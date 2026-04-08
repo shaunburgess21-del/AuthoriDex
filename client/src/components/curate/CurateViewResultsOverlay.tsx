@@ -159,14 +159,14 @@ export function CurateViewResultsOverlay({
                     className={`flex items-center gap-4 p-3 rounded-lg border transition-all ${
                       isLeading 
                         ? 'bg-white/5 border-slate-300/60' 
-                        : 'bg-muted/30 border-border hover:border-slate-400/40'
+                        : 'bg-muted/30 border-border hover:border-slate-500/50 dark:border-slate-400/40'
                     }`}
                     data-testid={`view-results-image-${image.id}`}
                   >
                     <div className={`w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${
-                      idx === 0 ? 'bg-yellow-500/20 text-yellow-600 dark:text-yellow-300' :
+                      idx === 0 ? 'bg-yellow-500/25 dark:bg-yellow-500/20 text-yellow-600 dark:text-yellow-300' :
                       idx === 1 ? 'bg-slate-400/20 text-slate-500 dark:text-slate-300' :
-                      idx === 2 ? 'bg-orange-500/20 text-orange-600 dark:text-orange-300' :
+                      idx === 2 ? 'bg-orange-500/25 dark:bg-orange-500/20 text-orange-600 dark:text-orange-300' :
                       'bg-muted/50 dark:bg-slate-700/30 text-muted-foreground dark:text-slate-400'
                     }`}>
                       {idx + 1}
@@ -188,7 +188,7 @@ export function CurateViewResultsOverlay({
                       </div>
                       {isLeading && (
                         <div className="absolute top-1 right-1">
-                          <Crown className="h-3.5 w-3.5 text-yellow-400" />
+                          <Crown className="h-3.5 w-3.5 text-yellow-600 dark:text-yellow-400" />
                         </div>
                       )}
                     </button>
@@ -197,7 +197,7 @@ export function CurateViewResultsOverlay({
                       <div className="flex items-center gap-2 mb-1">
                         <span className="font-bold text-lg">{votePercent}%</span>
                         {isLeading && (
-                          <span className="text-xs text-cyan-400 font-medium">Leading</span>
+                          <span className="text-xs text-cyan-600 dark:text-cyan-400 font-medium">Leading</span>
                         )}
                       </div>
                       <div className="h-2 rounded-full bg-slate-700/50 overflow-hidden">
@@ -218,7 +218,7 @@ export function CurateViewResultsOverlay({
                       variant={isLeading ? "default" : "outline"}
                       onClick={(e) => handleVote(image.id, e)}
                       disabled={voteMutation.isPending}
-                      className={isLeading ? "bg-cyan-500 hover:bg-cyan-600" : "border-cyan-500/50 text-cyan-400"}
+                      className={isLeading ? "bg-cyan-500 hover:bg-cyan-600" : "border-cyan-500/60 dark:border-cyan-500/50 text-cyan-600 dark:text-cyan-400"}
                       data-testid={`button-vote-image-${image.id}`}
                     >
                       <ThumbsUp className="h-3.5 w-3.5 mr-1" />

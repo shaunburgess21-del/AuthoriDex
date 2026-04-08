@@ -257,7 +257,7 @@ export default function UpDownDetailPage() {
 
       <div className="max-w-3xl mx-auto px-4 pt-4 space-y-4">
         {/* Hero */}
-        <Card className="relative overflow-hidden border-green-500/20">
+        <Card className="relative overflow-hidden border-green-500/30 dark:border-green-500/20">
           <div className="absolute inset-0 bg-gradient-to-r from-green-500/5 via-transparent to-red-500/5" />
           <div className="relative p-4 md:p-5">
             <div className="flex items-center gap-4 mb-4">
@@ -289,8 +289,8 @@ export default function UpDownDetailPage() {
                   variant="outline"
                   className={`mt-1.5 ${
                     delta >= 0
-                      ? "text-green-500 border-green-500/30"
-                      : "text-red-500 border-red-500/30"
+                      ? "text-green-700 dark:text-green-500 border-green-500/40 dark:border-green-500/30"
+                      : "text-red-700 dark:text-red-500 border-red-500/40 dark:border-red-500/30"
                   }`}
                 >
                   {delta >= 0 ? "+" : ""}
@@ -317,7 +317,7 @@ export default function UpDownDetailPage() {
                 </p>
               </div>
               <div>
-                <p className="text-sm md:text-base font-bold text-violet-400">
+                <p className="text-sm md:text-base font-bold text-violet-600 dark:text-violet-400">
                   {hydrated.totalPool.toLocaleString("en-US")}
                 </p>
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
@@ -338,23 +338,23 @@ export default function UpDownDetailPage() {
 
         {/* Your Position */}
         {userBet && userPick && (
-          <Card className="border-green-500/30 bg-green-500/5">
+          <Card className="border-green-500/40 dark:border-green-500/30 bg-green-500/8 dark:bg-green-500/5">
             <div className="p-4">
-              <p className="text-xs font-semibold text-green-500 uppercase tracking-wider mb-2">
+              <p className="text-xs font-semibold text-green-700 dark:text-green-500 uppercase tracking-wider mb-2">
                 Your Position
               </p>
               <div className="flex items-center gap-3">
                 <div
                   className={`h-12 w-12 rounded-full flex items-center justify-center ${
                     userPick === "up"
-                      ? "bg-green-500/20 border border-green-500/40"
-                      : "bg-red-500/20 border border-red-500/40"
+                      ? "bg-green-500/25 dark:bg-green-500/20 border border-green-500/50 dark:border-green-500/40"
+                      : "bg-red-500/25 dark:bg-red-500/20 border border-red-500/50 dark:border-red-500/40"
                   }`}
                 >
                   {userPick === "up" ? (
-                    <TrendingUp className="h-6 w-6 text-green-500" />
+                    <TrendingUp className="h-6 w-6 text-green-700 dark:text-green-500" />
                   ) : (
-                    <TrendingDown className="h-6 w-6 text-red-500" />
+                    <TrendingDown className="h-6 w-6 text-red-700 dark:text-red-500" />
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -384,7 +384,7 @@ export default function UpDownDetailPage() {
         <Card className="border-border/50">
           <div className="p-4">
             <h2 className="text-sm font-semibold flex items-center gap-1.5 mb-3">
-              <BarChart3 className="h-4 w-4 text-violet-400" />
+              <BarChart3 className="h-4 w-4 text-violet-600 dark:text-violet-400" />
               Trend Score This Week
             </h2>
             <OutcomePathChart
@@ -413,7 +413,7 @@ export default function UpDownDetailPage() {
         <Card className="border-border/50">
           <div className="p-4">
             <h2 className="text-sm font-semibold flex items-center gap-1.5 mb-3">
-              <Users className="h-4 w-4 text-violet-400" />
+              <Users className="h-4 w-4 text-violet-600 dark:text-violet-400" />
               Crowd Sentiment
             </h2>
             <div className="space-y-3">
@@ -429,11 +429,11 @@ export default function UpDownDetailPage() {
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="h-8 w-8 rounded-full bg-green-500/20 border border-green-500/40 flex items-center justify-center">
-                    <TrendingUp className="h-4 w-4 text-green-500" />
+                  <div className="h-8 w-8 rounded-full bg-green-500/25 dark:bg-green-500/20 border border-green-500/50 dark:border-green-500/40 flex items-center justify-center">
+                    <TrendingUp className="h-4 w-4 text-green-700 dark:text-green-500" />
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-green-500">
+                    <p className="text-sm font-semibold text-green-700 dark:text-green-500">
                       UP {hydrated.upPercent}%
                     </p>
                     <p className="text-[10px] text-muted-foreground">
@@ -443,15 +443,15 @@ export default function UpDownDetailPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <div>
-                    <p className="text-sm font-semibold text-red-500 text-right">
+                    <p className="text-sm font-semibold text-red-700 dark:text-red-500 text-right">
                       DOWN {100 - hydrated.upPercent}%
                     </p>
                     <p className="text-[10px] text-muted-foreground text-right">
                       {hydrated.downMultiplier}x payout
                     </p>
                   </div>
-                  <div className="h-8 w-8 rounded-full bg-red-500/20 border border-red-500/40 flex items-center justify-center">
-                    <TrendingDown className="h-4 w-4 text-red-500" />
+                  <div className="h-8 w-8 rounded-full bg-red-500/25 dark:bg-red-500/20 border border-red-500/50 dark:border-red-500/40 flex items-center justify-center">
+                    <TrendingDown className="h-4 w-4 text-red-700 dark:text-red-500" />
                   </div>
                 </div>
               </div>
@@ -481,14 +481,14 @@ export default function UpDownDetailPage() {
               <div
                 className={`h-10 w-10 rounded-full flex items-center justify-center shrink-0 ${
                   userPick === "up"
-                    ? "bg-green-500/20 border border-green-500/40"
-                    : "bg-red-500/20 border border-red-500/40"
+                    ? "bg-green-500/25 dark:bg-green-500/20 border border-green-500/50 dark:border-green-500/40"
+                    : "bg-red-500/25 dark:bg-red-500/20 border border-red-500/50 dark:border-red-500/40"
                 }`}
               >
                 {userPick === "up" ? (
-                  <TrendingUp className="h-5 w-5 text-green-500" />
+                  <TrendingUp className="h-5 w-5 text-green-700 dark:text-green-500" />
                 ) : (
-                  <TrendingDown className="h-5 w-5 text-red-500" />
+                  <TrendingDown className="h-5 w-5 text-red-700 dark:text-red-500" />
                 )}
               </div>
               <div className="flex-1 min-w-0">
@@ -500,10 +500,10 @@ export default function UpDownDetailPage() {
               <Badge
                 className={
                   delta >= 0 && userPick === "up"
-                    ? "bg-green-600/20 text-green-500 border-green-500/30"
+                    ? "bg-green-600/20 text-green-700 dark:text-green-500 border-green-500/40 dark:border-green-500/30"
                     : delta < 0 && userPick === "down"
-                    ? "bg-green-600/20 text-green-500 border-green-500/30"
-                    : "bg-amber-600/20 text-amber-500 border-amber-500/30"
+                    ? "bg-green-600/20 text-green-700 dark:text-green-500 border-green-500/40 dark:border-green-500/30"
+                    : "bg-amber-600/20 text-amber-700 dark:text-amber-500 border-amber-500/40 dark:border-amber-500/30"
                 }
               >
                 {(delta >= 0 && userPick === "up") || (delta < 0 && userPick === "down")

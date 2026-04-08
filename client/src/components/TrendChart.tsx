@@ -135,7 +135,7 @@ function CompareSearchModal({
       <DialogContent className="max-w-md max-h-[85vh] flex flex-col p-0">
         <DialogHeader className="px-4 pt-4 pb-0">
           <DialogTitle className="flex items-center gap-2">
-            <Users className="h-5 w-5 text-cyan-500" />
+            <Users className="h-5 w-5 text-cyan-700 dark:text-cyan-500" />
             Compare Celebrities
           </DialogTitle>
           <DialogDescription>
@@ -500,7 +500,7 @@ export function TrendChart({ personId, personName, activeMarkets }: TrendChartPr
               variant="outline"
               size="sm"
               onClick={() => setCompareOpen(true)}
-              className={`text-xs gap-1.5 shrink-0 ${compared.length > 0 ? "bg-cyan-500/10 border-cyan-500/40 text-cyan-400" : ""}`}
+              className={`text-xs gap-1.5 shrink-0 ${compared.length > 0 ? "bg-cyan-500/15 dark:bg-cyan-500/10 border-cyan-500/50 dark:border-cyan-500/40 text-cyan-600 dark:text-cyan-400" : ""}`}
               data-testid="button-compare"
             >
               <Users className="h-3.5 w-3.5" />
@@ -847,7 +847,7 @@ function PinnedTooltip({
           {score.toLocaleString("en-US")}
         </p>
         <p
-          className={`text-sm font-semibold ${isPositive ? "text-green-500" : "text-red-500"}`}
+          className={`text-sm font-semibold ${isPositive ? "text-green-700 dark:text-green-500" : "text-red-700 dark:text-red-500"}`}
         >
           {isPositive ? "+" : ""}
           {delta.toFixed(2)}% from start
@@ -911,8 +911,8 @@ function TwoPinCard({
         <div
           className={`text-center py-1.5 rounded-md text-sm font-bold ${
             comparison.isPositive
-              ? "bg-green-500/10 text-green-500"
-              : "bg-red-500/10 text-red-500"
+              ? "bg-green-500/15 dark:bg-green-500/10 text-green-700 dark:text-green-500"
+              : "bg-red-500/15 dark:bg-red-500/10 text-red-700 dark:text-red-500"
           }`}
         >
           {comparison.isPositive ? "+" : ""}

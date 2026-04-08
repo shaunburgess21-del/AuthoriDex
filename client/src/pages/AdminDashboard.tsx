@@ -1212,7 +1212,7 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
           </div>
 
           {openMarketType === "updown" && (
-            <div className="space-y-4 p-4 rounded-lg border border-violet-500/20 bg-violet-500/5">
+            <div className="space-y-4 p-4 rounded-lg border border-violet-500/20 bg-violet-500/8 dark:bg-violet-500/5">
               <h4 className="font-semibold text-sm flex items-center gap-2">
                 <ArrowUpDown className="h-4 w-4 text-violet-500" />
                 Strike Configuration
@@ -1430,7 +1430,7 @@ function SettleMarketModal({ market, entries, open, onClose, onSettle, isPending
                 key={entry.id}
                 className={cn(
                   "flex items-center justify-between gap-2 p-3 rounded-lg border cursor-pointer transition-colors",
-                  winnerId === entry.id ? "border-green-500 bg-green-500/10" : "hover-elevate"
+                  winnerId === entry.id ? "border-green-500 bg-green-500/15 dark:bg-green-500/10" : "hover-elevate"
                 )}
                 onClick={() => setWinnerId(entry.id)}
                 data-testid={`settle-entry-${entry.id}`}
@@ -3293,10 +3293,10 @@ export default function AdminDashboard() {
   };
 
   const getActionBadgeColor = (actionType: string) => {
-    if (actionType.startsWith("CREATE")) return "bg-emerald-500/20 text-emerald-400";
-    if (actionType.startsWith("UPDATE")) return "bg-amber-500/20 text-amber-400";
-    if (actionType.startsWith("DELETE")) return "bg-red-500/20 text-red-400";
-    return "bg-violet-500/20 text-violet-400";
+    if (actionType.startsWith("CREATE")) return "bg-emerald-500/25 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400";
+    if (actionType.startsWith("UPDATE")) return "bg-amber-500/25 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400";
+    if (actionType.startsWith("DELETE")) return "bg-red-500/25 dark:bg-red-500/20 text-red-600 dark:text-red-400";
+    return "bg-violet-500/25 dark:bg-violet-500/20 text-violet-600 dark:text-violet-400";
   };
 
   return (
@@ -3317,7 +3317,7 @@ export default function AdminDashboard() {
               className={cn(
                 "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
                 activeSection === item.id
-                  ? "bg-violet-500/20 text-violet-300 border border-violet-400/40"
+                  ? "bg-violet-500/25 dark:bg-violet-500/20 text-violet-500 dark:text-violet-300 border border-violet-500/50 dark:border-violet-400/40"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground"
               )}
             >
@@ -3355,7 +3355,7 @@ export default function AdminDashboard() {
               className={cn(
                 "flex flex-col items-center gap-1 p-2 rounded-lg text-xs",
                 activeSection === item.id
-                  ? "text-violet-400"
+                  ? "text-violet-600 dark:text-violet-400"
                   : "text-muted-foreground"
               )}
             >
@@ -3519,25 +3519,25 @@ export default function AdminDashboard() {
               <CardContent>
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   <div className="text-center p-4 bg-muted/50 rounded-lg">
-                    <div className="text-2xl font-bold text-cyan-400" data-testid="stat-traffic-today">
+                    <div className="text-2xl font-bold text-cyan-600 dark:text-cyan-400" data-testid="stat-traffic-today">
                       {trafficLoading ? "..." : trafficStats?.today || 0}
                     </div>
                     <p className="text-xs text-muted-foreground">Today</p>
                   </div>
                   <div className="text-center p-4 bg-muted/50 rounded-lg">
-                    <div className="text-2xl font-bold text-violet-400" data-testid="stat-traffic-week">
+                    <div className="text-2xl font-bold text-violet-600 dark:text-violet-400" data-testid="stat-traffic-week">
                       {trafficLoading ? "..." : trafficStats?.last7Days || 0}
                     </div>
                     <p className="text-xs text-muted-foreground">Last 7 Days</p>
                   </div>
                   <div className="text-center p-4 bg-muted/50 rounded-lg">
-                    <div className="text-2xl font-bold text-emerald-400" data-testid="stat-traffic-month">
+                    <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400" data-testid="stat-traffic-month">
                       {trafficLoading ? "..." : trafficStats?.last30Days || 0}
                     </div>
                     <p className="text-xs text-muted-foreground">Last 30 Days</p>
                   </div>
                   <div className="text-center p-4 bg-muted/50 rounded-lg">
-                    <div className="text-2xl font-bold text-amber-400" data-testid="stat-traffic-total">
+                    <div className="text-2xl font-bold text-amber-600 dark:text-amber-400" data-testid="stat-traffic-total">
                       {trafficLoading ? "..." : trafficStats?.total || 0}
                     </div>
                     <p className="text-xs text-muted-foreground">All Time</p>
@@ -4033,34 +4033,34 @@ export default function AdminDashboard() {
                                     <Badge variant="outline" className="text-xs capitalize">{market.category}</Badge>
                                   )}
                                   {vis === "draft" && (
-                                    <Badge variant="outline" className="text-xs border-yellow-500/30 text-yellow-500">Draft</Badge>
+                                    <Badge variant="outline" className="text-xs border-yellow-500/40 dark:border-yellow-500/30 text-yellow-500">Draft</Badge>
                                   )}
                                   {vis === "live" && (
-                                    <Badge variant="outline" className="text-xs border-green-500/30 text-green-500">Live</Badge>
+                                    <Badge variant="outline" className="text-xs border-green-500/40 dark:border-green-500/30 text-green-500">Live</Badge>
                                   )}
                                   {vis === "inactive" && (
-                                    <Badge variant="outline" className="text-xs border-orange-500/30 text-orange-500">Inactive</Badge>
+                                    <Badge variant="outline" className="text-xs border-orange-500/40 dark:border-orange-500/30 text-orange-500">Inactive</Badge>
                                   )}
                                   {vis === "archived" && (
-                                    <Badge variant="outline" className="text-xs border-red-500/30 text-red-500">Archived</Badge>
+                                    <Badge variant="outline" className="text-xs border-red-500/40 dark:border-red-500/30 text-red-500">Archived</Badge>
                                   )}
                                   {market.featured && (
-                                    <Badge variant="outline" className="text-xs border-yellow-500/30 text-yellow-500">
+                                    <Badge variant="outline" className="text-xs border-yellow-500/40 dark:border-yellow-500/30 text-yellow-500">
                                       <Star className="h-3 w-3 mr-1" />Featured
                                     </Badge>
                                   )}
                                   {resolvesSoon && (
-                                    <Badge variant="outline" className="text-xs border-amber-500/30 text-amber-500">
+                                    <Badge variant="outline" className="text-xs border-amber-500/40 dark:border-amber-500/30 text-amber-500">
                                       <Clock className="h-3 w-3 mr-1" />Resolves soon
                                     </Badge>
                                   )}
                                   {overdue && (
-                                    <Badge variant="outline" className="text-xs border-red-500/30 text-red-400">
+                                    <Badge variant="outline" className="text-xs border-red-500/40 dark:border-red-500/30 text-red-600 dark:text-red-400">
                                       <AlertTriangle className="h-3 w-3 mr-1" />Overdue
                                     </Badge>
                                   )}
                                   {market.personId && (
-                                    <Badge variant="outline" className="text-xs border-purple-500/30 text-purple-400">
+                                    <Badge variant="outline" className="text-xs border-purple-500/40 dark:border-purple-500/30 text-purple-600 dark:text-purple-400">
                                       Linked
                                     </Badge>
                                   )}
@@ -4170,7 +4170,7 @@ export default function AdminDashboard() {
                                 <div className="flex items-center gap-2 mt-1 flex-wrap">
                                   <Badge variant={market.visibility === "live" ? "default" : market.visibility === "inactive" ? "secondary" : "outline"} className="text-xs">{market.visibility}</Badge>
                                   <Badge variant="outline" className="text-xs">{market.status}</Badge>
-                                  {market.featured && <Badge variant="outline" className="text-xs border-yellow-500/30 text-yellow-500"><Star className="h-3 w-3 mr-1" />Featured</Badge>}
+                                  {market.featured && <Badge variant="outline" className="text-xs border-yellow-500/40 dark:border-yellow-500/30 text-yellow-500"><Star className="h-3 w-3 mr-1" />Featured</Badge>}
                                   <span className="text-xs text-muted-foreground">Pool: {Number(market.seedVolume || 0).toLocaleString()}</span>
                                 </div>
                               </div>
@@ -4274,7 +4274,7 @@ export default function AdminDashboard() {
                                 <div className="flex items-center gap-2 mt-1 flex-wrap">
                                   <Badge variant={market.visibility === "live" ? "default" : market.visibility === "inactive" ? "secondary" : "outline"} className="text-xs">{market.visibility}</Badge>
                                   {market.category && <Badge variant="outline" className="text-xs capitalize">{market.category}</Badge>}
-                                  {market.featured && <Badge variant="outline" className="text-xs border-yellow-500/30 text-yellow-500"><Star className="h-3 w-3 mr-1" />Featured</Badge>}
+                                  {market.featured && <Badge variant="outline" className="text-xs border-yellow-500/40 dark:border-yellow-500/30 text-yellow-500"><Star className="h-3 w-3 mr-1" />Featured</Badge>}
                                   <span className="text-xs text-muted-foreground">Pool: {Number(market.seedVolume || 0).toLocaleString()} | Wk {market.weekNumber || "-"}</span>
                                 </div>
                               </div>
@@ -4342,7 +4342,7 @@ export default function AdminDashboard() {
                                   <Badge variant={market.visibility === "live" ? "default" : market.visibility === "inactive" ? "secondary" : "outline"} className="text-xs">{market.visibility}</Badge>
                                   <Badge variant="outline" className="text-xs">{market.status}</Badge>
                                   {market.category && <Badge variant="outline" className="text-xs capitalize">{market.category}</Badge>}
-                                  {market.featured && <Badge variant="outline" className="text-xs border-yellow-500/30 text-yellow-500"><Star className="h-3 w-3 mr-1" />Featured</Badge>}
+                                  {market.featured && <Badge variant="outline" className="text-xs border-yellow-500/40 dark:border-yellow-500/30 text-yellow-500"><Star className="h-3 w-3 mr-1" />Featured</Badge>}
                                   <span className="text-xs text-muted-foreground">Pool: {Number(market.seedVolume || 0).toLocaleString()} | Wk {market.weekNumber || "-"}</span>
                                 </div>
                               </div>
@@ -4417,7 +4417,7 @@ export default function AdminDashboard() {
                                   <Badge variant={market.visibility === "live" ? "default" : market.visibility === "inactive" ? "secondary" : "outline"} className="text-xs">{market.visibility}</Badge>
                                   <Badge variant="outline" className="text-xs">{market.status}</Badge>
                                   <Badge variant="outline" className="text-xs capitalize">{market.category}</Badge>
-                                  {market.featured && <Badge variant="outline" className="text-xs border-yellow-500/30 text-yellow-500"><Star className="h-3 w-3 mr-1" />Featured</Badge>}
+                                  {market.featured && <Badge variant="outline" className="text-xs border-yellow-500/40 dark:border-yellow-500/30 text-yellow-500"><Star className="h-3 w-3 mr-1" />Featured</Badge>}
                                   <span className="text-xs text-muted-foreground">Pool: {Number(market.seedVolume || 0).toLocaleString()} | Wk {market.weekNumber || "-"}</span>
                                 </div>
                               </div>
@@ -5772,10 +5772,10 @@ export default function AdminDashboard() {
                     return (
                       <div className="grid gap-3 sm:grid-cols-3">
                         <div className={cn("p-4 rounded-lg border-2 text-center",
-                          freshnessOk ? "border-green-500/40" : freshnessWarn ? "border-yellow-500/40" : "border-red-500/40"
+                          freshnessOk ? "border-green-500/50 dark:border-green-500/40" : freshnessWarn ? "border-yellow-500/50 dark:border-yellow-500/40" : "border-red-500/50 dark:border-red-500/40"
                         )}>
                           <div className={cn("inline-flex items-center justify-center h-10 w-10 rounded-full mb-2",
-                            freshnessOk ? "bg-green-500/10 text-green-500" : freshnessWarn ? "bg-yellow-500/10 text-yellow-500" : "bg-red-500/10 text-red-500"
+                            freshnessOk ? "bg-green-500/15 dark:bg-green-500/10 text-green-500" : freshnessWarn ? "bg-yellow-500/15 dark:bg-yellow-500/10 text-yellow-500" : "bg-red-500/15 dark:bg-red-500/10 text-red-500"
                           )}>
                             {freshnessOk ? <CheckCircle className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
                           </div>
@@ -5804,10 +5804,10 @@ export default function AdminDashboard() {
                         </div>
 
                         <div className={cn("p-4 rounded-lg border-2 text-center",
-                          continuityOk ? "border-green-500/40" : continuityWarn ? "border-yellow-500/40" : "border-red-500/40"
+                          continuityOk ? "border-green-500/50 dark:border-green-500/40" : continuityWarn ? "border-yellow-500/50 dark:border-yellow-500/40" : "border-red-500/50 dark:border-red-500/40"
                         )}>
                           <div className={cn("inline-flex items-center justify-center h-10 w-10 rounded-full mb-2",
-                            continuityOk ? "bg-green-500/10 text-green-500" : continuityWarn ? "bg-yellow-500/10 text-yellow-500" : "bg-red-500/10 text-red-500"
+                            continuityOk ? "bg-green-500/15 dark:bg-green-500/10 text-green-500" : continuityWarn ? "bg-yellow-500/15 dark:bg-yellow-500/10 text-yellow-500" : "bg-red-500/15 dark:bg-red-500/10 text-red-500"
                           )}>
                             {continuityOk ? <CheckCircle className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
                           </div>
@@ -5826,10 +5826,10 @@ export default function AdminDashboard() {
                         </div>
 
                         <div className={cn("p-4 rounded-lg border-2 text-center",
-                          integrityOk ? "border-green-500/40" : integrityWarn ? "border-yellow-500/40" : "border-red-500/40"
+                          integrityOk ? "border-green-500/50 dark:border-green-500/40" : integrityWarn ? "border-yellow-500/50 dark:border-yellow-500/40" : "border-red-500/50 dark:border-red-500/40"
                         )}>
                           <div className={cn("inline-flex items-center justify-center h-10 w-10 rounded-full mb-2",
-                            integrityOk ? "bg-green-500/10 text-green-500" : integrityWarn ? "bg-yellow-500/10 text-yellow-500" : "bg-red-500/10 text-red-500"
+                            integrityOk ? "bg-green-500/15 dark:bg-green-500/10 text-green-500" : integrityWarn ? "bg-yellow-500/15 dark:bg-yellow-500/10 text-yellow-500" : "bg-red-500/15 dark:bg-red-500/10 text-red-500"
                           )}>
                             {integrityOk ? <CheckCircle className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
                           </div>
@@ -6048,7 +6048,7 @@ export default function AdminDashboard() {
                   </div>
 
                   {engineHealth.gaps?.gapDetails?.length > 0 && (
-                    <div className="p-3 rounded-lg border border-yellow-500/30">
+                    <div className="p-3 rounded-lg border border-yellow-500/40 dark:border-yellow-500/30">
                       <span className="text-xs font-medium text-yellow-500">Detected Gaps (&gt;2 hours)</span>
                       <div className="mt-2 space-y-1">
                         {engineHealth.gaps.gapDetails.map((gap: any, i: number) => (
@@ -6064,7 +6064,7 @@ export default function AdminDashboard() {
                   )}
 
                   {!engineHealth.rankIntegrity?.isCorrect && engineHealth.rankIntegrity?.issues?.length > 0 && (
-                    <div className="p-3 rounded-lg border border-red-500/30">
+                    <div className="p-3 rounded-lg border border-red-500/40 dark:border-red-500/30">
                       <span className="text-xs font-medium text-red-500">Rank Integrity Issues</span>
                       <div className="mt-2 space-y-1">
                         {engineHealth.rankIntegrity.issues.map((issue: string, i: number) => (
@@ -6157,9 +6157,9 @@ export default function AdminDashboard() {
                                 </td>
                                 <td className="px-2 py-1.5">
                                   <Badge variant="outline" className={cn("text-[10px]", {
-                                    "border-green-500/50 text-green-500": r.status === "ok" || r.status === "redirect_ok",
-                                    "border-red-500/50 text-red-500": r.status === "not_found",
-                                    "border-yellow-500/50 text-yellow-500": r.status === "redirect" || r.status === "low_views" || r.status === "missing",
+                                    "border-green-500/60 dark:border-green-500/50 text-green-500": r.status === "ok" || r.status === "redirect_ok",
+                                    "border-red-500/60 dark:border-red-500/50 text-red-500": r.status === "not_found",
+                                    "border-yellow-500/60 dark:border-yellow-500/50 text-yellow-500": r.status === "redirect" || r.status === "low_views" || r.status === "missing",
                                     "border-muted-foreground/50": r.status === "error",
                                   })}>
                                     {r.status === "ok" ? "OK"
@@ -6339,9 +6339,9 @@ export default function AdminDashboard() {
                                   </td>
                                   <td className="px-2 py-1.5">
                                     <Badge variant="outline" className={cn("text-[10px]", {
-                                      "border-green-500/50 text-green-500": r.status === "ok",
-                                      "border-red-500/50 text-red-500": r.status === "zero_articles",
-                                      "border-yellow-500/50 text-yellow-500": r.status === "no_cache" || r.status === "stale",
+                                      "border-green-500/60 dark:border-green-500/50 text-green-500": r.status === "ok",
+                                      "border-red-500/60 dark:border-red-500/50 text-red-500": r.status === "zero_articles",
+                                      "border-yellow-500/60 dark:border-yellow-500/50 text-yellow-500": r.status === "no_cache" || r.status === "stale",
                                     })}>
                                       {r.status === "ok" ? "OK" : r.status === "zero_articles" ? "Zero Articles" : r.status === "no_cache" ? "No Cache" : "Stale"}
                                     </Badge>
@@ -6357,7 +6357,7 @@ export default function AdminDashboard() {
                                             +{msProbeResults[r.personId].withoutLanguageFilter.articleCount} (no lang filter)
                                           </span>
                                         ) : msProbeResults[r.personId].recommendation === "no_results" ? (
-                                          <span className="text-red-400">0 both</span>
+                                          <span className="text-red-600 dark:text-red-400">0 both</span>
                                         ) : (
                                           <span className="text-muted-foreground">{msProbeResults[r.personId].withLanguageFilter.articleCount} EN</span>
                                         )}
@@ -6421,7 +6421,7 @@ export default function AdminDashboard() {
                         {serperAuditResults?.results?.some((r: any) => r.status === "stale") && (
                           <button
                             type="button"
-                            className="inline-flex items-center gap-1 rounded border border-yellow-500/40 bg-yellow-500/10 px-2 py-1 text-xs font-medium text-yellow-600 hover:bg-yellow-500/20 transition-colors disabled:opacity-50"
+                            className="inline-flex items-center gap-1 rounded border border-yellow-500/50 dark:border-yellow-500/40 bg-yellow-500/15 dark:bg-yellow-500/10 px-2 py-1 text-xs font-medium text-yellow-600 hover:bg-yellow-500/25 dark:hover:bg-yellow-500/20 transition-colors disabled:opacity-50"
                             disabled={serperRefreshLoading}
                             onClick={async () => {
                               const staleIds = serperAuditResults.results
@@ -6584,9 +6584,9 @@ export default function AdminDashboard() {
                                       <Badge
                                         variant="outline"
                                         className={cn("text-[10px]", {
-                                          "border-green-500/50 text-green-500": r.status === "ok",
-                                          "border-red-500/50 text-red-500": r.status === "zero_results",
-                                          "border-yellow-500/50 text-yellow-500":
+                                          "border-green-500/60 dark:border-green-500/50 text-green-500": r.status === "ok",
+                                          "border-red-500/60 dark:border-red-500/50 text-red-500": r.status === "zero_results",
+                                          "border-yellow-500/60 dark:border-yellow-500/50 text-yellow-500":
                                             r.status === "no_cache" || r.status === "stale",
                                         })}
                                       >
@@ -6919,9 +6919,9 @@ export default function AdminDashboard() {
                             key={result.personId}
                             className={cn(
                               "p-4 rounded-lg border space-y-2",
-                              result.conclusion === "POSSIBLE_MISMATCH" && "border-red-500/30 bg-red-500/5",
+                              result.conclusion === "POSSIBLE_MISMATCH" && "border-red-500/40 dark:border-red-500/30 bg-red-500/8 dark:bg-red-500/5",
                               result.conclusion === "ENTITY_MATCH_OK" && "border-green-500/20",
-                              result.conclusion === "NO_DATA" && "border-yellow-500/30 bg-yellow-500/5"
+                              result.conclusion === "NO_DATA" && "border-yellow-500/40 dark:border-yellow-500/30 bg-yellow-500/8 dark:bg-yellow-500/5"
                             )}
                             data-testid={`entity-diag-result-${result.personId}`}
                           >
@@ -6960,7 +6960,7 @@ export default function AdminDashboard() {
                             {result.mismatchReasons.length > 0 && (
                               <div className="text-sm space-y-1">
                                 {result.mismatchReasons.map((reason: string, i: number) => (
-                                  <div key={i} className="flex items-center gap-1 text-red-400">
+                                  <div key={i} className="flex items-center gap-1 text-red-600 dark:text-red-400">
                                     <AlertCircle className="h-3 w-3 flex-shrink-0" />
                                     {reason}
                                   </div>
@@ -6975,7 +6975,7 @@ export default function AdminDashboard() {
                                   <div key={i} className="ml-4 text-muted-foreground">
                                     #{r.position}. <span className="text-foreground">{r.title}</span>
                                     {r.url ? (
-                                      <a href={r.url} target="_blank" rel="noopener noreferrer" className="ml-1 text-blue-400 hover:underline text-xs" data-testid={`link-entity-result-${i}`}>({r.domain})</a>
+                                      <a href={r.url} target="_blank" rel="noopener noreferrer" className="ml-1 text-blue-600 dark:text-blue-400 hover:underline text-xs" data-testid={`link-entity-result-${i}`}>({r.domain})</a>
                                     ) : (
                                       <span className="ml-1 text-muted-foreground/60">({r.domain})</span>
                                     )}
@@ -7395,7 +7395,7 @@ export default function AdminDashboard() {
 
               {/* Previous Hour Comparison - Quick Debug Panel */}
               {scoreBreakdown.previousHourComparison && (
-                <Card className="p-4 border-violet-500/30 bg-violet-500/5" data-testid="card-prev-hour">
+                <Card className="p-4 border-violet-500/40 dark:border-violet-500/30 bg-violet-500/8 dark:bg-violet-500/5" data-testid="card-prev-hour">
                   <h3 className="font-semibold mb-3 flex items-center justify-between">
                     <span className="flex items-center gap-2">
                       <Clock className="h-4 w-4" />
@@ -7424,8 +7424,8 @@ export default function AdminDashboard() {
                         {scoreBreakdown.previousHourComparison.finalChangePercent.toFixed(1)}%
                       </Badge>
                     </div>
-                    <div className="p-3 bg-violet-500/20 rounded-lg border border-violet-500/30">
-                      <p className="text-lg font-bold text-violet-400">{scoreBreakdown.previousHourComparison.currentFameIndex.toLocaleString()}</p>
+                    <div className="p-3 bg-violet-500/25 dark:bg-violet-500/20 rounded-lg border border-violet-500/40 dark:border-violet-500/30">
+                      <p className="text-lg font-bold text-violet-600 dark:text-violet-400">{scoreBreakdown.previousHourComparison.currentFameIndex.toLocaleString()}</p>
                       <p className="text-xs text-muted-foreground">Current</p>
                       <Badge variant="outline" className="mt-1 text-xs">
                         #{scoreBreakdown.currentRank}
@@ -7642,8 +7642,8 @@ export default function AdminDashboard() {
                     <p className="text-lg font-bold">{scoreBreakdown.scoreBreakdown.diversityMultiplier.toFixed(2)}x</p>
                     <p className="text-xs text-muted-foreground">Diversity</p>
                   </div>
-                  <div className="text-center p-3 bg-violet-500/20 rounded-lg border border-violet-500/30">
-                    <p className="text-lg font-bold text-violet-400">{scoreBreakdown.scoreBreakdown.fameIndex.toLocaleString()}</p>
+                  <div className="text-center p-3 bg-violet-500/25 dark:bg-violet-500/20 rounded-lg border border-violet-500/40 dark:border-violet-500/30">
+                    <p className="text-lg font-bold text-violet-600 dark:text-violet-400">{scoreBreakdown.scoreBreakdown.fameIndex.toLocaleString()}</p>
                     <p className="text-xs text-muted-foreground">Final Score</p>
                   </div>
                 </div>

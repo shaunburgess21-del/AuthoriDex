@@ -46,10 +46,10 @@ interface InductionAPIResponse {
 }
 
 function getRankStyle(rank: number) {
-  if (rank === 1) return "bg-yellow-500/15 border-yellow-500/40 text-yellow-300";
-  if (rank === 2) return "bg-slate-400/10 border-slate-400/30 text-slate-300";
-  if (rank === 3) return "bg-orange-500/10 border-orange-500/30 text-orange-300";
-  return "bg-slate-800/40 border-slate-700/30 text-slate-400";
+  if (rank === 1) return "bg-yellow-500/20 dark:bg-yellow-500/15 border-yellow-500/50 dark:border-yellow-500/40 text-yellow-500 dark:text-yellow-300";
+  if (rank === 2) return "bg-slate-400/10 border-slate-400/30 text-slate-500 dark:text-slate-300";
+  if (rank === 3) return "bg-orange-500/15 dark:bg-orange-500/10 border-orange-500/40 dark:border-orange-500/30 text-orange-500 dark:text-orange-300";
+  return "bg-slate-800/40 border-slate-700/30 text-slate-600 dark:text-slate-400";
 }
 
 function getRankBg(rank: number) {
@@ -169,7 +169,7 @@ export default function InductionQueuePage() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-cyan-500" />
+        <Loader2 className="h-8 w-8 animate-spin text-cyan-700 dark:text-cyan-500" />
       </div>
     );
   }
@@ -195,8 +195,8 @@ export default function InductionQueuePage() {
         {/* Hero */}
         <div className="mb-8 md:mb-10">
           <div className="flex items-center gap-3 mb-2">
-            <div className="h-10 w-10 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center">
-              <Vote className="h-5 w-5 text-cyan-400" />
+            <div className="h-10 w-10 rounded-xl bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/30 dark:border-cyan-500/20 flex items-center justify-center">
+              <Vote className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
             </div>
             <div>
               <h1 className="text-2xl md:text-3xl font-serif font-bold tracking-tight">Induction Queue</h1>
@@ -209,28 +209,28 @@ export default function InductionQueuePage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
           <Card className="px-4 py-3 bg-gradient-to-br from-slate-900/60 to-slate-800/60 border-slate-700/40">
             <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-              <Users className="h-3.5 w-3.5 text-cyan-400" />
+              <Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
               Candidates
             </div>
             <p className="text-xl font-bold tabular-nums">{candidates.length}</p>
           </Card>
           <Card className="px-4 py-3 bg-gradient-to-br from-slate-900/60 to-slate-800/60 border-slate-700/40">
             <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-              <TrendingUp className="h-3.5 w-3.5 text-cyan-400" />
+              <TrendingUp className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
               Total Votes
             </div>
             <p className="text-xl font-bold tabular-nums">{totalVotes.toLocaleString("en-US")}</p>
           </Card>
           <Card className="px-4 py-3 bg-gradient-to-br from-slate-900/60 to-slate-800/60 border-slate-700/40">
             <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-              <BarChart3 className="h-3.5 w-3.5 text-cyan-400" />
+              <BarChart3 className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
               Categories
             </div>
             <p className="text-xl font-bold tabular-nums">{uniqueCategories.size}</p>
           </Card>
           <Card className="px-4 py-3 bg-gradient-to-br from-slate-900/60 to-slate-800/60 border-slate-700/40">
             <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-              <Check className="h-3.5 w-3.5 text-emerald-400" />
+              <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
               Your Votes
             </div>
             <p className="text-xl font-bold tabular-nums">{votedIds.size}</p>
@@ -246,8 +246,8 @@ export default function InductionQueuePage() {
                 onClick={() => setCategoryFilter(cat.value)}
                 className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
                   categoryFilter === cat.value
-                    ? "bg-cyan-500/15 border-cyan-500/50 text-cyan-400"
-                    : "bg-muted/30 border-border text-muted-foreground hover:border-cyan-500/30"
+                    ? "bg-cyan-500/20 dark:bg-cyan-500/15 border-cyan-500/60 dark:border-cyan-500/50 text-cyan-600 dark:text-cyan-400"
+                    : "bg-muted/30 border-border text-muted-foreground hover:border-cyan-500/40 dark:border-cyan-500/30"
                 }`}
               >
                 {cat.label}
@@ -261,7 +261,7 @@ export default function InductionQueuePage() {
               placeholder="Search candidates..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 rounded-lg bg-muted/30 border border-border text-sm placeholder:text-muted-foreground focus:outline-none focus:border-cyan-500/50"
+              className="w-full pl-9 pr-3 py-2 rounded-lg bg-muted/30 border border-border text-sm placeholder:text-muted-foreground focus:outline-none focus:border-cyan-500/60 dark:border-cyan-500/50"
             />
           </div>
         </div>
@@ -348,14 +348,14 @@ export default function InductionQueuePage() {
                         </div>
                         <div className="flex items-center justify-between mt-1.5">
                           <span className="text-xs text-muted-foreground">{candidate.seedVotes.toLocaleString("en-US")} votes</span>
-                          <span className="text-xs font-medium text-slate-400">{Math.round(progressPct)}%</span>
+                          <span className="text-xs font-medium text-slate-600 dark:text-slate-400">{Math.round(progressPct)}%</span>
                         </div>
                       </div>
 
                       {/* Vote button */}
                       {isVoted ? (
                         <Button
-                          className="w-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 hover:bg-emerald-500/20"
+                          className="w-full bg-emerald-500/15 dark:bg-emerald-500/10 border border-emerald-500/30 dark:border-emerald-500/20 text-emerald-500 dark:text-emerald-300 hover:bg-emerald-500/25 dark:hover:bg-emerald-500/20"
                           disabled
                         >
                           <Check className="h-4 w-4 mr-2" />
@@ -364,7 +364,7 @@ export default function InductionQueuePage() {
                       ) : (
                         <button
                           onClick={() => handleVote(candidate.id)}
-                          className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-md bg-cyan-500/10 border border-cyan-500/50 text-cyan-400 text-sm font-medium transition-all duration-300 hover:border-cyan-500/80 hover:bg-cyan-500/20"
+                          className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-md bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/60 dark:border-cyan-500/50 text-cyan-600 dark:text-cyan-400 text-sm font-medium transition-all duration-300 hover:border-cyan-500/80 hover:bg-cyan-500/25 dark:hover:bg-cyan-500/20"
                         >
                           <Vote className="h-4 w-4 shrink-0" />
                           <span>Vote to Induct</span>
@@ -390,7 +390,7 @@ export default function InductionQueuePage() {
           {/* Category Breakdown */}
           <Card className="p-5 border-slate-700/40 bg-gradient-to-br from-slate-900/60 to-slate-800/60">
             <h3 className="font-semibold text-sm flex items-center gap-2 mb-4">
-              <BarChart3 className="h-4 w-4 text-cyan-400" />
+              <BarChart3 className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
               Votes by Category
             </h3>
             <div className="space-y-3">
@@ -417,13 +417,13 @@ export default function InductionQueuePage() {
           {/* How It Works */}
           <Card className="p-5 border-slate-700/40 bg-gradient-to-br from-slate-900/60 to-slate-800/60">
             <h3 className="font-semibold text-sm flex items-center gap-2 mb-4">
-              <Info className="h-4 w-4 text-cyan-400" />
+              <Info className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
               How It Works
             </h3>
             <div className="space-y-4 text-sm text-muted-foreground">
               <div className="flex gap-3">
-                <div className="h-7 w-7 rounded-full bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center shrink-0 mt-0.5">
-                  <span className="text-xs font-bold text-cyan-400">1</span>
+                <div className="h-7 w-7 rounded-full bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/30 dark:border-cyan-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                  <span className="text-xs font-bold text-cyan-600 dark:text-cyan-400">1</span>
                 </div>
                 <div>
                   <p className="font-medium text-foreground">Community Nominations</p>
@@ -431,8 +431,8 @@ export default function InductionQueuePage() {
                 </div>
               </div>
               <div className="flex gap-3">
-                <div className="h-7 w-7 rounded-full bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center shrink-0 mt-0.5">
-                  <span className="text-xs font-bold text-cyan-400">2</span>
+                <div className="h-7 w-7 rounded-full bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/30 dark:border-cyan-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                  <span className="text-xs font-bold text-cyan-600 dark:text-cyan-400">2</span>
                 </div>
                 <div>
                   <p className="font-medium text-foreground">Vote for Your Picks</p>
@@ -440,8 +440,8 @@ export default function InductionQueuePage() {
                 </div>
               </div>
               <div className="flex gap-3">
-                <div className="h-7 w-7 rounded-full bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center shrink-0 mt-0.5">
-                  <span className="text-xs font-bold text-cyan-400">3</span>
+                <div className="h-7 w-7 rounded-full bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/30 dark:border-cyan-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                  <span className="text-xs font-bold text-cyan-600 dark:text-cyan-400">3</span>
                 </div>
                 <div>
                   <p className="font-medium text-foreground">Leaderboard Entry</p>
@@ -456,7 +456,7 @@ export default function InductionQueuePage() {
         {candidates.length >= 3 && (
           <Card className="hidden md:block p-6 border-slate-700/40 bg-gradient-to-br from-slate-900/60 to-slate-800/60 mb-10">
             <h3 className="font-semibold text-sm flex items-center gap-2 mb-6 justify-center">
-              <Trophy className="h-4 w-4 text-yellow-400" />
+              <Trophy className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
               Current Leaders
             </h3>
             <div className="flex items-end justify-center gap-6">
@@ -464,23 +464,23 @@ export default function InductionQueuePage() {
               <div className="flex flex-col items-center">
                 <PersonAvatar name={candidates[1].displayName} imageSlug={candidates[1].imageSlug} imageContext="induction" className="h-20 w-20 mb-2 ring-2 ring-slate-400/30" />
                 <p className="font-medium text-sm mb-1">{candidates[1].displayName}</p>
-                <Badge variant="outline" className="text-xs border-slate-400/40 text-slate-300">#2 · {candidates[1].seedVotes.toLocaleString("en-US")}</Badge>
+                <Badge variant="outline" className="text-xs border-slate-500/50 dark:border-slate-400/40 text-slate-500 dark:text-slate-300">#2 · {candidates[1].seedVotes.toLocaleString("en-US")}</Badge>
                 <div className="mt-2 w-20 h-16 rounded-t-lg bg-slate-400/10 border border-b-0 border-slate-400/20" />
               </div>
               {/* 1st place */}
               <div className="flex flex-col items-center">
-                <Crown className="h-5 w-5 text-yellow-400 mb-1" />
+                <Crown className="h-5 w-5 text-yellow-600 dark:text-yellow-400 mb-1" />
                 <PersonAvatar name={candidates[0].displayName} imageSlug={candidates[0].imageSlug} imageContext="induction" className="h-24 w-24 mb-2 ring-2 ring-yellow-500/40" />
                 <p className="font-semibold text-base mb-1">{candidates[0].displayName}</p>
-                <Badge variant="outline" className="text-xs border-yellow-500/40 text-yellow-300">#1 · {candidates[0].seedVotes.toLocaleString("en-US")}</Badge>
-                <div className="mt-2 w-24 h-24 rounded-t-lg bg-yellow-500/10 border border-b-0 border-yellow-500/20" />
+                <Badge variant="outline" className="text-xs border-yellow-500/50 dark:border-yellow-500/40 text-yellow-500 dark:text-yellow-300">#1 · {candidates[0].seedVotes.toLocaleString("en-US")}</Badge>
+                <div className="mt-2 w-24 h-24 rounded-t-lg bg-yellow-500/15 dark:bg-yellow-500/10 border border-b-0 border-yellow-500/30 dark:border-yellow-500/20" />
               </div>
               {/* 3rd place */}
               <div className="flex flex-col items-center">
                 <PersonAvatar name={candidates[2].displayName} imageSlug={candidates[2].imageSlug} imageContext="induction" className="h-18 w-18 mb-2 ring-2 ring-orange-500/30" />
                 <p className="font-medium text-sm mb-1">{candidates[2].displayName}</p>
-                <Badge variant="outline" className="text-xs border-orange-500/40 text-orange-300">#3 · {candidates[2].seedVotes.toLocaleString("en-US")}</Badge>
-                <div className="mt-2 w-18 h-12 rounded-t-lg bg-orange-500/10 border border-b-0 border-orange-500/20" />
+                <Badge variant="outline" className="text-xs border-orange-500/50 dark:border-orange-500/40 text-orange-500 dark:text-orange-300">#3 · {candidates[2].seedVotes.toLocaleString("en-US")}</Badge>
+                <div className="mt-2 w-18 h-12 rounded-t-lg bg-orange-500/15 dark:bg-orange-500/10 border border-b-0 border-orange-500/30 dark:border-orange-500/20" />
               </div>
             </div>
           </Card>

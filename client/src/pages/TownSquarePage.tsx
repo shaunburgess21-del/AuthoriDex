@@ -74,7 +74,7 @@ export default function TownSquarePage() {
               <Button variant="ghost" size="sm" className="md:text-sm" onClick={() => setLocation("/vote")}>
                 Vote
               </Button>
-              <Button variant="ghost" size="sm" className="text-violet-400 md:text-sm">
+              <Button variant="ghost" size="sm" className="text-violet-600 dark:text-violet-400 md:text-sm">
                 Town Square
               </Button>
             </div>
@@ -86,8 +86,8 @@ export default function TownSquarePage() {
       <div className="max-w-3xl mx-auto px-4 pt-8 pb-20">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-start gap-4">
-            <div className="h-12 w-12 rounded-xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center shrink-0">
-              <MessageSquare className="h-6 w-6 text-violet-400" />
+            <div className="h-12 w-12 rounded-xl bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/30 dark:border-violet-500/20 flex items-center justify-center shrink-0">
+              <MessageSquare className="h-6 w-6 text-violet-600 dark:text-violet-400" />
             </div>
             <div>
               <h1 className="text-2xl font-bold tracking-tight">Town Square</h1>

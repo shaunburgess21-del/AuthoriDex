@@ -43,7 +43,7 @@ export function WhatNeedsToHappen({
     if (pick === "up") {
       if (isAboveBaseline) {
         return (
-          <p className="text-[11px] text-green-400 leading-snug">
+          <p className="text-[11px] text-green-600 dark:text-green-400 leading-snug">
             <TrendingUp className="inline h-3 w-3 mr-0.5" />
             UP leads by {formatScore(pointsFromBaseline)} pts. Wins if {firstName} stays above baseline.
           </p>
@@ -51,14 +51,14 @@ export function WhatNeedsToHappen({
       }
       if (isAtBaseline) {
         return (
-          <p className="text-[11px] text-amber-400 leading-snug">
+          <p className="text-[11px] text-amber-600 dark:text-amber-400 leading-snug">
             <TrendingUp className="inline h-3 w-3 mr-0.5" />
             {firstName} is exactly at baseline. Any gain secures UP.
           </p>
         );
       }
       return (
-        <p className="text-[11px] text-amber-400 leading-snug">
+        <p className="text-[11px] text-amber-600 dark:text-amber-400 leading-snug">
           <TrendingUp className="inline h-3 w-3 mr-0.5" />
           Needs {formatDelta(pointsFromBaseline)} pts ({pctChange(currentScore, baselineScore)}) to cross baseline.
         </p>
@@ -68,7 +68,7 @@ export function WhatNeedsToHappen({
     // DOWN pick
     if (!isAboveBaseline && !isAtBaseline) {
       return (
-        <p className="text-[11px] text-green-400 leading-snug">
+        <p className="text-[11px] text-green-600 dark:text-green-400 leading-snug">
           <TrendingDown className="inline h-3 w-3 mr-0.5" />
           DOWN leads. {firstName} is {formatScore(pointsFromBaseline)} below baseline.
         </p>
@@ -76,14 +76,14 @@ export function WhatNeedsToHappen({
     }
     if (isAtBaseline) {
       return (
-        <p className="text-[11px] text-amber-400 leading-snug">
+        <p className="text-[11px] text-amber-600 dark:text-amber-400 leading-snug">
           <TrendingDown className="inline h-3 w-3 mr-0.5" />
           {firstName} is exactly at baseline. Any drop secures DOWN.
         </p>
       );
     }
     return (
-      <p className="text-[11px] text-amber-400 leading-snug">
+      <p className="text-[11px] text-amber-600 dark:text-amber-400 leading-snug">
         <TrendingDown className="inline h-3 w-3 mr-0.5" />
         {firstName} is {formatScore(pointsFromBaseline)} above baseline. DOWN needs a reversal.
       </p>
@@ -116,17 +116,17 @@ export function WhatNeedsToHappen({
       <div className="text-[11px] text-muted-foreground space-y-1">
         {pick === "up" ? (
           isAboveBaseline ? (
-            <p className="text-green-400">
+            <p className="text-green-600 dark:text-green-400">
               {firstName} is {formatScore(pointsFromBaseline)} pts above baseline ({pctChange(baselineScore, currentScore)}).
               UP wins if score stays above {formatScore(baselineScore)} by close.
             </p>
           ) : isAtBaseline ? (
-            <p className="text-amber-400">
+            <p className="text-amber-600 dark:text-amber-400">
               {firstName} is exactly at the baseline. Any gain by close secures UP.
             </p>
           ) : (
             <>
-              <p className="text-amber-400">
+              <p className="text-amber-600 dark:text-amber-400">
                 {firstName} is {formatScore(pointsFromBaseline)} pts below the weekly baseline.
               </p>
               <p>
@@ -137,17 +137,17 @@ export function WhatNeedsToHappen({
           )
         ) : (
           !isAboveBaseline && !isAtBaseline ? (
-            <p className="text-green-400">
+            <p className="text-green-600 dark:text-green-400">
               DOWN currently leads. {firstName} is {formatScore(pointsFromBaseline)} pts below baseline ({pctChange(baselineScore, currentScore)}).
               DOWN wins if score stays below {formatScore(baselineScore)} by close.
             </p>
           ) : isAtBaseline ? (
-            <p className="text-amber-400">
+            <p className="text-amber-600 dark:text-amber-400">
               {firstName} is exactly at baseline. Any drop by close secures DOWN.
             </p>
           ) : (
             <>
-              <p className="text-amber-400">
+              <p className="text-amber-600 dark:text-amber-400">
                 {firstName} is {formatScore(pointsFromBaseline)} pts above baseline ({pctChange(baselineScore, currentScore)}).
               </p>
               <p>

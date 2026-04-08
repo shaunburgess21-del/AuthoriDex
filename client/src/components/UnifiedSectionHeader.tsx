@@ -14,14 +14,14 @@ const accentMap = {
   cyan: {
     borderTop: "border-t-cyan-500",
     shellBg:
-      "bg-[linear-gradient(to_bottom,rgba(0,200,200,0.08)_0%,transparent_75%)]",
-    iconBg: "bg-cyan-500/10",
+      "bg-[linear-gradient(to_bottom,rgba(0,200,200,0.12)_0%,transparent_75%)] dark:bg-[linear-gradient(to_bottom,rgba(0,200,200,0.08)_0%,transparent_75%)]",
+    iconBg: "bg-cyan-500/15 dark:bg-cyan-500/10",
   },
   violet: {
     borderTop: "border-t-violet-500",
     shellBg:
-      "bg-[linear-gradient(to_bottom,rgba(139,92,246,0.08)_0%,transparent_75%)]",
-    iconBg: "bg-violet-500/10",
+      "bg-[linear-gradient(to_bottom,rgba(139,92,246,0.12)_0%,transparent_75%)] dark:bg-[linear-gradient(to_bottom,rgba(139,92,246,0.08)_0%,transparent_75%)]",
+    iconBg: "bg-violet-500/15 dark:bg-violet-500/10",
   },
 } as const;
 

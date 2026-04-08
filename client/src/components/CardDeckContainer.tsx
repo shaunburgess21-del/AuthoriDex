@@ -101,7 +101,7 @@ export function CardDeckContainer<T>({
             onClick={handleBottomButtonClick}
             className={`text-xs transition-all ${
               hasInteracted 
-                ? "text-cyan-400 hover:text-cyan-300 font-medium" 
+                ? "text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300 font-medium" 
                 : "text-muted-foreground hover:text-foreground"
             }`}
             data-testid={hasInteracted ? "button-next-card" : "button-skip-card"}

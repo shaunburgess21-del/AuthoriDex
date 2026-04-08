@@ -99,7 +99,7 @@ function SpotlightCard({
       <div className="flex items-center gap-3 mb-4">
         <PersonAvatar name={person.name} avatar={person.avatar} className="h-12 w-12" />
         <div className="min-w-0 flex-1">
-          <h3 className="font-semibold text-sm truncate group-hover:text-cyan-400 transition-colors">{person.name}</h3>
+          <h3 className="font-semibold text-sm truncate group-hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">{person.name}</h3>
           {person.category && <CategoryPill category={person.category} size="sm" className="mt-0.5" />}
         </div>
         <span className={`text-2xl font-bold tabular-nums ${accentColor}`}>{Math.round(pct)}%</span>
@@ -110,15 +110,15 @@ function SpotlightCard({
 }
 
 function RankBadge({ rank }: { rank: number }) {
-  if (rank === 1) return <div className="flex items-center justify-center w-7 h-7 rounded-full bg-amber-500/20 border border-amber-500/40"><Trophy className="h-3.5 w-3.5 text-amber-400" /></div>;
-  if (rank === 2) return <div className="flex items-center justify-center w-7 h-7 rounded-full bg-slate-400/20 border border-slate-400/40"><Medal className="h-3.5 w-3.5 text-slate-400" /></div>;
+  if (rank === 1) return <div className="flex items-center justify-center w-7 h-7 rounded-full bg-amber-500/25 dark:bg-amber-500/20 border border-amber-500/50 dark:border-amber-500/40"><Trophy className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" /></div>;
+  if (rank === 2) return <div className="flex items-center justify-center w-7 h-7 rounded-full bg-slate-400/20 border border-slate-500/50 dark:border-slate-400/40"><Medal className="h-3.5 w-3.5 text-slate-600 dark:text-slate-400" /></div>;
   if (rank === 3) return <div className="flex items-center justify-center w-7 h-7 rounded-full bg-orange-700/20 border border-orange-700/40"><Medal className="h-3.5 w-3.5 text-orange-600" /></div>;
   return <span className="w-7 text-center font-mono text-xs text-muted-foreground tabular-nums">{rank}</span>;
 }
 
 function ValueScoreBadge({ score }: { score: number | null }) {
   if (score == null) return <span className="text-xs text-muted-foreground">--</span>;
-  const color = score > 0 ? "text-[#00C853]" : score < 0 ? "text-[#FF0000]" : "text-slate-400";
+  const color = score > 0 ? "text-[#00C853]" : score < 0 ? "text-[#FF0000]" : "text-slate-600 dark:text-slate-400";
   return <span className={`text-sm font-bold font-mono tabular-nums ${color}`}>{score > 0 ? "+" : ""}{Math.round(score)}</span>;
 }
 
@@ -141,14 +141,14 @@ function RankingRow({ person, rank, focusId }: { person: ValuePerson; rank: numb
     : person.userValueVote === "overrated" ? "overrated"
     : person.userValueVote === "fairly_rated" ? "fairly rated" : null;
   const voteColor = person.userValueVote === "underrated" ? "text-[#00C853]"
-    : person.userValueVote === "overrated" ? "text-[#FF0000]" : "text-slate-400";
+    : person.userValueVote === "overrated" ? "text-[#FF0000]" : "text-slate-600 dark:text-slate-400";
 
   return (
     <button
       ref={rowRef}
       type="button"
       onClick={() => setLocation(`/person/${person.id}`)}
-      className={`w-full text-left px-3 sm:px-4 py-3 flex items-center gap-2 sm:gap-3 border-b border-border/30 transition-colors hover:bg-muted/30 ${isFocused ? "bg-cyan-500/5 ring-1 ring-inset ring-cyan-500/30" : ""}`}
+      className={`w-full text-left px-3 sm:px-4 py-3 flex items-center gap-2 sm:gap-3 border-b border-border/30 transition-colors hover:bg-muted/30 ${isFocused ? "bg-cyan-500/8 dark:bg-cyan-500/5 ring-1 ring-inset ring-cyan-500/30" : ""}`}
       data-testid={`row-value-${person.id}`}
     >
       <div className="shrink-0"><RankBadge rank={rank} /></div>
@@ -164,7 +164,7 @@ function RankingRow({ person, rank, focusId }: { person: ValuePerson; rank: numb
           </div>
           <div className="hidden sm:flex items-center gap-2 text-[11px] text-muted-foreground tabular-nums shrink-0">
             <span className="text-[#00C853]">{Math.round(uPct)}%</span>
-            <span className="text-slate-500">{Math.round(fPct)}%</span>
+            <span className="text-slate-700 dark:text-slate-500">{Math.round(fPct)}%</span>
             <span className="text-[#FF0000]">{Math.round(oPct)}%</span>
           </div>
         </div>
@@ -246,8 +246,8 @@ export default function ValueRatingsPage() {
       <main className="max-w-5xl mx-auto px-4 py-6">
         <div className="mb-6">
           <div className="flex items-center gap-2.5 mb-1.5">
-            <div className="h-9 w-9 rounded-lg bg-cyan-500/10 flex items-center justify-center">
-              <BarChart3 className="h-5 w-5 text-cyan-400" />
+            <div className="h-9 w-9 rounded-lg bg-cyan-500/15 dark:bg-cyan-500/10 flex items-center justify-center">
+              <BarChart3 className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
             </div>
             <h1 className="text-2xl font-serif font-bold">Community Perception Rankings</h1>
           </div>
@@ -263,7 +263,7 @@ export default function ValueRatingsPage() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-8">
           <SpotlightCard title="Most Underrated" person={spotlightMostUnderrated} accentColor="text-[#00C853]" accentBg="bg-[#00C853]/15" accentBorder="border-[#00C853]/25" icon={ArrowUp} pctField="underratedPct" />
           <SpotlightCard title="Most Overrated" person={spotlightMostOverrated} accentColor="text-[#FF0000]" accentBg="bg-[#FF0000]/15" accentBorder="border-[#FF0000]/25" icon={ArrowDown} pctField="overratedPct" />
-          <SpotlightCard title="Most Fairly Rated" person={spotlightMostFairlyRated} accentColor="text-slate-400" accentBg="bg-slate-400/15" accentBorder="border-slate-500/25" icon={Minus} pctField="fairlyRatedPct" />
+          <SpotlightCard title="Most Fairly Rated" person={spotlightMostFairlyRated} accentColor="text-slate-600 dark:text-slate-400" accentBg="bg-slate-400/15" accentBorder="border-slate-500/25" icon={Minus} pctField="fairlyRatedPct" />
         </div>
 
         <div className="flex flex-col sm:flex-row gap-3 mb-4">
@@ -274,7 +274,7 @@ export default function ValueRatingsPage() {
               const isActive = categoryFilter === cat;
               return (
                 <button key={cat} onClick={() => { if (isFavorites && !user) { setLocation("/login"); return; } setCategoryFilter(cat as FilterCategory); }}
-                  className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-all flex items-center gap-1.5 whitespace-nowrap ${isActive ? "bg-cyan-500/20 border-cyan-500/40 text-cyan-300" : "bg-slate-800/30 border-slate-700/40 text-slate-400 hover:border-slate-600"}`}
+                  className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-all flex items-center gap-1.5 whitespace-nowrap ${isActive ? "bg-cyan-500/25 dark:bg-cyan-500/20 border-cyan-500/50 dark:border-cyan-500/40 text-cyan-500 dark:text-cyan-300" : "bg-slate-800/30 border-slate-700/40 text-slate-600 dark:text-slate-400 hover:border-slate-600"}`}
                   data-testid={`filter-value-${cat.toLowerCase()}`}
                 >
                   {Icon && <Icon className="h-3 w-3" />}{cat}
@@ -305,14 +305,14 @@ export default function ValueRatingsPage() {
             <div>{Array.from({ length: 12 }).map((_, i) => <SkeletonRow key={i} />)}</div>
           ) : error ? (
             <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-              <div className="h-16 w-16 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center mb-4"><BarChart3 className="h-8 w-8 text-red-400/60" /></div>
+              <div className="h-16 w-16 rounded-full bg-red-500/15 dark:bg-red-500/10 border border-red-500/30 dark:border-red-500/20 flex items-center justify-center mb-4"><BarChart3 className="h-8 w-8 text-red-600/60 dark:text-red-400/60" /></div>
               <h3 className="text-lg font-semibold mb-1">Couldn&apos;t load rankings</h3>
               <p className="text-muted-foreground text-sm mb-4">Please try again in a moment.</p>
               <Button variant="outline" onClick={() => refetch()} data-testid="button-retry-value">Retry</Button>
             </div>
           ) : filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-              <div className="h-16 w-16 rounded-full bg-slate-500/10 border border-slate-500/20 flex items-center justify-center mb-4"><Search className="h-8 w-8 text-slate-400/60" /></div>
+              <div className="h-16 w-16 rounded-full bg-slate-500/15 dark:bg-slate-500/10 border border-slate-500/30 dark:border-slate-500/20 flex items-center justify-center mb-4"><Search className="h-8 w-8 text-slate-600/60 dark:text-slate-400/60" /></div>
               <h3 className="text-lg font-semibold mb-1">No results</h3>
               <p className="text-muted-foreground text-sm">Try adjusting your filters or search.</p>
             </div>
@@ -322,7 +322,7 @@ export default function ValueRatingsPage() {
         </Card>
 
         <div className="text-center mt-8 pb-20">
-          <Button variant="ghost" onClick={() => setLocation("/vote")} className="text-cyan-400 hover:text-cyan-300" data-testid="button-back-vote-bottom">
+          <Button variant="ghost" onClick={() => setLocation("/vote")} className="text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300" data-testid="button-back-vote-bottom">
             <ArrowLeft className="h-4 w-4 mr-1" />Back to Vote
           </Button>
         </div>

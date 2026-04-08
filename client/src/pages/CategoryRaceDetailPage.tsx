@@ -269,7 +269,7 @@ export default function CategoryRaceDetailPage() {
 
       <div className="max-w-3xl mx-auto px-4 pt-4 space-y-4">
         {/* Hero Stats */}
-        <Card className="relative overflow-hidden border-violet-500/20">
+        <Card className="relative overflow-hidden border-violet-500/30 dark:border-violet-500/20">
           <div className="absolute inset-0 bg-gradient-to-r from-violet-500/5 via-transparent to-fuchsia-500/5" />
           <div className="relative p-4 md:p-5">
             <div className="flex items-center gap-2 mb-3">
@@ -293,7 +293,7 @@ export default function CategoryRaceDetailPage() {
 
             <div className="grid grid-cols-3 gap-3 text-center">
               <div>
-                <p className="text-lg md:text-xl font-bold text-violet-400">
+                <p className="text-lg md:text-xl font-bold text-violet-600 dark:text-violet-400">
                   {totalPool.toLocaleString("en-US")}
                 </p>
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Pool</p>
@@ -316,9 +316,9 @@ export default function CategoryRaceDetailPage() {
 
         {/* Your Position */}
         {userPick && userBet && (
-          <Card className="border-green-500/30 bg-green-500/5">
+          <Card className="border-green-500/40 dark:border-green-500/30 bg-green-500/8 dark:bg-green-500/5">
             <div className="p-4">
-              <p className="text-xs font-semibold text-green-500 uppercase tracking-wider mb-2">
+              <p className="text-xs font-semibold text-green-700 dark:text-green-500 uppercase tracking-wider mb-2">
                 Your Position
               </p>
               <div className="flex items-center gap-3">
@@ -334,8 +334,8 @@ export default function CategoryRaceDetailPage() {
                       variant="outline"
                       className={
                         userPick.percentGain >= 0
-                          ? "text-green-500 border-green-500/30"
-                          : "text-red-500 border-red-500/30"
+                          ? "text-green-700 dark:text-green-500 border-green-500/40 dark:border-green-500/30"
+                          : "text-red-700 dark:text-red-500 border-red-500/40 dark:border-red-500/30"
                       }
                     >
                       {formatSignedPercent(userPick.percentGain)}
@@ -362,7 +362,7 @@ export default function CategoryRaceDetailPage() {
         <div>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-semibold flex items-center gap-1.5">
-              <BarChart3 className="h-4 w-4 text-violet-400" />
+              <BarChart3 className="h-4 w-4 text-violet-600 dark:text-violet-400" />
               Race Leaderboard
             </h2>
             <span className="text-xs text-muted-foreground">
@@ -401,9 +401,9 @@ export default function CategoryRaceDetailPage() {
                       canSelect ? "cursor-pointer" : ""
                     } ${
                       isLeader
-                        ? "bg-gradient-to-r from-amber-500/10 to-transparent border border-amber-500/30"
+                        ? "bg-gradient-to-r from-amber-500/10 to-transparent border border-amber-500/40 dark:border-amber-500/30"
                         : isUserPick
-                        ? "border border-green-500/40 bg-green-500/5"
+                        ? "border border-green-500/50 dark:border-green-500/40 bg-green-500/8 dark:bg-green-500/5"
                         : canSelect
                         ? "hover:bg-muted/50"
                         : ""
@@ -424,12 +424,12 @@ export default function CategoryRaceDetailPage() {
                   <div className="relative flex items-center gap-3 flex-1 min-w-0">
                     {/* Rank */}
                     {isLeader ? (
-                      <div className="h-7 w-7 rounded-full bg-amber-500/20 border border-amber-500/50 flex items-center justify-center shrink-0">
-                        <Crown className="h-4 w-4 text-amber-400" />
+                      <div className="h-7 w-7 rounded-full bg-amber-500/25 dark:bg-amber-500/20 border border-amber-500/60 dark:border-amber-500/50 flex items-center justify-center shrink-0">
+                        <Crown className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                       </div>
                     ) : (
                       <div className="h-7 w-7 rounded-full bg-muted/50 flex items-center justify-center shrink-0">
-                        <span className="text-[11px] font-bold text-violet-400">
+                        <span className="text-[11px] font-bold text-violet-600 dark:text-violet-400">
                           {globalIdx + 1}
                         </span>
                       </div>
@@ -447,7 +447,7 @@ export default function CategoryRaceDetailPage() {
                       <div className="flex items-center gap-1.5">
                         <span className="text-sm font-medium truncate">{candidate.name}</span>
                         {isUserPick && (
-                          <Badge className="bg-green-600/20 text-green-500 border-green-500/30 text-[9px] px-1.5 py-0">
+                          <Badge className="bg-green-600/20 text-green-700 dark:text-green-500 border-green-500/40 dark:border-green-500/30 text-[9px] px-1.5 py-0">
                             Your Pick
                           </Badge>
                         )}
@@ -463,7 +463,7 @@ export default function CategoryRaceDetailPage() {
                           className={`text-[10px] font-mono ${
                             candidate.currentGain >= 0
                               ? "text-muted-foreground"
-                              : "text-red-400/80"
+                              : "text-red-600/80 dark:text-red-400/80"
                           }`}
                         >
                           {formatSignedPoints(candidate.currentGain)} pts added
@@ -476,7 +476,7 @@ export default function CategoryRaceDetailPage() {
                   <div className="relative text-right shrink-0">
                     <p
                       className={`text-base font-mono font-bold ${
-                        candidate.percentGain >= 0 ? "text-green-500" : "text-red-500"
+                        candidate.percentGain >= 0 ? "text-green-700 dark:text-green-500" : "text-red-700 dark:text-red-500"
                       }`}
                     >
                       {formatSignedPercent(candidate.percentGain)}
@@ -499,7 +499,7 @@ export default function CategoryRaceDetailPage() {
         <Card className="border-border/50">
           <div className="p-4">
             <h2 className="text-sm font-semibold flex items-center gap-1.5 mb-3">
-              <Zap className="h-4 w-4 text-amber-400" />
+              <Zap className="h-4 w-4 text-amber-600 dark:text-amber-400" />
               Race Insights
             </h2>
 
@@ -558,8 +558,8 @@ export default function CategoryRaceDetailPage() {
                           variant="outline"
                           className={`text-[9px] ${
                             isAccelerating
-                              ? "text-green-500 border-green-500/30"
-                              : "text-orange-400 border-orange-500/30"
+                              ? "text-green-700 dark:text-green-500 border-green-500/40 dark:border-green-500/30"
+                              : "text-orange-600 dark:text-orange-400 border-orange-500/40 dark:border-orange-500/30"
                           }`}
                         >
                           {isAccelerating ? "Accelerating" : "Steady"}
@@ -594,8 +594,8 @@ export default function CategoryRaceDetailPage() {
               <Badge
                 className={
                   userPick.percentGain >= 0
-                    ? "bg-green-600/20 text-green-500 border-green-500/30"
-                    : "bg-red-600/20 text-red-500 border-red-500/30"
+                    ? "bg-green-600/20 text-green-700 dark:text-green-500 border-green-500/40 dark:border-green-500/30"
+                    : "bg-red-600/20 text-red-700 dark:text-red-500 border-red-500/40 dark:border-red-500/30"
                 }
               >
                 {formatSignedPercent(userPick.percentGain)}

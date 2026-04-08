@@ -202,7 +202,7 @@ export function AdminInductionQueue() {
                       <td className="p-3 text-right font-mono">{candidate.seedVotes}</td>
                       <td className="p-3 text-center">
                         {candidate.isActive ? (
-                          <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">Active</Badge>
+                          <Badge className="bg-emerald-500/25 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/40 dark:border-emerald-500/30">Active</Badge>
                         ) : (
                           <Badge variant="outline" className="text-muted-foreground">Inactive</Badge>
                         )}
@@ -214,7 +214,7 @@ export function AdminInductionQueue() {
                               <Button
                                 size="icon"
                                 variant="ghost"
-                                className="text-emerald-400"
+                                className="text-emerald-600 dark:text-emerald-400"
                                 onClick={() => approveMutation.mutate(candidate.id)}
                                 disabled={approveMutation.isPending}
                                 aria-label="Approve"
@@ -225,7 +225,7 @@ export function AdminInductionQueue() {
                               <Button
                                 size="icon"
                                 variant="ghost"
-                                className="text-red-400"
+                                className="text-red-600 dark:text-red-400"
                                 onClick={() => rejectMutation.mutate(candidate.id)}
                                 disabled={rejectMutation.isPending}
                                 aria-label="Reject"
@@ -247,7 +247,7 @@ export function AdminInductionQueue() {
                           <Button
                             size="icon"
                             variant="ghost"
-                            className="text-red-400"
+                            className="text-red-600 dark:text-red-400"
                             onClick={() => deleteMutation.mutate(candidate.id)}
                             disabled={deleteMutation.isPending}
                             aria-label="Delete"

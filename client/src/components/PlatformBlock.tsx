@@ -43,32 +43,32 @@ const platformConfig: Record<string, {
   },
   'YouTube': { 
     icon: SiYoutube, 
-    color: 'text-red-500', 
-    bgColor: 'bg-red-500/10',
+    color: 'text-red-700 dark:text-red-500', 
+    bgColor: 'bg-red-500/15 dark:bg-red-500/10',
     accentColor: '#ef4444'
   },
   'Instagram': { 
     icon: SiInstagram, 
-    color: 'text-pink-500', 
-    bgColor: 'bg-pink-500/10',
+    color: 'text-pink-700 dark:text-pink-500', 
+    bgColor: 'bg-pink-500/15 dark:bg-pink-500/10',
     accentColor: '#ec4899'
   },
   'TikTok': { 
     icon: SiTiktok, 
-    color: 'text-cyan-400', 
+    color: 'text-cyan-600 dark:text-cyan-400', 
     bgColor: 'bg-cyan-400/10',
     accentColor: '#22d3ee'
   },
   'Spotify': { 
     icon: SiSpotify, 
-    color: 'text-green-500', 
-    bgColor: 'bg-green-500/10',
+    color: 'text-green-700 dark:text-green-500', 
+    bgColor: 'bg-green-500/15 dark:bg-green-500/10',
     accentColor: '#22c55e'
   },
   'News': { 
     icon: Newspaper, 
-    color: 'text-blue-500', 
-    bgColor: 'bg-blue-500/10',
+    color: 'text-blue-700 dark:text-blue-500', 
+    bgColor: 'bg-blue-500/15 dark:bg-blue-500/10',
     accentColor: '#3b82f6'
   },
 };

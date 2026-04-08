@@ -151,8 +151,8 @@ export function StakeModal({
   const { days, hours, minutes, seconds, totalSeconds } = marketCycle.timeRemaining;
   const countdownText = formatCountdown(days, hours, minutes, seconds);
   const urgencyColor =
-    marketCycle.urgencyLevel === "critical" ? "text-red-400" :
-    marketCycle.urgencyLevel === "warning" ? "text-amber-400" :
+    marketCycle.urgencyLevel === "critical" ? "text-red-600 dark:text-red-400" :
+    marketCycle.urgencyLevel === "warning" ? "text-amber-600 dark:text-amber-400" :
     "text-muted-foreground";
 
   return (
@@ -168,17 +168,17 @@ export function StakeModal({
       <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto premium-scrollbar">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Target className="h-5 w-5 text-violet-500" />
+            <Target className="h-5 w-5 text-violet-700 dark:text-violet-500" />
             Confirm Prediction
             {selection?.type && RULES_CONTENT[selection.type] && (
               <Popover>
                 <PopoverTrigger asChild>
                   <button
                     type="button"
-                    className="h-6 w-6 rounded-full flex items-center justify-center hover:bg-violet-500/10 transition-colors"
+                    className="h-6 w-6 rounded-full flex items-center justify-center hover:bg-violet-500/15 dark:hover:bg-violet-500/15 dark:bg-violet-500/10 transition-colors"
                     aria-label="How it works"
                   >
-                    <HelpCircle className="h-4 w-4 text-violet-500" />
+                    <HelpCircle className="h-4 w-4 text-violet-700 dark:text-violet-500" />
                   </button>
                 </PopoverTrigger>
                 <PopoverContent className="w-80 max-h-[70vh] overflow-y-auto" side="bottom" align="end">
@@ -200,7 +200,7 @@ export function StakeModal({
         )}
 
         <div className="py-2 space-y-4">
-          <Card className="p-3 bg-violet-500/5 border-violet-500/20">
+          <Card className="p-3 bg-violet-500/8 dark:bg-violet-500/5 border-violet-500/20">
             <p className="text-xs text-muted-foreground mb-1">Market</p>
             <p className="text-sm font-semibold text-foreground">{selection.marketName}</p>
             {isUpDown ? (
@@ -217,7 +217,7 @@ export function StakeModal({
               <button
                 type="button"
                 onClick={onChangePick}
-                className="mt-2 text-xs text-violet-400 hover:text-violet-300 transition-colors"
+                className="mt-2 text-xs text-violet-600 dark:text-violet-400 hover:text-violet-500 dark:hover:text-violet-300 transition-colors"
               >
                 Change pick
               </button>
@@ -230,7 +230,7 @@ export function StakeModal({
                   className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md text-xs font-medium border transition-all ${
                     isUp
                       ? "bg-[#00C853]/20 border-[#00C853]/60 text-[#00C853]"
-                      : "bg-transparent border-slate-700 text-slate-400 hover:border-[#00C853]/40 hover:text-[#00C853]/60"
+                      : "bg-transparent border-slate-700 text-slate-600 dark:text-slate-400 hover:border-[#00C853]/40 hover:text-[#00C853]/60"
                   }`}
                 >
                   <TrendingUp className="h-3 w-3" /> Up
@@ -240,7 +240,7 @@ export function StakeModal({
                   className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md text-xs font-medium border transition-all ${
                     isDown
                       ? "bg-[#FF0000]/20 border-[#FF0000]/60 text-[#FF0000]"
-                      : "bg-transparent border-slate-700 text-slate-400 hover:border-[#FF0000]/40 hover:text-[#FF0000]/60"
+                      : "bg-transparent border-slate-700 text-slate-600 dark:text-slate-400 hover:border-[#FF0000]/40 hover:text-[#FF0000]/60"
                   }`}
                 >
                   <TrendingDown className="h-3 w-3" /> Down
@@ -250,7 +250,7 @@ export function StakeModal({
           </Card>
 
           {showJackpotWarning && (
-            <p className="text-xs text-amber-500 text-center flex items-center justify-center gap-1">
+            <p className="text-xs text-amber-700 dark:text-amber-500 text-center flex items-center justify-center gap-1">
               <Clock className="h-3 w-3" />
               Predictions lock Thursday 5 PM UTC
             </p>
@@ -295,13 +295,13 @@ export function StakeModal({
                 </Card>
                 <Card className="p-2.5 bg-muted/30">
                   <p className="text-[10px] text-muted-foreground uppercase tracking-wide">7-Day Gain</p>
-                  <p className={`font-mono font-bold text-sm ${(selection.candidatePercentGain ?? 0) >= 0 ? "text-green-500" : "text-red-500"}`}>
+                  <p className={`font-mono font-bold text-sm ${(selection.candidatePercentGain ?? 0) >= 0 ? "text-green-700 dark:text-green-500" : "text-red-700 dark:text-red-500"}`}>
                     {selection.candidatePercentGain != null ? `${selection.candidatePercentGain >= 0 ? "+" : ""}${selection.candidatePercentGain.toFixed(1)}%` : "--"}
                   </p>
                 </Card>
                 <Card className="p-2.5 bg-muted/30">
                   <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Points Added</p>
-                  <p className={`font-mono font-bold text-sm ${(selection.candidatePointsAdded ?? 0) >= 0 ? "text-green-500" : "text-red-500"}`}>
+                  <p className={`font-mono font-bold text-sm ${(selection.candidatePointsAdded ?? 0) >= 0 ? "text-green-700 dark:text-green-500" : "text-red-700 dark:text-red-500"}`}>
                     {selection.candidatePointsAdded != null ? `${selection.candidatePointsAdded >= 0 ? "+" : ""}${selection.candidatePointsAdded.toLocaleString("en-US")}` : "--"}
                   </p>
                 </Card>
@@ -317,7 +317,7 @@ export function StakeModal({
             const delta = (selection.currentScore as number) - baseline;
             const pct = baseline !== 0 ? (delta / baseline) * 100 : 0;
             const isPositive = delta >= 0;
-            const color = isPositive ? "text-green-500" : "text-red-500";
+            const color = isPositive ? "text-green-700 dark:text-green-500" : "text-red-700 dark:text-red-500";
             return (
               <div className="flex items-center justify-center gap-2 text-xs">
                 <span className="text-muted-foreground">Delta vs Baseline:</span>
@@ -330,7 +330,7 @@ export function StakeModal({
 
           {selection.estimatedPayout && !isNaN(selection.estimatedPayout) && (
             <p className="text-xs text-muted-foreground text-center">
-              Estimated Payout: <span className="font-mono font-medium text-green-500">{selection.estimatedPayout.toFixed(1)}x</span>
+              Estimated Payout: <span className="font-mono font-medium text-green-700 dark:text-green-500">{selection.estimatedPayout.toFixed(1)}x</span>
             </p>
           )}
 
@@ -411,7 +411,7 @@ export function StakeModal({
             </div>
             <div>
               <span className="text-muted-foreground">After Stake: </span>
-              <span className={`font-mono font-medium ${balanceAfter < 0 ? 'text-red-500' : 'text-green-500'}`}>
+              <span className={`font-mono font-medium ${balanceAfter < 0 ? 'text-red-700 dark:text-red-500' : 'text-green-700 dark:text-green-500'}`}>
                 {balanceAfter >= 0 ? balanceAfter.toLocaleString('en-US') : 'Insufficient'}
               </span>
             </div>
@@ -457,7 +457,7 @@ export function StakeModal({
                       <Star
                         className={`h-5 w-5 ${
                           level <= confidence
-                            ? "text-yellow-500 fill-yellow-500"
+                            ? "text-yellow-700 dark:text-yellow-500 fill-yellow-500"
                             : "text-muted-foreground/40"
                         }`}
                       />
@@ -527,7 +527,7 @@ export function StakeModal({
           </p>
         )}
         {isCutoffPassed && isLoggedIn && (
-          <p className="text-xs text-amber-400/80 text-center -mt-1">
+          <p className="text-xs text-amber-600/80 dark:text-amber-400/80 text-center -mt-1">
             Predictions closed Friday 23:59 UTC — Results Sunday
           </p>
         )}

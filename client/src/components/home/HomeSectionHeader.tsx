@@ -28,11 +28,11 @@ export function HomeSectionHeader({
   const [helpOpen, setHelpOpen] = useState(false);
 
   const isVote = theme === "vote";
-  const accentText = isVote ? "text-cyan-400" : "text-violet-400";
-  const accentBg = isVote ? "from-cyan-500/8 to-cyan-500/3" : "from-violet-500/8 to-violet-500/3";
-  const accentBorder = isVote ? "border-cyan-500/15" : "border-violet-500/15";
-  const accentIconBg = isVote ? "bg-cyan-500/10" : "bg-violet-500/10";
-  const helpBulletDot = isVote ? "bg-cyan-400" : "bg-violet-400";
+  const accentText = isVote ? "text-cyan-600 dark:text-cyan-400" : "text-violet-600 dark:text-violet-400";
+  const accentBg = isVote ? "from-cyan-500/12 to-cyan-500/5 dark:from-cyan-500/8 dark:to-cyan-500/3" : "from-violet-500/12 to-violet-500/5 dark:from-violet-500/8 dark:to-violet-500/3";
+  const accentBorder = isVote ? "border-cyan-500/25 dark:border-cyan-500/15" : "border-violet-500/25 dark:border-violet-500/15";
+  const accentIconBg = isVote ? "bg-cyan-500/15 dark:bg-cyan-500/10" : "bg-violet-500/15 dark:bg-violet-500/10";
+  const helpBulletDot = isVote ? "bg-cyan-600 dark:bg-cyan-400" : "bg-violet-600 dark:bg-violet-400";
 
   const testId = title.toLowerCase().replace(/[\s/]+/g, '-');
 

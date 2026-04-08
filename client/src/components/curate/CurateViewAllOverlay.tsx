@@ -128,7 +128,7 @@ function CelebCard({
                 />
                 {idx === 0 && (
                   <div className="absolute top-1 right-1 bg-yellow-500/20 rounded-full p-0.5">
-                    <Crown className="h-2.5 w-2.5 text-yellow-400" />
+                    <Crown className="h-2.5 w-2.5 text-yellow-600 dark:text-yellow-400" />
                   </div>
                 )}
               </div>

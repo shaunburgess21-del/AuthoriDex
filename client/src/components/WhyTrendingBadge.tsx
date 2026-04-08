@@ -62,18 +62,18 @@ export function WhyTrendingBadge({
 
   const getBadgeStyle = () => {
     if (context.isHeated) {
-      return "bg-orange-500/20 text-orange-300 border-orange-500/30";
+      return "bg-orange-500/25 dark:bg-orange-500/20 text-orange-500 dark:text-orange-300 border-orange-500/40 dark:border-orange-500/30";
     }
     
     switch (context.primaryDriver) {
       case "NEWS":
-        return "bg-blue-500/20 text-blue-300 border-blue-500/30";
+        return "bg-blue-500/25 dark:bg-blue-500/20 text-blue-500 dark:text-blue-300 border-blue-500/40 dark:border-blue-500/30";
       case "SEARCH":
-        return "bg-purple-500/20 text-purple-300 border-purple-500/30";
+        return "bg-purple-500/25 dark:bg-purple-500/20 text-purple-500 dark:text-purple-300 border-purple-500/40 dark:border-purple-500/30";
       case "WIKI":
-        return "bg-emerald-500/20 text-emerald-300 border-emerald-500/30";
+        return "bg-emerald-500/25 dark:bg-emerald-500/20 text-emerald-500 dark:text-emerald-300 border-emerald-500/40 dark:border-emerald-500/30";
       default:
-        return "bg-slate-500/20 text-slate-300 border-slate-500/30";
+        return "bg-slate-500/25 dark:bg-slate-500/20 text-slate-500 dark:text-slate-300 border-slate-500/40 dark:border-slate-500/30";
     }
   };
 
@@ -82,7 +82,7 @@ export function WhyTrendingBadge({
     const isStale = staleStatus.staleSources.includes(source);
     return isStale 
       ? <Circle className="h-2 w-2 text-muted-foreground" /> 
-      : <CheckCircle2 className="h-2 w-2 text-emerald-500" />;
+      : <CheckCircle2 className="h-2 w-2 text-emerald-700 dark:text-emerald-500" />;
   };
 
   const tooltipContent = (
@@ -103,7 +103,7 @@ export function WhyTrendingBadge({
           </div>
         )}
         {staleStatus.hasStale && staleStatus.staleSources.length >= 2 && (
-          <p className="mt-2 text-amber-400/80 flex items-center gap-1">
+          <p className="mt-2 text-amber-600/80 dark:text-amber-400/80 flex items-center gap-1">
             <AlertCircle className="h-3 w-3" />
             Some sources may be cached
           </p>
@@ -132,7 +132,7 @@ export function WhyTrendingBadge({
             {badgeContent}
             {staleStatus.hasStale && staleStatus.staleSources.length >= 3 && (
               <span className="relative flex h-1.5 w-1.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-600 dark:bg-amber-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-amber-500"></span>
               </span>
             )}

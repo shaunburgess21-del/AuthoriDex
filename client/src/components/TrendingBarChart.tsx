@@ -62,13 +62,13 @@ export function TrendingBarChart({ people }: TrendingBarChartProps) {
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-3">
             <h2 className="text-2xl font-serif font-bold">Most Influential People Worldwide</h2>
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/20">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-500/15 dark:bg-blue-500/10 border border-blue-500/20">
               <motion.div
                 className="h-2 w-2 rounded-full bg-blue-500"
                 animate={{ scale: [1, 1.2, 1], opacity: [1, 0.7, 1] }}
                 transition={{ duration: 2, repeat: Infinity }}
               />
-              <span className="text-xs font-medium text-blue-400">Live Updating</span>
+              <span className="text-xs font-medium text-blue-600 dark:text-blue-400">Live Updating</span>
             </div>
           </div>
           <div className="flex gap-2">
@@ -184,16 +184,16 @@ export function TrendingBarChart({ people }: TrendingBarChartProps) {
       {/* AI Insight Row */}
       {leader && runnerUp && (
         <div className="px-6 pb-6">
-          <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-4 flex items-start gap-3">
+          <div className="bg-blue-500/8 dark:bg-blue-500/5 border border-blue-500/20 rounded-lg p-4 flex items-start gap-3">
             <div className="mt-0.5">
-              <TrendingUp className="h-5 w-5 text-blue-400" />
+              <TrendingUp className="h-5 w-5 text-blue-600 dark:text-blue-400" />
             </div>
             <div>
               <p className="text-sm">
-                <span className="font-semibold text-blue-400">AI Insight:</span>
+                <span className="font-semibold text-blue-600 dark:text-blue-400">AI Insight:</span>
                 {' '}
                 <span className="font-semibold">{leader.name}</span> leads global rankings — 
-                <span className="font-mono font-bold text-blue-400"> {scoreDiff}</span> points ahead of #{runnerUp.rank} {runnerUp.name}.
+                <span className="font-mono font-bold text-blue-600 dark:text-blue-400"> {scoreDiff}</span> points ahead of #{runnerUp.rank} {runnerUp.name}.
               </p>
             </div>
           </div>

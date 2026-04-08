@@ -188,7 +188,7 @@ function WeeklyUpDownCard({
           </div>
           <Badge 
             variant="outline" 
-            className={delta >= 0 ? "text-green-500 border-green-500/30 shrink-0" : "text-red-500 border-red-500/30 shrink-0"}
+            className={delta >= 0 ? "text-green-700 dark:text-green-500 border-green-500/40 dark:border-green-500/30 shrink-0" : "text-red-700 dark:text-red-500 border-red-500/40 dark:border-red-500/30 shrink-0"}
           >
             {delta >= 0 ? "+" : ""}{pctDelta}%
           </Badge>
@@ -201,21 +201,21 @@ function WeeklyUpDownCard({
         <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mb-0 flex-wrap">
           <span>Baseline: <span className="font-mono text-foreground">{market.baselineScore.toLocaleString('en-US')}</span></span>
           <span className="text-muted-foreground/40">&middot;</span>
-          <span>Delta: <span className={`font-mono ${delta >= 0 ? "text-green-500" : "text-red-500"}`}>{delta >= 0 ? "+" : ""}{delta.toLocaleString('en-US')}</span></span>
+          <span>Delta: <span className={`font-mono ${delta >= 0 ? "text-green-700 dark:text-green-500" : "text-red-700 dark:text-red-500"}`}>{delta >= 0 ? "+" : ""}{delta.toLocaleString('en-US')}</span></span>
           <span className="text-muted-foreground/40">&middot;</span>
-          <span>Pool: <span className="font-mono text-violet-400">{market.totalPool.toLocaleString('en-US')}</span></span>
+          <span>Pool: <span className="font-mono text-violet-600 dark:text-violet-400">{market.totalPool.toLocaleString('en-US')}</span></span>
         </div>
       </Link>
 
-      <div className="h-2.5 rounded-full bg-red-500/20 overflow-hidden mb-1.5">
+      <div className="h-2.5 rounded-full bg-red-500/25 dark:bg-red-500/20 overflow-hidden mb-1.5">
         <div 
           className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all"
           style={{ width: `${market.upPoolPercent}%` }}
         />
       </div>
       <div className="flex items-center justify-between text-[11px] mb-2">
-        <span className="text-green-500 font-semibold">Up {market.upMultiplier}x</span>
-        <span className="text-red-500 font-semibold">Down {market.downMultiplier}x</span>
+        <span className="text-green-700 dark:text-green-500 font-semibold">Up {market.upMultiplier}x</span>
+        <span className="text-red-700 dark:text-red-500 font-semibold">Down {market.downMultiplier}x</span>
       </div>
       
       <WeeklyUpDownActionButtons
@@ -274,15 +274,12 @@ function HeadToHeadCard({
         
         <Link
           href={`/predict/h2h/${market.id}`}
-          className="relative mb-3 block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary hover:opacity-95 transition-opacity"
+          className="relative mb-3 block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           style={{ padding: '0 5px' }}
           aria-label={`View battle details: ${market.person1.name} vs ${market.person2.name}`}
         >
           <div className="flex" style={{ gap: '7px' }}>
-            <div
-              className={`flex-1 relative ${hasPicked && userPick !== 1 ? 'opacity-50' : ''}`}
-            >
-              <div className={`absolute -inset-4 rounded-md blur-lg pointer-events-none transition-opacity ${hasPicked && userPick === 1 ? 'bg-green-500/20' : 'bg-blue-500/20'}`} />
+            <div className="flex-1 relative">
               <div className={`rounded-lg overflow-hidden transition-all ${hasPicked && userPick === 1 ? 'ring-2 ring-green-500/70' : 'ring-2 ring-transparent'}`}>
                 <PersonAvatar name={market.person1.name} avatar={market.person1.avatar} className="h-auto w-full aspect-[4/5]" />
               </div>
@@ -295,10 +292,7 @@ function HeadToHeadCard({
                 </div>
               )}
             </div>
-            <div
-              className={`flex-1 relative ${hasPicked && userPick !== 2 ? 'opacity-50' : ''}`}
-            >
-              <div className={`absolute -inset-4 rounded-md blur-lg pointer-events-none transition-opacity ${hasPicked && userPick === 2 ? 'bg-green-500/20' : 'bg-purple-500/20'}`} />
+            <div className="flex-1 relative">
               <div className={`rounded-lg overflow-hidden transition-all ${hasPicked && userPick === 2 ? 'ring-2 ring-green-500/70' : 'ring-2 ring-transparent'}`}>
                 <PersonAvatar name={market.person2.name} avatar={market.person2.avatar} className="h-auto w-full aspect-[4/5]" />
               </div>
@@ -322,22 +316,22 @@ function HeadToHeadCard({
         <div className="flex items-center justify-between px-2 mb-2">
           <ClosedMarketActionTrigger isClosed={isMarketClosed && !hasPicked} message={closedMessage} side="top" align="center">
             <div
-              className={`flex flex-col items-center flex-1 ${!hasPicked ? 'cursor-pointer hover:opacity-80' : ''} transition-opacity`}
+              className={`flex flex-col items-center flex-1 ${!hasPicked ? 'cursor-pointer' : ''}`}
               onClick={() => !hasPicked && onSelect?.(1)}
             >
               <p className="text-sm font-semibold text-center">{smartName(market.person1.name)}</p>
               <span className="text-[10px] font-mono text-muted-foreground">{market.person1.currentScore?.toLocaleString('en-US') || ''}</span>
-              <span className="text-xs text-blue-400 font-semibold">{market.person1Percent}%</span>
+              <span className="text-xs text-blue-600 dark:text-blue-400 font-semibold">{market.person1Percent}%</span>
             </div>
           </ClosedMarketActionTrigger>
           <ClosedMarketActionTrigger isClosed={isMarketClosed && !hasPicked} message={closedMessage} side="top" align="center">
             <div
-              className={`flex flex-col items-center flex-1 ${!hasPicked ? 'cursor-pointer hover:opacity-80' : ''} transition-opacity`}
+              className={`flex flex-col items-center flex-1 ${!hasPicked ? 'cursor-pointer' : ''}`}
               onClick={() => !hasPicked && onSelect?.(2)}
             >
               <p className="text-sm font-semibold text-center">{smartName(market.person2.name)}</p>
               <span className="text-[10px] font-mono text-muted-foreground">{market.person2.currentScore?.toLocaleString('en-US') || ''}</span>
-              <span className="text-xs text-purple-400 font-semibold">{100 - market.person1Percent}%</span>
+              <span className="text-xs text-purple-600 dark:text-purple-400 font-semibold">{100 - market.person1Percent}%</span>
             </div>
           </ClosedMarketActionTrigger>
         </div>
@@ -354,15 +348,15 @@ function HeadToHeadCard({
         </div>
         
         <div className="flex items-center justify-center mb-2">
-          <span className="text-sm font-semibold text-violet-500">
+          <span className="text-sm font-semibold text-violet-700 dark:text-violet-500">
             Pool: {market.totalPool.toLocaleString('en-US')}
           </span>
         </div>
         
         <div className="mt-auto">
           {hasPicked ? (
-            <div className="flex items-center gap-2 rounded-lg border border-green-500/30 bg-green-500/5 px-3 py-2">
-              <Check className="h-4 w-4 text-green-500 shrink-0" />
+            <div className="flex items-center gap-2 rounded-lg border border-green-500/40 dark:border-green-500/30 bg-green-500/8 dark:bg-green-500/5 px-3 py-2">
+              <Check className="h-4 w-4 text-green-700 dark:text-green-500 shrink-0" />
               <div className="flex-1 min-w-0">
                 <p className="text-[11px] text-muted-foreground">Your pick</p>
                 <p className="text-sm font-semibold truncate">{smartName(pickedName)}</p>
@@ -370,10 +364,10 @@ function HeadToHeadCard({
               <Badge
                 className={
                   pickWinning
-                    ? "bg-green-600/20 text-green-500 border-green-500/30"
+                    ? "bg-green-600/20 text-green-700 dark:text-green-500 border-green-500/40 dark:border-green-500/30"
                     : pickTied
-                    ? "bg-amber-600/20 text-amber-500 border-amber-500/30"
-                    : "bg-red-600/20 text-red-500 border-red-500/30"
+                    ? "bg-amber-600/20 text-amber-700 dark:text-amber-500 border-amber-500/40 dark:border-amber-500/30"
+                    : "bg-red-600/20 text-red-700 dark:text-red-500 border-red-500/40 dark:border-red-500/30"
                 }
               >
                 {pickWinning ? "Winning" : pickTied ? "Tied" : "Behind"}
@@ -441,10 +435,10 @@ function TopGainerCard({
       
       <Link
         href={`/predict/race/${market.id}`}
-        className="text-[16px] font-semibold mb-2 leading-[1.4] inline-flex items-center gap-1 text-foreground hover:text-violet-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm"
+        className="text-[16px] font-semibold mb-2 leading-[1.4] inline-flex items-center gap-1 text-foreground hover:text-violet-700 dark:text-violet-500 dark:hover:text-violet-500 dark:text-violet-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm"
       >
         Category Race: {getMarketCategoryLabel(market.category)}
-        <span className="text-violet-400 font-normal" aria-hidden>
+        <span className="text-violet-600 dark:text-violet-400 font-normal" aria-hidden>
           ›
         </span>
       </Link>
@@ -455,7 +449,7 @@ function TopGainerCard({
           return market.leaders.map((leader, i) => (
             <div 
               key={leader.name} 
-              className={`flex items-center gap-2.5 p-2 rounded-lg transition-colors relative overflow-hidden ${canPick ? 'cursor-pointer' : ''} ${i === 0 ? 'bg-gradient-to-r from-amber-500/10 to-transparent border border-amber-500/30' : canPick ? 'hover:bg-muted/50' : ''}`}
+              className={`flex items-center gap-2.5 p-2 rounded-lg transition-colors relative overflow-hidden ${canPick ? 'cursor-pointer' : ''} ${i === 0 ? 'bg-gradient-to-r from-amber-500/10 to-transparent border border-amber-500/40 dark:border-amber-500/30' : canPick ? 'hover:bg-muted/50' : ''}`}
               onClick={() => {
                 if (!canPick) return;
                 onShowAllCandidates?.(market, leader);
@@ -464,20 +458,20 @@ function TopGainerCard({
               <div className="absolute inset-y-0 left-0 bg-green-500/8 transition-all" style={{ width: `${Math.max((Math.abs(leader.percentGain) / maxGain) * 100, 5)}%` }} />
               <div className="relative flex items-center gap-2.5 flex-1 min-w-0">
                 {i === 0 ? (
-                  <div className="h-6 w-6 rounded-full bg-amber-500/20 border border-amber-500/50 flex items-center justify-center shrink-0">
-                    <Crown className="h-3.5 w-3.5 text-amber-400" />
+                  <div className="h-6 w-6 rounded-full bg-amber-500/25 dark:bg-amber-500/20 border border-amber-500/60 dark:border-amber-500/50 flex items-center justify-center shrink-0">
+                    <Crown className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
                   </div>
                 ) : (
                   <div className="h-6 w-6 rounded-full bg-muted/50 flex items-center justify-center shrink-0">
-                    <span className="text-[10px] font-bold text-violet-400">#{leader.rank || (i + 1)}</span>
+                    <span className="text-[10px] font-bold text-violet-600 dark:text-violet-400">#{leader.rank || (i + 1)}</span>
                   </div>
                 )}
                 <PersonAvatar name={leader.name} avatar={leader.avatar} className="h-12 w-12" />
                 <span className="text-sm font-medium flex-1 truncate">{leader.name}</span>
               </div>
               <div className="relative text-right shrink-0">
-                <p className={`text-sm font-mono font-bold ${leader.percentGain >= 0 ? 'text-green-500' : 'text-red-500'}`}>{formatSignedPercent(leader.percentGain)}</p>
-                <p className={`text-[10px] font-mono ${leader.currentGain >= 0 ? 'text-muted-foreground' : 'text-red-400/80'}`}>
+                <p className={`text-sm font-mono font-bold ${leader.percentGain >= 0 ? 'text-green-700 dark:text-green-500' : 'text-red-700 dark:text-red-500'}`}>{formatSignedPercent(leader.percentGain)}</p>
+                <p className={`text-[10px] font-mono ${leader.currentGain >= 0 ? 'text-muted-foreground' : 'text-red-600/80 dark:text-red-400/80'}`}>
                   {formatSignedPoints(leader.currentGain)} pts added
                 </p>
               </div>
@@ -486,7 +480,7 @@ function TopGainerCard({
         })()}
         {visibleCandidateCount > 3 && (
           <button
-            className="text-xs text-violet-400 hover:text-violet-300 text-center mt-1 w-full cursor-pointer transition-colors"
+            className="text-xs text-violet-600 dark:text-violet-400 hover:text-violet-500 dark:hover:text-violet-300 text-center mt-1 w-full cursor-pointer transition-colors"
             onClick={(e) => { e.stopPropagation(); onShowAllCandidates?.(market); }}
           >
             View all {visibleCandidateCount} candidates
@@ -495,7 +489,7 @@ function TopGainerCard({
       </div>
       
       <div className="flex items-center justify-between mb-2">
-        <span className="text-sm font-semibold text-violet-500">
+        <span className="text-sm font-semibold text-violet-700 dark:text-violet-500">
           Pool: {market.totalPool.toLocaleString('en-US')}
         </span>
       </div>
@@ -557,7 +551,7 @@ function GainerCandidatesDialog({
       <DialogContent className="max-w-md max-h-[85vh] flex flex-col p-0 gap-0">
         <DialogHeader className="shrink-0 px-4 pt-4 pb-2">
           <DialogTitle className="flex items-center gap-2">
-            <Trophy className="h-5 w-5 text-amber-500" />
+            <Trophy className="h-5 w-5 text-amber-700 dark:text-amber-500" />
             Category Race: {categoryLabel}
           </DialogTitle>
           <DialogDescription>
@@ -566,16 +560,16 @@ function GainerCandidatesDialog({
         </DialogHeader>
 
         {isMarketClosed && (
-          <div className="shrink-0 mx-4 mb-2 rounded-md bg-amber-500/10 border border-amber-500/30 px-3 py-2 flex items-center gap-2">
-            <Lock className="h-3.5 w-3.5 text-amber-500 shrink-0" />
-            <p className="text-xs text-amber-400">Entries closed Friday 23:59 UTC — Awaiting results Sunday</p>
+          <div className="shrink-0 mx-4 mb-2 rounded-md bg-amber-500/15 dark:bg-amber-500/10 border border-amber-500/40 dark:border-amber-500/30 px-3 py-2 flex items-center gap-2">
+            <Lock className="h-3.5 w-3.5 text-amber-700 dark:text-amber-500 shrink-0" />
+            <p className="text-xs text-amber-600 dark:text-amber-400">Entries closed Friday 23:59 UTC — Awaiting results Sunday</p>
           </div>
         )}
 
         <div className="shrink-0 px-4 pb-3 space-y-2">
-          <div className="rounded-md bg-violet-500/5 border border-violet-500/15 px-3 py-2">
+          <div className="rounded-md bg-violet-500/8 dark:bg-violet-500/5 border border-violet-500/15 px-3 py-2">
             <p className="text-xs text-muted-foreground leading-relaxed">
-              <strong className="text-foreground">How it works:</strong> The winner is whoever has the highest <strong className="text-green-500">% gain</strong> in their Trend Score by Sunday close &mdash; not the highest ranked person.
+              <strong className="text-foreground">How it works:</strong> The winner is whoever has the highest <strong className="text-green-700 dark:text-green-500">% gain</strong> in their Trend Score by Sunday close &mdash; not the highest ranked person.
             </p>
           </div>
           <div className="relative">
@@ -606,29 +600,29 @@ function GainerCandidatesDialog({
                   key={candidateKey}
                   className={`w-full flex items-center gap-2 p-2 rounded-lg border text-left transition-colors cursor-pointer ${
                     isSelected
-                      ? "border-violet-500/60 bg-violet-500/10"
+                      ? "border-violet-500/60 bg-violet-500/15 dark:bg-violet-500/10"
                       : isLeader
-                        ? "border-amber-500/30 hover:bg-amber-500/5"
+                        ? "border-amber-500/40 dark:border-amber-500/30 hover:bg-amber-500/8 dark:hover:bg-amber-500/8 dark:bg-amber-500/5"
                         : "border-transparent hover:bg-muted/50"
                   }`}
                   onClick={() => setSelectedCandidateKey(candidateKey)}
                 >
                   <div className="w-6 shrink-0 text-center">
                     {isLeader ? (
-                      <div className="inline-flex h-5 w-5 rounded-full bg-background/80 border border-amber-500/50 items-center justify-center">
-                        <Crown className="h-3 w-3 text-amber-500" />
+                      <div className="inline-flex h-5 w-5 rounded-full bg-background/80 border border-amber-500/60 dark:border-amber-500/50 items-center justify-center">
+                        <Crown className="h-3 w-3 text-amber-700 dark:text-amber-500" />
                       </div>
                     ) : (
-                      <span className="text-xs font-bold text-violet-500">#{candidate.rank || (idx + 1)}</span>
+                      <span className="text-xs font-bold text-violet-700 dark:text-violet-500">#{candidate.rank || (idx + 1)}</span>
                     )}
                   </div>
                   <PersonAvatar name={candidate.name} avatar={candidate.avatar} size="sm" />
                   <span className="text-sm flex-1 truncate">{candidate.name}</span>
                   <div className="text-right shrink-0">
-                    <p className={`text-xs font-mono font-bold ${candidate.percentGain >= 0 ? "text-green-500" : "text-red-500"}`}>
+                    <p className={`text-xs font-mono font-bold ${candidate.percentGain >= 0 ? "text-green-700 dark:text-green-500" : "text-red-700 dark:text-red-500"}`}>
                       {formatSignedPercent(candidate.percentGain)}
                     </p>
-                    <p className={`text-[10px] font-mono ${candidate.currentGain >= 0 ? "text-muted-foreground" : "text-red-400/80"}`}>
+                    <p className={`text-[10px] font-mono ${candidate.currentGain >= 0 ? "text-muted-foreground" : "text-red-600/80 dark:text-red-400/80"}`}>
                       {formatSignedPoints(candidate.currentGain)} pts
                     </p>
                   </div>
@@ -696,7 +690,7 @@ function CommunityCard({
       </div>
       
       <div className="flex items-center justify-between text-xs text-muted-foreground mb-3">
-        <span className="text-violet-500 font-semibold">Pool: {market.totalPool.toLocaleString('en-US')}</span>
+        <span className="text-violet-700 dark:text-violet-500 font-semibold">Pool: {market.totalPool.toLocaleString('en-US')}</span>
         <span>{market.participants} participants</span>
       </div>
       
@@ -713,7 +707,7 @@ function CommunityCard({
         <Button 
           size="sm" 
           variant="outline"
-          className="w-full border-violet-500/30 text-violet-500"
+          className="w-full border-violet-500/40 dark:border-violet-500/30 text-violet-700 dark:text-violet-500"
           onClick={onClick}
           data-testid={`button-join-${market.id}`}
         >
@@ -812,7 +806,7 @@ function SectionHeader({
       {infoTooltip && (
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon" className="text-violet-400 hover:text-violet-300" aria-label="How it works">
+            <Button variant="ghost" size="icon" className="text-violet-600 dark:text-violet-400 hover:text-violet-500 dark:hover:text-violet-300" aria-label="How it works">
               <HelpCircle className="h-5 w-5" />
             </Button>
           </TooltipTrigger>
@@ -826,7 +820,7 @@ function SectionHeader({
           variant="ghost" 
           size="sm" 
           onClick={onViewAll}
-          className="text-violet-500 shrink-0"
+          className="text-violet-700 dark:text-violet-500 shrink-0"
           data-testid="button-view-all-community"
         >
           View all
@@ -1276,7 +1270,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-6 w-6 animate-spin text-violet-500" />
+        <Loader2 className="h-6 w-6 animate-spin text-violet-700 dark:text-violet-500" />
         <span className="ml-2 text-sm text-muted-foreground">Loading prediction markets...</span>
       </div>
     );
@@ -1287,7 +1281,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
       {/* World Markets (Open Markets) */}
       <section>
         <SectionHeader
-          icon={<Users className="h-5 w-5 text-violet-400" />}
+          icon={<Users className="h-5 w-5 text-violet-600 dark:text-violet-400" />}
           title="World Markets"
           subtitle="Predict the outcome of global events"
           count={communityPredictions.length || undefined}
@@ -1319,7 +1313,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
       {/* Weekly Jackpot - person specific */}
       <section>
         <SectionHeader
-          icon={<Crown className="h-5 w-5 text-amber-400" />}
+          icon={<Crown className="h-5 w-5 text-amber-600 dark:text-amber-400" />}
           title="Weekly Jackpot"
           subtitle="Predict this week's exact Trend Score"
           infoTooltip="Closest prediction to the final score wins the jackpot pot"
@@ -1327,20 +1321,20 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
 
         {jackpotMarket ? (
         <div 
-        className="relative overflow-hidden rounded-xl border-2 border-amber-500/50"
+        className="relative overflow-hidden rounded-xl border-2 border-amber-500/60 dark:border-amber-500/50"
         style={{
           background: "linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(251, 146, 60, 0.05) 50%, transparent 100%)",
           boxShadow: "inset 0 0 20px rgba(245, 158, 11, 0.1), 0 0 30px rgba(245, 158, 11, 0.1)",
         }}
         data-testid="profile-jackpot-widget"
       >
-        <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-2xl" />
-        <div className="absolute bottom-0 left-0 w-24 h-24 bg-orange-500/10 rounded-full blur-2xl" />
+        <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/15 dark:bg-amber-500/10 rounded-full blur-2xl" />
+        <div className="absolute bottom-0 left-0 w-24 h-24 bg-orange-500/15 dark:bg-orange-500/10 rounded-full blur-2xl" />
         
         <div className="relative z-10 p-5">
           <div className="flex items-center gap-2 mb-3">
-            <Crown className="h-5 w-5 text-amber-500" />
-            <Badge className="bg-amber-500/20 text-amber-500 border-amber-500/40 text-xs">
+            <Crown className="h-5 w-5 text-amber-700 dark:text-amber-500" />
+            <Badge className="bg-amber-500/25 dark:bg-amber-500/20 text-amber-700 dark:text-amber-500 border-amber-500/50 dark:border-amber-500/40 text-xs">
               WEEKLY JACKPOT
             </Badge>
           </div>
@@ -1368,7 +1362,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
             
             <div>
               <p className="text-xs text-muted-foreground uppercase tracking-wide">Pot</p>
-              <p className="text-xl font-mono font-bold text-amber-500">
+              <p className="text-xl font-mono font-bold text-amber-700 dark:text-amber-500">
                 {jackpotPoolSize.toLocaleString('en-US')}
                 <span className="text-xs ml-1 text-muted-foreground">credits</span>
               </p>
@@ -1426,7 +1420,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
       {/* Up/Down Predictions */}
       <section>
         <SectionHeader
-          icon={<TrendingUp className="h-5 w-5 text-violet-400" />}
+          icon={<TrendingUp className="h-5 w-5 text-violet-600 dark:text-violet-400" />}
           title="Weekly Up / Down"
           subtitle="Will their trend score be higher / lower"
           infoTooltip="Predict whether their trend score finishes the week above or below the starting value"
@@ -1448,7 +1442,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
       {/* Head-to-Head Battles */}
       <section>
         <SectionHeader
-          icon={<Swords className="h-5 w-5 text-violet-400" />}
+          icon={<Swords className="h-5 w-5 text-violet-600 dark:text-violet-400" />}
           title="Head-to-Head Battles"
           subtitle="Who will gain more points"
           count={h2hBattles.length || undefined}
@@ -1485,7 +1479,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
       {/* Category Races */}
       <section>
         <SectionHeader
-          icon={<Trophy className="h-5 w-5 text-violet-400" />}
+          icon={<Trophy className="h-5 w-5 text-violet-600 dark:text-violet-400" />}
           title="Category Races"
           subtitle="Pick the biggest mover in each category"
           count={gainerMarkets.length || undefined}

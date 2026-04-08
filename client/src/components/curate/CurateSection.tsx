@@ -182,7 +182,7 @@ export function CurateSection({
             <Button
               variant="ghost"
               onClick={() => setViewAllOpen(true)}
-              className="text-cyan-400 hover:text-cyan-300"
+              className="text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300"
               data-testid="button-view-full-curation-list"
             >
               View full curation list

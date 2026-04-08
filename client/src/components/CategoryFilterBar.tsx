@@ -34,11 +34,11 @@ export function CategoryFilterBar({
 
   const variantStyles = {
     cyan: {
-      active: "bg-cyan-500/20 border-cyan-500/40 text-cyan-700 dark:text-cyan-300",
+      active: "bg-cyan-500/25 dark:bg-cyan-500/20 border-cyan-500/50 dark:border-cyan-500/40 text-cyan-700 dark:text-cyan-300",
       inactive: "bg-muted/50 border-border/60 text-muted-foreground hover:border-foreground/30 dark:bg-slate-800/30 dark:border-slate-700/40 dark:text-slate-400 dark:hover:border-slate-600",
     },
     violet: {
-      active: "bg-violet-500/20 border-violet-500/40 text-violet-700 dark:text-violet-300",
+      active: "bg-violet-500/25 dark:bg-violet-500/20 border-violet-500/50 dark:border-violet-500/40 text-violet-700 dark:text-violet-300",
       inactive: "bg-muted/50 border-border/60 text-muted-foreground hover:border-foreground/30 dark:bg-slate-800/30 dark:border-slate-700/40 dark:text-slate-400 dark:hover:border-slate-600",
     },
     default: {

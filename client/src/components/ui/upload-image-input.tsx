@@ -212,7 +212,7 @@ export function UploadImageInput({
       )}
 
       {error && (
-        <div className="flex items-center gap-1.5 text-xs text-red-400" data-testid="text-upload-error">
+        <div className="flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400" data-testid="text-upload-error">
           <AlertCircle className="h-3 w-3 shrink-0" />
           <span>{error}</span>
         </div>

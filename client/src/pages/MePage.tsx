@@ -11,13 +11,13 @@ import { VoxDexLogo } from "@/components/VoxDexLogo";
 
 function RankBadge({ rank }: { rank: string }) {
   const badgeConfig: Record<string, { color: string; icon: typeof Shield }> = {
-    "Citizen": { color: "bg-blue-500/20 text-blue-300 border-blue-500/30", icon: Shield },
-    "Engaged": { color: "bg-green-500/20 text-green-300 border-green-500/30", icon: Shield },
-    "Contributor": { color: "bg-teal-500/20 text-teal-300 border-teal-500/30", icon: Sparkles },
-    "Influencer": { color: "bg-purple-500/20 text-purple-300 border-purple-500/30", icon: Sparkles },
-    "Trendsetter": { color: "bg-pink-500/20 text-pink-300 border-pink-500/30", icon: Sparkles },
-    "Fame Maker": { color: "bg-orange-500/20 text-orange-300 border-orange-500/30", icon: Trophy },
-    "Hall of Famer": { color: "bg-amber-500/20 text-amber-300 border-amber-500/30", icon: Trophy },
+    "Citizen": { color: "bg-blue-500/25 dark:bg-blue-500/20 text-blue-500 dark:text-blue-300 border-blue-500/40 dark:border-blue-500/30", icon: Shield },
+    "Engaged": { color: "bg-green-500/25 dark:bg-green-500/20 text-green-500 dark:text-green-300 border-green-500/40 dark:border-green-500/30", icon: Shield },
+    "Contributor": { color: "bg-teal-500/25 dark:bg-teal-500/20 text-teal-500 dark:text-teal-300 border-teal-500/40 dark:border-teal-500/30", icon: Sparkles },
+    "Influencer": { color: "bg-purple-500/25 dark:bg-purple-500/20 text-purple-500 dark:text-purple-300 border-purple-500/40 dark:border-purple-500/30", icon: Sparkles },
+    "Trendsetter": { color: "bg-pink-500/25 dark:bg-pink-500/20 text-pink-500 dark:text-pink-300 border-pink-500/40 dark:border-pink-500/30", icon: Sparkles },
+    "Fame Maker": { color: "bg-orange-500/25 dark:bg-orange-500/20 text-orange-500 dark:text-orange-300 border-orange-500/40 dark:border-orange-500/30", icon: Trophy },
+    "Hall of Famer": { color: "bg-amber-500/25 dark:bg-amber-500/20 text-amber-500 dark:text-amber-300 border-amber-500/40 dark:border-amber-500/30", icon: Trophy },
   };
 
   const config = badgeConfig[rank] || badgeConfig["Citizen"];
@@ -115,7 +115,7 @@ export default function MePage() {
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="font-semibold text-lg truncate">{displayName}</p>
                     {isAdmin && (
-                      <Badge variant="outline" className="bg-red-500/20 text-red-300 border-red-500/30">
+                      <Badge variant="outline" className="bg-red-500/25 dark:bg-red-500/20 text-red-500 dark:text-red-300 border-red-500/40 dark:border-red-500/30">
                         Admin
                       </Badge>
                     )}
@@ -126,7 +126,7 @@ export default function MePage() {
                     <Badge variant="secondary" className="font-mono">
                       Level {xpLevel}
                     </Badge>
-                    <Badge variant="outline" className="text-amber-400">
+                    <Badge variant="outline" className="text-amber-600 dark:text-amber-400">
                       {(profile?.xpPoints || 0).toLocaleString('en-US')} XP
                     </Badge>
                   </div>
@@ -135,28 +135,28 @@ export default function MePage() {
               
               <div className="grid grid-cols-3 sm:grid-cols-5 gap-3 mb-6 text-center">
                 <div className="p-3 rounded-lg bg-muted/50">
-                  <p className="text-2xl font-bold text-cyan-400">{profile?.totalVotes || 0}</p>
+                  <p className="text-2xl font-bold text-cyan-600 dark:text-cyan-400">{profile?.totalVotes || 0}</p>
                   <p className="text-xs text-muted-foreground">Votes Cast</p>
                 </div>
                 <div className="p-3 rounded-lg bg-muted/50">
-                  <p className="text-2xl font-bold text-violet-400">{profile?.totalPredictions || 0}</p>
+                  <p className="text-2xl font-bold text-violet-600 dark:text-violet-400">{profile?.totalPredictions || 0}</p>
                   <p className="text-xs text-muted-foreground">Predictions</p>
                 </div>
                 <div className="p-3 rounded-lg bg-muted/50">
-                  <p className="text-2xl font-bold text-green-400">{profile?.winRate || 0}%</p>
+                  <p className="text-2xl font-bold text-green-600 dark:text-green-400">{profile?.winRate || 0}%</p>
                   <p className="text-xs text-muted-foreground">Win Rate</p>
                 </div>
-                <div className="p-3 rounded-lg bg-violet-500/10 border border-violet-500/20">
+                <div className="p-3 rounded-lg bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/30 dark:border-violet-500/20">
                   <div className="flex items-center justify-center gap-1">
-                    <Wallet className="h-4 w-4 text-violet-400" />
-                    <p className="text-2xl font-bold text-violet-400 font-mono">{(profile?.predictCredits || 0).toLocaleString('en-US')}</p>
+                    <Wallet className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+                    <p className="text-2xl font-bold text-violet-600 dark:text-violet-400 font-mono">{(profile?.predictCredits || 0).toLocaleString('en-US')}</p>
                   </div>
                   <p className="text-xs text-muted-foreground">Credits</p>
                 </div>
-                <div className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/20">
+                <div className="p-3 rounded-lg bg-orange-500/15 dark:bg-orange-500/10 border border-orange-500/30 dark:border-orange-500/20">
                   <div className="flex items-center justify-center gap-1">
-                    <Flame className="h-4 w-4 text-orange-400" />
-                    <p className="text-2xl font-bold text-orange-400">{profile?.currentStreak || 0}</p>
+                    <Flame className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                    <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">{profile?.currentStreak || 0}</p>
                   </div>
                   <p className="text-xs text-muted-foreground">Streak</p>
                 </div>
@@ -219,24 +219,24 @@ export default function MePage() {
             <Card className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-semibold">Predictor Stats</h3>
-                <Badge variant="outline" className="border-violet-500/30 text-violet-400">VIRTUAL</Badge>
+                <Badge variant="outline" className="border-violet-500/40 dark:border-violet-500/30 text-violet-600 dark:text-violet-400">VIRTUAL</Badge>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div className="flex items-center justify-between p-3 rounded-lg bg-violet-500/10 border border-violet-500/30">
+                <div className="flex items-center justify-between p-3 rounded-lg bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/40 dark:border-violet-500/30">
                   <div className="flex items-center gap-2">
-                    <Wallet className="h-4 w-4 text-violet-400" />
+                    <Wallet className="h-4 w-4 text-violet-600 dark:text-violet-400" />
                     <span className="text-sm text-muted-foreground">Balance</span>
                   </div>
-                  <span className="font-mono font-bold text-lg text-violet-400">
+                  <span className="font-mono font-bold text-lg text-violet-600 dark:text-violet-400">
                     {(profile?.predictCredits || 0).toLocaleString('en-US')}
                   </span>
                 </div>
-                <div className="flex items-center justify-between p-3 rounded-lg bg-orange-500/10 border border-orange-500/30">
+                <div className="flex items-center justify-between p-3 rounded-lg bg-orange-500/15 dark:bg-orange-500/10 border border-orange-500/40 dark:border-orange-500/30">
                   <div className="flex items-center gap-2">
-                    <Flame className="h-4 w-4 text-orange-400" />
+                    <Flame className="h-4 w-4 text-orange-600 dark:text-orange-400" />
                     <span className="text-sm text-muted-foreground">Streak</span>
                   </div>
-                  <span className="font-mono font-bold text-lg text-orange-400">
+                  <span className="font-mono font-bold text-lg text-orange-600 dark:text-orange-400">
                     {profile?.currentStreak || 0}
                   </span>
                 </div>
@@ -247,16 +247,16 @@ export default function MePage() {
             </Card>
 
             {isAdmin && (
-              <Card className="p-6 border-red-500/30 bg-red-500/5">
-                <h3 className="font-semibold mb-4 text-red-400">Admin Panel</h3>
+              <Card className="p-6 border-red-500/40 dark:border-red-500/30 bg-red-500/8 dark:bg-red-500/5">
+                <h3 className="font-semibold mb-4 text-red-600 dark:text-red-400">Admin Panel</h3>
                 <div className="space-y-3">
                   <Button 
                     variant="outline" 
-                    className="w-full justify-start gap-3 border-red-500/30 hover:bg-red-500/10"
+                    className="w-full justify-start gap-3 border-red-500/40 dark:border-red-500/30 hover:bg-red-500/15 dark:hover:bg-red-500/10"
                     onClick={() => setLocation("/admin")}
                     data-testid="button-admin-panel"
                   >
-                    <Shield className="h-4 w-4 text-red-400" />
+                    <Shield className="h-4 w-4 text-red-600 dark:text-red-400" />
                     Manage Site
                   </Button>
                 </div>

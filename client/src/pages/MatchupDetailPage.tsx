@@ -128,7 +128,7 @@ export default function MatchupDetailPage() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-cyan-500" />
+        <Loader2 className="h-8 w-8 animate-spin text-cyan-700 dark:text-cyan-500" />
       </div>
     );
   }
@@ -188,11 +188,11 @@ export default function MatchupDetailPage() {
         <div className="mb-6" data-testid="section-matchup-header">
           <div className="flex items-center gap-2 flex-wrap mb-3">
             <CategoryPill category={matchup.category} />
-            <Badge variant="outline" className="text-xs border-cyan-500/30 text-cyan-400">
+            <Badge variant="outline" className="text-xs border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400">
               Matchup
             </Badge>
             {matchup.featured && (
-              <Badge variant="outline" className="text-xs border-amber-500/30 text-amber-400">
+              <Badge variant="outline" className="text-xs border-amber-500/40 dark:border-amber-500/30 text-amber-600 dark:text-amber-400">
                 Featured
               </Badge>
             )}
@@ -234,7 +234,7 @@ export default function MatchupDetailPage() {
         <div className="-mx-4 sm:mx-0">
           <Card className="p-5 mb-6 border-0 shadow-none bg-transparent overflow-hidden" data-testid="section-vote-module">
             <h2 className="text-lg font-serif font-bold mb-4 flex items-center gap-2">
-              <Swords className="h-5 w-5 text-cyan-500" />
+              <Swords className="h-5 w-5 text-cyan-700 dark:text-cyan-500" />
               Cast Your Vote
             </h2>
 
@@ -247,8 +247,8 @@ export default function MatchupDetailPage() {
                 hasVoted
                   ? votedA
                     ? 'border-slate-300/60 ring-2 ring-white/15'
-                    : 'border-slate-700/30 opacity-70 hover:opacity-90 hover:border-slate-400/40'
-                  : 'border-slate-700/50 hover:border-slate-400/50'
+                    : 'border-slate-700/30 opacity-70 hover:opacity-90 hover:border-slate-500/50 dark:border-slate-400/40'
+                  : 'border-slate-700/50 hover:border-slate-500/60 dark:border-slate-400/50'
               }`}
               data-testid="button-vote-option-a"
             >
@@ -267,14 +267,14 @@ export default function MatchupDetailPage() {
                 )}
                 {votedA && (
                   <div className="absolute top-2 right-2">
-                    <Badge variant="outline" className="text-[10px] border-blue-500/50 text-blue-400 bg-black/50 backdrop-blur-sm py-0">
+                    <Badge variant="outline" className="text-[10px] border-blue-500/60 dark:border-blue-500/50 text-blue-600 dark:text-blue-400 bg-black/50 backdrop-blur-sm py-0">
                       Your pick
                     </Badge>
                   </div>
                 )}
               </div>
               <div className="px-3 py-3 bg-slate-900/80 backdrop-blur-sm border-t border-slate-700/30 text-center">
-                <span className={`font-semibold text-sm truncate block ${votedA ? 'text-blue-400' : ''}`}>{matchup.optionAText}</span>
+                <span className={`font-semibold text-sm truncate block ${votedA ? 'text-blue-600 dark:text-blue-400' : ''}`}>{matchup.optionAText}</span>
               </div>
             </button>
 
@@ -292,8 +292,8 @@ export default function MatchupDetailPage() {
                 hasVoted
                   ? votedB
                     ? 'border-slate-300/60 ring-2 ring-white/15'
-                    : 'border-slate-700/30 opacity-70 hover:opacity-90 hover:border-slate-400/40'
-                  : 'border-slate-700/50 hover:border-slate-400/50'
+                    : 'border-slate-700/30 opacity-70 hover:opacity-90 hover:border-slate-500/50 dark:border-slate-400/40'
+                  : 'border-slate-700/50 hover:border-slate-500/60 dark:border-slate-400/50'
               }`}
               data-testid="button-vote-option-b"
             >
@@ -312,14 +312,14 @@ export default function MatchupDetailPage() {
                 )}
                 {votedB && (
                   <div className="absolute top-2 right-2">
-                    <Badge variant="outline" className="text-[10px] border-amber-500/50 text-amber-400 bg-black/50 backdrop-blur-sm py-0">
+                    <Badge variant="outline" className="text-[10px] border-amber-500/60 dark:border-amber-500/50 text-amber-600 dark:text-amber-400 bg-black/50 backdrop-blur-sm py-0">
                       Your pick
                     </Badge>
                   </div>
                 )}
               </div>
               <div className="px-3 py-3 bg-slate-900/80 backdrop-blur-sm border-t border-slate-700/30 text-center">
-                <span className={`font-semibold text-sm truncate block ${votedB ? 'text-amber-400' : ''}`}>{matchup.optionBText}</span>
+                <span className={`font-semibold text-sm truncate block ${votedB ? 'text-amber-600 dark:text-amber-400' : ''}`}>{matchup.optionBText}</span>
               </div>
             </button>
           </div>
@@ -330,7 +330,7 @@ export default function MatchupDetailPage() {
               <span className="text-xs text-muted-foreground/40">|</span>
               <button
                 onClick={() => handleRemoveVote(matchup.id)}
-                className="text-xs text-muted-foreground hover:text-red-400/80 transition-colors underline-offset-4 hover:underline"
+                className="text-xs text-muted-foreground hover:text-red-600/80 dark:hover:text-red-400/80 transition-colors underline-offset-4 hover:underline"
                 data-testid="button-remove-vote"
               >
                 Remove vote
@@ -340,7 +340,7 @@ export default function MatchupDetailPage() {
 
           {!isLoggedIn && !hasVoted && (
             <p className="text-xs text-center text-muted-foreground pt-2">
-              <Button variant="ghost" className="p-0 h-auto text-cyan-400 underline" onClick={() => setLocation("/login")} data-testid="link-login-to-vote">
+              <Button variant="ghost" className="p-0 h-auto text-cyan-600 dark:text-cyan-400 underline" onClick={() => setLocation("/login")} data-testid="link-login-to-vote">
                 Sign in
               </Button>{" "}
               to cast your vote
@@ -352,7 +352,7 @@ export default function MatchupDetailPage() {
         {/* Results */}
         <Card className="p-5 mb-6" data-testid="section-results">
           <h2 className="text-lg font-serif font-bold mb-4 flex items-center gap-2">
-            <BarChart3 className="h-5 w-5 text-cyan-500" />
+            <BarChart3 className="h-5 w-5 text-cyan-700 dark:text-cyan-500" />
             Results
           </h2>
 
@@ -360,11 +360,11 @@ export default function MatchupDetailPage() {
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-sm font-medium">{matchup.optionAText}</span>
-                <span className={`text-sm font-bold font-mono ${leadingA ? 'text-blue-400' : 'text-muted-foreground'}`}>
+                <span className={`text-sm font-bold font-mono ${leadingA ? 'text-blue-600 dark:text-blue-400' : 'text-muted-foreground'}`}>
                   {matchup.optionAPercent}%
                 </span>
               </div>
-              <div className="h-8 rounded-md bg-blue-500/10 border border-blue-500/30 overflow-hidden relative">
+              <div className="h-8 rounded-md bg-blue-500/15 dark:bg-blue-500/10 border border-blue-500/40 dark:border-blue-500/30 overflow-hidden relative">
                 <div
                   className="h-full bg-gradient-to-r from-blue-600 to-blue-400 transition-all duration-500 rounded-md flex items-center justify-center"
                   style={{ width: `${Math.max(matchup.optionAPercent, 5)}%` }}
@@ -379,11 +379,11 @@ export default function MatchupDetailPage() {
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-sm font-medium">{matchup.optionBText}</span>
-                <span className={`text-sm font-bold font-mono ${!leadingA ? 'text-amber-400' : 'text-muted-foreground'}`}>
+                <span className={`text-sm font-bold font-mono ${!leadingA ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'}`}>
                   {matchup.optionBPercent}%
                 </span>
               </div>
-              <div className="h-8 rounded-md bg-amber-500/10 border border-amber-500/30 overflow-hidden relative">
+              <div className="h-8 rounded-md bg-amber-500/15 dark:bg-amber-500/10 border border-amber-500/40 dark:border-amber-500/30 overflow-hidden relative">
                 <div
                   className="h-full bg-gradient-to-r from-amber-500 to-amber-600 transition-all duration-500 rounded-md flex items-center justify-center"
                   style={{ width: `${Math.max(matchup.optionBPercent, 5)}%` }}
@@ -402,7 +402,7 @@ export default function MatchupDetailPage() {
                 <div className="h-2.5 w-2.5 rounded-full bg-blue-400" />
                 <span className="text-xs font-medium">{matchup.optionAText}</span>
               </div>
-              <p className="text-lg font-bold font-mono text-blue-400" data-testid="text-option-a-percent">{matchup.optionAPercent}%</p>
+              <p className="text-lg font-bold font-mono text-blue-600 dark:text-blue-400" data-testid="text-option-a-percent">{matchup.optionAPercent}%</p>
               <p className="text-xs text-muted-foreground">{matchup.optionAVotes.toLocaleString('en-US')} votes</p>
             </div>
             <div>
@@ -410,7 +410,7 @@ export default function MatchupDetailPage() {
                 <div className="h-2.5 w-2.5 rounded-full bg-amber-500" />
                 <span className="text-xs font-medium">{matchup.optionBText}</span>
               </div>
-              <p className="text-lg font-bold font-mono text-amber-400" data-testid="text-option-b-percent">{matchup.optionBPercent}%</p>
+              <p className="text-lg font-bold font-mono text-amber-600 dark:text-amber-400" data-testid="text-option-b-percent">{matchup.optionBPercent}%</p>
               <p className="text-xs text-muted-foreground">{matchup.optionBVotes.toLocaleString('en-US')} votes</p>
             </div>
           </div>
@@ -425,18 +425,18 @@ export default function MatchupDetailPage() {
         {/* Stats Row */}
         <div className="grid grid-cols-3 gap-3 mb-6" data-testid="section-stats">
           <Card className="p-3 text-center">
-            <Users className="h-4 w-4 text-cyan-500 mx-auto mb-1" />
+            <Users className="h-4 w-4 text-cyan-700 dark:text-cyan-500 mx-auto mb-1" />
             <p className="text-lg font-bold font-mono" data-testid="text-total-votes">{matchup.totalVotes.toLocaleString('en-US')}</p>
             <p className="text-xs text-muted-foreground">Total Votes</p>
           </Card>
           <Card className="p-3 text-center">
-            <MessageSquare className="h-4 w-4 text-cyan-500 mx-auto mb-1" />
+            <MessageSquare className="h-4 w-4 text-cyan-700 dark:text-cyan-500 mx-auto mb-1" />
             <p className="text-lg font-bold font-mono" data-testid="text-comment-count">{matchupCommentCount}</p>
             <p className="text-xs text-muted-foreground">Comments</p>
           </Card>
           <Card className="p-3 text-center">
-            <TrendingUp className={`h-4 w-4 mx-auto mb-1 ${matchup.optionAPercent === matchup.optionBPercent ? 'text-muted-foreground' : leadingA ? 'text-blue-400' : 'text-amber-400'}`} />
-            <p className={`text-lg font-bold font-mono ${matchup.optionAPercent === matchup.optionBPercent ? 'text-muted-foreground' : leadingA ? 'text-blue-400' : 'text-amber-400'}`} data-testid="text-margin">
+            <TrendingUp className={`h-4 w-4 mx-auto mb-1 ${matchup.optionAPercent === matchup.optionBPercent ? 'text-muted-foreground' : leadingA ? 'text-blue-600 dark:text-blue-400' : 'text-amber-600 dark:text-amber-400'}`} />
+            <p className={`text-lg font-bold font-mono ${matchup.optionAPercent === matchup.optionBPercent ? 'text-muted-foreground' : leadingA ? 'text-blue-600 dark:text-blue-400' : 'text-amber-600 dark:text-amber-400'}`} data-testid="text-margin">
               {matchup.optionAPercent === matchup.optionBPercent ? 'Tied' : `${Math.abs(matchup.optionAPercent - matchup.optionBPercent)}pts`}
             </p>
             <p className="text-xs text-muted-foreground">Margin</p>
@@ -447,7 +447,7 @@ export default function MatchupDetailPage() {
         {matchup.description && (
           <Card className="p-5 mb-6" data-testid="section-about">
             <h2 className="text-lg font-serif font-bold mb-2 flex items-center gap-2">
-              <Info className="h-5 w-5 text-cyan-500" />
+              <Info className="h-5 w-5 text-cyan-700 dark:text-cyan-500" />
               About This Matchup
             </h2>
             <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">

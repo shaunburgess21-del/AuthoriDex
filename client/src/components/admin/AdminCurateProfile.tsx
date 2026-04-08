@@ -139,10 +139,10 @@ export function AdminCurateProfile() {
 
   const getVisibilityBadge = (vis: string) => {
     switch (vis) {
-      case 'live': return <Badge variant="default" className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">Live</Badge>;
+      case 'live': return <Badge variant="default" className="bg-emerald-500/25 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/40 dark:border-emerald-500/30">Live</Badge>;
       case 'inactive': return <Badge variant="secondary">Inactive</Badge>;
       case 'archived': return <Badge variant="outline" className="text-muted-foreground">Archived</Badge>;
-      default: return <Badge variant="default" className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">Live</Badge>;
+      default: return <Badge variant="default" className="bg-emerald-500/25 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/40 dark:border-emerald-500/30">Live</Badge>;
     }
   };
 
@@ -345,7 +345,7 @@ export function AdminCurateProfile() {
                       return (
                         <Card
                           key={img.id}
-                          className={`overflow-visible ${isWinner ? 'border-amber-500/50' : ''}`}
+                          className={`overflow-visible ${isWinner ? 'border-amber-500/60 dark:border-amber-500/50' : ''}`}
                           data-testid={`card-image-${img.id}`}
                         >
                           <div className="relative">
@@ -365,7 +365,7 @@ export function AdminCurateProfile() {
                           <div className="p-3 space-y-3">
                             <div className="flex items-center justify-between gap-2 flex-wrap">
                               <div className="flex items-center gap-1.5 text-sm">
-                                <ThumbsUp className="h-3.5 w-3.5 text-emerald-400" />
+                                <ThumbsUp className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
                                 <span className="font-mono font-semibold" data-testid={`text-votes-${img.id}`}>{img.votesUp}</span>
                                 <span className="text-muted-foreground">votes</span>
                               </div>

@@ -87,7 +87,7 @@ export function RulesExplainer({ title, description, steps }: RulesEntry) {
       <div className="space-y-3">
         {steps.map((step, i) => (
           <div key={i} className="flex items-start gap-3">
-            <div className="h-8 w-8 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0">
+            <div className="h-8 w-8 rounded-lg bg-violet-500/15 dark:bg-violet-500/10 flex items-center justify-center shrink-0">
               {step.icon}
             </div>
             <div>
@@ -119,7 +119,7 @@ export function RulesModal({ open, onClose, title, description, steps }: {
         <div className="space-y-4 py-4">
           {steps.map((step, i) => (
             <div key={i} className="flex items-start gap-3">
-              <div className="h-8 w-8 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0">
+              <div className="h-8 w-8 rounded-lg bg-violet-500/15 dark:bg-violet-500/10 flex items-center justify-center shrink-0">
                 {step.icon}
               </div>
               <div>

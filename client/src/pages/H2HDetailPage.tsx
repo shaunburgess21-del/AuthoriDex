@@ -256,7 +256,7 @@ export default function H2HDetailPage() {
 
       <div className="max-w-3xl mx-auto px-4 pt-4 space-y-4">
         {/* Hero – Side-by-side portraits */}
-        <Card className="relative overflow-hidden border-slate-500/20">
+        <Card className="relative overflow-hidden border-slate-500/30 dark:border-slate-500/20">
           <div className="absolute inset-0 pointer-events-none">
             <div className="absolute left-0 top-0 w-1/2 h-full bg-gradient-to-r from-blue-600/10 to-transparent" />
             <div className="absolute right-0 top-0 w-1/2 h-full bg-gradient-to-l from-purple-600/10 to-transparent" />
@@ -289,7 +289,7 @@ export default function H2HDetailPage() {
                     className={`flex-1 relative ${!userPickSide ? "cursor-pointer group/p1" : ""}`}
                     onClick={() => !userPickSide && handleSelect(1)}
                   >
-                  <div className="absolute -inset-4 rounded-md bg-blue-500/20 blur-lg pointer-events-none transition-opacity group-hover/p1:bg-blue-500/40" />
+                  <div className="absolute -inset-4 rounded-md bg-blue-500/25 dark:bg-blue-500/20 blur-lg pointer-events-none transition-opacity group-hover/p1:bg-blue-500/40" />
                   <div className="rounded-lg overflow-hidden ring-2 ring-transparent transition-all group-hover/p1:ring-blue-500/60">
                     <PersonAvatar
                       name={hydrated.person1.name}
@@ -298,8 +298,8 @@ export default function H2HDetailPage() {
                     />
                   </div>
                   {person1Leading && (
-                    <div className="absolute -top-1.5 -right-1.5 z-10 h-6 w-6 rounded-full bg-amber-500/20 border border-amber-500/50 flex items-center justify-center">
-                      <Crown className="h-3.5 w-3.5 text-amber-400" />
+                    <div className="absolute -top-1.5 -right-1.5 z-10 h-6 w-6 rounded-full bg-amber-500/25 dark:bg-amber-500/20 border border-amber-500/60 dark:border-amber-500/50 flex items-center justify-center">
+                      <Crown className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
                     </div>
                   )}
                   </div>
@@ -310,7 +310,7 @@ export default function H2HDetailPage() {
                     className={`flex-1 relative ${!userPickSide ? "cursor-pointer group/p2" : ""}`}
                     onClick={() => !userPickSide && handleSelect(2)}
                   >
-                  <div className="absolute -inset-4 rounded-md bg-purple-500/20 blur-lg pointer-events-none transition-opacity group-hover/p2:bg-purple-500/40" />
+                  <div className="absolute -inset-4 rounded-md bg-purple-500/25 dark:bg-purple-500/20 blur-lg pointer-events-none transition-opacity group-hover/p2:bg-purple-500/40" />
                   <div className="rounded-lg overflow-hidden ring-2 ring-transparent transition-all group-hover/p2:ring-purple-500/60">
                     <PersonAvatar
                       name={hydrated.person2.name}
@@ -319,8 +319,8 @@ export default function H2HDetailPage() {
                     />
                   </div>
                   {person2Leading && (
-                    <div className="absolute -top-1.5 -right-1.5 z-10 h-6 w-6 rounded-full bg-amber-500/20 border border-amber-500/50 flex items-center justify-center">
-                      <Crown className="h-3.5 w-3.5 text-amber-400" />
+                    <div className="absolute -top-1.5 -right-1.5 z-10 h-6 w-6 rounded-full bg-amber-500/25 dark:bg-amber-500/20 border border-amber-500/60 dark:border-amber-500/50 flex items-center justify-center">
+                      <Crown className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
                     </div>
                   )}
                   </div>
@@ -352,7 +352,7 @@ export default function H2HDetailPage() {
             {/* Quick stats */}
             <div className="grid grid-cols-3 gap-3 text-center">
               <div>
-                <p className="text-lg md:text-xl font-bold text-violet-400">
+                <p className="text-lg md:text-xl font-bold text-violet-600 dark:text-violet-400">
                   {hydrated.totalPool.toLocaleString("en-US")}
                 </p>
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
@@ -381,9 +381,9 @@ export default function H2HDetailPage() {
 
         {/* Your Position */}
         {userBet && userPickSide && (
-          <Card className="border-green-500/30 bg-green-500/5">
+          <Card className="border-green-500/40 dark:border-green-500/30 bg-green-500/8 dark:bg-green-500/5">
             <div className="p-4">
-              <p className="text-xs font-semibold text-green-500 uppercase tracking-wider mb-2">
+              <p className="text-xs font-semibold text-green-700 dark:text-green-500 uppercase tracking-wider mb-2">
                 Your Position
               </p>
               <div className="flex items-center gap-3">
@@ -409,10 +409,10 @@ export default function H2HDetailPage() {
                     className={
                       (userPickSide === 1 && person1Leading) ||
                       (userPickSide === 2 && person2Leading)
-                        ? "text-green-500 border-green-500/30"
+                        ? "text-green-700 dark:text-green-500 border-green-500/40 dark:border-green-500/30"
                         : scoreTied
-                        ? "text-amber-500 border-amber-500/30"
-                        : "text-red-500 border-red-500/30"
+                        ? "text-amber-700 dark:text-amber-500 border-amber-500/40 dark:border-amber-500/30"
+                        : "text-red-700 dark:text-red-500 border-red-500/40 dark:border-red-500/30"
                     }
                   >
                     {(userPickSide === 1 && person1Leading) ||
@@ -438,7 +438,7 @@ export default function H2HDetailPage() {
         <Card className="border-border/50">
           <div className="p-4">
             <h2 className="text-sm font-semibold flex items-center gap-1.5 mb-4">
-              <Swords className="h-4 w-4 text-violet-400" />
+              <Swords className="h-4 w-4 text-violet-600 dark:text-violet-400" />
               Score Comparison
             </h2>
 
@@ -473,7 +473,7 @@ export default function H2HDetailPage() {
                         />
                         <span className="text-sm font-medium">{smartName(person.name)}</span>
                         {isLeading && (
-                          <Crown className="h-3.5 w-3.5 text-amber-400" />
+                          <Crown className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
                         )}
                       </div>
                       <span className="text-sm font-mono font-bold">
@@ -497,7 +497,7 @@ export default function H2HDetailPage() {
               {/* Who's winning narrative */}
               <div className="rounded-lg border border-border/40 bg-muted/20 p-3">
                 {scoreTied ? (
-                  <p className="text-xs text-amber-400 flex items-center gap-1.5">
+                  <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
                     <Shield className="h-3.5 w-3.5" />
                     It's a dead heat! Scores are identical.
                   </p>
@@ -524,7 +524,7 @@ export default function H2HDetailPage() {
         <Card className="border-border/50">
           <div className="p-4">
             <h2 className="text-sm font-semibold flex items-center gap-1.5 mb-3">
-              <Users className="h-4 w-4 text-violet-400" />
+              <Users className="h-4 w-4 text-violet-600 dark:text-violet-400" />
               Crowd Picks
             </h2>
             <div className="space-y-3">
@@ -546,14 +546,14 @@ export default function H2HDetailPage() {
                     className="h-8 w-8"
                   />
                   <div>
-                    <p className="text-sm font-semibold text-blue-400">
+                    <p className="text-sm font-semibold text-blue-600 dark:text-blue-400">
                       {smartName(hydrated.person1.name)} {hydrated.person1Percent}%
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <div>
-                    <p className="text-sm font-semibold text-purple-400 text-right">
+                    <p className="text-sm font-semibold text-purple-600 dark:text-purple-400 text-right">
                       {100 - hydrated.person1Percent}% {smartName(hydrated.person2.name)}
                     </p>
                   </div>
@@ -574,7 +574,7 @@ export default function H2HDetailPage() {
         {/* How This Resolves */}
         <Card className="p-3 bg-muted/30 border-border/40 space-y-2">
           <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
-            <Shield className="h-3.5 w-3.5 text-violet-500" />
+            <Shield className="h-3.5 w-3.5 text-violet-700 dark:text-violet-500" />
             How this resolves
           </div>
           <div className="text-[11px] text-muted-foreground space-y-1.5 leading-snug">
@@ -590,7 +590,7 @@ export default function H2HDetailPage() {
               </span>
             </div>
             <div className="flex items-start gap-1.5">
-              <Lock className="h-3 w-3 mt-0.5 shrink-0 text-amber-500" />
+              <Lock className="h-3 w-3 mt-0.5 shrink-0 text-amber-700 dark:text-amber-500" />
               <span>
                 Predictions close:{" "}
                 <span className="font-medium text-foreground">
@@ -604,13 +604,13 @@ export default function H2HDetailPage() {
               </span>
             </div>
             <div className="flex items-start gap-1.5">
-              <TrendingUp className="h-3 w-3 mt-0.5 shrink-0 text-blue-400" />
+              <TrendingUp className="h-3 w-3 mt-0.5 shrink-0 text-blue-600 dark:text-blue-400" />
               <span>
                 {hydrated.person1.name} wins if their final Trend Score is higher
               </span>
             </div>
             <div className="flex items-start gap-1.5">
-              <TrendingDown className="h-3 w-3 mt-0.5 shrink-0 text-purple-400" />
+              <TrendingDown className="h-3 w-3 mt-0.5 shrink-0 text-purple-600 dark:text-purple-400" />
               <span>
                 {hydrated.person2.name} wins if their final Trend Score is higher
               </span>
@@ -656,10 +656,10 @@ export default function H2HDetailPage() {
                 className={
                   (userPickSide === 1 && person1Leading) ||
                   (userPickSide === 2 && person2Leading)
-                    ? "bg-green-600/20 text-green-500 border-green-500/30"
+                    ? "bg-green-600/20 text-green-700 dark:text-green-500 border-green-500/40 dark:border-green-500/30"
                     : scoreTied
-                    ? "bg-amber-600/20 text-amber-500 border-amber-500/30"
-                    : "bg-red-600/20 text-red-500 border-red-500/30"
+                    ? "bg-amber-600/20 text-amber-700 dark:text-amber-500 border-amber-500/40 dark:border-amber-500/30"
+                    : "bg-red-600/20 text-red-700 dark:text-red-500 border-red-500/40 dark:border-red-500/30"
                 }
               >
                 {(userPickSide === 1 && person1Leading) ||

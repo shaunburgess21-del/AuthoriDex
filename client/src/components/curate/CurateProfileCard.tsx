@@ -222,11 +222,11 @@ export function CurateProfileCard({
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
                 transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-                className="h-12 w-12 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-3"
+                className="h-12 w-12 rounded-full bg-green-500/25 dark:bg-green-500/20 flex items-center justify-center mx-auto mb-3"
               >
-                <Check className="h-6 w-6 text-green-400" />
+                <Check className="h-6 w-6 text-green-600 dark:text-green-400" />
               </motion.div>
-              <p className="font-medium text-green-400 mb-1">
+              <p className="font-medium text-green-600 dark:text-green-400 mb-1">
                 {resultMessage === "saved" ? "Your vote is saved!" : "Vote recorded!"}
               </p>
               <p className="text-xs text-muted-foreground mb-4">
@@ -238,7 +238,7 @@ export function CurateProfileCard({
                     size="sm"
                     variant="outline"
                     onClick={() => onViewResults(person)}
-                    className="border-cyan-500/50 text-cyan-400"
+                    className="border-cyan-500/60 dark:border-cyan-500/50 text-cyan-600 dark:text-cyan-400"
                     data-testid={`button-view-results-${person.id}`}
                   >
                     <Eye className="h-3.5 w-3.5 mr-1" />
@@ -253,7 +253,7 @@ export function CurateProfileCard({
                       setIsEditingVote(true);
                       setResultMessage("recorded");
                     }}
-                    className="border-slate-600/50 text-slate-300 hover:text-white hover:border-slate-500"
+                    className="border-slate-600/50 text-slate-500 dark:text-slate-300 hover:text-white hover:border-slate-500"
                     data-testid={`button-change-vote-${person.id}`}
                   >
                     <RefreshCw className="h-3.5 w-3.5 mr-1" />
@@ -265,7 +265,7 @@ export function CurateProfileCard({
                     size="sm"
                     variant="ghost"
                     onClick={() => setLocation(`/person/${person.id}`)}
-                    className="text-muted-foreground hover:text-cyan-400 text-xs"
+                    className="text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400 text-xs"
                     data-testid={`button-visit-profile-${person.id}`}
                   >
                     <User className="h-3 w-3 mr-1" />
@@ -294,7 +294,7 @@ export function CurateProfileCard({
                         hasVoted
                           ? isSelected
                             ? 'border-slate-300/60 ring-2 ring-white/15'
-                            : 'border-slate-700/30 opacity-70 hover:opacity-90 hover:border-slate-400/40'
+                            : 'border-slate-700/30 opacity-70 hover:opacity-90 hover:border-slate-500/50 dark:border-slate-400/40'
                           : 'border-slate-700/50 hover:border-slate-400/50 cursor-pointer'
                       }`}
                       data-testid={`button-curate-photo-${image.id}`}
@@ -306,14 +306,14 @@ export function CurateProfileCard({
                       />
                       {hasVoted && (
                         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2">
-                          <span className={`text-sm font-bold ${isSelected ? 'text-cyan-400' : 'text-slate-400'}`}>
+                          <span className={`text-sm font-bold ${isSelected ? 'text-cyan-600 dark:text-cyan-400' : 'text-slate-600 dark:text-slate-400'}`}>
                             {votePercent}%
                           </span>
                         </div>
                       )}
                       {isSelected && (
                         <motion.div 
-                          className="absolute inset-0 bg-green-500/20 flex items-center justify-center"
+                          className="absolute inset-0 bg-green-500/25 dark:bg-green-500/20 flex items-center justify-center"
                           initial={{ opacity: 0 }}
                           animate={{ opacity: 1 }}
                         >

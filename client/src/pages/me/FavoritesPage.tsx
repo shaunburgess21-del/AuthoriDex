@@ -120,13 +120,13 @@ export default function FavoritesPage() {
                     <div className="text-right">
                       <div className="flex items-center gap-1">
                         {(fav.change ?? 0) > 0 ? (
-                          <TrendingUp className="h-4 w-4 text-green-400" />
+                          <TrendingUp className="h-4 w-4 text-green-600 dark:text-green-400" />
                         ) : (fav.change ?? 0) < 0 ? (
-                          <TrendingUp className="h-4 w-4 text-red-400 rotate-180" />
+                          <TrendingUp className="h-4 w-4 text-red-600 dark:text-red-400 rotate-180" />
                         ) : (
                           <Minus className="h-4 w-4 text-muted-foreground" />
                         )}
-                        <span className={`font-mono text-sm ${(fav.change ?? 0) > 0 ? "text-green-400" : (fav.change ?? 0) < 0 ? "text-red-400" : "text-muted-foreground"}`}>
+                        <span className={`font-mono text-sm ${(fav.change ?? 0) > 0 ? "text-green-600 dark:text-green-400" : (fav.change ?? 0) < 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}>
                           {(fav.change ?? 0) > 0 ? "+" : ""}{fav.change ?? 0}%
                         </span>
                       </div>
@@ -144,7 +144,7 @@ export default function FavoritesPage() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-cyan-400"
+                        className="h-8 w-8 text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400"
                         onClick={(e) => { e.stopPropagation(); setLocation(`/predict`); }}
                         title="Predict"
                       >
@@ -158,7 +158,7 @@ export default function FavoritesPage() {
                         data-testid={`button-unfavorite-${fav.id}`}
                         title="Remove from favorites"
                       >
-                        <Heart className="h-4 w-4 text-red-400 fill-red-400" />
+                        <Heart className="h-4 w-4 text-red-600 dark:text-red-400 fill-red-600 dark:fill-red-400" />
                       </Button>
                     </div>
                   </div>

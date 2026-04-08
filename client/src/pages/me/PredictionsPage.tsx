@@ -172,13 +172,13 @@ export default function PredictionsPage() {
   const getStatusBadge = (status: UserPrediction["result"]) => {
     switch (status) {
       case "pending":
-        return <Badge className="bg-blue-500/20 text-blue-300 border-blue-500/30"><Clock className="h-3 w-3 mr-1" />Active</Badge>;
+        return <Badge className="bg-blue-500/25 dark:bg-blue-500/20 text-blue-500 dark:text-blue-300 border-blue-500/40 dark:border-blue-500/30"><Clock className="h-3 w-3 mr-1" />Active</Badge>;
       case "won":
-        return <Badge className="bg-green-500/20 text-green-300 border-green-500/30"><CheckCircle className="h-3 w-3 mr-1" />Won</Badge>;
+        return <Badge className="bg-green-500/25 dark:bg-green-500/20 text-green-500 dark:text-green-300 border-green-500/40 dark:border-green-500/30"><CheckCircle className="h-3 w-3 mr-1" />Won</Badge>;
       case "lost":
-        return <Badge className="bg-red-500/20 text-red-300 border-red-500/30"><XCircle className="h-3 w-3 mr-1" />Lost</Badge>;
+        return <Badge className="bg-red-500/25 dark:bg-red-500/20 text-red-500 dark:text-red-300 border-red-500/40 dark:border-red-500/30"><XCircle className="h-3 w-3 mr-1" />Lost</Badge>;
       case "refunded":
-        return <Badge className="bg-zinc-500/20 text-zinc-400 border-zinc-500/30">Refunded</Badge>;
+        return <Badge className="bg-zinc-500/25 dark:bg-zinc-500/20 text-zinc-600 dark:text-zinc-400 border-zinc-500/40 dark:border-zinc-500/30">Refunded</Badge>;
       default:
         return <Badge variant="secondary">{status}</Badge>;
     }
@@ -187,11 +187,11 @@ export default function PredictionsPage() {
   const getDirectionIcon = (direction: string) => {
     switch (direction) {
       case "up":
-        return <TrendingUp className="h-4 w-4 text-green-400" />;
+        return <TrendingUp className="h-4 w-4 text-green-600 dark:text-green-400" />;
       case "down":
-        return <TrendingDown className="h-4 w-4 text-red-400" />;
+        return <TrendingDown className="h-4 w-4 text-red-600 dark:text-red-400" />;
       default:
-        return <Target className="h-4 w-4 text-violet-400" />;
+        return <Target className="h-4 w-4 text-violet-600 dark:text-violet-400" />;
     }
   };
 
@@ -233,35 +233,35 @@ export default function PredictionsPage() {
         ) : stats ? (
           <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
             <Card className="p-3 text-center space-y-1">
-              <Clock className="h-4 w-4 mx-auto text-blue-400" />
-              <p className="text-xl font-bold text-blue-400">{stats.pending}</p>
+              <Clock className="h-4 w-4 mx-auto text-blue-600 dark:text-blue-400" />
+              <p className="text-xl font-bold text-blue-600 dark:text-blue-400">{stats.pending}</p>
               <p className="text-[10px] text-muted-foreground leading-tight">Open</p>
             </Card>
             <Card className="p-3 text-center space-y-1">
-              <Trophy className="h-4 w-4 mx-auto text-green-400" />
-              <p className="text-xl font-bold text-green-400">{stats.won}</p>
+              <Trophy className="h-4 w-4 mx-auto text-green-600 dark:text-green-400" />
+              <p className="text-xl font-bold text-green-600 dark:text-green-400">{stats.won}</p>
               <p className="text-[10px] text-muted-foreground leading-tight">Won</p>
             </Card>
             <Card className="p-3 text-center space-y-1">
-              <XCircle className="h-4 w-4 mx-auto text-red-400" />
-              <p className="text-xl font-bold text-red-400">{stats.lost}</p>
+              <XCircle className="h-4 w-4 mx-auto text-red-600 dark:text-red-400" />
+              <p className="text-xl font-bold text-red-600 dark:text-red-400">{stats.lost}</p>
               <p className="text-[10px] text-muted-foreground leading-tight">Lost</p>
             </Card>
             <Card className="p-3 text-center space-y-1">
-              <Coins className="h-4 w-4 mx-auto text-amber-400" />
-              <p className={`text-xl font-bold ${stats.netCredits >= 0 ? "text-green-400" : "text-red-400"}`}>
+              <Coins className="h-4 w-4 mx-auto text-amber-600 dark:text-amber-400" />
+              <p className={`text-xl font-bold ${stats.netCredits >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
                 {stats.netCredits >= 0 ? "+" : ""}{stats.netCredits.toLocaleString()}
               </p>
               <p className="text-[10px] text-muted-foreground leading-tight">Net Credits</p>
             </Card>
             <Card className="p-3 text-center space-y-1">
-              <BarChart3 className="h-4 w-4 mx-auto text-violet-400" />
-              <p className="text-xl font-bold text-violet-400">{stats.winRate}%</p>
+              <BarChart3 className="h-4 w-4 mx-auto text-violet-600 dark:text-violet-400" />
+              <p className="text-xl font-bold text-violet-600 dark:text-violet-400">{stats.winRate}%</p>
               <p className="text-[10px] text-muted-foreground leading-tight">Win Rate</p>
             </Card>
             <Card className="p-3 text-center space-y-1">
-              <Flame className="h-4 w-4 mx-auto text-orange-400" />
-              <p className="text-xl font-bold text-orange-400">{stats.currentStreak}</p>
+              <Flame className="h-4 w-4 mx-auto text-orange-600 dark:text-orange-400" />
+              <p className="text-xl font-bold text-orange-600 dark:text-orange-400">{stats.currentStreak}</p>
               <p className="text-[10px] text-muted-foreground leading-tight">Streak</p>
             </Card>
           </div>
@@ -278,7 +278,7 @@ export default function PredictionsPage() {
                 "Stats copied to clipboard!"
               )}
             >
-              {copiedId === "_stats" ? <Check className="h-3.5 w-3.5 text-green-400" /> : <Share2 className="h-3.5 w-3.5" />}
+              {copiedId === "_stats" ? <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-400" /> : <Share2 className="h-3.5 w-3.5" />}
               Share Stats
             </Button>
           </div>
@@ -416,7 +416,7 @@ export default function PredictionsPage() {
                           {isResolved ? "Close" : "Current"}:{" "}
                           <span className="font-mono text-foreground">{formatScore(prediction.currentScore)}</span>
                         </span>
-                        <span className={`font-mono font-medium ${delta >= 0 ? "text-green-400" : "text-red-400"}`}>
+                        <span className={`font-mono font-medium ${delta >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
                           {delta >= 0 ? "+" : ""}{formatScore(delta)} ({delta >= 0 ? "+" : ""}{pctDelta}%)
                         </span>
                       </div>
@@ -428,7 +428,7 @@ export default function PredictionsPage() {
                         Stake: <span className="text-foreground font-medium">{prediction.stakeAmount} credits</span>
                       </span>
                       {payoutDisplay > 0 && (
-                        <span className={prediction.result === "lost" ? "text-red-400" : "text-green-400"}>
+                        <span className={prediction.result === "lost" ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"}>
                           {isResolved ? "" : "Est. "}
                           {prediction.result === "lost" ? "-" : "+"}
                           {payoutDisplay} credits
@@ -464,7 +464,7 @@ export default function PredictionsPage() {
                             );
                           }}
                         >
-                          {copiedId === prediction.betId ? <Check className="h-3 w-3 text-green-400" /> : <Share2 className="h-3 w-3" />}
+                          {copiedId === prediction.betId ? <Check className="h-3 w-3 text-green-600 dark:text-green-400" /> : <Share2 className="h-3 w-3" />}
                           Share
                         </button>
                       )}
@@ -488,7 +488,7 @@ export default function PredictionsPage() {
                       <div className="grid grid-cols-2 gap-3 text-xs">
                         <div className="space-y-1">
                           <p className="text-muted-foreground">Delta vs Baseline</p>
-                          <p className={`font-mono font-semibold ${delta >= 0 ? "text-green-400" : "text-red-400"}`}>
+                          <p className={`font-mono font-semibold ${delta >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
                             {delta >= 0 ? "+" : ""}{delta.toLocaleString("en-US")} ({delta >= 0 ? "+" : ""}{pctDelta}%)
                           </p>
                         </div>

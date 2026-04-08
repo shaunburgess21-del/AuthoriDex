@@ -51,25 +51,25 @@ type VoteTypeValue = (typeof VOTE_TYPES)[number]["value"];
 function getVoteIcon(voteType: string, value: number) {
   switch (voteType) {
     case "face_off":
-      return <Swords className="h-5 w-5 text-purple-400" />;
+      return <Swords className="h-5 w-5 text-purple-600 dark:text-purple-400" />;
     case "sentiment":
       return value > 0
-        ? <TrendingUp className="h-5 w-5 text-green-400" />
-        : <TrendingDown className="h-5 w-5 text-red-400" />;
+        ? <TrendingUp className="h-5 w-5 text-green-600 dark:text-green-400" />
+        : <TrendingDown className="h-5 w-5 text-red-600 dark:text-red-400" />;
     case "value_vote":
       return value > 0
-        ? <TrendingUp className="h-5 w-5 text-green-400" />
+        ? <TrendingUp className="h-5 w-5 text-green-600 dark:text-green-400" />
         : value < 0
-          ? <TrendingDown className="h-5 w-5 text-red-400" />
-          : <Star className="h-5 w-5 text-amber-400" />;
+          ? <TrendingDown className="h-5 w-5 text-red-600 dark:text-red-400" />
+          : <Star className="h-5 w-5 text-amber-600 dark:text-amber-400" />;
     case "trending_poll":
-      return <BarChart3 className="h-5 w-5 text-blue-400" />;
+      return <BarChart3 className="h-5 w-5 text-blue-600 dark:text-blue-400" />;
     case "opinion_poll":
-      return <MessageCircle className="h-5 w-5 text-cyan-400" />;
+      return <MessageCircle className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />;
     case "image_curate":
-      return <ImageIcon className="h-5 w-5 text-pink-400" />;
+      return <ImageIcon className="h-5 w-5 text-pink-600 dark:text-pink-400" />;
     case "induction":
-      return <UserPlus className="h-5 w-5 text-amber-400" />;
+      return <UserPlus className="h-5 w-5 text-amber-600 dark:text-amber-400" />;
     default:
       return <Vote className="h-5 w-5 text-muted-foreground" />;
   }

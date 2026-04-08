@@ -12,6 +12,11 @@ import { getAvatarGradient } from "@/lib/avatar";
 import { getAuthHeaders } from "@/lib/queryClient";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  OnboardingDrawer,
+  type OnboardingDrawerHandle,
+  type OnboardingStep,
+} from "@/components/OnboardingDrawer";
+import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
@@ -32,6 +37,7 @@ import {
   Lock,
   RefreshCw,
   Shield,
+  HelpCircle,
 } from "lucide-react";
 
 type Period = "today" | "week" | "month" | "all";
@@ -68,6 +74,17 @@ const PERIOD_LABELS: Record<Period, string> = {
   all: "All Time",
 };
 
+const TOP_PREDICTORS_ONBOARDING_STEPS: readonly OnboardingStep[] = [
+  {
+    icon: Info,
+    heading: "How rankings work",
+    description:
+      "Rankings use settled prediction profit and loss for the selected time window. Ties break by total wagered volume, then by earlier account creation.",
+    gradient: "from-amber-500 to-orange-600",
+    glow: "shadow-amber-500/25",
+  },
+] as const;
+
 function formatLastUpdated(updatedAt: number) {
   if (!updatedAt) return "just now";
   return new Date(updatedAt).toLocaleString("en-US", {
@@ -81,15 +98,15 @@ function formatLastUpdated(updatedAt: number) {
 function RankCell({ rank }: { rank: number }) {
   if (rank === 1) {
     return (
-      <div className="flex items-center justify-center w-8 h-8 rounded-full bg-amber-500/20 border border-amber-500/40">
-        <Trophy className="h-4 w-4 text-amber-400" />
+      <div className="flex items-center justify-center w-8 h-8 rounded-full bg-amber-500/25 dark:bg-amber-500/20 border border-amber-500/50 dark:border-amber-500/40">
+        <Trophy className="h-4 w-4 text-amber-600 dark:text-amber-400" />
       </div>
     );
   }
   if (rank === 2) {
     return (
-      <div className="flex items-center justify-center w-8 h-8 rounded-full bg-slate-400/20 border border-slate-400/40">
-        <Medal className="h-4 w-4 text-slate-400" />
+      <div className="flex items-center justify-center w-8 h-8 rounded-full bg-slate-400/20 border border-slate-500/50 dark:border-slate-400/40">
+        <Medal className="h-4 w-4 text-slate-600 dark:text-slate-400" />
       </div>
     );
   }
@@ -110,7 +127,7 @@ function RankCell({ rank }: { rank: number }) {
 function PnLCell({ value }: { value: number }) {
   if (value > 0) {
     return (
-      <div className="flex items-center gap-1 text-emerald-400 font-mono text-sm tabular-nums">
+      <div className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-mono text-sm tabular-nums">
         <TrendingUp className="h-3.5 w-3.5 shrink-0" />
         +{value.toLocaleString("en-US")}
       </div>
@@ -118,7 +135,7 @@ function PnLCell({ value }: { value: number }) {
   }
   if (value < 0) {
     return (
-      <div className="flex items-center gap-1 text-red-400 font-mono text-sm tabular-nums">
+      <div className="flex items-center gap-1 text-red-600 dark:text-red-400 font-mono text-sm tabular-nums">
         <TrendingDown className="h-3.5 w-3.5 shrink-0" />
         {value.toLocaleString("en-US")}
       </div>
@@ -152,8 +169,8 @@ function EmptyState() {
   const [, setLocation] = useLocation();
   return (
     <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
-      <div className="h-20 w-20 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mb-6">
-        <Trophy className="h-10 w-10 text-amber-400/60" />
+      <div className="h-20 w-20 rounded-full bg-amber-500/15 dark:bg-amber-500/10 border border-amber-500/30 dark:border-amber-500/20 flex items-center justify-center mb-6">
+        <Trophy className="h-10 w-10 text-amber-600/60 dark:text-amber-400/60" />
       </div>
       <h3 className="text-xl font-semibold mb-2">No resolved predictions yet</h3>
       <p className="text-muted-foreground text-sm max-w-sm mb-8">
@@ -174,8 +191,8 @@ function EmptyState() {
 function ErrorState({ onRetry }: { onRetry: () => void }) {
   return (
     <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
-      <div className="h-20 w-20 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center mb-6">
-        <RefreshCw className="h-10 w-10 text-red-400/70" />
+      <div className="h-20 w-20 rounded-full bg-red-500/15 dark:bg-red-500/10 border border-red-500/30 dark:border-red-500/20 flex items-center justify-center mb-6">
+        <RefreshCw className="h-10 w-10 text-red-600/70 dark:text-red-400/70" />
       </div>
       <h3 className="text-xl font-semibold mb-2">Couldn&apos;t load the leaderboard</h3>
       <p className="text-muted-foreground text-sm max-w-sm mb-8">
@@ -207,7 +224,7 @@ function UserRow({
       type="button"
       disabled={!canOpenProfile}
       className={`w-full flex items-center gap-3 px-4 py-3 border-b border-border/50 transition-colors text-left ${
-        isCurrentUser ? "bg-cyan-500/5 border-l-2 border-l-cyan-500/50" : ""
+        isCurrentUser ? "bg-cyan-500/8 dark:bg-cyan-500/5 border-l-2 border-l-cyan-500/50" : ""
       } ${canOpenProfile ? "hover:bg-muted/30" : "cursor-default"}`}
       onClick={() => {
         if (canOpenProfile) onRowClick(user);
@@ -232,7 +249,7 @@ function UserRow({
         <div className="flex items-center gap-2 flex-wrap">
           <span className="font-medium text-sm truncate">{user.displayName}</span>
           {isCurrentUser && (
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-cyan-500/40 text-cyan-400 shrink-0">
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-cyan-500/50 dark:border-cyan-500/40 text-cyan-600 dark:text-cyan-400 shrink-0">
               You
             </Badge>
           )}
@@ -246,7 +263,7 @@ function UserRow({
             {user.userRank}
           </Badge>
           {showStreak && (
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-orange-500/40 text-orange-300">
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-orange-500/50 dark:border-orange-500/40 text-orange-500 dark:text-orange-300">
               <Flame className="h-3 w-3 mr-1" />
               {user.currentStreak} streak
             </Badge>
@@ -274,7 +291,7 @@ function UserRow({
 
       <div className="shrink-0 min-w-[56px] text-right hidden md:block">
         <div className="flex items-center justify-end gap-1">
-          <Zap className="h-3 w-3 text-amber-400" />
+          <Zap className="h-3 w-3 text-amber-600 dark:text-amber-400" />
           <span className="font-mono text-sm tabular-nums">{Math.round(user.winRate)}%</span>
         </div>
         <p className="text-[10px] text-muted-foreground mt-0.5">win rate</p>
@@ -299,7 +316,8 @@ export default function UserLeaderboardPage() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [, setLocation] = useLocation();
-  const { isLoggedIn, profile } = useAuth();
+  const { isLoggedIn, profile, user } = useAuth();
+  const onboardingRef = useRef<OnboardingDrawerHandle>(null);
 
   const {
     data,
@@ -399,7 +417,7 @@ export default function UserLeaderboardPage() {
               <Button variant="ghost" size="sm" className="md:text-sm" onClick={() => setLocation("/predict")} data-testid="nav-predict-desktop">
                 Predict
               </Button>
-              <Button variant="ghost" size="sm" className="text-amber-400 md:text-sm" data-testid="nav-top-predictors-desktop">
+              <Button variant="ghost" size="sm" className="text-amber-600 dark:text-amber-400 md:text-sm" data-testid="nav-top-predictors-desktop">
                 Top Predictors
               </Button>
             </div>
@@ -409,35 +427,37 @@ export default function UserLeaderboardPage() {
       </header>
 
       <div className="max-w-5xl mx-auto px-4 pt-8 pb-20">
-        {/* Page header */}
-        <div className="flex items-start gap-4 mb-6">
-          <div className="h-12 w-12 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0">
-            <Trophy className="h-6 w-6 text-amber-400" />
+        {/* Page header + compact last updated */}
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between mb-4">
+          <div className="flex items-start gap-4 min-w-0 flex-1">
+            <div className="h-12 w-12 rounded-xl bg-amber-500/15 dark:bg-amber-500/10 border border-amber-500/30 dark:border-amber-500/20 flex items-center justify-center shrink-0">
+              <Trophy className="h-6 w-6 text-amber-600 dark:text-amber-400" />
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-2xl font-bold tracking-tight">Top Predictors</h1>
+              <p className="text-muted-foreground text-sm mt-0.5">
+                Ranked by virtual credit profit
+              </p>
+              <p className="text-xs text-muted-foreground/70 mt-1">
+                Virtual credits — no real money.
+              </p>
+              <button
+                type="button"
+                onClick={() => onboardingRef.current?.open()}
+                className="text-sm text-muted-foreground hover:text-amber-700 dark:hover:text-amber-500 transition-colors mt-2 text-left"
+                data-testid="button-how-it-works-top-predictors"
+              >
+                <HelpCircle className="h-4 w-4 inline mr-1 align-text-bottom" />
+                How it works
+              </button>
+            </div>
           </div>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Top Predictors</h1>
-            <p className="text-muted-foreground text-sm mt-0.5">
-              Ranked by virtual credit profit
-            </p>
-            <p className="text-xs text-muted-foreground/70 mt-1">
-              Virtual credits — no real money.
-            </p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-          <div className="lg:col-span-2 rounded-xl border border-border/60 bg-card px-4 py-3">
-            <p className="text-sm font-medium">How rankings work</p>
-            <p className="text-sm text-muted-foreground mt-1">
-              Rankings use settled prediction profit and loss for the selected time window. Ties break by total wagered volume, then by earlier account creation.
-            </p>
-          </div>
-          <div className="rounded-xl border border-border/60 bg-card px-4 py-3">
+          <div className="shrink-0 w-full lg:w-auto border-t border-border/40 pt-3 lg:border-t-0 lg:pt-0 lg:text-right">
             <p className="text-sm font-medium">Last updated</p>
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="text-sm text-muted-foreground mt-0.5 tabular-nums">
               {formatLastUpdated(dataUpdatedAt)}
             </p>
-            <p className="text-xs text-muted-foreground/70 mt-1">
+            <p className="text-xs text-muted-foreground/70 mt-1 max-w-xs lg:ml-auto">
               Rankings change after markets settle.
             </p>
           </div>
@@ -528,7 +548,7 @@ export default function UserLeaderboardPage() {
 
           {/* Sticky "You" row if logged in but not visible on current page */}
           {isLoggedIn && userEntry && !isUserVisibleOnPage && rows.length > 0 && (
-            <div className="sticky bottom-0 border-t-2 border-cyan-500/40 bg-cyan-500/5 backdrop-blur-sm">
+            <div className="sticky bottom-0 border-t-2 border-cyan-500/50 dark:border-cyan-500/40 bg-cyan-500/8 dark:bg-cyan-500/5 backdrop-blur-sm">
               <UserRow
                 user={userEntry}
                 isCurrentUser={true}
@@ -579,6 +599,15 @@ export default function UserLeaderboardPage() {
           </div>
         )}
       </div>
+
+      <OnboardingDrawer
+        ref={onboardingRef}
+        storageKey="authoridex_top_predictors_onboarding"
+        steps={TOP_PREDICTORS_ONBOARDING_STEPS}
+        toastLabel="New to Top Predictors?"
+        lastStepCta="Got it"
+        disableAutoToast={!!user}
+      />
     </div>
   );
 }

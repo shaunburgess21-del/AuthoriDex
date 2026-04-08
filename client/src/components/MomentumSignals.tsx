@@ -77,7 +77,7 @@ function DeltaBadge({ pct }: { pct: number }) {
   return (
     <Badge
       variant="outline"
-      className={`text-xs font-mono ${isUp ? "text-emerald-500 border-emerald-500/30" : "text-red-500 border-red-500/30"}`}
+      className={`text-xs font-mono ${isUp ? "text-emerald-700 dark:text-emerald-500 border-emerald-500/40 dark:border-emerald-500/30" : "text-red-700 dark:text-red-500 border-red-500/40 dark:border-red-500/30"}`}
       data-testid="badge-delta"
     >
       {isUp ? "+" : ""}{pct}%<span className="ml-1 text-muted-foreground font-normal text-[10px]">24h</span>
@@ -208,7 +208,7 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
       </div>
 
       {staleFlags.dataDelayed && (
-        <div className="flex items-center gap-2 text-xs text-amber-500 bg-amber-500/10 rounded-md px-3 py-2" data-testid="banner-data-delayed">
+        <div className="flex items-center gap-2 text-xs text-amber-700 dark:text-amber-500 bg-amber-500/15 dark:bg-amber-500/10 rounded-md px-3 py-2" data-testid="banner-data-delayed">
           <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
           <span>Data may be delayed — last update was over 3 hours ago</span>
         </div>
@@ -216,10 +216,10 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card data-testid="card-search-interest">
-          <CardHeader className="pb-2 bg-blue-500/10">
+          <CardHeader className="pb-2 bg-blue-500/15 dark:bg-blue-500/10">
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <div className="flex items-center gap-2">
-                <Search className="h-4 w-4 text-blue-500" />
+                <Search className="h-4 w-4 text-blue-700 dark:text-blue-500" />
                 <span className="font-semibold text-sm">Search Interest</span>
                 <TouchTooltip side="top" contentClassName="max-w-[220px] text-xs normal-case tracking-normal" content="How actively people are searching for this person on Google right now, scored from 0 to 100. Higher means more search buzz.">
                   <Info className="h-3 w-3 text-muted-foreground/50 cursor-help" data-testid="icon-search-tooltip" />
@@ -235,9 +235,9 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
               </div>
               <div className="flex items-center gap-1 text-xs" data-testid="text-search-trend">
                 {signals.search.deltaPct > 5 ? (
-                  <><TrendingUp className="h-3 w-3 text-green-500" /><span className="text-green-500">Rising</span></>
+                  <><TrendingUp className="h-3 w-3 text-green-700 dark:text-green-500" /><span className="text-green-700 dark:text-green-500">Rising</span></>
                 ) : signals.search.deltaPct < -5 ? (
-                  <><TrendingDown className="h-3 w-3 text-red-500" /><span className="text-red-500">Falling</span></>
+                  <><TrendingDown className="h-3 w-3 text-red-700 dark:text-red-500" /><span className="text-red-700 dark:text-red-500">Falling</span></>
                 ) : (
                   <><Minus className="h-3 w-3 text-muted-foreground" /><span className="text-muted-foreground">Steady</span></>
                 )}
@@ -301,10 +301,10 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
         </Card>
 
         <Card data-testid="card-news-activity">
-          <CardHeader className="pb-2 bg-red-500/10">
+          <CardHeader className="pb-2 bg-red-500/15 dark:bg-red-500/10">
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <div className="flex items-center gap-2">
-                <Newspaper className="h-4 w-4 text-red-500" />
+                <Newspaper className="h-4 w-4 text-red-700 dark:text-red-500" />
                 <span className="font-semibold text-sm">News Activity</span>
               </div>
               <DeltaBadge pct={signals.news.deltaPct} />
@@ -401,14 +401,14 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
               <div className="flex items-center gap-1 text-xs">
                 {signals.wiki.wiki_rising === true && (
                   <>
-                    <TrendingUp className="h-3 w-3 text-emerald-500" />
-                    <span className="text-emerald-500">Rising</span>
+                    <TrendingUp className="h-3 w-3 text-emerald-700 dark:text-emerald-500" />
+                    <span className="text-emerald-700 dark:text-emerald-500">Rising</span>
                   </>
                 )}
                 {signals.wiki.wiki_falling === true && (
                   <>
-                    <TrendingDown className="h-3 w-3 text-red-500" />
-                    <span className="text-red-500">Falling</span>
+                    <TrendingDown className="h-3 w-3 text-red-700 dark:text-red-500" />
+                    <span className="text-red-700 dark:text-red-500">Falling</span>
                   </>
                 )}
               </div>
@@ -447,7 +447,7 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
                   <div className="space-y-2">
                     <DriverBar label="Search" pct={signals.drivers.breakdownPct.search} color="bg-blue-500" />
                     <DriverBar label="News" pct={signals.drivers.breakdownPct.news} color="bg-red-500" />
-                    <DriverBar label="Wiki" pct={signals.drivers.breakdownPct.wiki} color="bg-gray-400" />
+                    <DriverBar label="Wiki" pct={signals.drivers.breakdownPct.wiki} color="bg-gray-600 dark:bg-gray-400" />
                   </div>
                   <p className="text-[10px] text-muted-foreground/60" data-testid="text-stable-context">
                     Signals are steady — no major shift in the last 24h
@@ -485,7 +485,7 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
                   <div className="space-y-2">
                     <DriverBar label="Search" pct={signals.drivers.breakdown.search} color="bg-blue-500" />
                     <DriverBar label="News" pct={signals.drivers.breakdown.news} color="bg-red-500" />
-                    <DriverBar label="Wiki" pct={signals.drivers.breakdown.wiki} color="bg-gray-400" />
+                    <DriverBar label="Wiki" pct={signals.drivers.breakdown.wiki} color="bg-gray-600 dark:bg-gray-400" />
                   </div>
                   <div className="space-y-0.5">
                     {signals.drivers.quietSources.length > 0 && (
@@ -547,29 +547,29 @@ const profileConfig: Record<string, {
     icon: SiYoutube,
     label: "YouTube",
     urlPrefix: "https://youtube.com/channel/",
-    color: "text-red-500",
-    bgColor: "bg-red-500/10",
+    color: "text-red-700 dark:text-red-500",
+    bgColor: "bg-red-500/15 dark:bg-red-500/10",
   },
   instagram: {
     icon: SiInstagram,
     label: "Instagram",
     urlPrefix: "https://instagram.com/",
-    color: "text-pink-500",
-    bgColor: "bg-pink-500/10",
+    color: "text-pink-700 dark:text-pink-500",
+    bgColor: "bg-pink-500/15 dark:bg-pink-500/10",
   },
   tiktok: {
     icon: SiTiktok,
     label: "TikTok",
     urlPrefix: "https://tiktok.com/@",
-    color: "text-cyan-400",
+    color: "text-cyan-600 dark:text-cyan-400",
     bgColor: "bg-cyan-400/10",
   },
   spotify: {
     icon: SiSpotify,
     label: "Spotify",
     urlPrefix: "https://open.spotify.com/artist/",
-    color: "text-green-500",
-    bgColor: "bg-green-500/10",
+    color: "text-green-700 dark:text-green-500",
+    bgColor: "bg-green-500/15 dark:bg-green-500/10",
   },
 };
 

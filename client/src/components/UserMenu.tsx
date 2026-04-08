@@ -64,13 +64,13 @@ const RANK_THRESHOLDS = [
 
 function RankBadgeDisplay({ rank }: { rank: string }) {
   const badgeConfig: Record<string, { color: string; icon: typeof User }> = {
-    "Citizen": { color: "bg-gray-500/20 text-gray-300 border-gray-500/30", icon: Shield },
-    "Aspirant": { color: "bg-green-500/20 text-green-300 border-green-500/30", icon: Shield },
-    "Insider": { color: "bg-blue-500/20 text-blue-300 border-blue-500/30", icon: Sparkles },
-    "Analyst": { color: "bg-purple-500/20 text-purple-300 border-purple-500/30", icon: Sparkles },
-    "Expert": { color: "bg-amber-500/20 text-amber-300 border-amber-500/30", icon: Trophy },
-    "Maven": { color: "bg-red-500/20 text-red-300 border-red-500/30", icon: Trophy },
-    "Hall of Famer": { color: "bg-yellow-500/20 text-yellow-300 border-yellow-500/30", icon: Trophy },
+    "Citizen": { color: "bg-gray-500/25 dark:bg-gray-500/20 text-gray-500 dark:text-gray-300 border-gray-500/40 dark:border-gray-500/30", icon: Shield },
+    "Aspirant": { color: "bg-green-500/25 dark:bg-green-500/20 text-green-500 dark:text-green-300 border-green-500/40 dark:border-green-500/30", icon: Shield },
+    "Insider": { color: "bg-blue-500/25 dark:bg-blue-500/20 text-blue-500 dark:text-blue-300 border-blue-500/40 dark:border-blue-500/30", icon: Sparkles },
+    "Analyst": { color: "bg-purple-500/25 dark:bg-purple-500/20 text-purple-500 dark:text-purple-300 border-purple-500/40 dark:border-purple-500/30", icon: Sparkles },
+    "Expert": { color: "bg-amber-500/25 dark:bg-amber-500/20 text-amber-500 dark:text-amber-300 border-amber-500/40 dark:border-amber-500/30", icon: Trophy },
+    "Maven": { color: "bg-red-500/25 dark:bg-red-500/20 text-red-500 dark:text-red-300 border-red-500/40 dark:border-red-500/30", icon: Trophy },
+    "Hall of Famer": { color: "bg-yellow-500/25 dark:bg-yellow-500/20 text-yellow-500 dark:text-yellow-300 border-yellow-500/40 dark:border-yellow-500/30", icon: Trophy },
   };
 
   const config = badgeConfig[rank] || badgeConfig["Citizen"];
@@ -97,7 +97,7 @@ function XPProgressBar({ xp, level }: { xp: number; level: number }) {
     <div className="space-y-1.5">
       <div className="flex items-center justify-between text-xs">
         <span className="text-muted-foreground">Level {level}</span>
-        <span className="font-mono text-amber-400">{xp.toLocaleString('en-US')} XP</span>
+        <span className="font-mono text-amber-600 dark:text-amber-400">{xp.toLocaleString('en-US')} XP</span>
       </div>
       <div className="h-2 bg-muted/50 rounded-full overflow-hidden">
         <div 
@@ -180,7 +180,7 @@ function UserMenuContent({
           onClick={() => handleNavClick("/predictions/leaderboard")}
           data-testid="link-prediction-leaderboard-loggedout"
         >
-          <Trophy className="h-4 w-4 text-amber-400" />
+          <Trophy className="h-4 w-4 text-amber-600 dark:text-amber-400" />
           <span className="text-sm">Top Predictors</span>
           <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto" />
         </button>
@@ -245,28 +245,28 @@ function UserMenuContent({
       </div>
 
       <div className="px-4 pb-3 space-y-2">
-        <div className="flex items-center justify-between p-2.5 rounded-lg bg-violet-500/10 border border-violet-500/30">
+        <div className="flex items-center justify-between p-2.5 rounded-lg bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/40 dark:border-violet-500/30">
           <div className="flex items-center gap-2">
-            <Wallet className="h-4 w-4 text-violet-400" />
+            <Wallet className="h-4 w-4 text-violet-600 dark:text-violet-400" />
             <span className="text-sm text-muted-foreground">Credits</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="font-mono font-bold text-sm">{(profile?.predictCredits || 0).toLocaleString('en-US')}</span>
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-violet-500/30 text-violet-400">VIRTUAL</Badge>
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-violet-500/40 dark:border-violet-500/30 text-violet-600 dark:text-violet-400">VIRTUAL</Badge>
           </div>
         </div>
-        <div className="flex items-center justify-between p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30">
+        <div className="flex items-center justify-between p-2.5 rounded-lg bg-amber-500/15 dark:bg-amber-500/10 border border-amber-500/40 dark:border-amber-500/30">
           <div className="flex items-center gap-2">
-            <Zap className="h-4 w-4 text-amber-400" />
+            <Zap className="h-4 w-4 text-amber-600 dark:text-amber-400" />
             <span className="text-sm text-muted-foreground">Win Rate</span>
           </div>
-          <span className="font-mono font-bold text-sm text-amber-400">
+          <span className="font-mono font-bold text-sm text-amber-600 dark:text-amber-400">
             {profile?.winRate != null ? `${Math.round(profile.winRate)}%` : "--"}
           </span>
         </div>
         {showStreakBadge && (
           <div className="flex justify-end pt-0.5">
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-orange-500/40 text-orange-300">
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-orange-500/50 dark:border-orange-500/40 text-orange-500 dark:text-orange-300">
               <Flame className="h-3 w-3 mr-1" />
               {profile?.currentStreak} streak
             </Badge>
@@ -283,7 +283,7 @@ function UserMenuContent({
           onClick={() => handleNavClick("/me")}
           data-testid="link-my-account"
         >
-          <LayoutDashboard className="h-4 w-4 text-blue-400" />
+          <LayoutDashboard className="h-4 w-4 text-blue-600 dark:text-blue-400" />
           <span className="flex-1 text-sm">My Account</span>
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
         </button>
@@ -292,7 +292,7 @@ function UserMenuContent({
           onClick={() => handleNavClick("/me/predictions")}
           data-testid="link-my-predictions"
         >
-          <TrendingUp className="h-4 w-4 text-violet-400" />
+          <TrendingUp className="h-4 w-4 text-violet-600 dark:text-violet-400" />
           <span className="flex-1 text-sm">My Predictions</span>
           <span className="text-xs text-muted-foreground">{profile?.totalPredictions ?? 0}</span>
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
@@ -302,7 +302,7 @@ function UserMenuContent({
           onClick={() => handleNavClick("/me/votes")}
           data-testid="link-my-votes"
         >
-          <Vote className="h-4 w-4 text-cyan-400" />
+          <Vote className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
           <span className="flex-1 text-sm">My Votes</span>
           <span className="text-xs text-muted-foreground">{profile?.totalVotes ?? 0}</span>
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
@@ -312,7 +312,7 @@ function UserMenuContent({
           onClick={() => handleNavClick("/predictions/leaderboard")}
           data-testid="link-leaderboard"
         >
-          <Trophy className="h-4 w-4 text-amber-400" />
+          <Trophy className="h-4 w-4 text-amber-600 dark:text-amber-400" />
           <span className="flex-1 text-sm">Top Predictors</span>
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
         </button>
@@ -341,7 +341,7 @@ function UserMenuContent({
         <Button 
           variant="ghost" 
           size="sm" 
-          className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+          className="text-red-600 dark:text-red-400 hover:text-red-500 dark:hover:text-red-300 hover:bg-red-500/15 dark:hover:bg-red-500/15 dark:bg-red-500/10"
           onClick={onSignOut}
           data-testid="button-logout"
         >

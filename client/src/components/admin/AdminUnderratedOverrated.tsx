@@ -67,10 +67,10 @@ export function AdminUnderratedOverrated() {
 
   const getVisibilityBadge = (vis: string) => {
     switch (vis) {
-      case 'live': return <Badge variant="default" className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">Live</Badge>;
+      case 'live': return <Badge variant="default" className="bg-emerald-500/25 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/40 dark:border-emerald-500/30">Live</Badge>;
       case 'inactive': return <Badge variant="secondary">Inactive</Badge>;
       case 'archived': return <Badge variant="outline" className="text-muted-foreground">Archived</Badge>;
-      default: return <Badge variant="default" className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">Live</Badge>;
+      default: return <Badge variant="default" className="bg-emerald-500/25 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/40 dark:border-emerald-500/30">Live</Badge>;
     }
   };
 
@@ -173,7 +173,7 @@ export function AdminUnderratedOverrated() {
                     <td className="p-3 text-right font-mono">{getTotalVotes(card)}</td>
                     <td className="p-3 text-right">
                       {card.underratedPct != null ? (
-                        <span className="text-emerald-400">{card.underratedPct}%</span>
+                        <span className="text-emerald-600 dark:text-emerald-400">{card.underratedPct}%</span>
                       ) : '—'}
                     </td>
                     <td className="p-3 text-right">
@@ -183,7 +183,7 @@ export function AdminUnderratedOverrated() {
                     </td>
                     <td className="p-3 text-right">
                       {card.overratedPct != null ? (
-                        <span className="text-red-400">{card.overratedPct}%</span>
+                        <span className="text-red-600 dark:text-red-400">{card.overratedPct}%</span>
                       ) : '—'}
                     </td>
                     <td className="p-3 text-center">

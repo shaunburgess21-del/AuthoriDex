@@ -102,6 +102,29 @@ export default function OpinionPollDetailPage() {
     },
   });
 
+  const removeVoteMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/opinion-polls/${slug}/vote`, { remove: true });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/opinion-polls", slug] });
+      queryClient.invalidateQueries({ queryKey: ["/api/opinion-polls"] });
+      toast({ title: "Vote removed" });
+    },
+    onError: (error) => {
+      if (isUnauthorizedApiError(error)) {
+        toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+      } else {
+        toast({
+          title: "Could not remove vote",
+          description: parseOpinionPollVoteError(error),
+          variant: "destructive",
+        });
+      }
+    },
+  });
+
   const confirmChangeVote = async () => {
     if (!pendingOption) return;
     try {
@@ -120,7 +143,7 @@ export default function OpinionPollDetailPage() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-cyan-500" />
+        <Loader2 className="h-8 w-8 animate-spin text-cyan-700 dark:text-cyan-500" />
       </div>
     );
   }
@@ -167,11 +190,11 @@ export default function OpinionPollDetailPage() {
         <div className="mb-6" data-testid="section-poll-header">
           <div className="flex items-center gap-2 flex-wrap mb-3">
             <CategoryPill category={poll.category} />
-            <Badge variant="outline" className="text-xs border-cyan-500/30 text-cyan-400">
+            <Badge variant="outline" className="text-xs border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400">
               Opinion Poll
             </Badge>
             {poll.featured && (
-              <Badge variant="outline" className="text-xs border-amber-500/30 text-amber-400">
+              <Badge variant="outline" className="text-xs border-amber-500/40 dark:border-amber-500/30 text-amber-600 dark:text-amber-400">
                 Featured
               </Badge>
             )}
@@ -233,9 +256,12 @@ export default function OpinionPollDetailPage() {
           </div>
         </div>
 
-        <Card className="p-5 sm:p-6 mb-6 border-cyan-500/20" data-testid="section-vote-module">
+        <Card
+          className="p-5 sm:p-6 mb-6 border border-border/50 bg-card transition-all duration-200 hover:border-[#EFEFEF]/55 dark:hover:border-white/40"
+          data-testid="section-vote-module"
+        >
           <h2 className="text-lg font-serif font-bold mb-4 flex items-center gap-2">
-            <BarChart3 className="h-5 w-5 text-cyan-500" />
+            <BarChart3 className="h-5 w-5 text-cyan-700 dark:text-cyan-500" />
             Cast Your Vote
           </h2>
 
@@ -244,7 +270,7 @@ export default function OpinionPollDetailPage() {
               {options.map((option: any) => (
                 <div
                   key={option.id}
-                  className={`w-full flex items-stretch overflow-hidden rounded-lg border border-border/50 bg-muted/30 p-0 text-sm font-medium transition-all duration-200 hover:border-cyan-500/60 hover:bg-cyan-500/10 hover:ring-1 hover:ring-cyan-500/40 ${voteMutation.isPending ? "opacity-60" : ""}`}
+                  className={`w-full flex items-stretch overflow-hidden rounded-lg border border-border/50 bg-muted/30 p-0 text-sm font-medium transition-all duration-200 hover:border-[#EFEFEF]/50 hover:bg-muted/50 dark:hover:border-white/40 dark:hover:bg-white/5 hover:ring-1 hover:ring-inset hover:ring-[#EFEFEF]/40 dark:hover:ring-white/25 ${voteMutation.isPending ? "opacity-60" : ""}`}
                 >
                   {option.imageUrl ? (
                     <button
@@ -257,8 +283,8 @@ export default function OpinionPollDetailPage() {
                       <img src={option.imageUrl} alt={option.name} className="absolute inset-0 h-full w-full object-cover" />
                     </button>
                   ) : (
-                    <div className="relative flex shrink-0 w-14 items-center justify-center self-stretch min-h-[2.75rem] bg-cyan-500/10">
-                      <span className="text-sm font-semibold text-cyan-400">{option.orderIndex + 1}</span>
+                    <div className="relative flex shrink-0 w-14 items-center justify-center self-stretch min-h-[2.75rem] bg-cyan-500/15 dark:bg-cyan-500/10">
+                      <span className="text-sm font-semibold text-cyan-600 dark:text-cyan-400">{option.orderIndex + 1}</span>
                     </div>
                   )}
                   <button
@@ -289,7 +315,7 @@ export default function OpinionPollDetailPage() {
 
               {!user && (
                 <p className="text-xs text-center text-muted-foreground mt-1">
-                  <Button variant="ghost" className="p-0 h-auto text-cyan-400 underline" onClick={() => setLocation("/login")} data-testid="link-login-to-vote">
+                  <Button variant="ghost" className="p-0 h-auto text-cyan-600 dark:text-cyan-400 underline" onClick={() => setLocation("/login")} data-testid="link-login-to-vote">
                     Sign in
                   </Button>{" "}
                   to cast your vote
@@ -305,7 +331,7 @@ export default function OpinionPollDetailPage() {
                 const isLeading = percent === maxPercent && percent > 0;
                 const rowClass = `flex items-stretch overflow-hidden rounded-lg border transition-all duration-300 ${
                   isSelected
-                    ? "border-cyan-500/60 bg-cyan-500/[0.08]"
+                    ? "border-[#EFEFEF]/45 bg-white/[0.06] dark:border-white/40 dark:bg-white/5"
                     : "border-border/30 bg-muted/20"
                 }`;
                 const imageColumn = option.imageUrl ? (
@@ -319,8 +345,8 @@ export default function OpinionPollDetailPage() {
                     <img src={option.imageUrl} alt={option.name} className="absolute inset-0 h-full w-full object-cover" />
                   </button>
                 ) : (
-                  <div className="relative flex shrink-0 w-14 items-center justify-center self-stretch min-h-[2.75rem] bg-cyan-500/10">
-                    <span className="text-sm font-semibold text-cyan-400">{option.orderIndex + 1}</span>
+                  <div className="relative flex shrink-0 w-14 items-center justify-center self-stretch min-h-[2.75rem] bg-cyan-500/15 dark:bg-cyan-500/10">
+                    <span className="text-sm font-semibold text-cyan-600 dark:text-cyan-400">{option.orderIndex + 1}</span>
                   </div>
                 );
                 const contentColumn = (
@@ -329,8 +355,8 @@ export default function OpinionPollDetailPage() {
                       <span className={`min-w-0 flex-1 truncate text-sm ${isSelected ? "font-semibold" : ""}`}>
                         {option.name}
                       </span>
-                      {isSelected && <CheckCircle2 className="h-3.5 w-3.5 text-cyan-400 shrink-0" />}
-                      <span className={`shrink-0 text-xs font-mono font-bold ${isLeading ? "text-cyan-400" : "text-muted-foreground"}`}>
+                      {isSelected && <CheckCircle2 className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400 shrink-0" />}
+                      <span className={`shrink-0 text-xs font-mono font-bold ${isLeading ? "text-cyan-600 dark:text-cyan-400" : "text-muted-foreground"}`}>
                         {percent}%
                       </span>
                     </div>
@@ -356,7 +382,7 @@ export default function OpinionPollDetailPage() {
                     <button
                       type="button"
                       disabled={voteMutation.isPending}
-                      className={`min-w-0 flex-1 text-left cursor-pointer hover:border-cyan-500/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 border-0 bg-transparent p-0 ${voteMutation.isPending ? "opacity-60 cursor-not-allowed" : ""}`}
+                      className={`min-w-0 flex-1 text-left cursor-pointer rounded-r-md hover:ring-1 hover:ring-inset hover:ring-[#EFEFEF]/50 dark:hover:ring-white/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#EFEFEF]/40 dark:focus-visible:ring-white/30 border-0 bg-transparent p-0 ${voteMutation.isPending ? "opacity-60 cursor-not-allowed" : ""}`}
                       onClick={() => {
                         if (!user) {
                           toast({ title: "Sign in required", description: "Please sign in to vote", variant: "destructive" });
@@ -373,14 +399,38 @@ export default function OpinionPollDetailPage() {
               })}
 
               <div className="flex items-center justify-between mt-1 pt-3 border-t border-border/30">
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <span>
-                    You voted: <span className="font-semibold text-cyan-400">{votedOption?.name || "—"}</span>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground min-w-0">
+                  <span className="truncate">
+                    You voted: <span className="font-semibold text-cyan-600 dark:text-cyan-400">{votedOption?.name || "—"}</span>
                   </span>
                 </div>
-                <span className="px-2 py-0.5 rounded-full text-xs font-medium border bg-cyan-500/10 border-cyan-500/40 text-cyan-400">
+                <span className="shrink-0 px-2 py-0.5 rounded-full text-xs font-medium border bg-white/[0.06] border-[#EFEFEF]/35 text-foreground/90">
                   You voted
                 </span>
+              </div>
+              <div
+                className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center mt-2"
+                data-testid="text-change-vote-hint-detail"
+              >
+                <span className="text-[10px] text-slate-500/70 dark:text-slate-400/70">
+                  Tap another option to change your vote
+                </span>
+                <span className="text-[10px] text-slate-500/40 dark:text-slate-500/40">|</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!user) {
+                      toast({ title: "Sign in required", description: "Please sign in to manage your vote", variant: "destructive" });
+                      return;
+                    }
+                    removeVoteMutation.mutate();
+                  }}
+                  disabled={removeVoteMutation.isPending}
+                  className="text-[10px] text-slate-500/70 dark:text-slate-400/70 hover:text-red-600/80 dark:hover:text-red-400/80 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                  data-testid="button-remove-vote-opinion-detail"
+                >
+                  Remove vote
+                </button>
               </div>
             </div>
           )}
@@ -418,7 +468,7 @@ export default function OpinionPollDetailPage() {
 
         <Card className="p-5 mb-6" data-testid="section-results">
           <h2 className="text-lg font-serif font-bold mb-5 flex items-center gap-2">
-            <BarChart3 className="h-5 w-5 text-cyan-500" />
+            <BarChart3 className="h-5 w-5 text-cyan-700 dark:text-cyan-500" />
             Results
           </h2>
 
@@ -444,7 +494,7 @@ export default function OpinionPollDetailPage() {
                       />
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0 w-[72px] justify-end">
-                      <span className={`text-sm font-mono font-bold ${isLeading ? 'text-cyan-400' : 'text-muted-foreground'}`} data-testid={`text-percent-${option.id}`}>
+                      <span className={`text-sm font-mono font-bold ${isLeading ? 'text-cyan-600 dark:text-cyan-400' : 'text-muted-foreground'}`} data-testid={`text-percent-${option.id}`}>
                         {percent}%
                       </span>
                     </div>
@@ -465,17 +515,17 @@ export default function OpinionPollDetailPage() {
 
         <div className="grid grid-cols-3 gap-3 mb-6" data-testid="section-stats">
           <Card className="p-3 text-center">
-            <Users className="h-4 w-4 text-cyan-500 mx-auto mb-1" />
+            <Users className="h-4 w-4 text-cyan-700 dark:text-cyan-500 mx-auto mb-1" />
             <p className="text-lg font-bold font-mono" data-testid="text-total-votes">{(poll.totalVotes || 0).toLocaleString("en-US")}</p>
             <p className="text-xs text-muted-foreground">Total Votes</p>
           </Card>
           <Card className="p-3 text-center">
-            <MessageSquare className="h-4 w-4 text-cyan-500 mx-auto mb-1" />
+            <MessageSquare className="h-4 w-4 text-cyan-700 dark:text-cyan-500 mx-auto mb-1" />
             <p className="text-lg font-bold font-mono" data-testid="text-comment-count">{poll.commentCount || opCommentCount}</p>
             <p className="text-xs text-muted-foreground">Comments</p>
           </Card>
           <Card className="p-3 text-center">
-            <Clock className="h-4 w-4 text-cyan-500 mx-auto mb-1" />
+            <Clock className="h-4 w-4 text-cyan-700 dark:text-cyan-500 mx-auto mb-1" />
             <p className="text-sm font-semibold" data-testid="text-created-date">{formatDate(poll.createdAt)}</p>
             <p className="text-xs text-muted-foreground">Created</p>
           </Card>
@@ -484,7 +534,7 @@ export default function OpinionPollDetailPage() {
         {poll.summary && (
           <Card className="p-5 mb-6" data-testid="section-context">
             <h2 className="text-lg font-serif font-bold mb-2 flex items-center gap-2">
-              <Info className="h-5 w-5 text-cyan-500" />
+              <Info className="h-5 w-5 text-cyan-700 dark:text-cyan-500" />
               Context
             </h2>
             <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap" data-testid="text-poll-summary">

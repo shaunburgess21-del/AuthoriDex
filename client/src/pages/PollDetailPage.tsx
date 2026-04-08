@@ -117,7 +117,7 @@ export default function PollDetailPage() {
   if (pollLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-cyan-500" />
+        <Loader2 className="h-8 w-8 animate-spin text-cyan-700 dark:text-cyan-500" />
       </div>
     );
   }
@@ -161,11 +161,11 @@ export default function PollDetailPage() {
         <div className="mb-6" data-testid="section-poll-header">
           <div className="flex items-center gap-2 flex-wrap mb-3">
             <CategoryPill category={poll.category} />
-            <Badge variant="outline" className="text-xs border-cyan-500/30 text-cyan-400">
+            <Badge variant="outline" className="text-xs border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400">
               Sentiment Poll
             </Badge>
             {poll.featured && (
-              <Badge variant="outline" className="text-xs border-amber-500/30 text-amber-400">
+              <Badge variant="outline" className="text-xs border-amber-500/40 dark:border-amber-500/30 text-amber-600 dark:text-amber-400">
                 Featured
               </Badge>
             )}
@@ -205,7 +205,7 @@ export default function PollDetailPage() {
               {poll.totalVotes.toLocaleString('en-US')} votes
             </span>
             {poll.deadlineAt && (
-              <span className="flex items-center gap-1.5 text-amber-400">
+              <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
                 <Clock className="h-4 w-4" />
                 Ends {formatDate(poll.deadlineAt)}
               </span>
@@ -227,11 +227,11 @@ export default function PollDetailPage() {
           <div className="flex items-center gap-3 mb-6 p-3 rounded-lg border border-border/40 bg-muted/20">
             <Avatar className="h-10 w-10">
               <AvatarImage src={poll.personAvatar} alt={poll.personName || ""} />
-              <AvatarFallback className="bg-cyan-500/20 text-cyan-400 text-xs">{(poll.personName || "?").slice(0, 2).toUpperCase()}</AvatarFallback>
+              <AvatarFallback className="bg-cyan-500/25 dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 text-xs">{(poll.personName || "?").slice(0, 2).toUpperCase()}</AvatarFallback>
             </Avatar>
             <div>
               {poll.personId ? (
-                <Link href={`/person/${poll.personId}`} className="text-sm font-semibold text-cyan-400 hover:text-cyan-300 hover:underline">
+                <Link href={`/person/${poll.personId}`} className="text-sm font-semibold text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300 hover:underline">
                   {poll.personName}
                 </Link>
               ) : (
@@ -243,9 +243,9 @@ export default function PollDetailPage() {
         )}
 
         {/* Vote Module */}
-        <Card className="p-5 mb-6 border-cyan-500/20" data-testid="section-vote-module">
+        <Card className="p-5 mb-6 border-cyan-500/30 dark:border-cyan-500/20" data-testid="section-vote-module">
           <h2 className="text-lg font-serif font-bold mb-4 flex items-center gap-2">
-            <BarChart3 className="h-5 w-5 text-cyan-500" />
+            <BarChart3 className="h-5 w-5 text-cyan-700 dark:text-cyan-500" />
             Cast Your Vote
           </h2>
 
@@ -293,8 +293,8 @@ export default function PollDetailPage() {
                 <span className="text-sm text-muted-foreground w-10 text-right">{poll.approvePercent}%</span>
               </div>
               <div className="flex items-center gap-3">
-                <Minus className="h-4 w-4 text-slate-400 shrink-0" />
-                <span className="text-sm text-slate-400 w-16 shrink-0">Neutral</span>
+                <Minus className="h-4 w-4 text-slate-600 dark:text-slate-400 shrink-0" />
+                <span className="text-sm text-slate-600 dark:text-slate-400 w-16 shrink-0">Neutral</span>
                 <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-slate-400 rounded-full transition-all duration-500"
@@ -320,7 +320,7 @@ export default function PollDetailPage() {
                 </div>
                 <button
                   onClick={() => setShowVoteChange(true)}
-                  className="text-xs text-slate-400 hover:text-white transition-colors underline-offset-4 hover:underline"
+                  className="text-xs text-slate-600 dark:text-slate-400 hover:text-white transition-colors underline-offset-4 hover:underline"
                   data-testid="button-change-vote"
                 >
                   Change your vote
@@ -330,7 +330,7 @@ export default function PollDetailPage() {
           )}
           {!isLoggedIn && (
             <p className="text-xs text-center text-muted-foreground">
-              <Button variant="ghost" className="p-0 h-auto text-cyan-400 underline" onClick={() => setLocation("/login")} data-testid="link-login-to-vote">
+              <Button variant="ghost" className="p-0 h-auto text-cyan-600 dark:text-cyan-400 underline" onClick={() => setLocation("/login")} data-testid="link-login-to-vote">
                 Sign in
               </Button>{" "}
               to cast your vote
@@ -341,7 +341,7 @@ export default function PollDetailPage() {
         {/* Results Bar */}
         <Card className="p-5 mb-6" data-testid="section-results">
           <h2 className="text-lg font-serif font-bold mb-4 flex items-center gap-2">
-            <BarChart3 className="h-5 w-5 text-cyan-500" />
+            <BarChart3 className="h-5 w-5 text-cyan-700 dark:text-cyan-500" />
             Results
           </h2>
 
@@ -380,7 +380,7 @@ export default function PollDetailPage() {
                 <div className="h-2.5 w-2.5 rounded-full bg-slate-400" />
                 <span className="text-xs font-medium">Neutral</span>
               </div>
-              <p className="text-lg font-bold font-mono text-slate-300" data-testid="text-neutral-percent">{poll.neutralPercent}%</p>
+              <p className="text-lg font-bold font-mono text-slate-500 dark:text-slate-300" data-testid="text-neutral-percent">{poll.neutralPercent}%</p>
               <p className="text-xs text-muted-foreground">{poll.neutralCount.toLocaleString('en-US')} votes</p>
             </div>
             <div>
@@ -403,17 +403,17 @@ export default function PollDetailPage() {
         {/* Stats Row */}
         <div className="grid grid-cols-3 gap-3 mb-6" data-testid="section-stats">
           <Card className="p-3 text-center">
-            <Users className="h-4 w-4 text-cyan-500 mx-auto mb-1" />
+            <Users className="h-4 w-4 text-cyan-700 dark:text-cyan-500 mx-auto mb-1" />
             <p className="text-lg font-bold font-mono" data-testid="text-total-votes">{poll.totalVotes.toLocaleString('en-US')}</p>
             <p className="text-xs text-muted-foreground">Total Votes</p>
           </Card>
           <Card className="p-3 text-center">
-            <MessageSquare className="h-4 w-4 text-cyan-500 mx-auto mb-1" />
+            <MessageSquare className="h-4 w-4 text-cyan-700 dark:text-cyan-500 mx-auto mb-1" />
             <p className="text-lg font-bold font-mono" data-testid="text-comment-count">{pollCommentCount}</p>
             <p className="text-xs text-muted-foreground">Comments</p>
           </Card>
           <Card className="p-3 text-center">
-            <Clock className="h-4 w-4 text-cyan-500 mx-auto mb-1" />
+            <Clock className="h-4 w-4 text-cyan-700 dark:text-cyan-500 mx-auto mb-1" />
             <p className="text-sm font-semibold" data-testid="text-created-date">{formatDate(poll.createdAt)}</p>
             <p className="text-xs text-muted-foreground">Created</p>
           </Card>
@@ -423,7 +423,7 @@ export default function PollDetailPage() {
         {poll.description && (
           <Card className="p-5 mb-6" data-testid="section-description">
             <h2 className="text-lg font-serif font-bold mb-2 flex items-center gap-2">
-              <Info className="h-5 w-5 text-cyan-500" />
+              <Info className="h-5 w-5 text-cyan-700 dark:text-cyan-500" />
               Context
             </h2>
             <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">

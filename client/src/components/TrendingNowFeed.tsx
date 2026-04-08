@@ -76,7 +76,7 @@ export function TrendingNowFeed({ onPersonClick, collapsed, onToggle }: Trending
           data-testid="trending-now-header"
         >
           <div className="h-9 w-9 rounded-lg flex items-center justify-center pulse-icon-orange">
-            <Flame className="h-4 w-4 text-orange-400" />
+            <Flame className="h-4 w-4 text-orange-600 dark:text-orange-400" />
           </div>
           <div className="flex-1">
             <div className="flex items-center gap-2">
@@ -145,7 +145,7 @@ export function TrendingNowFeed({ onPersonClick, collapsed, onToggle }: Trending
                             className="inline-flex items-center justify-center min-w-[28px] min-h-[28px] rounded-md p-1 -m-1"
                             data-testid={`trending-now-why-${person.id}`}
                           >
-                            <Info className="h-3 w-3 text-slate-500" />
+                            <Info className="h-3 w-3 text-slate-700 dark:text-slate-500" />
                           </button>
                         </PopoverTrigger>
                         <PopoverContent
@@ -159,11 +159,11 @@ export function TrendingNowFeed({ onPersonClick, collapsed, onToggle }: Trending
                             <div className="flex items-center justify-between gap-2">
                               <span className="text-muted-foreground flex items-center gap-1">
                                 {isUp
-                                  ? <TrendingUp className="h-3 w-3 text-emerald-400" />
-                                  : <TrendingDown className="h-3 w-3 text-red-400" />}
+                                  ? <TrendingUp className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                                  : <TrendingDown className="h-3 w-3 text-red-600 dark:text-red-400" />}
                                 24h Change
                               </span>
-                              <span className={`font-mono font-medium ${isUp ? "text-emerald-400" : "text-red-400"}`}>
+                              <span className={`font-mono font-medium ${isUp ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
                                 {formatDelta(person.change24h)}
                               </span>
                             </div>
@@ -178,11 +178,11 @@ export function TrendingNowFeed({ onPersonClick, collapsed, onToggle }: Trending
                               <div className="flex items-center justify-between gap-2">
                                 <span className="text-muted-foreground flex items-center gap-1">
                                   {rc! > 0
-                                    ? <ArrowUpRight className="h-3 w-3 text-emerald-400" />
-                                    : <ArrowDownRight className="h-3 w-3 text-red-400" />}
+                                    ? <ArrowUpRight className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                                    : <ArrowDownRight className="h-3 w-3 text-red-600 dark:text-red-400" />}
                                   Rank move
                                 </span>
-                                <span className={`font-mono font-medium ${rc! > 0 ? "text-emerald-400" : "text-red-400"}`}>
+                                <span className={`font-mono font-medium ${rc! > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
                                   {rc! > 0 ? `\u2191${rc} spots` : `\u2193${Math.abs(rc!)} spots`}
                                 </span>
                               </div>
@@ -190,9 +190,9 @@ export function TrendingNowFeed({ onPersonClick, collapsed, onToggle }: Trending
                             {(() => {
                               const sb = person.sourceBreakdown;
                               const driverIconMeta: Record<string, { icon: JSX.Element; color: string }> = {
-                                news: { icon: <Newspaper className="h-3 w-3" />, color: "text-amber-400" },
-                                wiki: { icon: <Globe className="h-3 w-3" />, color: "text-emerald-400" },
-                                search: { icon: <Search className="h-3 w-3" />, color: "text-blue-400" },
+                                news: { icon: <Newspaper className="h-3 w-3" />, color: "text-amber-600 dark:text-amber-400" },
+                                wiki: { icon: <Globe className="h-3 w-3" />, color: "text-emerald-600 dark:text-emerald-400" },
+                                search: { icon: <Search className="h-3 w-3" />, color: "text-blue-600 dark:text-blue-400" },
                               };
                               const topActiveSource = sb?.sources?.find(s => s.status === "active");
                               const driverMeta = topActiveSource ? driverIconMeta[topActiveSource.key] : null;
@@ -208,7 +208,7 @@ export function TrendingNowFeed({ onPersonClick, collapsed, onToggle }: Trending
                                     </div>
                                   ) : hasData ? (
                                     <div className="flex items-center gap-1.5 mb-1" data-testid={`score-drivers-label-${person.id}`}>
-                                      <TrendingUp className="h-3 w-3 text-emerald-400" />
+                                      <TrendingUp className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
                                       <span className="text-[11px] font-medium text-muted-foreground">Multiple signals contributing</span>
                                     </div>
                                   ) : (
@@ -239,8 +239,8 @@ export function TrendingNowFeed({ onPersonClick, collapsed, onToggle }: Trending
                     <span
                       className={`px-2 py-0.5 rounded text-xs font-mono font-medium tabular-nums ${
                         isUp
-                          ? "bg-green-500/15 text-green-400"
-                          : "bg-red-500/15 text-red-400"
+                          ? "bg-green-500/15 text-green-600 dark:text-green-400"
+                          : "bg-red-500/15 text-red-600 dark:text-red-400"
                       }`}
                     >
                       {delta}

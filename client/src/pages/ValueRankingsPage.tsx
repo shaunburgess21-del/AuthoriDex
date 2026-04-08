@@ -66,7 +66,7 @@ export default function ValueRankingsPage() {
       <div className="container mx-auto px-4 py-6 max-w-3xl">
         {isLoading ? (
           <div className="flex justify-center py-16">
-            <Loader2 className="h-8 w-8 animate-spin text-cyan-400" />
+            <Loader2 className="h-8 w-8 animate-spin text-cyan-600 dark:text-cyan-400" />
           </div>
         ) : rows.length === 0 ? (
           <p className="text-center text-muted-foreground py-12">No rankings loaded yet.</p>
@@ -98,7 +98,7 @@ export default function ValueRankingsPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <Link href={`/person/${person.id}`}>
-                        <span className="font-semibold truncate hover:text-cyan-400 transition-colors">
+                        <span className="font-semibold truncate hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">
                           {person.name}
                         </span>
                       </Link>

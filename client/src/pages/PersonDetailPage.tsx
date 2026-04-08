@@ -219,7 +219,7 @@ function ProfileMatchupCard({
   return (
     <div className="relative group h-full">
       <div className="absolute -inset-[1px] rounded-xl border border-cyan-500/60 transition-opacity pointer-events-none opacity-0 group-hover:opacity-100 hidden md:block" />
-      <Card className="relative overflow-visible bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border-0 md:border md:border-transparent shadow-none md:shadow-sm group-hover:shadow-lg md:group-hover:shadow-cyan-500/20 transition-all h-full flex flex-col rounded-none md:rounded-xl min-h-[390px] md:min-h-0">
+      <Card className="relative overflow-visible bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border-0 md:border md:border-transparent shadow-none md:shadow-sm group-hover:shadow-lg md:group-hover:shadow-cyan-500/30 dark:shadow-cyan-500/20 transition-all h-full flex flex-col rounded-none md:rounded-xl min-h-[390px] md:min-h-0">
         <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-transparent to-sky-600/5 rounded-lg md:rounded-xl" />
 
         <div className="relative pt-4 pb-4 flex flex-col flex-1">
@@ -228,7 +228,7 @@ function ProfileMatchupCard({
           </div>
           <div className="flex items-center mb-3 gap-2 px-4">
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Users className="h-3.5 w-3.5 text-cyan-400" />
+              <Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
               <span>{matchup.totalVotes.toLocaleString("en-US")} votes</span>
             </div>
           </div>
@@ -237,13 +237,13 @@ function ProfileMatchupCard({
             {matchup.slug ? (
               <Link
                 href={`/vote/matchups/${matchup.slug}`}
-                className={`text-sm font-semibold transition-colors ${hasVoted ? 'text-cyan-400 hover:text-cyan-300' : 'text-slate-300 hover:text-cyan-400'}`}
+                className={`text-sm font-semibold transition-colors ${hasVoted ? 'text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300' : 'text-slate-500 dark:text-slate-300 hover:text-cyan-600 dark:hover:text-cyan-400'}`}
                 data-testid={`link-matchup-${matchup.id}`}
               >
                 {hasVoted ? "View details →" : (matchup.promptText || "Who do you prefer?")}
               </Link>
             ) : (
-              <span className="text-sm font-semibold text-slate-300">
+              <span className="text-sm font-semibold text-slate-500 dark:text-slate-300">
                 {matchup.promptText || "Who do you prefer?"}
               </span>
             )}
@@ -255,9 +255,9 @@ function ProfileMatchupCard({
               className={`flex-1 flex flex-col rounded-t-none rounded-b-lg border transition-all duration-300 overflow-hidden cursor-pointer ${
                 hasVoted
                   ? votedA
-                    ? "border-cyan-500/50 ring-2 ring-cyan-500/30"
-                    : "border-slate-700/30 opacity-70 hover:opacity-90 hover:border-cyan-500/30"
-                  : "border-slate-700/50 hover:border-cyan-500/50"
+                    ? "border-cyan-500/60 dark:border-cyan-500/50 ring-2 ring-cyan-500/30"
+                    : "border-slate-700/30 opacity-70 hover:opacity-90 hover:border-cyan-500/40 dark:border-cyan-500/30"
+                  : "border-slate-700/50 hover:border-cyan-500/60 dark:border-cyan-500/50"
               }`}
               data-testid={`button-vote-a-${matchup.id}`}
             >
@@ -335,7 +335,7 @@ function ProfileMatchupCard({
                 <div className="flex items-center gap-1.5">
                   <span
                     className={`text-lg font-bold ${
-                      hasVoted ? (leadingA ? "text-cyan-400" : "text-slate-400") : "text-slate-600"
+                      hasVoted ? (leadingA ? "text-cyan-600 dark:text-cyan-400" : "text-slate-600 dark:text-slate-400") : "text-slate-600"
                     }`}
                   >
                     {hasVoted ? `${matchup.optionAPercent}%` : "%"}
@@ -344,7 +344,7 @@ function ProfileMatchupCard({
                 <div className="flex items-center gap-1.5">
                   <span
                     className={`text-lg font-bold ${
-                      hasVoted ? (!leadingA ? "text-[#0386C9]" : "text-slate-400") : "text-slate-600"
+                      hasVoted ? (!leadingA ? "text-[#0386C9]" : "text-slate-600 dark:text-slate-400") : "text-slate-600"
                     }`}
                   >
                     {hasVoted ? `${matchup.optionBPercent}%` : "%"}
@@ -368,10 +368,10 @@ function ProfileMatchupCard({
                 )}
               </div>
               <div className="flex items-center justify-between mt-1.5">
-                <span className={`text-[11px] font-medium ${hasVoted ? "text-slate-500" : "text-slate-600"}`}>
+                <span className={`text-[11px] font-medium ${hasVoted ? "text-slate-700 dark:text-slate-500" : "text-slate-600"}`}>
                   {matchup.optionAText}
                 </span>
-                <span className={`text-[11px] font-medium ${hasVoted ? "text-slate-500" : "text-slate-600"}`}>
+                <span className={`text-[11px] font-medium ${hasVoted ? "text-slate-700 dark:text-slate-500" : "text-slate-600"}`}>
                   {matchup.optionBText}
                 </span>
               </div>
@@ -382,7 +382,7 @@ function ProfileMatchupCard({
                 <span className="text-[10px] text-slate-500/40">|</span>
                 <button
                   onClick={() => onRemoveVote(matchup.id)}
-                  className="text-[10px] text-slate-500/70 hover:text-red-400/80 transition-colors"
+                  className="text-[10px] text-slate-500/70 hover:text-red-600/80 dark:hover:text-red-400/80 transition-colors"
                   data-testid={`button-remove-vote-${matchup.id}`}
                 >
                   Remove vote
@@ -390,7 +390,7 @@ function ProfileMatchupCard({
               </div>
             ) : (
               <div className="flex items-center justify-center gap-2 text-xs text-slate-500/70 mt-2">
-                <Swords className="h-3.5 w-3.5 text-cyan-400/70" />
+                <Swords className="h-3.5 w-3.5 text-cyan-600/70 dark:text-cyan-400/70" />
                 <span className="font-medium">Tap an image to pick your side</span>
               </div>
             )}
@@ -491,12 +491,12 @@ function OpinionPollCardProfile({
     <div className="relative group h-full">
       <div className="absolute -inset-[1px] rounded-xl border border-cyan-500/60 transition-opacity pointer-events-none opacity-0 group-hover:opacity-100 hidden md:block" />
       <Card
-        className="relative pt-5 px-5 pb-5 transition-all duration-200 bg-card/80 backdrop-blur-sm h-full min-h-[420px] md:min-h-0 flex flex-col border-0 md:border md:border-transparent shadow-none md:shadow-sm group-hover:shadow-lg md:group-hover:shadow-cyan-500/20 rounded-none md:rounded-xl"
+        className="relative pt-5 px-5 pb-5 transition-all duration-200 bg-card/80 backdrop-blur-sm h-full min-h-[420px] md:min-h-0 flex flex-col border-0 md:border md:border-transparent shadow-none md:shadow-sm group-hover:shadow-lg md:group-hover:shadow-cyan-500/30 dark:shadow-cyan-500/20 rounded-none md:rounded-xl"
         data-testid={`opinion-poll-card-${poll.id}`}
       >
         <div className="flex items-center justify-between gap-2 mb-3">
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Users className="h-3.5 w-3.5 text-cyan-400" />
+            <Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
             <span className={hasVoted ? "" : "text-slate-600"}>
               {hasVoted ? `${totalVotes.toLocaleString("en-US")} votes` : "Votes"}
             </span>
@@ -511,12 +511,12 @@ function OpinionPollCardProfile({
             </div>
           ) : (
             <div className="h-12 w-12 rounded-lg bg-gradient-to-br from-slate-700/50 to-slate-800/50 flex items-center justify-center shrink-0">
-              <ListChecks className="h-5 w-5 text-slate-400" />
+              <ListChecks className="h-5 w-5 text-slate-600 dark:text-slate-400" />
             </div>
           )}
           <div className="flex-1 min-w-0">
             <Link href={`/vote/opinion-polls/${poll.slug}`} data-testid={`link-opinion-detail-${poll.id}`}>
-              <h3 className="font-serif font-bold text-lg leading-tight hover:text-cyan-400 transition-colors cursor-pointer">
+              <h3 className="font-serif font-bold text-lg leading-tight hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors cursor-pointer">
                 {poll.title}
               </h3>
             </Link>
@@ -524,7 +524,7 @@ function OpinionPollCardProfile({
         </div>
         {poll.description && (
           <Link href={`/vote/opinion-polls/${poll.slug}`}>
-            <p className="text-sm text-muted-foreground mb-3 line-clamp-2 hover:text-cyan-400 transition-colors cursor-pointer">{poll.description}</p>
+            <p className="text-sm text-muted-foreground mb-3 line-clamp-2 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors cursor-pointer">{poll.description}</p>
           </Link>
         )}
         {!poll.description && <div className="flex-grow" />}
@@ -535,7 +535,7 @@ function OpinionPollCardProfile({
               <button
                 key={option.id}
                 onClick={(e) => handleVote(option.id, e)}
-                className="w-full flex items-stretch overflow-hidden rounded-lg border border-border/50 bg-muted/30 p-0 text-left transition-all duration-200 hover:border-cyan-500/50 hover:bg-cyan-500/10 active:scale-[0.99]"
+                className="w-full flex items-stretch overflow-hidden rounded-lg border border-border/50 bg-muted/30 p-0 text-left transition-all duration-200 hover:border-cyan-500/60 dark:border-cyan-500/50 hover:bg-cyan-500/15 dark:hover:bg-cyan-500/10 active:scale-[0.99]"
                 data-testid={`opinion-poll-option-${poll.id}-${option.id}`}
               >
                 {option.imageUrl ? (
@@ -543,8 +543,8 @@ function OpinionPollCardProfile({
                     <img src={option.imageUrl} alt={option.name} className="absolute inset-0 h-full w-full object-cover" />
                   </div>
                 ) : (
-                  <div className="relative flex shrink-0 w-14 items-center justify-center self-stretch min-h-[2.75rem] bg-cyan-500/10">
-                    <ListChecks className="h-4 w-4 text-cyan-400" />
+                  <div className="relative flex shrink-0 w-14 items-center justify-center self-stretch min-h-[2.75rem] bg-cyan-500/15 dark:bg-cyan-500/10">
+                    <ListChecks className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
                   </div>
                 )}
                 <div className="flex-1 min-w-0 py-1.5 pl-2.5 pr-2">
@@ -559,7 +559,7 @@ function OpinionPollCardProfile({
             ))}
             {remainingCount > 0 && (
               <Link href={`/vote/opinion-polls/${poll.slug}`}>
-                <p className="text-xs text-cyan-400 text-center cursor-pointer hover:underline mt-2.5" data-testid={`link-more-options-${poll.id}`}>
+                <p className="text-xs text-cyan-600 dark:text-cyan-400 text-center cursor-pointer hover:underline mt-2.5" data-testid={`link-more-options-${poll.id}`}>
                   +{remainingCount} more options
                 </p>
               </Link>
@@ -583,16 +583,16 @@ function OpinionPollCardProfile({
                       <img src={option.imageUrl} alt={option.name} className="absolute inset-0 h-full w-full object-cover" />
                     </div>
                   ) : (
-                    <div className="relative flex shrink-0 w-14 items-center justify-center self-stretch min-h-[2.75rem] bg-cyan-500/10">
-                      <ListChecks className="h-4 w-4 text-cyan-400" />
+                    <div className="relative flex shrink-0 w-14 items-center justify-center self-stretch min-h-[2.75rem] bg-cyan-500/15 dark:bg-cyan-500/10">
+                      <ListChecks className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
                     </div>
                   )}
                   <div className="flex-1 min-w-0 py-1.5 pl-2.5 pr-2">
                     <div className="flex items-center gap-1.5">
                       <span className={`min-w-0 flex-1 truncate text-sm ${isSelected ? 'font-semibold' : ''}`}>{option.name}</span>
-                      {isSelected && <CheckCircle2 className="h-3.5 w-3.5 text-cyan-400 shrink-0" />}
+                      {isSelected && <CheckCircle2 className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400 shrink-0" />}
                       <span className={`shrink-0 text-xs font-mono font-bold ${
-                        isLeading ? 'text-cyan-400' : 'text-muted-foreground'
+                        isLeading ? 'text-cyan-600 dark:text-cyan-400' : 'text-muted-foreground'
                       }`}>{percent}%</span>
                     </div>
                     <div className="mt-1 h-1.5 rounded-full bg-slate-700/50 overflow-hidden">
@@ -619,7 +619,7 @@ function OpinionPollCardProfile({
                 <button
                   type="button"
                   key={option.id}
-                  className={`${rowClass} w-full text-left cursor-pointer hover:border-cyan-500/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30`}
+                  className={`${rowClass} w-full text-left cursor-pointer hover:border-cyan-500/50 dark:border-cyan-500/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30`}
                   onClick={(e) => openChangeDialog(option, e)}
                   data-testid={`opinion-poll-result-${poll.id}-${option.id}`}
                 >
@@ -629,7 +629,7 @@ function OpinionPollCardProfile({
             })}
             {remainingCount > 0 && (
               <Link href={`/vote/opinion-polls/${poll.slug}`}>
-                <p className="text-xs text-cyan-400 text-center cursor-pointer hover:underline mt-2.5" data-testid={`link-more-options-${poll.id}`}>
+                <p className="text-xs text-cyan-600 dark:text-cyan-400 text-center cursor-pointer hover:underline mt-2.5" data-testid={`link-more-options-${poll.id}`}>
                   +{remainingCount} more options
                 </p>
               </Link>
@@ -639,7 +639,7 @@ function OpinionPollCardProfile({
                 <Zap className="h-3 w-3" />
                 <span>{totalVotes.toLocaleString("en-US")} total votes</span>
               </div>
-              <span className="px-2 py-0.5 rounded-full text-xs font-medium border bg-cyan-500/10 border-cyan-500/40 text-cyan-400" data-testid={`badge-voted-opinion-${poll.id}`}>
+              <span className="px-2 py-0.5 rounded-full text-xs font-medium border bg-cyan-500/15 dark:bg-cyan-500/10 border-cyan-500/50 dark:border-cyan-500/40 text-cyan-600 dark:text-cyan-400" data-testid={`badge-voted-opinion-${poll.id}`}>
                 You voted
               </span>
             </div>
@@ -750,7 +750,7 @@ function CurateProfileCardProfile({
           )}
         </AnimatePresence>
         
-        <p className="text-center text-lg font-serif font-bold text-cyan-400 mb-4">Which look defines them?</p>
+        <p className="text-center text-lg font-serif font-bold text-cyan-600 dark:text-cyan-400 mb-4">Which look defines them?</p>
         
         <div className="grid grid-cols-2 gap-4">
           <button
@@ -761,7 +761,7 @@ function CurateProfileCardProfile({
                 ? 'border-green-500 ring-4 ring-green-500/30 scale-105' 
                 : selectedChoice === 'b'
                 ? 'border-muted opacity-40 scale-95'
-                : 'border-transparent hover:border-cyan-500/50 hover:scale-102'
+                : 'border-transparent hover:border-cyan-500/60 dark:border-cyan-500/50 hover:scale-102'
             }`}
             data-testid={`button-curate-photo-a-${poll.id}`}
           >
@@ -786,7 +786,7 @@ function CurateProfileCardProfile({
             )}
             {selectedChoice === 'a' && (
               <motion.div 
-                className="absolute inset-0 bg-green-500/20 flex items-center justify-center"
+                className="absolute inset-0 bg-green-500/25 dark:bg-green-500/20 flex items-center justify-center"
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.3 }}
@@ -811,7 +811,7 @@ function CurateProfileCardProfile({
                 ? 'border-green-500 ring-4 ring-green-500/30 scale-105' 
                 : selectedChoice === 'a'
                 ? 'border-muted opacity-40 scale-95'
-                : 'border-transparent hover:border-cyan-500/50 hover:scale-102'
+                : 'border-transparent hover:border-cyan-500/60 dark:border-cyan-500/50 hover:scale-102'
             }`}
             data-testid={`button-curate-photo-b-${poll.id}`}
           >
@@ -836,7 +836,7 @@ function CurateProfileCardProfile({
             )}
             {selectedChoice === 'b' && (
               <motion.div 
-                className="absolute inset-0 bg-green-500/20 flex items-center justify-center"
+                className="absolute inset-0 bg-green-500/25 dark:bg-green-500/20 flex items-center justify-center"
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.3 }}
@@ -881,7 +881,7 @@ function FeaturedPollCard({
       data-testid={`card-featured-poll-${poll.id}`}
     >
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
-        <Users className="h-3.5 w-3.5 text-cyan-400" />
+        <Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
         <span>{poll.totalVotes.toLocaleString('en-US')} votes</span>
       </div>
       <h3 className="font-serif font-bold text-lg mb-1">{poll.headline}</h3>
@@ -917,8 +917,8 @@ function FeaturedPollCard({
       ) : (
         <div className="flex flex-col gap-3">
           <div className="flex items-center gap-3">
-            <ThumbsUp className="h-4 w-4 text-emerald-400 shrink-0" />
-            <span className="text-sm text-emerald-400 w-16 shrink-0">Support</span>
+            <ThumbsUp className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <span className="text-sm text-emerald-600 dark:text-emerald-400 w-16 shrink-0">Support</span>
             <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
               <div 
                 className="h-full bg-emerald-400 rounded-full transition-all duration-500"
@@ -928,8 +928,8 @@ function FeaturedPollCard({
             <span className="text-xs text-muted-foreground w-10 text-right">{poll.approvePercent}%</span>
           </div>
           <div className="flex items-center gap-3">
-            <Minus className="h-4 w-4 text-slate-400 shrink-0" />
-            <span className="text-sm text-slate-400 w-16 shrink-0">Neutral</span>
+            <Minus className="h-4 w-4 text-slate-600 dark:text-slate-400 shrink-0" />
+            <span className="text-sm text-slate-600 dark:text-slate-400 w-16 shrink-0">Neutral</span>
             <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
               <div 
                 className="h-full bg-slate-400 rounded-full transition-all duration-500"
@@ -939,8 +939,8 @@ function FeaturedPollCard({
             <span className="text-xs text-muted-foreground w-10 text-right">{poll.neutralPercent}%</span>
           </div>
           <div className="flex items-center gap-3">
-            <ThumbsDown className="h-4 w-4 text-red-400 shrink-0" />
-            <span className="text-sm text-red-400 w-16 shrink-0">Oppose</span>
+            <ThumbsDown className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0" />
+            <span className="text-sm text-red-600 dark:text-red-400 w-16 shrink-0">Oppose</span>
             <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
               <div 
                 className="h-full bg-red-400 rounded-full transition-all duration-500"
@@ -1548,7 +1548,7 @@ export default function PersonDetailPage() {
                     showCloseButton
                   >
                     <div
-                      className="inline-flex items-center gap-1.5 px-2 sm:px-3 min-h-9 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-400 font-mono text-xs sm:text-sm font-semibold cursor-help"
+                      className="inline-flex items-center gap-1.5 px-2 sm:px-3 min-h-9 rounded-md bg-amber-500/15 dark:bg-amber-500/10 border border-amber-500/30 dark:border-amber-500/20 text-amber-600 dark:text-amber-400 font-mono text-xs sm:text-sm font-semibold cursor-help"
                       data-testid="text-header-rank"
                     >
                       <Trophy className="h-3.5 w-3.5" />
@@ -1563,7 +1563,7 @@ export default function PersonDetailPage() {
                   <Button
                     variant="outline"
                     size="icon"
-                    className={`sm:hidden ${isFavorited ? "bg-blue-500/15 border-blue-400/50 text-blue-400" : ""}`}
+                    className={`sm:hidden ${isFavorited ? "bg-blue-500/20 dark:bg-blue-500/15 border-blue-500/60 dark:border-blue-400/50 text-blue-600 dark:text-blue-400" : ""}`}
                     onClick={handleToggleFavorite}
                     disabled={favoriteLoading}
                     aria-label={isFavorited ? "Remove from favorites" : "Add to favorites"}
@@ -1577,7 +1577,7 @@ export default function PersonDetailPage() {
                   </Button>
                   <Button
                     variant="outline"
-                    className={`hidden sm:inline-flex gap-2 ${isFavorited ? "bg-blue-500/15 border-blue-400/50 text-blue-400" : ""}`}
+                    className={`hidden sm:inline-flex gap-2 ${isFavorited ? "bg-blue-500/20 dark:bg-blue-500/15 border-blue-500/60 dark:border-blue-400/50 text-blue-600 dark:text-blue-400" : ""}`}
                     onClick={handleToggleFavorite}
                     disabled={favoriteLoading}
                     data-testid="button-favorite"
@@ -1682,7 +1682,7 @@ export default function PersonDetailPage() {
               <UnifiedSectionHeader
                 title="Overall Rating"
                 subtitle={`How do you feel about ${person.name}?`}
-                icon={<ThumbsUp className="h-5 w-5 text-cyan-400" />}
+                icon={<ThumbsUp className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />}
                 accent="cyan"
                 testId="profile-section-overall-rating"
               />
@@ -1701,7 +1701,7 @@ export default function PersonDetailPage() {
               <UnifiedSectionHeader
                 title="Matchups"
                 subtitle="Vote on A vs B"
-                icon={<Swords className="h-5 w-5 text-cyan-400" />}
+                icon={<Swords className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />}
                 accent="cyan"
                 testId="profile-section-matchups"
               />
@@ -1736,7 +1736,7 @@ export default function PersonDetailPage() {
               <UnifiedSectionHeader
                 title="Sentiment Polls"
                 subtitle="Weigh in on current events"
-                icon={<MessageSquare className="h-5 w-5 text-cyan-400" />}
+                icon={<MessageSquare className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />}
                 accent="cyan"
                 testId="profile-section-sentiment"
                 actions={
@@ -1745,7 +1745,7 @@ export default function PersonDetailPage() {
                       variant="ghost"
                       size="sm"
                       onClick={() => setShowAllPollsOverlay(true)}
-                      className="text-cyan-400 hover:text-cyan-300"
+                      className="text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300"
                       data-testid="button-view-all-polls"
                     >
                       View all
@@ -1800,7 +1800,7 @@ export default function PersonDetailPage() {
               <UnifiedSectionHeader
                 title="Opinion Polls"
                 subtitle="Choose who leads the pack"
-                icon={<ListChecks className="h-5 w-5 text-cyan-400" />}
+                icon={<ListChecks className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />}
                 accent="cyan"
                 testId="profile-section-opinion"
               />
@@ -1834,7 +1834,7 @@ export default function PersonDetailPage() {
               <UnifiedSectionHeader
                 title="Underrated / Overrated"
                 subtitle="Overhyped or underappreciated?"
-                icon={<BarChart3 className="h-5 w-5 text-cyan-400" />}
+                icon={<BarChart3 className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />}
                 accent="cyan"
                 testId="profile-section-value"
               />
@@ -1851,7 +1851,7 @@ export default function PersonDetailPage() {
               <UnifiedSectionHeader
                 title="Curate the Profile"
                 subtitle="Help select their profile photo"
-                icon={<Camera className="h-5 w-5 text-cyan-400" />}
+                icon={<Camera className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />}
                 accent="cyan"
                 testId="profile-section-curate"
                 actions={
@@ -1886,8 +1886,8 @@ export default function PersonDetailPage() {
                 </div>
               ) : (
                 <div className="text-center py-8">
-                  <div className="h-16 w-16 rounded-full bg-green-500/10 flex items-center justify-center mx-auto mb-4">
-                    <Check className="h-8 w-8 text-green-500" />
+                  <div className="h-16 w-16 rounded-full bg-green-500/15 dark:bg-green-500/10 flex items-center justify-center mx-auto mb-4">
+                    <Check className="h-8 w-8 text-green-700 dark:text-green-500" />
                   </div>
                   <p className="text-lg font-semibold mb-2">Thanks for voting!</p>
                   <p className="text-sm text-muted-foreground mb-4">
@@ -1896,7 +1896,7 @@ export default function PersonDetailPage() {
                   <Button
                     variant="outline"
                     onClick={() => setCurateCompleted(false)}
-                    className="border-cyan-500/50 text-cyan-400"
+                    className="border-cyan-500/60 dark:border-cyan-500/50 text-cyan-600 dark:text-cyan-400"
                     data-testid="button-curate-vote-again"
                   >
                     Vote on Another Look

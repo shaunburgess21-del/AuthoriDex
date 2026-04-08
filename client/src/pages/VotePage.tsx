@@ -344,7 +344,7 @@ function VersusCard({
         </div>
         <div className="flex items-center mb-3 gap-2 px-4">
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Users className="h-3.5 w-3.5 text-cyan-400" />
+            <Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
             <span>{matchup.totalVotes.toLocaleString('en-US')} votes</span>
           </div>
         </div>
@@ -445,14 +445,14 @@ function VersusCard({
                   {hasVoted ? `${matchup.optionAPercent}%` : '%'}
                 </span>
                 {hasVoted && votedA && (
-                  <Badge variant="outline" className="text-[10px] border-blue-500/40 text-blue-400 px-1.5 py-0">
+                  <Badge variant="outline" className="text-[10px] border-blue-500/50 dark:border-blue-500/40 text-blue-600 dark:text-blue-400 px-1.5 py-0">
                     Your pick
                   </Badge>
                 )}
               </div>
               <div className="flex items-center gap-1.5">
                 {hasVoted && votedB && (
-                  <Badge variant="outline" className="text-[10px] border-amber-500/40 text-amber-400 px-1.5 py-0">
+                  <Badge variant="outline" className="text-[10px] border-amber-500/50 dark:border-amber-500/40 text-amber-600 dark:text-amber-400 px-1.5 py-0">
                     Your pick
                   </Badge>
                 )}
@@ -478,8 +478,8 @@ function VersusCard({
               )}
             </div>
             <div className="flex items-center justify-between mt-1.5">
-              <span className={`text-[11px] font-medium ${votedA ? 'text-blue-400' : hasVoted ? 'text-slate-500' : 'text-slate-600'}`}>{matchup.optionAText}</span>
-              <span className={`text-[11px] font-medium ${votedB ? 'text-amber-400' : hasVoted ? 'text-slate-500' : 'text-slate-600'}`}>{matchup.optionBText}</span>
+              <span className={`text-[11px] font-medium ${votedA ? 'text-blue-600 dark:text-blue-400' : hasVoted ? 'text-slate-500' : 'text-slate-600'}`}>{matchup.optionAText}</span>
+              <span className={`text-[11px] font-medium ${votedB ? 'text-amber-600 dark:text-amber-400' : hasVoted ? 'text-slate-500' : 'text-slate-600'}`}>{matchup.optionBText}</span>
             </div>
           </div>
           {hasVoted ? (
@@ -488,7 +488,7 @@ function VersusCard({
               <span className="text-[10px] text-slate-500/40">|</span>
               <button
                 onClick={() => onRemoveVote(matchup.id)}
-                className="text-[10px] text-slate-500/70 hover:text-red-400/80 transition-colors"
+                className="text-[10px] text-slate-500/70 hover:text-red-600/80 dark:hover:text-red-400/80 transition-colors"
                 data-testid={`button-remove-vote-${matchup.id}`}
               >
                 Remove vote
@@ -496,7 +496,7 @@ function VersusCard({
             </div>
           ) : (
             <div className="flex items-center justify-center gap-2 text-xs text-slate-500/70 mt-2">
-              <Swords className="h-3.5 w-3.5 text-cyan-400/70" />
+              <Swords className="h-3.5 w-3.5 text-cyan-600/70 dark:text-cyan-400/70" />
               <span className="font-medium">Tap an image to pick your side</span>
             </div>
           )}
@@ -625,7 +625,7 @@ function InductionCandidateCard({
       {isVoted ? (
         <Button 
           onClick={handleVoteClick}
-          className="w-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 hover:bg-emerald-500/20"
+          className="w-full bg-emerald-500/15 dark:bg-emerald-500/10 border border-emerald-500/30 dark:border-emerald-500/20 text-emerald-500 dark:text-emerald-300 hover:bg-emerald-500/25 dark:hover:bg-emerald-500/20"
           data-testid={`button-induct-${candidate.id}`}
         >
           <Check className="h-4 w-4 mr-2" />
@@ -634,7 +634,7 @@ function InductionCandidateCard({
       ) : (
         <button
           onClick={handleVoteClick}
-          className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-md bg-cyan-500/10 border border-cyan-500/50 text-cyan-400 text-sm font-medium transition-all duration-300 hover:border-cyan-500/80 hover:bg-cyan-500/20"
+          className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-md bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/60 dark:border-cyan-500/50 text-cyan-600 dark:text-cyan-400 text-sm font-medium transition-all duration-300 hover:border-cyan-500/80 hover:bg-cyan-500/25 dark:hover:bg-cyan-500/20"
           data-testid={`button-induct-${candidate.id}`}
         >
           <Vote className="h-4 w-4 shrink-0" />
@@ -806,18 +806,18 @@ function CurateProfileCard({
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
               transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-              className="h-12 w-12 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-3"
+              className="h-12 w-12 rounded-full bg-green-500/25 dark:bg-green-500/20 flex items-center justify-center mx-auto mb-3"
             >
-              <Check className="h-6 w-6 text-green-400" />
+              <Check className="h-6 w-6 text-green-600 dark:text-green-400" />
             </motion.div>
-            <p className="font-medium text-green-400 mb-1">Vote recorded!</p>
+            <p className="font-medium text-green-600 dark:text-green-400 mb-1">Vote recorded!</p>
             <p className="text-xs text-muted-foreground mb-4">{totalVotes.toLocaleString('en-US')} total votes</p>
             <div className="flex gap-2 justify-center">
               <Button
                 size="sm"
                 variant="outline"
                 onClick={() => onViewResults(poll)}
-                className="border-cyan-500/50 text-cyan-400"
+                className="border-cyan-500/60 dark:border-cyan-500/50 text-cyan-600 dark:text-cyan-400"
                 data-testid={`button-view-results-${poll.id}`}
               >
                 View Results
@@ -835,7 +835,7 @@ function CurateProfileCard({
           </div>
         ) : (
           <>
-            <p className="text-center text-lg font-serif font-bold text-cyan-400 mb-4">Which look defines them?</p>
+            <p className="text-center text-lg font-serif font-bold text-cyan-600 dark:text-cyan-400 mb-4">Which look defines them?</p>
             
             <div className="grid grid-cols-2 gap-4">
               <button
@@ -862,7 +862,7 @@ function CurateProfileCard({
                 </div>
                 {selectedChoice === 'a' && (
                   <motion.div 
-                    className="absolute inset-0 bg-green-500/20 flex items-center justify-center"
+                    className="absolute inset-0 bg-green-500/25 dark:bg-green-500/20 flex items-center justify-center"
                     initial={{ opacity: 0, scale: 0.8 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ duration: 0.3 }}
@@ -903,7 +903,7 @@ function CurateProfileCard({
                 </div>
                 {selectedChoice === 'b' && (
                   <motion.div 
-                    className="absolute inset-0 bg-green-500/20 flex items-center justify-center"
+                    className="absolute inset-0 bg-green-500/25 dark:bg-green-500/20 flex items-center justify-center"
                     initial={{ opacity: 0, scale: 0.8 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ duration: 0.3 }}
@@ -994,7 +994,7 @@ function DiscourseCard({
         />
       </div>
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
-        <Users className="h-3.5 w-3.5 text-cyan-400" />
+        <Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
         <span>{topic.totalVotes.toLocaleString('en-US')} votes</span>
       </div>
       <div className="flex items-start gap-3 mb-3">
@@ -1018,18 +1018,18 @@ function DiscourseCard({
         <div className="flex-1 min-w-0">
           {topic.slug ? (
             <Link href={`/polls/${topic.slug}`} data-testid={`link-poll-detail-${topic.id}`} className="block w-full min-w-0">
-              <h3 className="font-serif font-bold text-lg leading-tight hover:text-cyan-400 transition-colors cursor-pointer line-clamp-2">{topic.headline}</h3>
+              <h3 className="font-serif font-bold text-lg leading-tight hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors cursor-pointer line-clamp-2">{topic.headline}</h3>
             </Link>
           ) : (
             <h3 className="font-serif font-bold text-lg leading-tight line-clamp-2 block min-w-0">{topic.headline}</h3>
           )}
           {topic.personName && (
             topic.personId ? (
-              <Link href={`/person/${topic.personId}`} className="text-xs text-cyan-400 hover:text-cyan-300 hover:underline cursor-pointer">
+              <Link href={`/person/${topic.personId}`} className="text-xs text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300 hover:underline cursor-pointer">
                 {topic.personName}
               </Link>
             ) : (
-              <span className="text-xs text-cyan-400">{topic.personName}</span>
+              <span className="text-xs text-cyan-600 dark:text-cyan-400">{topic.personName}</span>
             )
           )}
         </div>
@@ -1037,7 +1037,7 @@ function DiscourseCard({
       {topic.subjectText && (
         topic.slug ? (
           <Link href={`/polls/${topic.slug}`} className="block mb-4">
-            <p className="text-[17px] md:text-[16px] leading-[1.5] md:leading-[1.4] text-muted-foreground line-clamp-2 hover:text-cyan-400 transition-colors">{topic.subjectText}</p>
+            <p className="text-[17px] md:text-[16px] leading-[1.5] md:leading-[1.4] text-muted-foreground line-clamp-2 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">{topic.subjectText}</p>
           </Link>
         ) : (
           <p className="text-[17px] md:text-[16px] leading-[1.5] md:leading-[1.4] text-muted-foreground mb-4 line-clamp-2">{topic.subjectText}</p>
@@ -1046,7 +1046,7 @@ function DiscourseCard({
       {!topic.subjectText && topic.description && (
         topic.slug ? (
           <Link href={`/polls/${topic.slug}`} className="block mb-4">
-            <p className="text-[17px] md:text-[16px] leading-[1.5] md:leading-[1.4] text-muted-foreground line-clamp-2 hover:text-cyan-400 transition-colors">{topic.description}</p>
+            <p className="text-[17px] md:text-[16px] leading-[1.5] md:leading-[1.4] text-muted-foreground line-clamp-2 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">{topic.description}</p>
           </Link>
         ) : (
           <p className="text-[17px] md:text-[16px] leading-[1.5] md:leading-[1.4] text-muted-foreground mb-4 line-clamp-2">{topic.description}</p>
@@ -1187,15 +1187,19 @@ function parseVoteError(err: unknown): string {
   return "Something went wrong. Please try again.";
 }
 
+const OPINION_POLL_PREVIEW_COUNT = 5;
+
 function OpinionPollCard({
   poll,
   onVote,
+  onRemoveVote,
   onFilterCategory,
   categoryRaceMap,
   leaderboardCategories,
 }: {
   poll: any;
   onVote: (pollSlug: string, optionId: string) => Promise<void>;
+  onRemoveVote: (pollSlug: string) => Promise<void>;
   onFilterCategory: (category: string) => void;
   categoryRaceMap: Map<string, string>;
   leaderboardCategories?: Set<string>;
@@ -1207,8 +1211,8 @@ function OpinionPollCard({
   const [pendingOption, setPendingOption] = useState<{ id: string; name: string } | null>(null);
   const [expandedImage, setExpandedImage] = useState<{ url: string; alt: string } | null>(null);
   const options = poll.options || [];
-  const visibleOptions = options.slice(0, 4);
-  const remainingCount = options.length - 4;
+  const visibleOptions = options.slice(0, OPINION_POLL_PREVIEW_COUNT);
+  const remainingCount = Math.max(0, options.length - OPINION_POLL_PREVIEW_COUNT);
 
   useEffect(() => {
     setVoted(poll.userVote ?? null);
@@ -1260,6 +1264,24 @@ function OpinionPollCard({
     }
   };
 
+  const handleRemoveVote = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await onRemoveVote(poll.slug);
+      setVoted(null);
+    } catch (err) {
+      if (isUnauthorizedApiError(err)) {
+        toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+      } else {
+        toast({
+          title: "Could not remove vote",
+          description: parseVoteError(err),
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
   const hasVoted = !!voted;
   const totalVotes = poll.totalVotes || 0;
   const maxPercent = Math.max(...visibleOptions.map((o: any) => totalVotes > 0 ? Math.round((o.votes / totalVotes) * 100) : 0), 0);
@@ -1273,7 +1295,7 @@ function OpinionPollCard({
       >
         <div className="flex items-center justify-between gap-2 mb-3">
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Users className="h-3.5 w-3.5 text-cyan-400" />
+            <Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
             <span className={hasVoted ? "" : "text-slate-600"}>
               {hasVoted ? `${totalVotes.toLocaleString("en-US")} votes` : "Votes"}
             </span>
@@ -1300,22 +1322,22 @@ function OpinionPollCard({
           )}
           <div className="flex-1 min-w-0">
             <Link href={`/vote/opinion-polls/${poll.slug}`} data-testid={`link-opinion-detail-${poll.id}`}>
-              <h3 className="font-serif font-bold text-lg leading-tight hover:text-cyan-400 transition-colors cursor-pointer">{poll.title}</h3>
+              <h3 className="font-serif font-bold text-lg leading-tight hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors cursor-pointer">{poll.title}</h3>
             </Link>
           </div>
         </div>
         {poll.description && (
           <Link href={`/vote/opinion-polls/${poll.slug}`}>
-            <p className="text-sm text-muted-foreground mb-3 line-clamp-2 hover:text-cyan-400 transition-colors cursor-pointer">{poll.description}</p>
+            <p className="text-sm text-muted-foreground mb-3 line-clamp-2 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors cursor-pointer">{poll.description}</p>
           </Link>
         )}
 
         {!hasVoted ? (
-          <div className="space-y-1.5 mt-auto">
+          <div className="space-y-1.5">
             {visibleOptions.map((option: any) => (
               <div
                 key={option.id}
-                className="w-full flex items-stretch overflow-hidden rounded-lg border border-border/50 bg-muted/30 p-0 text-left transition-all duration-200 hover:border-cyan-500/50 hover:bg-cyan-500/10"
+                className="w-full flex items-stretch overflow-hidden rounded-lg border border-border/50 bg-muted/30 p-0 text-left transition-all duration-200 hover:border-[#EFEFEF]/50 hover:bg-muted/50 dark:hover:border-white/40 dark:hover:bg-white/5 hover:ring-1 hover:ring-inset hover:ring-[#EFEFEF]/40 dark:hover:ring-white/25"
                 data-testid={`opinion-poll-option-${poll.id}-${option.id}`}
               >
                 {option.imageUrl ? (
@@ -1328,8 +1350,8 @@ function OpinionPollCard({
                     <img src={option.imageUrl} alt={option.name} className="absolute inset-0 h-full w-full object-cover" />
                   </button>
                 ) : (
-                  <div className="relative flex shrink-0 w-14 items-center justify-center self-stretch min-h-[2.75rem] bg-cyan-500/10">
-                    <span className="text-xs font-semibold text-cyan-400">{option.orderIndex + 1}</span>
+                  <div className="relative flex shrink-0 w-14 items-center justify-center self-stretch min-h-[2.75rem] bg-cyan-500/15 dark:bg-cyan-500/10">
+                    <span className="text-xs font-semibold text-cyan-600 dark:text-cyan-400">{option.orderIndex + 1}</span>
                   </div>
                 )}
                 <button
@@ -1348,22 +1370,22 @@ function OpinionPollCard({
             ))}
             {remainingCount > 0 && (
               <Link href={`/vote/opinion-polls/${poll.slug}`}>
-                <p className="text-xs text-cyan-400 text-center cursor-pointer hover:underline mt-2.5" data-testid={`link-more-options-${poll.id}`}>
+                <p className="text-xs text-cyan-600 dark:text-cyan-400 text-center cursor-pointer hover:underline mt-2.5" data-testid={`link-more-options-${poll.id}`}>
                   +{remainingCount} more options
                 </p>
               </Link>
             )}
           </div>
         ) : (
-          <div className="space-y-1.5 mt-auto">
+          <div className="space-y-1.5">
             {visibleOptions.map((option: any) => {
               const isSelected = voted === option.id;
               const percent = totalVotes > 0 ? Math.round((option.votes / totalVotes) * 100) : 0;
               const isLeading = percent === maxPercent && percent > 0;
               const rowClass = `flex items-stretch overflow-hidden rounded-lg border transition-all duration-300 ${
                 isSelected
-                  ? 'border-cyan-500/60 bg-cyan-500/[0.08]'
-                  : 'border-border/30 bg-muted/20'
+                  ? "border-[#EFEFEF]/45 bg-white/[0.06] dark:border-white/40 dark:bg-white/5"
+                  : "border-border/30 bg-muted/20"
               }`;
               const imageColumn = option.imageUrl ? (
                 <button
@@ -1375,17 +1397,17 @@ function OpinionPollCard({
                   <img src={option.imageUrl} alt={option.name} className="absolute inset-0 h-full w-full object-cover" />
                 </button>
               ) : (
-                <div className="relative flex shrink-0 w-14 items-center justify-center self-stretch min-h-[2.75rem] bg-cyan-500/10">
-                  <span className="text-xs font-semibold text-cyan-400">{option.orderIndex + 1}</span>
+                <div className="relative flex shrink-0 w-14 items-center justify-center self-stretch min-h-[2.75rem] bg-cyan-500/15 dark:bg-cyan-500/10">
+                  <span className="text-xs font-semibold text-cyan-600 dark:text-cyan-400">{option.orderIndex + 1}</span>
                 </div>
               );
               const contentColumn = (
                 <div className="flex-1 min-w-0 py-1.5 pl-2.5 pr-2">
                   <div className="flex items-center gap-1.5">
                     <span className={`min-w-0 flex-1 truncate text-sm ${isSelected ? 'font-semibold' : ''}`}>{option.name}</span>
-                    {isSelected && <CheckCircle2 className="h-3.5 w-3.5 text-cyan-400 shrink-0" />}
+                    {isSelected && <CheckCircle2 className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400 shrink-0" />}
                     <span className={`shrink-0 text-xs font-mono font-bold ${
-                      isLeading ? 'text-cyan-400' : 'text-muted-foreground'
+                      isLeading ? 'text-cyan-600 dark:text-cyan-400' : 'text-muted-foreground'
                     }`}>{percent}%</span>
                   </div>
                   <div className="mt-1 h-1.5 rounded-full bg-slate-700/50 overflow-hidden">
@@ -1417,7 +1439,7 @@ function OpinionPollCard({
                   {imageColumn}
                   <button
                     type="button"
-                    className="min-w-0 flex-1 text-left cursor-pointer hover:border-cyan-500/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 border-0 bg-transparent p-0"
+                    className="min-w-0 flex-1 text-left cursor-pointer rounded-r-md hover:ring-1 hover:ring-inset hover:ring-[#EFEFEF]/50 dark:hover:ring-white/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#EFEFEF]/40 dark:focus-visible:ring-white/30 border-0 bg-transparent p-0"
                     onClick={(e) => openChangeDialog(option, e)}
                   >
                     {contentColumn}
@@ -1427,7 +1449,7 @@ function OpinionPollCard({
             })}
             {remainingCount > 0 && (
               <Link href={`/vote/opinion-polls/${poll.slug}`}>
-                <p className="text-xs text-cyan-400 text-center cursor-pointer hover:underline mt-2.5" data-testid={`link-more-options-${poll.id}`}>
+                <p className="text-xs text-cyan-600 dark:text-cyan-400 text-center cursor-pointer hover:underline mt-2.5" data-testid={`link-more-options-${poll.id}`}>
                   +{remainingCount} more options
                 </p>
               </Link>
@@ -1440,6 +1462,23 @@ function OpinionPollCard({
               <span className="px-2 py-0.5 rounded-full text-xs font-medium border bg-white/[0.06] border-[#EFEFEF]/35 text-foreground/90" data-testid={`badge-voted-opinion-${poll.id}`}>
                 You voted
               </span>
+            </div>
+            <div
+              className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center mt-2"
+              data-testid={`text-change-vote-hint-${poll.id}`}
+            >
+              <span className="text-[10px] text-slate-500/70 dark:text-slate-400/70">
+                Tap another option to change your vote
+              </span>
+              <span className="text-[10px] text-slate-500/40 dark:text-slate-500/40">|</span>
+              <button
+                type="button"
+                onClick={handleRemoveVote}
+                className="text-[10px] text-slate-500/70 dark:text-slate-400/70 hover:text-red-600/80 dark:hover:text-red-400/80 transition-colors"
+                data-testid={`button-remove-vote-opinion-${poll.id}`}
+              >
+                Remove vote
+              </button>
             </div>
           </div>
         )}
@@ -1518,8 +1557,8 @@ function CarouselSection({
   return (
     <section className="mb-10">
       <div className="flex items-start gap-3 mb-4">
-        <div className="h-10 w-10 rounded-lg bg-cyan-500/10 hidden sm:flex items-center justify-center shrink-0">
-          <Icon className="h-5 w-5 text-cyan-400" />
+        <div className="h-10 w-10 rounded-lg bg-cyan-500/15 dark:bg-cyan-500/10 hidden sm:flex items-center justify-center shrink-0">
+          <Icon className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
         </div>
         <div>
           <h2 className="text-xl font-serif font-bold">{title}</h2>
@@ -1584,7 +1623,7 @@ function XPFloaterAnimation({ floater, onComplete }: { floater: XPFloater; onCom
       transition={{ duration: 1, ease: "easeOut" }}
       style={{ left: floater.x, top: floater.y }}
     >
-      <span className="text-cyan-400 drop-shadow-[0_0_10px_rgba(34,211,238,0.8)]">
+      <span className="text-cyan-600 dark:text-cyan-400 drop-shadow-[0_0_10px_rgba(34,211,238,0.8)]">
         +{floater.amount} XP
       </span>
     </motion.div>
@@ -1677,14 +1716,14 @@ function HybridSubjectCombobox({
             {showCustomTopicOption && (
               <button
                 onClick={() => handleSelectCustomTopic(value || "Custom Topic")}
-                className="w-full px-4 py-2.5 text-left text-sm hover:bg-cyan-500/10 transition-colors flex items-center gap-2 border-b border-border bg-gradient-to-r from-cyan-500/5 to-transparent"
+                className="w-full px-4 py-2.5 text-left text-sm hover:bg-cyan-500/15 dark:hover:bg-cyan-500/10 transition-colors flex items-center gap-2 border-b border-border bg-gradient-to-r from-cyan-500/5 to-transparent"
                 data-testid="option-create-custom-topic"
               >
-                <div className="h-7 w-7 rounded-md bg-cyan-500/20 border border-cyan-500/30 flex items-center justify-center">
-                  <Sparkles className="h-3.5 w-3.5 text-cyan-400" />
+                <div className="h-7 w-7 rounded-md bg-cyan-500/25 dark:bg-cyan-500/20 border border-cyan-500/40 dark:border-cyan-500/30 flex items-center justify-center">
+                  <Sparkles className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
                 </div>
                 <div className="flex flex-col">
-                  <span className="font-medium text-cyan-400">Create Custom Topic</span>
+                  <span className="font-medium text-cyan-600 dark:text-cyan-400">Create Custom Topic</span>
                   <span className="text-xs text-muted-foreground">Not about a specific celebrity</span>
                 </div>
               </button>
@@ -1713,11 +1752,11 @@ function HybridSubjectCombobox({
                 className="w-full px-4 py-2.5 text-left text-sm hover:bg-muted transition-colors flex items-center gap-2"
                 data-testid="option-use-as-custom"
               >
-                <div className="h-7 w-7 rounded-md bg-violet-500/20 border border-violet-500/30 flex items-center justify-center">
-                  <Plus className="h-3.5 w-3.5 text-violet-400" />
+                <div className="h-7 w-7 rounded-md bg-violet-500/25 dark:bg-violet-500/20 border border-violet-500/40 dark:border-violet-500/30 flex items-center justify-center">
+                  <Plus className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400" />
                 </div>
                 <div className="flex flex-col">
-                  <span>Use "<span className="font-medium text-violet-400">{value}</span>" as Custom Topic</span>
+                  <span>Use "<span className="font-medium text-violet-600 dark:text-violet-400">{value}</span>" as Custom Topic</span>
                   <span className="text-xs text-muted-foreground">No matching celebrities found</span>
                 </div>
               </button>
@@ -1895,9 +1934,9 @@ function ContenderSelector({
             <p className="font-medium truncate">{value.name}</p>
             <p className="text-xs text-muted-foreground">
               {value.type === 'celebrity' ? (
-                <span className="text-cyan-400">VoxDex Celebrity</span>
+                <span className="text-cyan-600 dark:text-cyan-400">VoxDex Celebrity</span>
               ) : (
-                <span className="text-violet-400">Custom Contender</span>
+                <span className="text-violet-600 dark:text-violet-400">Custom Contender</span>
               )}
             </p>
           </div>
@@ -1915,15 +1954,15 @@ function ContenderSelector({
 
         {/* Upload button for custom contenders */}
         {needsUpload && (
-          <div className="flex items-center gap-2 p-3 rounded-lg border border-dashed border-amber-500/50 bg-amber-500/5">
-            <Upload className="h-4 w-4 text-amber-400" />
-            <span className="text-sm text-amber-400">Image required for custom contenders</span>
+          <div className="flex items-center gap-2 p-3 rounded-lg border border-dashed border-amber-500/60 dark:border-amber-500/50 bg-amber-500/5">
+            <Upload className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            <span className="text-sm text-amber-600 dark:text-amber-400">Image required for custom contenders</span>
             <Button
               type="button"
               size="sm"
               variant="outline"
               onClick={() => fileInputRef.current?.click()}
-              className="ml-auto border-amber-500/50 text-amber-400 hover:bg-amber-500/10"
+              className="ml-auto border-amber-500/60 dark:border-amber-500/50 text-amber-600 dark:text-amber-400 hover:bg-amber-500/15 dark:hover:bg-amber-500/10"
               data-testid={`${testIdPrefix}-upload-btn`}
             >
               Upload Image
@@ -1974,14 +2013,14 @@ function ContenderSelector({
               {showCustomOption && (
                 <button
                   onClick={handleSelectCustom}
-                  className="w-full px-4 py-2.5 text-left text-sm hover:bg-violet-500/10 transition-colors flex items-center gap-2 border-b border-border bg-gradient-to-r from-violet-500/5 to-transparent"
+                  className="w-full px-4 py-2.5 text-left text-sm hover:bg-violet-500/15 dark:hover:bg-violet-500/10 transition-colors flex items-center gap-2 border-b border-border bg-gradient-to-r from-violet-500/5 to-transparent"
                   data-testid={`${testIdPrefix}-custom-option`}
                 >
-                  <div className="h-8 w-8 rounded-md bg-violet-500/20 border border-violet-500/30 flex items-center justify-center">
-                    <Plus className="h-4 w-4 text-violet-400" />
+                  <div className="h-8 w-8 rounded-md bg-violet-500/25 dark:bg-violet-500/20 border border-violet-500/40 dark:border-violet-500/30 flex items-center justify-center">
+                    <Plus className="h-4 w-4 text-violet-600 dark:text-violet-400" />
                   </div>
                   <div className="flex flex-col">
-                    <span>Use "<span className="font-medium text-violet-400">{searchQuery}</span>" as Custom Contender</span>
+                    <span>Use "<span className="font-medium text-violet-600 dark:text-violet-400">{searchQuery}</span>" as Custom Contender</span>
                     <span className="text-xs text-muted-foreground">Image upload required</span>
                   </div>
                 </button>
@@ -2013,7 +2052,7 @@ function ContenderSelector({
                           {celebrity.category} â€¢ Auto-image
                         </p>
                       </div>
-                      <Badge variant="outline" className="text-xs bg-cyan-500/10 text-cyan-300 border-cyan-400/30">
+                      <Badge variant="outline" className="text-xs bg-cyan-500/15 dark:bg-cyan-500/10 text-cyan-500 dark:text-cyan-300 border-cyan-500/40 dark:border-cyan-400/30">
                         <Check className="h-3 w-3 mr-1" />
                         Auto
                       </Badge>
@@ -2099,7 +2138,7 @@ function FilterChip({
       onClick={handleClick}
       className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-all flex items-center gap-1.5 whitespace-nowrap ${
         isActive
-          ? "bg-cyan-500/20 border-cyan-500/40 text-cyan-700 dark:text-cyan-300"
+          ? "bg-cyan-500/25 dark:bg-cyan-500/20 border-cyan-500/50 dark:border-cyan-500/40 text-cyan-700 dark:text-cyan-300"
           : "bg-muted/50 border-border/60 text-muted-foreground hover:border-foreground/30 dark:bg-slate-800/30 dark:border-slate-700/40 dark:text-slate-400 dark:hover:border-slate-600"
       }`}
       data-testid={getTestId()}
@@ -2801,7 +2840,7 @@ export default function VotePage() {
                 <Button variant="ghost" size="sm" className="md:text-sm" data-testid="link-nav-leaderboard">Leaderboard</Button>
               </Link>
               <Link href="/vote">
-                <Button variant="ghost" size="sm" className="text-cyan-400 md:text-sm" data-testid="link-nav-vote">Vote</Button>
+                <Button variant="ghost" size="sm" className="text-cyan-700 dark:text-cyan-400 md:text-sm" data-testid="link-nav-vote">Vote</Button>
               </Link>
               <Link href="/predict">
                 <Button variant="ghost" size="sm" className="md:text-sm" data-testid="link-nav-predict">Predict</Button>
@@ -2824,7 +2863,7 @@ export default function VotePage() {
                 onClick={() => setActiveSection(section)}
                 className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all min-w-fit ${
                   activeSection === section
-                    ? "bg-cyan-500/20 text-cyan-400 border border-cyan-400/40 shadow-sm shadow-cyan-500/20"
+                    ? "bg-cyan-500/25 dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border border-cyan-500/50 dark:border-cyan-400/40 shadow-sm shadow-cyan-500/30 dark:shadow-cyan-500/20"
                     : "bg-muted/50 text-muted-foreground hover:bg-muted border border-transparent"
                 }`}
                 data-testid={`toggle-section-${section.toLowerCase().replace(/['\s]/g, '-')}`}
@@ -2848,7 +2887,7 @@ export default function VotePage() {
           <UnifiedSectionHeader
             title="Matchups"
             subtitle="Vote on A vs B"
-            icon={<Swords className="h-5 w-5 text-cyan-400" />}
+            icon={<Swords className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />}
             accent="cyan"
             testId="section-header-matchups"
             actions={
@@ -2859,7 +2898,7 @@ export default function VotePage() {
                       variant="ghost"
                       size="icon"
                       onClick={() => setRulesModalOpen("matchups")}
-                      className="text-cyan-400 hover:text-cyan-300"
+                      className="text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300"
                       data-testid="button-rules-matchups"
                     >
                       <HelpCircle className="h-5 w-5" />
@@ -2871,7 +2910,7 @@ export default function VotePage() {
                 </Tooltip>
                 <Button
                   onClick={() => setMatchupSuggestOpen(true)}
-                  className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 hidden md:flex"
+                  className="rounded-full bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/25 dark:hover:bg-cyan-500/20 hidden md:flex"
                   data-testid="button-suggest-matchup"
                 >
                   <Plus className="h-4 w-4 mr-2" />
@@ -2880,7 +2919,7 @@ export default function VotePage() {
                 <Button
                   size="icon"
                   onClick={() => setMatchupSuggestOpen(true)}
-                  className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 md:hidden"
+                  className="rounded-full bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/25 dark:hover:bg-cyan-500/20 md:hidden"
                   data-testid="button-suggest-matchup-mobile"
                 >
                   <Plus className="h-4 w-4" />
@@ -2937,7 +2976,7 @@ export default function VotePage() {
             <Button
               variant="ghost"
               onClick={() => openOverlay("matchups")}
-              className="text-cyan-400 hover:text-cyan-300"
+              className="text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300"
               data-testid="button-view-all-matchups"
             >
               View all matchups
@@ -2953,7 +2992,7 @@ export default function VotePage() {
           <UnifiedSectionHeader
             title="Sentiment Polls"
             subtitle="Weigh in on current events"
-            icon={<MessageSquare className="h-5 w-5 text-cyan-400" />}
+            icon={<MessageSquare className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />}
             accent="cyan"
             testId="section-header-sentiment"
             actions={
@@ -2964,7 +3003,7 @@ export default function VotePage() {
                       variant="ghost"
                       size="icon"
                       onClick={() => setRulesModalOpen("voice")}
-                      className="text-cyan-400 hover:text-cyan-300"
+                      className="text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300"
                       data-testid="button-rules-voice"
                     >
                       <HelpCircle className="h-5 w-5" />
@@ -2976,7 +3015,7 @@ export default function VotePage() {
                 </Tooltip>
                 <Button
                   onClick={() => setStartPollModalOpen(true)}
-                  className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 hidden md:flex"
+                  className="rounded-full bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/25 dark:hover:bg-cyan-500/20 hidden md:flex"
                   data-testid="button-suggest-poll"
                 >
                   <Plus className="h-4 w-4 mr-2" />
@@ -2985,7 +3024,7 @@ export default function VotePage() {
                 <Button
                   size="icon"
                   onClick={() => setStartPollModalOpen(true)}
-                  className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 md:hidden"
+                  className="rounded-full bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/25 dark:hover:bg-cyan-500/20 md:hidden"
                   data-testid="button-suggest-poll-mobile"
                 >
                   <Plus className="h-4 w-4" />
@@ -3034,7 +3073,7 @@ export default function VotePage() {
             <Button
               variant="ghost"
               onClick={() => openOverlay("topics")}
-              className="text-cyan-400 hover:text-cyan-300"
+              className="text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300"
               data-testid="button-view-all-topics"
             >
               View all topics
@@ -3050,7 +3089,7 @@ export default function VotePage() {
           <UnifiedSectionHeader
             title="Opinion Polls"
             subtitle="Choose who leads the pack"
-            icon={<ListChecks className="h-5 w-5 text-cyan-400" />}
+            icon={<ListChecks className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />}
             accent="cyan"
             testId="section-header-opinion"
             actions={
@@ -3061,7 +3100,7 @@ export default function VotePage() {
                       variant="ghost"
                       size="icon"
                       onClick={() => setRulesModalOpen("opinion")}
-                      className="text-cyan-400 hover:text-cyan-300"
+                      className="text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300"
                       data-testid="button-rules-opinion"
                     >
                       <HelpCircle className="h-5 w-5" />
@@ -3073,7 +3112,7 @@ export default function VotePage() {
                 </Tooltip>
                 <Button
                   onClick={() => setOpinionSuggestOpen(true)}
-                  className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 hidden md:flex"
+                  className="rounded-full bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/25 dark:hover:bg-cyan-500/20 hidden md:flex"
                   data-testid="button-suggest-opinion"
                 >
                   <Plus className="h-4 w-4 mr-2" />
@@ -3082,7 +3121,7 @@ export default function VotePage() {
                 <Button
                   size="icon"
                   onClick={() => setOpinionSuggestOpen(true)}
-                  className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 md:hidden"
+                  className="rounded-full bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/25 dark:hover:bg-cyan-500/20 md:hidden"
                   data-testid="button-suggest-opinion-mobile"
                 >
                   <Plus className="h-4 w-4" />
@@ -3117,6 +3156,10 @@ export default function VotePage() {
                       await apiRequest("POST", `/api/opinion-polls/${pollSlug}/vote`, { optionId });
                       queryClient.invalidateQueries({ queryKey: ['/api/opinion-polls'] });
                     }}
+                    onRemoveVote={async (pollSlug) => {
+                      await apiRequest("POST", `/api/opinion-polls/${pollSlug}/vote`, { remove: true });
+                      queryClient.invalidateQueries({ queryKey: ['/api/opinion-polls'] });
+                    }}
                     onFilterCategory={handleCategoryPillFilter}
                     categoryRaceMap={raceMap}
                     leaderboardCategories={leaderboardCats}
@@ -3135,7 +3178,7 @@ export default function VotePage() {
             <Button
               variant="ghost"
               onClick={() => openOverlay("opinion-polls")}
-              className="text-cyan-400 hover:text-cyan-300"
+              className="text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300"
               data-testid="button-view-all-opinion-polls"
             >
               View all opinion polls
@@ -3151,7 +3194,7 @@ export default function VotePage() {
           <UnifiedSectionHeader
             title="Underrated / Overrated"
             subtitle="overhyped or underappreciated?"
-            icon={<BarChart3 className="h-5 w-5 text-cyan-400" />}
+            icon={<BarChart3 className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />}
             accent="cyan"
             testId="section-header-value"
             actions={
@@ -3161,7 +3204,7 @@ export default function VotePage() {
                     variant="ghost"
                     size="icon"
                     onClick={() => setRulesModalOpen("value")}
-                    className="text-cyan-400"
+                    className="text-cyan-600 dark:text-cyan-400"
                     data-testid="button-rules-value"
                   >
                     <HelpCircle className="h-5 w-5" />
@@ -3213,7 +3256,7 @@ export default function VotePage() {
             <Button
               variant="ghost"
               onClick={() => setLocation("/vote/value-ratings")}
-              className="text-cyan-400"
+              className="text-cyan-600 dark:text-cyan-400"
               data-testid="button-view-all-value"
             >
               View all rankings
@@ -3237,11 +3280,11 @@ export default function VotePage() {
               <p className="text-muted-foreground max-w-2xl mx-auto mb-3">Vote on new inductees and curate profile images</p>
               <button
                 onClick={() => setInfoModalOpen("governance")}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-cyan-500/10 border border-cyan-500/20 hover:bg-cyan-500/20 hover:border-cyan-500/30 transition-all cursor-pointer"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/20 hover:bg-cyan-500/25 dark:hover:bg-cyan-500/20 hover:border-cyan-500/30 transition-all cursor-pointer"
                 data-testid="button-governance-info"
               >
-                <Sparkles className="h-4 w-4 text-cyan-400" />
-                <span className="text-sm text-cyan-400 font-medium">Community Governance</span>
+                <Sparkles className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
+                <span className="text-sm text-cyan-600 dark:text-cyan-400 font-medium">Community Governance</span>
               </button>
             </div>
           </div>
@@ -3254,7 +3297,7 @@ export default function VotePage() {
           <UnifiedSectionHeader
             title="The Induction Queue"
             subtitle="Who joins the leaderboard next"
-            icon={<Vote className="h-5 w-5 text-cyan-400" />}
+            icon={<Vote className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />}
             accent="cyan"
             testId="section-header-induction"
             actions={
@@ -3265,7 +3308,7 @@ export default function VotePage() {
                       variant="ghost"
                       size="icon"
                       onClick={() => setRulesModalOpen("induction")}
-                      className="text-cyan-400 hover:text-cyan-300"
+                      className="text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300"
                       data-testid="button-rules-induction"
                     >
                       <HelpCircle className="h-5 w-5" />
@@ -3277,7 +3320,7 @@ export default function VotePage() {
                 </Tooltip>
                 <Button
                   onClick={() => setInductionSuggestOpen(true)}
-                  className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 hidden md:flex"
+                  className="rounded-full bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/25 dark:hover:bg-cyan-500/20 hidden md:flex"
                   data-testid="button-suggest-induction"
                 >
                   <Plus className="h-4 w-4 mr-2" />
@@ -3286,7 +3329,7 @@ export default function VotePage() {
                 <Button
                   size="icon"
                   onClick={() => setInductionSuggestOpen(true)}
-                  className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 md:hidden"
+                  className="rounded-full bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/25 dark:hover:bg-cyan-500/20 md:hidden"
                   data-testid="button-suggest-induction-mobile"
                 >
                   <Plus className="h-4 w-4" />
@@ -3296,11 +3339,11 @@ export default function VotePage() {
             meta={
               <div className="flex flex-wrap items-center gap-2">
                 <div className="rounded-full px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 border bg-slate-800/50 border-slate-700/60">
-                  <Clock className="h-3 w-3 text-cyan-400" />
+                  <Clock className="h-3 w-3 text-cyan-600 dark:text-cyan-400" />
                   <span className="text-slate-300">Ends in: {countdown}</span>
                 </div>
                 <div className="rounded-full px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 border bg-slate-800/50 border-slate-700/60">
-                  <Star className="h-3 w-3 text-amber-400" />
+                  <Star className="h-3 w-3 text-amber-600 dark:text-amber-400" />
                   <span className="text-slate-300">Top 1 will be inducted</span>
                 </div>
               </div>
@@ -3350,7 +3393,7 @@ export default function VotePage() {
             <Button
               variant="ghost"
               onClick={() => openOverlay("induction")}
-              className="text-cyan-400 hover:text-cyan-300"
+              className="text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300"
               data-testid="button-view-full-candidate-list"
             >
               View full candidate list
@@ -3366,7 +3409,7 @@ export default function VotePage() {
           <UnifiedSectionHeader
             title="Curate the Profile"
             subtitle="Help select their profile photo"
-            icon={<Camera className="h-5 w-5 text-cyan-400" />}
+            icon={<Camera className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />}
             accent="cyan"
             testId="section-header-curate"
             actions={
@@ -3377,7 +3420,7 @@ export default function VotePage() {
                       variant="ghost"
                       size="icon"
                       onClick={() => setRulesModalOpen("curate")}
-                      className="text-cyan-400 hover:text-cyan-300"
+                      className="text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300"
                       data-testid="button-rules-curate"
                     >
                       <HelpCircle className="h-5 w-5" />
@@ -3389,7 +3432,7 @@ export default function VotePage() {
                 </Tooltip>
                 <Button
                   onClick={() => setCurateSuggestOpen(true)}
-                  className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 hidden md:flex"
+                  className="rounded-full bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/25 dark:hover:bg-cyan-500/20 hidden md:flex"
                   data-testid="button-suggest-curate"
                 >
                   <Plus className="h-4 w-4 mr-2" />
@@ -3398,7 +3441,7 @@ export default function VotePage() {
                 <Button
                   size="icon"
                   onClick={() => setCurateSuggestOpen(true)}
-                  className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 md:hidden"
+                  className="rounded-full bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/25 dark:hover:bg-cyan-500/20 md:hidden"
                   data-testid="button-suggest-curate-mobile"
                 >
                   <Plus className="h-4 w-4" />
@@ -3429,7 +3472,7 @@ export default function VotePage() {
           <button
             type="button"
             onClick={() => voteOnboardingRef.current?.open()}
-            className="text-sm text-muted-foreground hover:text-cyan-400 transition-colors"
+            className="text-sm text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors"
             data-testid="button-footer-how-it-works-vote"
           >
             <HelpCircle className="h-4 w-4 inline mr-1 align-text-bottom" />
@@ -3441,7 +3484,7 @@ export default function VotePage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <MessageSquare className="h-5 w-5 text-cyan-400" />
+              <MessageSquare className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
               Suggest a Poll
             </DialogTitle>
             <DialogDescription>
@@ -3452,7 +3495,7 @@ export default function VotePage() {
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="text-sm font-medium">Headline *</label>
-                <span className={`text-xs ${pollHeadline.length > 80 ? 'text-red-400' : 'text-muted-foreground'}`}>
+                <span className={`text-xs ${pollHeadline.length > 80 ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>
                   {pollHeadline.length}/80
                 </span>
               </div>
@@ -3479,7 +3522,7 @@ export default function VotePage() {
                 showCustomTopicOption={true}
               />
               {pollSubjectType && (
-                <div className={`mt-2 text-xs flex items-center gap-1.5 ${pollSubjectType === 'custom' ? 'text-violet-400' : 'text-cyan-400'}`}>
+                <div className={`mt-2 text-xs flex items-center gap-1.5 ${pollSubjectType === 'custom' ? 'text-violet-600 dark:text-violet-400' : 'text-cyan-600 dark:text-cyan-400'}`}>
                   {pollSubjectType === 'custom' ? (
                     <>
                       <Sparkles className="h-3 w-3" />
@@ -3494,11 +3537,11 @@ export default function VotePage() {
                 </div>
               )}
               {pollSubjectType === 'custom' && (
-                <div className="mt-3 p-3 rounded-lg border border-dashed border-amber-500/30 bg-amber-500/5">
-                  <label className="text-sm font-medium mb-2 block text-amber-400">Topic Image (Optional)</label>
+                <div className="mt-3 p-3 rounded-lg border border-dashed border-amber-500/40 dark:border-amber-500/30 bg-amber-500/5">
+                  <label className="text-sm font-medium mb-2 block text-amber-600 dark:text-amber-400">Topic Image (Optional)</label>
                   {pollSubjectImagePreview ? (
                     <div className="flex items-center gap-3">
-                      <div className="h-16 w-16 rounded-md overflow-hidden border border-amber-500/30 bg-muted dark:bg-slate-800">
+                      <div className="h-16 w-16 rounded-md overflow-hidden border border-amber-500/40 dark:border-amber-500/30 bg-muted dark:bg-slate-800">
                         <img 
                           src={pollSubjectImagePreview} 
                           alt="Topic preview"
@@ -3512,7 +3555,7 @@ export default function VotePage() {
                             setPollSubjectImage(null);
                             setPollSubjectImagePreview(null);
                           }}
-                          className="text-xs text-red-400 hover:underline mt-1"
+                          className="text-xs text-red-600 dark:text-red-400 hover:underline mt-1"
                           data-testid="button-remove-poll-image"
                         >
                           Remove
@@ -3553,7 +3596,7 @@ export default function VotePage() {
                     onClick={() => setPollDuration(preset.value)}
                     className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
                       pollDuration === preset.value
-                        ? "bg-cyan-500/20 border-cyan-500/40 text-cyan-700 dark:text-cyan-300"
+                        ? "bg-cyan-500/25 dark:bg-cyan-500/20 border-cyan-500/50 dark:border-cyan-500/40 text-cyan-700 dark:text-cyan-300"
                         : "bg-muted/50 border-border/60 text-muted-foreground hover:border-foreground/30 dark:bg-slate-800/30 dark:border-slate-700/40 dark:text-slate-400 dark:hover:border-slate-600"
                     }`}
                     data-testid={`poll-duration-${preset.value}`}
@@ -3600,7 +3643,7 @@ export default function VotePage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Swords className="h-5 w-5 text-cyan-400" />
+              <Swords className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
               Suggest a Matchup
             </DialogTitle>
             <DialogDescription>
@@ -3611,7 +3654,7 @@ export default function VotePage() {
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="text-sm font-medium">Headline *</label>
-                <span className={`text-xs ${matchupHeadline.length > 60 ? 'text-red-400' : 'text-muted-foreground'}`}>
+                <span className={`text-xs ${matchupHeadline.length > 60 ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>
                   {matchupHeadline.length}/60
                 </span>
               </div>
@@ -3688,7 +3731,7 @@ export default function VotePage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <UserPlus className="h-5 w-5 text-cyan-400" />
+              <UserPlus className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
               Suggest a Candidate
             </DialogTitle>
             <DialogDescription>
@@ -3715,7 +3758,7 @@ export default function VotePage() {
                 className={suggestUrl && !suggestUrl.startsWith('http') ? 'border-red-500' : ''}
               />
               {suggestUrl && !suggestUrl.startsWith('http') ? (
-                <p className="text-xs text-red-400 mt-1">Please enter a valid URL starting with http:// or https://</p>
+                <p className="text-xs text-red-600 dark:text-red-400 mt-1">Please enter a valid URL starting with http:// or https://</p>
               ) : (
                 <p className="text-xs text-muted-foreground mt-1">Required for verification</p>
               )}
@@ -3774,7 +3817,7 @@ export default function VotePage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Upload className="h-5 w-5 text-cyan-400" />
+              <Upload className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
               Suggest a Profile Image
             </DialogTitle>
             <DialogDescription>
@@ -3807,7 +3850,7 @@ export default function VotePage() {
                 />
                 <label htmlFor="curate-image-upload" className="cursor-pointer">
                   {curateImageFile ? (
-                    <div className="flex items-center justify-center gap-2 text-cyan-400">
+                    <div className="flex items-center justify-center gap-2 text-cyan-600 dark:text-cyan-400">
                       <Check className="h-4 w-4" />
                       <span className="text-sm">{curateImageFile.name}</span>
                     </div>
@@ -3870,7 +3913,7 @@ export default function VotePage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <ListChecks className="h-5 w-5 text-cyan-400" />
+              <ListChecks className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
               Suggest an Opinion Poll
             </DialogTitle>
             <DialogDescription>
@@ -3881,7 +3924,7 @@ export default function VotePage() {
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="text-sm font-medium">Question / Title *</label>
-                <span className={`text-xs ${opinionSuggestTitle.length > 100 ? 'text-red-400' : 'text-muted-foreground'}`}>
+                <span className={`text-xs ${opinionSuggestTitle.length > 100 ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>
                   {opinionSuggestTitle.length}/100
                 </span>
               </div>
@@ -3900,8 +3943,8 @@ export default function VotePage() {
               <div className="space-y-2">
                 {opinionSuggestOptions.map((opt, idx) => (
                   <div key={idx} className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-full bg-cyan-500/20 flex items-center justify-center shrink-0">
-                      <span className="text-xs font-medium text-cyan-400">{idx + 1}</span>
+                    <div className="w-6 h-6 rounded-full bg-cyan-500/25 dark:bg-cyan-500/20 flex items-center justify-center shrink-0">
+                      <span className="text-xs font-medium text-cyan-600 dark:text-cyan-400">{idx + 1}</span>
                     </div>
                     <Input
                       value={opt}
@@ -3935,7 +3978,7 @@ export default function VotePage() {
                   variant="ghost"
                   size="sm"
                   onClick={() => setOpinionSuggestOptions([...opinionSuggestOptions, ""])}
-                  className="mt-2 text-cyan-400"
+                  className="mt-2 text-cyan-600 dark:text-cyan-400"
                   data-testid="button-add-opinion-option"
                 >
                   <Plus className="h-4 w-4 mr-1" />
@@ -3969,7 +4012,7 @@ export default function VotePage() {
                     onClick={() => setOpinionSuggestDuration(preset.value)}
                     className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
                       opinionSuggestDuration === preset.value
-                        ? "bg-cyan-500/20 border-cyan-500/40 text-cyan-700 dark:text-cyan-300"
+                        ? "bg-cyan-500/25 dark:bg-cyan-500/20 border-cyan-500/50 dark:border-cyan-500/40 text-cyan-700 dark:text-cyan-300"
                         : "bg-muted/50 border-border/60 text-muted-foreground hover:border-foreground/30 dark:bg-slate-800/30 dark:border-slate-700/40 dark:text-slate-400 dark:hover:border-slate-600"
                     }`}
                     data-testid={`opinion-duration-${preset.value}`}
@@ -4037,7 +4080,7 @@ export default function VotePage() {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <HelpCircle className="h-5 w-5 text-cyan-400" />
+              <HelpCircle className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
               {rulesModalOpen === "induction" && "Induction Queue Rules"}
               {rulesModalOpen === "curate" && "Curate the Profile Rules"}
               {rulesModalOpen === "voice" && "Sentiment Polls Rules"}
@@ -4052,19 +4095,19 @@ export default function VotePage() {
                 <p className="text-muted-foreground">Vote for celebrities you want to see added to the VoxDex leaderboard.</p>
                 <div className="space-y-2">
                   <div className="flex items-start gap-2">
-                    <Vote className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
-                    <span>Each user can vote <span className="text-cyan-400 font-medium">once per candidate</span></span>
+                    <Vote className="h-4 w-4 text-cyan-600 dark:text-cyan-400 mt-0.5 shrink-0" />
+                    <span>Each user can vote <span className="text-cyan-600 dark:text-cyan-400 font-medium">once per candidate</span></span>
                   </div>
                   <div className="flex items-start gap-2">
-                    <Crown className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
-                    <span>The <span className="text-cyan-400 font-medium">#1 candidate</span> is inducted weekly</span>
+                    <Crown className="h-4 w-4 text-cyan-600 dark:text-cyan-400 mt-0.5 shrink-0" />
+                    <span>The <span className="text-cyan-600 dark:text-cyan-400 font-medium">#1 candidate</span> is inducted weekly</span>
                   </div>
                   <div className="flex items-start gap-2">
-                    <Sparkles className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
-                    <span>Earn <span className="text-cyan-400 font-medium">+30 XP</span> for each vote</span>
+                    <Sparkles className="h-4 w-4 text-cyan-600 dark:text-cyan-400 mt-0.5 shrink-0" />
+                    <span>Earn <span className="text-cyan-600 dark:text-cyan-400 font-medium">+30 XP</span> for each vote</span>
                   </div>
                   <div className="flex items-start gap-2">
-                    <Zap className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
+                    <Zap className="h-4 w-4 text-cyan-600 dark:text-cyan-400 mt-0.5 shrink-0" />
                     <span>Weekly winner gets inducted to the main leaderboard</span>
                   </div>
                 </div>
@@ -4075,19 +4118,19 @@ export default function VotePage() {
                 <p className="text-muted-foreground">Help choose the official profile photo displayed across VoxDex.</p>
                 <div className="space-y-2">
                   <div className="flex items-start gap-2">
-                    <Camera className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
+                    <Camera className="h-4 w-4 text-cyan-600 dark:text-cyan-400 mt-0.5 shrink-0" />
                     <span>Swipe left or right to vote on profile photos</span>
                   </div>
                   <div className="flex items-start gap-2">
-                    <Crown className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
+                    <Crown className="h-4 w-4 text-cyan-600 dark:text-cyan-400 mt-0.5 shrink-0" />
                     <span>The winning image becomes the official profile photo</span>
                   </div>
                   <div className="flex items-start gap-2">
-                    <Sparkles className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
-                    <span>Earn <span className="text-cyan-400 font-medium">+20 XP</span> for each vote</span>
+                    <Sparkles className="h-4 w-4 text-cyan-600 dark:text-cyan-400 mt-0.5 shrink-0" />
+                    <span>Earn <span className="text-cyan-600 dark:text-cyan-400 font-medium">+20 XP</span> for each vote</span>
                   </div>
                   <div className="flex items-start gap-2">
-                    <Clock className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
+                    <Clock className="h-4 w-4 text-cyan-600 dark:text-cyan-400 mt-0.5 shrink-0" />
                     <span>Votes accumulate perpetually to determine the definitive all-time look</span>
                   </div>
                 </div>
@@ -4098,19 +4141,19 @@ export default function VotePage() {
                 <p className="text-muted-foreground">Share your opinion on trending topics and current events.</p>
                 <div className="space-y-2">
                   <div className="flex items-start gap-2">
-                    <MessageSquare className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
+                    <MessageSquare className="h-4 w-4 text-cyan-600 dark:text-cyan-400 mt-0.5 shrink-0" />
                     <span>Vote <span className="text-[#00C853] font-medium">Support</span>, <span className="text-slate-400 font-medium">Neutral</span>, or <span className="text-[#FF0000] font-medium">Oppose</span> on various topics.</span>
                   </div>
                   <div className="flex items-start gap-2">
-                    <Users className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
+                    <Users className="h-4 w-4 text-cyan-600 dark:text-cyan-400 mt-0.5 shrink-0" />
                     <span>See how your vote compares to the community</span>
                   </div>
                   <div className="flex items-start gap-2">
-                    <Sparkles className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
-                    <span>Earn <span className="text-cyan-400 font-medium">+25 XP</span> for each vote</span>
+                    <Sparkles className="h-4 w-4 text-cyan-600 dark:text-cyan-400 mt-0.5 shrink-0" />
+                    <span>Earn <span className="text-cyan-600 dark:text-cyan-400 font-medium">+25 XP</span> for each vote</span>
                   </div>
                   <div className="flex items-start gap-2">
-                    <Plus className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
+                    <Plus className="h-4 w-4 text-cyan-600 dark:text-cyan-400 mt-0.5 shrink-0" />
                     <span>Submit your own poll topics for community voting</span>
                   </div>
                 </div>
@@ -4121,19 +4164,19 @@ export default function VotePage() {
                 <p className="text-muted-foreground">Pick a side in head-to-head matchups across anything and everything.</p>
                 <div className="space-y-2">
                   <div className="flex items-start gap-2">
-                    <Swords className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
+                    <Swords className="h-4 w-4 text-cyan-600 dark:text-cyan-400 mt-0.5 shrink-0" />
                     <span>Vote A vs B: Choose the winner in quick 1v1 battles.</span>
                   </div>
                   <div className="flex items-start gap-2">
-                    <Globe className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
+                    <Globe className="h-4 w-4 text-cyan-600 dark:text-cyan-400 mt-0.5 shrink-0" />
                     <span>Anything Goes: People, brands, sports, ideas â€” even random preferences.</span>
                   </div>
                   <div className="flex items-start gap-2">
-                    <Zap className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
-                    <span>Earn <span className="text-cyan-400 font-medium">+15 XP</span>: Get rewarded for every Matchup vote you cast.</span>
+                    <Zap className="h-4 w-4 text-cyan-600 dark:text-cyan-400 mt-0.5 shrink-0" />
+                    <span>Earn <span className="text-cyan-600 dark:text-cyan-400 font-medium">+15 XP</span>: Get rewarded for every Matchup vote you cast.</span>
                   </div>
                   <div className="flex items-start gap-2">
-                    <BarChart3 className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
+                    <BarChart3 className="h-4 w-4 text-cyan-600 dark:text-cyan-400 mt-0.5 shrink-0" />
                     <span>Instant Results: See how your pick compares to the community.</span>
                   </div>
                 </div>
@@ -4152,11 +4195,11 @@ export default function VotePage() {
                     <span>Vote <span className="text-[#FF0000] font-medium">Overrated</span> if you think they receive more attention or praise than they deserve.</span>
                   </div>
                   <div className="flex items-start gap-2">
-                    <Users className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
+                    <Users className="h-4 w-4 text-cyan-600 dark:text-cyan-400 mt-0.5 shrink-0" />
                     <span>Compare your view with the community results.</span>
                   </div>
                   <div className="flex items-start gap-2">
-                    <BarChart3 className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
+                    <BarChart3 className="h-4 w-4 text-cyan-600 dark:text-cyan-400 mt-0.5 shrink-0" />
                     <span>Your vote updates the Underrated/Overrated split in real time.</span>
                   </div>
                 </div>
@@ -4167,19 +4210,19 @@ export default function VotePage() {
                 <p className="text-muted-foreground">Choose your pick from multiple options on community-created polls.</p>
                 <div className="space-y-2">
                   <div className="flex items-start gap-2">
-                    <ListChecks className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
-                    <span>Pick <span className="text-cyan-400 font-medium">one option</span> from multiple choices on each poll</span>
+                    <ListChecks className="h-4 w-4 text-cyan-600 dark:text-cyan-400 mt-0.5 shrink-0" />
+                    <span>Pick <span className="text-cyan-600 dark:text-cyan-400 font-medium">one option</span> from multiple choices on each poll</span>
                   </div>
                   <div className="flex items-start gap-2">
-                    <Users className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
+                    <Users className="h-4 w-4 text-cyan-600 dark:text-cyan-400 mt-0.5 shrink-0" />
                     <span>See live results and how the community voted</span>
                   </div>
                   <div className="flex items-start gap-2">
-                    <Sparkles className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
-                    <span>Earn <span className="text-cyan-400 font-medium">+15 XP</span> for each vote</span>
+                    <Sparkles className="h-4 w-4 text-cyan-600 dark:text-cyan-400 mt-0.5 shrink-0" />
+                    <span>Earn <span className="text-cyan-600 dark:text-cyan-400 font-medium">+15 XP</span> for each vote</span>
                   </div>
                   <div className="flex items-start gap-2">
-                    <Plus className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
+                    <Plus className="h-4 w-4 text-cyan-600 dark:text-cyan-400 mt-0.5 shrink-0" />
                     <span>Suggest your own opinion polls for the community</span>
                   </div>
                 </div>
@@ -4201,36 +4244,36 @@ export default function VotePage() {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-cyan-400" />
+              <Sparkles className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
               You Run the Show
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4 text-sm">
             <div className="space-y-3">
               <div className="flex items-start gap-3">
-                <div className="h-6 w-6 rounded-full bg-cyan-500/10 flex items-center justify-center shrink-0 mt-0.5">
-                  <span className="text-cyan-400 text-xs font-bold">1</span>
+                <div className="h-6 w-6 rounded-full bg-cyan-500/15 dark:bg-cyan-500/10 flex items-center justify-center shrink-0 mt-0.5">
+                  <span className="text-cyan-600 dark:text-cyan-400 text-xs font-bold">1</span>
                 </div>
                 <div>
-                  <span className="font-medium text-cyan-400">Expand the Roster:</span>
+                  <span className="font-medium text-cyan-600 dark:text-cyan-400">Expand the Roster:</span>
                   <span className="text-muted-foreground"> The leaderboard isn't static. Vote in the Induction Queue to decide exactly who deserves to be added next.</span>
                 </div>
               </div>
               <div className="flex items-start gap-3">
-                <div className="h-6 w-6 rounded-full bg-cyan-500/10 flex items-center justify-center shrink-0 mt-0.5">
-                  <span className="text-cyan-400 text-xs font-bold">2</span>
+                <div className="h-6 w-6 rounded-full bg-cyan-500/15 dark:bg-cyan-500/10 flex items-center justify-center shrink-0 mt-0.5">
+                  <span className="text-cyan-600 dark:text-cyan-400 text-xs font-bold">2</span>
                 </div>
                 <div>
-                  <span className="font-medium text-cyan-400">Define the Aesthetic:</span>
+                  <span className="font-medium text-cyan-600 dark:text-cyan-400">Define the Aesthetic:</span>
                   <span className="text-muted-foreground"> You are the Art Director. Use Curate Profile to swap out bad press photos and choose the definitive image for every star.</span>
                 </div>
               </div>
               <div className="flex items-start gap-3">
-                <div className="h-6 w-6 rounded-full bg-cyan-500/10 flex items-center justify-center shrink-0 mt-0.5">
-                  <span className="text-cyan-400 text-xs font-bold">3</span>
+                <div className="h-6 w-6 rounded-full bg-cyan-500/15 dark:bg-cyan-500/10 flex items-center justify-center shrink-0 mt-0.5">
+                  <span className="text-cyan-600 dark:text-cyan-400 text-xs font-bold">3</span>
                 </div>
                 <div>
-                  <span className="font-medium text-cyan-400">Remove the Gatekeepers:</span>
+                  <span className="font-medium text-cyan-600 dark:text-cyan-400">Remove the Gatekeepers:</span>
                   <span className="text-muted-foreground"> No editors, no bias. This is the first global index that is 100% shaped, ranked, and managed by you.</span>
                 </div>
               </div>
@@ -4363,8 +4406,8 @@ export default function VotePage() {
               className="flex items-center justify-between gap-2 p-4 border-b border-cyan-500/20"
             >
               <div className="flex items-center gap-3 min-w-0">
-                <div className="h-8 w-8 rounded-lg bg-cyan-500/10 flex shrink-0 items-center justify-center">
-                  <Swords className="h-4 w-4 text-cyan-400" />
+                <div className="h-8 w-8 rounded-lg bg-cyan-500/15 dark:bg-cyan-500/10 flex shrink-0 items-center justify-center">
+                  <Swords className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
                 </div>
                 <h2 className="text-xl font-serif font-bold truncate">All Matchups</h2>
               </div>
@@ -4423,8 +4466,8 @@ export default function VotePage() {
               className="flex items-center justify-between gap-2 p-4 border-b border-cyan-500/20"
             >
               <div className="flex items-center gap-3 min-w-0">
-                <div className="h-8 w-8 rounded-lg bg-cyan-500/10 flex shrink-0 items-center justify-center">
-                  <ListChecks className="h-4 w-4 text-cyan-400" />
+                <div className="h-8 w-8 rounded-lg bg-cyan-500/15 dark:bg-cyan-500/10 flex shrink-0 items-center justify-center">
+                  <ListChecks className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
                 </div>
                 <h2 className="text-xl font-serif font-bold truncate">All Opinion Polls</h2>
               </div>
@@ -4452,6 +4495,10 @@ export default function VotePage() {
                     poll={poll}
                     onVote={async (pollSlug, optionId) => {
                       await apiRequest("POST", `/api/opinion-polls/${pollSlug}/vote`, { optionId });
+                      queryClient.invalidateQueries({ queryKey: ['/api/opinion-polls'] });
+                    }}
+                    onRemoveVote={async (pollSlug) => {
+                      await apiRequest("POST", `/api/opinion-polls/${pollSlug}/vote`, { remove: true });
                       queryClient.invalidateQueries({ queryKey: ['/api/opinion-polls'] });
                     }}
                     onFilterCategory={handleCategoryPillFilter}
@@ -4484,8 +4531,8 @@ export default function VotePage() {
               className="flex items-center justify-between gap-2 p-4 border-b border-amber-500/20"
             >
               <div className="flex items-center gap-3 min-w-0">
-                <div className="h-8 w-8 rounded-lg bg-amber-500/10 flex shrink-0 items-center justify-center">
-                  <BarChart3 className="h-4 w-4 text-amber-400" />
+                <div className="h-8 w-8 rounded-lg bg-amber-500/15 dark:bg-amber-500/10 flex shrink-0 items-center justify-center">
+                  <BarChart3 className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                 </div>
                 <h2 className="text-xl font-serif font-bold truncate">Underrated / Overrated</h2>
               </div>
@@ -4591,6 +4638,10 @@ export default function VotePage() {
                   poll={p}
                   onVote={async (pollSlug, optionId) => {
                     await apiRequest("POST", `/api/opinion-polls/${pollSlug}/vote`, { optionId });
+                    queryClient.invalidateQueries({ queryKey: ['/api/opinion-polls'] });
+                  }}
+                  onRemoveVote={async (pollSlug) => {
+                    await apiRequest("POST", `/api/opinion-polls/${pollSlug}/vote`, { remove: true });
                     queryClient.invalidateQueries({ queryKey: ['/api/opinion-polls'] });
                   }}
                   onFilterCategory={handleCategoryPillFilter}

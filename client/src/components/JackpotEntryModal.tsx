@@ -257,7 +257,7 @@ export function JackpotEntryModal({
                 <p className="text-xs font-medium text-amber-500 mb-2">Your predictions</p>
                 <div className="flex flex-wrap gap-2 justify-center">
                   {existingEntries.map((e: JackpotEntry) => (
-                    <Badge key={e.betId} variant="outline" className="border-amber-500/30 text-amber-400 font-mono">
+                    <Badge key={e.betId} variant="outline" className="border-amber-500/40 dark:border-amber-500/30 text-amber-600 dark:text-amber-400 font-mono">
                       {formatNumber(e.predictedScore)}
                     </Badge>
                   ))}
@@ -297,7 +297,7 @@ export function JackpotEntryModal({
               return (
                 <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium ${
                   isUrgent
-                    ? "bg-amber-500/15 border border-amber-500/30 text-amber-400"
+                    ? "bg-amber-500/20 dark:bg-amber-500/15 border border-amber-500/40 dark:border-amber-500/30 text-amber-600 dark:text-amber-400"
                     : "bg-muted/50 text-muted-foreground"
                 }`}>
                   <Clock className="h-3.5 w-3.5 shrink-0" />
@@ -356,14 +356,14 @@ export function JackpotEntryModal({
               </p>
               {availabilityStatus === "taken" && (
                 <div className="mt-2 p-2 rounded bg-red-500/5 border border-red-500/20">
-                  <p className="text-xs text-red-400 mb-1">That number is already claimed.</p>
+                  <p className="text-xs text-red-600 dark:text-red-400 mb-1">That number is already claimed.</p>
                   {suggestions.length > 0 && (
                     <div className="flex gap-1 flex-wrap">
                       <span className="text-xs text-muted-foreground">Try:</span>
                       {suggestions.map((s) => (
                         <button
                           key={s}
-                          className="text-xs text-amber-400 hover:text-amber-300 underline cursor-pointer"
+                          className="text-xs text-amber-600 dark:text-amber-400 hover:text-amber-500 dark:hover:text-amber-300 underline cursor-pointer"
                           onClick={() => handleScoreChange(String(s))}
                         >
                           {formatNumber(s)}
@@ -383,14 +383,14 @@ export function JackpotEntryModal({
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">Your balance</span>
-                <span className={`font-semibold ${userCredits < JACKPOT_TICKET_COST ? "text-red-400" : ""}`}>
+                <span className={`font-semibold ${userCredits < JACKPOT_TICKET_COST ? "text-red-600 dark:text-red-400" : ""}`}>
                   {formatNumber(userCredits)} credits
                 </span>
               </div>
             </div>
 
             {userCredits < JACKPOT_TICKET_COST && (
-              <p className="text-xs text-red-400 text-center">
+              <p className="text-xs text-red-600 dark:text-red-400 text-center">
                 You need at least {JACKPOT_TICKET_COST} credits to enter.
               </p>
             )}
@@ -418,7 +418,7 @@ export function JackpotEntryModal({
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {existingEntries.map((e: JackpotEntry) => (
-                    <Badge key={e.betId} variant="outline" className="border-amber-500/30 text-amber-400 font-mono">
+                    <Badge key={e.betId} variant="outline" className="border-amber-500/40 dark:border-amber-500/30 text-amber-600 dark:text-amber-400 font-mono">
                       {formatNumber(e.predictedScore)}
                     </Badge>
                   ))}

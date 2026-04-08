@@ -136,7 +136,7 @@ function LinkedPersonChip({ market }: { market: any }) {
   const name = market.linkedPersonName;
   if (!name) return null;
   return (
-    <span className="inline-flex items-center gap-1 text-[11px] text-purple-400/80 bg-purple-500/10 rounded-full px-2 py-0.5">
+    <span className="inline-flex items-center gap-1 text-[11px] text-purple-600/80 dark:text-purple-400/80 bg-purple-500/15 dark:bg-purple-500/10 rounded-full px-2 py-0.5">
       <span className="opacity-60">Linked to</span> {name}
     </span>
   );
@@ -153,10 +153,10 @@ function FreshnessBadge({ market }: { market: any }) {
   return (
     <div className="flex items-center gap-1.5 flex-wrap">
       {createdDaysAgo <= 7 && (
-        <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-400 px-1.5 py-0">New</Badge>
+        <Badge variant="outline" className="text-[10px] border-emerald-500/40 dark:border-emerald-500/30 text-emerald-600 dark:text-emerald-400 px-1.5 py-0">New</Badge>
       )}
       {daysLeft <= 7 && (
-        <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-400 px-1.5 py-0">Closing soon</Badge>
+        <Badge variant="outline" className="text-[10px] border-amber-500/40 dark:border-amber-500/30 text-amber-600 dark:text-amber-400 px-1.5 py-0">Closing soon</Badge>
       )}
       <span className="text-[11px] text-muted-foreground">
         {daysLeft === 1 ? "Closes tomorrow" : `Closes in ${daysLeft} days`}
@@ -656,7 +656,7 @@ function SectionFilterBar({
               onClick={() => handleCategoryClick(cat.id)}
               className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1.5 ${
                 categoryFilter === cat.id
-                  ? 'bg-violet-500/20 text-violet-700 dark:text-violet-300 border border-violet-400/40 shadow-sm shadow-violet-500/20'
+                  ? 'bg-violet-500/25 dark:bg-violet-500/20 text-violet-700 dark:text-violet-300 border border-violet-500/50 dark:border-violet-400/40 shadow-sm shadow-violet-500/30 dark:shadow-violet-500/20'
                   : 'bg-muted/50 border border-border/60 text-muted-foreground hover:border-violet-400/30 dark:bg-slate-800/30 dark:border-slate-700/40 dark:text-slate-400 dark:hover:border-violet-400/20'
               }`}
               data-testid={cat.id === "misc" ? `${testIdPrefix}-category-custom-topic` : `${testIdPrefix}-category-${cat.id}`}
@@ -774,7 +774,7 @@ function PredictCard({
       } ${className}`}>
         {inactive && (
           <div className="absolute top-3 right-3 z-10">
-            <Badge variant="outline" className="text-xs border-amber-500/40 text-amber-500 bg-amber-500/10">
+            <Badge variant="outline" className="text-xs border-amber-500/50 dark:border-amber-500/40 text-amber-700 dark:text-amber-500 bg-amber-500/15 dark:bg-amber-500/10">
               <Clock className="h-3 w-3 mr-1" />
               {inactiveMessage || "Coming Soon"}
             </Badge>
@@ -830,25 +830,25 @@ function WeeklyUpDownCard({
         <div className="flex items-center gap-1.5">
           <Badge 
             variant="outline" 
-            className={delta >= 0 ? "text-green-500 border-green-500/30" : "text-red-500 border-red-500/30"}
+            className={delta >= 0 ? "text-green-500 border-green-500/40 dark:border-green-500/30" : "text-red-500 border-red-500/40 dark:border-red-500/30"}
           >
             {delta >= 0 ? "+" : ""}{pctDelta}%
           </Badge>
-          <Badge variant="outline" className="text-violet-400 border-violet-500/30 text-[10px]">
+          <Badge variant="outline" className="text-violet-600 dark:text-violet-400 border-violet-500/40 dark:border-violet-500/30 text-[10px]">
             {cadenceLabel}
           </Badge>
           {market.featured && (
-            <Badge variant="outline" className="text-yellow-400 border-yellow-500/30 text-[10px]">
+            <Badge variant="outline" className="text-yellow-600 dark:text-yellow-400 border-yellow-500/40 dark:border-yellow-500/30 text-[10px]">
               <Star className="h-3 w-3 mr-0.5" />Featured
             </Badge>
           )}
           {(market.totalPool > 5000 || (market.totalBets ?? 0) > 50) && (
-            <Badge variant="outline" className="text-orange-400 border-orange-500/30 text-[10px]">
+            <Badge variant="outline" className="text-orange-600 dark:text-orange-400 border-orange-500/40 dark:border-orange-500/30 text-[10px]">
               <Flame className="h-3 w-3 mr-0.5" />Hot
             </Badge>
           )}
           {market.totalPool < 100 && (
-            <Badge variant="outline" className="text-amber-400 border-amber-500/30 text-[10px]">
+            <Badge variant="outline" className="text-amber-600 dark:text-amber-400 border-amber-500/40 dark:border-amber-500/30 text-[10px]">
               Thin Pool
             </Badge>
           )}
@@ -886,7 +886,7 @@ function WeeklyUpDownCard({
           <span className="text-muted-foreground/40">&middot;</span>
           <span>Delta: <span className={`font-mono ${delta >= 0 ? "text-green-500" : "text-red-500"}`}>{delta >= 0 ? "+" : ""}{delta.toLocaleString('en-US')}</span></span>
           <span className="text-muted-foreground/40">&middot;</span>
-          <span>Pool: <span className="font-mono text-violet-400">{market.totalPool.toLocaleString('en-US')}</span></span>
+          <span>Pool: <span className="font-mono text-violet-600 dark:text-violet-400">{market.totalPool.toLocaleString('en-US')}</span></span>
         </div>
       </Link>
       
@@ -899,7 +899,7 @@ function WeeklyUpDownCard({
       </div>
       
       <div className="mb-2">
-        <div className="h-2.5 rounded-full bg-red-500/20 overflow-hidden">
+          <div className="h-2.5 rounded-full bg-red-500/25 dark:bg-red-500/20 overflow-hidden">
           <div 
             className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all"
             style={{ width: `${market.upPoolPercent}%` }}
@@ -980,15 +980,12 @@ function HeadToHeadCard({
         
         <Link
           href={`/predict/h2h/${market.id}`}
-          className="relative mb-3 block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary hover:opacity-95 transition-opacity"
+          className="relative mb-3 block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           style={{ padding: '0 5px' }}
           aria-label={`View battle details: ${market.person1.name} vs ${market.person2.name}`}
         >
           <div className="flex" style={{ gap: '7px' }}>
-            <div
-              className={`flex-1 relative ${hasPicked && userPick !== 1 ? 'opacity-50' : ''}`}
-            >
-              <div className={`absolute -inset-4 rounded-md blur-lg pointer-events-none transition-opacity ${hasPicked && userPick === 1 ? 'bg-green-500/20' : 'bg-blue-500/20'}`} />
+            <div className="flex-1 relative">
               <div className={`rounded-lg overflow-hidden transition-all ${hasPicked && userPick === 1 ? 'ring-2 ring-green-500/70' : 'ring-2 ring-transparent'}`}>
                 <PersonAvatar name={market.person1.name} avatar={market.person1.avatar} className="h-auto w-full aspect-[4/5]" />
               </div>
@@ -1001,10 +998,7 @@ function HeadToHeadCard({
                 </div>
               )}
             </div>
-            <div
-              className={`flex-1 relative ${hasPicked && userPick !== 2 ? 'opacity-50' : ''}`}
-            >
-              <div className={`absolute -inset-4 rounded-md blur-lg pointer-events-none transition-opacity ${hasPicked && userPick === 2 ? 'bg-green-500/20' : 'bg-purple-500/20'}`} />
+            <div className="flex-1 relative">
               <div className={`rounded-lg overflow-hidden transition-all ${hasPicked && userPick === 2 ? 'ring-2 ring-green-500/70' : 'ring-2 ring-transparent'}`}>
                 <PersonAvatar name={market.person2.name} avatar={market.person2.avatar} className="h-auto w-full aspect-[4/5]" />
               </div>
@@ -1028,22 +1022,22 @@ function HeadToHeadCard({
         <div className="flex items-center justify-between px-2 mb-2">
           <ClosedMarketActionTrigger isClosed={isMarketClosed && !hasPicked} message={closedMessage} side="top" align="center">
             <div
-              className={`flex flex-col items-center flex-1 ${!hasPicked ? 'cursor-pointer hover:opacity-80' : ''} transition-opacity`}
+              className={`flex flex-col items-center flex-1 ${!hasPicked ? 'cursor-pointer' : ''}`}
               onClick={() => !hasPicked && onSelect?.(1)}
             >
               <p className="text-sm font-semibold text-center">{smartName(market.person1.name)}</p>
               <span className="text-[10px] font-mono text-muted-foreground">{market.person1.currentScore?.toLocaleString('en-US') || ''}</span>
-              <span className="text-xs text-blue-400 font-semibold">{market.person1Percent}%</span>
+              <span className="text-xs text-blue-600 dark:text-blue-400 font-semibold">{market.person1Percent}%</span>
             </div>
           </ClosedMarketActionTrigger>
           <ClosedMarketActionTrigger isClosed={isMarketClosed && !hasPicked} message={closedMessage} side="top" align="center">
             <div
-              className={`flex flex-col items-center flex-1 ${!hasPicked ? 'cursor-pointer hover:opacity-80' : ''} transition-opacity`}
+              className={`flex flex-col items-center flex-1 ${!hasPicked ? 'cursor-pointer' : ''}`}
               onClick={() => !hasPicked && onSelect?.(2)}
             >
               <p className="text-sm font-semibold text-center">{smartName(market.person2.name)}</p>
               <span className="text-[10px] font-mono text-muted-foreground">{market.person2.currentScore?.toLocaleString('en-US') || ''}</span>
-              <span className="text-xs text-purple-400 font-semibold">{100 - market.person1Percent}%</span>
+              <span className="text-xs text-purple-600 dark:text-purple-400 font-semibold">{100 - market.person1Percent}%</span>
             </div>
           </ClosedMarketActionTrigger>
         </div>
@@ -1060,14 +1054,14 @@ function HeadToHeadCard({
         </div>
         
         <div className="flex items-center justify-center mb-2">
-          <span className="text-sm font-semibold text-violet-500">
+          <span className="text-sm font-semibold text-violet-700 dark:text-violet-500">
             Pool: {market.totalPool.toLocaleString('en-US')}
           </span>
         </div>
         
         <div className="mt-auto">
           {hasPicked ? (
-            <div className="flex items-center gap-2 rounded-lg border border-green-500/30 bg-green-500/5 px-3 py-2">
+            <div className="flex items-center gap-2 rounded-lg border border-green-500/40 dark:border-green-500/30 bg-green-500/8 dark:bg-green-500/5 px-3 py-2">
               <Check className="h-4 w-4 text-green-500 shrink-0" />
               <div className="flex-1 min-w-0">
                 <p className="text-[11px] text-muted-foreground">Your pick</p>
@@ -1076,10 +1070,10 @@ function HeadToHeadCard({
               <Badge
                 className={
                   pickWinning
-                    ? "bg-green-600/20 text-green-500 border-green-500/30"
+                    ? "bg-green-600/20 text-green-500 border-green-500/40 dark:border-green-500/30"
                     : pickTied
-                    ? "bg-amber-600/20 text-amber-500 border-amber-500/30"
-                    : "bg-red-600/20 text-red-500 border-red-500/30"
+                    ? "bg-amber-600/20 text-amber-500 border-amber-500/40 dark:border-amber-500/30"
+                    : "bg-red-600/20 text-red-500 border-red-500/40 dark:border-red-500/30"
                 }
               >
                 {pickWinning ? "Winning" : pickTied ? "Tied" : "Behind"}
@@ -1166,10 +1160,10 @@ function TopGainerCard({
       
       <Link
         href={`/predict/race/${market.id}`}
-        className="text-[16px] font-semibold mb-2 leading-[1.4] inline-flex items-center gap-1 text-foreground hover:text-violet-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm"
+        className="text-[16px] font-semibold mb-2 leading-[1.4] inline-flex items-center gap-1 text-foreground hover:text-violet-500 dark:hover:text-violet-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm"
       >
         Category Race: {getMarketCategoryLabel(market.category)}
-        <span className="text-violet-400 font-normal" aria-hidden>
+        <span className="text-violet-600 dark:text-violet-400 font-normal" aria-hidden>
           ›
         </span>
       </Link>
@@ -1180,7 +1174,7 @@ function TopGainerCard({
           return market.leaders.map((leader, i) => (
             <div 
               key={leader.name} 
-              className={`flex items-center gap-2.5 p-2 rounded-lg transition-colors relative overflow-hidden ${canPick ? 'cursor-pointer' : ''} ${i === 0 ? 'bg-gradient-to-r from-amber-500/10 to-transparent border border-amber-500/30' : canPick ? 'hover:bg-muted/50' : ''}`}
+              className={`flex items-center gap-2.5 p-2 rounded-lg transition-colors relative overflow-hidden ${canPick ? 'cursor-pointer' : ''} ${i === 0 ? 'bg-gradient-to-r from-amber-500/10 to-transparent border border-amber-500/40 dark:border-amber-500/30' : canPick ? 'hover:bg-muted/50' : ''}`}
               onClick={() => {
                 if (!canPick) return;
                 onShowAllCandidates?.(market, leader);
@@ -1189,12 +1183,12 @@ function TopGainerCard({
               <div className="absolute inset-y-0 left-0 bg-green-500/8 transition-all" style={{ width: `${Math.max((Math.abs(leader.percentGain) / maxGain) * 100, 5)}%` }} />
               <div className="relative flex items-center gap-2.5 flex-1 min-w-0">
                 {i === 0 ? (
-                  <div className="h-6 w-6 rounded-full bg-amber-500/20 border border-amber-500/50 flex items-center justify-center shrink-0">
-                    <Crown className="h-3.5 w-3.5 text-amber-400" />
+                  <div className="h-6 w-6 rounded-full bg-amber-500/25 dark:bg-amber-500/20 border border-amber-500/60 dark:border-amber-500/50 flex items-center justify-center shrink-0">
+                    <Crown className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
                   </div>
                 ) : (
                   <div className="h-6 w-6 rounded-full bg-muted/50 flex items-center justify-center shrink-0">
-                    <span className="text-[10px] font-bold text-violet-400">{leader.rank ? `#${leader.rank}` : 'New'}</span>
+                    <span className="text-[10px] font-bold text-violet-600 dark:text-violet-400">{leader.rank ? `#${leader.rank}` : 'New'}</span>
                   </div>
                 )}
                 <PersonAvatar name={leader.name} avatar={leader.avatar} className="h-12 w-12" />
@@ -1202,7 +1196,7 @@ function TopGainerCard({
               </div>
               <div className="relative text-right shrink-0">
                 <p className={`text-sm font-mono font-bold ${leader.percentGain >= 0 ? 'text-green-500' : 'text-red-500'}`}>{formatSignedPercent(leader.percentGain)}</p>
-                <p className={`text-[10px] font-mono ${leader.currentGain >= 0 ? 'text-muted-foreground' : 'text-red-400/80'}`}>
+                <p className={`text-[10px] font-mono ${leader.currentGain >= 0 ? 'text-muted-foreground' : 'text-red-600/80 dark:text-red-400/80'}`}>
                   {formatSignedPoints(leader.currentGain)} pts added
                 </p>
               </div>
@@ -1211,7 +1205,7 @@ function TopGainerCard({
         })()}
         {visibleCandidateCount > 3 && (
           <button
-            className="text-xs text-violet-400 hover:text-violet-300 text-center mt-1 w-full cursor-pointer transition-colors"
+            className="text-xs text-violet-600 dark:text-violet-400 hover:text-violet-500 dark:hover:text-violet-300 text-center mt-1 w-full cursor-pointer transition-colors"
             onClick={(e) => { e.stopPropagation(); onShowAllCandidates?.(market); }}
           >
             View all {visibleCandidateCount} candidates
@@ -1220,7 +1214,7 @@ function TopGainerCard({
       </div>
       
       <div className="flex items-center justify-between mb-2">
-        <span className="text-sm font-semibold text-violet-500">
+        <span className="text-sm font-semibold text-violet-700 dark:text-violet-500">
           Pool: {market.totalPool.toLocaleString('en-US')}
         </span>
       </div>
@@ -1228,7 +1222,7 @@ function TopGainerCard({
       <div className="mt-auto space-y-2">
         {isPredicted ? (
           <Button 
-            className="w-full bg-green-600/20 text-green-500 border border-green-500/30 py-3 md:py-2 h-auto"
+            className="w-full bg-green-600/20 text-green-500 border border-green-500/40 dark:border-green-500/30 py-3 md:py-2 h-auto"
             disabled
           >
             Predicted
@@ -1300,14 +1294,14 @@ function GainerCandidatesDialog({
         </DialogHeader>
 
         {isMarketClosed && (
-          <div className="shrink-0 mx-4 mb-2 rounded-md bg-amber-500/10 border border-amber-500/30 px-3 py-2 flex items-center gap-2">
+          <div className="shrink-0 mx-4 mb-2 rounded-md bg-amber-500/15 dark:bg-amber-500/10 border border-amber-500/40 dark:border-amber-500/30 px-3 py-2 flex items-center gap-2">
             <Lock className="h-3.5 w-3.5 text-amber-500 shrink-0" />
-            <p className="text-xs text-amber-400">Entries closed Friday 23:59 UTC — Awaiting results Sunday</p>
+            <p className="text-xs text-amber-600 dark:text-amber-400">Entries closed Friday 23:59 UTC — Awaiting results Sunday</p>
           </div>
         )}
 
         <div className="shrink-0 px-4 pb-3 space-y-2">
-          <div className="rounded-md bg-violet-500/5 border border-violet-500/15 px-3 py-2">
+          <div className="rounded-md bg-violet-500/8 dark:bg-violet-500/5 border border-violet-500/15 px-3 py-2">
             <p className="text-xs text-muted-foreground leading-relaxed">
               <strong className="text-foreground">How it works:</strong> The winner is whoever has the highest <strong className="text-green-500">% gain</strong> in their Trend Score by Sunday close &mdash; not the highest ranked person.
             </p>
@@ -1340,20 +1334,20 @@ function GainerCandidatesDialog({
                   key={candidateKey}
                   className={`w-full flex items-center gap-2 p-2 rounded-lg border text-left transition-colors cursor-pointer ${
                     isSelected
-                      ? "border-violet-500/60 bg-violet-500/10"
+                      ? "border-violet-500/70 dark:border-violet-500/60 bg-violet-500/15 dark:bg-violet-500/10"
                       : isLeader
-                        ? "border-amber-500/30 hover:bg-amber-500/5"
+                        ? "border-amber-500/40 dark:border-amber-500/30 hover:bg-amber-500/5"
                         : "border-transparent hover:bg-muted/50"
                   }`}
                   onClick={() => setSelectedCandidateKey(candidateKey)}
                 >
                   <div className="w-6 shrink-0 text-center">
                     {isLeader ? (
-                      <div className="inline-flex h-5 w-5 rounded-full bg-background/80 border border-amber-500/50 items-center justify-center">
+                      <div className="inline-flex h-5 w-5 rounded-full bg-background/80 border border-amber-500/60 dark:border-amber-500/50 items-center justify-center">
                         <Crown className="h-3 w-3 text-amber-500" />
                       </div>
                     ) : (
-                      <span className="text-xs font-bold text-violet-500">{candidate.rank ? `#${candidate.rank}` : 'New'}</span>
+                      <span className="text-xs font-bold text-violet-700 dark:text-violet-500">{candidate.rank ? `#${candidate.rank}` : 'New'}</span>
                     )}
                   </div>
                   <PersonAvatar name={candidate.name} avatar={candidate.avatar} size="sm" />
@@ -1362,7 +1356,7 @@ function GainerCandidatesDialog({
                     <p className={`text-xs font-mono font-bold ${candidate.percentGain >= 0 ? "text-green-500" : "text-red-500"}`}>
                       {formatSignedPercent(candidate.percentGain)}
                     </p>
-                    <p className={`text-[10px] font-mono ${candidate.currentGain >= 0 ? "text-muted-foreground" : "text-red-400/80"}`}>
+                    <p className={`text-[10px] font-mono ${candidate.currentGain >= 0 ? "text-muted-foreground" : "text-red-600/80 dark:text-red-400/80"}`}>
                       {formatSignedPoints(candidate.currentGain)} pts
                     </p>
                   </div>
@@ -1425,7 +1419,7 @@ function PayoutDetails({ marketId }: { marketId: string }) {
       ) : data ? (
         (() => {
           const netPL = data.userPayout - data.userStake;
-          const plColor = netPL > 0 ? 'text-emerald-400' : netPL < 0 ? 'text-red-400' : 'text-muted-foreground';
+          const plColor = netPL > 0 ? 'text-emerald-600 dark:text-emerald-400' : netPL < 0 ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground';
           const plSign = netPL > 0 ? '+' : '';
           return (
             <>
@@ -1460,9 +1454,9 @@ function UserBetResult({ betResult, isMarketClosed = false }: { betResult?: { re
   return (
     <div>
       <div className={`flex items-center gap-2 text-xs font-semibold px-2 py-1.5 rounded-md mt-2 ${
-        betResult.result === 'won' ? 'bg-emerald-500/10 text-emerald-400' :
-        betResult.result === 'refunded' ? 'bg-yellow-500/10 text-yellow-400' :
-        'bg-red-500/10 text-red-400'
+        betResult.result === 'won' ? 'bg-emerald-500/15 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' :
+        betResult.result === 'refunded' ? 'bg-yellow-500/15 dark:bg-yellow-500/10 text-yellow-600 dark:text-yellow-400' :
+        'bg-red-500/15 dark:bg-red-500/10 text-red-600 dark:text-red-400'
       }`} data-testid="text-bet-result">
         {betResult.result === 'won' && <Trophy className="h-3.5 w-3.5" />}
         {betResult.result === 'lost' && <XCircle className="h-3.5 w-3.5" />}
@@ -1521,7 +1515,7 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
       <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); if (!isInactive) onNavigate(market.slug); }} className={isInactive ? "cursor-default" : "cursor-pointer"}>
         <div className="flex items-center gap-3 mb-2">
           <MarketAvatar market={market} />
-          <p className={`text-[16px] leading-[1.4] font-semibold line-clamp-2 ${isInactive ? '' : 'hover:text-violet-400'} transition-colors`}>{market.title}</p>
+          <p className={`text-[16px] leading-[1.4] font-semibold line-clamp-2 ${isInactive ? '' : 'hover:text-violet-600 dark:hover:text-violet-400'} transition-colors`}>{market.title}</p>
         </div>
       </a>
       {market.teaser && <p className="text-sm text-muted-foreground mb-3 line-clamp-2 leading-[1.4]">{market.teaser}</p>}
@@ -1534,7 +1528,7 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
           </div>
           
           <div className="mb-2 md:mb-3">
-            <div className="h-3 rounded-full bg-red-500/20 overflow-hidden">
+            <div className="h-3 rounded-full bg-red-500/25 dark:bg-red-500/20 overflow-hidden">
               <div className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all" style={{ width: `${yesPercent}%` }} />
             </div>
             <div className="flex items-center justify-between text-xs mt-1.5">
@@ -1609,12 +1603,12 @@ function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, 
       <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); if (!isInactive) onNavigate(market.slug); }} className={isInactive ? "cursor-default" : "cursor-pointer"}>
         <div className="flex items-center gap-3 mb-2">
           <MarketAvatar market={market} />
-          <p className={`text-[16px] leading-[1.4] font-semibold line-clamp-2 ${isInactive ? '' : 'hover:text-violet-400'} transition-colors`}>{market.title}</p>
+          <p className={`text-[16px] leading-[1.4] font-semibold line-clamp-2 ${isInactive ? '' : 'hover:text-violet-600 dark:hover:text-violet-400'} transition-colors`}>{market.title}</p>
         </div>
       </a>
       {market.teaser && (
         <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); if (!isInactive) onNavigate(market.slug); }} className={isInactive ? "cursor-default" : "cursor-pointer"}>
-          <p className={`text-sm text-muted-foreground mb-3 line-clamp-2 leading-[1.4] ${!isInactive ? 'hover:text-violet-400' : ''} transition-colors`}>{market.teaser}</p>
+          <p className={`text-sm text-muted-foreground mb-3 line-clamp-2 leading-[1.4] ${!isInactive ? 'hover:text-violet-600 dark:hover:text-violet-400' : ''} transition-colors`}>{market.teaser}</p>
         </a>
       )}
 
@@ -1671,7 +1665,7 @@ function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, 
         {entries.length > 4 && (
           <button
             type="button"
-            className="text-xs text-violet-400 hover:text-violet-300 text-center w-full cursor-pointer transition-colors font-medium mt-auto pt-3"
+            className="text-xs text-violet-600 dark:text-violet-400 hover:text-violet-500 dark:hover:text-violet-300 text-center w-full cursor-pointer transition-colors font-medium mt-auto pt-3"
             onClick={(e) => { e.stopPropagation(); onNavigate(market.slug); }}
           >
             +{entries.length - 4} more
@@ -1706,7 +1700,7 @@ function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel,
       <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); if (!isInactive) onNavigate(market.slug); }} className={isInactive ? "cursor-default" : "cursor-pointer"}>
         <div className="flex items-center gap-3 mb-2">
           <MarketAvatar market={market} />
-          <p className={`text-[16px] leading-[1.4] font-semibold line-clamp-2 ${isInactive ? '' : 'hover:text-violet-400'} transition-colors`}>{market.title}</p>
+          <p className={`text-[16px] leading-[1.4] font-semibold line-clamp-2 ${isInactive ? '' : 'hover:text-violet-600 dark:hover:text-violet-400'} transition-colors`}>{market.title}</p>
         </div>
       </a>
       {market.teaser && <p className="text-sm text-muted-foreground mb-3 line-clamp-2 leading-[1.4]">{market.teaser}</p>}
@@ -1717,7 +1711,7 @@ function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel,
         </div>
         
         <div className="mb-2">
-          <div className="h-3 rounded-full bg-red-500/20 overflow-hidden">
+          <div className="h-3 rounded-full bg-red-500/25 dark:bg-red-500/20 overflow-hidden">
             <div className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all" style={{ width: `${abovePercent}%` }} />
           </div>
           <div className="flex items-center justify-between text-xs mt-1.5">
@@ -1765,13 +1759,13 @@ function SuggestMarketCard({ onClick }: { onClick: () => void }) {
   return (
     <div 
       onClick={onClick}
-      className="border-2 border-dashed border-violet-500/30 rounded-xl p-6 flex flex-col items-center justify-center gap-3 cursor-pointer hover:border-[#EFEFEF] hover:bg-[#EFEFEF]/5 transition-all min-h-[200px]"
+      className="border-2 border-dashed border-violet-500/40 dark:border-violet-500/30 rounded-xl p-6 flex flex-col items-center justify-center gap-3 cursor-pointer hover:border-[#EFEFEF] hover:bg-[#EFEFEF]/5 transition-all min-h-[200px]"
       data-testid="card-suggest-market"
     >
-      <div className="h-12 w-12 rounded-full bg-violet-500/10 flex items-center justify-center">
-        <Plus className="h-6 w-6 text-violet-500" />
+      <div className="h-12 w-12 rounded-full bg-violet-500/15 dark:bg-violet-500/10 flex items-center justify-center">
+        <Plus className="h-6 w-6 text-violet-700 dark:text-violet-500" />
       </div>
-      <p className="text-sm font-medium text-violet-500">Suggest a Market</p>
+      <p className="text-sm font-medium text-violet-700 dark:text-violet-500">Suggest a Market</p>
       <p className="text-xs text-muted-foreground text-center">Suggest a prediction for admin review</p>
     </div>
   );
@@ -1905,7 +1899,7 @@ function CreatePredictionModal({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Plus className="h-5 w-5 text-violet-500" />
+            <Plus className="h-5 w-5 text-violet-700 dark:text-violet-500" />
             Suggest a Market
           </DialogTitle>
           <DialogDescription>
@@ -2054,7 +2048,7 @@ function CelebritySearchModal({
                   key={person.id}
                   onClick={() => handleSelectPerson(person)}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-muted/50 transition-colors ${
-                    selectedPerson?.id === person.id ? 'bg-amber-500/10 border border-amber-500/30' : ''
+                    selectedPerson?.id === person.id ? 'bg-amber-500/15 dark:bg-amber-500/10 border border-amber-500/40 dark:border-amber-500/30' : ''
                   }`}
                   data-testid={`modal-option-person-${person.id}`}
                 >
@@ -2151,7 +2145,7 @@ function WeeklyJackpotHero({
 
   return (
     <div 
-      className="relative overflow-hidden rounded-2xl mb-8 border-2 border-amber-500/50 jackpot-hero-bg"
+      className="relative overflow-hidden rounded-2xl mb-8 border-2 border-amber-500/60 dark:border-amber-500/50 jackpot-hero-bg"
       data-testid="weekly-jackpot-hero"
     >
       <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/10 rounded-full blur-3xl" />
@@ -2161,7 +2155,7 @@ function WeeklyJackpotHero({
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-3">
               <Crown className="h-6 w-6 text-amber-500" />
-              <Badge className="bg-amber-500/20 text-amber-500 border-amber-500/40">
+              <Badge className="bg-amber-500/25 dark:bg-amber-500/20 text-amber-700 dark:text-amber-500 border-amber-500/50 dark:border-amber-500/40">
                 WEEKLY JACKPOT
               </Badge>
               <Tooltip>
@@ -2177,7 +2171,7 @@ function WeeklyJackpotHero({
             <div className="mb-4">
               <button
                 onClick={() => setSearchModalOpen(true)}
-                className="w-full max-w-md flex items-center justify-between gap-2 px-4 py-3 rounded-lg border-2 border-amber-500/40 bg-background/80 backdrop-blur-sm hover:border-amber-500/60 transition-colors"
+                className="w-full max-w-md flex items-center justify-between gap-2 px-4 py-3 rounded-lg border-2 border-amber-500/50 dark:border-amber-500/40 bg-background/80 backdrop-blur-sm hover:border-amber-500/70 dark:hover:border-amber-500/60 transition-colors"
                 data-testid="dropdown-jackpot-person"
               >
                 <div className="flex items-center gap-3">
@@ -2233,22 +2227,22 @@ function WeeklyJackpotHero({
           </div>
         </div>
         {lastWinnerData?.hasResult && (
-          <div className="mt-4 p-3 rounded-lg bg-amber-500/5 border border-amber-500/20 mx-6 md:mx-8 mb-2">
-            <p className="text-xs text-amber-400 font-medium mb-1">
+          <div className="mt-4 p-3 rounded-lg bg-amber-500/8 dark:bg-amber-500/5 border border-amber-500/20 mx-6 md:mx-8 mb-2">
+            <p className="text-xs text-amber-600 dark:text-amber-400 font-medium mb-1">
               <Trophy className="h-3 w-3 inline mr-1" />
               Last week's result
             </p>
             <p className="text-sm">
               {lastWinnerData.winnerUsername ? (
                 <>
-                  <span className="font-semibold text-amber-400">@{lastWinnerData.winnerUsername}</span>
+                  <span className="font-semibold text-amber-600 dark:text-amber-400">@{lastWinnerData.winnerUsername}</span>
                   {" guessed "}
                   <span className="font-bold">{Number(lastWinnerData.winningPrediction).toLocaleString()}</span>
                   {" (actual: "}
                   <span className="font-bold">{Number(lastWinnerData.actualScore).toLocaleString()}</span>
                   {lastWinnerData.margin === 0 ? " — EXACT match!" : `, off by ${Number(lastWinnerData.margin).toLocaleString()}`}
                   {") and won "}
-                  <span className="font-bold text-amber-400">{Number(lastWinnerData.payout).toLocaleString()} credits</span>
+                  <span className="font-bold text-amber-600 dark:text-amber-400">{Number(lastWinnerData.payout).toLocaleString()} credits</span>
                 </>
               ) : (
                 <>
@@ -3045,20 +3039,20 @@ export default function PredictPage() {
                 <Button variant="ghost" size="sm" className="md:text-sm">Vote</Button>
               </Link>
               <Link href="/predict">
-                <Button variant="ghost" size="sm" className="text-violet-500 md:text-sm">Predict</Button>
+                <Button variant="ghost" size="sm" className="text-violet-700 dark:text-violet-500 md:text-sm">Predict</Button>
               </Link>
             </div>
             <div className="flex items-center gap-2.5 md:hidden">
               <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setRulesModalOpen("predictions")} aria-label="How predictions work">
                 <HelpCircle className="h-4 w-4 text-muted-foreground" />
               </Button>
-              <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-violet-500/10 border border-violet-500/30">
-                <Wallet className="h-[14px] w-[14px] text-violet-500" />
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/40 dark:border-violet-500/30">
+                <Wallet className="h-[14px] w-[14px] text-violet-700 dark:text-violet-500" />
                 <span className="font-mono font-bold text-sm">{walletCredits.toLocaleString('en-US')}</span>
               </div>
               <button
                 onClick={() => setShowMyPositions(!showMyPositions)}
-                className={`flex items-center gap-1.5 ${showMyPositions ? 'text-violet-400' : 'text-muted-foreground'}`}
+                className={`flex items-center gap-1.5 ${showMyPositions ? 'text-violet-600 dark:text-violet-400' : 'text-muted-foreground'}`}
               >
                 <ListChecks className="h-[14px] w-[14px]" />
                 <span className="text-sm">{activePredictions}</span>
@@ -3077,7 +3071,7 @@ export default function PredictPage() {
                 onClick={() => setSelectedType(type.id)}
                 className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all min-w-fit ${
                   selectedType === type.id
-                    ? 'bg-violet-500/20 text-violet-400 border border-violet-400/40 shadow-sm shadow-violet-500/20'
+                    ? 'bg-violet-500/25 dark:bg-violet-500/20 text-violet-600 dark:text-violet-400 border border-violet-500/50 dark:border-violet-400/40 shadow-sm shadow-violet-500/30 dark:shadow-violet-500/20'
                     : 'bg-muted/50 text-muted-foreground hover:bg-muted border border-transparent'
                 }`}
                 data-testid={`toggle-type-${type.id}`}
@@ -3092,7 +3086,7 @@ export default function PredictPage() {
                 onClick={() => setShowMyPositions(!showMyPositions)}
                 className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all min-w-fit md:hidden ${
                   showMyPositions
-                    ? 'bg-violet-500/20 text-violet-400 border border-violet-400/40 shadow-sm shadow-violet-500/20'
+                    ? 'bg-violet-500/25 dark:bg-violet-500/20 text-violet-600 dark:text-violet-400 border border-violet-500/50 dark:border-violet-400/40 shadow-sm shadow-violet-500/30 dark:shadow-violet-500/20'
                     : 'bg-muted/50 text-muted-foreground hover:bg-muted border border-transparent'
                 }`}
                 data-testid="toggle-my-positions-pill"
@@ -3176,7 +3170,7 @@ export default function PredictPage() {
             <UnifiedSectionHeader
               title="World Markets"
               subtitle="Predict the outcome of global events"
-              icon={<Scale className="h-5 w-5 text-violet-400" />}
+              icon={<Scale className="h-5 w-5 text-violet-600 dark:text-violet-400" />}
               accent="violet"
               testId="section-header-world-markets"
               actions={
@@ -3187,7 +3181,7 @@ export default function PredictPage() {
                         variant="ghost" 
                         size="icon" 
                         onClick={() => setRulesModalOpen("community")}
-                        className="text-violet-400 hover:text-violet-300"
+                        className="text-violet-600 dark:text-violet-400 hover:text-violet-500 dark:hover:text-violet-300"
                         aria-label="How it works"
                         data-testid="button-rules-real-world-markets"
                       >
@@ -3198,7 +3192,7 @@ export default function PredictPage() {
                   </Tooltip>
                   <Button 
                     onClick={() => setCreateModalOpen(true)}
-                    className="rounded-full bg-violet-500/10 border border-violet-500/30 text-violet-400 hover:bg-violet-500/20 hidden md:flex"
+                    className="rounded-full bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/40 dark:border-violet-500/30 text-violet-600 dark:text-violet-400 hover:bg-violet-500/25 dark:hover:bg-violet-500/20 hidden md:flex"
                     data-testid="button-start-prediction"
                   >
                     <Plus className="h-4 w-4 mr-2" />
@@ -3207,7 +3201,7 @@ export default function PredictPage() {
                   <Button 
                     size="icon"
                     onClick={() => setCreateModalOpen(true)}
-                    className="rounded-full bg-violet-500/10 border border-violet-500/30 text-violet-400 hover:bg-violet-500/20 md:hidden"
+                    className="rounded-full bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/40 dark:border-violet-500/30 text-violet-600 dark:text-violet-400 hover:bg-violet-500/25 dark:hover:bg-violet-500/20 md:hidden"
                     data-testid="button-start-prediction-mobile"
                   >
                     <Plus className="h-4 w-4" />
@@ -3277,7 +3271,7 @@ export default function PredictPage() {
               <Button 
                 variant="ghost" 
                 size="sm" 
-                className="text-violet-500 hover:text-violet-400 text-[14px]"
+                className="text-violet-700 dark:text-violet-500 hover:text-violet-600 dark:hover:text-violet-400 text-[14px]"
                 onClick={() => openPredictOverlay("community")}
                 data-testid="button-view-all-real-world"
               >
@@ -3306,7 +3300,7 @@ export default function PredictPage() {
                     data-testid="town-square-header"
                   >
                     <div className="h-9 w-9 rounded-lg flex items-center justify-center pulse-icon-blue shrink-0">
-                      <MessageSquare className="h-4 w-4 text-blue-400" />
+                      <MessageSquare className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <h3 className="text-sm font-semibold text-foreground dark:text-slate-100">Town Square</h3>
@@ -3381,7 +3375,7 @@ export default function PredictPage() {
                               e.stopPropagation();
                               setLocation("/predict/activity");
                             }}
-                            className="text-sm font-medium text-blue-400 hover:text-blue-300 transition-colors"
+                            className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 transition-colors"
                           >
                             Show more activity →
                           </button>
@@ -3425,7 +3419,7 @@ export default function PredictPage() {
             <UnifiedSectionHeader
               title="Weekly Up / Down"
               subtitle="Will their trend score be higher / lower"
-              icon={<TrendingUp className="h-5 w-5 text-violet-400" />}
+              icon={<TrendingUp className="h-5 w-5 text-violet-600 dark:text-violet-400" />}
               accent="violet"
               testId="section-header-updown"
               actions={
@@ -3435,7 +3429,7 @@ export default function PredictPage() {
                       variant="ghost" 
                       size="icon" 
                       onClick={() => setRulesModalOpen("updown")}
-                      className="text-violet-400 hover:text-violet-300"
+                      className="text-violet-600 dark:text-violet-400 hover:text-violet-500 dark:hover:text-violet-300"
                       aria-label="How it works"
                       data-testid="button-rules-weekly-up-/-down"
                     >
@@ -3490,7 +3484,7 @@ export default function PredictPage() {
               <Button 
                 variant="ghost" 
                 size="sm" 
-                className="text-violet-500 hover:text-violet-400 text-[14px]"
+                className="text-violet-700 dark:text-violet-500 hover:text-violet-600 dark:hover:text-violet-400 text-[14px]"
                 onClick={() => openPredictOverlay("weekly")}
                 data-testid="button-view-all-updown"
               >
@@ -3506,7 +3500,7 @@ export default function PredictPage() {
             <UnifiedSectionHeader
               title="Head-to-Head Battles"
               subtitle="Who will gain more points"
-              icon={<Swords className="h-5 w-5 text-violet-400" />}
+              icon={<Swords className="h-5 w-5 text-violet-600 dark:text-violet-400" />}
               accent="violet"
               testId="section-header-h2h"
               actions={
@@ -3516,7 +3510,7 @@ export default function PredictPage() {
                       variant="ghost" 
                       size="icon" 
                       onClick={() => setRulesModalOpen("h2h")}
-                      className="text-violet-400 hover:text-violet-300"
+                      className="text-violet-600 dark:text-violet-400 hover:text-violet-500 dark:hover:text-violet-300"
                       aria-label="How it works"
                       data-testid="button-rules-head-to-head-battles"
                     >
@@ -3580,7 +3574,7 @@ export default function PredictPage() {
               <Button 
                 variant="ghost" 
                 size="sm" 
-                className="text-violet-500 hover:text-violet-400 text-[14px]"
+                className="text-violet-700 dark:text-violet-500 hover:text-violet-600 dark:hover:text-violet-400 text-[14px]"
                 onClick={() => openPredictOverlay("h2h")}
                 data-testid="button-view-all-h2h"
               >
@@ -3596,7 +3590,7 @@ export default function PredictPage() {
             <UnifiedSectionHeader
               title="Category Races"
               subtitle="Pick the biggest mover in each category"
-              icon={<Trophy className="h-5 w-5 text-violet-400" />}
+              icon={<Trophy className="h-5 w-5 text-violet-600 dark:text-violet-400" />}
               accent="violet"
               testId="section-header-gainer"
               actions={
@@ -3606,7 +3600,7 @@ export default function PredictPage() {
                       variant="ghost" 
                       size="icon" 
                       onClick={() => setRulesModalOpen("gainer")}
-                      className="text-violet-400 hover:text-violet-300"
+                      className="text-violet-600 dark:text-violet-400 hover:text-violet-500 dark:hover:text-violet-300"
                       aria-label="How it works"
                       data-testid="button-rules-category-races"
                     >
@@ -3663,7 +3657,7 @@ export default function PredictPage() {
               <Button 
                 variant="ghost" 
                 size="sm" 
-                className="text-violet-500 hover:text-violet-400 text-[14px]"
+                className="text-violet-700 dark:text-violet-500 hover:text-violet-600 dark:hover:text-violet-400 text-[14px]"
                 onClick={() => openPredictOverlay("gainers")}
                 data-testid="button-view-all-gainer"
               >
@@ -3678,7 +3672,7 @@ export default function PredictPage() {
         <div className="text-center pb-8">
           <button 
             onClick={() => onboardingRef.current?.open()}
-            className="text-sm text-muted-foreground hover:text-violet-500 transition-colors"
+            className="text-sm text-muted-foreground hover:text-violet-700 dark:hover:text-violet-500 transition-colors"
           >
             <HelpCircle className="h-4 w-4 inline mr-1" />
             How it works

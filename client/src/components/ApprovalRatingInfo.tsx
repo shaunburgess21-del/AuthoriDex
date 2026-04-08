@@ -14,11 +14,11 @@ export function ApprovalRatingInfoContent({ onRateNow }: ApprovalRatingInfoConte
       </p>
       <ul className="space-y-1.5">
         <li className="flex items-center gap-2 text-xs">
-          <Star className="h-3.5 w-3.5 text-cyan-500 shrink-0" />
+          <Star className="h-3.5 w-3.5 text-cyan-700 dark:text-cyan-500 shrink-0" />
           <span className="font-medium">Rate 1–5</span>
         </li>
         <li className="flex items-center gap-2 text-xs">
-          <Users className="h-3.5 w-3.5 text-cyan-500 shrink-0" />
+          <Users className="h-3.5 w-3.5 text-cyan-700 dark:text-cyan-500 shrink-0" />
           <span><span className="font-medium">One vote</span> per user, per person, per day</span>
         </li>
       </ul>
@@ -29,7 +29,7 @@ export function ApprovalRatingInfoContent({ onRateNow }: ApprovalRatingInfoConte
         <button
           type="button"
           onClick={onRateNow}
-          className="w-full mt-1 px-3 py-1.5 rounded-md bg-cyan-500/15 border border-cyan-500/30 text-cyan-400 text-xs font-medium hover:bg-cyan-500/25 transition-colors"
+          className="w-full mt-1 px-3 py-1.5 rounded-md bg-cyan-500/15 border border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 text-xs font-medium hover:bg-cyan-500/25 transition-colors"
         >
           Rate Now
         </button>

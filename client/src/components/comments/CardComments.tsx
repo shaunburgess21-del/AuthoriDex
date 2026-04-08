@@ -180,7 +180,7 @@ export function CardComments({
   const sortBar = (
     <div className="flex items-center gap-2 mb-3 px-1">
       <div className="flex items-center gap-2">
-        <MessageSquare className="h-4 w-4 text-cyan-500" />
+        <MessageSquare className="h-4 w-4 text-cyan-700 dark:text-cyan-500" />
         <span className="text-sm font-semibold">
           {variant === "card" ? `Discussion (${comments.length})` : `${comments.length} ${comments.length === 1 ? "comment" : "comments"}`}
         </span>
@@ -216,12 +216,12 @@ export function CardComments({
       {(onDetail || onShare) && (
         <div className="flex items-center gap-3 ml-auto">
           {onDetail && (
-            <button onClick={onDetail} className="text-muted-foreground hover:text-cyan-400 transition-colors" data-interactive="true">
+            <button onClick={onDetail} className="text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors" data-interactive="true">
               <ExternalLink className="h-4 w-4" />
             </button>
           )}
           {onShare && (
-            <button onClick={onShare} className="text-muted-foreground hover:text-cyan-400 transition-colors" data-interactive="true">
+            <button onClick={onShare} className="text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors" data-interactive="true">
               <Share2 className="h-4 w-4" />
             </button>
           )}
@@ -237,13 +237,13 @@ export function CardComments({
         key={comment.id}
         id={`comment-${comment.id}`}
         className={`flex gap-3 py-3 ${isReply ? "ml-8 pl-3 border-l-2 border-border/20" : ""} ${
-          isTopComment ? "bg-cyan-500/5 px-3 rounded-lg border border-cyan-500/20" : ""
+          isTopComment ? "bg-cyan-500/8 dark:bg-cyan-500/5 px-3 rounded-lg border border-cyan-500/20" : ""
         }`}
         data-testid={`comment-${comment.id}`}
       >
         <Avatar className={`${isReply ? "h-6 w-6" : "h-8 w-8"} shrink-0`}>
           {comment.avatarUrl && <AvatarImage src={comment.avatarUrl} alt={comment.username || ""} />}
-          <AvatarFallback className="bg-cyan-500/20 text-cyan-400 text-[10px] font-semibold">
+          <AvatarFallback className="bg-cyan-500/25 dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 text-[10px] font-semibold">
             {(comment.username || "?").slice(0, 2).toUpperCase()}
           </AvatarFallback>
         </Avatar>
@@ -257,7 +257,7 @@ export function CardComments({
                 {formatTimeAgo(comment.createdAt)}
               </span>
               {isTopComment && (
-                <Badge variant="outline" className="text-[10px] border-cyan-500/30 text-cyan-400 py-0">
+                <Badge variant="outline" className="text-[10px] border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 py-0">
                   Top Take
                 </Badge>
               )}
@@ -276,7 +276,7 @@ export function CardComments({
           <div className="flex items-center gap-4 mt-2">
             <button
               onClick={() => commentVoteMutation.mutate({ commentId: comment.id, voteType: "up" })}
-              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-cyan-400 transition-colors"
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors"
               data-testid={`button-upvote-${comment.id}`}
             >
               <ThumbsUp className="h-3.5 w-3.5" />
@@ -284,7 +284,7 @@ export function CardComments({
             </button>
             <button
               onClick={() => commentVoteMutation.mutate({ commentId: comment.id, voteType: "down" })}
-              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-rose-400 transition-colors"
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
               data-testid={`button-downvote-${comment.id}`}
             >
               <ThumbsDown className="h-3.5 w-3.5" />
@@ -293,7 +293,7 @@ export function CardComments({
             {!isReply && (
               <button
                 onClick={() => startReply(comment)}
-                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-cyan-400 transition-colors"
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors"
                 data-testid={`button-reply-${comment.id}`}
               >
                 <Reply className="h-3.5 w-3.5" />
@@ -301,7 +301,7 @@ export function CardComments({
               </button>
             )}
             {netVotes !== 0 && (
-              <span className={`text-xs font-mono ${netVotes > 0 ? "text-cyan-400" : "text-rose-400"}`}>
+              <span className={`text-xs font-mono ${netVotes > 0 ? "text-cyan-600 dark:text-cyan-400" : "text-rose-600 dark:text-rose-400"}`}>
                 {netVotes > 0 ? `+${netVotes}` : netVotes}
               </span>
             )}
@@ -343,7 +343,7 @@ export function CardComments({
     <div className="pt-3 border-t border-border/20" style={{ paddingBottom: "env(safe-area-inset-bottom, 4px)" }}>
       {replyTo && (
         <div className="flex items-center gap-2 mb-2 px-1">
-          <span className="text-xs text-cyan-400">
+          <span className="text-xs text-cyan-600 dark:text-cyan-400">
             Replying to @{replyTo.username}
           </span>
           <button
@@ -357,7 +357,7 @@ export function CardComments({
       <div className="flex items-center gap-2">
         <Avatar className="h-7 w-7 shrink-0">
           {profile?.avatarUrl && <AvatarImage src={profile.avatarUrl} alt="" />}
-          <AvatarFallback className="bg-cyan-500/20 text-cyan-400 text-[10px] font-semibold">
+          <AvatarFallback className="bg-cyan-500/25 dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 text-[10px] font-semibold">
             {(profile?.username || user?.email || "?").slice(0, 2).toUpperCase()}
           </AvatarFallback>
         </Avatar>
@@ -388,7 +388,7 @@ export function CardComments({
             <button
               disabled={!commentBody.trim() || commentMutation.isPending}
               onClick={handlePost}
-              className="p-1 text-cyan-400 hover:text-cyan-300 disabled:text-muted-foreground/30 transition-colors"
+              className="p-1 text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300 disabled:text-muted-foreground/30 transition-colors"
               data-testid="button-submit-comment"
             >
               {commentMutation.isPending ? (
@@ -405,7 +405,7 @@ export function CardComments({
     <div className="text-center py-3 border-t border-border/20">
       <p className="text-sm text-muted-foreground">
         <button
-          className="text-cyan-400 underline hover:text-cyan-300 transition-colors"
+          className="text-cyan-600 dark:text-cyan-400 underline hover:text-cyan-500 dark:hover:text-cyan-300 transition-colors"
           onClick={() => setLocation("/login")}
           data-testid="link-login-to-comment"
         >

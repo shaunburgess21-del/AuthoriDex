@@ -26,16 +26,16 @@ interface WhyTrendingCardProps {
 }
 
 const categoryColors: Record<string, string> = {
-  "Politics": "bg-blue-500/20 text-blue-400 border-blue-500/30",
-  "Business": "bg-green-500/20 text-green-400 border-green-500/30",
-  "Music": "bg-purple-500/20 text-purple-400 border-purple-500/30",
-  "Sports": "bg-orange-500/20 text-orange-400 border-orange-500/30",
-  "Technology": "bg-cyan-500/20 text-cyan-400 border-cyan-500/30",
-  "Legal": "bg-red-500/20 text-red-400 border-red-500/30",
-  "Personal Life": "bg-pink-500/20 text-pink-400 border-pink-500/30",
-  "Controversy": "bg-amber-500/20 text-amber-400 border-amber-500/30",
-  "General News": "bg-slate-500/20 text-slate-400 border-slate-500/30",
-  "In The News": "bg-slate-500/20 text-slate-400 border-slate-500/30",
+  "Politics": "bg-blue-500/25 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 border-blue-500/40 dark:border-blue-500/30",
+  "Business": "bg-green-500/25 dark:bg-green-500/20 text-green-600 dark:text-green-400 border-green-500/40 dark:border-green-500/30",
+  "Music": "bg-purple-500/25 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400 border-purple-500/40 dark:border-purple-500/30",
+  "Sports": "bg-orange-500/25 dark:bg-orange-500/20 text-orange-600 dark:text-orange-400 border-orange-500/40 dark:border-orange-500/30",
+  "Technology": "bg-cyan-500/25 dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border-cyan-500/40 dark:border-cyan-500/30",
+  "Legal": "bg-red-500/25 dark:bg-red-500/20 text-red-600 dark:text-red-400 border-red-500/40 dark:border-red-500/30",
+  "Personal Life": "bg-pink-500/25 dark:bg-pink-500/20 text-pink-600 dark:text-pink-400 border-pink-500/40 dark:border-pink-500/30",
+  "Controversy": "bg-amber-500/25 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/40 dark:border-amber-500/30",
+  "General News": "bg-slate-500/25 dark:bg-slate-500/20 text-slate-600 dark:text-slate-400 border-slate-500/40 dark:border-slate-500/30",
+  "In The News": "bg-slate-500/25 dark:bg-slate-500/20 text-slate-600 dark:text-slate-400 border-slate-500/40 dark:border-slate-500/30",
 };
 
 export function WhyTrendingCard({ personId, personName, hotMover }: WhyTrendingCardProps) {

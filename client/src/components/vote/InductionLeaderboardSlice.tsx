@@ -23,10 +23,10 @@ export interface InductionCandidate {
 }
 
 function getRankBadgeStyle(rank: number) {
-  if (rank === 1) return "bg-yellow-500/10 border-yellow-500/20 text-yellow-300";
-  if (rank === 2) return "bg-slate-400/10 border-slate-400/20 text-slate-300";
-  if (rank === 3) return "bg-orange-500/10 border-orange-500/20 text-orange-300";
-  return "bg-slate-500/10 border-slate-500/20 text-slate-400";
+  if (rank === 1) return "bg-yellow-500/15 dark:bg-yellow-500/10 border-yellow-500/20 text-yellow-500 dark:text-yellow-300";
+  if (rank === 2) return "bg-slate-400/10 border-slate-400/20 text-slate-500 dark:text-slate-300";
+  if (rank === 3) return "bg-orange-500/15 dark:bg-orange-500/10 border-orange-500/20 text-orange-500 dark:text-orange-300";
+  return "bg-slate-500/15 dark:bg-slate-500/10 border-slate-500/20 text-slate-600 dark:text-slate-400";
 }
 
 interface InductionCandidateRowProps {
@@ -116,7 +116,7 @@ function InductionCandidateRow({
           </div>
           <span className="text-xs text-muted-foreground shrink-0">
             {rank === 1 ? (
-              <span className="text-yellow-400">{candidate.votes.toLocaleString('en-US')}</span>
+              <span className="text-yellow-600 dark:text-yellow-400">{candidate.votes.toLocaleString('en-US')}</span>
             ) : (
               <span>-{gap.toLocaleString('en-US')}</span>
             )}
@@ -128,7 +128,7 @@ function InductionCandidateRow({
         size="sm"
         onClick={handleVoteClick}
         className={`shrink-0 ${isVoted 
-          ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 hover:bg-emerald-500/20' 
+          ? 'bg-emerald-500/15 dark:bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 dark:text-emerald-300 hover:bg-emerald-500/25 dark:hover:bg-emerald-500/20' 
           : 'bg-gradient-to-r from-cyan-600 to-cyan-500 text-white'
         }`}
         data-testid={`button-vote-${candidate.id}`}
@@ -242,8 +242,8 @@ export function InductionLeaderboardSlice({
     >
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-lg bg-cyan-500/10 flex items-center justify-center">
-            <Vote className="h-4 w-4 text-cyan-400" />
+          <div className="h-8 w-8 rounded-lg bg-cyan-500/15 dark:bg-cyan-500/10 flex items-center justify-center">
+            <Vote className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
           </div>
           <div>
             <h3 className="font-semibold text-sm">Induction Queue</h3>
@@ -251,7 +251,7 @@ export function InductionLeaderboardSlice({
           </div>
         </div>
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Users className="h-3.5 w-3.5 text-cyan-400" />
+          <Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
           <span>{totalVoters.toLocaleString('en-US')} votes</span>
         </div>
       </div>
@@ -272,7 +272,7 @@ export function InductionLeaderboardSlice({
       {onExplore && (
         <Button 
           variant="outline" 
-          className="w-full border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10"
+          className="w-full border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/15 dark:hover:bg-cyan-500/15 dark:bg-cyan-500/10"
           onClick={onExplore}
           data-testid="button-explore-induction"
         >

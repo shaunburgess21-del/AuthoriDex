@@ -34,10 +34,10 @@ export function MarketCycleHero({ marketState, constrainedWidth = false }: Marke
     if (status === "RESOLVED") {
       return (
         <Badge 
-          className="px-3 py-1.5 text-xs font-semibold bg-red-500/20 text-red-400 border border-red-500/40"
+          className="px-3 py-1.5 text-xs font-semibold bg-red-500/25 dark:bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/50 dark:border-red-500/40"
           data-testid="status-badge-closed"
         >
-          <span className="inline-block w-2 h-2 bg-red-400 rounded-full mr-2" />
+          <span className="inline-block w-2 h-2 bg-red-600 dark:bg-red-400 rounded-full mr-2" />
           RESOLVED
         </Badge>
       );
@@ -46,10 +46,10 @@ export function MarketCycleHero({ marketState, constrainedWidth = false }: Marke
     if (status === "ENTRIES_CLOSED") {
       return (
         <Badge 
-          className="px-3 py-1.5 text-xs font-semibold bg-amber-500/20 text-amber-400 border border-amber-500/40"
+          className="px-3 py-1.5 text-xs font-semibold bg-amber-500/25 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/50 dark:border-amber-500/40"
           data-testid="status-badge-awaiting"
         >
-          <span className="inline-block w-2 h-2 bg-amber-400 rounded-full mr-2 animate-pulse" />
+          <span className="inline-block w-2 h-2 bg-amber-600 dark:bg-amber-400 rounded-full mr-2 animate-pulse" />
           AWAITING RESULTS
         </Badge>
       );
@@ -59,30 +59,30 @@ export function MarketCycleHero({ marketState, constrainedWidth = false }: Marke
       case "critical":
         return (
           <Badge 
-            className="px-3 py-1.5 text-xs font-semibold bg-red-500/20 text-red-400 border border-red-500/40"
+            className="px-3 py-1.5 text-xs font-semibold bg-red-500/25 dark:bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/50 dark:border-red-500/40"
             data-testid="status-badge-critical"
           >
-            <span className="inline-block w-2 h-2 bg-red-400 rounded-full mr-2 animate-pulse" />
+            <span className="inline-block w-2 h-2 bg-red-600 dark:bg-red-400 rounded-full mr-2 animate-pulse" />
             FINAL CALL
           </Badge>
         );
       case "warning":
         return (
           <Badge 
-            className="px-3 py-1.5 text-xs font-semibold bg-orange-500/20 text-orange-400 border border-orange-500/40"
+            className="px-3 py-1.5 text-xs font-semibold bg-orange-500/25 dark:bg-orange-500/20 text-orange-600 dark:text-orange-400 border border-orange-500/50 dark:border-orange-500/40"
             data-testid="status-badge-warning"
           >
-            <span className="inline-block w-2 h-2 bg-orange-400 rounded-full mr-2" />
+            <span className="inline-block w-2 h-2 bg-orange-600 dark:bg-orange-400 rounded-full mr-2" />
             CLOSING SOON
           </Badge>
         );
       default:
         return (
           <Badge 
-            className="px-3 py-1.5 text-xs font-semibold bg-green-500/20 text-green-400 border border-green-500/40"
+            className="px-3 py-1.5 text-xs font-semibold bg-green-500/25 dark:bg-green-500/20 text-green-600 dark:text-green-400 border border-green-500/50 dark:border-green-500/40"
             data-testid="status-badge-open"
           >
-            <span className="inline-block w-2 h-2 bg-green-400 rounded-full mr-2 animate-pulse" />
+            <span className="inline-block w-2 h-2 bg-green-600 dark:bg-green-400 rounded-full mr-2 animate-pulse" />
             OPEN
           </Badge>
         );
@@ -110,10 +110,10 @@ export function MarketCycleHero({ marketState, constrainedWidth = false }: Marke
     >
       <div className="relative z-10 px-4 py-2 md:px-6 md:py-4">
         <div className="flex flex-row items-center justify-between gap-2 md:gap-4">
-          <p className="text-gray-400 text-[10px] font-medium uppercase tracking-widest hidden md:block">
+          <p className="text-gray-600 dark:text-gray-400 text-[10px] font-medium uppercase tracking-widest hidden md:block">
             {label.desktop}
           </p>
-          <p className="text-gray-400 text-[9px] font-medium uppercase tracking-widest md:hidden shrink-0">
+          <p className="text-gray-600 dark:text-gray-400 text-[9px] font-medium uppercase tracking-widest md:hidden shrink-0">
             {label.mobile}
           </p>
           
@@ -127,19 +127,19 @@ export function MarketCycleHero({ marketState, constrainedWidth = false }: Marke
                 label="Days" 
                 testId="timer-days" 
               />
-              <span className="text-violet-500 text-lg font-bold">:</span>
+              <span className="text-violet-700 dark:text-violet-500 text-lg font-bold">:</span>
               <TimerSegment 
                 value={padZero(timeRemaining.hours)} 
                 label="Hrs" 
                 testId="timer-hours" 
               />
-              <span className="text-violet-500 text-lg font-bold">:</span>
+              <span className="text-violet-700 dark:text-violet-500 text-lg font-bold">:</span>
               <TimerSegment 
                 value={padZero(timeRemaining.minutes)} 
                 label="Min" 
                 testId="timer-minutes" 
               />
-              <span className="text-violet-500 text-lg font-bold">:</span>
+              <span className="text-violet-700 dark:text-violet-500 text-lg font-bold">:</span>
               <TimerSegment 
                 value={padZero(timeRemaining.seconds)} 
                 label="Sec" 

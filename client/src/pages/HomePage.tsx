@@ -63,13 +63,13 @@ function MarketPulseCard({
       subtitle: "Movement \u00B7 24h",
     },
     gainer: {
-      iconColor: "text-green-400",
+      iconColor: "text-green-600 dark:text-green-400",
       cardClass: "pulse-card-green",
       iconBgClass: "pulse-icon-green",
       subtitle: "Momentum \u00B7 7d",
     },
     dropper: {
-      iconColor: "text-red-400",
+      iconColor: "text-red-600 dark:text-red-400",
       cardClass: "pulse-card-red",
       iconBgClass: "pulse-icon-red",
       subtitle: "Dropping \u00B7 7d",
@@ -123,8 +123,8 @@ function MarketPulseCard({
                   <span 
                     className={`px-2 py-0.5 rounded text-xs font-mono font-medium tabular-nums ${
                       isPositive 
-                        ? "bg-green-500/15 text-green-400" 
-                        : "bg-red-500/15 text-red-400"
+                        ? "bg-green-500/20 dark:bg-green-500/15 text-green-600 dark:text-green-400" 
+                        : "bg-red-500/20 dark:bg-red-500/15 text-red-600 dark:text-red-400"
                     }`}
                   >
                     {isPositive ? "+" : ""}{changeValue.toFixed(1)}%
@@ -335,7 +335,7 @@ function TrendGraphOverlay({
             <p className="text-sm text-muted-foreground">
               {selectedTimeRange.key === "ALL" ? "All-Time" : `${selectedTimeRange.days}-Day`} Trend Analysis
               {usingFallbackData && (
-                <span className="ml-2 text-amber-400/80 text-xs">(Simulated data - collecting real history)</span>
+                <span className="ml-2 text-amber-600/80 dark:text-amber-400/80 text-xs">(Simulated data - collecting real history)</span>
               )}
             </p>
           </div>
@@ -352,7 +352,7 @@ function TrendGraphOverlay({
                 onClick={() => setSelectedTimeRange(range)}
                 className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
                   selectedTimeRange.key === range.key
-                    ? "bg-cyan-500/20 text-cyan-300 border border-cyan-400/40"
+                    ? "bg-cyan-500/25 dark:bg-cyan-500/20 text-cyan-500 dark:text-cyan-300 border border-cyan-500/50 dark:border-cyan-400/40"
                     : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                 }`}
                 data-testid={`trend-range-${range.key.toLowerCase()}`}
@@ -369,7 +369,7 @@ function TrendGraphOverlay({
                 onClick={() => setSelectedCategory(cat)}
                 className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all ${
                   selectedCategory === cat
-                    ? "bg-blue-500/20 text-blue-300 border border-blue-400/40"
+                    ? "bg-blue-500/25 dark:bg-blue-500/20 text-blue-500 dark:text-blue-300 border border-blue-500/50 dark:border-blue-400/40"
                     : "bg-muted/50 border border-border/50 text-muted-foreground hover:bg-muted/80"
                 }`}
                 data-testid={`trend-category-${cat.toLowerCase()}`}
@@ -848,7 +848,7 @@ export default function HomePage() {
               <Button 
                 variant="ghost" 
                 size="sm" 
-                className="text-blue-400 md:text-sm" 
+                className="text-blue-700 dark:text-blue-400 md:text-sm" 
                 onClick={() => {
                   setActiveView("leaderboard");
                   document.getElementById("leaderboard")?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -893,7 +893,7 @@ export default function HomePage() {
                   onClick={() => setActiveView(view)}
                   className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-medium transition-all ${
                     activeView === view
-                      ? "bg-blue-500/20 text-blue-300 border border-blue-400/40 shadow-sm shadow-blue-500/20"
+                      ? "bg-blue-500/25 dark:bg-blue-500/20 text-blue-500 dark:text-blue-300 border border-blue-500/50 dark:border-blue-400/40 shadow-sm shadow-blue-500/30 dark:shadow-blue-500/20"
                       : "bg-background/50 border border-border/50 text-muted-foreground hover:bg-muted/80 hover:border-blue-400/20"
                   }`}
                   data-testid={`toggle-view-${view}`}
@@ -961,7 +961,7 @@ export default function HomePage() {
                           className="text-xs max-w-[240px]"
                         >
                           <span className="inline-flex items-center gap-1 cursor-help">
-                            <Zap className="h-3 w-3 text-green-400" />
+                            <Zap className="h-3 w-3 text-green-600 dark:text-green-400" />
                             <span>Live: {systemFreshness?.liveUpdatedAtFormatted || "pending"}</span>
                           </span>
                         </TouchTooltip>
@@ -1085,19 +1085,19 @@ export default function HomePage() {
                       <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
                         <TouchTooltip content="Big score surge combined with a major rank jump" side="bottom" className="text-xs max-w-[200px]">
                           <span className="inline-flex items-center gap-1 cursor-help" data-testid="legend-breakout">
-                            <Rocket className="h-3 w-3 text-orange-400" />
+                            <Rocket className="h-3 w-3 text-orange-600 dark:text-orange-400" />
                             Breakout
                           </span>
                         </TouchTooltip>
                         <TouchTooltip content="Top percentile score spike or rank jump in the last 24 hours" side="bottom" className="text-xs max-w-[200px]">
                           <span className="inline-flex items-center gap-1 cursor-help" data-testid="legend-surging">
-                            <Flame className="h-3 w-3 text-yellow-400" />
+                            <Flame className="h-3 w-3 text-yellow-600 dark:text-yellow-400" />
                             Surging
                           </span>
                         </TouchTooltip>
                         <TouchTooltip content="Fading momentum or dropping in rank" side="bottom" className="text-xs max-w-[200px]">
                           <span className="inline-flex items-center gap-1 cursor-help opacity-80" data-testid="legend-cooling">
-                            <TrendingDown className="h-3 w-3 text-sky-300" />
+                            <TrendingDown className="h-3 w-3 text-sky-500 dark:text-sky-300" />
                             Cooling
                           </span>
                         </TouchTooltip>
@@ -1118,7 +1118,7 @@ export default function HomePage() {
                       <button
                         type="button"
                         onClick={() => setApprovalShowResults(v => !v)}
-                        className="ml-auto text-[11px] font-medium uppercase tracking-wider text-cyan-400 hover:text-cyan-300 transition-colors"
+                        className="ml-auto text-[11px] font-medium uppercase tracking-wider text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300 transition-colors"
                       >
                         {approvalShowResults ? "Rate" : "View Results"}
                       </button>

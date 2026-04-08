@@ -109,13 +109,13 @@ export function UnderratedOverratedCard({
     ? <ArrowUp className="h-4 w-4 text-[#00C853]" />
     : localVote === 'overrated'
       ? <ArrowDown className="h-4 w-4 text-[#FF0000]" />
-      : <Minus className="h-4 w-4 text-slate-400" />;
+      : <Minus className="h-4 w-4 text-slate-600 dark:text-slate-400" />;
 
   const voteColor = localVote === 'underrated'
     ? 'text-[#00C853]'
     : localVote === 'overrated'
       ? 'text-[#FF0000]'
-      : 'text-slate-400';
+      : 'text-slate-600 dark:text-slate-400';
 
   const voteLabel = localVote === 'underrated'
     ? 'underrated'
@@ -144,7 +144,7 @@ export function UnderratedOverratedCard({
       )}
       
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
-        <Users className="h-3.5 w-3.5 text-cyan-400" />
+        <Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
         <span>{totalVotes.toLocaleString('en-US')} votes</span>
       </div>
       
@@ -158,7 +158,7 @@ export function UnderratedOverratedCard({
           className="h-20 w-20 md:h-16 md:w-16"
         />
         <div className="flex-1 min-w-0">
-          <h3 className="font-serif font-bold text-xl md:text-lg leading-tight group-hover:text-cyan-400 transition-colors">
+          <h3 className="font-serif font-bold text-xl md:text-lg leading-tight group-hover:text-cyan-600 dark:group-hover:text-cyan-400 transition-colors">
             {person.name}
           </h3>
           <p className="text-[15px] md:text-sm text-muted-foreground mt-1 md:mt-0.5">
@@ -229,7 +229,7 @@ export function UnderratedOverratedCard({
         <div className="flex flex-col gap-4 md:gap-3 mt-auto">
           <Link
             href={`/vote/value-rankings?focus=${encodeURIComponent(person.id)}`}
-            className="inline-flex items-center gap-1 self-start text-sm font-medium text-cyan-400/80 hover:text-cyan-300 transition-colors"
+            className="inline-flex items-center gap-1 self-start text-sm font-medium text-cyan-600/80 dark:text-cyan-400/80 hover:text-cyan-500 dark:hover:text-cyan-300 transition-colors"
             data-testid={`link-value-compare-${person.id}`}
             onClick={(e) => e.stopPropagation()}
           >
@@ -248,8 +248,8 @@ export function UnderratedOverratedCard({
             <span className="text-base tabular-nums md:text-sm text-muted-foreground w-11 md:w-10 text-right font-medium">{Math.round(underratedPct)}%</span>
           </div>
           <div className="flex items-center gap-3 md:gap-2.5">
-            <Minus className="h-5 w-5 md:h-4 md:w-4 text-slate-400 shrink-0" />
-            <span className="text-base font-medium md:text-sm text-slate-400 w-[5.25rem] md:w-20 shrink-0">Fair</span>
+            <Minus className="h-5 w-5 md:h-4 md:w-4 text-slate-600 dark:text-slate-400 shrink-0" />
+            <span className="text-base font-medium md:text-sm text-slate-600 dark:text-slate-400 w-[5.25rem] md:w-20 shrink-0">Fair</span>
             <div className="flex-1 h-4 md:h-3 bg-white/5 rounded-full overflow-hidden self-center">
               <div 
                 className="h-full bg-slate-500 rounded-full transition-all duration-500"

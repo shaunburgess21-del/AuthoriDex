@@ -84,20 +84,20 @@ function ShareLinkButton({ url, label }: { url: string; label: string }) {
 
   return (
     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleCopy} title="Copy link">
-      {copied ? <Check className="h-4 w-4 text-green-400" /> : <Share2 className="h-4 w-4" />}
+      {copied ? <Check className="h-4 w-4 text-green-600 dark:text-green-400" /> : <Share2 className="h-4 w-4" />}
     </Button>
   );
 }
 
 function RankBadge({ rank }: { rank: string }) {
   const badgeConfig: Record<string, { color: string; icon: typeof Shield }> = {
-    "Citizen": { color: "bg-gray-500/20 text-gray-300 border-gray-500/30", icon: Shield },
-    "Aspirant": { color: "bg-green-500/20 text-green-300 border-green-500/30", icon: Shield },
-    "Insider": { color: "bg-blue-500/20 text-blue-300 border-blue-500/30", icon: Sparkles },
-    "Analyst": { color: "bg-purple-500/20 text-purple-300 border-purple-500/30", icon: Sparkles },
-    "Expert": { color: "bg-amber-500/20 text-amber-300 border-amber-500/30", icon: Trophy },
-    "Maven": { color: "bg-red-500/20 text-red-300 border-red-500/30", icon: Trophy },
-    "Hall of Famer": { color: "bg-yellow-500/20 text-yellow-300 border-yellow-500/30", icon: Trophy },
+    "Citizen": { color: "bg-gray-500/25 dark:bg-gray-500/20 text-gray-500 dark:text-gray-300 border-gray-500/40 dark:border-gray-500/30", icon: Shield },
+    "Aspirant": { color: "bg-green-500/25 dark:bg-green-500/20 text-green-500 dark:text-green-300 border-green-500/40 dark:border-green-500/30", icon: Shield },
+    "Insider": { color: "bg-blue-500/25 dark:bg-blue-500/20 text-blue-500 dark:text-blue-300 border-blue-500/40 dark:border-blue-500/30", icon: Sparkles },
+    "Analyst": { color: "bg-purple-500/25 dark:bg-purple-500/20 text-purple-500 dark:text-purple-300 border-purple-500/40 dark:border-purple-500/30", icon: Sparkles },
+    "Expert": { color: "bg-amber-500/25 dark:bg-amber-500/20 text-amber-500 dark:text-amber-300 border-amber-500/40 dark:border-amber-500/30", icon: Trophy },
+    "Maven": { color: "bg-red-500/25 dark:bg-red-500/20 text-red-500 dark:text-red-300 border-red-500/40 dark:border-red-500/30", icon: Trophy },
+    "Hall of Famer": { color: "bg-yellow-500/25 dark:bg-yellow-500/20 text-yellow-500 dark:text-yellow-300 border-yellow-500/40 dark:border-yellow-500/30", icon: Trophy },
   };
   const config = badgeConfig[rank] || badgeConfig["Citizen"];
   const Icon = config.icon;
@@ -176,40 +176,40 @@ function BetHistorySection({ username }: { username: string }) {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-0.5">
                   {bet.status === "won" && (
-                    <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-[10px] px-1.5 py-0">Won</Badge>
+                    <Badge variant="outline" className="bg-emerald-500/15 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/40 dark:border-emerald-500/30 text-[10px] px-1.5 py-0">Won</Badge>
                   )}
                   {bet.status === "lost" && (
-                    <Badge variant="outline" className="bg-red-500/10 text-red-400 border-red-500/30 text-[10px] px-1.5 py-0">Lost</Badge>
+                    <Badge variant="outline" className="bg-red-500/15 dark:bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/40 dark:border-red-500/30 text-[10px] px-1.5 py-0">Lost</Badge>
                   )}
                   {bet.status === "active" && (
-                    <Badge variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/30 text-[10px] px-1.5 py-0">Active</Badge>
+                    <Badge variant="outline" className="bg-blue-500/15 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/40 dark:border-blue-500/30 text-[10px] px-1.5 py-0">Active</Badge>
                   )}
                   {(bet.status === "void" || bet.status === "refunded") && (
-                    <Badge variant="outline" className="bg-gray-500/10 text-gray-400 border-gray-500/30 text-[10px] px-1.5 py-0">Void</Badge>
+                    <Badge variant="outline" className="bg-gray-500/15 dark:bg-gray-500/10 text-gray-600 dark:text-gray-400 border-gray-500/40 dark:border-gray-500/30 text-[10px] px-1.5 py-0">Void</Badge>
                   )}
                   <span className="text-sm font-medium truncate">{bet.marketTitle}</span>
                 </div>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <span className="text-violet-400 font-medium">
+                  <span className="text-violet-600 dark:text-violet-400 font-medium">
                     {bet.predictedScore != null ? bet.entryLabel
                       : bet.marketType === 'updown' ? `Picked: ${bet.entryLabel}`
                       : `Backed: ${bet.entryLabel}`}
                   </span>
                   {bet.predictedScore != null && (
-                    <span className="text-amber-400">Score: {Number(bet.predictedScore).toLocaleString()}</span>
+                    <span className="text-amber-600 dark:text-amber-400">Score: {Number(bet.predictedScore).toLocaleString()}</span>
                   )}
                   {bet.confidence != null && (
-                    <span className="text-cyan-400">{Math.round(bet.confidence * 100)}% conf</span>
+                    <span className="text-cyan-600 dark:text-cyan-400">{Math.round(bet.confidence * 100)}% conf</span>
                   )}
                   <span>{bet.stakeAmount.toLocaleString()} credits</span>
                 </div>
               </div>
               <div className="text-right shrink-0">
                 {bet.status === "won" && (
-                  <span className="text-sm font-semibold text-emerald-400">+{bet.pnl.toLocaleString()}</span>
+                  <span className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">+{bet.pnl.toLocaleString()}</span>
                 )}
                 {bet.status === "lost" && (
-                  <span className="text-sm font-semibold text-red-400">{bet.pnl.toLocaleString()}</span>
+                  <span className="text-sm font-semibold text-red-600 dark:text-red-400">{bet.pnl.toLocaleString()}</span>
                 )}
                 {bet.status === "active" && (
                   <span className="text-sm text-muted-foreground">{bet.stakeAmount.toLocaleString()}</span>
@@ -361,9 +361,9 @@ export default function PublicProfilePage() {
           </div>
 
           {profile.isAgent && profile.agentProfile && (
-            <div className="mb-6 rounded-lg border border-violet-500/20 bg-violet-500/5 p-4">
+            <div className="mb-6 rounded-lg border border-violet-500/30 dark:border-violet-500/20 bg-violet-500/8 dark:bg-violet-500/5 p-4">
               <div className="flex items-center gap-2 mb-2">
-                <BrainCircuit className="h-4 w-4 text-violet-300" />
+                <BrainCircuit className="h-4 w-4 text-violet-500 dark:text-violet-300" />
                 <p className="text-sm font-medium capitalize">{profile.agentProfile.archetype.replace(/_/g, " ")}</p>
               </div>
               {profile.agentProfile.bio && (
@@ -387,24 +387,24 @@ export default function PublicProfilePage() {
           {/* Stats Grid */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="p-3 rounded-lg bg-muted/50 text-center">
-              <TrendingUp className="h-4 w-4 mx-auto mb-1.5 text-violet-400" />
+              <TrendingUp className="h-4 w-4 mx-auto mb-1.5 text-violet-600 dark:text-violet-400" />
               <p className="text-xl font-bold">{predictions}</p>
               <p className="text-[10px] text-muted-foreground">Predictions</p>
             </div>
             <div className="p-3 rounded-lg bg-muted/50 text-center">
-              <Coins className="h-4 w-4 mx-auto mb-1.5 text-amber-400" />
-              <p className={`text-xl font-bold ${pnl > 0 ? "text-emerald-400" : pnl < 0 ? "text-red-400" : ""}`}>
+              <Coins className="h-4 w-4 mx-auto mb-1.5 text-amber-600 dark:text-amber-400" />
+              <p className={`text-xl font-bold ${pnl > 0 ? "text-emerald-600 dark:text-emerald-400" : pnl < 0 ? "text-red-600 dark:text-red-400" : ""}`}>
                 {pnl > 0 ? "+" : ""}{pnl.toLocaleString()}
               </p>
               <p className="text-[10px] text-muted-foreground">P&L</p>
             </div>
             <div className="p-3 rounded-lg bg-muted/50 text-center">
-              <BarChart3 className="h-4 w-4 mx-auto mb-1.5 text-cyan-400" />
+              <BarChart3 className="h-4 w-4 mx-auto mb-1.5 text-cyan-600 dark:text-cyan-400" />
               <p className="text-xl font-bold">{(profile.volume ?? 0).toLocaleString()}</p>
               <p className="text-[10px] text-muted-foreground">Volume</p>
             </div>
             <div className="p-3 rounded-lg bg-muted/50 text-center">
-              <Trophy className="h-4 w-4 mx-auto mb-1.5 text-emerald-400" />
+              <Trophy className="h-4 w-4 mx-auto mb-1.5 text-emerald-600 dark:text-emerald-400" />
               <p className="text-xl font-bold">{accuracyPct ?? profile.winRate ?? 0}%</p>
               <p className="text-[10px] text-muted-foreground">Win Rate</p>
             </div>
@@ -412,9 +412,9 @@ export default function PublicProfilePage() {
 
           {/* Biggest Win highlight */}
           {(profile.biggestWin ?? 0) > 0 && (
-            <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/5 border border-emerald-500/15">
-              <Target className="h-4 w-4 text-emerald-400 shrink-0" />
-              <span className="text-sm text-emerald-400 font-medium">
+            <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/8 dark:bg-emerald-500/5 border border-emerald-500/15">
+              <Target className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <span className="text-sm text-emerald-600 dark:text-emerald-400 font-medium">
                 Biggest Win: +{(profile.biggestWin ?? 0).toLocaleString()} credits
               </span>
             </div>
@@ -423,7 +423,7 @@ export default function PublicProfilePage() {
           {/* Votes Cast */}
           {(profile.totalVotes ?? 0) > 0 && (
             <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/30">
-              <Vote className="h-4 w-4 text-cyan-400 shrink-0" />
+              <Vote className="h-4 w-4 text-cyan-600 dark:text-cyan-400 shrink-0" />
               <span className="text-sm text-muted-foreground">
                 {profile.totalVotes} votes cast
               </span>
@@ -438,7 +438,7 @@ export default function PublicProfilePage() {
               <div className="flex-1">
                 <div className="flex justify-between text-sm mb-2">
                   <span className="text-muted-foreground">Level {xpLevel}</span>
-                  <span className="font-mono text-amber-400">{profile.xpPoints?.toLocaleString('en-US') || 0} XP</span>
+                  <span className="font-mono text-amber-600 dark:text-amber-400">{profile.xpPoints?.toLocaleString('en-US') || 0} XP</span>
                 </div>
                 <div className="h-2 bg-muted rounded-full overflow-hidden">
                   {(() => {

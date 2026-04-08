@@ -77,14 +77,14 @@ function ApprovalCard({
   const isHighest = type === "highest";
   const cardClass = isHighest ? "pulse-card-green" : "pulse-card-red";
   const iconBgClass = isHighest ? "pulse-icon-green" : "pulse-icon-red";
-  const iconColor = isHighest ? "text-green-400" : "text-red-400";
-  const percentColor = isHighest ? "text-green-400" : "text-red-400";
+  const iconColor = isHighest ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400";
+  const percentColor = isHighest ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400";
   const Icon = isHighest ? ThumbsUp : ThumbsDown;
   
   // Glassy badge styling - green tint for highest, red tint for lowest
   const badgeClass = isHighest 
-    ? "bg-green-500/10 text-green-400 border border-green-500/30 backdrop-blur-sm"
-    : "bg-red-500/10 text-red-400 border border-red-500/30 backdrop-blur-sm";
+    ? "bg-green-500/15 dark:bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/40 dark:border-green-500/30 backdrop-blur-sm"
+    : "bg-red-500/15 dark:bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/40 dark:border-red-500/30 backdrop-blur-sm";
   const badgeTestId = isHighest ? "text-approval-badge-highest" : "text-approval-badge-lowest";
 
   return (
@@ -129,7 +129,7 @@ function ApprovalCard({
             </span>
           </div>
           
-          <div className="flex items-center gap-1 text-[10px] text-slate-500">
+          <div className="flex items-center gap-1 text-[10px] text-slate-700 dark:text-slate-500">
             <Star className="h-3 w-3" />
             <span>{person.voteCount.toLocaleString('en-US')} votes</span>
           </div>

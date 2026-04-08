@@ -225,7 +225,7 @@ export function LeaderboardRow({
               <span className="font-mono">
                 {compactNumber(fameScore)}
                 {showDelta && (
-                  <span className={person.change24h! > 0 ? "text-emerald-400" : "text-red-400"}>
+                  <span className={person.change24h! > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}>
                     {' '}{delta24h}
                     <span className="text-muted-foreground ml-0.5">24h</span>
                   </span>
@@ -257,8 +257,8 @@ export function LeaderboardRow({
                 person.change24h == null || Math.abs(person.change24h) < 0.05
                   ? "text-muted-foreground"
                   : person.change24h > 0
-                    ? "text-emerald-400"
-                    : "text-red-400"
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : "text-red-600 dark:text-red-400"
               }`}>
                 {person.change24h != null ? delta24h : '—'}
               </p>

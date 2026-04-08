@@ -107,7 +107,7 @@ function UpDownCard({
         <div className="flex items-center justify-between mb-3">
           <Badge 
             variant="outline" 
-            className={isUp ? "text-green-500 border-green-500/30" : "text-red-500 border-red-500/30"}
+            className={isUp ? "text-green-700 dark:text-green-500 border-green-500/40 dark:border-green-500/30" : "text-red-700 dark:text-red-500 border-red-500/40 dark:border-red-500/30"}
           >
             {isUp ? "+" : ""}{market.change7d.toFixed(1)}%
           </Badge>
@@ -136,9 +136,9 @@ function UpDownCard({
         </div>
         
         <div className="flex items-center justify-between text-xs mb-3">
-          <span className="text-green-500">Up {market.upMultiplier}x</span>
+          <span className="text-green-700 dark:text-green-500">Up {market.upMultiplier}x</span>
           <span className="text-muted-foreground">Pool: {market.totalPool.toLocaleString('en-US')}</span>
-          <span className="text-red-500">Down {market.downMultiplier}x</span>
+          <span className="text-red-700 dark:text-red-500">Down {market.downMultiplier}x</span>
         </div>
         
         <div className="grid grid-cols-2 gap-2">
@@ -146,7 +146,7 @@ function UpDownCard({
             <Button
               size="sm"
               variant="outline"
-              className="border-green-500/30 text-green-500 hover:bg-green-500/10"
+              className="border-green-500/40 dark:border-green-500/30 text-green-700 dark:text-green-500 hover:bg-green-500/15 dark:hover:bg-green-500/15 dark:bg-green-500/10"
               onClick={() => onPredict(market.id, 'up', market.personName, market.upMultiplier)}
               data-testid={`button-predict-up-${market.id}`}
             >
@@ -158,7 +158,7 @@ function UpDownCard({
             <Button
               size="sm"
               variant="outline"
-              className="border-red-500/30 text-red-500 hover:bg-red-500/10"
+              className="border-red-500/40 dark:border-red-500/30 text-red-700 dark:text-red-500 hover:bg-red-500/15 dark:hover:bg-red-500/15 dark:bg-red-500/10"
               onClick={() => onPredict(market.id, 'down', market.personName, market.downMultiplier)}
               data-testid={`button-predict-down-${market.id}`}
             >
@@ -213,13 +213,12 @@ function H2HCard({
               onClick={() => !isClosed && onPredict(market.id, 'person1', market.person1.name)}
             >
               <div className="relative">
-                <div className="absolute -inset-3 rounded-full bg-blue-500/30 blur-md transition-opacity group-hover/p1:bg-blue-500/50" />
                 <div className="relative rounded-full ring-2 ring-transparent transition-all group-hover/p1:ring-blue-500/60">
                   <PersonAvatar name={market.person1.name} avatar={market.person1.avatar} size="xl" />
                 </div>
               </div>
               <p className="text-sm font-semibold mt-2 text-center">{smartName(market.person1.name)}</p>
-              <span className="text-xs text-blue-400">{market.person1Percent}%</span>
+              <span className="text-xs text-blue-600 dark:text-blue-400">{market.person1Percent}%</span>
             </div>
           </ClosedMarketActionTrigger>
           
@@ -235,13 +234,12 @@ function H2HCard({
               onClick={() => !isClosed && onPredict(market.id, 'person2', market.person2.name)}
             >
               <div className="relative">
-                <div className="absolute -inset-3 rounded-full bg-purple-500/30 blur-md transition-opacity group-hover/p2:bg-purple-500/50" />
                 <div className="relative rounded-full ring-2 ring-transparent transition-all group-hover/p2:ring-purple-500/60">
                   <PersonAvatar name={market.person2.name} avatar={market.person2.avatar} size="xl" />
                 </div>
               </div>
               <p className="text-sm font-semibold mt-2 text-center">{smartName(market.person2.name)}</p>
-              <span className="text-xs text-purple-400">{100 - market.person1Percent}%</span>
+              <span className="text-xs text-purple-600 dark:text-purple-400">{100 - market.person1Percent}%</span>
             </div>
           </ClosedMarketActionTrigger>
         </div>
@@ -254,7 +252,7 @@ function H2HCard({
         </div>
         
         <div className="flex items-center justify-center mb-3">
-          <span className="text-sm font-semibold text-violet-500">
+          <span className="text-sm font-semibold text-violet-700 dark:text-violet-500">
             Pool: {market.totalPool.toLocaleString('en-US')}
           </span>
         </div>
@@ -319,7 +317,7 @@ function CommunityCard({
         </div>
         
         <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); onNavigate(market.slug); }} className="cursor-pointer">
-          <p className="text-sm font-semibold mb-3 line-clamp-2 text-center hover:text-violet-400 transition-colors">{market.title}</p>
+          <p className="text-sm font-semibold mb-3 line-clamp-2 text-center hover:text-violet-600 dark:hover:text-violet-400 transition-colors">{market.title}</p>
         </a>
         
         <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground mb-3">
@@ -332,10 +330,10 @@ function CommunityCard({
         {entries.length === 2 && (
           <div className="mb-3">
             <div className="flex items-center justify-between text-xs mb-1.5">
-              <span className="text-green-500 font-semibold">{entry1?.label} {pct1}%</span>
-              <span className="text-red-500 font-semibold">{entry2?.label} {pct2}%</span>
+              <span className="text-green-700 dark:text-green-500 font-semibold">{entry1?.label} {pct1}%</span>
+              <span className="text-red-700 dark:text-red-500 font-semibold">{entry2?.label} {pct2}%</span>
             </div>
-            <div className="h-2 rounded-full bg-red-500/20 overflow-hidden">
+            <div className="h-2 rounded-full bg-red-500/25 dark:bg-red-500/20 overflow-hidden">
               <div className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all" style={{ width: `${pct1}%` }} />
             </div>
           </div>
@@ -359,13 +357,13 @@ function CommunityCard({
         )}
         
         <div className="flex items-center justify-center mb-3">
-          <span className="text-sm font-semibold text-violet-500">Pool: {totalPool.toLocaleString('en-US')}</span>
+          <span className="text-sm font-semibold text-violet-700 dark:text-violet-500">Pool: {totalPool.toLocaleString('en-US')}</span>
         </div>
         
         <Button 
           size="sm" 
           variant="outline"
-          className="w-full border-violet-500/30 text-violet-500"
+          className="w-full border-violet-500/40 dark:border-violet-500/30 text-violet-700 dark:text-violet-500"
           onClick={() => onNavigate(market.slug)}
           data-testid={`button-predict-${market.slug}`}
         >
@@ -407,13 +405,13 @@ function GainerCard({
             return market.leaders.map((leader, idx) => (
               <div 
                 key={leader.name}
-                className={`flex items-center gap-3 p-2.5 rounded-lg relative overflow-hidden ${idx === 0 ? 'bg-gradient-to-r from-amber-500/10 to-muted/50 dark:to-slate-800/50 border border-amber-500/30' : 'bg-muted/50 dark:bg-slate-800/50 border border-border/40 dark:border-slate-700/30'}`}
+                className={`flex items-center gap-3 p-2.5 rounded-lg relative overflow-hidden ${idx === 0 ? 'bg-gradient-to-r from-amber-500/10 to-muted/50 dark:to-slate-800/50 border border-amber-500/40 dark:border-amber-500/30' : 'bg-muted/50 dark:bg-slate-800/50 border border-border/40 dark:border-slate-700/30'}`}
               >
                 <div className="absolute inset-y-0 left-0 bg-green-500/8 transition-all" style={{ width: `${Math.max((Math.abs(leader.percentGain) / maxGain) * 100, 5)}%` }} />
                 <div className="relative flex items-center gap-2 flex-1 min-w-0">
                   {idx === 0 ? (
-                    <div className="w-6 h-6 rounded-full bg-amber-500/20 border border-amber-500/50 flex items-center justify-center">
-                      <Trophy className="h-3.5 w-3.5 text-amber-400" />
+                    <div className="w-6 h-6 rounded-full bg-amber-500/25 dark:bg-amber-500/20 border border-amber-500/60 dark:border-amber-500/50 flex items-center justify-center">
+                      <Trophy className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
                     </div>
                   ) : (
                     <div className="w-6 h-6 rounded-full bg-muted/50 flex items-center justify-center">
@@ -424,7 +422,7 @@ function GainerCard({
                   <span className="text-sm font-medium truncate">{leader.name}</span>
                 </div>
                 <div className="relative text-right">
-                  <div className="text-sm font-semibold text-green-400">
+                  <div className="text-sm font-semibold text-green-600 dark:text-green-400">
                     +{leader.currentGain.toLocaleString('en-US')} pts
                   </div>
                   <div className="text-xs text-green-500/70 font-mono">
@@ -437,7 +435,7 @@ function GainerCard({
         </div>
         
         <div className="flex items-center justify-center mb-3">
-          <span className="text-sm font-semibold text-violet-400">
+          <span className="text-sm font-semibold text-violet-600 dark:text-violet-400">
             Pool: {market.totalPool.toLocaleString('en-US')}
           </span>
         </div>
@@ -478,7 +476,7 @@ function StakeModal({
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Target className="h-5 w-5 text-violet-500" />
+            <Target className="h-5 w-5 text-violet-700 dark:text-violet-500" />
             Confirm Prediction
           </DialogTitle>
           <DialogDescription>
@@ -491,7 +489,7 @@ function StakeModal({
         <div className="space-y-4 py-4">
           <div className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50 border border-slate-700/30">
             <span className="text-sm text-muted-foreground">Your Balance</span>
-            <span className="font-semibold text-violet-400">{userCredits.toLocaleString('en-US')} credits</span>
+            <span className="font-semibold text-violet-600 dark:text-violet-400">{userCredits.toLocaleString('en-US')} credits</span>
           </div>
           
           <div>
@@ -511,9 +509,9 @@ function StakeModal({
             </div>
           </div>
           
-          <div className="flex items-center justify-between p-3 rounded-lg bg-violet-500/10 border border-violet-500/20">
+          <div className="flex items-center justify-between p-3 rounded-lg bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/20">
             <span className="text-sm">Potential Win</span>
-            <span className="font-bold text-lg text-green-400">+{potentialWin.toLocaleString('en-US')}</span>
+            <span className="font-bold text-lg text-green-600 dark:text-green-400">+{potentialWin.toLocaleString('en-US')}</span>
           </div>
         </div>
         
@@ -700,7 +698,7 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
             onClick={() => setActiveSection(section)}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
               activeSection === section
-                ? "bg-violet-500/20 text-violet-400 border border-violet-400/40"
+                ? "bg-violet-500/25 dark:bg-violet-500/20 text-violet-600 dark:text-violet-400 border border-violet-500/50 dark:border-violet-400/40"
                 : "bg-muted/50 text-muted-foreground hover:bg-muted border border-transparent"
             }`}
             data-testid={`toggle-predict-section-${section.toLowerCase().replace(/[\s\/]/g, '-')}`}
@@ -740,7 +738,7 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
             }}
             className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1.5 ${
               categoryFilter === cat.id
-                ? 'bg-violet-500/20 text-violet-300 border border-violet-400/40'
+                ? 'bg-violet-500/25 dark:bg-violet-500/20 text-violet-500 dark:text-violet-300 border border-violet-500/50 dark:border-violet-400/40'
                 : 'bg-muted/30 border border-border/50 text-muted-foreground hover:bg-muted/50'
             }`}
             data-testid={`chip-predict-category-${cat.id}`}
@@ -918,7 +916,7 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
       <div className="flex flex-col items-center gap-3 pt-4">
         <Button 
           size="lg"
-          className="bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white font-semibold px-8 shadow-lg shadow-violet-500/20"
+          className="bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white font-semibold px-8 shadow-lg shadow-violet-500/30 dark:shadow-violet-500/20"
           onClick={() => {
             window.scrollTo({ top: 0, behavior: 'smooth' });
             onExplore();

@@ -54,8 +54,8 @@ export function PeoplesVoicePoll({
     >
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-lg bg-violet-500/10 flex items-center justify-center">
-            <MessageSquare className="h-4 w-4 text-violet-400" />
+          <div className="h-8 w-8 rounded-lg bg-violet-500/15 dark:bg-violet-500/10 flex items-center justify-center">
+            <MessageSquare className="h-4 w-4 text-violet-600 dark:text-violet-400" />
           </div>
           <div>
             <h3 className="font-semibold text-sm">Sentiment Polls</h3>
@@ -66,7 +66,7 @@ export function PeoplesVoicePoll({
       </div>
       
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
-        <Users className="h-3.5 w-3.5 text-violet-400" />
+        <Users className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400" />
         <span>{topic.totalVotes.toLocaleString('en-US')} votes</span>
       </div>
       
@@ -124,7 +124,7 @@ export function PeoplesVoicePoll({
             </div>
             <div className="flex gap-1 h-2 rounded-full overflow-hidden">
               <div className="bg-[#00C853]" style={{ width: `${topic.approvePercent}%` }} />
-              <div className="bg-gray-400" style={{ width: `${topic.neutralPercent}%` }} />
+              <div className="bg-gray-600 dark:bg-gray-400" style={{ width: `${topic.neutralPercent}%` }} />
               <div className="bg-[#FF0000]" style={{ width: `${topic.disapprovePercent}%` }} />
             </div>
             <div className="flex justify-between mt-1.5 text-[10px] text-muted-foreground">
@@ -147,7 +147,7 @@ export function PeoplesVoicePoll({
       {onExplore && (
         <Button 
           variant="outline" 
-          className="w-full mt-3 border-violet-500/30 text-violet-400 hover:bg-violet-500/10"
+          className="w-full mt-3 border-violet-500/40 dark:border-violet-500/30 text-violet-600 dark:text-violet-400 hover:bg-violet-500/15 dark:hover:bg-violet-500/15 dark:bg-violet-500/10"
           onClick={onExplore}
           data-testid="button-explore-polls"
         >

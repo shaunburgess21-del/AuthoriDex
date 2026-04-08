@@ -119,10 +119,10 @@ interface MarketData {
 }
 
 const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
-  OPEN: { label: "Open", className: "bg-green-500/20 text-green-400 border-green-500/30" },
-  CLOSED_PENDING: { label: "Closed", className: "bg-amber-500/20 text-amber-400 border-amber-500/30" },
-  RESOLVED: { label: "Resolved", className: "bg-blue-500/20 text-blue-400 border-blue-500/30" },
-  VOID: { label: "Void", className: "bg-red-500/20 text-red-400 border-red-500/30" },
+  OPEN: { label: "Open", className: "bg-green-500/25 dark:bg-green-500/20 text-green-600 dark:text-green-400 border-green-500/40 dark:border-green-500/30" },
+  CLOSED_PENDING: { label: "Closed", className: "bg-amber-500/25 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/40 dark:border-amber-500/30" },
+  RESOLVED: { label: "Resolved", className: "bg-blue-500/25 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 border-blue-500/40 dark:border-blue-500/30" },
+  VOID: { label: "Void", className: "bg-red-500/25 dark:bg-red-500/20 text-red-600 dark:text-red-400 border-red-500/40 dark:border-red-500/30" },
 };
 
 function useCountdown(endDate: string | null) {
@@ -231,11 +231,11 @@ function getEntryResolutionTone(status: string | null | undefined) {
   switch (status) {
     case "winner":
       return {
-        cardClass: "border-amber-400/70 bg-amber-500/10 shadow-[0_0_18px_rgba(245,158,11,0.16)]",
-        rowClass: "bg-amber-500/10 ring-1 ring-amber-400/30",
+        cardClass: "border-amber-400/70 bg-amber-500/15 dark:bg-amber-500/10 shadow-[0_0_18px_rgba(245,158,11,0.16)]",
+        rowClass: "bg-amber-500/15 dark:bg-amber-500/10 ring-1 ring-amber-400/30",
         barClass: "from-amber-400 via-amber-500 to-yellow-500 shadow-[0_0_12px_rgba(245,158,11,0.35)]",
-        labelClass: "bg-amber-500/15 text-amber-300 border border-amber-400/40",
-        textClass: "text-amber-300",
+        labelClass: "bg-amber-500/20 dark:bg-amber-500/15 text-amber-500 dark:text-amber-300 border border-amber-500/50 dark:border-amber-400/40",
+        textClass: "text-amber-500 dark:text-amber-300",
         label: "Winner",
       };
     case "loser":
@@ -243,17 +243,17 @@ function getEntryResolutionTone(status: string | null | undefined) {
         cardClass: "border-slate-600/40 bg-slate-800/40",
         rowClass: "bg-slate-800/40 opacity-80",
         barClass: "from-slate-600 to-slate-500",
-        labelClass: "bg-slate-500/10 text-slate-300 border border-slate-500/30",
-        textClass: "text-slate-300",
+        labelClass: "bg-slate-500/15 dark:bg-slate-500/10 text-slate-500 dark:text-slate-300 border border-slate-500/40 dark:border-slate-500/30",
+        textClass: "text-slate-500 dark:text-slate-300",
         label: "Lost",
       };
     case "void":
       return {
-        cardClass: "border-slate-500/50 bg-slate-500/5",
-        rowClass: "bg-slate-500/5 ring-1 ring-slate-500/20",
+        cardClass: "border-slate-500/60 dark:border-slate-500/50 bg-slate-500/8 dark:bg-slate-500/5",
+        rowClass: "bg-slate-500/8 dark:bg-slate-500/5 ring-1 ring-slate-500/20",
         barClass: "from-slate-500 to-slate-400",
-        labelClass: "bg-slate-500/10 text-slate-300 border border-slate-500/30",
-        textClass: "text-slate-300",
+        labelClass: "bg-slate-500/15 dark:bg-slate-500/10 text-slate-500 dark:text-slate-300 border border-slate-500/40 dark:border-slate-500/30",
+        textClass: "text-slate-500 dark:text-slate-300",
         label: "Void",
       };
     default:
@@ -286,8 +286,8 @@ function BinaryOutcomes({
           disabled={disabled}
           className={`relative p-4 rounded-xl border-2 transition-all text-left ${
             selectedEntry === yesEntry.id
-              ? "border-green-500 bg-green-500/15 shadow-lg shadow-green-500/20"
-              : "border-green-500/20 bg-green-500/5 hover:border-green-500/40"
+              ? "border-green-500 bg-green-500/20 dark:bg-green-500/15 shadow-lg shadow-green-500/30 dark:shadow-green-500/20"
+              : "border-green-500/30 dark:border-green-500/20 bg-green-500/8 dark:bg-green-500/5 hover:border-green-500/40"
           } ${yesTone?.cardClass ?? ""} ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
           data-testid={`button-outcome-${yesEntry.id}`}
         >
@@ -299,10 +299,10 @@ function BinaryOutcomes({
             </div>
           )}
           <div className="flex items-center gap-2 mb-2">
-            <CheckCircle2 className="h-5 w-5 text-green-500" />
-            <span className="font-semibold text-green-400">{yesEntry.label}</span>
+            <CheckCircle2 className="h-5 w-5 text-green-700 dark:text-green-500" />
+            <span className="font-semibold text-green-600 dark:text-green-400">{yesEntry.label}</span>
           </div>
-          <div className="text-3xl font-bold text-green-400 font-mono">{yesEntry.percentage}%</div>
+          <div className="text-3xl font-bold text-green-600 dark:text-green-400 font-mono">{yesEntry.percentage}%</div>
           <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
             <span>{formatNumber(yesEntry.displayStake)} staked</span>
             <span>{yesEntry.betCount} bets</span>
@@ -315,8 +315,8 @@ function BinaryOutcomes({
           disabled={disabled}
           className={`relative p-4 rounded-xl border-2 transition-all text-left ${
             selectedEntry === noEntry.id
-              ? "border-red-500 bg-red-500/15 shadow-lg shadow-red-500/20"
-              : "border-red-500/20 bg-red-500/5 hover:border-red-500/40"
+              ? "border-red-500 bg-red-500/20 dark:bg-red-500/15 shadow-lg shadow-red-500/30 dark:shadow-red-500/20"
+              : "border-red-500/30 dark:border-red-500/20 bg-red-500/8 dark:bg-red-500/5 hover:border-red-500/40"
           } ${noTone?.cardClass ?? ""} ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
           data-testid={`button-outcome-${noEntry.id}`}
         >
@@ -328,10 +328,10 @@ function BinaryOutcomes({
             </div>
           )}
           <div className="flex items-center gap-2 mb-2">
-            <XCircle className="h-5 w-5 text-red-500" />
-            <span className="font-semibold text-red-400">{noEntry.label}</span>
+            <XCircle className="h-5 w-5 text-red-700 dark:text-red-500" />
+            <span className="font-semibold text-red-600 dark:text-red-400">{noEntry.label}</span>
           </div>
-          <div className="text-3xl font-bold text-red-400 font-mono">{noEntry.percentage}%</div>
+          <div className="text-3xl font-bold text-red-600 dark:text-red-400 font-mono">{noEntry.percentage}%</div>
           <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
             <span>{formatNumber(noEntry.displayStake)} staked</span>
             <span>{noEntry.betCount} bets</span>
@@ -369,7 +369,7 @@ function MultiOutcomes({
             disabled={disabled}
             onClick={() => !disabled && onSelect(entry.id)}
             className={`flex items-center gap-3 w-full text-left rounded-lg py-0.5 -mx-1 px-1 transition-colors ${
-              isUserPick ? "bg-violet-500/5 ring-1 ring-violet-500/20" : ""
+              isUserPick ? "bg-violet-500/8 dark:bg-violet-500/5 ring-1 ring-violet-500/20" : ""
             } ${tone?.rowClass ?? ""} ${disabled ? "cursor-not-allowed" : "cursor-pointer hover:bg-muted/20"}`}
             data-testid={`button-outcome-${entry.id}`}
           >
@@ -385,7 +385,7 @@ function MultiOutcomes({
             )}
             <span
               className={`w-[30%] sm:w-[25%] text-sm truncate shrink-0 ${
-                isUserPick ? "font-semibold text-foreground" : isLeading ? "font-medium text-violet-400" : "text-muted-foreground"
+                isUserPick ? "font-semibold text-foreground" : isLeading ? "font-medium text-violet-600 dark:text-violet-400" : "text-muted-foreground"
               }`}
             >
               {entry.label}
@@ -405,7 +405,7 @@ function MultiOutcomes({
             </div>
             <span
               className={`text-sm font-mono font-bold shrink-0 w-[48px] text-right ${
-                tone?.textClass ?? (isLeading ? "text-violet-300" : "text-blue-300")
+                tone?.textClass ?? (isLeading ? "text-violet-500 dark:text-violet-300" : "text-blue-500 dark:text-blue-300")
               }`}
             >
               {entry.percentage}%
@@ -451,7 +451,7 @@ function UpDownOutcomes({
       <Card className="p-4 bg-muted/10 border-border/40">
         <div className="text-center">
           <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">{underlying} {metric}</p>
-          <p className="text-3xl font-bold font-mono text-violet-400">
+          <p className="text-3xl font-bold font-mono text-violet-600 dark:text-violet-400">
             {unit}{Number(strike).toLocaleString('en-US')}
           </p>
           <p className="text-xs text-muted-foreground mt-1">Strike Price</p>
@@ -469,11 +469,11 @@ function UpDownOutcomes({
               className={`relative p-4 rounded-xl border-2 transition-all text-left ${
                 selectedEntry === entry.id
                   ? isAbove
-                    ? "border-green-500 bg-green-500/15 shadow-lg shadow-green-500/20"
-                    : "border-red-500 bg-red-500/15 shadow-lg shadow-red-500/20"
+                    ? "border-green-500 bg-green-500/20 dark:bg-green-500/15 shadow-lg shadow-green-500/30 dark:shadow-green-500/20"
+                    : "border-red-500 bg-red-500/20 dark:bg-red-500/15 shadow-lg shadow-red-500/30 dark:shadow-red-500/20"
                   : isAbove
-                    ? "border-green-500/20 bg-green-500/5 hover:border-green-500/40"
-                    : "border-red-500/20 bg-red-500/5 hover:border-red-500/40"
+                    ? "border-green-500/30 dark:border-green-500/20 bg-green-500/8 dark:bg-green-500/5 hover:border-green-500/40"
+                    : "border-red-500/30 dark:border-red-500/20 bg-red-500/8 dark:bg-red-500/5 hover:border-red-500/40"
               } ${tone?.cardClass ?? ""} ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
               data-testid={`button-outcome-${entry.id}`}
             >
@@ -486,15 +486,15 @@ function UpDownOutcomes({
               )}
               <div className="flex items-center gap-2 mb-2">
                 {isAbove ? (
-                  <TrendingUp className="h-5 w-5 text-green-500" />
+                  <TrendingUp className="h-5 w-5 text-green-700 dark:text-green-500" />
                 ) : (
-                  <TrendingDown className="h-5 w-5 text-red-500" />
+                  <TrendingDown className="h-5 w-5 text-red-700 dark:text-red-500" />
                 )}
-                <span className={`font-semibold ${isAbove ? "text-green-400" : "text-red-400"}`}>
+                <span className={`font-semibold ${isAbove ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
                   {entry.label}
                 </span>
               </div>
-              <div className={`text-3xl font-bold font-mono ${isAbove ? "text-green-400" : "text-red-400"}`}>
+              <div className={`text-3xl font-bold font-mono ${isAbove ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
                 {entry.percentage}%
               </div>
               <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
@@ -812,7 +812,7 @@ export default function MarketDetailPage() {
             </Badge>
             {market.category && <CategoryPill category={market.category} data-testid="badge-category" />}
             {market.featured && (
-              <Badge variant="outline" className="bg-amber-500/10 text-amber-400 border-amber-500/30" data-testid="badge-featured">
+              <Badge variant="outline" className="bg-amber-500/15 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/40 dark:border-amber-500/30" data-testid="badge-featured">
                 <Star className="h-3 w-3 mr-1" />
                 Featured
               </Badge>
@@ -851,7 +851,7 @@ export default function MarketDetailPage() {
           {(market.linkedPersonName || market.endAt) && (
             <div className="flex items-center gap-3 mb-3 flex-wrap">
               {market.linkedPersonName && (
-                <span className="inline-flex items-center gap-1 text-xs text-violet-400/90 bg-violet-500/10 rounded-full px-2.5 py-1">
+                <span className="inline-flex items-center gap-1 text-xs text-violet-600/90 dark:text-violet-400/90 bg-violet-500/15 dark:bg-violet-500/10 rounded-full px-2.5 py-1">
                   <span className="opacity-60">Linked to</span> {market.linkedPersonName}
                 </span>
               )}
@@ -861,7 +861,7 @@ export default function MarketDetailPage() {
                 return (
                   <span className="text-xs text-muted-foreground">
                     Resolves by {new Date(market.endAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                    {daysLeft <= 7 && <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-400 ml-2 px-1.5 py-0">Closing soon</Badge>}
+                    {daysLeft <= 7 && <Badge variant="outline" className="text-[10px] border-amber-500/40 dark:border-amber-500/30 text-amber-600 dark:text-amber-400 ml-2 px-1.5 py-0">Closing soon</Badge>}
                   </span>
                 );
               })()}
@@ -880,7 +880,7 @@ export default function MarketDetailPage() {
                 href={market.sourceUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1.5 text-violet-400 hover:text-violet-300 transition-colors"
+                className="flex items-center gap-1.5 text-violet-600 dark:text-violet-400 hover:text-violet-500 dark:hover:text-violet-300 transition-colors"
                 data-testid="link-source"
               >
                 <ExternalLink className="h-3.5 w-3.5" />
@@ -913,7 +913,7 @@ export default function MarketDetailPage() {
         {isOpen && !isInactive && (
           <Card className="p-5 mb-6 border-border/40 bg-muted/5" data-testid="section-place-prediction">
             <h2 className="text-lg font-serif font-bold mb-4 flex items-center gap-2">
-              <Trophy className="h-5 w-5 text-violet-500" />
+              <Trophy className="h-5 w-5 text-violet-700 dark:text-violet-500" />
               Place Your Prediction
             </h2>
             {!isLoggedIn ? (
@@ -944,15 +944,15 @@ export default function MarketDetailPage() {
                 </div>
 
                 {jackpotSuggestions.length > 0 && (
-                  <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
-                    <p className="text-xs text-amber-400 mb-2">That number is taken. Try one of these:</p>
+                  <div className="rounded-lg border border-amber-500/30 dark:border-amber-500/20 bg-amber-500/8 dark:bg-amber-500/5 p-3">
+                    <p className="text-xs text-amber-600 dark:text-amber-400 mb-2">That number is taken. Try one of these:</p>
                     <div className="flex flex-wrap gap-2">
                       {jackpotSuggestions.map((suggestion) => (
                         <Button
                           key={suggestion}
                           size="sm"
                           variant="outline"
-                          className="border-amber-500/30 text-amber-400"
+                          className="border-amber-500/40 dark:border-amber-500/30 text-amber-600 dark:text-amber-400"
                           onClick={() => setJackpotScoreInput(String(suggestion))}
                           data-testid={`button-jackpot-suggestion-${suggestion}`}
                         >
@@ -1054,10 +1054,10 @@ export default function MarketDetailPage() {
                 </div>
 
                 {potentialPayout !== null && (
-                  <div className="p-3 rounded-lg bg-green-500/5 border border-green-500/20" data-testid="text-potential-payout">
+                  <div className="p-3 rounded-lg bg-green-500/8 dark:bg-green-500/5 border border-green-500/30 dark:border-green-500/20" data-testid="text-potential-payout">
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-muted-foreground">Est. payout if correct</span>
-                      <span className="font-bold font-mono text-green-400">{formatNumber(potentialPayout)} credits</span>
+                      <span className="font-bold font-mono text-green-600 dark:text-green-400">{formatNumber(potentialPayout)} credits</span>
                     </div>
                     <p className="text-[10px] text-muted-foreground/60 mt-1">Estimate -- updates as more people predict.</p>
                   </div>
@@ -1098,8 +1098,8 @@ export default function MarketDetailPage() {
                           ? "bg-green-600 text-white border-green-600"
                           : "bg-red-600 text-white border-red-600"
                         : isYesLike
-                          ? "border-green-500/30 text-green-500"
-                          : "border-red-500/30 text-red-500";
+                          ? "border-green-500/40 dark:border-green-500/30 text-green-700 dark:text-green-500"
+                          : "border-red-500/40 dark:border-red-500/30 text-red-700 dark:text-red-500";
                       return (
                         <Button
                           key={entry.id}
@@ -1130,10 +1130,10 @@ export default function MarketDetailPage() {
                 </div>
 
                 {potentialPayout !== null && (
-                  <div className="p-3 rounded-lg bg-green-500/5 border border-green-500/20" data-testid="text-potential-payout">
+                  <div className="p-3 rounded-lg bg-green-500/8 dark:bg-green-500/5 border border-green-500/30 dark:border-green-500/20" data-testid="text-potential-payout">
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-muted-foreground">Est. payout if correct</span>
-                      <span className="font-bold font-mono text-green-400">{formatNumber(potentialPayout)} credits</span>
+                      <span className="font-bold font-mono text-green-600 dark:text-green-400">{formatNumber(potentialPayout)} credits</span>
                     </div>
                     <p className="text-[10px] text-muted-foreground/60 mt-1">Estimate -- updates as more people predict.</p>
                   </div>
@@ -1166,15 +1166,15 @@ export default function MarketDetailPage() {
         )}
 
         {isClosedMarket && (
-          <Card className="p-5 mb-6 border-violet-500/20 bg-violet-500/5" data-testid="section-result-summary">
+          <Card className="p-5 mb-6 border-violet-500/30 dark:border-violet-500/20 bg-violet-500/8 dark:bg-violet-500/5" data-testid="section-result-summary">
             <div className="flex items-start gap-3 mb-4">
-              <div className="h-10 w-10 rounded-full bg-violet-500/10 flex items-center justify-center shrink-0">
+              <div className="h-10 w-10 rounded-full bg-violet-500/15 dark:bg-violet-500/10 flex items-center justify-center shrink-0">
                 {market.status === "VOID" ? (
-                  <AlertTriangle className="h-5 w-5 text-amber-400" />
+                  <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
                 ) : market.status === "CLOSED_PENDING" ? (
-                  <Clock className="h-5 w-5 text-amber-400" />
+                  <Clock className="h-5 w-5 text-amber-600 dark:text-amber-400" />
                 ) : (
-                  <Trophy className="h-5 w-5 text-violet-400" />
+                  <Trophy className="h-5 w-5 text-violet-600 dark:text-violet-400" />
                 )}
               </div>
               <div className="min-w-0">
@@ -1202,42 +1202,42 @@ export default function MarketDetailPage() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {(resultOpenScore !== null && resultOpenScore !== undefined) && (
                 <Card className="p-3 text-center bg-background/40">
-                  <BarChart3 className="h-4 w-4 text-violet-400 mx-auto mb-1" />
+                  <BarChart3 className="h-4 w-4 text-violet-600 dark:text-violet-400 mx-auto mb-1" />
                   <p className="text-sm font-semibold font-mono">{formatScoreValue(resultOpenScore)}</p>
                   <p className="text-xs text-muted-foreground">Open Score</p>
                 </Card>
               )}
               {(resultCloseScore !== null && resultCloseScore !== undefined) && (
                 <Card className="p-3 text-center bg-background/40">
-                  <Target className="h-4 w-4 text-violet-400 mx-auto mb-1" />
+                  <Target className="h-4 w-4 text-violet-600 dark:text-violet-400 mx-auto mb-1" />
                   <p className="text-sm font-semibold font-mono">{formatScoreValue(resultCloseScore)}</p>
                   <p className="text-xs text-muted-foreground">Close Score</p>
                 </Card>
               )}
               {(resultActualScore !== null && resultActualScore !== undefined) && (
                 <Card className="p-3 text-center bg-background/40">
-                  <Target className="h-4 w-4 text-amber-400 mx-auto mb-1" />
+                  <Target className="h-4 w-4 text-amber-600 dark:text-amber-400 mx-auto mb-1" />
                   <p className="text-sm font-semibold font-mono">{formatScoreValue(resultActualScore)}</p>
                   <p className="text-xs text-muted-foreground">Actual Score</p>
                 </Card>
               )}
               {(resultWinningPrediction !== null && resultWinningPrediction !== undefined) && (
                 <Card className="p-3 text-center bg-background/40">
-                  <Trophy className="h-4 w-4 text-amber-400 mx-auto mb-1" />
+                  <Trophy className="h-4 w-4 text-amber-600 dark:text-amber-400 mx-auto mb-1" />
                   <p className="text-sm font-semibold font-mono">{formatScoreValue(resultWinningPrediction)}</p>
                   <p className="text-xs text-muted-foreground">Winning Prediction</p>
                 </Card>
               )}
               {resultResolvedAt && (
                 <Card className="p-3 text-center bg-background/40">
-                  <Clock className="h-4 w-4 text-violet-400 mx-auto mb-1" />
+                  <Clock className="h-4 w-4 text-violet-600 dark:text-violet-400 mx-auto mb-1" />
                   <p className="text-sm font-semibold">{formatDate(resultResolvedAt)}</p>
                   <p className="text-xs text-muted-foreground">Resolved At</p>
                 </Card>
               )}
               {market.resolveMethod && (
                 <Card className="p-3 text-center bg-background/40">
-                  <Gavel className="h-4 w-4 text-violet-400 mx-auto mb-1" />
+                  <Gavel className="h-4 w-4 text-violet-600 dark:text-violet-400 mx-auto mb-1" />
                   <p className="text-sm font-semibold capitalize">{market.resolveMethod.replace(/_/g, " ")}</p>
                   <p className="text-xs text-muted-foreground">Method</p>
                 </Card>
@@ -1249,7 +1249,7 @@ export default function MarketDetailPage() {
         {!isJackpotMarket && (
         <Card className="p-5 mb-6" data-testid="section-outcomes">
           <h2 className="text-lg font-serif font-bold mb-4 flex items-center gap-2">
-            <Target className="h-5 w-5 text-violet-500" />
+            <Target className="h-5 w-5 text-violet-700 dark:text-violet-500" />
             Outcomes
           </h2>
           {effectiveOpenMarketType === "binary" && (
@@ -1285,24 +1285,24 @@ export default function MarketDetailPage() {
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6" data-testid="section-stats">
           <Card className="p-3 text-center">
-            <Zap className="h-4 w-4 text-violet-500 mx-auto mb-1" />
+            <Zap className="h-4 w-4 text-violet-700 dark:text-violet-500 mx-auto mb-1" />
             <p className="text-lg font-bold font-mono" data-testid="text-total-pool">{formatNumber(totalPool)}</p>
             <p className="text-xs text-muted-foreground">Total Pool</p>
           </Card>
           <Card className="p-3 text-center">
-            <Users className="h-4 w-4 text-violet-500 mx-auto mb-1" />
+            <Users className="h-4 w-4 text-violet-700 dark:text-violet-500 mx-auto mb-1" />
             <p className="text-lg font-bold font-mono" data-testid="text-total-participants">{formatNumber(totalParticipants)}</p>
             <p className="text-xs text-muted-foreground">Participants</p>
           </Card>
           <Card className="p-3 text-center">
-            <Gavel className="h-4 w-4 text-violet-500 mx-auto mb-1" />
+            <Gavel className="h-4 w-4 text-violet-700 dark:text-violet-500 mx-auto mb-1" />
             <p className="text-sm font-semibold capitalize" data-testid="text-resolve-method">
               {(market.resolveMethod || "manual").replace(/_/g, " ")}
             </p>
             <p className="text-xs text-muted-foreground">Resolution</p>
           </Card>
           <Card className="p-3 text-center">
-            <Clock className="h-4 w-4 text-violet-500 mx-auto mb-1" />
+            <Clock className="h-4 w-4 text-violet-700 dark:text-violet-500 mx-auto mb-1" />
             <p className="text-sm font-semibold" data-testid="text-close-date">
               {market.closeAt ? formatDate(market.closeAt) : market.endAt ? formatDate(market.endAt) : "TBD"}
             </p>
@@ -1313,7 +1313,7 @@ export default function MarketDetailPage() {
         {market.summary && (
           <Card className="p-5 mb-6" data-testid="section-summary">
             <h2 className="text-lg font-serif font-bold mb-2 flex items-center gap-2">
-              <Info className="h-5 w-5 text-violet-500" />
+              <Info className="h-5 w-5 text-violet-700 dark:text-violet-500" />
               About
             </h2>
             <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">{market.summary}</p>
@@ -1327,7 +1327,7 @@ export default function MarketDetailPage() {
           (market.resolutionSources && market.resolutionSources.length > 0)) && (
           <Card className="p-5 mb-6" data-testid="section-resolution-rules">
             <h2 className="text-lg font-serif font-bold mb-3 flex items-center gap-2">
-              <BarChart3 className="h-5 w-5 text-violet-500" />
+              <BarChart3 className="h-5 w-5 text-violet-700 dark:text-violet-500" />
               Resolution Rules
             </h2>
             {market.resolutionCriteria && market.resolutionCriteria.length > 0 && (
@@ -1336,7 +1336,7 @@ export default function MarketDetailPage() {
                 <ul className="space-y-1.5">
                   {market.resolutionCriteria.map((criterion, i) => (
                     <li key={i} className="flex items-start gap-2 text-sm">
-                      <CheckCircle2 className="h-4 w-4 text-violet-500 shrink-0 mt-0.5" />
+                      <CheckCircle2 className="h-4 w-4 text-violet-700 dark:text-violet-500 shrink-0 mt-0.5" />
                       <span>{criterion}</span>
                     </li>
                   ))}
@@ -1353,7 +1353,7 @@ export default function MarketDetailPage() {
                       href={source.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center gap-2 text-sm text-violet-400 hover:text-violet-300 transition-colors"
+                      className="flex items-center gap-2 text-sm text-violet-600 dark:text-violet-400 hover:text-violet-500 dark:hover:text-violet-300 transition-colors"
                       data-testid={`link-resolution-source-${i}`}
                     >
                       <ExternalLink className="h-3.5 w-3.5 shrink-0" />
@@ -1367,9 +1367,9 @@ export default function MarketDetailPage() {
         )}
 
         {isInactive && (
-          <Card className="p-5 mb-6 border-amber-500/20 bg-amber-500/5" data-testid="section-inactive-market">
+          <Card className="p-5 mb-6 border-amber-500/30 dark:border-amber-500/20 bg-amber-500/8 dark:bg-amber-500/5" data-testid="section-inactive-market">
             <div className="text-center py-4">
-              <Clock className="h-8 w-8 text-amber-500 mx-auto mb-3" />
+              <Clock className="h-8 w-8 text-amber-700 dark:text-amber-500 mx-auto mb-3" />
               <h2 className="text-lg font-serif font-bold mb-2">{(market as any).inactiveMessage || "Coming Soon"}</h2>
               <p className="text-sm text-muted-foreground max-w-md mx-auto">
                 This market is not yet open for predictions. Check back soon for when it goes live.

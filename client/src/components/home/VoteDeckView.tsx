@@ -91,7 +91,7 @@ function VersusCard({
       <div className="relative p-4">
         <div className="flex items-center justify-between mb-4 gap-2">
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Users className="h-3.5 w-3.5 text-cyan-400" />
+            <Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
             <span>{matchup.totalVotes.toLocaleString('en-US')} votes</span>
           </div>
           <CategoryPill category={matchup.category} />
@@ -99,10 +99,10 @@ function VersusCard({
         
         {!hasVoted && (
           <div className="flex flex-col items-center justify-center gap-1 mb-3" style={{ minHeight: '40px' }}>
-            <span className="text-sm font-semibold text-slate-300">
+            <span className="text-sm font-semibold text-slate-500 dark:text-slate-300">
               {matchup.promptText || "Who do you prefer?"}
             </span>
-            <span className="text-[11px] text-slate-500">Tap an image to pick your side</span>
+            <span className="text-[11px] text-slate-700 dark:text-slate-500">Tap an image to pick your side</span>
           </div>
         )}
         
@@ -113,9 +113,9 @@ function VersusCard({
             className={`flex-1 rounded-lg border transition-all overflow-hidden relative ${
               hasVoted
                 ? votedA
-                  ? 'border-cyan-500/50 ring-2 ring-cyan-500/30'
+                  ? 'border-cyan-500/60 dark:border-cyan-500/50 ring-2 ring-cyan-500/30'
                   : 'border-slate-700/30 opacity-60'
-                : 'border-slate-700/50 hover:border-cyan-500/50 cursor-pointer'
+                : 'border-slate-700/50 hover:border-cyan-500/60 dark:border-cyan-500/50 cursor-pointer'
             }`}
             style={{ minHeight: '260px' }}
             data-testid={`button-vote-a-${matchup.id}`}
@@ -138,7 +138,7 @@ function VersusCard({
             <div className="relative h-full flex flex-col items-center justify-end p-3">
               <span className="font-semibold text-sm text-center text-white drop-shadow-lg">{matchup.optionAText}</span>
               {hasVoted && (
-                <span className={`text-xl font-bold mt-1 ${votedA ? 'text-cyan-400' : 'text-slate-300'}`}>
+                <span className={`text-xl font-bold mt-1 ${votedA ? 'text-cyan-600 dark:text-cyan-400' : 'text-slate-500 dark:text-slate-300'}`}>
                   {matchup.optionAPercent}%
                 </span>
               )}
@@ -157,9 +157,9 @@ function VersusCard({
             className={`flex-1 rounded-lg border transition-all overflow-hidden relative ${
               hasVoted
                 ? votedB
-                  ? 'border-teal-500/50 ring-2 ring-teal-500/30'
+                  ? 'border-teal-500/60 dark:border-teal-500/50 ring-2 ring-teal-500/30'
                   : 'border-slate-700/30 opacity-60'
-                : 'border-slate-700/50 hover:border-teal-500/50 cursor-pointer'
+                : 'border-slate-700/50 hover:border-teal-500/60 dark:border-teal-500/50 cursor-pointer'
             }`}
             style={{ minHeight: '260px' }}
             data-testid={`button-vote-b-${matchup.id}`}
@@ -182,7 +182,7 @@ function VersusCard({
             <div className="relative h-full flex flex-col items-center justify-end p-3">
               <span className="font-semibold text-sm text-center text-white drop-shadow-lg">{matchup.optionBText}</span>
               {hasVoted && (
-                <span className={`text-xl font-bold mt-1 ${votedB ? 'text-teal-400' : 'text-slate-300'}`}>
+                <span className={`text-xl font-bold mt-1 ${votedB ? 'text-teal-600 dark:text-teal-400' : 'text-slate-500 dark:text-slate-300'}`}>
                   {matchup.optionBPercent}%
                 </span>
               )}
@@ -225,7 +225,7 @@ function PollCard({
       <div className="relative p-4">
         <div className="flex items-center justify-between mb-3 gap-2">
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Users className="h-3.5 w-3.5 text-cyan-400" />
+            <Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
             <span>{topic.totalVotes.toLocaleString('en-US')} votes</span>
           </div>
           <CategoryPill category={topic.category} />
@@ -239,7 +239,7 @@ function PollCard({
         
         {topic.slug ? (
           <Link href={`/polls/${topic.slug}`} data-testid={`link-poll-detail-${topic.id}`}>
-            <h3 className="font-semibold text-base mb-1 text-center hover:text-cyan-400 transition-colors cursor-pointer">{topic.headline}</h3>
+            <h3 className="font-semibold text-base mb-1 text-center hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors cursor-pointer">{topic.headline}</h3>
           </Link>
         ) : (
           <h3 className="font-semibold text-base mb-1 text-center">{topic.headline}</h3>
@@ -286,7 +286,7 @@ function PollCard({
               <span className={userVote === 'support' ? 'text-[#00C853] font-semibold' : ''}>
                 {topic.approvePercent}% Support
               </span>
-              <span className={userVote === 'neutral' ? 'text-slate-300 font-semibold' : ''}>
+              <span className={userVote === 'neutral' ? 'text-slate-500 dark:text-slate-300 font-semibold' : ''}>
                 {topic.neutralPercent}% Neutral
               </span>
               <span className={userVote === 'oppose' ? 'text-[#FF0000] font-semibold' : ''}>
@@ -316,7 +316,7 @@ function InductionCard({
       </div>
       <div className="relative p-4">
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
-          <Users className="h-3.5 w-3.5 text-cyan-400" />
+          <Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
           <span>{candidate.votes.toLocaleString('en-US')} votes</span>
         </div>
         
@@ -328,7 +328,7 @@ function InductionCard({
         <Button
           className={`w-full ${
             isVoted
-              ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-300'
+              ? 'bg-emerald-500/15 dark:bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 dark:text-emerald-300'
               : 'bg-gradient-to-r from-cyan-600 to-cyan-500 text-white shadow-[0_0_15px_rgba(34,211,238,0.2)]'
           }`}
           onClick={() => onVote(candidate.id)}
@@ -372,14 +372,14 @@ function ValueCard({
       </div>
       <div className="relative p-4">
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
-          <BarChart3 className="h-3.5 w-3.5 text-cyan-400" />
+          <BarChart3 className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
           <span>{totalVotes.toLocaleString('en-US')} votes</span>
         </div>
         
         <div className="flex flex-col items-center text-center mb-4">
           <PersonAvatar name={person.name} avatar={person.avatar} imageSlug={(person as any).imageSlug} size="xl" />
           <h3 className="font-semibold text-base mt-3">{person.name}</h3>
-          <div className="text-sm font-mono text-cyan-400 mt-1">
+          <div className="text-sm font-mono text-cyan-600 dark:text-cyan-400 mt-1">
             {person.fameIndex?.toLocaleString('en-US') ?? 'N/A'} Trend Score
           </div>
         </div>
@@ -679,7 +679,7 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
             onClick={() => setActiveSection(section)}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
               activeSection === section
-                ? "bg-cyan-500/20 text-cyan-400 border border-cyan-400/40"
+                ? "bg-cyan-500/25 dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border border-cyan-500/50 dark:border-cyan-400/40"
                 : "bg-muted/50 text-muted-foreground hover:bg-muted border border-transparent"
             }`}
             data-testid={`toggle-vote-section-${section.toLowerCase().replace(/['\s]/g, '-')}`}
@@ -719,7 +719,7 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
             }}
             className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1.5 ${
               categoryFilter === cat
-                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-400/40'
+                ? 'bg-cyan-500/25 dark:bg-cyan-500/20 text-cyan-500 dark:text-cyan-300 border border-cyan-500/50 dark:border-cyan-400/40'
                 : 'bg-muted/30 border border-border/50 text-muted-foreground hover:bg-muted/50'
             }`}
             data-testid={`chip-vote-category-${cat.toLowerCase()}`}
@@ -881,7 +881,7 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
       <div className="flex flex-col items-center gap-3 pt-4">
         <Button 
           size="lg"
-          className="bg-gradient-to-r from-cyan-600 to-teal-500 text-white font-semibold px-8 shadow-lg shadow-cyan-500/20"
+          className="bg-gradient-to-r from-cyan-600 to-teal-500 text-white font-semibold px-8 shadow-lg shadow-cyan-500/30 dark:shadow-cyan-500/20"
           onClick={() => {
             window.scrollTo({ top: 0, behavior: 'smooth' });
             onExplore();

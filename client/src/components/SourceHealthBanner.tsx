@@ -64,13 +64,13 @@ export function SourceHealthBanner() {
   return (
     <Alert 
       data-testid="banner-source-health"
-      className="mb-4 border-amber-500/50 bg-amber-500/10"
+      className="mb-4 border-amber-500/60 dark:border-amber-500/50 bg-amber-500/15 dark:bg-amber-500/10"
     >
       <div className="flex items-start gap-3">
         {isRecovering ? (
-          <RefreshCw className="h-4 w-4 text-amber-500 animate-spin" />
+          <RefreshCw className="h-4 w-4 text-amber-700 dark:text-amber-500 animate-spin" />
         ) : (
-          <AlertTriangle className="h-4 w-4 text-amber-500" />
+          <AlertTriangle className="h-4 w-4 text-amber-700 dark:text-amber-500" />
         )}
         <AlertDescription className="text-sm text-amber-200">
           {isRecovering ? (
@@ -80,7 +80,7 @@ export function SourceHealthBanner() {
               Some data sources are temporarily delayed. Rankings may be less responsive.
             </span>
           )}
-          <span className="ml-2 text-amber-400/70">
+          <span className="ml-2 text-amber-600/70 dark:text-amber-400/70">
             ({degradedSources.map(s => 
               `${s.label}: ${s.state}${s.staleMinutes ? ` (${formatStaleDuration(s.staleMinutes)} stale)` : ""}`
             ).join(", ")})

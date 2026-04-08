@@ -119,7 +119,7 @@ export function ValueVoteModal({ open, onOpenChange, person }: ValueVoteModalPro
           <h3 className="font-semibold text-lg">{person.name}</h3>
           
           {success ? (
-            <div className="flex items-center gap-2 text-emerald-500 font-medium">
+            <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-500 font-medium">
               <Check className="h-5 w-5" />
               <span>Vote submitted!</span>
             </div>
@@ -128,8 +128,8 @@ export function ValueVoteModal({ open, onOpenChange, person }: ValueVoteModalPro
               <button
                 className={`flex items-center justify-center gap-3 w-full px-6 py-4 rounded-lg text-base font-semibold transition-all border-2 ${
                   isUnderrated 
-                    ? "bg-emerald-500/20 border-emerald-500 text-emerald-400 shadow-[0_0_16px_rgba(16,185,129,0.3)]" 
-                    : "bg-emerald-500/5 border-emerald-500/40 text-emerald-500 hover:bg-emerald-500/15 hover:border-emerald-500/60"
+                    ? "bg-emerald-500/25 dark:bg-emerald-500/20 border-emerald-500 text-emerald-600 dark:text-emerald-400 shadow-[0_0_16px_rgba(16,185,129,0.3)]" 
+                    : "bg-emerald-500/8 dark:bg-emerald-500/5 border-emerald-500/50 dark:border-emerald-500/40 text-emerald-700 dark:text-emerald-500 hover:bg-emerald-500/15 hover:border-emerald-500/60"
                 }`}
                 onClick={() => handleVote('underrated')}
                 disabled={isPending}
@@ -149,8 +149,8 @@ export function ValueVoteModal({ open, onOpenChange, person }: ValueVoteModalPro
               <button
                 className={`flex items-center justify-center gap-3 w-full px-6 py-4 rounded-lg text-base font-semibold transition-all border-2 ${
                   isOverrated 
-                    ? "bg-red-500/20 border-red-500 text-red-400 shadow-[0_0_16px_rgba(239,68,68,0.3)]" 
-                    : "bg-red-500/5 border-red-500/40 text-red-500 hover:bg-red-500/15 hover:border-red-500/60"
+                    ? "bg-red-500/25 dark:bg-red-500/20 border-red-500 text-red-600 dark:text-red-400 shadow-[0_0_16px_rgba(239,68,68,0.3)]" 
+                    : "bg-red-500/8 dark:bg-red-500/5 border-red-500/50 dark:border-red-500/40 text-red-700 dark:text-red-500 hover:bg-red-500/15 hover:border-red-500/60"
                 }`}
                 onClick={() => handleVote('overrated')}
                 disabled={isPending}
@@ -170,14 +170,14 @@ export function ValueVoteModal({ open, onOpenChange, person }: ValueVoteModalPro
           )}
           
           {error && (
-            <p className="text-sm text-red-500 text-center" data-testid="text-vote-error">
+            <p className="text-sm text-red-700 dark:text-red-500 text-center" data-testid="text-vote-error">
               {error}
             </p>
           )}
           
           {localUserVote && !success && (
             <p className="text-sm text-muted-foreground text-center">
-              You voted: <span className={localUserVote === 'underrated' ? 'text-emerald-500' : 'text-red-500'}>
+              You voted: <span className={localUserVote === 'underrated' ? 'text-emerald-700 dark:text-emerald-500' : 'text-red-700 dark:text-red-500'}>
                 {localUserVote === 'underrated' ? 'Underrated' : 'Overrated'}
               </span>
             </p>
