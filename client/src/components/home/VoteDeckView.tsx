@@ -326,10 +326,10 @@ function InductionCard({
         </div>
         
         <Button
-          className={`w-full ${
+          className={`w-full transition-all duration-300 ${
             isVoted
               ? 'bg-emerald-500/15 dark:bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 dark:text-emerald-300'
-              : 'bg-gradient-to-r from-cyan-600 to-cyan-500 text-white shadow-[0_0_15px_rgba(34,211,238,0.2)]'
+              : 'bg-muted/40 border border-border text-foreground dark:bg-white/5 dark:border-white/40 dark:text-white hover:border-cyan-500/80 hover:bg-cyan-500/25 dark:hover:border-cyan-500/50 dark:hover:bg-cyan-500/20 hover:text-cyan-600 dark:hover:text-cyan-400'
           }`}
           onClick={() => onVote(candidate.id)}
           data-testid={`button-induction-vote-${candidate.id}`}

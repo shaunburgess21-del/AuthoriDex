@@ -364,7 +364,7 @@ export default function InductionQueuePage() {
                       ) : (
                         <button
                           onClick={() => handleVote(candidate.id)}
-                          className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-md bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/60 dark:border-cyan-500/50 text-cyan-600 dark:text-cyan-400 text-sm font-medium transition-all duration-300 hover:border-cyan-500/80 hover:bg-cyan-500/25 dark:hover:bg-cyan-500/20"
+                          className="group w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-md bg-muted/40 border border-border text-foreground dark:bg-white/5 dark:border-white/40 dark:text-white text-sm font-medium transition-all duration-300 hover:border-cyan-500/80 hover:bg-cyan-500/25 dark:hover:border-cyan-500/50 dark:hover:bg-cyan-500/20 hover:text-cyan-600 dark:hover:text-cyan-400"
                         >
                           <Vote className="h-4 w-4 shrink-0" />
                           <span>Vote to Induct</span>
