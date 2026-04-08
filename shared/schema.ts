@@ -492,6 +492,7 @@ export const matchups = pgTable("face_offs", {
   description: text("description"),
   seedVotesA: integer("seed_votes_a").notNull().default(0),
   seedVotesB: integer("seed_votes_b").notNull().default(0),
+  seedVotesNeutral: integer("seed_votes_neutral").notNull().default(0),
   visibility: text("visibility").default("live"),
   featured: boolean("featured").default(false),
   slug: text("slug"),

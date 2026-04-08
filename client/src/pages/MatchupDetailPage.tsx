@@ -49,9 +49,11 @@ interface MatchupDetail {
   createdAt: string;
   optionAVotes: number;
   optionBVotes: number;
+  neutralVotes: number;
   totalVotes: number;
   optionAPercent: number;
   optionBPercent: number;
+  neutralPercent: number;
 }
 
 
@@ -113,7 +115,7 @@ export default function MatchupDetailPage() {
     },
   });
 
-  const handleVote = (matchupId: string, option: 'option_a' | 'option_b') => {
+  const handleVote = (matchupId: string, option: 'option_a' | 'option_b' | 'neutral') => {
     voteMutation.mutate({ matchupId, option });
   };
 
@@ -164,6 +166,7 @@ export default function MatchupDetailPage() {
   const hasVoted = userVote !== null;
   const votedA = userVote === 'option_a';
   const votedB = userVote === 'option_b';
+  const votedNeutral = userVote === 'neutral';
   const leadingA = matchup.optionAPercent >= matchup.optionBPercent;
 
   return (
@@ -241,7 +244,7 @@ export default function MatchupDetailPage() {
             <div className="flex items-stretch gap-0 relative mb-4 -mx-5">
             <button
               onClick={() => {
-                if (!hasVoted || votedB) handleVote(matchup.id, 'option_a');
+                if (!votedA) handleVote(matchup.id, 'option_a');
               }}
               className={`flex-1 flex flex-col rounded-none border transition-all duration-300 overflow-hidden cursor-pointer ${
                 hasVoted
@@ -278,15 +281,30 @@ export default function MatchupDetailPage() {
               </div>
             </button>
 
-            <div className="absolute left-1/2 top-[calc(50%-18px)] -translate-x-1/2 -translate-y-1/2 z-20 flex items-center justify-center pointer-events-none">
-              <div className="h-14 w-14 md:h-11 md:w-11 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 border-2 border-slate-500 flex items-center justify-center shadow-lg">
-                <span className="text-sm md:text-xs font-bold text-slate-200">VS</span>
-              </div>
+            <div className="absolute left-1/2 top-[calc(50%-18px)] -translate-x-1/2 -translate-y-1/2 z-20 flex flex-col items-center gap-1">
+              <button
+                onClick={() => {
+                  if (!votedNeutral) handleVote(matchup.id, 'neutral');
+                }}
+                data-testid="button-vote-neutral"
+                className={`h-14 w-14 md:h-11 md:w-11 rounded-full border-2 flex items-center justify-center shadow-lg transition-all duration-300 ${
+                  votedNeutral
+                    ? 'bg-gradient-to-br from-slate-500 to-slate-600 border-slate-400 ring-2 ring-slate-400/40'
+                    : 'bg-gradient-to-br from-slate-700 to-slate-900 border-slate-500 hover:border-slate-400 hover:ring-2 hover:ring-slate-300/30 cursor-pointer'
+                }`}
+              >
+                <span className={`text-sm md:text-xs font-bold ${votedNeutral ? 'text-white' : 'text-slate-200'}`}>VS</span>
+              </button>
+              {votedNeutral && (
+                <span className="text-[9px] font-semibold text-slate-400 bg-slate-800 border border-slate-600 rounded px-1 py-px leading-none whitespace-nowrap shadow-sm">
+                  Your pick
+                </span>
+              )}
             </div>
 
             <button
               onClick={() => {
-                if (!hasVoted || votedA) handleVote(matchup.id, 'option_b');
+                if (!votedB) handleVote(matchup.id, 'option_b');
               }}
               className={`flex-1 flex flex-col rounded-none border transition-all duration-300 overflow-hidden cursor-pointer ${
                 hasVoted
@@ -326,7 +344,7 @@ export default function MatchupDetailPage() {
 
           {hasVoted && (
             <div className="flex items-center justify-center gap-3 pt-3 border-t border-border/30">
-              <span className="text-xs text-muted-foreground">Tap the other option to change your vote</span>
+              <span className="text-xs text-muted-foreground">Tap an option or VS to change your vote</span>
               <span className="text-xs text-muted-foreground/40">|</span>
               <button
                 onClick={() => handleRemoveVote(matchup.id)}
@@ -376,6 +394,27 @@ export default function MatchupDetailPage() {
               </div>
             </div>
 
+            {(matchup.neutralVotes ?? 0) > 0 && (
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-sm font-medium text-muted-foreground">Neither / Neutral</span>
+                  <span className={`text-sm font-bold font-mono ${votedNeutral ? 'text-slate-600 dark:text-slate-300' : 'text-muted-foreground'}`}>
+                    {matchup.neutralPercent}%
+                  </span>
+                </div>
+                <div className="h-8 rounded-md bg-slate-500/15 dark:bg-slate-500/10 border border-slate-500/40 dark:border-slate-500/30 overflow-hidden relative">
+                  <div
+                    className="h-full bg-slate-400 dark:bg-slate-500 transition-all duration-500 rounded-md flex items-center justify-center"
+                    style={{ width: `${Math.max(matchup.neutralPercent, 5)}%` }}
+                  >
+                    {matchup.neutralPercent >= 20 && (
+                      <span className="text-xs font-semibold text-white drop-shadow-sm">{matchup.neutralPercent}%</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-sm font-medium">{matchup.optionBText}</span>
@@ -396,7 +435,7 @@ export default function MatchupDetailPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 text-center mb-3">
+          <div className={(matchup.neutralVotes ?? 0) > 0 ? "grid grid-cols-3 gap-3 text-center mb-3" : "grid grid-cols-2 gap-3 text-center mb-3"}>
             <div>
               <div className="flex items-center justify-center gap-1.5 mb-1">
                 <div className="h-2.5 w-2.5 rounded-full bg-blue-400" />
@@ -405,6 +444,16 @@ export default function MatchupDetailPage() {
               <p className="text-lg font-bold font-mono text-blue-600 dark:text-blue-400" data-testid="text-option-a-percent">{matchup.optionAPercent}%</p>
               <p className="text-xs text-muted-foreground">{matchup.optionAVotes.toLocaleString('en-US')} votes</p>
             </div>
+            {(matchup.neutralVotes ?? 0) > 0 && (
+              <div>
+                <div className="flex items-center justify-center gap-1.5 mb-1">
+                  <div className="h-2.5 w-2.5 rounded-full bg-slate-400 dark:bg-slate-500" />
+                  <span className="text-xs font-medium text-muted-foreground">Neutral</span>
+                </div>
+                <p className="text-lg font-bold font-mono text-slate-600 dark:text-slate-300">{matchup.neutralPercent}%</p>
+                <p className="text-xs text-muted-foreground">{matchup.neutralVotes.toLocaleString('en-US')} votes</p>
+              </div>
+            )}
             <div>
               <div className="flex items-center justify-center gap-1.5 mb-1">
                 <div className="h-2.5 w-2.5 rounded-full bg-amber-500" />

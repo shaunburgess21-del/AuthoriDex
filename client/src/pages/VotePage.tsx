@@ -298,9 +298,11 @@ interface MatchupData {
   createdAt: string;
   optionAVotes: number;
   optionBVotes: number;
+  neutralVotes: number;
   totalVotes: number;
   optionAPercent: number;
   optionBPercent: number;
+  neutralPercent: number;
 }
 
 function VersusCard({ 
@@ -314,7 +316,7 @@ function VersusCard({
 }: { 
   matchup: MatchupData; 
   userVote: string | null;
-  onVote: (matchupId: string, option: 'option_a' | 'option_b', event?: React.MouseEvent) => void;
+  onVote: (matchupId: string, option: 'option_a' | 'option_b' | 'neutral', event?: React.MouseEvent) => void;
   onRemoveVote: (matchupId: string) => void;
   onFilterCategory: (category: string) => void;
   categoryRaceMap: Map<string, string>;
@@ -323,6 +325,7 @@ function VersusCard({
   const hasVoted = userVote !== null;
   const votedA = userVote === 'option_a';
   const votedB = userVote === 'option_b';
+  const votedNeutral = userVote === 'neutral';
   const leadingA = matchup.optionAPercent >= matchup.optionBPercent;
   
   return (
@@ -364,7 +367,7 @@ function VersusCard({
         <div className="flex items-stretch gap-0 relative">
           <button
             onClick={(e) => {
-              if (!hasVoted || votedB) onVote(matchup.id, 'option_a', e);
+              if (!votedA) onVote(matchup.id, 'option_a', e);
             }}
             className={`flex-1 flex flex-col rounded-none border transition-all duration-300 overflow-hidden cursor-pointer ${
               hasVoted
@@ -396,15 +399,30 @@ function VersusCard({
             </div>
           </button>
           
-          <div className="absolute left-1/2 top-[calc(50%-18px)] -translate-x-1/2 -translate-y-1/2 z-20 flex items-center justify-center pointer-events-none">
-            <div className="h-14 w-14 md:h-11 md:w-11 rounded-full bg-gradient-to-br from-muted to-card dark:from-slate-700 dark:to-slate-900 border-2 border-border dark:border-slate-500 flex items-center justify-center shadow-lg">
-              <span className="text-sm md:text-xs font-bold text-foreground dark:text-slate-200">VS</span>
-            </div>
+          <div className="absolute left-1/2 top-[calc(50%-18px)] -translate-x-1/2 -translate-y-1/2 z-20 flex flex-col items-center gap-1">
+            <button
+              onClick={(e) => {
+                if (!votedNeutral) onVote(matchup.id, 'neutral', e);
+              }}
+              data-testid={`button-vote-neutral-${matchup.id}`}
+              className={`h-14 w-14 md:h-11 md:w-11 rounded-full border-2 flex items-center justify-center shadow-lg transition-all duration-300 ${
+                votedNeutral
+                  ? 'bg-gradient-to-br from-slate-500 to-slate-600 dark:from-slate-500 dark:to-slate-600 border-slate-400 dark:border-slate-400 ring-2 ring-slate-400/40 dark:ring-slate-400/40'
+                  : 'bg-gradient-to-br from-muted to-card dark:from-slate-700 dark:to-slate-900 border-border dark:border-slate-500 hover:border-slate-400 dark:hover:border-slate-400 hover:ring-2 hover:ring-slate-300/30 cursor-pointer'
+              }`}
+            >
+              <span className={`text-sm md:text-xs font-bold ${votedNeutral ? 'text-white' : 'text-foreground dark:text-slate-200'}`}>VS</span>
+            </button>
+            {votedNeutral && (
+              <span className="text-[9px] font-semibold text-slate-500 dark:text-slate-400 bg-card dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-1 py-px leading-none whitespace-nowrap shadow-sm">
+                Your pick
+              </span>
+            )}
           </div>
           
           <button
             onClick={(e) => {
-              if (!hasVoted || votedA) onVote(matchup.id, 'option_b', e);
+              if (!votedB) onVote(matchup.id, 'option_b', e);
             }}
             className={`flex-1 flex flex-col rounded-none border transition-all duration-300 overflow-hidden cursor-pointer ${
               hasVoted
@@ -450,6 +468,11 @@ function VersusCard({
                   </Badge>
                 )}
               </div>
+              {hasVoted && (matchup.neutralVotes ?? 0) > 0 && (
+                <span className={`text-xs font-semibold ${votedNeutral ? 'text-slate-600 dark:text-slate-300' : 'text-muted-foreground dark:text-slate-500'}`}>
+                  {matchup.neutralPercent}%
+                </span>
+              )}
               <div className="flex items-center gap-1.5">
                 {hasVoted && votedB && (
                   <Badge variant="outline" className="text-[10px] border-amber-500/50 dark:border-amber-500/40 text-amber-600 dark:text-amber-400 px-1.5 py-0">
@@ -464,11 +487,17 @@ function VersusCard({
             <div className={`h-2.5 rounded-full overflow-hidden flex ${hasVoted ? 'bg-muted dark:bg-slate-700/50' : 'bg-muted/60 dark:bg-slate-700/30'}`}>
               {hasVoted ? (
                 <>
-                  <div 
+                  <div
                     className="h-full bg-gradient-to-r from-blue-600 to-blue-400"
                     style={{ width: `${matchup.optionAPercent}%` }}
                   />
-                  <div 
+                  {(matchup.neutralVotes ?? 0) > 0 && (
+                    <div
+                      className="h-full bg-slate-400 dark:bg-slate-500"
+                      style={{ width: `${matchup.neutralPercent}%` }}
+                    />
+                  )}
+                  <div
                     className="h-full bg-gradient-to-r from-amber-500 to-amber-600"
                     style={{ width: `${matchup.optionBPercent}%` }}
                   />
@@ -484,7 +513,7 @@ function VersusCard({
           </div>
           {hasVoted ? (
             <div className="flex items-center justify-center gap-2 mt-2">
-              <span className="text-[10px] text-slate-500/70">Tap the other image to change your vote</span>
+              <span className="text-[10px] text-slate-500/70">Tap an image or VS to change your vote</span>
               <span className="text-[10px] text-slate-500/40">|</span>
               <button
                 onClick={() => onRemoveVote(matchup.id)}
@@ -497,7 +526,7 @@ function VersusCard({
           ) : (
             <div className="flex items-center justify-center gap-2 text-xs text-slate-500/70 mt-2">
               <Swords className="h-3.5 w-3.5 text-cyan-600/70 dark:text-cyan-400/70" />
-              <span className="font-medium">Tap an image to pick your side</span>
+              <span className="font-medium">Tap an image or VS to pick your side</span>
             </div>
           )}
         </div>
@@ -634,7 +663,7 @@ function InductionCandidateCard({
       ) : (
         <button
           onClick={handleVoteClick}
-          className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-md bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/60 dark:border-cyan-500/50 text-cyan-600 dark:text-cyan-400 text-sm font-medium transition-all duration-300 hover:border-cyan-500/80 hover:bg-cyan-500/25 dark:hover:bg-cyan-500/20"
+          className="group w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-md bg-muted/40 border border-border text-foreground dark:bg-white/5 dark:border-white/40 dark:text-white text-sm font-medium transition-all duration-300 hover:border-cyan-500/80 hover:bg-cyan-500/25 dark:hover:border-cyan-500/50 dark:hover:bg-cyan-500/20 hover:text-cyan-600 dark:hover:text-cyan-400"
           data-testid={`button-induct-${candidate.id}`}
         >
           <Vote className="h-4 w-4 shrink-0" />
@@ -1294,11 +1323,25 @@ function OpinionPollCard({
         data-testid={`opinion-poll-card-${poll.id}`}
       >
         <div className="flex items-center justify-between gap-2 mb-3">
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
-            <span className={hasVoted ? "" : "text-slate-600"}>
-              {hasVoted ? `${totalVotes.toLocaleString("en-US")} votes` : "Votes"}
-            </span>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground min-w-0">
+            <div className="flex items-center gap-1.5 shrink-0">
+              <Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
+              <span className={hasVoted ? "" : "text-slate-600"}>
+                {hasVoted ? `${totalVotes.toLocaleString("en-US")} votes` : "Votes"}
+              </span>
+            </div>
+            {hasVoted && (
+              <button
+                type="button"
+                onClick={handleRemoveVote}
+                aria-label="Remove vote"
+                className="group/pill inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-medium border bg-white/[0.06] border-[#EFEFEF]/35 text-foreground/90 cursor-pointer transition-[opacity,transform] hover:opacity-90 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#EFEFEF]/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background dark:focus-visible:ring-white/30 shrink-0"
+                data-testid={`badge-voted-opinion-${poll.id}`}
+              >
+                <span className="group-hover/pill:hidden">You voted</span>
+                <span className="hidden group-hover/pill:inline text-red-600/90 dark:text-red-400/90">Remove vote</span>
+              </button>
+            )}
           </div>
           <InteractiveCategoryPill
             category={poll.category}
@@ -1454,32 +1497,6 @@ function OpinionPollCard({
                 </p>
               </Link>
             )}
-            <div className="flex items-center justify-between mt-2 pt-3 border-t border-border/30">
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <Zap className="h-3 w-3" />
-                <span>{totalVotes.toLocaleString('en-US')} total votes</span>
-              </div>
-              <span className="px-2 py-0.5 rounded-full text-xs font-medium border bg-white/[0.06] border-[#EFEFEF]/35 text-foreground/90" data-testid={`badge-voted-opinion-${poll.id}`}>
-                You voted
-              </span>
-            </div>
-            <div
-              className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center mt-2"
-              data-testid={`text-change-vote-hint-${poll.id}`}
-            >
-              <span className="text-[10px] text-slate-500/70 dark:text-slate-400/70">
-                Tap another option to change your vote
-              </span>
-              <span className="text-[10px] text-slate-500/40 dark:text-slate-500/40">|</span>
-              <button
-                type="button"
-                onClick={handleRemoveVote}
-                className="text-[10px] text-slate-500/70 dark:text-slate-400/70 hover:text-red-600/80 dark:hover:text-red-400/80 transition-colors"
-                data-testid={`button-remove-vote-opinion-${poll.id}`}
-              >
-                Remove vote
-              </button>
-            </div>
           </div>
         )}
       </Card>
@@ -2434,7 +2451,7 @@ export default function VotePage() {
   );
   
   const matchupVoteMutation = useMutation({
-    mutationFn: async ({ matchupId, option }: { matchupId: string; option: 'option_a' | 'option_b'; previousVote?: string | null }) => {
+    mutationFn: async ({ matchupId, option }: { matchupId: string; option: 'option_a' | 'option_b' | 'neutral'; previousVote?: string | null }) => {
       const response = await apiRequest('POST', `/api/matchups/${matchupId}/vote`, { option });
       return response.json();
     },
@@ -2497,7 +2514,7 @@ export default function VotePage() {
     },
   });
 
-  const handleMatchupVote = (matchupId: string, option: 'option_a' | 'option_b', event?: React.MouseEvent) => {
+  const handleMatchupVote = (matchupId: string, option: 'option_a' | 'option_b' | 'neutral', event?: React.MouseEvent) => {
     if (!user) {
       toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
       return;
@@ -3088,7 +3105,7 @@ export default function VotePage() {
         <section className="mb-10">
           <UnifiedSectionHeader
             title="Opinion Polls"
-            subtitle="Choose who leads the pack"
+            subtitle="Your preference. The world's verdict."
             icon={<ListChecks className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />}
             accent="cyan"
             testId="section-header-opinion"
@@ -3192,7 +3209,7 @@ export default function VotePage() {
         {(activeSection === "All" || activeSection === "Underrated/Overrated") && (
         <section className="mb-10">
           <UnifiedSectionHeader
-            title="Underrated / Overrated"
+            title="Overrated / Underrated "
             subtitle="overhyped or underappreciated?"
             icon={<BarChart3 className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />}
             accent="cyan"

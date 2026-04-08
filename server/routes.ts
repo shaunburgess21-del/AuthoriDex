@@ -4111,7 +4111,7 @@ Only return the JSON object.`;
       
       // Single query for all vote counts (batch instead of N+1)
       const matchupIds = matchupList.map((m) => m.id);
-      const voteCountsMap = new Map<string, { option_a: number; option_b: number }>();
+      const voteCountsMap = new Map<string, { option_a: number; option_b: number; neutral: number }>();
       if (matchupIds.length > 0) {
         const voteResults = await db
           .select({
@@ -4123,9 +4123,10 @@ Only return the JSON object.`;
           .where(and(eq(votes.voteType, "face_off"), inArray(votes.targetId, matchupIds)))
           .groupBy(votes.targetId, votes.value);
         for (const row of voteResults) {
-          const existing = voteCountsMap.get(row.targetId) || { option_a: 0, option_b: 0 };
+          const existing = voteCountsMap.get(row.targetId) || { option_a: 0, option_b: 0, neutral: 0 };
           if (row.value === "option_a") existing.option_a = Number(row.cnt);
           else if (row.value === "option_b") existing.option_b = Number(row.cnt);
+          else if (row.value === "neutral") existing.neutral = Number(row.cnt);
           voteCountsMap.set(row.targetId, existing);
         }
       }
@@ -4133,15 +4134,20 @@ Only return the JSON object.`;
       const relatedMap = await getRelatedPeopleForCards("matchup", matchupIds);
 
       const matchupsWithVotes = matchupList.map((matchup) => {
-        const counts = voteCountsMap.get(matchup.id) || { option_a: 0, option_b: 0 };
+        const counts = voteCountsMap.get(matchup.id) || { option_a: 0, option_b: 0, neutral: 0 };
         const displayAVotes = counts.option_a + (matchup.seedVotesA || 0);
         const displayBVotes = counts.option_b + (matchup.seedVotesB || 0);
-        const totalVotes = displayAVotes + displayBVotes;
+        const displayNeutralVotes = counts.neutral + (matchup.seedVotesNeutral || 0);
+        const totalVotes = displayAVotes + displayBVotes + displayNeutralVotes;
 
         const optionAImageResolved = matchup.optionAImage || matchupBucketUrl(matchup.optionAText, matchup.optionBText, matchup.optionAText) || null;
         const optionBImageResolved = matchup.optionBImage || matchupBucketUrl(matchup.optionAText, matchup.optionBText, matchup.optionBText) || null;
         const optionAFallback = (matchup.personAId && avatarById[matchup.personAId]) || avatarByName[matchup.optionAText?.toLowerCase()] || null;
         const optionBFallback = (matchup.personBId && avatarById[matchup.personBId]) || avatarByName[matchup.optionBText?.toLowerCase()] || null;
+
+        const optionAPercent = totalVotes > 0 ? Math.round((displayAVotes / totalVotes) * 100) : 50;
+        const optionBPercent = totalVotes > 0 ? Math.round((displayBVotes / totalVotes) * 100) : 50;
+        const neutralPercent = totalVotes > 0 ? 100 - optionAPercent - optionBPercent : 0;
 
         return {
           ...matchup,
@@ -4151,9 +4157,11 @@ Only return the JSON object.`;
           optionBFallbackImage: optionBFallback !== optionBImageResolved ? optionBFallback : null,
           optionAVotes: displayAVotes,
           optionBVotes: displayBVotes,
+          neutralVotes: displayNeutralVotes,
           totalVotes,
-          optionAPercent: totalVotes > 0 ? Math.round((displayAVotes / totalVotes) * 100) : 50,
-          optionBPercent: totalVotes > 0 ? Math.round((displayBVotes / totalVotes) * 100) : 50,
+          optionAPercent,
+          optionBPercent,
+          neutralPercent,
           relatedPersonIds: (relatedMap[matchup.id] || []).map(p => p.id),
           relatedPeople: relatedMap[matchup.id] || [],
         };
@@ -4201,14 +4209,20 @@ Only return the JSON object.`;
       
       const realAVotes = Number(voteResults.find(v => v.value === 'option_a')?.count || 0);
       const realBVotes = Number(voteResults.find(v => v.value === 'option_b')?.count || 0);
+      const realNeutralVotes = Number(voteResults.find(v => v.value === 'neutral')?.count || 0);
       const displayAVotes = realAVotes + (matchup.seedVotesA || 0);
       const displayBVotes = realBVotes + (matchup.seedVotesB || 0);
-      const totalVotes = displayAVotes + displayBVotes;
-      
+      const displayNeutralVotes = realNeutralVotes + (matchup.seedVotesNeutral || 0);
+      const totalVotes = displayAVotes + displayBVotes + displayNeutralVotes;
+
       const optionAImageResolved = matchup.optionAImage || matchupBucketUrl(matchup.optionAText, matchup.optionBText, matchup.optionAText) || null;
       const optionBImageResolved = matchup.optionBImage || matchupBucketUrl(matchup.optionAText, matchup.optionBText, matchup.optionBText) || null;
       const optionAFallback = (matchup.personAId && avatarById[matchup.personAId]) || avatarByName[matchup.optionAText.toLowerCase()] || null;
       const optionBFallback = (matchup.personBId && avatarById[matchup.personBId]) || avatarByName[matchup.optionBText.toLowerCase()] || null;
+
+      const optionAPercent = totalVotes > 0 ? Math.round((displayAVotes / totalVotes) * 100) : 50;
+      const optionBPercent = totalVotes > 0 ? Math.round((displayBVotes / totalVotes) * 100) : 50;
+      const neutralPercent = totalVotes > 0 ? 100 - optionAPercent - optionBPercent : 0;
 
       res.json({
         ...matchup,
@@ -4218,9 +4232,11 @@ Only return the JSON object.`;
         optionBFallbackImage: optionBFallback !== optionBImageResolved ? optionBFallback : null,
         optionAVotes: displayAVotes,
         optionBVotes: displayBVotes,
+        neutralVotes: displayNeutralVotes,
         totalVotes,
-        optionAPercent: totalVotes > 0 ? Math.round((displayAVotes / totalVotes) * 100) : 50,
-        optionBPercent: totalVotes > 0 ? Math.round((displayBVotes / totalVotes) * 100) : 50,
+        optionAPercent,
+        optionBPercent,
+        neutralPercent,
       });
     } catch (error: any) {
       console.error("Error fetching matchup by slug:", error.message);
@@ -4310,24 +4326,30 @@ Only return the JSON object.`;
         
         const realA = Number(voteResults.find(v => v.value === 'option_a')?.count || 0);
         const realB = Number(voteResults.find(v => v.value === 'option_b')?.count || 0);
+        const realN = Number(voteResults.find(v => v.value === 'neutral')?.count || 0);
         const dispA = realA + (matchup.seedVotesA || 0);
         const dispB = realB + (matchup.seedVotesB || 0);
-        const totalVotes = dispA + dispB;
-        
+        const dispN = realN + (matchup.seedVotesNeutral || 0);
+        const totalVotes = dispA + dispB + dispN;
+        const dispAPercent = totalVotes > 0 ? Math.round((dispA / totalVotes) * 100) : 50;
+        const dispBPercent = totalVotes > 0 ? Math.round((dispB / totalVotes) * 100) : 50;
+
         return res.json({
           success: true,
           removed: true,
           optionAVotes: dispA,
           optionBVotes: dispB,
+          neutralVotes: dispN,
           totalVotes,
-          optionAPercent: totalVotes > 0 ? Math.round((dispA / totalVotes) * 100) : 50,
-          optionBPercent: totalVotes > 0 ? Math.round((dispB / totalVotes) * 100) : 50,
+          optionAPercent: dispAPercent,
+          optionBPercent: dispBPercent,
+          neutralPercent: totalVotes > 0 ? 100 - dispAPercent - dispBPercent : 0,
           votedOption: null,
         });
       }
-      
-      if (!option || (option !== 'option_a' && option !== 'option_b')) {
-        return res.status(400).json({ error: "Invalid option. Must be 'option_a' or 'option_b'" });
+
+      if (!option || (option !== 'option_a' && option !== 'option_b' && option !== 'neutral')) {
+        return res.status(400).json({ error: "Invalid option. Must be 'option_a', 'option_b', or 'neutral'" });
       }
       
       let xpResult = null;
@@ -4384,17 +4406,23 @@ Only return the JSON object.`;
       
       const realA2 = Number(voteResults.find(v => v.value === 'option_a')?.count || 0);
       const realB2 = Number(voteResults.find(v => v.value === 'option_b')?.count || 0);
+      const realN2 = Number(voteResults.find(v => v.value === 'neutral')?.count || 0);
       const dispA2 = realA2 + (matchup.seedVotesA || 0);
       const dispB2 = realB2 + (matchup.seedVotesB || 0);
-      const totalVotes = dispA2 + dispB2;
-      
+      const dispN2 = realN2 + (matchup.seedVotesNeutral || 0);
+      const totalVotes = dispA2 + dispB2 + dispN2;
+      const dispA2Percent = totalVotes > 0 ? Math.round((dispA2 / totalVotes) * 100) : 50;
+      const dispB2Percent = totalVotes > 0 ? Math.round((dispB2 / totalVotes) * 100) : 50;
+
       res.json({
         success: true,
         optionAVotes: dispA2,
         optionBVotes: dispB2,
+        neutralVotes: dispN2,
         totalVotes,
-        optionAPercent: totalVotes > 0 ? Math.round((dispA2 / totalVotes) * 100) : 50,
-        optionBPercent: totalVotes > 0 ? Math.round((dispB2 / totalVotes) * 100) : 50,
+        optionAPercent: dispA2Percent,
+        optionBPercent: dispB2Percent,
+        neutralPercent: totalVotes > 0 ? 100 - dispA2Percent - dispB2Percent : 0,
         votedOption: option,
         xpAwarded: xpResult?.success ? xpResult.xpAwarded : 0,
         xp: xpResult ?? null,
