@@ -12,13 +12,15 @@ import {
   backfillGainerMarketForInductee,
   ensureUpDownMarketForInductee,
 } from "../jobs/market-generator";
+import { supabaseServer } from "../supabase";
 
 const BASELINE_RUN_ID = "induction-onboard";
+const BUCKET = "celebrity-large";
 
-function publicCelebrityLargeImageUrl(imageSlug: string | null | undefined): string | null {
+function buildPublicUrl(slug: string, filename: string): string | null {
   const base = process.env.SUPABASE_URL;
-  if (!base || !imageSlug?.trim()) return null;
-  return `${base}/storage/v1/object/public/celebrity-large/${encodeURIComponent(imageSlug.trim())}/1.webp`;
+  if (!base) return null;
+  return `${base}/storage/v1/object/public/${BUCKET}/${encodeURIComponent(slug)}/${filename}`;
 }
 
 /**
@@ -45,12 +47,82 @@ export async function runPostInductionOnboarding(args: {
       return;
     }
 
+    // --- Sync all gallery images from Supabase storage ---
+    const slug = (imageSlug || tp.imageSlug || "").trim();
+    let primaryUrl: string | null = null;
+
+    if (slug) {
+      const existingImages = await db
+        .select({ imageUrl: celebrityImages.imageUrl })
+        .from(celebrityImages)
+        .where(eq(celebrityImages.personId, personId));
+      const existingFilenames = new Set(
+        existingImages
+          .map((r) => {
+            try { return new URL(r.imageUrl).pathname.split("/").pop(); } catch { return null; }
+          })
+          .filter(Boolean),
+      );
+
+      const { data: files, error: listError } = await supabaseServer.storage.from(BUCKET).list(slug);
+
+      if (listError) {
+        console.warn("[induction-onboarding] Supabase storage list error:", listError.message);
+      }
+
+      const imageFiles = (files || []).filter((f) => /\.(webp|jpg|jpeg|png)$/i.test(f.name));
+
+      let insertedCount = 0;
+      for (const file of imageFiles) {
+        if (existingFilenames.has(file.name)) continue;
+        const publicUrl = buildPublicUrl(slug, file.name);
+        if (!publicUrl) continue;
+
+        const isFirst = insertedCount === 0 && existingImages.length === 0;
+        await db.insert(celebrityImages).values({
+          personId,
+          imageUrl: publicUrl,
+          source: "induction",
+          isPrimary: isFirst,
+        });
+        if (isFirst) primaryUrl = publicUrl;
+        insertedCount++;
+      }
+
+      // If no files found in storage, fall back to the conventional 1.webp URL
+      if (insertedCount === 0 && existingImages.length === 0) {
+        const fallbackUrl = buildPublicUrl(slug, "1.webp");
+        if (fallbackUrl) {
+          await db.insert(celebrityImages).values({
+            personId,
+            imageUrl: fallbackUrl,
+            source: "induction",
+            isPrimary: true,
+          });
+          primaryUrl = fallbackUrl;
+          insertedCount = 1;
+        }
+      }
+
+      if (insertedCount > 0) {
+        console.log(`[induction-onboarding] Synced ${insertedCount} image(s) for ${displayName} (slug: ${slug})`);
+      }
+    }
+
+    // --- Set avatar on tracked_people + trending_people ---
+    const avatarUrl = primaryUrl || tp.avatar || buildPublicUrl(slug, "1.webp");
+
+    if (avatarUrl && !tp.avatar) {
+      await db.update(trackedPeople).set({ avatar: avatarUrl }).where(eq(trackedPeople.id, personId));
+    }
+
     await db
       .insert(trendingPeople)
       .values({
         id: personId,
         name: tp.name,
         category: tp.category,
+        avatar: avatarUrl || tp.avatar || null,
         rank: 0,
         trendScore: 0,
         fameIndex: 0,
@@ -60,6 +132,7 @@ export async function runPostInductionOnboarding(args: {
         set: {
           name: tp.name,
           category: tp.category,
+          avatar: avatarUrl || tp.avatar || null,
         },
       });
 
@@ -86,30 +159,6 @@ export async function runPostInductionOnboarding(args: {
       });
     }
 
-    const heroUrl = publicCelebrityLargeImageUrl(imageSlug || tp.imageSlug);
-    if (heroUrl) {
-      const [hasImg] = await db
-        .select({ id: celebrityImages.id })
-        .from(celebrityImages)
-        .where(eq(celebrityImages.personId, personId))
-        .limit(1);
-      if (!hasImg) {
-        await db.insert(celebrityImages).values({
-          personId,
-          imageUrl: heroUrl,
-          source: "induction",
-          isPrimary: true,
-        });
-      }
-
-      if (!tp.avatar) {
-        await db
-          .update(trackedPeople)
-          .set({ avatar: heroUrl })
-          .where(eq(trackedPeople.id, personId));
-      }
-    }
-
     await recomputeCelebrityMetrics(personId).catch((e) =>
       console.error("[induction-onboarding] recomputeCelebrityMetrics:", e),
     );
@@ -127,7 +176,7 @@ export async function runPostInductionOnboarding(args: {
       id: personId,
       name: displayName,
       category,
-      avatar: tp.avatar || heroUrl,
+      avatar: tp.avatar || avatarUrl,
     });
     if (gainer === "no_market") {
       console.log(
