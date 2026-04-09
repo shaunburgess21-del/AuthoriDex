@@ -264,7 +264,6 @@ async function getSnapshotRankMap(): Promise<Map<string, number>> {
   return map;
 }
 
-const MAX_BET_STAKE = 500;
 const BET_RATE_WINDOW_MS = 60_000;
 const BET_RATE_MAX = 10;
 const betRateMap = new Map<string, number[]>();
@@ -11714,10 +11713,6 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         return res.status(400).json({ error: "Valid entryId and positive stakeAmount are required" });
       }
 
-      if (stakeAmount > MAX_BET_STAKE) {
-        return res.status(400).json({ error: `Maximum stake is ${MAX_BET_STAKE} credits` });
-      }
-
       const validDirection = direction === "no" ? "no" as const : "yes" as const;
 
       if (!checkBetRateLimit(authReq.userId!)) {
@@ -11774,10 +11769,6 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
 
       if (!entryId || !stakeAmount || typeof stakeAmount !== "number" || stakeAmount <= 0) {
         return res.status(400).json({ error: "Valid entryId and positive stakeAmount are required" });
-      }
-
-      if (stakeAmount > MAX_BET_STAKE) {
-        return res.status(400).json({ error: `Maximum stake is ${MAX_BET_STAKE} credits` });
       }
 
       if (!checkBetRateLimit(authReq.userId!)) {
@@ -11851,10 +11842,6 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
 
       if (!entryId || !stakeAmount || typeof stakeAmount !== "number" || stakeAmount <= 0) {
         return res.status(400).json({ error: "Valid entryId and positive stakeAmount are required" });
-      }
-
-      if (stakeAmount > MAX_BET_STAKE) {
-        return res.status(400).json({ error: `Maximum stake is ${MAX_BET_STAKE} credits` });
       }
 
       if (!checkBetRateLimit(authReq.userId!)) {

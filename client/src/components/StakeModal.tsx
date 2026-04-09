@@ -381,27 +381,46 @@ export function StakeModal({
             <label className="text-sm font-medium">Stake Amount</label>
             <Input
               type="number"
+              min={MIN_STAKE}
+              max={walletBalance}
               placeholder="Enter credits to stake"
               value={stakeAmount}
-              onChange={(e) => setStakeAmount(e.target.value)}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v === "") {
+                  setStakeAmount("");
+                  return;
+                }
+                const n = parseInt(v, 10);
+                if (Number.isNaN(n)) {
+                  setStakeAmount(v);
+                  return;
+                }
+                setStakeAmount(String(Math.min(Math.max(0, n), walletBalance)));
+              }}
               className="font-mono"
               data-testid="input-stake"
             />
           </div>
 
           <div className="flex gap-2">
-            {[100, 500, 1000].map((amount) => (
-              <Button
-                key={amount}
-                variant="outline"
-                size="sm"
-                onClick={() => setStakeAmount(amount.toString())}
-                className="flex-1"
-                data-testid={`button-preset-${amount}`}
-              >
-                {amount}
-              </Button>
-            ))}
+            {[100, 500, 1000].map((amount) => {
+              const capped = Math.min(amount, walletBalance);
+              return (
+                <Button
+                  key={amount}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setStakeAmount(capped > 0 ? String(capped) : "")}
+                  title={capped < amount ? `Stakes ${capped.toLocaleString("en-US")} credits (your balance)` : undefined}
+                  className="flex-1"
+                  data-testid={`button-preset-${amount}`}
+                >
+                  {amount}
+                </Button>
+              );
+            })}
           </div>
 
           <div className="flex items-center justify-between text-xs pt-2 border-t">
