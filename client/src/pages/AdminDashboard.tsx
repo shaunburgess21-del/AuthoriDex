@@ -2075,6 +2075,27 @@ export default function AdminDashboard() {
     },
   });
 
+  const syncCurateImagesMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetchWithAuth("/api/admin/sync-curate-images", { method: "POST" });
+      if (!res.ok) throw new Error("Failed to sync curate images");
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      toast({
+        title: "Curate Images Synced",
+        description: `Synced ${data.totalSynced} image(s) across ${data.peopleProcessed} people (${data.totalPeopleScanned} scanned)`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Sync Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   // Credit adjustment mutation
   const adjustCreditsMutation = useMutation({
     mutationFn: async (params: { userId: string; amount: number; reason: string }) => {
@@ -6797,6 +6818,38 @@ export default function AdminDashboard() {
                       <>
                         <Play className="h-4 w-4 mr-2" />
                         Seed Approval Data
+                      </>
+                    )}
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <ImagePlus className="h-5 w-5 text-cyan-500" />
+                    Sync Curate Images
+                  </CardTitle>
+                  <CardDescription>
+                    Pull gallery images from Supabase storage into curate profiles
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button
+                    className="w-full"
+                    onClick={() => syncCurateImagesMutation.mutate()}
+                    disabled={syncCurateImagesMutation.isPending}
+                    data-testid="button-sync-curate-images"
+                  >
+                    {syncCurateImagesMutation.isPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Syncing Images...
+                      </>
+                    ) : (
+                      <>
+                        <Play className="h-4 w-4 mr-2" />
+                        Sync Curate Images
                       </>
                     )}
                   </Button>
