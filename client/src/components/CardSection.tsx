@@ -1,10 +1,11 @@
-import { Children, isValidElement, useMemo, useState, useRef, useEffect, type ReactNode } from "react";
+import { Children, Fragment, isValidElement, useMemo, useState, useRef, useEffect, type ReactNode } from "react";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { A11y, Virtual } from "swiper/modules";
 import type { Swiper as SwiperType } from "swiper";
 import "swiper/css";
 import "swiper/css/virtual";
 import { WindowedDotIndicator, type WindowedDotAccent } from "@/components/WindowedDotIndicator";
+import { profileSectionGridClass } from "@/lib/profileSectionGridClass";
 
 interface CardSectionProps {
   children: ReactNode;
@@ -13,6 +14,15 @@ interface CardSectionProps {
   gap?: string;
   testIdPrefix?: string;
   dotActiveColor?: string;
+  /** When true (e.g. profile Vote tab), center 1–2 cards on desktop like PredictTab sections. Default off for Vote/Predict pages. */
+  centerShortRows?: boolean;
+}
+
+function desktopChildKey(child: unknown, index: number): string | number {
+  if (isValidElement(child) && child.key != null && child.key !== ".") {
+    return child.key as string | number;
+  }
+  return `desktop-${index}`;
 }
 
 export function CardSection({
@@ -22,6 +32,7 @@ export function CardSection({
   gap = "gap-5",
   testIdPrefix = "card-section",
   dotActiveColor = "bg-cyan-400",
+  centerShortRows = false,
 }: CardSectionProps) {
   const items = useMemo(() => Children.toArray(children).filter(Boolean), [children]);
   const desktopItems = items.slice(0, desktopLimit);
@@ -40,11 +51,32 @@ export function CardSection({
     ? "md:grid-cols-2"
     : "md:grid-cols-2 lg:grid-cols-3";
 
+  const n = desktopItems.length;
+  const shortRowLayout = centerShortRows ? profileSectionGridClass(n) : null;
+
   return (
     <div data-testid={testIdPrefix}>
-      <div className={`hidden md:grid grid-cols-1 ${gridCols} ${gap}`}>
-        {desktopItems}
-      </div>
+      {centerShortRows && shortRowLayout ? (
+        <div className="hidden md:block w-full">
+          <div className={shortRowLayout.container}>
+            {desktopItems.map((item, i) => {
+              const key = desktopChildKey(item, i);
+              if (shortRowLayout.item) {
+                return (
+                  <div key={key} className={shortRowLayout.item}>
+                    {item}
+                  </div>
+                );
+              }
+              return <Fragment key={key}>{item}</Fragment>;
+            })}
+          </div>
+        </div>
+      ) : (
+        <div className={`hidden md:grid grid-cols-1 ${gridCols} ${gap}`}>
+          {desktopItems}
+        </div>
+      )}
 
       <div className="md:hidden relative w-full">
         <Swiper

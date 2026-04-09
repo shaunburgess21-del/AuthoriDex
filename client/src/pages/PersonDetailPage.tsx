@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, useCallback, lazy, Suspense } from "react";
+import { Fragment, useState, useEffect, useRef, useMemo, useCallback, lazy, Suspense } from "react";
 import { handleImageError } from "@/lib/imageResolver";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -56,6 +56,7 @@ import { WhyTrendingCard } from "@/components/WhyTrendingCard";
 import { getExceptionalIndicator } from "@/lib/leaderboard-exceptional";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { profileSectionGridClass } from "@/lib/profileSectionGridClass";
 import { isUnauthorizedApiError, signInToVoteToastOptions } from "@/lib/signInToVoteToast";
 import { ViewAllOverlayHeader } from "@/components/ViewAllOverlayHeader";
 import { AvatarHeightHeadline } from "@/components/AvatarHeightHeadline";
@@ -1139,7 +1140,7 @@ export default function PersonDetailPage() {
   };
 
   return (
-    <div className="min-h-screen pb-20 md:pb-0">
+    <div className="min-h-screen pb-20 md:pb-0 overflow-x-clip">
       <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -1183,7 +1184,7 @@ export default function PersonDetailPage() {
           </div>
         </div>
       </header>
-      <div className="container mx-auto px-4 pt-4 md:pt-12 pb-12 max-w-6xl">
+      <div className="container mx-auto px-4 pt-4 md:pt-12 max-w-6xl">
         {/* 1. Header: Name + Category */}
         <div className="mb-8">
           <div className="flex gap-6">
@@ -1325,15 +1326,19 @@ export default function PersonDetailPage() {
             )}
           </Card>
         </div>
+      </div>
 
-        {/* Profile Tabs Section — sticky full-width bar; scroll to top when switching tabs */}
-        <div
-          id="profile-tabs-section"
-          className="sticky top-14 z-10 bg-background border-b border-border/50 shadow-sm -mx-4 px-4 py-2"
-        >
+      {/* Profile Tabs Section — sticky full-width bar (sibling of container column); scroll to top when switching tabs */}
+      <div
+        id="profile-tabs-section"
+        className="sticky top-14 z-10 w-full bg-background border-b border-border/50 shadow-sm py-2"
+      >
+        <div className="container mx-auto max-w-6xl px-4">
           <ProfileTabs activeTab={activeTab} onTabChange={handleTabChange} noBottomMargin />
         </div>
+      </div>
 
+      <div className="container mx-auto px-4 pb-12 max-w-6xl">
         <div className="mt-4">
         {/* OVERVIEW TAB */}
         {activeTab === "overview" && (
@@ -1395,7 +1400,7 @@ export default function PersonDetailPage() {
                   ))}
                 </div>
               ) : personMatchups.length > 0 ? (
-                <CardSection desktopLimit={6} gap="gap-5" testIdPrefix="profile-matchups">
+                <CardSection desktopLimit={6} gap="gap-5" testIdPrefix="profile-matchups" centerShortRows>
                   {personMatchups.map((matchup) => (
                     <VersusCard
                       key={matchup.id}
@@ -1445,23 +1450,37 @@ export default function PersonDetailPage() {
                 </div>
               ) : featuredPollsForPerson.length > 0 ? (
                 <>
-                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    {featuredPollsForPerson.slice(0, 3).map((poll) => (
-                      <FeaturedPollCard
-                        key={poll.id}
-                        poll={poll}
-                        onVote={(choice) => {
-                          toast({
-                            title: "Vote Recorded",
-                            description: `You voted "${choice}" on "${poll.headline}"`,
-                          });
-                        }}
-                        onFilterCategory={handleSentimentCategoryFilter}
-                        categoryRaceMap={categoryRaceMap}
-                        leaderboardCategories={leaderboardCats}
-                      />
-                    ))}
-                  </div>
+                  {(() => {
+                    const sentimentVisible = featuredPollsForPerson.slice(0, 3);
+                    const sg = profileSectionGridClass(sentimentVisible.length);
+                    return (
+                      <div className={sg.container}>
+                        {sentimentVisible.map((poll) => {
+                          const card = (
+                            <FeaturedPollCard
+                              poll={poll}
+                              onVote={(choice) => {
+                                toast({
+                                  title: "Vote Recorded",
+                                  description: `You voted "${choice}" on "${poll.headline}"`,
+                                });
+                              }}
+                              onFilterCategory={handleSentimentCategoryFilter}
+                              categoryRaceMap={categoryRaceMap}
+                              leaderboardCategories={leaderboardCats}
+                            />
+                          );
+                          return sg.item ? (
+                            <div key={poll.id} className={sg.item}>
+                              {card}
+                            </div>
+                          ) : (
+                            <Fragment key={poll.id}>{card}</Fragment>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
 
                   <ViewAllPollsOverlay
                     open={showAllPollsOverlay}
@@ -1501,7 +1520,7 @@ export default function PersonDetailPage() {
                   <div className="h-8 w-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
                 </div>
               ) : personOpinionPolls.length > 0 ? (
-                <CardSection desktopLimit={6} gap="gap-5" testIdPrefix="profile-opinion-polls">
+                <CardSection desktopLimit={6} gap="gap-5" testIdPrefix="profile-opinion-polls" centerShortRows>
                   {personOpinionPolls.map((poll) => (
                     <OpinionPollCard
                       key={poll.id}
@@ -1625,7 +1644,7 @@ export default function PersonDetailPage() {
           </Suspense>
         )}
         </div>
-      </div>
+        </div>
 
       {expandedProfileImage && (
         <div

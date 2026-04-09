@@ -33,7 +33,7 @@ import {
   Lock,
   TrendingUp,
   ChevronRight,
-  Users,
+  Scale,
   Swords,
   Search,
   HelpCircle,
@@ -727,7 +727,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       {openMarketsForPerson.length > 0 && (
         <section>
           <SectionHeader
-            icon={<Users className="h-5 w-5 text-violet-600 dark:text-violet-400" />}
+            icon={<Scale className="h-5 w-5 text-violet-600 dark:text-violet-400" />}
             title="World Markets"
             subtitle="Predict the outcome of global events"
             count={openMarketsForPerson.length || undefined}
@@ -760,7 +760,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
         </section>
       )}
 
-      <MarketCycleHero marketState={marketCycle} />
+      <MarketCycleHero marketState={marketCycle} constrainedWidth />
 
       {/* Weekly Jackpot — same hero as main Predict page; static person row (no celebrity picker) */}
       <section data-testid="profile-jackpot-widget">
