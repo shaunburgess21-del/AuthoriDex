@@ -8259,8 +8259,8 @@ export default function AdminDashboard() {
                 </Button>
               </div>
               {opinionPollForm.options.map((opt, idx) => (
-                <div key={idx} className="flex items-start gap-2 p-3 rounded-lg border overflow-hidden min-w-0 max-w-full">
-                  <div className="flex-1 min-w-0 space-y-2 overflow-hidden">
+                <div key={idx} className="flex items-start gap-2 p-3 rounded-lg border min-w-0 max-w-full">
+                  <div className="flex-1 min-w-0 space-y-2">
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-medium text-muted-foreground w-4 shrink-0">{idx + 1}</span>
                       <Input
