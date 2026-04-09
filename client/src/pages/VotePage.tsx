@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { CardGridSkeleton } from "@/components/ui/card-skeletons";
 import { Badge } from "@/components/ui/badge";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
+import { AvatarHeightHeadline } from "@/components/AvatarHeightHeadline";
 import { useCategoryRaceMap } from "@/hooks/useCategoryRaceMap";
 import { useLeaderboardCategories } from "@/hooks/useLeaderboardCategories";
 import { UserMenu } from "@/components/UserMenu";
@@ -1026,43 +1027,48 @@ function DiscourseCard({
         <Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
         <span>{topic.totalVotes.toLocaleString('en-US')} votes</span>
       </div>
-      <div className="flex items-start gap-3 mb-3">
-        {currentImgSrc ? (
-          <div
-            className="h-16 w-16 rounded-md overflow-hidden shrink-0 bg-muted dark:bg-slate-800 cursor-pointer"
-            onClick={(e) => { e.stopPropagation(); setExpandedImage(currentImgSrc); }}
-          >
-            <img 
-              src={currentImgSrc} 
-              alt={topic.personName || topic.headline}
-              className="w-full h-full object-cover"
-              onError={handleImgError}
-            />
-          </div>
-        ) : (
-          <div className="h-16 w-16 rounded-md bg-gradient-to-br from-slate-700/50 to-slate-800/50 flex items-center justify-center shrink-0">
-            <MessageSquare className="h-5 w-5 text-slate-400" />
-          </div>
-        )}
-        <div className="flex-1 min-w-0">
-          {topic.slug ? (
-            <Link href={`/polls/${topic.slug}`} data-testid={`link-poll-detail-${topic.id}`} className="block w-full min-w-0">
-              <h3 className="font-serif font-bold text-lg leading-tight hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors cursor-pointer line-clamp-2">{topic.headline}</h3>
-            </Link>
+      <AvatarHeightHeadline
+        className="mb-3"
+        text={topic.headline}
+        href={topic.slug ? `/polls/${topic.slug}` : undefined}
+        linkTestId={topic.slug ? `link-poll-detail-${topic.id}` : undefined}
+        avatar={
+          currentImgSrc ? (
+            <div
+              className="h-16 w-16 rounded-md overflow-hidden shrink-0 bg-muted dark:bg-slate-800 cursor-pointer"
+              onClick={(e) => {
+                e.stopPropagation();
+                setExpandedImage(currentImgSrc);
+              }}
+            >
+              <img
+                src={currentImgSrc}
+                alt={topic.personName || topic.headline}
+                className="w-full h-full object-cover"
+                onError={handleImgError}
+              />
+            </div>
           ) : (
-            <h3 className="font-serif font-bold text-lg leading-tight line-clamp-2 block min-w-0">{topic.headline}</h3>
-          )}
-          {topic.personName && (
+            <div className="h-16 w-16 rounded-md bg-gradient-to-br from-slate-700/50 to-slate-800/50 flex items-center justify-center shrink-0">
+              <MessageSquare className="h-5 w-5 text-slate-400" />
+            </div>
+          )
+        }
+        belowTitle={
+          topic.personName ? (
             topic.personId ? (
-              <Link href={`/person/${topic.personId}`} className="text-xs text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300 hover:underline cursor-pointer">
+              <Link
+                href={`/person/${topic.personId}`}
+                className="text-xs text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300 hover:underline cursor-pointer mt-0.5 inline-block"
+              >
                 {topic.personName}
               </Link>
             ) : (
-              <span className="text-xs text-cyan-600 dark:text-cyan-400">{topic.personName}</span>
+              <span className="text-xs text-cyan-600 dark:text-cyan-400 mt-0.5 inline-block">{topic.personName}</span>
             )
-          )}
-        </div>
-      </div>
+          ) : null
+        }
+      />
       {topic.subjectText && (
         topic.slug ? (
           <Link href={`/polls/${topic.slug}`} className="block mb-4">
@@ -1353,22 +1359,23 @@ function OpinionPollCard({
           />
         </div>
 
-        <div className="flex items-start gap-3 mb-2">
-          {poll.imageUrl ? (
-            <div className="h-14 w-14 rounded-lg overflow-hidden shrink-0 bg-muted dark:bg-slate-800">
-              <img src={poll.imageUrl} alt={poll.title} className="w-full h-full object-cover" />
-            </div>
-          ) : (
-            <div className="h-14 w-14 rounded-lg bg-gradient-to-br from-slate-700/50 to-slate-800/50 flex items-center justify-center shrink-0">
-              <ListChecks className="h-5 w-5 text-slate-400" />
-            </div>
-          )}
-          <div className="flex-1 min-w-0">
-            <Link href={`/vote/opinion-polls/${poll.slug}`} data-testid={`link-opinion-detail-${poll.id}`}>
-              <h3 className="font-serif font-bold text-lg leading-tight hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors cursor-pointer">{poll.title}</h3>
-            </Link>
-          </div>
-        </div>
+        <AvatarHeightHeadline
+          className="mb-2"
+          text={poll.title}
+          href={`/vote/opinion-polls/${poll.slug}`}
+          linkTestId={`link-opinion-detail-${poll.id}`}
+          avatar={
+            poll.imageUrl ? (
+              <div className="h-14 w-14 rounded-lg overflow-hidden shrink-0 bg-muted dark:bg-slate-800">
+                <img src={poll.imageUrl} alt={poll.title} className="w-full h-full object-cover" />
+              </div>
+            ) : (
+              <div className="h-14 w-14 rounded-lg bg-gradient-to-br from-slate-700/50 to-slate-800/50 flex items-center justify-center shrink-0">
+                <ListChecks className="h-5 w-5 text-slate-400" />
+              </div>
+            )
+          }
+        />
         {poll.description && (
           <Link href={`/vote/opinion-polls/${poll.slug}`}>
             <p className="text-sm text-muted-foreground mb-3 line-clamp-2 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors cursor-pointer">{poll.description}</p>

@@ -17,11 +17,14 @@ import { JackpotEntryModal } from "@/components/JackpotEntryModal";
 import { RulesModal, RULES_CONTENT } from "@/components/predict/RulesContent";
 import { OverlayFilterBar } from "@/components/OverlayFilterBar";
 import { ViewAllOverlayHeader } from "@/components/ViewAllOverlayHeader";
+import { AvatarHeightHeadline } from "@/components/AvatarHeightHeadline";
+import { WeeklyUpDownNameBlock } from "@/components/WeeklyUpDownNameBlock";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { TrendingPerson } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest } from "@/lib/queryClient";
+import { getSupabase } from "@/lib/supabase";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { getCanonicalNativeCycle } from "@/lib/nativeMarketLifecycle";
 import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
@@ -58,6 +61,7 @@ import {
   Loader2,
   Sparkles,
   Crown,
+  TicketCheck,
   UserPlus,
   ChevronDown,
   Plus,
@@ -130,6 +134,15 @@ function MarketAvatar({ market }: { market: any }) {
       <AvatarFallback className="text-sm rounded-md">{(market.title || "?")[0]}</AvatarFallback>
     </Avatar>
   );
+}
+
+/** Keeps title vertical budget consistent when there is no market image. */
+function MarketAvatarOrSpacer({ market }: { market: any }) {
+  const imgUrl = market.coverImageUrl || market.linkedPersonAvatar;
+  if (!imgUrl) {
+    return <div className="h-20 w-20 shrink-0 rounded-md md:h-16 md:w-16 bg-muted/25" aria-hidden />;
+  }
+  return <MarketAvatar market={market} />;
 }
 
 function LinkedPersonChip({ market }: { market: any }) {
@@ -867,10 +880,10 @@ function WeeklyUpDownCard({
         className="block rounded-lg -mx-1 px-1 py-0.5 mb-2 hover:bg-muted/25 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         aria-label={`View details for ${market.personName} up or down market`}
       >
-        <div className="flex items-center gap-3 mb-2">
-          <PersonAvatar name={market.personName} avatar={market.personAvatar} className="h-20 w-20 md:h-16 md:w-16" />
+        <div className="flex items-start gap-3 mb-2">
+          <PersonAvatar name={market.personName} avatar={market.personAvatar} className="h-20 w-20 md:h-16 md:w-16 shrink-0" />
           <div className="flex-1 min-w-0">
-            <p className="font-semibold text-[18px] leading-tight">{market.personName}</p>
+            <WeeklyUpDownNameBlock text={market.personName} />
             <p className="text-xs text-muted-foreground font-mono mt-0.5">
               Now: {market.currentScore.toLocaleString('en-US')}
             </p>
@@ -1513,10 +1526,13 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
       </div>
       
       <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); if (!isInactive) onNavigate(market.slug); }} className={isInactive ? "cursor-default" : "cursor-pointer"}>
-        <div className="flex items-center gap-3 mb-2">
-          <MarketAvatar market={market} />
-          <p className={`text-[16px] leading-[1.4] font-semibold line-clamp-2 ${isInactive ? '' : 'hover:text-violet-600 dark:hover:text-violet-400'} transition-colors`}>{market.title}</p>
-        </div>
+        <AvatarHeightHeadline
+          className="mb-2"
+          text={market.title || ""}
+          serif={false}
+          avatar={<MarketAvatarOrSpacer market={market} />}
+          titleClassName={`!font-semibold ${isInactive ? "" : "hover:!text-violet-600 dark:hover:!text-violet-400"}`}
+        />
       </a>
       {market.teaser && <p className="text-sm text-muted-foreground mb-3 line-clamp-2 leading-[1.4]">{market.teaser}</p>}
       
@@ -1601,10 +1617,13 @@ function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, 
       </div>
 
       <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); if (!isInactive) onNavigate(market.slug); }} className={isInactive ? "cursor-default" : "cursor-pointer"}>
-        <div className="flex items-center gap-3 mb-2">
-          <MarketAvatar market={market} />
-          <p className={`text-[16px] leading-[1.4] font-semibold line-clamp-2 ${isInactive ? '' : 'hover:text-violet-600 dark:hover:text-violet-400'} transition-colors`}>{market.title}</p>
-        </div>
+        <AvatarHeightHeadline
+          className="mb-2"
+          text={market.title || ""}
+          serif={false}
+          avatar={<MarketAvatarOrSpacer market={market} />}
+          titleClassName={`!font-semibold ${isInactive ? "" : "hover:!text-violet-600 dark:hover:!text-violet-400"}`}
+        />
       </a>
       {market.teaser && (
         <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); if (!isInactive) onNavigate(market.slug); }} className={isInactive ? "cursor-default" : "cursor-pointer"}>
@@ -1698,10 +1717,13 @@ function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel,
       </div>
       
       <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); if (!isInactive) onNavigate(market.slug); }} className={isInactive ? "cursor-default" : "cursor-pointer"}>
-        <div className="flex items-center gap-3 mb-2">
-          <MarketAvatar market={market} />
-          <p className={`text-[16px] leading-[1.4] font-semibold line-clamp-2 ${isInactive ? '' : 'hover:text-violet-600 dark:hover:text-violet-400'} transition-colors`}>{market.title}</p>
-        </div>
+        <AvatarHeightHeadline
+          className="mb-2"
+          text={market.title || ""}
+          serif={false}
+          avatar={<MarketAvatarOrSpacer market={market} />}
+          titleClassName={`!font-semibold ${isInactive ? "" : "hover:!text-violet-600 dark:hover:!text-violet-400"}`}
+        />
       </a>
       {market.teaser && <p className="text-sm text-muted-foreground mb-3 line-clamp-2 leading-[1.4]">{market.teaser}</p>}
       
@@ -2090,6 +2112,27 @@ function WeeklyJackpotHero({
   onRulesClick: () => void;
 }) {
   const [searchModalOpen, setSearchModalOpen] = useState(false);
+  const { session, loading: authLoading } = useAuth();
+  const marketId = jackpotMarket?.id ?? null;
+  const isAuthReady = !!session?.access_token && !authLoading;
+
+  const { data: userJackpotEntriesData } = useQuery({
+    queryKey: ["/api/native-markets", marketId, "jackpot-entries", session?.access_token],
+    queryFn: async () => {
+      if (!marketId) return { entries: [] };
+      const sb = await getSupabase();
+      const { data: { session: currentSession } } = await sb.auth.getSession();
+      const headers: Record<string, string> = {};
+      if (currentSession?.access_token) headers["Authorization"] = `Bearer ${currentSession.access_token}`;
+      const res = await fetch(`/api/native-markets/${marketId}/jackpot-entries`, { headers, credentials: "include" });
+      if (!res.ok) throw new Error(`Failed to load entries: ${res.status}`);
+      return res.json();
+    },
+    enabled: !!marketId && isAuthReady,
+    staleTime: 30_000,
+  });
+
+  const myJackpotEntryCount = userJackpotEntriesData?.entries?.length ?? 0;
 
   const { data: lastWinnerData } = useQuery({
     queryKey: ["/api/native-markets/jackpot-last-winner", selectedPerson?.id],
@@ -2196,6 +2239,17 @@ function WeeklyJackpotHero({
             <p className="text-sm text-muted-foreground mb-4 max-w-md">Predict the exact Trend Score. Closest wins the jackpot!</p>
             
             {renderCTA()}
+            {myJackpotEntryCount > 0 && (
+              <p
+                className="mt-3 flex items-start gap-2 text-xs text-muted-foreground max-w-md"
+                data-testid="text-jackpot-user-entered-hint"
+              >
+                <TicketCheck className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-600/80 dark:text-amber-400/80" aria-hidden />
+                <span>
+                  You&apos;re in with {myJackpotEntryCount} prediction{myJackpotEntryCount !== 1 ? "s" : ""} this week — Enter again to add another.
+                </span>
+              </p>
+            )}
           </div>
           
           <div className="flex flex-col items-end gap-2">
@@ -2227,7 +2281,7 @@ function WeeklyJackpotHero({
           </div>
         </div>
         {lastWinnerData?.hasResult && (
-          <div className="mt-4 p-3 rounded-lg bg-amber-500/8 dark:bg-amber-500/5 border border-amber-500/20 mx-6 md:mx-8 mb-2">
+          <div className="mt-4 p-3 rounded-lg bg-amber-500/8 dark:bg-amber-500/5 border border-amber-500/20 mb-2">
             <p className="text-xs text-amber-600 dark:text-amber-400 font-medium mb-1">
               <Trophy className="h-3 w-3 inline mr-1" />
               Last week's result

@@ -17,13 +17,16 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLocation, Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { getSupabase } from "@/lib/supabase";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { getCanonicalNativeCycle } from "@/lib/nativeMarketLifecycle";
 import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
 import { WeeklyUpDownActionButtons } from "@/components/predict/WeeklyUpDownActionButtons";
+import { WeeklyUpDownNameBlock } from "@/components/WeeklyUpDownNameBlock";
 import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { 
   Crown, 
+  TicketCheck,
   Sparkles, 
   Lock, 
   TrendingUp,
@@ -178,10 +181,10 @@ function WeeklyUpDownCard({
         className="block rounded-lg -mx-1 px-1 py-0.5 mb-2 hover:bg-muted/25 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         aria-label={`View details for ${market.personName} up or down market`}
       >
-        <div className="flex items-center gap-3 mb-2">
-          <PersonAvatar name={market.personName} avatar={market.personAvatar} className="h-20 w-20 md:h-16 md:w-16" />
+        <div className="flex items-start gap-3 mb-2">
+          <PersonAvatar name={market.personName} avatar={market.personAvatar} className="h-20 w-20 md:h-16 md:w-16 shrink-0" />
           <div className="flex-1 min-w-0">
-            <p className="font-semibold text-[18px] leading-tight">{market.personName}</p>
+            <WeeklyUpDownNameBlock text={market.personName} />
             <p className="text-xs text-muted-foreground font-mono mt-0.5">
               Now: {market.currentScore.toLocaleString('en-US')}
             </p>
@@ -1051,13 +1054,32 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
 
   const hasAnyMarkets = weeklyMarket || h2hBattles.length > 0 || gainerMarkets.length > 0 || communityPredictions.length > 0 || jackpotMarket;
 
-  const { user, profile, refreshProfile } = useAuth();
+  const { user, session, loading: authLoading, profile, refreshProfile } = useAuth();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [pendingSelection, setPendingSelection] = useState<StakeSelection | null>(null);
   const [stakeModalOpen, setStakeModalOpen] = useState(false);
   const walletCredits = profile?.predictCredits ?? 0;
+
+  const jackpotMarketId = jackpotMarket?.id ?? null;
+  const isAuthReady = !!session?.access_token && !authLoading;
+  const { data: profileJackpotEntriesData } = useQuery({
+    queryKey: ["/api/native-markets", jackpotMarketId, "jackpot-entries", session?.access_token],
+    queryFn: async () => {
+      if (!jackpotMarketId) return { entries: [] };
+      const sb = await getSupabase();
+      const { data: { session: currentSession } } = await sb.auth.getSession();
+      const headers: Record<string, string> = {};
+      if (currentSession?.access_token) headers["Authorization"] = `Bearer ${currentSession.access_token}`;
+      const res = await fetch(`/api/native-markets/${jackpotMarketId}/jackpot-entries`, { headers, credentials: "include" });
+      if (!res.ok) throw new Error(`Failed to load entries: ${res.status}`);
+      return res.json();
+    },
+    enabled: !!jackpotMarketId && isAuthReady,
+    staleTime: 30_000,
+  });
+  const profileJackpotEntryCount = profileJackpotEntriesData?.entries?.length ?? 0;
 
   const { data: userPredictionsData } = useQuery<any>({
     queryKey: ["/api/me/predictions"],
@@ -1381,22 +1403,48 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
           </div>
           
           {isMarketClosed ? (
-            <Button 
-              className="bg-muted text-muted-foreground cursor-not-allowed"
-              disabled
-            >
-              <Clock className="h-4 w-4 mr-2" />
-              Entries Closed — Results Sunday
-            </Button>
+            <>
+              <Button 
+                className="bg-muted text-muted-foreground cursor-not-allowed"
+                disabled
+              >
+                <Clock className="h-4 w-4 mr-2" />
+                Entries Closed — Results Sunday
+              </Button>
+              {profileJackpotEntryCount > 0 && (
+                <p
+                  className="mt-3 flex items-start gap-2 text-xs text-muted-foreground"
+                  data-testid="text-profile-jackpot-user-entered-hint-closed"
+                >
+                  <TicketCheck className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-600/80 dark:text-amber-400/80" aria-hidden />
+                  <span>
+                    You&apos;re in with {profileJackpotEntryCount} prediction{profileJackpotEntryCount !== 1 ? "s" : ""} this week.
+                  </span>
+                </p>
+              )}
+            </>
           ) : (
-            <Button 
-              className="bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/30"
-              onClick={() => setJackpotModalOpen(true)}
-              data-testid="button-profile-predict-score"
-            >
-              <Sparkles className="h-4 w-4 mr-2" />
-              Predict Score
-            </Button>
+            <>
+              <Button 
+                className="bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/30"
+                onClick={() => setJackpotModalOpen(true)}
+                data-testid="button-profile-predict-score"
+              >
+                <Sparkles className="h-4 w-4 mr-2" />
+                Predict Score
+              </Button>
+              {profileJackpotEntryCount > 0 && (
+                <p
+                  className="mt-3 flex items-start gap-2 text-xs text-muted-foreground"
+                  data-testid="text-profile-jackpot-user-entered-hint"
+                >
+                  <TicketCheck className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-600/80 dark:text-amber-400/80" aria-hidden />
+                  <span>
+                    You&apos;re in with {profileJackpotEntryCount} prediction{profileJackpotEntryCount !== 1 ? "s" : ""} this week — tap Predict Score to add another.
+                  </span>
+                </p>
+              )}
+            </>
           )}
         </div>
       </div>

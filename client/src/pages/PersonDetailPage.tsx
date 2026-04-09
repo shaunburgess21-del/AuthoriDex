@@ -64,6 +64,7 @@ import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { isUnauthorizedApiError, signInToVoteToastOptions } from "@/lib/signInToVoteToast";
 import { ViewAllOverlayHeader } from "@/components/ViewAllOverlayHeader";
+import { AvatarHeightHeadline } from "@/components/AvatarHeightHeadline";
 
 const LazyPredictTab = lazy(() =>
   import("@/components/PredictTab").then((m) => ({ default: m.PredictTab }))
@@ -113,6 +114,11 @@ interface FeaturedPoll {
   neutralPercent: number;
   disapprovePercent: number;
   totalVotes: number;
+  personId?: string | null;
+  personName?: string | null;
+  personAvatar?: string | null;
+  imageUrl?: string | null;
+  slug?: string | null;
 }
 
 interface CelebrityImage {
@@ -504,24 +510,23 @@ function OpinionPollCardProfile({
           <CategoryPill category={poll.category || ""} data-testid={`badge-opinion-category-${poll.id}`} />
         </div>
 
-        <div className="flex items-start gap-3 mb-2">
-          {poll.options[0]?.imageUrl ? (
-            <div className="h-12 w-12 rounded-lg overflow-hidden shrink-0 bg-slate-800">
-              <img src={poll.options[0].imageUrl!} alt={poll.title} className="w-full h-full object-cover" />
-            </div>
-          ) : (
-            <div className="h-12 w-12 rounded-lg bg-gradient-to-br from-slate-700/50 to-slate-800/50 flex items-center justify-center shrink-0">
-              <ListChecks className="h-5 w-5 text-slate-600 dark:text-slate-400" />
-            </div>
-          )}
-          <div className="flex-1 min-w-0">
-            <Link href={`/vote/opinion-polls/${poll.slug}`} data-testid={`link-opinion-detail-${poll.id}`}>
-              <h3 className="font-serif font-bold text-lg leading-tight hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors cursor-pointer">
-                {poll.title}
-              </h3>
-            </Link>
-          </div>
-        </div>
+        <AvatarHeightHeadline
+          className="mb-2"
+          text={poll.title}
+          href={`/vote/opinion-polls/${poll.slug}`}
+          linkTestId={`link-opinion-detail-${poll.id}`}
+          avatar={
+            poll.options[0]?.imageUrl ? (
+              <div className="h-12 w-12 rounded-lg overflow-hidden shrink-0 bg-slate-800">
+                <img src={poll.options[0].imageUrl!} alt={poll.title} className="w-full h-full object-cover" />
+              </div>
+            ) : (
+              <div className="h-12 w-12 rounded-lg bg-gradient-to-br from-slate-700/50 to-slate-800/50 flex items-center justify-center shrink-0">
+                <ListChecks className="h-5 w-5 text-slate-600 dark:text-slate-400" />
+              </div>
+            )
+          }
+        />
         {poll.description && (
           <Link href={`/vote/opinion-polls/${poll.slug}`}>
             <p className="text-sm text-muted-foreground mb-3 line-clamp-2 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors cursor-pointer">{poll.description}</p>
@@ -866,6 +871,22 @@ function FeaturedPollCard({
   onVote: (choice: 'support' | 'neutral' | 'oppose') => void;
 }) {
   const [voted, setVoted] = useState<'support' | 'neutral' | 'oppose' | null>(null);
+  const imgSources = [poll.personAvatar, poll.imageUrl].filter(Boolean) as string[];
+  const [imgIdx, setImgIdx] = useState(0);
+
+  useEffect(() => {
+    setImgIdx(0);
+  }, [poll.id, poll.imageUrl, poll.personAvatar]);
+
+  const currentImgSrc = imgSources[imgIdx] ?? null;
+
+  const handleImgError = () => {
+    if (imgIdx + 1 < imgSources.length) {
+      setImgIdx(imgIdx + 1);
+    } else {
+      setImgIdx(imgSources.length);
+    }
+  };
 
   const handleVote = (choice: 'support' | 'neutral' | 'oppose') => {
     if (!voted) {
@@ -873,6 +894,8 @@ function FeaturedPollCard({
       onVote(choice);
     }
   };
+
+  const pollDetailHref = poll.slug ? `/polls/${poll.slug}` : undefined;
 
   return (
     <Card 
@@ -884,7 +907,42 @@ function FeaturedPollCard({
         <Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
         <span>{poll.totalVotes.toLocaleString('en-US')} votes</span>
       </div>
-      <h3 className="font-serif font-bold text-lg mb-1">{poll.headline}</h3>
+      <AvatarHeightHeadline
+        className="mb-3"
+        text={poll.headline}
+        href={pollDetailHref}
+        linkTestId={poll.slug ? `link-poll-detail-${poll.id}` : undefined}
+        avatar={
+          currentImgSrc ? (
+            <div className="h-16 w-16 rounded-md overflow-hidden shrink-0 bg-muted dark:bg-slate-800">
+              <img
+                src={currentImgSrc}
+                alt={poll.personName || poll.headline}
+                className="w-full h-full object-cover"
+                onError={handleImgError}
+              />
+            </div>
+          ) : (
+            <div className="h-16 w-16 rounded-md bg-gradient-to-br from-slate-700/50 to-slate-800/50 flex items-center justify-center shrink-0">
+              <MessageSquare className="h-5 w-5 text-slate-400" />
+            </div>
+          )
+        }
+        belowTitle={
+          poll.personName ? (
+            poll.personId ? (
+              <Link
+                href={`/person/${poll.personId}`}
+                className="text-xs text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300 hover:underline cursor-pointer mt-0.5 inline-block"
+              >
+                {poll.personName}
+              </Link>
+            ) : (
+              <span className="text-xs text-cyan-600 dark:text-cyan-400 mt-0.5 inline-block">{poll.personName}</span>
+            )
+          ) : null
+        }
+      />
       <p className="text-sm text-muted-foreground mb-5 flex-grow">{poll.description}</p>
       
       {!voted ? (
@@ -1344,6 +1402,11 @@ export default function PersonDetailPage() {
       neutralPercent: p.neutralPercent,
       disapprovePercent: p.disapprovePercent,
       totalVotes: p.totalVotes,
+      personId: p.personId,
+      personName: p.personName,
+      personAvatar: p.personAvatar,
+      imageUrl: p.imageUrl,
+      slug: p.slug,
     }));
   }, [personTrendingPolls]);
 
