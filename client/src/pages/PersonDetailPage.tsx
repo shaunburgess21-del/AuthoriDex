@@ -1240,9 +1240,6 @@ export default function PersonDetailPage() {
                   </TouchTooltip>
                 </div>
                 <div className="flex flex-row gap-2">
-                  <Button variant="outline" size="icon" className="sm:hidden" onClick={() => sharePage(`${person.name} on VoxDex`)} aria-label="Share" data-testid="button-share-mobile">
-                    <Share2 className="h-4 w-4" />
-                  </Button>
                   <Button
                     variant="outline"
                     size="icon"
@@ -1254,9 +1251,8 @@ export default function PersonDetailPage() {
                   >
                     <Star className={`h-4 w-4 ${isFavorited ? "fill-current" : ""}`} />
                   </Button>
-                  <Button variant="outline" className="hidden sm:inline-flex gap-2" onClick={() => sharePage(`${person.name} on VoxDex`)} data-testid="button-share">
+                  <Button variant="outline" size="icon" className="sm:hidden" onClick={() => sharePage(`${person.name} on VoxDex`)} aria-label="Share" data-testid="button-share-mobile">
                     <Share2 className="h-4 w-4" />
-                    Share
                   </Button>
                   <Button
                     variant="outline"
@@ -1267,6 +1263,10 @@ export default function PersonDetailPage() {
                   >
                     <Star className={`h-4 w-4 ${isFavorited ? "fill-current" : ""}`} />
                     {isFavorited ? "Favorited" : "Favorite"}
+                  </Button>
+                  <Button variant="outline" className="hidden sm:inline-flex gap-2" onClick={() => sharePage(`${person.name} on VoxDex`)} data-testid="button-share">
+                    <Share2 className="h-4 w-4" />
+                    Share
                   </Button>
                 </div>
               </div>
@@ -1368,7 +1368,7 @@ export default function PersonDetailPage() {
             <section id="voting-widget" className="mb-10">
               <UnifiedSectionHeader
                 title="Overall Rating"
-                subtitle={`How do you feel about ${person.name}?`}
+                subtitle="Community approval rating"
                 icon={<ThumbsUp className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />}
                 accent="cyan"
                 testId="profile-section-overall-rating"
