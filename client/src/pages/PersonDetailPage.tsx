@@ -1620,6 +1620,7 @@ export default function PersonDetailPage() {
               personName={person.name}
               personAvatar={person.avatar || ""}
               currentScore={person.fameIndex ?? Math.round(person.trendScore / 100)}
+              personRank={person.rank ?? null}
             />
           </Suspense>
         )}

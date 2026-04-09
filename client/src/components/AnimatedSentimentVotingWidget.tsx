@@ -448,7 +448,7 @@ export function AnimatedSentimentVotingWidget({
                         className="absolute inset-0 rounded-full"
                         style={{
                           backgroundColor: color.bg,
-                          opacity: currentValue === null ? 0.55 : (isFilled ? 1 : 0.3),
+                          opacity: currentValue === null ? 1 : (isFilled ? 1 : 0.3),
                           boxShadow: isActive
                             ? `0 0 8px ${color.glow}40`
                             : isFilled

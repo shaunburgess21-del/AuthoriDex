@@ -1126,7 +1126,7 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
           <RelatedCelebritiesField
             value={relatedPeople}
             onChange={setRelatedPeople}
-            fetchFn={fetch}
+            fetchFn={fetchWithAuth}
           />
 
           <div className="grid grid-cols-2 gap-4">

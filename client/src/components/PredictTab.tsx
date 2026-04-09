@@ -5,7 +5,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PersonAvatar } from "@/components/PersonAvatar";
-import { CategoryPill } from "@/components/CategoryPill";
 import { StakeModal, type StakeSelection } from "@/components/StakeModal";
 import { JackpotEntryModal } from "@/components/JackpotEntryModal";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -17,7 +16,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLocation, Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { getSupabase } from "@/lib/supabase";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { getCanonicalNativeCycle } from "@/lib/nativeMarketLifecycle";
 import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
@@ -25,27 +23,24 @@ import { PredictCard } from "@/components/predict/PredictCard";
 import { WeeklyUpDownCard, type PredictionMarket } from "@/components/predict/WeeklyUpDownCard";
 import { HeadToHeadCard, type HeadToHeadMarket } from "@/components/predict/HeadToHeadCard";
 import { TopGainerCard, type TopGainerMarket, type GainerCandidate } from "@/components/predict/TopGainerCard";
+import { OpenMarketCard } from "@/components/predict/OpenMarketCard";
+import { WeeklyJackpotHero } from "@/components/predict/WeeklyJackpotHero";
+import { RulesModal, RULES_CONTENT } from "@/components/predict/RulesContent";
 import { useCategoryRaceMap } from "@/hooks/useCategoryRaceMap";
 import { useLeaderboardCategories } from "@/hooks/useLeaderboardCategories";
-import { 
-  Crown, 
-  TicketCheck,
-  Sparkles, 
-  Lock, 
+import {
+  Crown,
+  Lock,
   TrendingUp,
-  Clock, 
-  ChevronRight, 
-  Users, 
-  UserPlus, 
+  ChevronRight,
+  Users,
   Swords,
   Search,
   HelpCircle,
   Loader2,
   Trophy,
-  Check
+  Check,
 } from "lucide-react";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { ViewAllOverlayHeader } from "@/components/ViewAllOverlayHeader";
 import { UnifiedSectionHeader } from "@/components/UnifiedSectionHeader";
 import { normalizeMarketCategory, getMarketCategoryLabel } from "@shared/constants";
 
@@ -54,23 +49,18 @@ interface PredictTabProps {
   personName: string;
   personAvatar?: string;
   currentScore: number;
+  personRank?: number | null;
+}
+
+/** Center 1–2 cards; use 3-column grid when there are 3+ cards. */
+function predictSectionGridClass(n: number): { container: string; item: string } {
+  if (n <= 0) return { container: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4", item: "" };
+  if (n === 1) return { container: "flex justify-center", item: "w-full max-w-sm" };
+  if (n === 2) return { container: "flex flex-col sm:flex-row flex-wrap justify-center gap-4", item: "w-full max-w-sm" };
+  return { container: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4", item: "" };
 }
 
 type CategoryFilter = "all" | "favorites" | "trending" | "tech" | "politics" | "business" | "music" | "sports" | "film-tv" | "gaming" | "creator" | "food-drink" | "lifestyle" | "misc";
-
-interface CommunityMarket {
-  id: string;
-  creatorName: string;
-  question: string;
-  personName: string;
-  personAvatar: string;
-  totalPool: number;
-  endTime: string;
-  participants: number;
-  category: CategoryFilter;
-  relatedPersonIds?: string[];
-}
-
 
 function GainerCandidatesDialog({
   market,
@@ -225,127 +215,6 @@ function GainerCandidatesDialog({
   );
 }
 
-function CommunityCard({ 
-  market, 
-  onClick, 
-  isMarketClosed = false 
-}: { 
-  market: CommunityMarket; 
-  onClick: () => void; 
-  isMarketClosed?: boolean;
-}) {
-  return (
-    <PredictCard testId={`card-community-${market.id}`} className={isMarketClosed ? 'opacity-75' : ''}>
-      <div className="flex items-center gap-2 mb-2">
-        <Badge variant="secondary" className="text-xs">
-          <UserPlus className="h-3 w-3 mr-1" />
-          {market.creatorName}
-        </Badge>
-        <CategoryPill category={market.category} />
-      </div>
-      
-      <p className="text-sm font-medium mb-3 line-clamp-2">{market.question}</p>
-      
-      <div className="flex items-center gap-2 mb-3">
-        <PersonAvatar name={market.personName} avatar={market.personAvatar} size="xs" />
-        <span className="text-xs text-muted-foreground">{market.personName}</span>
-      </div>
-      
-      <div className="flex items-center justify-between text-xs text-muted-foreground mb-3">
-        <span className="text-violet-700 dark:text-violet-500 font-semibold">Pool: {market.totalPool.toLocaleString('en-US')}</span>
-        <span>{market.participants} participants</span>
-      </div>
-      
-      {isMarketClosed ? (
-        <Button 
-          size="sm" 
-          className="w-full bg-muted text-muted-foreground cursor-not-allowed"
-          disabled
-        >
-          <Lock className="h-4 w-4 mr-2" />
-          Closed
-        </Button>
-      ) : (
-        <Button 
-          size="sm" 
-          variant="outline"
-          className="w-full border-violet-500/40 dark:border-violet-500/30 text-violet-700 dark:text-violet-500"
-          onClick={onClick}
-          data-testid={`button-join-${market.id}`}
-        >
-          Join Market
-        </Button>
-      )}
-    </PredictCard>
-  );
-}
-
-function ViewAllCommunityOverlay({
-  open,
-  onClose,
-  personName,
-  markets,
-  isMarketClosed
-}: {
-  open: boolean;
-  onClose: () => void;
-  personName: string;
-  markets: CommunityMarket[];
-  isMarketClosed: boolean;
-}) {
-  const [searchQuery, setSearchQuery] = useState("");
-
-  const filteredMarkets = markets.filter(m => 
-    !searchQuery || m.question.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  if (!open) return null;
-
-  return (
-    <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-hidden" data-testid="overlay-community-predictions">
-      <div className="h-full flex flex-col">
-        <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-xl border-b p-4">
-          <ViewAllOverlayHeader
-            onClose={onClose}
-            closeTestId="button-close-community-overlay"
-            backTestId="button-back-community-overlay"
-            className="flex items-center justify-between gap-2 mb-4"
-          >
-            <div className="min-w-0">
-              <h2 className="text-lg font-serif font-bold truncate">World Predictions</h2>
-              <p className="text-sm text-muted-foreground">{filteredMarkets.length} predictions about {personName}</p>
-            </div>
-          </ViewAllOverlayHeader>
-          
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search predictions..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9"
-              data-testid="input-search-community"
-            />
-          </div>
-        </div>
-        
-        <ScrollArea className="flex-1 p-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-8">
-            {filteredMarkets.map((market) => (
-              <CommunityCard
-                key={market.id}
-                market={market}
-                onClick={() => {}}
-                isMarketClosed={isMarketClosed}
-              />
-            ))}
-          </div>
-        </ScrollArea>
-      </div>
-    </div>
-  );
-}
-
 function SectionHeader({ 
   icon, 
   title, 
@@ -404,10 +273,11 @@ function SectionHeader({
   );
 }
 
-export function PredictTab({ personId, personName, personAvatar, currentScore }: PredictTabProps) {
+export function PredictTab({ personId, personName, personAvatar, currentScore, personRank }: PredictTabProps) {
   const [jackpotModalOpen, setJackpotModalOpen] = useState(false);
-  const [showCommunityOverlay, setShowCommunityOverlay] = useState(false);
+  const [rulesModalOpen, setRulesModalOpen] = useState<string | null>(null);
   const [gainerPickerState, setGainerPickerState] = useState<{ market: TopGainerMarket; initialCandidate?: GainerCandidate | null } | null>(null);
+  const [visibleWorldCount, setVisibleWorldCount] = useState(3);
 
   const { data: nativeUpdownData, isLoading: updownLoading } = useQuery<any[]>({ queryKey: ['/api/native-markets/updown'] });
   const { data: nativeH2hData, isLoading: h2hLoading } = useQuery<any[]>({ queryKey: ['/api/native-markets/h2h'] });
@@ -576,27 +446,11 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
     return all.filter(g => (g.allCandidates || g.leaders).some(l => l.personId === personId));
   }, [nativeGainerData, personId]);
 
-  const communityPredictions = useMemo((): CommunityMarket[] => {
-    const markets = (openMarketsData || []).filter((m: any) => m.visibility === "live");
-    return markets
-      .filter((m: any) => m.personId === personId || (m.relatedPersonIds || []).includes(personId))
-      .map((m: any) => {
-        const entries = m.entries || [];
-        const totalPool = entries.reduce((sum: number, entry: any) => sum + Number(entry.totalStake || 0), 0) + Number(m.seedVolume || 0);
-        return {
-          id: m.id,
-          creatorName: m.linkedPersonName || "Community",
-          question: m.title || "",
-          personName: m.linkedPersonName || personName,
-          personAvatar: m.linkedPersonAvatar || "",
-          totalPool,
-          endTime: "Sun 23:59 UTC",
-          participants: m.activeParticipantCount || 0,
-          category: normalizeMarketCategory(m.category || "misc") as CategoryFilter,
-          relatedPersonIds: m.relatedPersonIds || [],
-        };
-      });
-  }, [openMarketsData, personId, personName]);
+  const openMarketsForPerson = useMemo(() => {
+    return (openMarketsData || [])
+      .filter((m: any) => m.visibility === "live")
+      .filter((m: any) => m.personId === personId || (m.relatedPersonIds || []).includes(personId));
+  }, [openMarketsData, personId]);
 
   const jackpotMarket = useMemo(() => {
     if (!nativeJackpotData) return null;
@@ -605,40 +459,15 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
     ) || null;
   }, [nativeJackpotData, personId]);
 
-  const jackpotPoolSize = useMemo(() => {
-    if (!jackpotMarket) return 0;
-    const entries = jackpotMarket.entries || [];
-    return entries.reduce((sum: number, e: any) => sum + Number(e.totalStake || 0), 0) + Number(jackpotMarket.seedVolume || 0);
-  }, [jackpotMarket]);
+  const hasAnyMarkets = weeklyMarket || h2hBattles.length > 0 || gainerMarkets.length > 0 || openMarketsForPerson.length > 0 || jackpotMarket;
 
-  const hasAnyMarkets = weeklyMarket || h2hBattles.length > 0 || gainerMarkets.length > 0 || communityPredictions.length > 0 || jackpotMarket;
-
-  const { user, session, loading: authLoading, profile, refreshProfile } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [pendingSelection, setPendingSelection] = useState<StakeSelection | null>(null);
   const [stakeModalOpen, setStakeModalOpen] = useState(false);
   const walletCredits = profile?.predictCredits ?? 0;
-
-  const jackpotMarketId = jackpotMarket?.id ?? null;
-  const isAuthReady = !!session?.access_token && !authLoading;
-  const { data: profileJackpotEntriesData } = useQuery({
-    queryKey: ["/api/native-markets", jackpotMarketId, "jackpot-entries", session?.access_token],
-    queryFn: async () => {
-      if (!jackpotMarketId) return { entries: [] };
-      const sb = await getSupabase();
-      const { data: { session: currentSession } } = await sb.auth.getSession();
-      const headers: Record<string, string> = {};
-      if (currentSession?.access_token) headers["Authorization"] = `Bearer ${currentSession.access_token}`;
-      const res = await fetch(`/api/native-markets/${jackpotMarketId}/jackpot-entries`, { headers, credentials: "include" });
-      if (!res.ok) throw new Error(`Failed to load entries: ${res.status}`);
-      return res.json();
-    },
-    enabled: !!jackpotMarketId && isAuthReady,
-    staleTime: 30_000,
-  });
-  const profileJackpotEntryCount = profileJackpotEntriesData?.entries?.length ?? 0;
 
   const { data: userPredictionsData } = useQuery<any>({
     queryKey: ["/api/me/predictions"],
@@ -655,6 +484,32 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
         map.set(b.marketId, { entryLabel: b.entryLabel, entryId: b.entryId });
       }
     }
+    return map;
+  }, [userPredictionsData]);
+
+  const openMarketBets = useMemo(() => {
+    const map = new Map<string, { result: string; payout: number; entryLabel: string; stakeAmount: number; marketId: string }>();
+    const betsArray = Array.isArray(userPredictionsData) ? userPredictionsData : (userPredictionsData as any)?.predictions ?? [];
+    const grouped = new Map<string, any[]>();
+    for (const b of betsArray) {
+      const arr = grouped.get(b.marketId) || [];
+      arr.push(b);
+      grouped.set(b.marketId, arr);
+    }
+    grouped.forEach((bets, marketId) => {
+      const totalStake = bets.reduce((s: number, b: any) => s + b.stakeAmount, 0);
+      const totalPayout = bets.reduce((s: number, b: any) => s + (b.payout || 0), 0);
+      const uniqueEntries = new Set(bets.map((b: any) => b.entryLabel));
+      const entryLabel = uniqueEntries.size === 1 ? bets[0].entryLabel : "Multiple positions";
+      const results = new Set(bets.map((b: any) => b.result));
+      let result = "pending";
+      if (results.has("won") && !results.has("lost")) result = "won";
+      else if (results.has("lost") && !results.has("won")) result = "lost";
+      else if (results.has("won") && results.has("lost")) result = "won";
+      else if (results.has("refunded") && results.size === 1) result = "refunded";
+      else result = bets[0].result;
+      map.set(marketId, { result, payout: totalPayout, entryLabel, stakeAmount: totalStake, marketId });
+    });
     return map;
   }, [userPredictionsData]);
 
@@ -861,171 +716,84 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
     );
   }
 
+  const worldCards = openMarketsForPerson.slice(0, visibleWorldCount);
+  const worldGrid = predictSectionGridClass(worldCards.length);
+  const h2hGrid = predictSectionGridClass(h2hBattles.length);
+  const gainerGrid = predictSectionGridClass(gainerMarkets.length);
+
   return (
     <div className="space-y-6">
       {/* World Markets (Open Markets) */}
-      <section>
-        <SectionHeader
-          icon={<Users className="h-5 w-5 text-violet-600 dark:text-violet-400" />}
-          title="World Markets"
-          subtitle="Predict the outcome of global events"
-          count={communityPredictions.length || undefined}
-          showViewAll={communityPredictions.length > 3}
-          onViewAll={() => setShowCommunityOverlay(true)}
-          infoTooltip="Prediction markets about real-world events involving this person"
-        />
-        {communityPredictions.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {communityPredictions.slice(0, 3).map((community) => (
-              <CommunityCard
-                key={community.id}
-                market={community}
-                onClick={() => {}}
-                isMarketClosed={isMarketClosed}
-              />
+      {openMarketsForPerson.length > 0 && (
+        <section>
+          <SectionHeader
+            icon={<Users className="h-5 w-5 text-violet-600 dark:text-violet-400" />}
+            title="World Markets"
+            subtitle="Predict the outcome of global events"
+            count={openMarketsForPerson.length || undefined}
+            infoTooltip="Prediction markets about real-world events involving this person"
+          />
+          <div className={worldGrid.container}>
+            {worldCards.map((market: any) => (
+              <div key={market.id} className={worldGrid.item}>
+                <OpenMarketCard
+                  market={market}
+                  onNavigate={(slug, pick, direction) =>
+                    setLocation(`/markets/${slug}${pick ? `?pick=${pick}${direction ? `&direction=${direction}` : ''}` : ''}`)
+                  }
+                  isMarketClosed={market.status !== "OPEN"}
+                  userBetResult={openMarketBets.get(market.id)}
+                  onFilterCategory={handleCategoryFilter}
+                  categoryRaceMap={categoryRaceMap}
+                  leaderboardCategories={leaderboardCategories}
+                />
+              </div>
             ))}
           </div>
-        ) : (
-          <div className="text-center py-6 text-muted-foreground">
-            No real-world markets for {personName} yet.
-          </div>
-        )}
-      </section>
-
-      {/* Sticky weekly countdown timer — constrained to same width as profile toggles / page container */}
-      <MarketCycleHero marketState={marketCycle} constrainedWidth />
-
-      {/* Weekly Jackpot - person specific */}
-      <section>
-        <SectionHeader
-          icon={<Crown className="h-5 w-5 text-amber-600 dark:text-amber-400" />}
-          title="Weekly Jackpot"
-          subtitle="Predict this week's exact Trend Score"
-          infoTooltip="Closest prediction to the final score wins the jackpot pot"
-        />
-
-        {jackpotMarket ? (
-        <div 
-        className="relative overflow-hidden rounded-xl border-2 border-amber-500/60 dark:border-amber-500/50"
-        style={{
-          background: "linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(251, 146, 60, 0.05) 50%, transparent 100%)",
-          boxShadow: "inset 0 0 20px rgba(245, 158, 11, 0.1), 0 0 30px rgba(245, 158, 11, 0.1)",
-        }}
-        data-testid="profile-jackpot-widget"
-      >
-        <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/15 dark:bg-amber-500/10 rounded-full blur-2xl" />
-        <div className="absolute bottom-0 left-0 w-24 h-24 bg-orange-500/15 dark:bg-orange-500/10 rounded-full blur-2xl" />
-        
-        <div className="relative z-10 p-5">
-          <div className="flex items-center gap-2 mb-3">
-            <Crown className="h-5 w-5 text-amber-700 dark:text-amber-500" />
-            <Badge className="bg-amber-500/25 dark:bg-amber-500/20 text-amber-700 dark:text-amber-500 border-amber-500/50 dark:border-amber-500/40 text-xs">
-              WEEKLY JACKPOT
-            </Badge>
-          </div>
-          
-          <h3 className="text-lg font-serif font-bold mb-2">
-            Predict {personName}'s Exact Score
-          </h3>
-          
-          <p className="text-sm text-muted-foreground mb-4">
-            Guess the exact VoxDex score at week's end. Closest prediction takes the entire pot!
-          </p>
-          
-          <div className="flex flex-wrap items-center gap-4 mb-4">
-            <div className="flex items-center gap-3">
-              <PersonAvatar name={personName} avatar={personAvatar || ""} size="md" />
-              <div>
-                <p className="font-semibold">{personName}</p>
-                <p className="text-xs text-muted-foreground font-mono">
-                  Current: {currentScore.toLocaleString('en-US')} pts
-                </p>
-              </div>
-            </div>
-            
-            <div className="h-10 w-px bg-border hidden sm:block" />
-            
-            <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Pot</p>
-              <p className="text-xl font-mono font-bold text-amber-700 dark:text-amber-500">
-                {jackpotPoolSize.toLocaleString('en-US')}
-                <span className="text-xs ml-1 text-muted-foreground">credits</span>
-              </p>
-            </div>
-            
-            <div className="h-10 w-px bg-border hidden sm:block" />
-            
-            <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">
-                {marketCycle.status === "ENTRIES_CLOSED" ? "Results In" : "Entries Close In"}
-              </p>
-              <p className="text-sm font-mono font-bold">
-                {marketCycle.timeRemaining.days}d {marketCycle.timeRemaining.hours}h {marketCycle.timeRemaining.minutes}m
-              </p>
-            </div>
-          </div>
-          
-          {isMarketClosed ? (
-            <>
-              <Button 
-                className="bg-muted text-muted-foreground cursor-not-allowed"
-                disabled
-              >
-                <Clock className="h-4 w-4 mr-2" />
-                Entries Closed — Results Sunday
+          {openMarketsForPerson.length > visibleWorldCount && (
+            <div className="flex justify-center mt-4">
+              <Button variant="outline" size="sm" onClick={() => setVisibleWorldCount(c => c + 3)}>
+                Load more
               </Button>
-              {profileJackpotEntryCount > 0 && (
-                <p
-                  className="mt-3 flex items-start gap-2 text-xs text-muted-foreground"
-                  data-testid="text-profile-jackpot-user-entered-hint-closed"
-                >
-                  <TicketCheck className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-600/80 dark:text-amber-400/80" aria-hidden />
-                  <span>
-                    You&apos;re in with {profileJackpotEntryCount} prediction{profileJackpotEntryCount !== 1 ? "s" : ""} this week.
-                  </span>
-                </p>
-              )}
-            </>
-          ) : (
-            <>
-              <Button 
-                className="bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/30"
-                onClick={() => setJackpotModalOpen(true)}
-                data-testid="button-profile-predict-score"
-              >
-                <Sparkles className="h-4 w-4 mr-2" />
-                Predict Score
-              </Button>
-              {profileJackpotEntryCount > 0 && (
-                <p
-                  className="mt-3 flex items-start gap-2 text-xs text-muted-foreground"
-                  data-testid="text-profile-jackpot-user-entered-hint"
-                >
-                  <TicketCheck className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-600/80 dark:text-amber-400/80" aria-hidden />
-                  <span>
-                    You&apos;re in with {profileJackpotEntryCount} prediction{profileJackpotEntryCount !== 1 ? "s" : ""} this week — tap Predict Score to add another.
-                  </span>
-                </p>
-              )}
-            </>
+            </div>
           )}
-        </div>
-      </div>
+        </section>
+      )}
+
+      <MarketCycleHero marketState={marketCycle} />
+
+      {/* Weekly Jackpot — same hero as main Predict page; static person row (no celebrity picker) */}
+      <section data-testid="profile-jackpot-widget">
+        {jackpotMarket ? (
+          <WeeklyJackpotHero
+            variant="profile"
+            profilePerson={{
+              id: personId,
+              name: personName,
+              avatar: personAvatar || "",
+              rank: personRank,
+            }}
+            onEnterJackpot={() => setJackpotModalOpen(true)}
+            marketStatus={marketCycle.status}
+            timeRemaining={marketCycle.timeRemaining}
+            jackpotMarket={jackpotMarket}
+            onRulesClick={() => setRulesModalOpen("jackpot")}
+          />
         ) : (
           <div className="text-center py-6 text-muted-foreground">
             No weekly jackpot market for {personName} yet.
           </div>
         )}
 
-      <JackpotEntryModal
-        open={jackpotModalOpen}
-        onClose={() => setJackpotModalOpen(false)}
-        person={{ id: personId, name: personName, avatar: personAvatar || "", trendScore: currentScore } as any}
-        marketId={jackpotMarket?.id || null}
-        userCredits={walletCredits}
-        bettingCutoff={jackpotMarket?.bettingCutoff || null}
-        isCutoffPassed={jackpotMarket?.isCutoffPassed || false}
-      />
+        <JackpotEntryModal
+          open={jackpotModalOpen}
+          onClose={() => setJackpotModalOpen(false)}
+          person={{ id: personId, name: personName, avatar: personAvatar || "", trendScore: currentScore } as any}
+          marketId={jackpotMarket?.id || null}
+          userCredits={walletCredits}
+          bettingCutoff={jackpotMarket?.bettingCutoff || null}
+          isCutoffPassed={jackpotMarket?.isCutoffPassed || false}
+        />
       </section>
 
       {/* Up/Down Predictions */}
@@ -1063,7 +831,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
           infoTooltip="Face-off markets matching this person against another rival"
         />
         {h2hBattles.length > 0 ? (
-          <div className={`grid gap-4 ${h2hBattles.length > 1 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>
+          <div className={h2hGrid.container}>
             {h2hBattles.map((battle) => {
               const bet = userBetsByMarket.get(battle.id);
               const h2hUserPick = bet
@@ -1072,17 +840,18 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
                 : null
                 : null;
               return (
-                <HeadToHeadCard
-                  key={battle.id}
-                  market={battle}
-                  isMarketClosed={isMarketClosed}
-                  closedMessage={closedMarketMessage}
-                  onSelect={(person) => handleH2HSelect(battle, person)}
-                  userPick={h2hUserPick}
-                  onFilterCategory={handleCategoryFilter}
-                  categoryRaceMap={categoryRaceMap}
-                  leaderboardCategories={leaderboardCategories}
-                />
+                <div key={battle.id} className={h2hGrid.item}>
+                  <HeadToHeadCard
+                    market={battle}
+                    isMarketClosed={isMarketClosed}
+                    closedMessage={closedMarketMessage}
+                    onSelect={(person) => handleH2HSelect(battle, person)}
+                    userPick={h2hUserPick}
+                    onFilterCategory={handleCategoryFilter}
+                    categoryRaceMap={categoryRaceMap}
+                    leaderboardCategories={leaderboardCategories}
+                  />
+                </div>
               );
             })}
           </div>
@@ -1103,19 +872,20 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
           infoTooltip="The winner is whoever has the highest % gain in their Trend Score by Sunday close — not the highest ranked person."
         />
         {gainerMarkets.length > 0 ? (
-          <div className={`grid gap-4 ${gainerMarkets.length > 1 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>
+          <div className={gainerGrid.container}>
             {gainerMarkets.map((gainer) => (
-              <TopGainerCard
-                key={gainer.id}
-                market={gainer}
-                isMarketClosed={isMarketClosed}
-                closedMessage={closedMarketMessage}
-                onShowAllCandidates={openGainerPicker}
-                isPredicted={userBetsByMarket.has(gainer.id)}
-                onFilterCategory={handleCategoryFilter}
-                categoryRaceMap={categoryRaceMap}
-                leaderboardCategories={leaderboardCategories}
-              />
+              <div key={gainer.id} className={gainerGrid.item}>
+                <TopGainerCard
+                  market={gainer}
+                  isMarketClosed={isMarketClosed}
+                  closedMessage={closedMarketMessage}
+                  onShowAllCandidates={openGainerPicker}
+                  isPredicted={userBetsByMarket.has(gainer.id)}
+                  onFilterCategory={handleCategoryFilter}
+                  categoryRaceMap={categoryRaceMap}
+                  leaderboardCategories={leaderboardCategories}
+                />
+              </div>
             ))}
           </div>
         ) : (
@@ -1140,15 +910,6 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
         </Card>
       )}
 
-      {/* View-all overlay for World Markets */}
-      <ViewAllCommunityOverlay
-        open={showCommunityOverlay}
-        onClose={() => setShowCommunityOverlay(false)}
-        personName={personName}
-        markets={communityPredictions}
-        isMarketClosed={isMarketClosed}
-      />
-
       <GainerCandidatesDialog
         market={gainerPickerState?.market || null}
         initialCandidate={gainerPickerState?.initialCandidate || null}
@@ -1169,6 +930,16 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
         onConfirm={handleConfirmStake}
         walletBalance={walletCredits}
       />
+
+      {rulesModalOpen && RULES_CONTENT[rulesModalOpen] && (
+        <RulesModal
+          open={!!rulesModalOpen}
+          onClose={() => setRulesModalOpen(null)}
+          title={RULES_CONTENT[rulesModalOpen].title}
+          description={RULES_CONTENT[rulesModalOpen].description}
+          steps={RULES_CONTENT[rulesModalOpen].steps}
+        />
+      )}
     </div>
   );
 }
