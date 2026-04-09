@@ -6726,6 +6726,34 @@ Only return the JSON object.`;
       if (status && typeof status === 'string') {
         celebrities = celebrities.filter(c => c.status === status);
       }
+
+      const missingAvatarIds = celebrities.filter(c => !c.avatar).map(c => c.id);
+      if (missingAvatarIds.length > 0) {
+        const primaryImages = await db
+          .select({ personId: celebrityImages.personId, imageUrl: celebrityImages.imageUrl })
+          .from(celebrityImages)
+          .where(and(
+            inArray(celebrityImages.personId, missingAvatarIds),
+            eq(celebrityImages.isPrimary, true),
+          ));
+        const avatarMap = new Map(primaryImages.map(r => [r.personId, r.imageUrl]));
+
+        if (avatarMap.size < missingAvatarIds.length) {
+          const fallbackImages = await db
+            .selectDistinctOn([celebrityImages.personId], {
+              personId: celebrityImages.personId,
+              imageUrl: celebrityImages.imageUrl,
+            })
+            .from(celebrityImages)
+            .where(inArray(celebrityImages.personId, missingAvatarIds.filter(id => !avatarMap.has(id))))
+            .orderBy(celebrityImages.personId, celebrityImages.addedAt);
+          for (const row of fallbackImages) {
+            if (!avatarMap.has(row.personId)) avatarMap.set(row.personId, row.imageUrl);
+          }
+        }
+
+        celebrities = celebrities.map(c => c.avatar ? c : { ...c, avatar: avatarMap.get(c.id) ?? null });
+      }
       
       res.json(celebrities);
     } catch (error: any) {
@@ -7897,7 +7925,7 @@ Only return the JSON object.`;
       const supabaseUrl = process.env.SUPABASE_URL;
       if (!supabaseUrl) return res.status(503).json({ error: "SUPABASE_URL not configured" });
 
-      const allPeople = await db.select({ id: trackedPeople.id, name: trackedPeople.name, imageSlug: trackedPeople.imageSlug })
+      const allPeople = await db.select({ id: trackedPeople.id, name: trackedPeople.name, imageSlug: trackedPeople.imageSlug, avatar: trackedPeople.avatar })
         .from(trackedPeople);
       const people = allPeople.filter(p => p.imageSlug && p.imageSlug.trim() !== '');
 
@@ -7980,11 +8008,43 @@ Only return the JSON object.`;
         }
       }
 
+      // Backfill trackedPeople.avatar for anyone missing one
+      let avatarsBackfilled = 0;
+      const missingAvatarPeople = allPeople.filter(p => !p.avatar);
+      if (missingAvatarPeople.length > 0) {
+        const missingIds = missingAvatarPeople.map(p => p.id);
+        const primaryImages = await db
+          .select({ personId: celebrityImages.personId, imageUrl: celebrityImages.imageUrl })
+          .from(celebrityImages)
+          .where(and(inArray(celebrityImages.personId, missingIds), eq(celebrityImages.isPrimary, true)));
+        const backfillMap = new Map(primaryImages.map(r => [r.personId, r.imageUrl]));
+
+        if (backfillMap.size < missingIds.length) {
+          const fallback = await db
+            .selectDistinctOn([celebrityImages.personId], {
+              personId: celebrityImages.personId,
+              imageUrl: celebrityImages.imageUrl,
+            })
+            .from(celebrityImages)
+            .where(inArray(celebrityImages.personId, missingIds.filter(id => !backfillMap.has(id))))
+            .orderBy(celebrityImages.personId, celebrityImages.addedAt);
+          for (const row of fallback) {
+            if (!backfillMap.has(row.personId)) backfillMap.set(row.personId, row.imageUrl);
+          }
+        }
+
+        for (const [personId, imageUrl] of backfillMap) {
+          await db.update(trackedPeople).set({ avatar: imageUrl }).where(eq(trackedPeople.id, personId));
+          avatarsBackfilled++;
+        }
+      }
+
       res.json({
         totalSynced,
         peopleProcessed,
         totalPeopleScanned: people.length,
         totalTrackedWithoutSlug: allPeople.length - people.length,
+        avatarsBackfilled,
         foldersMissing: foldersMissing.length,
         foldersMissingSample: foldersMissing.slice(0, 10),
         foldersEmpty: foldersEmpty.length,
