@@ -3252,7 +3252,7 @@ export default function AdminDashboard() {
       if (res.ok) {
         const data = await res.json();
         const newResults = [...opOptionSearchResults];
-        newResults[idx] = data.slice(0, 8);
+        newResults[idx] = data.slice(0, 15);
         setOpOptionSearchResults(newResults);
         const newDropdown = [...opOptionShowDropdown];
         newDropdown[idx] = true;
@@ -3264,6 +3264,9 @@ export default function AdminDashboard() {
   const selectCelebrityForOption = (idx: number, celeb: any) => {
     updateOpinionOption(idx, "personId", celeb.id);
     updateOpinionOption(idx, "name", celeb.name);
+    if (celeb.avatar) {
+      updateOpinionOption(idx, "imageUrl", celeb.avatar);
+    }
     const newInputs = [...opOptionSearchInputs];
     newInputs[idx] = celeb.name;
     setOpOptionSearchInputs(newInputs);
@@ -8251,44 +8254,64 @@ export default function AdminDashboard() {
                       />
                     </div>
                     <div className="relative ml-6 min-w-0">
-                      <Input
-                        value={opOptionSearchInputs[idx] || ""}
-                        onChange={(e) => searchCelebrityForOption(idx, e.target.value)}
-                        placeholder="Link celebrity (search...)"
-                        className="text-xs"
-                        data-testid={`input-opinion-option-celebrity-${idx}`}
-                      />
-                      {opt.personId && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="absolute right-1 top-1/2 -translate-y-1/2"
-                          onClick={() => {
-                            updateOpinionOption(idx, "personId", "");
-                            const newInputs = [...opOptionSearchInputs];
-                            newInputs[idx] = "";
-                            setOpOptionSearchInputs(newInputs);
-                          }}
-                          aria-label="Clear celebrity"
-                          data-testid={`button-clear-opinion-option-celebrity-${idx}`}
-                        >
-                          <X className="h-3 w-3" />
-                        </Button>
-                      )}
-                      {opOptionShowDropdown[idx] && opOptionSearchResults[idx]?.length > 0 && (
-                        <div className="absolute z-50 top-full mt-1 w-full bg-popover border rounded-md shadow-lg max-h-40 overflow-y-auto">
-                          {opOptionSearchResults[idx].map((celeb: any) => (
-                            <button
-                              key={celeb.id}
-                              className="w-full px-3 py-2 text-left text-sm hover-elevate flex items-center gap-2"
-                              onClick={() => selectCelebrityForOption(idx, celeb)}
-                              data-testid={`option-celebrity-result-${idx}-${celeb.id}`}
-                            >
-                              {celeb.avatar && <img src={celeb.avatar} alt={celeb.name} className="w-5 h-5 rounded-full" />}
-                              <span>{celeb.name}</span>
-                            </button>
-                          ))}
+                      <div className="flex items-center gap-1.5">
+                        {opt.personId && opt.imageUrl && (
+                          <img src={opt.imageUrl} alt="" className="w-6 h-6 rounded-full object-cover shrink-0 border border-green-500/50" />
+                        )}
+                        <Input
+                          value={opOptionSearchInputs[idx] || ""}
+                          onChange={(e) => searchCelebrityForOption(idx, e.target.value)}
+                          placeholder={opt.personId ? "Linked — type to change" : "Link celebrity (search...)"}
+                          className={`text-xs flex-1 ${opt.personId ? "border-green-500/40" : ""}`}
+                          data-testid={`input-opinion-option-celebrity-${idx}`}
+                        />
+                        {opt.personId && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="shrink-0 h-7 w-7"
+                            onClick={() => {
+                              updateOpinionOption(idx, "personId", "");
+                              updateOpinionOption(idx, "name", "");
+                              updateOpinionOption(idx, "imageUrl", "");
+                              const newInputs = [...opOptionSearchInputs];
+                              newInputs[idx] = "";
+                              setOpOptionSearchInputs(newInputs);
+                            }}
+                            aria-label="Clear celebrity"
+                            data-testid={`button-clear-opinion-option-celebrity-${idx}`}
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
+                      {opOptionShowDropdown[idx] && (
+                        <div className="absolute z-50 top-full mt-1 w-full bg-popover border rounded-md shadow-lg max-h-64 overflow-y-auto">
+                          {opOptionSearchResults[idx]?.length > 0 ? (
+                            opOptionSearchResults[idx].map((celeb: any) => (
+                              <button
+                                key={celeb.id}
+                                className="w-full px-3 py-2 text-left text-sm hover:bg-muted/50 flex items-center gap-2"
+                                onClick={() => selectCelebrityForOption(idx, celeb)}
+                                data-testid={`option-celebrity-result-${idx}-${celeb.id}`}
+                              >
+                                {celeb.avatar ? (
+                                  <img src={celeb.avatar} alt={celeb.name} className="w-6 h-6 rounded-full object-cover shrink-0" />
+                                ) : (
+                                  <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-[10px] font-medium shrink-0">
+                                    {celeb.name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2)}
+                                  </div>
+                                )}
+                                <span className="truncate">{celeb.name}</span>
+                                {celeb.category && (
+                                  <span className="ml-auto text-[10px] text-muted-foreground shrink-0">{celeb.category}</span>
+                                )}
+                              </button>
+                            ))
+                          ) : (
+                            <p className="px-3 py-2 text-xs text-muted-foreground">No matching celebrities found</p>
+                          )}
                         </div>
                       )}
                     </div>
