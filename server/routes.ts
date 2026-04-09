@@ -8033,8 +8033,9 @@ Only return the JSON object.`;
           }
         }
 
-        for (const [personId, imageUrl] of backfillMap) {
-          await db.update(trackedPeople).set({ avatar: imageUrl }).where(eq(trackedPeople.id, personId));
+        const backfillEntries = Array.from(backfillMap.entries());
+        for (const entry of backfillEntries) {
+          await db.update(trackedPeople).set({ avatar: entry[1] }).where(eq(trackedPeople.id, entry[0]));
           avatarsBackfilled++;
         }
       }
