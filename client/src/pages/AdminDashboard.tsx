@@ -8287,11 +8287,6 @@ export default function AdminDashboard() {
                             searchCelebrityForOption(idx, e.target.value);
                           }
                         }}
-                        onBlur={() => {
-                          setTimeout(() => {
-                            setOpOptionShowDropdown(prev => prev.map((v, i) => i === idx ? false : v));
-                          }, 200);
-                        }}
                         placeholder="Option name"
                         className="flex-1 min-w-0"
                         data-testid={`input-opinion-option-name-${idx}`}
@@ -8330,11 +8325,6 @@ export default function AdminDashboard() {
                             const q = (opOptionSearchInputs[idx] || "").trim();
                             if (q && !opt.personId) searchCelebrityForOption(idx, q);
                           }}
-                          onBlur={() => {
-                            setTimeout(() => {
-                              setOpOptionShowDropdown(prev => prev.map((v, i) => i === idx ? false : v));
-                            }, 200);
-                          }}
                           placeholder={opt.personId ? "Linked — type to change" : "Link to leaderboard celebrity..."}
                           className={`text-xs flex-1 ${opt.personId ? "border-green-500/40" : ""}`}
                           data-testid={`input-opinion-option-celebrity-${idx}`}
@@ -8361,7 +8351,7 @@ export default function AdminDashboard() {
                         )}
                       </div>
                       {opOptionShowDropdown[idx] && (
-                        <div className="absolute z-50 top-full mt-1 w-full bg-popover border rounded-md shadow-lg max-h-64 overflow-y-auto">
+                        <div className="absolute z-50 top-full mt-1 w-full bg-popover border rounded-md shadow-lg max-h-64 overflow-y-auto" onMouseDown={(e) => e.preventDefault()}>
                           {opOptionSearchResults[idx]?.length > 0 ? (
                             opOptionSearchResults[idx].map((celeb: any) => (
                               <button
