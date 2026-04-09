@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, lazy, Suspense } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback, lazy, Suspense } from "react";
 import { handleImageError } from "@/lib/imageResolver";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -8,7 +8,10 @@ import { TrendBadge } from "@/components/TrendBadge";
 import { StatCard } from "@/components/StatCard";
 import { UserMenu } from "@/components/UserMenu";
 import { ProfileTabs } from "@/components/ProfileTabs";
-import { CategoryPill, getCategoryStyle } from "@/components/CategoryPill";
+import { getCategoryStyle } from "@/components/CategoryPill";
+import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
+import { useCategoryRaceMap } from "@/hooks/useCategoryRaceMap";
+import { useLeaderboardCategories } from "@/hooks/useLeaderboardCategories";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
 import { TrendScoreInfoIcon } from "@/components/TrendScoreInfo";
 import { ApprovalRatingInfoIcon } from "@/components/ApprovalRatingInfo";
@@ -36,23 +39,14 @@ import {
   ListChecks,
   ChevronRight,
   BarChart3,
-  CheckCircle2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogHeader,
-  AlertDialogFooter,
-  AlertDialogTitle,
-  AlertDialogDescription,
-  AlertDialogCancel,
-} from "@/components/ui/alert-dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useRoute, useLocation, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { TrendingPerson } from "@shared/schema";
+import { normalizeMarketCategory } from "@shared/constants";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { sharePage } from "@/lib/share";
@@ -65,6 +59,8 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { isUnauthorizedApiError, signInToVoteToastOptions } from "@/lib/signInToVoteToast";
 import { ViewAllOverlayHeader } from "@/components/ViewAllOverlayHeader";
 import { AvatarHeightHeadline } from "@/components/AvatarHeightHeadline";
+import { VersusCard, type VersusCardMatchup } from "@/components/matchups/VersusCard";
+import { OpinionPollCard } from "@/components/opinion-polls/OpinionPollCard";
 
 const LazyPredictTab = lazy(() =>
   import("@/components/PredictTab").then((m) => ({ default: m.PredictTab }))
@@ -109,7 +105,9 @@ interface ValueVoteMetrics {
 interface FeaturedPoll {
   id: string;
   headline: string;
-  description: string;
+  category: string;
+  subjectText?: string | null;
+  description?: string | null;
   approvePercent: number;
   neutralPercent: number;
   disapprovePercent: number;
@@ -132,31 +130,11 @@ interface CelebrityImage {
   addedAt: string;
 }
 
-interface MatchupData {
-  id: string;
-  category: string;
-  title: string;
-  optionAText: string;
-  optionAImage: string | null;
-  optionAFallbackImage?: string | null;
-  optionBText: string;
-  optionBImage: string | null;
-  optionBFallbackImage?: string | null;
-  promptText?: string | null;
-  isActive?: boolean;
-  visibility?: string;
-  featured?: boolean;
-  slug?: string | null;
-  createdAt?: string;
-  optionAVotes: number;
-  optionBVotes: number;
-  totalVotes: number;
-  optionAPercent: number;
-  optionBPercent: number;
+type MatchupData = VersusCardMatchup & {
   personAId?: string | null;
   personBId?: string | null;
   relatedPersonIds?: string[];
-}
+};
 
 interface TrendingPoll {
   id: string;
@@ -184,6 +162,7 @@ interface OpinionPollOption {
   personName?: string | null;
   votes: number;
   percent: number;
+  orderIndex?: number;
 }
 
 interface OpinionPoll {
@@ -192,492 +171,11 @@ interface OpinionPoll {
   description?: string | null;
   category?: string | null;
   slug: string;
+  imageUrl?: string | null;
   options: OpinionPollOption[];
   totalVotes: number;
   userVote?: string | null;
   relatedPersonIds?: string[];
-}
-
-function ProfileMatchupCard({
-  matchup,
-  userVote,
-  onVote,
-  onRemoveVote,
-}: {
-  matchup: MatchupData;
-  userVote: string | null;
-  onVote: (matchupId: string, option: "option_a" | "option_b") => void;
-  onRemoveVote: (matchupId: string) => void;
-}) {
-  const hasVoted = userVote !== null;
-  const votedA = userVote === "option_a";
-  const votedB = userVote === "option_b";
-  const leadingA = matchup.optionAPercent >= matchup.optionBPercent;
-
-  const handleVoteA = () => {
-    if (!hasVoted || votedB) onVote(matchup.id, "option_a");
-  };
-
-  const handleVoteB = () => {
-    if (!hasVoted || votedA) onVote(matchup.id, "option_b");
-  };
-
-  return (
-    <div className="relative group h-full">
-      <div className="absolute -inset-[1px] rounded-xl border border-cyan-500/60 transition-opacity pointer-events-none opacity-0 group-hover:opacity-100 hidden md:block" />
-      <Card className="relative overflow-visible bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border-0 md:border md:border-transparent shadow-none md:shadow-sm group-hover:shadow-lg md:group-hover:shadow-cyan-500/30 dark:shadow-cyan-500/20 transition-all h-full flex flex-col rounded-none md:rounded-xl min-h-[390px] md:min-h-0">
-        <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-transparent to-sky-600/5 rounded-lg md:rounded-xl" />
-
-        <div className="relative pt-4 pb-4 flex flex-col flex-1">
-          <div className="absolute top-3 right-3 z-10">
-            <CategoryPill category={matchup.category} data-testid={`badge-matchup-${matchup.id}`} />
-          </div>
-          <div className="flex items-center mb-3 gap-2 px-4">
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
-              <span>{matchup.totalVotes.toLocaleString("en-US")} votes</span>
-            </div>
-          </div>
-
-          <div className="rounded-t-lg border border-slate-700/30 border-b-0 bg-slate-900/80 backdrop-blur-sm px-4 py-2 text-center mb-0 mt-[5px]">
-            {matchup.slug ? (
-              <Link
-                href={`/vote/matchups/${matchup.slug}`}
-                className={`text-sm font-semibold transition-colors ${hasVoted ? 'text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300' : 'text-slate-500 dark:text-slate-300 hover:text-cyan-600 dark:hover:text-cyan-400'}`}
-                data-testid={`link-matchup-${matchup.id}`}
-              >
-                {hasVoted ? "View details →" : (matchup.promptText || "Who do you prefer?")}
-              </Link>
-            ) : (
-              <span className="text-sm font-semibold text-slate-500 dark:text-slate-300">
-                {matchup.promptText || "Who do you prefer?"}
-              </span>
-            )}
-          </div>
-
-          <div className="flex items-stretch gap-0 relative">
-            <button
-              onClick={handleVoteA}
-              className={`flex-1 flex flex-col rounded-t-none rounded-b-lg border transition-all duration-300 overflow-hidden cursor-pointer ${
-                hasVoted
-                  ? votedA
-                    ? "border-cyan-500/60 dark:border-cyan-500/50 ring-2 ring-cyan-500/30"
-                    : "border-slate-700/30 opacity-70 hover:opacity-90 hover:border-cyan-500/40 dark:border-cyan-500/30"
-                  : "border-slate-700/50 hover:border-cyan-500/60 dark:border-cyan-500/50"
-              }`}
-              data-testid={`button-vote-a-${matchup.id}`}
-            >
-              <div className="relative" style={{ minHeight: "222px" }}>
-                {matchup.optionAImage ? (
-                  <div className="absolute inset-0">
-                    <img
-                      src={matchup.optionAImage}
-                      alt={matchup.optionAText}
-                      className="w-full h-full object-cover"
-                      onError={(e) => handleImageError(e, matchup.optionAFallbackImage)}
-                    />
-                  </div>
-                ) : (
-                  <div
-                    className={`absolute inset-0 bg-gradient-to-br ${
-                      hasVoted && votedA
-                        ? "from-cyan-600/30 via-slate-800 to-slate-900"
-                        : "from-slate-700 via-slate-800 to-slate-900"
-                    }`}
-                  />
-                )}
-              </div>
-              <div className="px-2 py-2 bg-slate-900/80 backdrop-blur-sm border-t border-slate-700/30 text-center">
-                <span className="font-semibold text-sm truncate block">{matchup.optionAText}</span>
-              </div>
-            </button>
-
-            <div className="absolute left-1/2 top-[calc(50%-16px)] -translate-x-1/2 -translate-y-1/2 z-20 flex items-center justify-center pointer-events-none">
-              <div className="h-10 w-10 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 border-2 border-slate-500 flex items-center justify-center shadow-lg">
-                <span className="text-xs font-bold text-slate-200">VS</span>
-              </div>
-            </div>
-
-            <button
-              onClick={handleVoteB}
-              className={`flex-1 flex flex-col rounded-t-none rounded-b-lg border transition-all duration-300 overflow-hidden cursor-pointer ${
-                hasVoted
-                  ? votedB
-                    ? "border-sky-600/50 ring-2 ring-sky-600/30"
-                    : "border-slate-700/30 opacity-70 hover:opacity-90 hover:border-sky-600/30"
-                  : "border-slate-700/50 hover:border-sky-600/50"
-              }`}
-              data-testid={`button-vote-b-${matchup.id}`}
-            >
-              <div className="relative" style={{ minHeight: "222px" }}>
-                {matchup.optionBImage ? (
-                  <div className="absolute inset-0">
-                    <img
-                      src={matchup.optionBImage}
-                      alt={matchup.optionBText}
-                      className="w-full h-full object-cover"
-                      onError={(e) => handleImageError(e, matchup.optionBFallbackImage)}
-                    />
-                  </div>
-                ) : (
-                  <div
-                    className={`absolute inset-0 bg-gradient-to-br ${
-                      hasVoted && votedB
-                        ? "from-sky-700/30 via-slate-800 to-slate-900"
-                        : "from-slate-700 via-slate-800 to-slate-900"
-                    }`}
-                  />
-                )}
-              </div>
-              <div className="px-2 py-2 bg-slate-900/80 backdrop-blur-sm border-t border-slate-700/30 text-center">
-                <span className="font-semibold text-sm truncate block">{matchup.optionBText}</span>
-              </div>
-            </button>
-          </div>
-
-          <div className="mt-auto pt-3 px-4">
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-1.5">
-                  <span
-                    className={`text-lg font-bold ${
-                      hasVoted ? (leadingA ? "text-cyan-600 dark:text-cyan-400" : "text-slate-600 dark:text-slate-400") : "text-slate-600"
-                    }`}
-                  >
-                    {hasVoted ? `${matchup.optionAPercent}%` : "%"}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span
-                    className={`text-lg font-bold ${
-                      hasVoted ? (!leadingA ? "text-[#0386C9]" : "text-slate-600 dark:text-slate-400") : "text-slate-600"
-                    }`}
-                  >
-                    {hasVoted ? `${matchup.optionBPercent}%` : "%"}
-                  </span>
-                </div>
-              </div>
-              <div className={`h-2.5 rounded-full overflow-hidden flex ${hasVoted ? "bg-slate-700/50" : "bg-slate-700/30"}`}>
-                {hasVoted ? (
-                  <>
-                    <div
-                      className="h-full bg-gradient-to-r from-cyan-500 to-cyan-400"
-                      style={{ width: `${matchup.optionAPercent}%` }}
-                    />
-                    <div
-                      className="h-full bg-gradient-to-r from-sky-500 to-sky-600"
-                      style={{ width: `${matchup.optionBPercent}%` }}
-                    />
-                  </>
-                ) : (
-                  <div className="h-full w-full bg-slate-700/40" />
-                )}
-              </div>
-              <div className="flex items-center justify-between mt-1.5">
-                <span className={`text-[11px] font-medium ${hasVoted ? "text-slate-700 dark:text-slate-500" : "text-slate-600"}`}>
-                  {matchup.optionAText}
-                </span>
-                <span className={`text-[11px] font-medium ${hasVoted ? "text-slate-700 dark:text-slate-500" : "text-slate-600"}`}>
-                  {matchup.optionBText}
-                </span>
-              </div>
-            </div>
-            {hasVoted ? (
-              <div className="flex items-center justify-center gap-2 mt-2">
-                <span className="text-[10px] text-slate-500/70">Tap the other image to change your vote</span>
-                <span className="text-[10px] text-slate-500/40">|</span>
-                <button
-                  onClick={() => onRemoveVote(matchup.id)}
-                  className="text-[10px] text-slate-500/70 hover:text-red-600/80 dark:hover:text-red-400/80 transition-colors"
-                  data-testid={`button-remove-vote-${matchup.id}`}
-                >
-                  Remove vote
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-center justify-center gap-2 text-xs text-slate-500/70 mt-2">
-                <Swords className="h-3.5 w-3.5 text-cyan-600/70 dark:text-cyan-400/70" />
-                <span className="font-medium">Tap an image to pick your side</span>
-              </div>
-            )}
-          </div>
-        </div>
-      </Card>
-    </div>
-  );
-}
-
-function parseOpinionPollVoteError(err: unknown): string {
-  if (err instanceof Error && err.message) {
-    const jsonMatch = err.message.match(/^\d+:\s*(\{[\s\S]*\})\s*$/);
-    if (jsonMatch) {
-      try {
-        const j = JSON.parse(jsonMatch[1]) as { error?: string };
-        if (j.error) return j.error;
-      } catch {
-        /* ignore */
-      }
-    }
-    return err.message;
-  }
-  return "Something went wrong. Please try again.";
-}
-
-function OpinionPollCardProfile({
-  poll,
-  onVote,
-}: {
-  poll: OpinionPoll;
-  onVote: (pollSlug: string, optionId: string) => Promise<void>;
-}) {
-  const { toast } = useToast();
-  const [, setLocation] = useLocation();
-  const [voted, setVoted] = useState<string | null>(poll.userVote || null);
-  const [changeDialogOpen, setChangeDialogOpen] = useState(false);
-  const [pendingOption, setPendingOption] = useState<{ id: string; name: string } | null>(null);
-  const options = poll.options || [];
-  const visibleOptions = options.slice(0, 4);
-  const remainingCount = options.length - 4;
-  const totalVotes = poll.totalVotes || 0;
-  const maxPercent = Math.max(...visibleOptions.map((o) => totalVotes > 0 ? Math.round((o.votes / totalVotes) * 100) : 0), 0);
-
-  useEffect(() => {
-    setVoted(poll.userVote ?? null);
-  }, [poll.userVote]);
-
-  const handleVote = async (optionId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!voted) {
-      try {
-        await onVote(poll.slug, optionId);
-        setVoted(optionId);
-      } catch (err) {
-        if (isUnauthorizedApiError(err)) {
-          toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
-        } else {
-          toast({
-            title: "Could not record vote",
-            description: parseOpinionPollVoteError(err),
-            variant: "destructive",
-          });
-        }
-      }
-    }
-  };
-
-  const openChangeDialog = (option: (typeof options)[0], e: React.MouseEvent) => {
-    e.stopPropagation();
-    setPendingOption({ id: option.id, name: option.name });
-    setChangeDialogOpen(true);
-  };
-
-  const confirmChangeVote = async () => {
-    if (!pendingOption) return;
-    try {
-      await onVote(poll.slug, pendingOption.id);
-      setVoted(pendingOption.id);
-      setChangeDialogOpen(false);
-      setPendingOption(null);
-    } catch (err) {
-      if (isUnauthorizedApiError(err)) {
-        toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
-      } else {
-        toast({
-          title: "Could not change vote",
-          description: parseOpinionPollVoteError(err),
-          variant: "destructive",
-        });
-      }
-    }
-  };
-
-  const hasVoted = !!voted;
-
-  return (
-    <div className="relative group h-full">
-      <div className="absolute -inset-[1px] rounded-xl border border-cyan-500/60 transition-opacity pointer-events-none opacity-0 group-hover:opacity-100 hidden md:block" />
-      <Card
-        className="relative pt-5 px-5 pb-5 transition-all duration-200 bg-card/80 backdrop-blur-sm h-full min-h-[420px] md:min-h-0 flex flex-col border-0 md:border md:border-transparent shadow-none md:shadow-sm group-hover:shadow-lg md:group-hover:shadow-cyan-500/30 dark:shadow-cyan-500/20 rounded-none md:rounded-xl"
-        data-testid={`opinion-poll-card-${poll.id}`}
-      >
-        <div className="flex items-center justify-between gap-2 mb-3">
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
-            <span className={hasVoted ? "" : "text-slate-600"}>
-              {hasVoted ? `${totalVotes.toLocaleString("en-US")} votes` : "Votes"}
-            </span>
-          </div>
-          <CategoryPill category={poll.category || ""} data-testid={`badge-opinion-category-${poll.id}`} />
-        </div>
-
-        <AvatarHeightHeadline
-          className="mb-2"
-          text={poll.title}
-          href={`/vote/opinion-polls/${poll.slug}`}
-          linkTestId={`link-opinion-detail-${poll.id}`}
-          avatar={
-            poll.options[0]?.imageUrl ? (
-              <div className="h-12 w-12 rounded-lg overflow-hidden shrink-0 bg-slate-800">
-                <img src={poll.options[0].imageUrl!} alt={poll.title} className="w-full h-full object-cover" />
-              </div>
-            ) : (
-              <div className="h-12 w-12 rounded-lg bg-gradient-to-br from-slate-700/50 to-slate-800/50 flex items-center justify-center shrink-0">
-                <ListChecks className="h-5 w-5 text-slate-600 dark:text-slate-400" />
-              </div>
-            )
-          }
-        />
-        {poll.description && (
-          <Link href={`/vote/opinion-polls/${poll.slug}`}>
-            <p className="text-sm text-muted-foreground mb-3 line-clamp-2 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors cursor-pointer">{poll.description}</p>
-          </Link>
-        )}
-        {!poll.description && <div className="flex-grow" />}
-
-        {!hasVoted ? (
-          <div className="space-y-1.5 mt-auto">
-            {visibleOptions.map((option) => (
-              <button
-                key={option.id}
-                onClick={(e) => handleVote(option.id, e)}
-                className="w-full flex items-stretch overflow-hidden rounded-lg border border-border/50 bg-muted/30 p-0 text-left transition-all duration-200 hover:border-cyan-500/60 dark:border-cyan-500/50 hover:bg-cyan-500/15 dark:hover:bg-cyan-500/10 active:scale-[0.99]"
-                data-testid={`opinion-poll-option-${poll.id}-${option.id}`}
-              >
-                {option.imageUrl ? (
-                  <div className="relative shrink-0 w-14 self-stretch min-h-[2.75rem]">
-                    <img src={option.imageUrl} alt={option.name} className="absolute inset-0 h-full w-full object-cover" />
-                  </div>
-                ) : (
-                  <div className="relative flex shrink-0 w-14 items-center justify-center self-stretch min-h-[2.75rem] bg-cyan-500/15 dark:bg-cyan-500/10">
-                    <ListChecks className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
-                  </div>
-                )}
-                <div className="flex-1 min-w-0 py-1.5 pl-2.5 pr-2">
-                  <div className="flex items-center gap-1.5">
-                    <span className="min-w-0 flex-1 truncate text-sm">{option.name}</span>
-                    <span className="shrink-0 text-xs font-mono font-bold text-slate-600">%</span>
-                  </div>
-                  <div className="mt-1 h-1.5 rounded-full bg-slate-700/50" />
-                  <p className="text-[10px] text-slate-600 mt-0.5">Votes</p>
-                </div>
-              </button>
-            ))}
-            {remainingCount > 0 && (
-              <Link href={`/vote/opinion-polls/${poll.slug}`}>
-                <p className="text-xs text-cyan-600 dark:text-cyan-400 text-center cursor-pointer hover:underline mt-2.5" data-testid={`link-more-options-${poll.id}`}>
-                  +{remainingCount} more options
-                </p>
-              </Link>
-            )}
-          </div>
-        ) : (
-          <div className="space-y-1.5 mt-auto">
-            {visibleOptions.map((option) => {
-              const isSelected = voted === option.id;
-              const percent = totalVotes > 0 ? Math.round((option.votes / totalVotes) * 100) : 0;
-              const isLeading = percent === maxPercent && percent > 0;
-              const rowClass = `rounded-lg border overflow-hidden transition-all duration-300 ${
-                isSelected
-                  ? 'border-cyan-500/60 bg-cyan-500/[0.08]'
-                  : 'border-border/30 bg-muted/20'
-              }`;
-              const rowInner = (
-                <div className="flex items-stretch overflow-hidden p-0">
-                  {option.imageUrl ? (
-                    <div className="relative shrink-0 w-14 self-stretch min-h-[2.75rem]">
-                      <img src={option.imageUrl} alt={option.name} className="absolute inset-0 h-full w-full object-cover" />
-                    </div>
-                  ) : (
-                    <div className="relative flex shrink-0 w-14 items-center justify-center self-stretch min-h-[2.75rem] bg-cyan-500/15 dark:bg-cyan-500/10">
-                      <ListChecks className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0 py-1.5 pl-2.5 pr-2">
-                    <div className="flex items-center gap-1.5">
-                      <span className={`min-w-0 flex-1 truncate text-sm ${isSelected ? 'font-semibold' : ''}`}>{option.name}</span>
-                      {isSelected && <CheckCircle2 className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400 shrink-0" />}
-                      <span className={`shrink-0 text-xs font-mono font-bold ${
-                        isLeading ? 'text-cyan-600 dark:text-cyan-400' : 'text-muted-foreground'
-                      }`}>{percent}%</span>
-                    </div>
-                    <div className="mt-1 h-1.5 rounded-full bg-slate-700/50 overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-700 ease-out ${
-                          isLeading ? 'bg-cyan-500' : isSelected ? 'bg-cyan-400/60' : 'bg-slate-600/50'
-                        }`}
-                        style={{ width: `${percent}%` }}
-                      />
-                    </div>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">{(option.votes || 0).toLocaleString("en-US")} votes</p>
-                  </div>
-                </div>
-              );
-              return isSelected ? (
-                <div
-                  key={option.id}
-                  className={rowClass}
-                  data-testid={`opinion-poll-result-${poll.id}-${option.id}`}
-                >
-                  {rowInner}
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  key={option.id}
-                  className={`${rowClass} w-full text-left cursor-pointer hover:border-cyan-500/50 dark:border-cyan-500/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30`}
-                  onClick={(e) => openChangeDialog(option, e)}
-                  data-testid={`opinion-poll-result-${poll.id}-${option.id}`}
-                >
-                  {rowInner}
-                </button>
-              );
-            })}
-            {remainingCount > 0 && (
-              <Link href={`/vote/opinion-polls/${poll.slug}`}>
-                <p className="text-xs text-cyan-600 dark:text-cyan-400 text-center cursor-pointer hover:underline mt-2.5" data-testid={`link-more-options-${poll.id}`}>
-                  +{remainingCount} more options
-                </p>
-              </Link>
-            )}
-            <div className="flex items-center justify-between mt-2 pt-3 border-t border-border/30">
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <Zap className="h-3 w-3" />
-                <span>{totalVotes.toLocaleString("en-US")} total votes</span>
-              </div>
-              <span className="px-2 py-0.5 rounded-full text-xs font-medium border bg-cyan-500/15 dark:bg-cyan-500/10 border-cyan-500/50 dark:border-cyan-500/40 text-cyan-600 dark:text-cyan-400" data-testid={`badge-voted-opinion-${poll.id}`}>
-                You voted
-              </span>
-            </div>
-          </div>
-        )}
-      </Card>
-
-      <AlertDialog
-        open={changeDialogOpen}
-        onOpenChange={(open) => {
-          setChangeDialogOpen(open);
-          if (!open) setPendingOption(null);
-        }}
-      >
-        <AlertDialogContent onClick={(e) => e.stopPropagation()}>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Change your vote?</AlertDialogTitle>
-            <AlertDialogDescription>
-              You&apos;re switching to{" "}
-              <span className="font-medium text-foreground">{pendingOption?.name ?? "this option"}</span>. You can
-              change your vote once per day on this poll.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel type="button">Cancel</AlertDialogCancel>
-            <Button type="button" className="bg-cyan-600 hover:bg-cyan-700" onClick={() => void confirmChangeVote()}>
-              Change vote
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
-  );
 }
 
 function CurateProfileCardProfile({ 
@@ -863,14 +361,21 @@ function CurateProfileCardProfile({
   );
 }
 
-function FeaturedPollCard({ 
-  poll, 
-  onVote 
-}: { 
-  poll: FeaturedPoll; 
-  onVote: (choice: 'support' | 'neutral' | 'oppose') => void;
+function FeaturedPollCard({
+  poll,
+  onVote,
+  onFilterCategory,
+  categoryRaceMap,
+  leaderboardCategories,
+}: {
+  poll: FeaturedPoll;
+  onVote: (choice: "support" | "neutral" | "oppose") => void;
+  onFilterCategory: (category: string) => void;
+  categoryRaceMap: Map<string, string>;
+  leaderboardCategories?: Set<string>;
 }) {
-  const [voted, setVoted] = useState<'support' | 'neutral' | 'oppose' | null>(null);
+  const [voted, setVoted] = useState<"support" | "neutral" | "oppose" | null>(null);
+  const [expandedImage, setExpandedImage] = useState<string | null>(null);
   const imgSources = [poll.personAvatar, poll.imageUrl].filter(Boolean) as string[];
   const [imgIdx, setImgIdx] = useState(0);
 
@@ -888,135 +393,219 @@ function FeaturedPollCard({
     }
   };
 
-  const handleVote = (choice: 'support' | 'neutral' | 'oppose') => {
+  const handleVote = (choice: "support" | "neutral" | "oppose") => {
     if (!voted) {
       setVoted(choice);
       onVote(choice);
     }
   };
 
+  const handleChangeVote = () => {
+    setVoted(null);
+  };
+
   const pollDetailHref = poll.slug ? `/polls/${poll.slug}` : undefined;
+  const raceMarketId = categoryRaceMap.get(normalizeMarketCategory(poll.category)) ?? undefined;
+
+  const bodyCopy = (
+    <>
+      {poll.subjectText && (
+        poll.slug ? (
+          <Link href={`/polls/${poll.slug}`} className="block mb-4">
+            <p className="text-[17px] md:text-[16px] leading-[1.5] md:leading-[1.4] text-muted-foreground line-clamp-2 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">
+              {poll.subjectText}
+            </p>
+          </Link>
+        ) : (
+          <p className="text-[17px] md:text-[16px] leading-[1.5] md:leading-[1.4] text-muted-foreground mb-4 line-clamp-2">{poll.subjectText}</p>
+        )
+      )}
+      {!poll.subjectText && poll.description && (
+        poll.slug ? (
+          <Link href={`/polls/${poll.slug}`} className="block mb-4">
+            <p className="text-[17px] md:text-[16px] leading-[1.5] md:leading-[1.4] text-muted-foreground line-clamp-2 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">
+              {poll.description}
+            </p>
+          </Link>
+        ) : (
+          <p className="text-[17px] md:text-[16px] leading-[1.5] md:leading-[1.4] text-muted-foreground mb-4 line-clamp-2">{poll.description}</p>
+        )
+      )}
+    </>
+  );
 
   return (
-    <Card 
-      className="pt-6 px-5 pb-5 transition-all duration-200 bg-card/80 backdrop-blur-sm h-full flex flex-col hover:shadow-[0_0_20px_rgba(148,163,184,0.08)] relative"
-      style={{ border: '1px solid rgba(148,163,184,0.18)' }}
-      data-testid={`card-featured-poll-${poll.id}`}
-    >
-      <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
-        <Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
-        <span>{poll.totalVotes.toLocaleString('en-US')} votes</span>
-      </div>
-      <AvatarHeightHeadline
-        className="mb-3"
-        text={poll.headline}
-        href={pollDetailHref}
-        linkTestId={poll.slug ? `link-poll-detail-${poll.id}` : undefined}
-        avatar={
-          currentImgSrc ? (
-            <div className="h-16 w-16 rounded-md overflow-hidden shrink-0 bg-muted dark:bg-slate-800">
-              <img
-                src={currentImgSrc}
-                alt={poll.personName || poll.headline}
-                className="w-full h-full object-cover"
-                onError={handleImgError}
-              />
-            </div>
-          ) : (
-            <div className="h-16 w-16 rounded-md bg-gradient-to-br from-slate-700/50 to-slate-800/50 flex items-center justify-center shrink-0">
-              <MessageSquare className="h-5 w-5 text-slate-400" />
-            </div>
-          )
-        }
-        belowTitle={
-          poll.personName ? (
-            poll.personId ? (
-              <Link
-                href={`/person/${poll.personId}`}
-                className="text-xs text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300 hover:underline cursor-pointer mt-0.5 inline-block"
-              >
-                {poll.personName}
-              </Link>
-            ) : (
-              <span className="text-xs text-cyan-600 dark:text-cyan-400 mt-0.5 inline-block">{poll.personName}</span>
-            )
-          ) : null
-        }
-      />
-      <p className="text-sm text-muted-foreground mb-5 flex-grow">{poll.description}</p>
-      
-      {!voted ? (
-        <div className="flex flex-col gap-3">
-          <button
-            onClick={() => handleVote('support')}
-            className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] text-sm font-medium transition-all duration-300 hover:border-[#00C853]/80 hover:bg-[#00C853]/20"
-            data-testid={`button-poll-support-${poll.id}`}
-          >
-            <ThumbsUp className="h-4 w-4 shrink-0" />
-            <span>Support</span>
-          </button>
-          <button
-            onClick={() => handleVote('neutral')}
-            className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl bg-white/5 border border-white/40 text-white text-sm font-medium transition-all duration-300 hover:border-white/80 hover:bg-white/15"
-            data-testid={`button-poll-neutral-${poll.id}`}
-          >
-            <Minus className="h-4 w-4 shrink-0" />
-            <span>Neutral</span>
-          </button>
-          <button
-            onClick={() => handleVote('oppose')}
-            className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] text-sm font-medium transition-all duration-300 hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20"
-            data-testid={`button-poll-oppose-${poll.id}`}
-          >
-            <ThumbsDown className="h-4 w-4 shrink-0" />
-            <span>Oppose</span>
-          </button>
+    <div className="relative group h-full">
+      <div className="absolute -inset-[1px] rounded-xl border border-[#EFEFEF]/50 transition-opacity pointer-events-none opacity-0 group-hover:opacity-100 hidden md:block" />
+      <Card
+        className="relative pt-6 px-5 pb-5 transition-all duration-200 bg-card/80 backdrop-blur-sm h-full min-h-[390px] md:min-h-[300px] flex flex-col border-0 md:border md:border-transparent shadow-none md:shadow-sm group-hover:shadow-lg md:group-hover:shadow-[0_8px_32px_rgba(239,239,239,0.1)] rounded-[12px] md:rounded-xl"
+        data-testid={`card-featured-poll-${poll.id}`}
+      >
+        <div className="absolute top-3 right-3">
+          <InteractiveCategoryPill
+            category={poll.category}
+            onFilter={() => onFilterCategory(poll.category)}
+            raceMarketId={raceMarketId}
+            leaderboardCategories={leaderboardCategories}
+            detailHref={pollDetailHref}
+            detailLabel="View Poll Details"
+            data-testid={`badge-category-${poll.id}`}
+          />
         </div>
-      ) : (
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center gap-3">
-            <ThumbsUp className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-            <span className="text-sm text-emerald-600 dark:text-emerald-400 w-16 shrink-0">Support</span>
-            <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-emerald-400 rounded-full transition-all duration-500"
-                style={{ width: `${poll.approvePercent}%` }}
-              />
-            </div>
-            <span className="text-xs text-muted-foreground w-10 text-right">{poll.approvePercent}%</span>
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
+          <Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
+          <span>{poll.totalVotes.toLocaleString("en-US")} votes</span>
+        </div>
+        <AvatarHeightHeadline
+          className="mb-3"
+          text={poll.headline}
+          serif={false}
+          href={pollDetailHref}
+          linkTestId={poll.slug ? `link-poll-detail-${poll.id}` : undefined}
+          avatar={
+            currentImgSrc ? (
+              <div
+                className="h-16 w-16 rounded-md overflow-hidden shrink-0 bg-muted dark:bg-slate-800 cursor-pointer"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setExpandedImage(currentImgSrc);
+                }}
+              >
+                <img
+                  src={currentImgSrc}
+                  alt={poll.personName || poll.headline}
+                  className="w-full h-full object-cover"
+                  onError={handleImgError}
+                />
+              </div>
+            ) : (
+              <div className="h-16 w-16 rounded-md bg-gradient-to-br from-slate-700/50 to-slate-800/50 flex items-center justify-center shrink-0">
+                <MessageSquare className="h-5 w-5 text-slate-400" />
+              </div>
+            )
+          }
+        />
+        {bodyCopy}
+
+        {!voted ? (
+          <div className="flex flex-col gap-3 mt-auto">
+            <button
+              type="button"
+              onClick={() => handleVote("support")}
+              className="w-full flex items-center justify-center gap-3 px-4 py-3.5 md:py-2.5 rounded-md bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] text-sm font-medium transition-all duration-300 hover:border-[#00C853]/80 hover:bg-[#00C853]/20"
+              data-testid={`button-poll-support-${poll.id}`}
+            >
+              <ThumbsUp className="h-4 w-4 shrink-0" />
+              <span>Support</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleVote("neutral")}
+              className="w-full flex items-center justify-center gap-3 px-4 py-3.5 md:py-2.5 rounded-md bg-muted/40 border border-border text-foreground dark:bg-white/5 dark:border-white/40 dark:text-white text-sm font-medium transition-all duration-300 hover:border-foreground/40 hover:bg-muted/60 dark:hover:border-white/80 dark:hover:bg-white/15"
+              data-testid={`button-poll-neutral-${poll.id}`}
+            >
+              <Minus className="h-4 w-4 shrink-0" />
+              <span>Neutral</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleVote("oppose")}
+              className="w-full flex items-center justify-center gap-3 px-4 py-3.5 md:py-2.5 rounded-md bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] text-sm font-medium transition-all duration-300 hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20"
+              data-testid={`button-poll-oppose-${poll.id}`}
+            >
+              <ThumbsDown className="h-4 w-4 shrink-0" />
+              <span>Oppose</span>
+            </button>
           </div>
-          <div className="flex items-center gap-3">
-            <Minus className="h-4 w-4 text-slate-600 dark:text-slate-400 shrink-0" />
-            <span className="text-sm text-slate-600 dark:text-slate-400 w-16 shrink-0">Neutral</span>
-            <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-slate-400 rounded-full transition-all duration-500"
-                style={{ width: `${poll.neutralPercent}%` }}
-              />
+        ) : (
+          <div className="flex flex-col gap-3 mt-auto">
+            <div className="flex items-center gap-3">
+              <ThumbsUp className="h-4 w-4 text-[#00C853] shrink-0" />
+              <span className="text-sm text-[#00C853] w-16 shrink-0">Support</span>
+              <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-[#00C853] rounded-full transition-all duration-500"
+                  style={{ width: `${poll.approvePercent}%` }}
+                />
+              </div>
+              <span className="text-sm text-muted-foreground w-10 text-right">{poll.approvePercent}%</span>
             </div>
-            <span className="text-xs text-muted-foreground w-10 text-right">{poll.neutralPercent}%</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <ThumbsDown className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0" />
-            <span className="text-sm text-red-600 dark:text-red-400 w-16 shrink-0">Oppose</span>
-            <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-red-400 rounded-full transition-all duration-500"
-                style={{ width: `${poll.disapprovePercent}%` }}
-              />
+
+            <div className="flex items-center gap-3">
+              <Minus className="h-4 w-4 text-slate-400 shrink-0" />
+              <span className="text-sm text-slate-400 w-16 shrink-0">Neutral</span>
+              <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-slate-400 rounded-full transition-all duration-500"
+                  style={{ width: `${poll.neutralPercent}%` }}
+                />
+              </div>
+              <span className="text-sm text-muted-foreground w-10 text-right">{poll.neutralPercent}%</span>
             </div>
-            <span className="text-xs text-muted-foreground w-10 text-right">{poll.disapprovePercent}%</span>
+
+            <div className="flex items-center gap-3">
+              <ThumbsDown className="h-4 w-4 text-[#FF0000] shrink-0" />
+              <span className="text-sm text-[#FF0000] w-16 shrink-0">Oppose</span>
+              <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-[#FF0000] rounded-full transition-all duration-500"
+                  style={{ width: `${poll.disapprovePercent}%` }}
+                />
+              </div>
+              <span className="text-sm text-muted-foreground w-10 text-right">{poll.disapprovePercent}%</span>
+            </div>
+
+            <div className="flex items-center justify-between mt-2 pt-3 border-t border-white/10">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Zap className="h-3.5 w-3.5" />
+                <span>{poll.totalVotes.toLocaleString("en-US")} total votes</span>
+              </div>
+              <div
+                className={`px-2 py-0.5 rounded-full text-xs font-medium border ${
+                  voted === "support"
+                    ? "bg-[#00C853]/10 border-[#00C853]/40 text-[#00C853]"
+                    : voted === "oppose"
+                      ? "bg-[#FF0000]/10 border-[#FF0000]/40 text-[#FF0000]"
+                      : "bg-slate-500/10 border-slate-500/40 text-slate-500 dark:text-slate-400"
+                }`}
+                data-testid={`badge-voted-poll-${poll.id}`}
+              >
+                You voted
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleChangeVote}
+              className="text-xs text-slate-400 hover:text-white transition-colors underline-offset-4 hover:underline text-center"
+              data-testid={`button-change-vote-${poll.id}`}
+            >
+              Change your vote
+            </button>
           </div>
+        )}
+      </Card>
+      {expandedImage && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
+          onClick={() => setExpandedImage(null)}
+        >
           <button
-            onClick={() => setVoted(null)}
-            className="text-xs text-muted-foreground hover:text-foreground mt-2 underline"
-            data-testid={`button-change-vote-${poll.id}`}
+            type="button"
+            className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+            onClick={() => setExpandedImage(null)}
           >
-            Change vote
+            <X className="h-6 w-6 text-white" />
           </button>
+          <img
+            src={expandedImage}
+            alt={poll.personName || poll.headline}
+            className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
         </div>
       )}
-    </Card>
+    </div>
   );
 }
 
@@ -1025,30 +614,42 @@ function ViewAllPollsOverlay({
   onClose,
   title,
   polls,
-  onVote
+  onVote,
+  onFilterCategory,
+  categoryRaceMap,
+  leaderboardCategories,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   polls: FeaturedPoll[];
-  onVote: (pollId: string, choice: 'support' | 'neutral' | 'oppose') => void;
+  onVote: (pollId: string, choice: "support" | "neutral" | "oppose") => void;
+  onFilterCategory: (category: string) => void;
+  categoryRaceMap: Map<string, string>;
+  leaderboardCategories?: Set<string>;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     if (open) {
-      document.body.style.overflow = 'hidden';
+      document.body.style.overflow = "hidden";
     } else {
-      document.body.style.overflow = '';
+      document.body.style.overflow = "";
     }
-    return () => { document.body.style.overflow = ''; };
+    return () => {
+      document.body.style.overflow = "";
+    };
   }, [open]);
-  
+
   if (!open) return null;
 
-  const filteredPolls = polls.filter(p => 
-    !searchQuery || p.headline.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    p.description.toLowerCase().includes(searchQuery.toLowerCase())
+  const q = searchQuery.toLowerCase();
+  const filteredPolls = polls.filter(
+    (p) =>
+      !searchQuery ||
+      p.headline.toLowerCase().includes(q) ||
+      (p.subjectText || "").toLowerCase().includes(q) ||
+      (p.description || "").toLowerCase().includes(q)
   );
 
   return (
@@ -1081,10 +682,13 @@ function ViewAllPollsOverlay({
       <div className="container mx-auto px-4 py-6 max-w-4xl">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filteredPolls.map((poll) => (
-            <FeaturedPollCard 
-              key={poll.id} 
-              poll={poll} 
+            <FeaturedPollCard
+              key={poll.id}
+              poll={poll}
               onVote={(choice) => onVote(poll.id, choice)}
+              onFilterCategory={onFilterCategory}
+              categoryRaceMap={categoryRaceMap}
+              leaderboardCategories={leaderboardCategories}
             />
           ))}
         </div>
@@ -1141,6 +745,11 @@ export default function PersonDetailPage() {
   })();
   const [activeTab, setActiveTab] = useState(initialTab);
   const [showAllPollsOverlay, setShowAllPollsOverlay] = useState(false);
+  const categoryRaceMap = useCategoryRaceMap();
+  const leaderboardCats = useLeaderboardCategories();
+  const handleSentimentCategoryFilter = useCallback((_category: string) => {
+    setLocation("/vote");
+  }, [setLocation]);
   const [curateCompleted, setCurateCompleted] = useState(false);
   const [expandedProfileImage, setExpandedProfileImage] = useState<string | null>(null);
 
@@ -1237,7 +846,7 @@ export default function PersonDetailPage() {
   );
 
   const matchupVoteMutation = useMutation({
-    mutationFn: async ({ matchupId, option }: { matchupId: string; option: 'option_a' | 'option_b'; previousVote?: string | null }) => {
+    mutationFn: async ({ matchupId, option }: { matchupId: string; option: "option_a" | "option_b" | "neutral"; previousVote?: string | null }) => {
       const response = await apiRequest("POST", `/api/matchups/${matchupId}/vote`, { option });
       return response.json();
     },
@@ -1313,12 +922,20 @@ export default function PersonDetailPage() {
     },
   });
 
-  const handleMatchupVote = (matchupId: string, option: 'option_a' | 'option_b') => {
+  const handleMatchupVote = (matchupId: string, option: "option_a" | "option_b" | "neutral") => {
+    if (!user || !session?.access_token) {
+      toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+      return;
+    }
     const previousVote = matchupUserVotes[matchupId] || null;
     matchupVoteMutation.mutate({ matchupId, option, previousVote });
   };
 
   const handleMatchupRemoveVote = (matchupId: string) => {
+    if (!user || !session?.access_token) {
+      toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+      return;
+    }
     const previousVote = matchupUserVotes[matchupId];
     if (!previousVote) return;
     matchupRemoveVoteMutation.mutate({ matchupId, previousVote });
@@ -1397,7 +1014,9 @@ export default function PersonDetailPage() {
     return personTrendingPolls.map((p) => ({
       id: p.id,
       headline: p.headline,
-      description: p.description || p.subjectText || "",
+      category: p.category,
+      subjectText: p.subjectText ?? null,
+      description: p.description ?? null,
       approvePercent: p.approvePercent,
       neutralPercent: p.neutralPercent,
       disapprovePercent: p.disapprovePercent,
@@ -1778,12 +1397,15 @@ export default function PersonDetailPage() {
               ) : personMatchups.length > 0 ? (
                 <CardSection desktopLimit={6} gap="gap-5" testIdPrefix="profile-matchups">
                   {personMatchups.map((matchup) => (
-                    <ProfileMatchupCard
+                    <VersusCard
                       key={matchup.id}
                       matchup={matchup}
                       userVote={matchupUserVotes[matchup.id] || null}
                       onVote={handleMatchupVote}
                       onRemoveVote={handleMatchupRemoveVote}
+                      onFilterCategory={handleSentimentCategoryFilter}
+                      categoryRaceMap={categoryRaceMap}
+                      leaderboardCategories={leaderboardCats}
                     />
                   ))}
                 </CardSection>
@@ -1834,6 +1456,9 @@ export default function PersonDetailPage() {
                             description: `You voted "${choice}" on "${poll.headline}"`,
                           });
                         }}
+                        onFilterCategory={handleSentimentCategoryFilter}
+                        categoryRaceMap={categoryRaceMap}
+                        leaderboardCategories={leaderboardCats}
                       />
                     ))}
                   </div>
@@ -1849,6 +1474,9 @@ export default function PersonDetailPage() {
                         description: "Your vote has been recorded.",
                       });
                     }}
+                    onFilterCategory={handleSentimentCategoryFilter}
+                    categoryRaceMap={categoryRaceMap}
+                    leaderboardCategories={leaderboardCats}
                   />
                 </>
               ) : (
@@ -1875,13 +1503,20 @@ export default function PersonDetailPage() {
               ) : personOpinionPolls.length > 0 ? (
                 <CardSection desktopLimit={6} gap="gap-5" testIdPrefix="profile-opinion-polls">
                   {personOpinionPolls.map((poll) => (
-                    <OpinionPollCardProfile
+                    <OpinionPollCard
                       key={poll.id}
                       poll={poll}
                       onVote={async (pollSlug, optionId) => {
                         await apiRequest("POST", `/api/opinion-polls/${pollSlug}/vote`, { optionId });
                         queryClient.invalidateQueries({ queryKey: ["/api/opinion-polls"] });
                       }}
+                      onRemoveVote={async (pollSlug) => {
+                        await apiRequest("POST", `/api/opinion-polls/${pollSlug}/vote`, { remove: true });
+                        queryClient.invalidateQueries({ queryKey: ["/api/opinion-polls"] });
+                      }}
+                      onFilterCategory={handleSentimentCategoryFilter}
+                      categoryRaceMap={categoryRaceMap}
+                      leaderboardCategories={leaderboardCats}
                     />
                   ))}
                 </CardSection>
