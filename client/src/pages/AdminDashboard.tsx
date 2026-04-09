@@ -3207,7 +3207,7 @@ export default function AdminDashboard() {
       visibility: poll.visibility || "draft",
       options: opts,
     });
-    setOpOptionSearchInputs(opts.map((o: any) => o.name || ""));
+    setOpOptionSearchInputs(opts.map((o: any) => o.personId ? o.name : ""));
     setOpOptionSearchResults(opts.map(() => []));
     setOpOptionShowDropdown(opts.map(() => false));
     setOpinionPollRelatedPeople(poll.relatedPeople || []);
@@ -3258,7 +3258,6 @@ export default function AdminDashboard() {
     setOpOptionSearchInputs(newInputs);
 
     if (!query.trim()) {
-      updateOpinionOption(idx, "personId", "");
       const newResults = [...opOptionSearchResults];
       newResults[idx] = [];
       setOpOptionSearchResults(newResults);
@@ -8282,7 +8281,17 @@ export default function AdminDashboard() {
                       <span className="text-xs font-medium text-muted-foreground w-4 shrink-0">{idx + 1}</span>
                       <Input
                         value={opt.name}
-                        onChange={(e) => updateOpinionOption(idx, "name", e.target.value)}
+                        onChange={(e) => {
+                          updateOpinionOption(idx, "name", e.target.value);
+                          if (!opt.personId && e.target.value.trim().length >= 2) {
+                            searchCelebrityForOption(idx, e.target.value);
+                          }
+                        }}
+                        onBlur={() => {
+                          setTimeout(() => {
+                            setOpOptionShowDropdown(prev => prev.map((v, i) => i === idx ? false : v));
+                          }, 200);
+                        }}
                         placeholder="Option name"
                         className="flex-1 min-w-0"
                         data-testid={`input-opinion-option-name-${idx}`}
@@ -8311,10 +8320,22 @@ export default function AdminDashboard() {
                         {opt.personId && opt.imageUrl && (
                           <img src={opt.imageUrl} alt="" className="w-6 h-6 rounded-full object-cover shrink-0 border border-green-500/50" />
                         )}
+                        {!opt.personId && (
+                          <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        )}
                         <Input
                           value={opOptionSearchInputs[idx] || ""}
                           onChange={(e) => searchCelebrityForOption(idx, e.target.value)}
-                          placeholder={opt.personId ? "Linked — type to change" : "Link celebrity (search...)"}
+                          onFocus={() => {
+                            const q = (opOptionSearchInputs[idx] || "").trim();
+                            if (q && !opt.personId) searchCelebrityForOption(idx, q);
+                          }}
+                          onBlur={() => {
+                            setTimeout(() => {
+                              setOpOptionShowDropdown(prev => prev.map((v, i) => i === idx ? false : v));
+                            }, 200);
+                          }}
+                          placeholder={opt.personId ? "Linked — type to change" : "Link to leaderboard celebrity..."}
                           className={`text-xs flex-1 ${opt.personId ? "border-green-500/40" : ""}`}
                           data-testid={`input-opinion-option-celebrity-${idx}`}
                         />
