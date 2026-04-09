@@ -100,6 +100,11 @@ import { formatActivityAge } from "@/lib/formatDate";
 import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
 import { OnboardingDrawer, type OnboardingStep, type OnboardingDrawerHandle } from "@/components/OnboardingDrawer";
 import { UnifiedSectionHeader } from "@/components/UnifiedSectionHeader";
+import { PredictCard } from "@/components/predict/PredictCard";
+import { ParticipantAvatarStack, type ParticipantPreview } from "@/components/predict/ParticipantAvatarStack";
+import { WeeklyUpDownCard, type PredictionMarket } from "@/components/predict/WeeklyUpDownCard";
+import { HeadToHeadCard, smartName, type HeadToHeadMarket } from "@/components/predict/HeadToHeadCard";
+import { TopGainerCard, type TopGainerMarket, type GainerCandidate } from "@/components/predict/TopGainerCard";
 
 const PREDICT_ONBOARDING_STEPS: readonly OnboardingStep[] = [
   {
@@ -178,85 +183,11 @@ function FreshnessBadge({ market }: { market: any }) {
   );
 }
 
-function ParticipantAvatarStack({
-  participants = [],
-  totalCount = 0,
-}: {
-  participants?: ParticipantPreview[];
-  totalCount?: number;
-}) {
-  if (participants.length === 0 && totalCount <= 0) {
-    return null;
-  }
-
-  return (
-    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-      <div className="flex -space-x-2">
-        {participants.slice(0, 3).map((participant) => (
-          <Avatar
-            key={`${participant.userId}-${participant.username || participant.displayName}`}
-            className="h-6 w-6 border-2 border-background"
-          >
-            {participant.avatarUrl && !participant.isAgent ? (
-              <AvatarImage src={participant.avatarUrl} alt={participant.displayName} />
-            ) : (
-              <AvatarFallback
-                className={`text-[10px] ${getAvatarGradient(participant.displayName)} ${
-                  participant.isAgent
-                    ? AGENT_AVATAR_FALLBACK_CLASS
-                    : HUMAN_AVATAR_FALLBACK_CLASS
-                }`}
-              >
-                {getAvatarInitials(participant.displayName)}
-              </AvatarFallback>
-            )}
-          </Avatar>
-        ))}
-      </div>
-      <span>{totalCount} participant{totalCount === 1 ? "" : "s"}</span>
-    </div>
-  );
-}
 
 // Prediction Type definitions
 type PredictionType = "all" | "jackpot" | "updown" | "h2h" | "gainer" | "community";
 type CategoryFilter = "all" | "favorites" | "trending" | "tech" | "politics" | "business" | "music" | "sports" | "film-tv" | "gaming" | "creator" | "food-drink" | "lifestyle" | "misc";
 
-interface PredictionMarket {
-  id: string;
-  personId: string;
-  personName: string;
-  personAvatar: string;
-  currentScore: number;
-  baselineScore: number;
-  startScore: number;
-  change7d: number;
-  upMultiplier: number;
-  downMultiplier: number;
-  endTime: string;
-  totalPool: number;
-  upPoolPercent: number;
-  category: CategoryFilter;
-  upEntryId?: string;
-  downEntryId?: string;
-  cadence?: string;
-  tieRule?: string;
-  startAt?: string;
-  endAt?: string;
-  totalBets?: number;
-  featured?: boolean;
-  activeParticipantCount?: number;
-  recentParticipants?: ParticipantPreview[];
-  bettingCutoff?: string | null;
-}
-
-interface ParticipantPreview {
-  userId: string;
-  username: string | null;
-  displayName: string;
-  avatarUrl: string | null;
-  isAgent: boolean;
-}
 
 const mockMarkets: PredictionMarket[] = [
   {
@@ -389,24 +320,6 @@ const mockMarkets: PredictionMarket[] = [
   },
 ];
 
-interface HeadToHeadMarket {
-  id: string;
-  title: string;
-  person1: { name: string; avatar: string; currentScore: number };
-  person2: { name: string; avatar: string; currentScore: number };
-  person1EntryId?: string;
-  person2EntryId?: string;
-  person1Id?: string;
-  person2Id?: string;
-  category: CategoryFilter;
-  endTime: string;
-  totalPool: number;
-  person1Percent: number;
-  totalBets?: number;
-  activeParticipantCount?: number;
-  recentParticipants?: ParticipantPreview[];
-  bettingCutoff?: string | null;
-}
 
 const headToHeadMarkets: HeadToHeadMarket[] = [
   {
@@ -471,37 +384,6 @@ const headToHeadMarkets: HeadToHeadMarket[] = [
   },
 ];
 
-type GainerCandidate = {
-  name: string;
-  avatar: string;
-  currentGain: number;
-  percentGain: number;
-  rank?: number;
-  entryId?: string;
-  personId?: string;
-};
-
-interface TopGainerMarket {
-  id: string;
-  category: CategoryFilter;
-  leaders: GainerCandidate[];
-  allCandidates?: GainerCandidate[];
-  totalPool: number;
-  endTime: string;
-  totalEntries?: number;
-  candidateCount?: number;
-  totalBets?: number;
-  activeParticipantCount?: number;
-  recentParticipants?: ParticipantPreview[];
-  bettingCutoff?: string | null;
-}
-
-function smartName(fullName: string): string {
-  const parts = fullName.trim().split(/\s+/);
-  if (parts.length <= 1) return fullName;
-  if (fullName.length <= 14) return fullName;
-  return `${parts[0]} ${parts[parts.length - 1][0]}.`;
-}
 
 interface RecentPredictionActivity {
   id: string;
@@ -756,506 +638,9 @@ const getPredictCategoryFilters = (includeCustomTopic: boolean) =>
 
 const CATEGORY_FILTERS = BASE_CATEGORY_FILTERS;
 
-function PredictCard({ 
-  children, 
-  className = "", 
-  testId,
-  onClick,
-  selected = false,
-  inactive = false,
-  inactiveMessage,
-}: { 
-  children: React.ReactNode; 
-  className?: string; 
-  testId?: string;
-  onClick?: () => void;
-  selected?: boolean;
-  inactive?: boolean;
-  inactiveMessage?: string;
-}) {
-  const cardContent = (
-    <div 
-      className={`relative group h-full overflow-visible ${onClick && !inactive ? 'cursor-pointer' : ''} ${inactive ? 'cursor-default' : ''}`}
-      onClick={inactive ? undefined : onClick}
-      data-testid={testId}
-    >
-      {/* Inset ring lives on Card so it is never clipped by grid neighbors (absolute -inset was cut off on the right of left-column cards). */}
-      <Card className={`relative p-4 bg-card/95 backdrop-blur-sm transition-all h-full flex flex-col rounded-[12px] md:rounded-xl min-h-[390px] md:min-h-0 border-0 md:border md:border-transparent shadow-none md:shadow-sm ${
-        inactive 
-          ? 'opacity-50 grayscale-[40%]' 
-          : `md:ring-inset md:ring-1 md:ring-transparent md:transition-[box-shadow,ring-color] md:group-hover:ring-[#EFEFEF]/50 md:group-hover:shadow-lg md:group-hover:shadow-[0_8px_32px_rgba(239,239,239,0.1)] ${selected ? 'md:ring-[#EFEFEF]/50 shadow-lg shadow-[0_8px_32px_rgba(239,239,239,0.14)]' : ''}`
-      } ${className}`}>
-        {inactive && (
-          <div className="absolute top-3 right-3 z-10">
-            <Badge variant="outline" className="text-xs border-amber-500/50 dark:border-amber-500/40 text-amber-700 dark:text-amber-500 bg-amber-500/15 dark:bg-amber-500/10">
-              <Clock className="h-3 w-3 mr-1" />
-              {inactiveMessage || "Coming Soon"}
-            </Badge>
-          </div>
-        )}
-        <div className="flex flex-col flex-1">
-          {children}
-        </div>
-      </Card>
-    </div>
-  );
 
-  if (inactive) {
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          {cardContent}
-        </TooltipTrigger>
-        <TooltipContent side="top" className="max-w-[200px]">
-          <p className="text-xs">{inactiveMessage || "This market is coming soon. Stay tuned!"}</p>
-        </TooltipContent>
-      </Tooltip>
-    );
-  }
 
-  return cardContent;
-}
 
-function WeeklyUpDownCard({ 
-  market, 
-  isMarketClosed = false,
-  closedMessage,
-  onSelect,
-  onFilterCategory,
-  categoryRaceMap,
-  leaderboardCategories,
-}: { 
-  market: PredictionMarket; 
-  isMarketClosed?: boolean;
-  closedMessage: Pick<ClosedMarketMessage, "title" | "lines">;
-  onSelect?: (choice: "up" | "down") => void;
-  onFilterCategory?: (category: string) => void;
-  categoryRaceMap?: Map<string, string>;
-  leaderboardCategories?: Set<string>;
-}) {
-  const delta = market.currentScore - market.baselineScore;
-  const pctDelta = market.baselineScore > 0 ? ((delta / market.baselineScore) * 100).toFixed(1) : "0";
-  const cadenceLabel = (market.cadence || "weekly").charAt(0).toUpperCase() + (market.cadence || "weekly").slice(1);
-
-  return (
-    <PredictCard testId={`card-weekly-${market.id}`} className={`${isMarketClosed ? 'opacity-75' : ''}`}>
-      <div className="flex items-center justify-between mb-2 flex-wrap gap-1">
-        <div className="flex items-center gap-1.5">
-          <Badge 
-            variant="outline" 
-            className={delta >= 0 ? "text-green-500 border-green-500/40 dark:border-green-500/30" : "text-red-500 border-red-500/40 dark:border-red-500/30"}
-          >
-            {delta >= 0 ? "+" : ""}{pctDelta}%
-          </Badge>
-          <Badge variant="outline" className="text-violet-600 dark:text-violet-400 border-violet-500/40 dark:border-violet-500/30 text-[10px]">
-            {cadenceLabel}
-          </Badge>
-          {market.featured && (
-            <Badge variant="outline" className="text-yellow-600 dark:text-yellow-400 border-yellow-500/40 dark:border-yellow-500/30 text-[10px]">
-              <Star className="h-3 w-3 mr-0.5" />Featured
-            </Badge>
-          )}
-          {(market.totalPool > 5000 || (market.totalBets ?? 0) > 50) && (
-            <Badge variant="outline" className="text-orange-600 dark:text-orange-400 border-orange-500/40 dark:border-orange-500/30 text-[10px]">
-              <Flame className="h-3 w-3 mr-0.5" />Hot
-            </Badge>
-          )}
-          {market.totalPool < 100 && (
-            <Badge variant="outline" className="text-amber-600 dark:text-amber-400 border-amber-500/40 dark:border-amber-500/30 text-[10px]">
-              Thin Pool
-            </Badge>
-          )}
-        </div>
-        <InteractiveCategoryPill
-          category={market.category}
-          onFilter={() => onFilterCategory?.(market.category)}
-          leaderboardCategories={leaderboardCategories}
-          detailHref={`/predict/updown/${market.id}`}
-          detailLabel="View Up/Down Details"
-        />
-      </div>
-      
-      <Link
-        href={`/predict/updown/${market.id}`}
-        className="block rounded-lg -mx-1 px-1 py-0.5 mb-2 hover:bg-muted/25 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-        aria-label={`View details for ${market.personName} up or down market`}
-      >
-        <div className="flex items-start gap-3 mb-2">
-          <PersonAvatar name={market.personName} avatar={market.personAvatar} className="h-20 w-20 md:h-16 md:w-16 shrink-0" />
-          <div className="flex-1 min-w-0">
-            <WeeklyUpDownNameBlock text={market.personName} />
-            <p className="text-xs text-muted-foreground font-mono mt-0.5">
-              Now: {market.currentScore.toLocaleString('en-US')}
-            </p>
-          </div>
-        </div>
-
-        <p className="text-xs text-muted-foreground mb-2 leading-[1.4]">
-          Will <span className="font-semibold text-foreground">{market.personName.split(" ")[0]}</span> close above or below the weekly baseline?
-        </p>
-
-        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mb-0 flex-wrap">
-          <span>Baseline: <span className="font-mono text-foreground">{market.baselineScore.toLocaleString('en-US')}</span></span>
-          <span className="text-muted-foreground/40">&middot;</span>
-          <span>Delta: <span className={`font-mono ${delta >= 0 ? "text-green-500" : "text-red-500"}`}>{delta >= 0 ? "+" : ""}{delta.toLocaleString('en-US')}</span></span>
-          <span className="text-muted-foreground/40">&middot;</span>
-          <span>Pool: <span className="font-mono text-violet-600 dark:text-violet-400">{market.totalPool.toLocaleString('en-US')}</span></span>
-        </div>
-      </Link>
-      
-      <div className="mt-auto">
-      <div className="mb-2">
-        <ParticipantAvatarStack
-          participants={market.recentParticipants}
-          totalCount={market.totalBets ?? market.activeParticipantCount ?? 0}
-        />
-      </div>
-      
-      <div className="mb-2">
-          <div className="h-2.5 rounded-full bg-red-500/25 dark:bg-red-500/20 overflow-hidden">
-          <div 
-            className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all"
-            style={{ width: `${market.upPoolPercent}%` }}
-          />
-        </div>
-        <div className="flex items-center justify-between text-[11px] mt-1">
-          <span className="text-green-500 font-semibold">Up {market.upMultiplier}x</span>
-          <span className="text-red-500 font-semibold">Down {market.downMultiplier}x</span>
-        </div>
-      </div>
-      
-      <WeeklyUpDownActionButtons
-        marketId={market.id}
-        isMarketClosed={!!isMarketClosed}
-        closedMessage={closedMessage}
-        onSelect={onSelect}
-      />
-      </div>
-    </PredictCard>
-  );
-}
-
-function HeadToHeadCard({ 
-  market, 
-  isMarketClosed = false,
-  closedMessage,
-  onSelect,
-  userPick,
-  onFilterCategory,
-  categoryRaceMap,
-  leaderboardCategories,
-}: { 
-  market: HeadToHeadMarket; 
-  isMarketClosed?: boolean;
-  closedMessage: Pick<ClosedMarketMessage, "title" | "lines">;
-  onSelect?: (person: 1 | 2) => void;
-  userPick?: 1 | 2 | null;
-  onFilterCategory?: (category: string) => void;
-  categoryRaceMap?: Map<string, string>;
-  leaderboardCategories?: Set<string>;
-}) {
-  const hasPicked = userPick === 1 || userPick === 2;
-  const pickedName = userPick === 1 ? market.person1.name : userPick === 2 ? market.person2.name : "";
-  const scoreDiff = (market.person1.currentScore || 0) - (market.person2.currentScore || 0);
-  const pickWinning = hasPicked && (
-    (userPick === 1 && scoreDiff > 0) || (userPick === 2 && scoreDiff < 0)
-  );
-  const pickTied = hasPicked && scoreDiff === 0;
-
-  return (
-    <PredictCard testId={`card-h2h-${market.id}`} className={`relative overflow-hidden max-w-sm mx-auto ${isMarketClosed && !hasPicked ? 'opacity-75' : ''}`}>
-      <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute left-0 top-0 w-1/2 h-full bg-gradient-to-r from-blue-600/20 to-transparent" />
-        <div className="absolute right-0 top-0 w-1/2 h-full bg-gradient-to-l from-purple-600/20 to-transparent" />
-      </div>
-      
-      <div className="relative z-10 flex flex-col h-full">
-        <div className="flex items-center justify-between mb-3">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Badge variant="outline" className="text-xs cursor-help">
-                <Clock className="h-3 w-3 mr-1" />
-                {market.endTime}
-              </Badge>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p className="text-xs">Market closes {market.endTime}</p>
-            </TooltipContent>
-          </Tooltip>
-          <InteractiveCategoryPill
-            category={market.category}
-            onFilter={() => onFilterCategory?.(market.category)}
-            leaderboardCategories={leaderboardCategories}
-            detailHref={`/predict/h2h/${market.id}`}
-            detailLabel="View Battle Details"
-          />
-        </div>
-        
-        <Link
-          href={`/predict/h2h/${market.id}`}
-          className="relative mb-3 block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-          style={{ padding: '0 5px' }}
-          aria-label={`View battle details: ${market.person1.name} vs ${market.person2.name}`}
-        >
-          <div className="flex" style={{ gap: '7px' }}>
-            <div className="flex-1 relative">
-              <div className={`rounded-lg overflow-hidden transition-all ${hasPicked && userPick === 1 ? 'ring-2 ring-green-500/70' : 'ring-2 ring-transparent'}`}>
-                <PersonAvatar name={market.person1.name} avatar={market.person1.avatar} className="h-auto w-full aspect-[4/5]" />
-              </div>
-              {hasPicked && userPick === 1 && (
-                <div className="absolute bottom-1 left-1/2 -translate-x-1/2 z-10">
-                  <span className="bg-green-600/90 text-white text-[8px] px-1.5 py-0.5 rounded-full font-semibold uppercase tracking-wider whitespace-nowrap flex items-center gap-0.5">
-                    <Check className="h-2.5 w-2.5" />
-                    Your Pick
-                  </span>
-                </div>
-              )}
-            </div>
-            <div className="flex-1 relative">
-              <div className={`rounded-lg overflow-hidden transition-all ${hasPicked && userPick === 2 ? 'ring-2 ring-green-500/70' : 'ring-2 ring-transparent'}`}>
-                <PersonAvatar name={market.person2.name} avatar={market.person2.avatar} className="h-auto w-full aspect-[4/5]" />
-              </div>
-              {hasPicked && userPick === 2 && (
-                <div className="absolute bottom-1 left-1/2 -translate-x-1/2 z-10">
-                  <span className="bg-green-600/90 text-white text-[8px] px-1.5 py-0.5 rounded-full font-semibold uppercase tracking-wider whitespace-nowrap flex items-center gap-0.5">
-                    <Check className="h-2.5 w-2.5" />
-                    Your Pick
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none">
-            <div className="h-14 w-14 rounded-full bg-gradient-to-br from-muted to-card dark:from-slate-700 dark:to-slate-900 border-2 border-border dark:border-slate-500 flex items-center justify-center shadow-lg">
-              <span className="text-sm font-bold text-foreground dark:text-slate-200">VS</span>
-            </div>
-          </div>
-        </Link>
-        
-        <div className="flex items-center justify-between px-2 mb-2">
-          <ClosedMarketActionTrigger isClosed={isMarketClosed && !hasPicked} message={closedMessage} side="top" align="center">
-            <div
-              className={`flex flex-col items-center flex-1 ${!hasPicked ? 'cursor-pointer' : ''}`}
-              onClick={() => !hasPicked && onSelect?.(1)}
-            >
-              <p className="text-sm font-semibold text-center">{smartName(market.person1.name)}</p>
-              <span className="text-[10px] font-mono text-muted-foreground">{market.person1.currentScore?.toLocaleString('en-US') || ''}</span>
-              <span className="text-xs text-blue-600 dark:text-blue-400 font-semibold">{market.person1Percent}%</span>
-            </div>
-          </ClosedMarketActionTrigger>
-          <ClosedMarketActionTrigger isClosed={isMarketClosed && !hasPicked} message={closedMessage} side="top" align="center">
-            <div
-              className={`flex flex-col items-center flex-1 ${!hasPicked ? 'cursor-pointer' : ''}`}
-              onClick={() => !hasPicked && onSelect?.(2)}
-            >
-              <p className="text-sm font-semibold text-center">{smartName(market.person2.name)}</p>
-              <span className="text-[10px] font-mono text-muted-foreground">{market.person2.currentScore?.toLocaleString('en-US') || ''}</span>
-              <span className="text-xs text-purple-600 dark:text-purple-400 font-semibold">{100 - market.person1Percent}%</span>
-            </div>
-          </ClosedMarketActionTrigger>
-        </div>
-        
-        <div className="h-2 rounded-full overflow-hidden mb-2 flex">
-          <div 
-            className="h-full bg-gradient-to-r from-blue-500 to-blue-400"
-            style={{ width: `${market.person1Percent}%` }}
-          />
-          <div 
-            className="h-full bg-gradient-to-l from-purple-500 to-purple-400"
-            style={{ width: `${100 - market.person1Percent}%` }}
-          />
-        </div>
-        
-        <div className="flex items-center justify-center mb-2">
-          <span className="text-sm font-semibold text-violet-700 dark:text-violet-500">
-            Pool: {market.totalPool.toLocaleString('en-US')}
-          </span>
-        </div>
-        
-        <div className="mt-auto">
-          {hasPicked ? (
-            <div className="flex items-center gap-2 rounded-lg border border-green-500/40 dark:border-green-500/30 bg-green-500/8 dark:bg-green-500/5 px-3 py-2">
-              <Check className="h-4 w-4 text-green-500 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-[11px] text-muted-foreground">Your pick</p>
-                <p className="text-sm font-semibold truncate">{smartName(pickedName)}</p>
-              </div>
-              <Badge
-                className={
-                  pickWinning
-                    ? "bg-green-600/20 text-green-500 border-green-500/40 dark:border-green-500/30"
-                    : pickTied
-                    ? "bg-amber-600/20 text-amber-500 border-amber-500/40 dark:border-amber-500/30"
-                    : "bg-red-600/20 text-red-500 border-red-500/40 dark:border-red-500/30"
-                }
-              >
-                {pickWinning ? "Winning" : pickTied ? "Tied" : "Behind"}
-              </Badge>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-2">
-              <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMessage} side="top" align="center">
-                <Button 
-                  className="bg-[#3B82F6]/10 border border-[#3B82F6]/50 text-[#3B82F6] hover:border-[#3B82F6]/80 hover:bg-[#3B82F6]/20 py-3 md:py-2 h-auto"
-                  onClick={() => onSelect?.(1)}
-                  data-testid={`button-pick1-${market.id}`}
-                >
-                  {smartName(market.person1.name)}
-                </Button>
-              </ClosedMarketActionTrigger>
-              <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMessage} side="top" align="center">
-                <Button 
-                  className="bg-[#7C3AED]/10 border border-[#7C3AED]/50 text-[#7C3AED] hover:border-[#7C3AED]/80 hover:bg-[#7C3AED]/20 py-3 md:py-2 h-auto"
-                  onClick={() => onSelect?.(2)}
-                  data-testid={`button-pick2-${market.id}`}
-                >
-                  {smartName(market.person2.name)}
-                </Button>
-              </ClosedMarketActionTrigger>
-            </div>
-          )}
-        </div>
-      </div>
-    </PredictCard>
-  );
-}
-
-function TopGainerCard({ 
-  market, 
-  isMarketClosed = false,
-  closedMessage,
-  onShowAllCandidates,
-  isPredicted = false,
-  isShimmering = false,
-  onFilterCategory,
-  categoryRaceMap,
-  leaderboardCategories,
-}: { 
-  market: TopGainerMarket; 
-  isMarketClosed?: boolean;
-  closedMessage: Pick<ClosedMarketMessage, "title" | "lines">;
-  onShowAllCandidates?: (market: TopGainerMarket, initialCandidate?: GainerCandidate) => void;
-  isPredicted?: boolean;
-  isShimmering?: boolean;
-  onFilterCategory?: (category: string) => void;
-  categoryRaceMap?: Map<string, string>;
-  leaderboardCategories?: Set<string>;
-}) {
-  const visibleCandidateCount = market.candidateCount ?? market.allCandidates?.length ?? market.totalEntries ?? market.leaders.length;
-  const canPick = !isPredicted;
-
-  const handlePlacePrediction = () => {
-    onShowAllCandidates?.(market);
-  };
-
-  return (
-    <PredictCard testId={`card-gainer-${market.id}`} className={`${isMarketClosed ? 'opacity-75' : ''} ${isShimmering ? 'shimmer-once' : ''}`}>
-      <div className="flex items-center justify-between mb-2">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span className="text-xs text-muted-foreground flex items-center gap-1 cursor-help border-b border-dashed border-muted-foreground/40">
-              <TrendingUp className="h-3 w-3" />
-              Biggest Mover Wins
-              <HelpCircle className="h-3 w-3" />
-            </span>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" className="max-w-[240px]">
-            <p className="text-xs">Pick who will have the highest % gain in their Trend Score this week. The biggest mover wins, not the highest ranked.</p>
-          </TooltipContent>
-        </Tooltip>
-        <InteractiveCategoryPill
-          category={market.category}
-          onFilter={() => onFilterCategory?.(market.category)}
-          raceMarketId={categoryRaceMap?.get(normalizeMarketCategory(market.category))}
-          leaderboardCategories={leaderboardCategories}
-        />
-      </div>
-      
-      <Link
-        href={`/predict/race/${market.id}`}
-        className="text-[16px] font-semibold mb-2 leading-[1.4] inline-flex items-center gap-1 text-foreground hover:text-violet-500 dark:hover:text-violet-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm"
-      >
-        Category Race: {getMarketCategoryLabel(market.category)}
-        <span className="text-violet-600 dark:text-violet-400 font-normal" aria-hidden>
-          ›
-        </span>
-      </Link>
-      
-      <div className="space-y-1.5 mb-3">
-        {(() => {
-          const maxGain = Math.max(...market.leaders.map(l => Math.abs(l.percentGain)), 1);
-          return market.leaders.map((leader, i) => (
-            <div 
-              key={leader.name} 
-              className={`flex items-center gap-2.5 p-2 rounded-lg transition-colors relative overflow-hidden ${canPick ? 'cursor-pointer' : ''} ${i === 0 ? 'bg-gradient-to-r from-amber-500/10 to-transparent border border-amber-500/40 dark:border-amber-500/30' : canPick ? 'hover:bg-muted/50' : ''}`}
-              onClick={() => {
-                if (!canPick) return;
-                onShowAllCandidates?.(market, leader);
-              }}
-            >
-              <div className="absolute inset-y-0 left-0 bg-green-500/8 transition-all" style={{ width: `${Math.max((Math.abs(leader.percentGain) / maxGain) * 100, 5)}%` }} />
-              <div className="relative flex items-center gap-2.5 flex-1 min-w-0">
-                {i === 0 ? (
-                  <div className="h-6 w-6 rounded-full bg-amber-500/25 dark:bg-amber-500/20 border border-amber-500/60 dark:border-amber-500/50 flex items-center justify-center shrink-0">
-                    <Crown className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-                  </div>
-                ) : (
-                  <div className="h-6 w-6 rounded-full bg-muted/50 flex items-center justify-center shrink-0">
-                    <span className="text-[10px] font-bold text-violet-600 dark:text-violet-400">{leader.rank ? `#${leader.rank}` : 'New'}</span>
-                  </div>
-                )}
-                <PersonAvatar name={leader.name} avatar={leader.avatar} className="h-12 w-12" />
-                <span className="text-sm font-medium flex-1 truncate">{leader.name}</span>
-              </div>
-              <div className="relative text-right shrink-0">
-                <p className={`text-sm font-mono font-bold ${leader.percentGain >= 0 ? 'text-green-500' : 'text-red-500'}`}>{formatSignedPercent(leader.percentGain)}</p>
-                <p className={`text-[10px] font-mono ${leader.currentGain >= 0 ? 'text-muted-foreground' : 'text-red-600/80 dark:text-red-400/80'}`}>
-                  {formatSignedPoints(leader.currentGain)} pts added
-                </p>
-              </div>
-            </div>
-          ));
-        })()}
-        {visibleCandidateCount > 3 && (
-          <button
-            className="text-xs text-violet-600 dark:text-violet-400 hover:text-violet-500 dark:hover:text-violet-300 text-center mt-1 w-full cursor-pointer transition-colors"
-            onClick={(e) => { e.stopPropagation(); onShowAllCandidates?.(market); }}
-          >
-            View all {visibleCandidateCount} candidates
-          </button>
-        )}
-      </div>
-      
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-sm font-semibold text-violet-700 dark:text-violet-500">
-          Pool: {market.totalPool.toLocaleString('en-US')}
-        </span>
-      </div>
-      
-      <div className="mt-auto space-y-2">
-        {isPredicted ? (
-          <Button 
-            className="w-full bg-green-600/20 text-green-500 border border-green-500/40 dark:border-green-500/30 py-3 md:py-2 h-auto"
-            disabled
-          >
-            Predicted
-          </Button>
-        ) : (
-          <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMessage} side="top" align="center">
-            <Button 
-              className="w-full bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white py-3 md:py-2 h-auto"
-              data-testid={`button-place-prediction-${market.id}`}
-              onClick={handlePlacePrediction}
-            >
-              Choose Candidate
-              <ChevronRight className="h-4 w-4 ml-1" />
-            </Button>
-          </ClosedMarketActionTrigger>
-        )}
-      </div>
-    </PredictCard>
-  );
-}
 
 function GainerCandidatesDialog({
   market,
@@ -1636,10 +1021,6 @@ function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, 
         <Badge variant="outline" className="text-[10px] ml-auto">{entries.length} options</Badge>
       </div>
 
-      <div className="flex items-center justify-center mb-3">
-        <span className="text-sm font-semibold text-muted-foreground">Pool: {totalPool.toLocaleString('en-US')}</span>
-      </div>
-
       <div className="flex flex-col flex-1 min-h-0">
         <div className="space-y-1.5">
           {rankedEntries.slice(0, 4).map((entry: any) => {
@@ -1681,14 +1062,28 @@ function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, 
             );
           })}
         </div>
-        {entries.length > 4 && (
-          <button
-            type="button"
-            className="text-xs text-violet-600 dark:text-violet-400 hover:text-violet-500 dark:hover:text-violet-300 text-center w-full cursor-pointer transition-colors font-medium mt-auto pt-3"
-            onClick={(e) => { e.stopPropagation(); onNavigate(market.slug); }}
-          >
-            +{entries.length - 4} more
-          </button>
+        {entries.length > 4 ? (
+          <div className="mt-auto pt-2 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-end gap-x-2 gap-y-1">
+            <div className="min-w-0 flex justify-start">
+              <button
+                type="button"
+                className="text-xs text-violet-600 dark:text-violet-400 hover:text-violet-500 dark:hover:text-violet-300 text-left pl-11 cursor-pointer transition-colors font-medium"
+                onClick={(e) => { e.stopPropagation(); onNavigate(market.slug); }}
+              >
+                +{entries.length - 4} more
+              </button>
+            </div>
+            <span className="text-sm font-semibold text-muted-foreground shrink-0 text-center tabular-nums">
+              Pool: {totalPool.toLocaleString("en-US")}
+            </span>
+            <div aria-hidden="true" />
+          </div>
+        ) : (
+          <div className="mt-auto pt-2 flex flex-wrap items-end justify-end gap-x-3 gap-y-1">
+            <span className="text-sm font-semibold text-muted-foreground shrink-0 text-right tabular-nums">
+              Pool: {totalPool.toLocaleString("en-US")}
+            </span>
+          </div>
         )}
       </div>
 
