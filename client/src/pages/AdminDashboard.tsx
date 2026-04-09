@@ -3253,17 +3253,11 @@ export default function AdminDashboard() {
   };
 
   const searchCelebrityForOption = async (idx: number, query: string) => {
-    const newInputs = [...opOptionSearchInputs];
-    newInputs[idx] = query;
-    setOpOptionSearchInputs(newInputs);
+    setOpOptionSearchInputs(prev => { const n = [...prev]; n[idx] = query; return n; });
 
     if (!query.trim()) {
-      const newResults = [...opOptionSearchResults];
-      newResults[idx] = [];
-      setOpOptionSearchResults(newResults);
-      const newDropdown = [...opOptionShowDropdown];
-      newDropdown[idx] = false;
-      setOpOptionShowDropdown(newDropdown);
+      setOpOptionSearchResults(prev => { const n = [...prev]; n[idx] = []; return n; });
+      setOpOptionShowDropdown(prev => { const n = [...prev]; n[idx] = false; return n; });
       return;
     }
 
@@ -3271,12 +3265,8 @@ export default function AdminDashboard() {
       const res = await fetchWithAuth(`/api/admin/celebrities?search=${encodeURIComponent(query)}`);
       if (res.ok) {
         const data = await res.json();
-        const newResults = [...opOptionSearchResults];
-        newResults[idx] = data.slice(0, 15);
-        setOpOptionSearchResults(newResults);
-        const newDropdown = [...opOptionShowDropdown];
-        newDropdown[idx] = true;
-        setOpOptionShowDropdown(newDropdown);
+        setOpOptionSearchResults(prev => { const n = [...prev]; n[idx] = data.slice(0, 15); return n; });
+        setOpOptionShowDropdown(prev => { const n = [...prev]; n[idx] = true; return n; });
       }
     } catch {}
   };
@@ -3287,15 +3277,9 @@ export default function AdminDashboard() {
     if (celeb.avatar) {
       updateOpinionOption(idx, "imageUrl", celeb.avatar);
     }
-    const newInputs = [...opOptionSearchInputs];
-    newInputs[idx] = celeb.name;
-    setOpOptionSearchInputs(newInputs);
-    const newDropdown = [...opOptionShowDropdown];
-    newDropdown[idx] = false;
-    setOpOptionShowDropdown(newDropdown);
-    const newResults = [...opOptionSearchResults];
-    newResults[idx] = [];
-    setOpOptionSearchResults(newResults);
+    setOpOptionSearchInputs(prev => { const n = [...prev]; n[idx] = celeb.name; return n; });
+    setOpOptionShowDropdown(prev => { const n = [...prev]; n[idx] = false; return n; });
+    setOpOptionSearchResults(prev => { const n = [...prev]; n[idx] = []; return n; });
   };
 
   const handleDeleteConfirm = () => {
@@ -8339,9 +8323,7 @@ export default function AdminDashboard() {
                               updateOpinionOption(idx, "personId", "");
                               updateOpinionOption(idx, "name", "");
                               updateOpinionOption(idx, "imageUrl", "");
-                              const newInputs = [...opOptionSearchInputs];
-                              newInputs[idx] = "";
-                              setOpOptionSearchInputs(newInputs);
+                              setOpOptionSearchInputs(prev => { const n = [...prev]; n[idx] = ""; return n; });
                             }}
                             aria-label="Clear celebrity"
                             data-testid={`button-clear-opinion-option-celebrity-${idx}`}
