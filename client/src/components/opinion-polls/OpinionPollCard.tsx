@@ -228,7 +228,7 @@ export function OpinionPollCard({
               return (
                 <div
                   key={option.id}
-                  className="w-full flex items-stretch overflow-hidden rounded-lg border border-border/50 bg-muted/30 p-0 text-left transition-all duration-200 hover:border-[#EFEFEF]/50 hover:bg-muted/50 dark:hover:border-white/40 dark:hover:bg-white/5 hover:ring-1 hover:ring-inset hover:ring-[#EFEFEF]/40 dark:hover:ring-white/25"
+                  className="w-full flex items-stretch overflow-hidden rounded-lg border border-border/50 bg-muted/30 p-0 text-left transition-all duration-200 touch-manipulation [@media(hover:hover)_and_(pointer:fine)]:hover:border-[#EFEFEF]/50 [@media(hover:hover)_and_(pointer:fine)]:hover:bg-muted/50 dark:[@media(hover:hover)_and_(pointer:fine)]:hover:border-white/40 dark:[@media(hover:hover)_and_(pointer:fine)]:hover:bg-white/5 [@media(hover:hover)_and_(pointer:fine)]:hover:ring-1 [@media(hover:hover)_and_(pointer:fine)]:hover:ring-inset [@media(hover:hover)_and_(pointer:fine)]:hover:ring-[#EFEFEF]/40 dark:[@media(hover:hover)_and_(pointer:fine)]:hover:ring-white/25 active:border-[#EFEFEF]/40 active:bg-muted/45 dark:active:border-white/35 dark:active:bg-white/[0.07] active:ring-1 active:ring-inset active:ring-[#EFEFEF]/30 dark:active:ring-white/20"
                   data-testid={`opinion-poll-option-${poll.id}-${option.id}`}
                 >
                   {option.imageUrl ? (
@@ -337,7 +337,7 @@ export function OpinionPollCard({
                   {imageColumn}
                   <button
                     type="button"
-                    className="min-w-0 flex-1 text-left cursor-pointer rounded-r-md hover:ring-1 hover:ring-inset hover:ring-[#EFEFEF]/50 dark:hover:ring-white/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#EFEFEF]/40 dark:focus-visible:ring-white/30 border-0 bg-transparent p-0"
+                    className="min-w-0 flex-1 text-left cursor-pointer rounded-r-md touch-manipulation [@media(hover:hover)_and_(pointer:fine)]:hover:ring-1 [@media(hover:hover)_and_(pointer:fine)]:hover:ring-inset [@media(hover:hover)_and_(pointer:fine)]:hover:ring-[#EFEFEF]/50 dark:[@media(hover:hover)_and_(pointer:fine)]:hover:ring-white/35 active:ring-1 active:ring-inset active:ring-[#EFEFEF]/45 dark:active:ring-white/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#EFEFEF]/40 dark:focus-visible:ring-white/30 border-0 bg-transparent p-0"
                     onClick={(e) => openChangeDialog(option, e)}
                   >
                     {contentColumn}

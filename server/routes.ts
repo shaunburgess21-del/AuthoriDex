@@ -8033,9 +8033,12 @@ Only return the JSON object.`;
           }
         }
 
-        const backfillEntries = Array.from(backfillMap.entries());
-        for (const entry of backfillEntries) {
-          await db.update(trackedPeople).set({ avatar: entry[1] }).where(eq(trackedPeople.id, entry[0]));
+        const backfillList: { personId: string; imageUrl: string }[] = [];
+        backfillMap.forEach((imageUrl, personId) => {
+          backfillList.push({ personId, imageUrl });
+        });
+        for (const row of backfillList) {
+          await db.update(trackedPeople).set({ avatar: row.imageUrl }).where(eq(trackedPeople.id, row.personId));
           avatarsBackfilled++;
         }
       }

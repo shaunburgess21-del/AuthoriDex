@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef, useEffect, type ReactNode } from "react";
+import { Children, isValidElement, useMemo, useState, useRef, useEffect, type ReactNode } from "react";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { A11y, Virtual } from "swiper/modules";
 import type { Swiper as SwiperType } from "swiper";
@@ -7,7 +7,7 @@ import "swiper/css/virtual";
 import { WindowedDotIndicator, type WindowedDotAccent } from "@/components/WindowedDotIndicator";
 
 interface CardSectionProps {
-  children: ReactNode[];
+  children: ReactNode;
   desktopLimit?: number;
   columns?: 2 | 3;
   gap?: string;
@@ -23,7 +23,7 @@ export function CardSection({
   testIdPrefix = "card-section",
   dotActiveColor = "bg-cyan-400",
 }: CardSectionProps) {
-  const items = useMemo(() => children.filter(Boolean), [children]);
+  const items = useMemo(() => Children.toArray(children).filter(Boolean), [children]);
   const desktopItems = items.slice(0, desktopLimit);
   const dotActive: WindowedDotAccent = dotActiveColor.includes("violet") ? "violet" : "cyan";
   const [activeIndex, setActiveIndex] = useState(0);
@@ -61,7 +61,10 @@ export function CardSection({
           onSwiper={(s) => {
             swiperRef.current = s;
           }}
-          onSlideChange={(s) => setActiveIndex(s.activeIndex)}
+          onSlideChange={(s) => {
+            setActiveIndex(s.activeIndex);
+            (document.activeElement as HTMLElement | undefined)?.blur?.();
+          }}
           a11y={{
             enabled: true,
             prevSlideMessage: "Previous slide",
@@ -70,13 +73,19 @@ export function CardSection({
           className="pt-0 pb-2 md:py-2"
           data-testid={`${testIdPrefix}-carousel`}
         >
-          {items.map((item, i) => (
-            <SwiperSlide key={i} virtualIndex={i}>
-              <div className="w-full px-1.5 md:px-0">
-                {item}
-              </div>
-            </SwiperSlide>
-          ))}
+          {items.map((item, i) => {
+            const slideKey =
+              isValidElement(item) && item.key != null && item.key !== "."
+                ? String(item.key)
+                : `slide-${i}`;
+            return (
+              <SwiperSlide key={slideKey} virtualIndex={i}>
+                <div className="w-full px-1.5 md:px-0">
+                  {item}
+                </div>
+              </SwiperSlide>
+            );
+          })}
         </Swiper>
         <WindowedDotIndicator
           totalSlides={items.length}
