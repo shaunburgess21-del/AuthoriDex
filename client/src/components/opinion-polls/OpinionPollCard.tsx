@@ -63,6 +63,7 @@ export function OpinionPollCard({
   onFilterCategory,
   categoryRaceMap,
   leaderboardCategories,
+  onNavigateToDetail,
 }: {
   poll: OpinionPollCardPoll;
   onVote: (pollSlug: string, optionId: string) => Promise<void>;
@@ -70,6 +71,7 @@ export function OpinionPollCard({
   onFilterCategory: (category: string) => void;
   categoryRaceMap: Map<string, string>;
   leaderboardCategories?: Set<string>;
+  onNavigateToDetail?: () => void;
 }) {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
@@ -190,6 +192,7 @@ export function OpinionPollCard({
             raceMarketId={categoryRaceMap.get(normalizeMarketCategory(categoryKey)) ?? undefined}
             leaderboardCategories={leaderboardCategories}
             detailHref={poll.slug ? `/vote/opinion-polls/${poll.slug}` : undefined}
+            detailOnNavigate={onNavigateToDetail}
             detailLabel="View Poll Details"
             data-testid={`badge-opinion-category-${poll.id}`}
           />
@@ -199,7 +202,8 @@ export function OpinionPollCard({
           className="mb-2"
           text={poll.title}
           serif={false}
-          href={`/vote/opinion-polls/${poll.slug}`}
+          href={onNavigateToDetail ? undefined : `/vote/opinion-polls/${poll.slug}`}
+          onTitleNavigate={onNavigateToDetail}
           linkTestId={`link-opinion-detail-${poll.id}`}
           avatar={
             poll.imageUrl ? (
@@ -214,11 +218,19 @@ export function OpinionPollCard({
           }
         />
         {poll.description && (
-          <Link href={`/vote/opinion-polls/${poll.slug}`}>
-            <p className="text-sm text-muted-foreground mb-3 line-clamp-2 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors cursor-pointer">
-              {poll.description}
-            </p>
-          </Link>
+          onNavigateToDetail ? (
+            <button type="button" onClick={onNavigateToDetail} className="w-full text-left mb-3">
+              <p className="text-sm text-muted-foreground line-clamp-2 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors cursor-pointer">
+                {poll.description}
+              </p>
+            </button>
+          ) : (
+            <Link href={`/vote/opinion-polls/${poll.slug}`}>
+              <p className="text-sm text-muted-foreground mb-3 line-clamp-2 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors cursor-pointer">
+                {poll.description}
+              </p>
+            </Link>
+          )
         )}
 
         {!hasVoted ? (
@@ -261,14 +273,25 @@ export function OpinionPollCard({
               );
             })}
             {remainingCount > 0 && (
-              <Link href={`/vote/opinion-polls/${poll.slug}`}>
-                <p
-                  className="text-xs text-cyan-600 dark:text-cyan-400 text-center cursor-pointer hover:underline mt-2.5"
-                  data-testid={`link-more-options-${poll.id}`}
-                >
-                  +{remainingCount} more options
-                </p>
-              </Link>
+              onNavigateToDetail ? (
+                <button type="button" onClick={onNavigateToDetail} className="w-full">
+                  <p
+                    className="text-xs text-cyan-600 dark:text-cyan-400 text-center cursor-pointer hover:underline mt-2.5"
+                    data-testid={`link-more-options-${poll.id}`}
+                  >
+                    +{remainingCount} more options
+                  </p>
+                </button>
+              ) : (
+                <Link href={`/vote/opinion-polls/${poll.slug}`}>
+                  <p
+                    className="text-xs text-cyan-600 dark:text-cyan-400 text-center cursor-pointer hover:underline mt-2.5"
+                    data-testid={`link-more-options-${poll.id}`}
+                  >
+                    +{remainingCount} more options
+                  </p>
+                </Link>
+              )
             )}
           </div>
         ) : (
@@ -340,14 +363,25 @@ export function OpinionPollCard({
               );
             })}
             {remainingCount > 0 && (
-              <Link href={`/vote/opinion-polls/${poll.slug}`}>
-                <p
-                  className="text-xs text-cyan-600 dark:text-cyan-400 text-center cursor-pointer hover:underline mt-2.5"
-                  data-testid={`link-more-options-${poll.id}`}
-                >
-                  +{remainingCount} more options
-                </p>
-              </Link>
+              onNavigateToDetail ? (
+                <button type="button" onClick={onNavigateToDetail} className="w-full">
+                  <p
+                    className="text-xs text-cyan-600 dark:text-cyan-400 text-center cursor-pointer hover:underline mt-2.5"
+                    data-testid={`link-more-options-${poll.id}`}
+                  >
+                    +{remainingCount} more options
+                  </p>
+                </button>
+              ) : (
+                <Link href={`/vote/opinion-polls/${poll.slug}`}>
+                  <p
+                    className="text-xs text-cyan-600 dark:text-cyan-400 text-center cursor-pointer hover:underline mt-2.5"
+                    data-testid={`link-more-options-${poll.id}`}
+                  >
+                    +{remainingCount} more options
+                  </p>
+                </Link>
+              )
             )}
           </div>
         )}

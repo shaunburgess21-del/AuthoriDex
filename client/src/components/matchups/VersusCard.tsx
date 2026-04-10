@@ -41,6 +41,7 @@ export function VersusCard({
   onFilterCategory,
   categoryRaceMap,
   leaderboardCategories,
+  onNavigateToDetail,
 }: {
   matchup: VersusCardMatchup;
   userVote: string | null;
@@ -49,6 +50,7 @@ export function VersusCard({
   onFilterCategory: (category: string) => void;
   categoryRaceMap: Map<string, string>;
   leaderboardCategories?: Set<string>;
+  onNavigateToDetail?: () => void;
 }) {
   const hasVoted = userVote !== null;
   const votedA = userVote === "option_a";
@@ -69,6 +71,7 @@ export function VersusCard({
               raceMarketId={categoryRaceMap.get(normalizeMarketCategory(matchup.category)) ?? undefined}
               leaderboardCategories={leaderboardCategories}
               detailHref={matchup.slug ? `/vote/matchups/${matchup.slug}` : undefined}
+              detailOnNavigate={onNavigateToDetail}
               detailLabel="View Matchup Details"
               data-testid={`badge-matchup-${matchup.id}`}
             />
@@ -81,7 +84,16 @@ export function VersusCard({
           </div>
 
           <div className="rounded-t-lg border border-border/40 dark:border-slate-700/30 border-b-0 bg-muted/60 dark:bg-slate-900/80 backdrop-blur-sm px-4 py-2 text-center mb-0 mt-[5px]">
-            {matchup.slug ? (
+            {matchup.slug && onNavigateToDetail ? (
+              <button
+                type="button"
+                onClick={onNavigateToDetail}
+                className={`text-sm font-semibold transition-colors ${hasVoted ? "text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300" : "text-foreground/80 dark:text-slate-300 hover:text-cyan-600 dark:hover:text-cyan-400"}`}
+                data-testid={`link-matchup-${matchup.id}`}
+              >
+                {hasVoted ? "View details →" : matchup.promptText || "Who do you prefer?"}
+              </button>
+            ) : matchup.slug ? (
               <Link
                 href={`/vote/matchups/${matchup.slug}`}
                 className={`text-sm font-semibold transition-colors ${hasVoted ? "text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300" : "text-foreground/80 dark:text-slate-300 hover:text-cyan-600 dark:hover:text-cyan-400"}`}

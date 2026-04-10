@@ -29,6 +29,8 @@ interface InteractiveCategoryPillProps {
   raceMarketId?: string | null;
   leaderboardCategories?: Set<string>;
   detailHref?: string;
+  /** When set (e.g. Vote page list context), runs instead of navigating via detailHref Link. */
+  detailOnNavigate?: () => void;
   detailLabel?: string;
   size?: keyof typeof SIZE_CLASSES;
   className?: string;
@@ -42,6 +44,7 @@ function MenuItems({
   leaderboardCategories,
   detailHref,
   detailLabel,
+  onDetailNavigate,
   onFilter,
   CloseWrapper,
 }: {
@@ -51,6 +54,7 @@ function MenuItems({
   leaderboardCategories?: Set<string>;
   detailHref?: string;
   detailLabel?: string;
+  onDetailNavigate?: () => void;
   onFilter: () => void;
   CloseWrapper: React.ComponentType<{ children: React.ReactNode; asChild?: boolean }>;
 }) {
@@ -81,16 +85,29 @@ function MenuItems({
         </CloseWrapper>
       )}
 
-      {detailHref && (
-        <CloseWrapper asChild>
-          <Link
-            href={detailHref}
-            className="flex items-center gap-2.5 w-full px-3 py-2.5 text-sm rounded-md hover:bg-muted/60 transition-colors no-underline text-foreground"
-          >
-            <ExternalLink className="h-4 w-4 opacity-60 shrink-0" />
-            {detailLabel || "View Details"}
-          </Link>
-        </CloseWrapper>
+      {(detailHref || onDetailNavigate) && (
+        onDetailNavigate ? (
+          <CloseWrapper asChild>
+            <button
+              type="button"
+              className="flex items-center gap-2.5 w-full px-3 py-2.5 text-sm text-left rounded-md hover:bg-muted/60 transition-colors text-foreground"
+              onClick={onDetailNavigate}
+            >
+              <ExternalLink className="h-4 w-4 opacity-60 shrink-0" />
+              {detailLabel || "View Details"}
+            </button>
+          </CloseWrapper>
+        ) : (
+          <CloseWrapper asChild>
+            <Link
+              href={detailHref!}
+              className="flex items-center gap-2.5 w-full px-3 py-2.5 text-sm rounded-md hover:bg-muted/60 transition-colors no-underline text-foreground"
+            >
+              <ExternalLink className="h-4 w-4 opacity-60 shrink-0" />
+              {detailLabel || "View Details"}
+            </Link>
+          </CloseWrapper>
+        )
       )}
 
       {showLeaderboard && (
@@ -114,6 +131,7 @@ export function InteractiveCategoryPill({
   raceMarketId,
   leaderboardCategories,
   detailHref,
+  detailOnNavigate,
   detailLabel,
   size = "default",
   className = "",
@@ -144,6 +162,13 @@ export function InteractiveCategoryPill({
     detailLabel,
   };
 
+  const detailNavHandler = detailOnNavigate
+    ? () => {
+        setOpen(false);
+        detailOnNavigate();
+      }
+    : undefined;
+
   if (isMobile) {
     return (
       <Drawer open={open} onOpenChange={setOpen}>
@@ -153,6 +178,7 @@ export function InteractiveCategoryPill({
             <DrawerTitle className="sr-only">{label} actions</DrawerTitle>
             <MenuItems
               {...menuProps}
+              onDetailNavigate={detailNavHandler}
               onFilter={() => {
                 onFilter();
                 setOpen(false);
@@ -171,6 +197,7 @@ export function InteractiveCategoryPill({
       <PopoverContent align="end" className="w-56 p-1">
         <MenuItems
           {...menuProps}
+          onDetailNavigate={detailNavHandler}
           onFilter={() => {
             onFilter();
             setOpen(false);

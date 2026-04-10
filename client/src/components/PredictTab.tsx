@@ -513,6 +513,24 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
     return map;
   }, [userPredictionsData]);
 
+  const userBetsPerEntry = useMemo(() => {
+    const map = new Map<string, Map<string, { direction: string; stakeAmount: number }>>();
+    const betsArray = Array.isArray(userPredictionsData) ? userPredictionsData : (userPredictionsData as any)?.predictions ?? [];
+    for (const b of betsArray as any[]) {
+      if (!b.marketId || !b.entryId) continue;
+      const mId = String(b.marketId);
+      const eId = String(b.entryId);
+      let inner = map.get(mId);
+      if (!inner) { inner = new Map(); map.set(mId, inner); }
+      const prev = inner.get(eId);
+      inner.set(eId, {
+        direction: b.direction || prev?.direction || "yes",
+        stakeAmount: (prev?.stakeAmount || 0) + (b.stakeAmount || 0),
+      });
+    }
+    return map;
+  }, [userPredictionsData]);
+
   const categoryRaceMap = useCategoryRaceMap();
   const leaderboardCategories = useLeaderboardCategories();
   const handleCategoryFilter = (_category: string) => setLocation("/predict");
@@ -743,6 +761,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
                   }
                   isMarketClosed={market.status !== "OPEN"}
                   userBetResult={openMarketBets.get(market.id)}
+                  userBetsPerEntry={userBetsPerEntry.get(String(market.id))}
                   onFilterCategory={handleCategoryFilter}
                   categoryRaceMap={categoryRaceMap}
                   leaderboardCategories={leaderboardCategories}

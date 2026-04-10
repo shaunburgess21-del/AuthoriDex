@@ -101,6 +101,7 @@ import { UnifiedSectionHeader } from "@/components/UnifiedSectionHeader";
 import { WindowedDotIndicator } from "@/components/WindowedDotIndicator";
 import { ScrollMaskedChipRow } from "@/components/ScrollMaskedChipRow";
 import { VoteSnapScrollView, type SnapItem, type SnapSectionType } from "@/components/snap-scroll/VoteSnapScrollView";
+import { navigateWithVoteList } from "@/lib/voteListNavigation";
 
 const VOTE_ONBOARDING_STEPS: readonly OnboardingStep[] = [
   {
@@ -709,12 +710,15 @@ function DiscourseCard({
   onFilterCategory,
   categoryRaceMap,
   leaderboardCategories,
+  onNavigateToPollDetail,
 }: {
   topic: any;
   onVote: (choice: 'support' | 'neutral' | 'oppose') => void;
   onFilterCategory: (category: string) => void;
   categoryRaceMap: Map<string, string>;
   leaderboardCategories?: Set<string>;
+  /** When set, detail links use history voteList + client navigation (Vote page). */
+  onNavigateToPollDetail?: () => void;
 }) {
   const [voted, setVoted] = useState<'support' | 'neutral' | 'oppose' | null>(topic.userVote || null);
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
@@ -764,6 +768,7 @@ function DiscourseCard({
           onFilter={() => onFilterCategory(topic.category)}
           leaderboardCategories={leaderboardCategories}
           detailHref={topic.slug ? `/polls/${topic.slug}` : undefined}
+          detailOnNavigate={onNavigateToPollDetail}
           detailLabel="View Poll Details"
           data-testid={`badge-category-${topic.id}`}
         />
@@ -776,7 +781,8 @@ function DiscourseCard({
         className="mb-3"
         text={topic.headline}
         serif={false}
-        href={topic.slug ? `/polls/${topic.slug}` : undefined}
+        href={onNavigateToPollDetail ? undefined : topic.slug ? `/polls/${topic.slug}` : undefined}
+        onTitleNavigate={onNavigateToPollDetail}
         linkTestId={topic.slug ? `link-poll-detail-${topic.id}` : undefined}
         avatar={
           currentImgSrc ? (
@@ -802,7 +808,11 @@ function DiscourseCard({
         }
       />
       {topic.subjectText && (
-        topic.slug ? (
+        topic.slug && onNavigateToPollDetail ? (
+          <button type="button" onClick={onNavigateToPollDetail} className="block mb-4 w-full text-left">
+            <p className="text-[17px] md:text-[16px] leading-[1.5] md:leading-[1.4] text-muted-foreground line-clamp-2 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">{topic.subjectText}</p>
+          </button>
+        ) : topic.slug ? (
           <Link href={`/polls/${topic.slug}`} className="block mb-4">
             <p className="text-[17px] md:text-[16px] leading-[1.5] md:leading-[1.4] text-muted-foreground line-clamp-2 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">{topic.subjectText}</p>
           </Link>
@@ -811,7 +821,11 @@ function DiscourseCard({
         )
       )}
       {!topic.subjectText && topic.description && (
-        topic.slug ? (
+        topic.slug && onNavigateToPollDetail ? (
+          <button type="button" onClick={onNavigateToPollDetail} className="block mb-4 w-full text-left">
+            <p className="text-[17px] md:text-[16px] leading-[1.5] md:leading-[1.4] text-muted-foreground line-clamp-2 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">{topic.description}</p>
+          </button>
+        ) : topic.slug ? (
           <Link href={`/polls/${topic.slug}`} className="block mb-4">
             <p className="text-[17px] md:text-[16px] leading-[1.5] md:leading-[1.4] text-muted-foreground line-clamp-2 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">{topic.description}</p>
           </Link>
@@ -1953,6 +1967,50 @@ export default function VotePage() {
     return matchesCategory && matchesSearch && f.isActive;
   }).sort((a: any, b: any) => matchupsCategoryFilter === "Trending" ? ((b.totalVotes ?? 0) - (a.totalVotes ?? 0)) : 0);
 
+  const sentimentSlugList = useMemo(
+    () => filteredTopics.map((t: any) => t.slug).filter(Boolean) as string[],
+    [filteredTopics],
+  );
+  const matchupSlugList = useMemo(
+    () => filteredMatchups.map((m) => m.slug).filter((s): s is string => !!s),
+    [filteredMatchups],
+  );
+  const opinionSlugList = useMemo(
+    () => filteredOpinionPolls.map((p: any) => p.slug).filter(Boolean) as string[],
+    [filteredOpinionPolls],
+  );
+
+  const goSentimentDetail = useCallback(
+    (slug: string) => {
+      navigateWithVoteList(
+        setLocation,
+        { type: "sentiment", slugs: sentimentSlugList, currentSlug: slug },
+        `/polls/${slug}`,
+      );
+    },
+    [sentimentSlugList, setLocation],
+  );
+  const goMatchupDetail = useCallback(
+    (slug: string) => {
+      navigateWithVoteList(
+        setLocation,
+        { type: "matchup", slugs: matchupSlugList, currentSlug: slug },
+        `/vote/matchups/${encodeURIComponent(slug)}`,
+      );
+    },
+    [matchupSlugList, setLocation],
+  );
+  const goOpinionDetail = useCallback(
+    (slug: string) => {
+      navigateWithVoteList(
+        setLocation,
+        { type: "opinion", slugs: opinionSlugList, currentSlug: slug },
+        `/vote/opinion-polls/${slug}`,
+      );
+    },
+    [opinionSlugList, setLocation],
+  );
+
   const matchupSnapItems: SnapItem[] = useMemo(() =>
     matchups.filter(m => m.isActive).map(m => ({
       id: m.id,
@@ -2374,6 +2432,7 @@ export default function VotePage() {
                     onFilterCategory={handleCategoryPillFilter}
                     categoryRaceMap={raceMap}
                     leaderboardCategories={leaderboardCats}
+                    onNavigateToPollDetail={topic.slug ? () => goSentimentDetail(topic.slug) : undefined}
                   />
                 </div>
               ))}
@@ -2469,14 +2528,15 @@ export default function VotePage() {
             <CardSection desktopLimit={9} gap="gap-5" testIdPrefix="section-matchups">
               {filteredMatchups.map((matchup) => (
                 <div key={matchup.id} role="button" tabIndex={0} onClick={(e) => handleCardEmptyTap(e, "matchups", matchup.id)} onKeyDown={(e) => { if (e.key === "Enter") handleCardEmptyTap(e as any, "matchups", matchup.id); }} className="h-full">
-                  <VersusCard 
-                    matchup={matchup} 
+                  <VersusCard
+                    matchup={matchup}
                     userVote={matchupUserVotes[matchup.id] || null}
                     onVote={handleMatchupVote}
                     onRemoveVote={handleMatchupRemoveVote}
                     onFilterCategory={handleCategoryPillFilter}
                     categoryRaceMap={raceMap}
                     leaderboardCategories={leaderboardCats}
+                    onNavigateToDetail={matchup.slug ? () => goMatchupDetail(matchup.slug!) : undefined}
                   />
                 </div>
               ))}
@@ -2583,6 +2643,7 @@ export default function VotePage() {
                     onFilterCategory={handleCategoryPillFilter}
                     categoryRaceMap={raceMap}
                     leaderboardCategories={leaderboardCats}
+                    onNavigateToDetail={poll.slug ? () => goOpinionDetail(poll.slug) : undefined}
                   />
                 </div>
               ))}
@@ -3799,6 +3860,7 @@ export default function VotePage() {
                     onFilterCategory={handleCategoryPillFilter}
                     categoryRaceMap={raceMap}
                     leaderboardCategories={leaderboardCats}
+                    onNavigateToPollDetail={topic.slug ? () => goSentimentDetail(topic.slug) : undefined}
                   />
                 ))}
               </div>
@@ -3859,6 +3921,7 @@ export default function VotePage() {
                     onFilterCategory={handleCategoryPillFilter}
                     categoryRaceMap={raceMap}
                     leaderboardCategories={leaderboardCats}
+                    onNavigateToDetail={matchup.slug ? () => goMatchupDetail(matchup.slug!) : undefined}
                   />
                 ))}
               </div>
@@ -3924,6 +3987,7 @@ export default function VotePage() {
                     onFilterCategory={handleCategoryPillFilter}
                     categoryRaceMap={raceMap}
                     leaderboardCategories={leaderboardCats}
+                    onNavigateToDetail={poll.slug ? () => goOpinionDetail(poll.slug) : undefined}
                   />
                 ))}
               </div>
@@ -4020,6 +4084,7 @@ export default function VotePage() {
                   onFilterCategory={handleCategoryPillFilter}
                   categoryRaceMap={raceMap}
                   leaderboardCategories={leaderboardCats}
+                  onNavigateToDetail={m.slug ? () => goMatchupDetail(m.slug!) : undefined}
                 />
               );
             }}
@@ -4040,6 +4105,7 @@ export default function VotePage() {
                   onFilterCategory={handleCategoryPillFilter}
                   categoryRaceMap={raceMap}
                   leaderboardCategories={leaderboardCats}
+                  onNavigateToPollDetail={t.slug ? () => goSentimentDetail(t.slug) : undefined}
                 />
               );
             }}
@@ -4067,6 +4133,7 @@ export default function VotePage() {
                   onFilterCategory={handleCategoryPillFilter}
                   categoryRaceMap={raceMap}
                   leaderboardCategories={leaderboardCats}
+                  onNavigateToDetail={p.slug ? () => goOpinionDetail(p.slug) : undefined}
                 />
               );
             }}

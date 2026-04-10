@@ -3,6 +3,11 @@ import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, Inbox, ChevronUp, ChevronDown } from "lucide-react";
 import { sharePage } from "@/lib/share";
+import {
+  navigateWithVoteList,
+  type VoteListHistoryState,
+  type VoteListNavType,
+} from "@/lib/voteListNavigation";
 import { CategoryTabStrip } from "./CategoryTabStrip";
 import { CardComments, type CommentEntityType } from "@/components/comments/CardComments";
 
@@ -40,6 +45,12 @@ const SECTION_LABEL: Record<SnapSectionType, string> = {
   matchups: "matchups",
   sentiment: "sentiment polls",
   opinion: "opinion polls",
+};
+
+const SNAP_TO_VOTE_LIST_TYPE: Record<SnapSectionType, VoteListNavType> = {
+  matchups: "matchup",
+  sentiment: "sentiment",
+  opinion: "opinion",
 };
 
 const DRAG_THRESHOLD = 40;
@@ -125,10 +136,22 @@ export function VoteSnapScrollView({
 
   const navigateToDetail = useCallback(() => {
     const item = getVisibleItem();
-    if (item?.slug) {
-      setLocation(`${SECTION_DETAIL_PREFIX[sectionType]}${item.slug}`);
-    }
-  }, [getVisibleItem, sectionType, setLocation]);
+    if (!item?.slug) return;
+    const listItems = categoryItems.get(activeCategory) || [];
+    const slugs = listItems.map((i) => i.slug).filter(Boolean);
+    if (slugs.length === 0) return;
+    const listType = SNAP_TO_VOTE_LIST_TYPE[sectionType];
+    const voteList: VoteListHistoryState = {
+      type: listType,
+      slugs,
+      currentSlug: item.slug,
+    };
+    const path =
+      listType === "matchup"
+        ? `${SECTION_DETAIL_PREFIX[sectionType]}${encodeURIComponent(item.slug)}`
+        : `${SECTION_DETAIL_PREFIX[sectionType]}${item.slug}`;
+    navigateWithVoteList(setLocation, voteList, path);
+  }, [activeCategory, categoryItems, getVisibleItem, sectionType, setLocation]);
 
   const handleShare = useCallback(() => {
     const item = getVisibleItem();

@@ -13,7 +13,10 @@ import { Badge } from "@/components/ui/badge";
 import { apiRequest } from "@/lib/queryClient";
 import { formatDate } from "@/lib/formatDate";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
+import { VoteDetailNavCluster } from "@/components/vote/VoteDetailNavCluster";
+import { useDetailNavigation } from "@/hooks/useDetailNavigation";
 import { CardComments, useCommentCount } from "@/components/comments/CardComments";
+import { CommentsBottomSheet } from "@/components/snap-scroll/CommentsBottomSheet";
 import {
   ArrowLeft,
   Clock,
@@ -28,6 +31,7 @@ import {
   Check,
   Swords,
   TrendingUp,
+  ChevronRight,
 } from "lucide-react";
 
 interface MatchupDetail {
@@ -74,6 +78,8 @@ export default function MatchupDetailPage() {
   const { user, isLoggedIn } = useAuth();
 
   const matchupCommentCount = useCommentCount("matchup", slug || "");
+  const { showNav } = useDetailNavigation(slug || undefined, "matchup");
+  const [commentsSheetOpen, setCommentsSheetOpen] = useState(false);
 
   const { data: matchup, isLoading, error } = useQuery<MatchupDetail>({
     queryKey: ["/api/matchups/by-slug", slug],
@@ -139,17 +145,22 @@ export default function MatchupDetailPage() {
     return (
       <div className="min-h-screen bg-background">
         <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-md border-b border-border/50">
-          <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-3 min-w-0">
+          <div className="max-w-3xl mx-auto px-4 py-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+            <div className="flex items-center gap-3 min-w-0 justify-self-start">
               <Link href="/" data-testid="link-logo-home">
                 <VoxDexLogo size={28} />
               </Link>
-              <Button variant="ghost" size="sm" onClick={() => { window.history.length > 1 ? window.history.back() : setLocation("/vote"); }} data-testid="button-back">
+              <Button variant="ghost" size="sm" onClick={() => { showNav ? setLocation("/vote") : (window.history.length > 1 ? window.history.back() : setLocation("/vote")); }} data-testid="button-back">
                 <ArrowLeft className="h-4 w-4 mr-1" />
                 Vote
               </Button>
             </div>
-            <UserMenu />
+            <div className="flex justify-center min-w-0 col-start-2">
+              <VoteDetailNavCluster listType="matchup" slug={slug || undefined} />
+            </div>
+            <div className="flex justify-end min-w-0 justify-self-end col-start-3">
+              <UserMenu />
+            </div>
           </div>
         </header>
         <div className="max-w-3xl mx-auto px-4 py-8">
@@ -172,17 +183,22 @@ export default function MatchupDetailPage() {
   return (
     <div className="min-h-screen bg-background" data-testid="matchup-detail-page">
       <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-md border-b border-border/50">
-        <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-3 min-w-0">
+        <div className="max-w-3xl mx-auto px-4 py-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+          <div className="flex items-center gap-3 min-w-0 justify-self-start">
             <Link href="/" data-testid="link-logo-home">
               <VoxDexLogo size={28} />
             </Link>
-            <Button variant="ghost" size="sm" onClick={() => { window.history.length > 1 ? window.history.back() : setLocation("/vote"); }} data-testid="button-back">
+            <Button variant="ghost" size="sm" onClick={() => { showNav ? setLocation("/vote") : (window.history.length > 1 ? window.history.back() : setLocation("/vote")); }} data-testid="button-back">
               <ArrowLeft className="h-4 w-4 mr-1" />
               Vote
             </Button>
           </div>
-          <UserMenu />
+          <div className="flex justify-center min-w-0 col-start-2">
+            <VoteDetailNavCluster listType="matchup" slug={slug || undefined} />
+          </div>
+          <div className="flex justify-end min-w-0 justify-self-end col-start-3">
+            <UserMenu />
+          </div>
         </div>
       </header>
 
@@ -506,7 +522,22 @@ export default function MatchupDetailPage() {
         )}
 
         {/* Discussion */}
-        <CardComments entityType="matchup" slug={slug || ""} placeholder="Share your thoughts on this matchup..." />
+        <button
+          type="button"
+          onClick={() => setCommentsSheetOpen(true)}
+          className="w-full flex items-center justify-between rounded-xl border border-border/50 bg-card p-4 mb-6 md:hidden"
+        >
+          <div className="flex items-center gap-2">
+            <MessageSquare className="h-4 w-4 text-cyan-700 dark:text-cyan-500" />
+            <span className="text-sm font-semibold">Discussion</span>
+            <span className="text-xs text-muted-foreground">({matchupCommentCount})</span>
+          </div>
+          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+        </button>
+
+        <div className="hidden md:block">
+          <CardComments entityType="matchup" slug={slug || ""} placeholder="Share your thoughts on this matchup..." />
+        </div>
 
         {/* Back to Vote */}
         <div className="flex justify-center pb-8">
@@ -518,6 +549,22 @@ export default function MatchupDetailPage() {
           </Link>
         </div>
       </div>
+
+      <button
+        type="button"
+        onClick={() => setCommentsSheetOpen(true)}
+        className="fixed bottom-20 right-4 z-40 md:hidden flex items-center gap-1.5 rounded-full bg-cyan-600 text-white px-4 py-2.5 shadow-lg"
+      >
+        <MessageSquare className="h-4 w-4" />
+        <span className="text-xs font-semibold">{matchupCommentCount}</span>
+      </button>
+
+      <CommentsBottomSheet
+        open={commentsSheetOpen}
+        onOpenChange={setCommentsSheetOpen}
+        entityType="matchup"
+        slug={slug || ""}
+      />
     </div>
   );
 }

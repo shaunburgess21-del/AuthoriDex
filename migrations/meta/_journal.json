@@ -36,6 +36,20 @@
       "when": 1774700871137,
       "tag": "0004_induction_candidate_social_status",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1774800871137,
+      "tag": "0005_matchup_neutral_votes",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1774900871137,
+      "tag": "0006_reduce_face_offs_seed_votes",
+      "breakpoints": true
     }
   ]
 }

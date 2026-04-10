@@ -876,7 +876,55 @@ function UserBetResult({ betResult, isMarketClosed = false }: { betResult?: { re
   );
 }
 
-function OpenMarketCard({ market, onNavigate, isMarketClosed = false, userBetResult, onFilterCategory, categoryRaceMap, leaderboardCategories }: { market: any; onNavigate: (slug: string, pick?: string, direction?: string) => void; isMarketClosed?: boolean; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number }; onFilterCategory?: (cat: string) => void; categoryRaceMap?: Map<string, string>; leaderboardCategories?: Set<string> }) {
+function isYesLikeLabel(label: string) {
+  const l = (label || "").toLowerCase();
+  return l === "yes" || l === "above";
+}
+
+function PendingBetLinkRow({ entryLabel, stakeAmount, href }: { entryLabel: string; stakeAmount: number; href: string }) {
+  const yesLike = isYesLikeLabel(entryLabel);
+  const accent = yesLike ? "#00C853" : "#FF0000";
+  return (
+    <Link
+      href={href}
+      className="block w-full rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+      aria-label={`View your prediction: ${entryLabel}`}
+    >
+      <div
+        className="flex min-h-10 items-center justify-between gap-2 rounded-md border px-3 py-3 md:py-2 text-left w-full transition-colors"
+        style={{
+          backgroundColor: `${accent}10`,
+          borderColor: `${accent}80`,
+        }}
+        data-testid="pending-bet-link"
+      >
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <div
+            className="h-5 w-5 rounded-full flex items-center justify-center shrink-0 border"
+            style={{ backgroundColor: `${accent}1A`, borderColor: `${accent}80` }}
+          >
+            <Check className="h-2.5 w-2.5" style={{ color: accent }} />
+          </div>
+          <div className="min-w-0 flex flex-row flex-wrap items-center gap-1.5">
+            <span className="text-xs font-semibold uppercase tracking-wide leading-none text-foreground">Your pick</span>
+            <span className="text-xs font-semibold leading-none" style={{ color: accent }}>
+              {entryLabel.toUpperCase()}
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-baseline gap-1 tabular-nums">
+            <span className="text-[10px] text-muted-foreground">Stake</span>
+            <span className="text-xs font-semibold text-foreground">{stakeAmount.toLocaleString("en-US")}</span>
+          </div>
+          <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden />
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+function OpenMarketCard({ market, onNavigate, isMarketClosed = false, userBetResult, userBetsPerEntry, onFilterCategory, categoryRaceMap, leaderboardCategories }: { market: any; onNavigate: (slug: string, pick?: string, direction?: string) => void; isMarketClosed?: boolean; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number }; userBetsPerEntry?: Map<string, { direction: string; stakeAmount: number }>; onFilterCategory?: (cat: string) => void; categoryRaceMap?: Map<string, string>; leaderboardCategories?: Set<string> }) {
   const entries = market.entries || [];
   const isCommunity = market.marketType === "community";
   const totalStake = entries.reduce((sum: number, e: any) => sum + Number(e.totalStake || 0) + Number(e.noStake || 0), 0);
@@ -893,7 +941,7 @@ function OpenMarketCard({ market, onNavigate, isMarketClosed = false, userBetRes
     return <UpDownMarketCard market={market} entries={entries} totalPool={totalPool} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} isMarketClosed={isMarketClosed || isInactive} isInactive={isInactive} inactiveMessage={market.inactiveMessage} userBetResult={userBetResult} onFilterCategory={onFilterCategory} categoryRaceMap={categoryRaceMap} leaderboardCategories={leaderboardCategories} />;
   }
   if (market.openMarketType === "multi") {
-    return <MultiMarketCard market={market} entries={entries} totalPool={totalPool} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} isMarketClosed={isMarketClosed || isInactive} isInactive={isInactive} inactiveMessage={market.inactiveMessage} userBetResult={userBetResult} onFilterCategory={onFilterCategory} categoryRaceMap={categoryRaceMap} leaderboardCategories={leaderboardCategories} />;
+    return <MultiMarketCard market={market} entries={entries} totalPool={totalPool} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} isMarketClosed={isMarketClosed || isInactive} isInactive={isInactive} inactiveMessage={market.inactiveMessage} userBetResult={userBetResult} userBetsPerEntry={userBetsPerEntry} onFilterCategory={onFilterCategory} categoryRaceMap={categoryRaceMap} leaderboardCategories={leaderboardCategories} />;
   }
   return <BinaryMarketCard market={market} entries={entries} totalPool={totalPool} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} isMarketClosed={isMarketClosed || isInactive} isInactive={isInactive} inactiveMessage={market.inactiveMessage} userBetResult={userBetResult} onFilterCategory={onFilterCategory} categoryRaceMap={categoryRaceMap} leaderboardCategories={leaderboardCategories} />;
 }
@@ -956,9 +1004,10 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
               <Lock className="h-4 w-4 mr-2" />
               Closed
             </Button>
+          ) : userBetResult?.result === "pending" ? (
+            <PendingBetLinkRow entryLabel={userBetResult.entryLabel} stakeAmount={userBetResult.stakeAmount} href={`/markets/${market.slug}`} />
           ) : (
             <div className="grid grid-cols-2 gap-2">
-              {/* Match UnderratedOverratedCard mobile tap targets: py-3.5; compact on md+ */}
               <Button
                 className="!min-h-0 px-4 py-3.5 md:py-2.5 bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20"
                 onClick={() => onNavigate(market.slug, 'yes')}
@@ -982,7 +1031,7 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
   );
 }
 
-function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, onNavigate, isMarketClosed, isInactive = false, inactiveMessage, userBetResult, onFilterCategory, categoryRaceMap, leaderboardCategories }: { market: any; entries: any[]; totalPool: number; participants: number; timeLabel: string; onNavigate: (slug: string, pick?: string, direction?: string) => void; isMarketClosed: boolean; isInactive?: boolean; inactiveMessage?: string; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number }; onFilterCategory?: (cat: string) => void; categoryRaceMap?: Map<string, string>; leaderboardCategories?: Set<string> }) {
+function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, onNavigate, isMarketClosed, isInactive = false, inactiveMessage, userBetResult, userBetsPerEntry, onFilterCategory, categoryRaceMap, leaderboardCategories }: { market: any; entries: any[]; totalPool: number; participants: number; timeLabel: string; onNavigate: (slug: string, pick?: string, direction?: string) => void; isMarketClosed: boolean; isInactive?: boolean; inactiveMessage?: string; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number }; userBetsPerEntry?: Map<string, { direction: string; stakeAmount: number }>; onFilterCategory?: (cat: string) => void; categoryRaceMap?: Map<string, string>; leaderboardCategories?: Set<string> }) {
   const totalEntryStake = entries.reduce((sum: number, e: any) => sum + Number(e.totalStake || 0) + Number(e.noStake || 0), 0) || 1;
   const rankedEntries = [...entries]
     .map((e: any) => {
@@ -1031,6 +1080,9 @@ function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, 
       <div className="flex flex-col flex-1 min-h-0">
         <div className="space-y-1.5">
           {rankedEntries.slice(0, 4).map((entry: any) => {
+            const entryBet = userBetsPerEntry?.get(String(entry.id));
+            const hasBet = !!entryBet && userBetResult?.result === "pending";
+            const betAccent = entryBet?.direction === "no" ? "#FF0000" : "#00C853";
             return (
               <div key={entry.id} className="flex items-center gap-2">
                 {entry.imageUrl ? (
@@ -1045,7 +1097,18 @@ function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, 
                 )}
                 <span className="text-[14px] font-medium truncate flex-1 min-w-0">{entry.label}</span>
                 <span className="text-[14px] font-mono font-semibold text-muted-foreground w-10 text-right shrink-0">{entry.pct}%</span>
-                {!isMarketClosed ? (
+                {hasBet ? (
+                  <Link
+                    href={`/markets/${market.slug}`}
+                    className="flex items-center gap-1.5 shrink-0 rounded-md border px-2 py-1.5 transition-colors"
+                    style={{ backgroundColor: `${betAccent}10`, borderColor: `${betAccent}80` }}
+                    data-testid={`pending-entry-${entry.id}`}
+                  >
+                    <Check className="h-3 w-3" style={{ color: betAccent }} />
+                    <span className="text-[10px] font-semibold" style={{ color: betAccent }}>Your pick</span>
+                    <span className="text-[10px] text-muted-foreground tabular-nums">{entryBet.stakeAmount.toLocaleString("en-US")}</span>
+                  </Link>
+                ) : !isMarketClosed ? (
                   <div className="flex gap-1.5 shrink-0">
                     <button
                       className="px-3 py-2 text-xs font-semibold rounded-md bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20 transition-colors"
@@ -1155,6 +1218,8 @@ function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel,
             <Lock className="h-4 w-4 mr-2" />
             Closed
           </Button>
+        ) : userBetResult?.result === "pending" ? (
+          <PendingBetLinkRow entryLabel={userBetResult.entryLabel} stakeAmount={userBetResult.stakeAmount} href={`/markets/${market.slug}`} />
         ) : (
           <div className="grid grid-cols-2 gap-2">
             <Button
@@ -1566,6 +1631,24 @@ export default function PredictPage() {
       else result = bets[0].result;
       map.set(marketId, { result, payout: totalPayout, entryLabel, stakeAmount: totalStake, marketId, entryId });
     });
+    return map;
+  }, [userBetsData]);
+
+  const userBetsPerEntry = useMemo(() => {
+    const map = new Map<string, Map<string, { direction: string; stakeAmount: number }>>();
+    const betsArray = Array.isArray(userBetsData) ? userBetsData : (userBetsData as any)?.predictions ?? [];
+    for (const b of betsArray as any[]) {
+      if (!b.marketId || !b.entryId) continue;
+      const mId = String(b.marketId);
+      const eId = String(b.entryId);
+      let inner = map.get(mId);
+      if (!inner) { inner = new Map(); map.set(mId, inner); }
+      const prev = inner.get(eId);
+      inner.set(eId, {
+        direction: b.direction || prev?.direction || "yes",
+        stakeAmount: (prev?.stakeAmount || 0) + (b.stakeAmount || 0),
+      });
+    }
     return map;
   }, [userBetsData]);
   const walletCredits = profile?.predictCredits ?? 0;
@@ -2400,6 +2483,7 @@ export default function PredictPage() {
                     onNavigate={(slug, pick, direction) => setLocation(`/markets/${slug}${pick ? `?pick=${pick}${direction ? `&direction=${direction}` : ''}` : ''}`)}
                     isMarketClosed={market.status !== 'OPEN'}
                     userBetResult={userBetsByMarket.get(market.id)}
+                    userBetsPerEntry={userBetsPerEntry.get(String(market.id))}
                     onFilterCategory={handleCategoryPillFilter}
                     categoryRaceMap={raceMap}
                     leaderboardCategories={leaderboardCats}
@@ -2964,6 +3048,7 @@ export default function PredictPage() {
               onNavigate={(slug, pick, direction) => setLocation(`/markets/${slug}${pick ? `?pick=${pick}${direction ? `&direction=${direction}` : ''}` : ''}`)}
               isMarketClosed={market.status !== 'OPEN'}
               userBetResult={userBetsByMarket.get(market.id)}
+              userBetsPerEntry={userBetsPerEntry.get(String(market.id))}
               onFilterCategory={(cat) => setOverlayCategoryFilter(normalizeMarketCategory(cat) as any)}
               categoryRaceMap={raceMap}
               leaderboardCategories={leaderboardCats}

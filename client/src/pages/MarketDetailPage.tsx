@@ -15,9 +15,11 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { formatTimeAgo, formatDate } from "@/lib/formatDate";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
-import { CardComments } from "@/components/comments/CardComments";
+import { CardComments, useCommentCount } from "@/components/comments/CardComments";
+import { CommentsBottomSheet } from "@/components/snap-scroll/CommentsBottomSheet";
 import {
   ArrowLeft,
+  Check,
   Star,
   Clock,
   Users,
@@ -37,6 +39,8 @@ import {
   Gavel,
   Share2,
   X,
+  MessageSquare,
+  ChevronRight,
 } from "lucide-react";
 
 interface MarketEntry {
@@ -315,8 +319,8 @@ function BinaryOutcomes({
           disabled={disabled}
           className={`relative p-4 rounded-xl border-2 transition-all text-left ${
             selectedEntry === noEntry.id
-              ? "border-red-500 bg-red-500/20 dark:bg-red-500/15 shadow-lg shadow-red-500/30 dark:shadow-red-500/20"
-              : "border-red-500/30 dark:border-red-500/20 bg-red-500/8 dark:bg-red-500/5 hover:border-red-500/40"
+              ? "border-[#FF0000] bg-[#FF0000]/20 dark:bg-[#FF0000]/15 shadow-lg shadow-[#FF0000]/30 dark:shadow-[#FF0000]/20"
+              : "border-[#FF0000]/30 dark:border-[#FF0000]/20 bg-[#FF0000]/8 dark:bg-[#FF0000]/5 hover:border-[#FF0000]/40"
           } ${noTone?.cardClass ?? ""} ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
           data-testid={`button-outcome-${noEntry.id}`}
         >
@@ -328,10 +332,10 @@ function BinaryOutcomes({
             </div>
           )}
           <div className="flex items-center gap-2 mb-2">
-            <XCircle className="h-5 w-5 text-red-700 dark:text-red-500" />
-            <span className="font-semibold text-red-600 dark:text-red-400">{noEntry.label}</span>
+            <XCircle className="h-5 w-5 text-[#FF0000]" />
+            <span className="font-semibold text-[#FF0000]">{noEntry.label}</span>
           </div>
-          <div className="text-3xl font-bold text-red-600 dark:text-red-400 font-mono">{noEntry.percentage}%</div>
+          <div className="text-3xl font-bold text-[#FF0000] font-mono">{noEntry.percentage}%</div>
           <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
             <span>{formatNumber(noEntry.displayStake)} staked</span>
             <span>{noEntry.betCount} bets</span>
@@ -470,10 +474,10 @@ function UpDownOutcomes({
                 selectedEntry === entry.id
                   ? isAbove
                     ? "border-green-500 bg-green-500/20 dark:bg-green-500/15 shadow-lg shadow-green-500/30 dark:shadow-green-500/20"
-                    : "border-red-500 bg-red-500/20 dark:bg-red-500/15 shadow-lg shadow-red-500/30 dark:shadow-red-500/20"
+                    : "border-[#FF0000] bg-[#FF0000]/20 dark:bg-[#FF0000]/15 shadow-lg shadow-[#FF0000]/30 dark:shadow-[#FF0000]/20"
                   : isAbove
                     ? "border-green-500/30 dark:border-green-500/20 bg-green-500/8 dark:bg-green-500/5 hover:border-green-500/40"
-                    : "border-red-500/30 dark:border-red-500/20 bg-red-500/8 dark:bg-red-500/5 hover:border-red-500/40"
+                    : "border-[#FF0000]/30 dark:border-[#FF0000]/20 bg-[#FF0000]/8 dark:bg-[#FF0000]/5 hover:border-[#FF0000]/40"
               } ${tone?.cardClass ?? ""} ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
               data-testid={`button-outcome-${entry.id}`}
             >
@@ -488,13 +492,13 @@ function UpDownOutcomes({
                 {isAbove ? (
                   <TrendingUp className="h-5 w-5 text-green-700 dark:text-green-500" />
                 ) : (
-                  <TrendingDown className="h-5 w-5 text-red-700 dark:text-red-500" />
+                  <TrendingDown className="h-5 w-5 text-[#FF0000]" />
                 )}
-                <span className={`font-semibold ${isAbove ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
+                <span className={`font-semibold ${isAbove ? "text-green-600 dark:text-green-400" : "text-[#FF0000]"}`}>
                   {entry.label}
                 </span>
               </div>
-              <div className={`text-3xl font-bold font-mono ${isAbove ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
+              <div className={`text-3xl font-bold font-mono ${isAbove ? "text-green-600 dark:text-green-400" : "text-[#FF0000]"}`}>
                 {entry.percentage}%
               </div>
               <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
@@ -515,6 +519,7 @@ export default function MarketDetailPage() {
   const { user, isLoggedIn, refreshProfile } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const marketCommentCount = useCommentCount("open-market", params.slug || "");
 
   const urlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
   const pickParam = urlParams?.get("pick") || null;
@@ -528,6 +533,7 @@ export default function MarketDetailPage() {
   const [pickApplied, setPickApplied] = useState(false);
   const [headerImgError, setHeaderImgError] = useState(false);
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
+  const [commentsSheetOpen, setCommentsSheetOpen] = useState(false);
 
   const { data: market, isLoading, error } = useQuery<MarketData>({
     queryKey: ["/api/open-markets", params.slug],
@@ -538,6 +544,17 @@ export default function MarketDetailPage() {
     },
     enabled: !!params.slug,
   });
+
+  const { data: userPredictionsData } = useQuery<any>({
+    queryKey: ["/api/me/predictions"],
+    enabled: !!user,
+  });
+
+  const existingBets = useMemo(() => {
+    if (!market || !userPredictionsData) return [];
+    const betsArray = Array.isArray(userPredictionsData) ? userPredictionsData : (userPredictionsData as any)?.predictions ?? [];
+    return (betsArray as any[]).filter((b: any) => b.marketId === market.id);
+  }, [userPredictionsData, market]);
 
   const isCommunityMarket = market?.marketType === "community";
   const isJackpotMarket = market?.marketType === "jackpot";
@@ -916,6 +933,41 @@ export default function MarketDetailPage() {
               <Trophy className="h-5 w-5 text-violet-700 dark:text-violet-500" />
               Place Your Prediction
             </h2>
+
+            {existingBets.length > 0 && (
+              <div className="mb-4 rounded-lg border border-violet-500/40 dark:border-violet-500/30 bg-violet-500/8 dark:bg-violet-500/5 p-3.5" data-testid="panel-your-prediction">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="h-6 w-6 rounded-full bg-violet-500/20 dark:bg-violet-500/15 border border-violet-500/50 dark:border-violet-500/40 flex items-center justify-center shrink-0">
+                    <Check className="h-3 w-3 text-violet-600 dark:text-violet-400" />
+                  </div>
+                  <span className="text-sm font-semibold text-violet-700 dark:text-violet-400">Your Prediction</span>
+                </div>
+                <div className="space-y-1.5">
+                  {existingBets.map((bet: any, i: number) => {
+                    const label = bet.entryLabel || "Unknown";
+                    const dir = bet.direction;
+                    const isYesDir = !dir || dir === "yes";
+                    const accentColor = isYesDir ? "#00C853" : "#FF0000";
+                    return (
+                      <div key={bet.id ?? i} className="flex items-center justify-between gap-2 text-sm">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span
+                            className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-semibold border"
+                            style={{ backgroundColor: `${accentColor}15`, borderColor: `${accentColor}50`, color: accentColor }}
+                          >
+                            {dir === "no" ? "No" : "Yes"} &middot; {label}
+                          </span>
+                        </div>
+                        <span className="text-xs text-muted-foreground tabular-nums shrink-0">
+                          Stake: <span className="font-semibold text-foreground">{(bet.stakeAmount || 0).toLocaleString("en-US")}</span>
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {!isLoggedIn ? (
               <div className="text-center py-4">
                 <Lock className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
@@ -1054,10 +1106,10 @@ export default function MarketDetailPage() {
                 </div>
 
                 {potentialPayout !== null && (
-                  <div className="p-3 rounded-lg bg-green-500/8 dark:bg-green-500/5 border border-green-500/30 dark:border-green-500/20" data-testid="text-potential-payout">
+                  <div className="p-3 rounded-lg bg-violet-500/8 dark:bg-violet-500/5 border border-violet-500/30 dark:border-violet-500/20" data-testid="text-potential-payout">
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-muted-foreground">Est. payout if correct</span>
-                      <span className="font-bold font-mono text-green-600 dark:text-green-400">{formatNumber(potentialPayout)} credits</span>
+                      <span className="font-bold font-mono text-violet-600 dark:text-violet-400">{formatNumber(potentialPayout)} credits</span>
                     </div>
                     <p className="text-[10px] text-muted-foreground/60 mt-1">Estimate -- updates as more people predict.</p>
                   </div>
@@ -1066,7 +1118,7 @@ export default function MarketDetailPage() {
                 <p className="text-[10px] text-muted-foreground/50 text-center">Final payout may differ as the pool changes.</p>
 
                 <Button
-                  className="w-full bg-gradient-to-r from-slate-700 to-slate-600 hover:from-slate-600 hover:to-slate-500 text-white"
+                  className="w-full bg-gradient-to-r from-violet-700 to-violet-600 hover:from-violet-600 hover:to-violet-500 text-white"
                   disabled={!selectedEntry || !stakeAmount || Number(stakeAmount) <= 0 || betMutation.isPending}
                   onClick={handlePlaceBet}
                   data-testid="button-submit-prediction"
@@ -1095,16 +1147,16 @@ export default function MarketDetailPage() {
                       const isYesLike = entry.label.toLowerCase() === "yes" || entry.label.toLowerCase() === "above" || entry.displayOrder === 0;
                       const colorClass = isSelected
                         ? isYesLike
-                          ? "bg-green-600 text-white border-green-600"
-                          : "bg-red-600 text-white border-red-600"
+                          ? "bg-[#00C853]/20 border-[#00C853] text-[#00C853] shadow-[0_0_8px_rgba(0,200,83,0.25)]"
+                          : "bg-[#FF0000]/20 border-[#FF0000] text-[#FF0000] shadow-[0_0_8px_rgba(255,0,0,0.25)]"
                         : isYesLike
-                          ? "border-green-500/40 dark:border-green-500/30 text-green-700 dark:text-green-500"
-                          : "border-red-500/40 dark:border-red-500/30 text-red-700 dark:text-red-500";
+                          ? "bg-[#00C853]/10 border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20"
+                          : "bg-[#FF0000]/10 border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20";
                       return (
                         <Button
                           key={entry.id}
                           size="sm"
-                          variant={isSelected ? "default" : "outline"}
+                          variant="outline"
                           className={`${colorClass} min-w-0 whitespace-normal text-left h-auto py-2`}
                           onClick={() => setSelectedEntry(entry.id)}
                           data-testid={`button-pick-${entry.label.toLowerCase()}`}
@@ -1130,10 +1182,10 @@ export default function MarketDetailPage() {
                 </div>
 
                 {potentialPayout !== null && (
-                  <div className="p-3 rounded-lg bg-green-500/8 dark:bg-green-500/5 border border-green-500/30 dark:border-green-500/20" data-testid="text-potential-payout">
+                  <div className="p-3 rounded-lg bg-violet-500/8 dark:bg-violet-500/5 border border-violet-500/30 dark:border-violet-500/20" data-testid="text-potential-payout">
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-muted-foreground">Est. payout if correct</span>
-                      <span className="font-bold font-mono text-green-600 dark:text-green-400">{formatNumber(potentialPayout)} credits</span>
+                      <span className="font-bold font-mono text-violet-600 dark:text-violet-400">{formatNumber(potentialPayout)} credits</span>
                     </div>
                     <p className="text-[10px] text-muted-foreground/60 mt-1">Estimate -- updates as more people predict.</p>
                   </div>
@@ -1142,7 +1194,7 @@ export default function MarketDetailPage() {
                 <p className="text-[10px] text-muted-foreground/50 text-center">Final payout may differ as the pool changes.</p>
 
                 <Button
-                  className="w-full bg-gradient-to-r from-slate-700 to-slate-600 hover:from-slate-600 hover:to-slate-500 text-white"
+                  className="w-full bg-gradient-to-r from-violet-700 to-violet-600 hover:from-violet-600 hover:to-violet-500 text-white"
                   disabled={!selectedEntry || !stakeAmount || Number(stakeAmount) <= 0 || betMutation.isPending}
                   onClick={handlePlaceBet}
                   data-testid="button-submit-prediction"
@@ -1379,11 +1431,48 @@ export default function MarketDetailPage() {
         )}
 
         {isCommunityMarket && (
-          <CardComments entityType="open-market" slug={params.slug || ""} />
+          <>
+            <button
+              type="button"
+              onClick={() => setCommentsSheetOpen(true)}
+              className="w-full flex items-center justify-between rounded-xl border border-border/50 bg-card p-4 mb-6 md:hidden"
+            >
+              <div className="flex items-center gap-2">
+                <MessageSquare className="h-4 w-4 text-violet-700 dark:text-violet-500" />
+                <span className="text-sm font-semibold">Discussion</span>
+                <span className="text-xs text-muted-foreground">({marketCommentCount})</span>
+              </div>
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            </button>
+
+            <div className="hidden md:block">
+              <CardComments entityType="open-market" slug={params.slug || ""} />
+            </div>
+          </>
         )}
 
         {/* Related Markets - placeholder for future implementation */}
       </div>
+
+      {isCommunityMarket && (
+        <>
+          <button
+            type="button"
+            onClick={() => setCommentsSheetOpen(true)}
+            className="fixed bottom-20 right-4 z-40 md:hidden flex items-center gap-1.5 rounded-full bg-violet-600 text-white px-4 py-2.5 shadow-lg"
+          >
+            <MessageSquare className="h-4 w-4" />
+            <span className="text-xs font-semibold">{marketCommentCount}</span>
+          </button>
+
+          <CommentsBottomSheet
+            open={commentsSheetOpen}
+            onOpenChange={setCommentsSheetOpen}
+            entityType="open-market"
+            slug={params.slug || ""}
+          />
+        </>
+      )}
 
       {expandedImage && (
         <div

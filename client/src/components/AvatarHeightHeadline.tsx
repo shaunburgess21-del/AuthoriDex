@@ -8,6 +8,8 @@ type AvatarHeightHeadlineProps = {
   className?: string;
   titleClassName?: string;
   href?: string;
+  /** When set, headline acts as a button (e.g. Vote page detail with list context). */
+  onTitleNavigate?: () => void;
   linkTestId?: string;
   serif?: boolean;
   /** Optional cap on starting font search (px) */
@@ -25,6 +27,7 @@ export function AvatarHeightHeadline({
   className = "",
   titleClassName = "",
   href,
+  onTitleNavigate,
   linkTestId,
   serif = true,
   maxFontPx,
@@ -80,7 +83,22 @@ export function AvatarHeightHeadline({
     ...(serif ? { fontFamily: "ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif" } : {}),
   };
 
-  const titleEl = href ? (
+  const titleEl = onTitleNavigate ? (
+    <button
+      type="button"
+      data-testid={linkTestId}
+      onClick={onTitleNavigate}
+      className="block w-full min-w-0 text-left bg-transparent border-0 p-0 cursor-pointer"
+    >
+      <h3
+        ref={titleRef}
+        style={titleStyle}
+        className={`font-bold hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors ${titleClassName}`}
+      >
+        {text}
+      </h3>
+    </button>
+  ) : href ? (
     <Link href={href} data-testid={linkTestId} className="block w-full min-w-0">
       <h3
         ref={titleRef}

@@ -15,7 +15,10 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { apiRequest } from "@/lib/queryClient";
 import { formatTimeAgo, formatDate } from "@/lib/formatDate";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
+import { VoteDetailNavCluster } from "@/components/vote/VoteDetailNavCluster";
+import { useDetailNavigation } from "@/hooks/useDetailNavigation";
 import { CardComments, useCommentCount } from "@/components/comments/CardComments";
+import { CommentsBottomSheet } from "@/components/snap-scroll/CommentsBottomSheet";
 import {
   ArrowLeft,
   Clock,
@@ -32,6 +35,7 @@ import {
   ArrowUpDown,
   Copy,
   X,
+  ChevronRight,
 } from "lucide-react";
 
 interface PollData {
@@ -69,9 +73,11 @@ export default function PollDetailPage() {
   const queryClient = useQueryClient();
 
   const pollCommentCount = useCommentCount("poll", slug || "");
+  const { showNav } = useDetailNavigation(slug, "sentiment");
   const [showVoteChange, setShowVoteChange] = useState(false);
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
   const [headerImgError, setHeaderImgError] = useState(false);
+  const [commentsSheetOpen, setCommentsSheetOpen] = useState(false);
 
   const { data: poll, isLoading: pollLoading, error: pollError } = useQuery<PollData>({
     queryKey: ["/api/polls", slug],
@@ -142,17 +148,22 @@ export default function PollDetailPage() {
   return (
     <div className="min-h-screen bg-background" data-testid="poll-detail-page">
       <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-md border-b border-border/50">
-        <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-3 min-w-0">
+        <div className="max-w-3xl mx-auto px-4 py-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+          <div className="flex items-center gap-3 min-w-0 justify-self-start">
             <Link href="/" data-testid="link-logo-home">
               <VoxDexLogo size={28} />
             </Link>
-            <Button variant="ghost" size="sm" onClick={() => { window.history.length > 1 ? window.history.back() : setLocation("/vote"); }} data-testid="button-back">
+            <Button variant="ghost" size="sm" onClick={() => { showNav ? setLocation("/vote") : (window.history.length > 1 ? window.history.back() : setLocation("/vote")); }} data-testid="button-back">
               <ArrowLeft className="h-4 w-4 mr-1" />
               Vote
             </Button>
           </div>
-          <UserMenu />
+          <div className="flex justify-center min-w-0 col-start-2">
+            <VoteDetailNavCluster listType="sentiment" slug={slug} />
+          </div>
+          <div className="flex justify-end min-w-0 justify-self-end col-start-3">
+            <UserMenu />
+          </div>
         </div>
       </header>
 
@@ -432,7 +443,22 @@ export default function PollDetailPage() {
           </Card>
         )}
 
-        <CardComments entityType="poll" slug={slug || ""} placeholder="Share your thoughts on this topic..." />
+        <button
+          type="button"
+          onClick={() => setCommentsSheetOpen(true)}
+          className="w-full flex items-center justify-between rounded-xl border border-border/50 bg-card p-4 mb-6 md:hidden"
+        >
+          <div className="flex items-center gap-2">
+            <MessageSquare className="h-4 w-4 text-cyan-700 dark:text-cyan-500" />
+            <span className="text-sm font-semibold">Discussion</span>
+            <span className="text-xs text-muted-foreground">({pollCommentCount})</span>
+          </div>
+          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+        </button>
+
+        <div className="hidden md:block">
+          <CardComments entityType="poll" slug={slug || ""} placeholder="Share your thoughts on this topic..." />
+        </div>
 
         {/* Back link at bottom */}
         <div className="text-center pb-8">
@@ -442,6 +468,22 @@ export default function PollDetailPage() {
           </Button>
         </div>
       </div>
+
+      <button
+        type="button"
+        onClick={() => setCommentsSheetOpen(true)}
+        className="fixed bottom-20 right-4 z-40 md:hidden flex items-center gap-1.5 rounded-full bg-cyan-600 text-white px-4 py-2.5 shadow-lg"
+      >
+        <MessageSquare className="h-4 w-4" />
+        <span className="text-xs font-semibold">{pollCommentCount}</span>
+      </button>
+
+      <CommentsBottomSheet
+        open={commentsSheetOpen}
+        onOpenChange={setCommentsSheetOpen}
+        entityType="poll"
+        slug={slug || ""}
+      />
 
       {expandedImage && (
         <div
