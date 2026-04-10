@@ -307,7 +307,7 @@ export default function OpinionPollDetailPage() {
                       )}
                       <span className="shrink-0 text-xs font-mono font-bold text-slate-600">%</span>
                     </div>
-                    <div className="mt-1 h-1.5 rounded-full bg-slate-700/50" />
+                    <div className="mt-1 h-2 rounded-full bg-slate-700/50" />
                     <p className="text-[10px] text-slate-600 mt-0.5">Votes</p>
                   </button>
                 </div>
@@ -360,7 +360,7 @@ export default function OpinionPollDetailPage() {
                         {percent}%
                       </span>
                     </div>
-                    <div className="mt-1 h-1.5 rounded-full bg-slate-700/50 overflow-hidden">
+                    <div className="mt-1 h-2 rounded-full bg-slate-700/50 overflow-hidden">
                       <div
                         className="h-full rounded-full bg-cyan-500 transition-all duration-700 ease-out"
                         style={{ width: `${percent}%` }}
