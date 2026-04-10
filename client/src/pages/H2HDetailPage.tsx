@@ -13,6 +13,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { h2hUserPickFromBet } from "@/components/predict/HeadToHeadCard";
 import { normalizeMarketCategory } from "@shared/constants";
 import { apiRequest } from "@/lib/queryClient";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
@@ -35,6 +36,8 @@ interface HydratedH2H {
   person2: { name: string; avatar: string; currentScore: number; personId: string };
   person1EntryId?: string;
   person2EntryId?: string;
+  person1EntryLabel?: string;
+  person2EntryLabel?: string;
   category: string;
   totalPool: number;
   person1Percent: number;
@@ -123,6 +126,8 @@ export default function H2HDetailPage() {
       },
       person1EntryId: e1.id,
       person2EntryId: e2.id,
+      person1EntryLabel: typeof e1.label === "string" ? e1.label : undefined,
+      person2EntryLabel: typeof e2.label === "string" ? e2.label : undefined,
       category: normalizeMarketCategory(market.category || "misc"),
       totalPool,
       person1Percent: s1 + s2 === 0 ? 50 : Math.round((s1 / total) * 100),
@@ -144,9 +149,17 @@ export default function H2HDetailPage() {
 
   const userPickSide = useMemo((): 1 | 2 | null => {
     if (!userBet || !hydrated) return null;
-    if (userBet.entryId === hydrated.person1EntryId) return 1;
-    if (userBet.entryId === hydrated.person2EntryId) return 2;
-    return null;
+    return h2hUserPickFromBet(
+      {
+        person1: hydrated.person1,
+        person2: hydrated.person2,
+        person1EntryId: hydrated.person1EntryId,
+        person2EntryId: hydrated.person2EntryId,
+        person1EntryLabel: hydrated.person1EntryLabel,
+        person2EntryLabel: hydrated.person2EntryLabel,
+      },
+      { entryLabel: userBet.entryLabel, entryId: userBet.entryId }
+    );
   }, [userBet, hydrated]);
 
   const handleSelect = useCallback(

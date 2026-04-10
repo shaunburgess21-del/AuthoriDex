@@ -20,6 +20,9 @@ export interface HeadToHeadMarket {
   person2: { name: string; avatar: string; currentScore: number };
   person1EntryId?: string;
   person2EntryId?: string;
+  /** Market entry `label` when it differs from `person.name` (for matching `/api/me/predictions` entryLabel). */
+  person1EntryLabel?: string;
+  person2EntryLabel?: string;
   person1Id?: string;
   person2Id?: string;
   category: CategoryFilter;
@@ -37,6 +40,33 @@ export function smartName(fullName: string): string {
   if (parts.length <= 1) return fullName;
   if (fullName.length <= 14) return fullName;
   return `${parts[0]} ${parts[parts.length - 1][0]}.`;
+}
+
+/** Minimal market slice needed to resolve a user pick from prediction rows. */
+export type H2hPickResolutionMarket = Pick<
+  HeadToHeadMarket,
+  "person1" | "person2" | "person1EntryId" | "person2EntryId" | "person1EntryLabel" | "person2EntryLabel"
+>;
+
+/** Resolve which side the user picked from aggregated `/api/me/predictions` data (entryId preferred; then labels). */
+export function h2hUserPickFromBet(
+  market: H2hPickResolutionMarket,
+  bet: { entryLabel: string; entryId?: string | null } | undefined
+): 1 | 2 | null {
+  if (!bet) return null;
+  if (bet.entryLabel === "Multiple positions") return null;
+  const id = bet.entryId?.trim();
+  if (id && market.person1EntryId && id === market.person1EntryId) return 1;
+  if (id && market.person2EntryId && id === market.person2EntryId) return 2;
+  const norm = (s: string) => s.trim();
+  const label = norm(bet.entryLabel);
+  if (label === norm(market.person1.name)) return 1;
+  if (label === norm(market.person2.name)) return 2;
+  const l1 = market.person1EntryLabel != null ? norm(market.person1EntryLabel) : "";
+  const l2 = market.person2EntryLabel != null ? norm(market.person2EntryLabel) : "";
+  if (l1 && label === l1) return 1;
+  if (l2 && label === l2) return 2;
+  return null;
 }
 
 export function HeadToHeadCard({

@@ -5710,6 +5710,7 @@ Only return the JSON object.`;
         return {
           betId: b.betId,
           marketId: b.marketId,
+          entryId: b.entryId,
           marketSlug: b.marketSlug,
           marketTitle: b.marketTitle,
           marketStatus: b.marketStatus,

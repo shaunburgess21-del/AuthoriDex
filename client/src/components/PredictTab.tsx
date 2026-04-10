@@ -22,7 +22,7 @@ import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { PredictCard } from "@/components/predict/PredictCard";
 import { WeeklyUpDownCard, type PredictionMarket } from "@/components/predict/WeeklyUpDownCard";
 import { pendingWeeklyUpDownPositionFromBet } from "@/components/predict/WeeklyUpDownYourPositionPanel";
-import { HeadToHeadCard, type HeadToHeadMarket } from "@/components/predict/HeadToHeadCard";
+import { HeadToHeadCard, h2hUserPickFromBet, type HeadToHeadMarket } from "@/components/predict/HeadToHeadCard";
 import {
   TopGainerCard,
   categoryRacePredictionSummaryFromBet,
@@ -396,6 +396,8 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
         person2Id: e2.personId || "",
         person1EntryId: e1.id,
         person2EntryId: e2.id,
+        person1EntryLabel: typeof e1.label === "string" ? e1.label : undefined,
+        person2EntryLabel: typeof e2.label === "string" ? e2.label : undefined,
         category: normalizeMarketCategory(m.category || "misc") as CategoryFilter,
         endTime: "Sun 23:59 UTC",
         totalPool,
@@ -480,21 +482,11 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
     enabled: !!user,
   });
 
-  const userBetsByMarket = useMemo(() => {
-    const map = new Map<string, { entryLabel: string; entryId?: string }>();
-    const betsArray = Array.isArray(userPredictionsData)
-      ? userPredictionsData
-      : (userPredictionsData as any)?.predictions ?? [];
-    for (const b of betsArray) {
-      if (b.marketId && !map.has(b.marketId)) {
-        map.set(b.marketId, { entryLabel: b.entryLabel, entryId: b.entryId });
-      }
-    }
-    return map;
-  }, [userPredictionsData]);
-
   const openMarketBets = useMemo(() => {
-    const map = new Map<string, { result: string; payout: number; entryLabel: string; stakeAmount: number; marketId: string }>();
+    const map = new Map<
+      string,
+      { result: string; payout: number; entryLabel: string; stakeAmount: number; marketId: string; entryId?: string }
+    >();
     const betsArray = Array.isArray(userPredictionsData) ? userPredictionsData : (userPredictionsData as any)?.predictions ?? [];
     const grouped = new Map<string, any[]>();
     for (const b of betsArray) {
@@ -507,6 +499,8 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       const totalPayout = bets.reduce((s: number, b: any) => s + (b.payout || 0), 0);
       const uniqueEntries = new Set(bets.map((b: any) => b.entryLabel));
       const entryLabel = uniqueEntries.size === 1 ? bets[0].entryLabel : "Multiple positions";
+      const uniqueEntryIds = new Set(bets.map((b: any) => b.entryId).filter(Boolean));
+      const entryId = uniqueEntryIds.size === 1 ? ([...uniqueEntryIds][0] as string) : undefined;
       const results = new Set(bets.map((b: any) => b.result));
       let result = "pending";
       if (results.has("won") && !results.has("lost")) result = "won";
@@ -514,7 +508,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       else if (results.has("won") && results.has("lost")) result = "won";
       else if (results.has("refunded") && results.size === 1) result = "refunded";
       else result = bets[0].result;
-      map.set(marketId, { result, payout: totalPayout, entryLabel, stakeAmount: totalStake, marketId });
+      map.set(marketId, { result, payout: totalPayout, entryLabel, stakeAmount: totalStake, marketId, entryId });
     });
     return map;
   }, [userPredictionsData]);
@@ -840,13 +834,11 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
         {h2hBattles.length > 0 ? (
           <div className={h2hGrid.container}>
             {h2hBattles.map((battle) => {
-              const bet = userBetsByMarket.get(battle.id);
               const aggregated = openMarketBets.get(battle.id);
-              const h2hUserPick = bet
-                ? bet.entryLabel === battle.person1.name ? 1 as const
-                : bet.entryLabel === battle.person2.name ? 2 as const
-                : null
-                : null;
+              const h2hUserPick = h2hUserPickFromBet(
+                battle,
+                aggregated ? { entryLabel: aggregated.entryLabel, entryId: aggregated.entryId } : undefined
+              );
               return (
                 <div key={battle.id} className={h2hGrid.item}>
                   <HeadToHeadCard

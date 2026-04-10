@@ -104,7 +104,7 @@ import { PredictCard } from "@/components/predict/PredictCard";
 import { ParticipantAvatarStack, type ParticipantPreview } from "@/components/predict/ParticipantAvatarStack";
 import { WeeklyUpDownCard, type PredictionMarket } from "@/components/predict/WeeklyUpDownCard";
 import { pendingWeeklyUpDownPositionFromBet } from "@/components/predict/WeeklyUpDownYourPositionPanel";
-import { HeadToHeadCard, smartName, type HeadToHeadMarket } from "@/components/predict/HeadToHeadCard";
+import { HeadToHeadCard, h2hUserPickFromBet, smartName, type HeadToHeadMarket } from "@/components/predict/HeadToHeadCard";
 import {
   TopGainerCard,
   categoryRacePredictionSummaryFromBet,
@@ -1539,7 +1539,10 @@ export default function PredictPage() {
   });
 
   const userBetsByMarket = useMemo(() => {
-    const map = new Map<string, { result: string; payout: number; entryLabel: string; stakeAmount: number; marketId: string }>();
+    const map = new Map<
+      string,
+      { result: string; payout: number; entryLabel: string; stakeAmount: number; marketId: string; entryId?: string }
+    >();
     const grouped = new Map<string, any[]>();
     const betsArray = Array.isArray(userBetsData) ? userBetsData : (userBetsData as any)?.predictions ?? [];
     (betsArray).forEach((b: any) => {
@@ -1552,6 +1555,8 @@ export default function PredictPage() {
       const totalPayout = bets.reduce((s: number, b: any) => s + (b.payout || 0), 0);
       const uniqueEntries = new Set(bets.map((b: any) => b.entryLabel));
       const entryLabel = uniqueEntries.size === 1 ? bets[0].entryLabel : "Multiple positions";
+      const uniqueEntryIds = new Set(bets.map((b: any) => b.entryId).filter(Boolean));
+      const entryId = uniqueEntryIds.size === 1 ? ([...uniqueEntryIds][0] as string) : undefined;
       const results = new Set(bets.map((b: any) => b.result));
       let result = 'pending';
       if (results.has('won') && !results.has('lost')) result = 'won';
@@ -1559,7 +1564,7 @@ export default function PredictPage() {
       else if (results.has('won') && results.has('lost')) result = 'won';
       else if (results.has('refunded') && results.size === 1) result = 'refunded';
       else result = bets[0].result;
-      map.set(marketId, { result, payout: totalPayout, entryLabel, stakeAmount: totalStake, marketId });
+      map.set(marketId, { result, payout: totalPayout, entryLabel, stakeAmount: totalStake, marketId, entryId });
     });
     return map;
   }, [userBetsData]);
@@ -1657,6 +1662,8 @@ export default function PredictPage() {
           person2: { name: p2.name || e2.label || "?", avatar: p2.avatar || "", currentScore: Number(p2.trendScore || 0) },
           person1EntryId: e1.id,
           person2EntryId: e2.id,
+          person1EntryLabel: typeof e1.label === "string" ? e1.label : undefined,
+          person2EntryLabel: typeof e2.label === "string" ? e2.label : undefined,
           person1Id: e1.personId || "",
           person2Id: e2.personId || "",
           category: normalizeMarketCategory(m.category || "misc") as CategoryFilter,
@@ -2683,11 +2690,10 @@ export default function PredictPage() {
               <CardSection desktopLimit={9} gap="gap-4" testIdPrefix="section-h2h" dotActiveColor="bg-violet-500">
                 {filteredH2H.map((market) => {
                   const bet = userBetsByMarket.get(market.id);
-                  const h2hUserPick = bet
-                    ? bet.entryLabel === market.person1.name ? 1 as const
-                    : bet.entryLabel === market.person2.name ? 2 as const
-                    : null
-                    : null;
+                  const h2hUserPick = h2hUserPickFromBet(
+                    market,
+                    bet ? { entryLabel: bet.entryLabel, entryId: bet.entryId } : undefined
+                  );
                   return (
                     <HeadToHeadCard 
                       key={market.id} 
@@ -2879,11 +2885,10 @@ export default function PredictPage() {
           .sort((a: any, b: any) => overlayCategoryFilter === "trending" ? ((b.totalBets ?? 0) - (a.totalBets ?? 0)) : 0)
           .map((market) => {
             const bet = userBetsByMarket.get(market.id);
-            const h2hUserPick = bet
-              ? bet.entryLabel === market.person1.name ? 1 as const
-              : bet.entryLabel === market.person2.name ? 2 as const
-              : null
-              : null;
+            const h2hUserPick = h2hUserPickFromBet(
+              market,
+              bet ? { entryLabel: bet.entryLabel, entryId: bet.entryId } : undefined
+            );
             return (
               <HeadToHeadCard 
                 key={market.id} 
