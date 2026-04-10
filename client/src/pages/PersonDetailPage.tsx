@@ -38,6 +38,7 @@ import {
   Swords,
   ListChecks,
   ChevronRight,
+  ChevronDown,
   BarChart3,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -74,6 +75,9 @@ const LazyInlineCelebrityBio = lazy(() =>
 );
 const LazyCommunityInsights = lazy(() =>
   import("@/components/CommunityInsights").then((m) => ({ default: m.CommunityInsights }))
+);
+const LazyMomentumSignals = lazy(() =>
+  import("@/components/MomentumSignals").then((m) => ({ default: m.MomentumSignals }))
 );
 const LazyAnimatedSentimentVotingWidget = lazy(() =>
   import("@/components/AnimatedSentimentVotingWidget").then((m) => ({
@@ -800,6 +804,17 @@ export default function PersonDetailPage() {
     refetchInterval: 5 * 60 * 1000,
   });
 
+  const { data: momentumData } = useQuery<{ categoryRank: { overall: number; category: string; categoryRank: number } | null }>({
+    queryKey: ['/api/people', person?.id, 'momentum'],
+    queryFn: async () => {
+      const res = await fetch(`/api/people/${person?.id ?? ""}/momentum`);
+      if (!res.ok) throw new Error('Failed to fetch momentum');
+      return res.json();
+    },
+    enabled: !!person?.id,
+    staleTime: 5 * 60 * 1000,
+  });
+
   const { isHotMover, exceptionalIndicator } = useMemo(() => {
     if (!person || !leaderboardForThresholds?.thresholds) {
       return { isHotMover: false, exceptionalIndicator: null };
@@ -1212,6 +1227,13 @@ export default function PersonDetailPage() {
                       personName={person.name}
                     />
                   )}
+                  {momentumData?.categoryRank && (
+                    <CategoryRankPill
+                      category={momentumData.categoryRank.category}
+                      rank={momentumData.categoryRank.categoryRank}
+                      personName={person.name}
+                    />
+                  )}
                 </div>
               </div>
               <div className="flex flex-row flex-wrap items-center gap-2">
@@ -1347,6 +1369,17 @@ export default function PersonDetailPage() {
               <LazyInlineCelebrityBio personId={person.id} personName={person.name} />
             </Suspense>
 
+            <div className="flex justify-end mb-2">
+              <a
+                href="#momentum-signals"
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                data-testid="link-jump-to-signals"
+              >
+                Jump to Signals
+                <ChevronDown className="inline h-3 w-3 ml-0.5" />
+              </a>
+            </div>
+
             {((person.rank && person.rank <= 10) || isHotMover) && (
               <div className="mb-8">
                 <WhyTrendingCard personId={person.id} personName={person.name} hotMover={isHotMover && !(person.rank && person.rank <= 10)} />
@@ -1358,6 +1391,10 @@ export default function PersonDetailPage() {
               <LazyTrendChart personId={person.id} personName={person.name} />
             </Suspense>
 
+            {/* 6. Momentum Signals + Official Profiles */}
+            <Suspense fallback={<ProfileLazyFallback />}>
+              <LazyMomentumSignals personId={person.id} wikiSlug={person.wikiSlug} />
+            </Suspense>
           </>
         )}
 
