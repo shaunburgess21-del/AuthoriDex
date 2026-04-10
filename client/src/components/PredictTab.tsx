@@ -21,8 +21,14 @@ import { getCanonicalNativeCycle } from "@/lib/nativeMarketLifecycle";
 import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { PredictCard } from "@/components/predict/PredictCard";
 import { WeeklyUpDownCard, type PredictionMarket } from "@/components/predict/WeeklyUpDownCard";
+import { pendingWeeklyUpDownPositionFromBet } from "@/components/predict/WeeklyUpDownYourPositionPanel";
 import { HeadToHeadCard, type HeadToHeadMarket } from "@/components/predict/HeadToHeadCard";
-import { TopGainerCard, type TopGainerMarket, type GainerCandidate } from "@/components/predict/TopGainerCard";
+import {
+  TopGainerCard,
+  categoryRacePredictionSummaryFromBet,
+  type TopGainerMarket,
+  type GainerCandidate,
+} from "@/components/predict/TopGainerCard";
 import { OpenMarketCard } from "@/components/predict/OpenMarketCard";
 import { WeeklyJackpotHero } from "@/components/predict/WeeklyJackpotHero";
 import { RulesModal, RULES_CONTENT } from "@/components/predict/RulesContent";
@@ -813,6 +819,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
             onFilterCategory={handleCategoryFilter}
             categoryRaceMap={categoryRaceMap}
             leaderboardCategories={leaderboardCategories}
+            pendingPosition={pendingWeeklyUpDownPositionFromBet(openMarketBets.get(weeklyMarket.id))}
           />
         ) : (
           <div className="text-center py-6 text-muted-foreground">
@@ -834,6 +841,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
           <div className={h2hGrid.container}>
             {h2hBattles.map((battle) => {
               const bet = userBetsByMarket.get(battle.id);
+              const aggregated = openMarketBets.get(battle.id);
               const h2hUserPick = bet
                 ? bet.entryLabel === battle.person1.name ? 1 as const
                 : bet.entryLabel === battle.person2.name ? 2 as const
@@ -847,6 +855,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
                     closedMessage={closedMarketMessage}
                     onSelect={(person) => handleH2HSelect(battle, person)}
                     userPick={h2hUserPick}
+                    userStake={aggregated?.stakeAmount}
                     onFilterCategory={handleCategoryFilter}
                     categoryRaceMap={categoryRaceMap}
                     leaderboardCategories={leaderboardCategories}
@@ -873,20 +882,24 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
         />
         {gainerMarkets.length > 0 ? (
           <div className={gainerGrid.container}>
-            {gainerMarkets.map((gainer) => (
+            {gainerMarkets.map((gainer) => {
+              const gainerBet = openMarketBets.get(gainer.id);
+              return (
               <div key={gainer.id} className={gainerGrid.item}>
                 <TopGainerCard
                   market={gainer}
                   isMarketClosed={isMarketClosed}
                   closedMessage={closedMarketMessage}
                   onShowAllCandidates={openGainerPicker}
-                  isPredicted={userBetsByMarket.has(gainer.id)}
+                  isPredicted={openMarketBets.has(gainer.id)}
+                  predictionSummary={categoryRacePredictionSummaryFromBet(gainerBet)}
                   onFilterCategory={handleCategoryFilter}
                   categoryRaceMap={categoryRaceMap}
                   leaderboardCategories={leaderboardCategories}
                 />
               </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <div className="text-center py-6 text-muted-foreground">

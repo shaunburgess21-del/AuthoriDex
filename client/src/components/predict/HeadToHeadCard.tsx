@@ -7,7 +7,8 @@ import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActi
 import { PredictCard } from "@/components/predict/PredictCard";
 import type { ParticipantPreview } from "@/components/predict/ParticipantAvatarStack";
 import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
-import { Clock, Check } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Clock, Check, ChevronRight } from "lucide-react";
 import { Link } from "wouter";
 
 type CategoryFilter = "all" | "favorites" | "trending" | "tech" | "politics" | "business" | "music" | "sports" | "film-tv" | "gaming" | "creator" | "food-drink" | "lifestyle" | "misc";
@@ -44,6 +45,7 @@ export function HeadToHeadCard({
   closedMessage,
   onSelect,
   userPick,
+  userStake,
   onFilterCategory,
   categoryRaceMap,
   leaderboardCategories,
@@ -53,6 +55,8 @@ export function HeadToHeadCard({
   closedMessage: Pick<ClosedMarketMessage, "title" | "lines">;
   onSelect?: (person: 1 | 2) => void;
   userPick?: 1 | 2 | null;
+  /** Aggregated stake for this market when the user has a pick (optional). */
+  userStake?: number;
   onFilterCategory?: (category: string) => void;
   categoryRaceMap?: Map<string, string>;
   leaderboardCategories?: Set<string>;
@@ -64,6 +68,17 @@ export function HeadToHeadCard({
     (userPick === 1 && scoreDiff > 0) || (userPick === 2 && scoreDiff < 0)
   );
   const pickTied = hasPicked && scoreDiff === 0;
+
+  const pickAccentShell =
+    userPick === 1
+      ? "bg-[#3B82F6]/10 border-[#3B82F6]/50 hover:bg-[#3B82F6]/20 hover:border-[#3B82F6]/80"
+      : "bg-[#7C3AED]/10 border-[#7C3AED]/50 hover:bg-[#7C3AED]/20 hover:border-[#7C3AED]/80";
+  const pickAccentIconClass = userPick === 1 ? "text-[#3B82F6]" : "text-[#7C3AED]";
+  const pickAvatarRing = userPick === 1 ? "ring-[#3B82F6]/70" : "ring-[#7C3AED]/70";
+  const pickChipClass =
+    userPick === 1
+      ? "bg-[#3B82F6]/90 text-white border border-[#3B82F6]"
+      : "bg-[#7C3AED]/90 text-white border border-[#7C3AED]";
 
   return (
     <PredictCard testId={`card-h2h-${market.id}`} className={`relative overflow-hidden max-w-sm mx-auto ${isMarketClosed && !hasPicked ? 'opacity-75' : ''}`}>
@@ -102,12 +117,22 @@ export function HeadToHeadCard({
         >
           <div className="flex" style={{ gap: '7px' }}>
             <div className="flex-1 relative">
-              <div className={`rounded-lg overflow-hidden transition-all ${hasPicked && userPick === 1 ? 'ring-2 ring-green-500/70' : 'ring-2 ring-transparent'}`}>
+              <div
+                className={cn(
+                  "rounded-lg overflow-hidden transition-all ring-2",
+                  hasPicked && userPick === 1 ? pickAvatarRing : "ring-transparent"
+                )}
+              >
                 <PersonAvatar name={market.person1.name} avatar={market.person1.avatar} className="h-auto w-full aspect-[4/5]" />
               </div>
               {hasPicked && userPick === 1 && (
                 <div className="absolute bottom-1 left-1/2 -translate-x-1/2 z-10">
-                  <span className="bg-green-600/90 text-white text-[8px] px-1.5 py-0.5 rounded-full font-semibold uppercase tracking-wider whitespace-nowrap flex items-center gap-0.5">
+                  <span
+                    className={cn(
+                      "text-[8px] px-1.5 py-0.5 rounded-full font-semibold uppercase tracking-wider whitespace-nowrap flex items-center gap-0.5",
+                      pickChipClass
+                    )}
+                  >
                     <Check className="h-2.5 w-2.5" />
                     Your Pick
                   </span>
@@ -115,12 +140,22 @@ export function HeadToHeadCard({
               )}
             </div>
             <div className="flex-1 relative">
-              <div className={`rounded-lg overflow-hidden transition-all ${hasPicked && userPick === 2 ? 'ring-2 ring-green-500/70' : 'ring-2 ring-transparent'}`}>
+              <div
+                className={cn(
+                  "rounded-lg overflow-hidden transition-all ring-2",
+                  hasPicked && userPick === 2 ? pickAvatarRing : "ring-transparent"
+                )}
+              >
                 <PersonAvatar name={market.person2.name} avatar={market.person2.avatar} className="h-auto w-full aspect-[4/5]" />
               </div>
               {hasPicked && userPick === 2 && (
                 <div className="absolute bottom-1 left-1/2 -translate-x-1/2 z-10">
-                  <span className="bg-green-600/90 text-white text-[8px] px-1.5 py-0.5 rounded-full font-semibold uppercase tracking-wider whitespace-nowrap flex items-center gap-0.5">
+                  <span
+                    className={cn(
+                      "text-[8px] px-1.5 py-0.5 rounded-full font-semibold uppercase tracking-wider whitespace-nowrap flex items-center gap-0.5",
+                      pickChipClass
+                    )}
+                  >
                     <Check className="h-2.5 w-2.5" />
                     Your Pick
                   </span>
@@ -177,24 +212,45 @@ export function HeadToHeadCard({
 
         <div className="mt-auto">
           {hasPicked ? (
-            <div className="flex items-center gap-2 rounded-lg border border-green-500/40 dark:border-green-500/30 bg-green-500/8 dark:bg-green-500/5 px-3 py-2">
-              <Check className="h-4 w-4 text-green-500 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-[11px] text-muted-foreground">Your pick</p>
-                <p className="text-sm font-semibold truncate">{smartName(pickedName)}</p>
-              </div>
-              <Badge
-                className={
-                  pickWinning
-                    ? "bg-green-600/20 text-green-500 border-green-500/40 dark:border-green-500/30"
-                    : pickTied
-                    ? "bg-amber-600/20 text-amber-500 border-amber-500/40 dark:border-amber-500/30"
-                    : "bg-red-600/20 text-red-500 border-red-500/40 dark:border-red-500/30"
-                }
+            <Link
+              href={`/predict/h2h/${market.id}`}
+              className="block w-full rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              data-testid={`link-h2h-your-pick-${market.id}`}
+              aria-label={`View head-to-head details: your pick ${smartName(pickedName)}`}
+            >
+              <div
+                className={cn(
+                  "flex min-h-10 items-center gap-2 rounded-lg border px-3 py-3 md:py-2 transition-colors",
+                  pickAccentShell
+                )}
               >
-                {pickWinning ? "Winning" : pickTied ? "Tied" : "Behind"}
-              </Badge>
-            </div>
+                <Check className={cn("h-4 w-4 shrink-0", pickAccentIconClass)} />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] leading-none text-muted-foreground">Your pick</p>
+                  <p className="truncate text-sm font-semibold leading-tight text-foreground">{smartName(pickedName)}</p>
+                </div>
+                {userStake != null && (
+                  <div className="flex shrink-0 flex-col items-end tabular-nums">
+                    <span className="text-[10px] leading-none text-muted-foreground">Stake</span>
+                    <span className="text-xs font-semibold leading-tight text-foreground">
+                      {userStake.toLocaleString("en-US")}
+                    </span>
+                  </div>
+                )}
+                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                <Badge
+                  className={
+                    pickWinning
+                      ? "shrink-0 bg-green-600/20 text-green-500 border-green-500/40 dark:border-green-500/30"
+                      : pickTied
+                        ? "shrink-0 bg-amber-600/20 text-amber-500 border-amber-500/40 dark:border-amber-500/30"
+                        : "shrink-0 bg-[#FF0000]/10 text-[#FF0000] border-[#FF0000]/50 dark:border-[#FF0000]/50"
+                  }
+                >
+                  {pickWinning ? "Winning" : pickTied ? "Tied" : "Behind"}
+                </Badge>
+              </div>
+            </Link>
           ) : (
             <div className="grid grid-cols-2 gap-2">
               <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMessage} side="top" align="center">

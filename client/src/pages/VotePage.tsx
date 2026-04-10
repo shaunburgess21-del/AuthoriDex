@@ -236,14 +236,14 @@ const curateProfilePolls: CurateProfilePoll[] = [
 ];
 
 
-const SECTION_TOGGLES = ["All", "Matchups", "Sentiment Polls", "Opinion Polls", "Underrated/Overrated", "Induction Queue", "Curate Profile"] as const;
+const SECTION_TOGGLES = ["All", "Sentiment Polls", "Matchups", "Opinion Polls", "Underrated/Overrated", "Induction Queue", "Curate Profile"] as const;
 type SectionToggle = typeof SECTION_TOGGLES[number];
 
 const isGovernanceSection = (section: SectionToggle) => 
   section === "Induction Queue" || section === "Curate Profile";
 
 const isPublicOpinionSection = (section: SectionToggle) =>
-  section === "Matchups" || section === "Sentiment Polls" || section === "Opinion Polls" || section === "Underrated/Overrated";
+  section === "Sentiment Polls" || section === "Matchups" || section === "Opinion Polls" || section === "Underrated/Overrated";
 
 const SECTION_RULES = {
   induction: {
@@ -2301,9 +2301,106 @@ export default function VotePage() {
         </div>
       </div>
       <div className="container mx-auto px-4 py-8 max-w-7xl pt-[5px] pb-[5px]">
-        {/* ZONE 1: Public Opinion - Matchups Section (First) */}
-        {(activeSection === "All" || activeSection === "Matchups") && (
+        {/* ZONE 1: Public Opinion - Sentiment Polls Section (First) */}
+        {(activeSection === "All" || activeSection === "Sentiment Polls") && (
         <section className="mb-10 mt-[5px]">
+          <UnifiedSectionHeader
+            title="Sentiment Polls"
+            subtitle="Weigh in on current events"
+            icon={<MessageSquare className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />}
+            accent="cyan"
+            testId="section-header-sentiment"
+            actions={
+              <>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setRulesModalOpen("voice")}
+                      className="text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300"
+                      data-testid="button-rules-voice"
+                    >
+                      <HelpCircle className="h-5 w-5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="bg-popover dark:bg-slate-900/95 border-border dark:border-slate-700 text-popover-foreground dark:text-slate-200 text-xs">
+                    How it works
+                  </TooltipContent>
+                </Tooltip>
+                <Button
+                  onClick={() => setStartPollModalOpen(true)}
+                  className="rounded-full bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/25 dark:hover:bg-cyan-500/20 hidden md:flex"
+                  data-testid="button-suggest-poll"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Suggest
+                </Button>
+                <Button
+                  size="icon"
+                  onClick={() => setStartPollModalOpen(true)}
+                  className="rounded-full bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/25 dark:hover:bg-cyan-500/20 md:hidden"
+                  data-testid="button-suggest-poll-mobile"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </>
+            }
+          >
+            <ScrollMaskedChipRow>
+              {getFilterCategories(true).map((cat) => (
+                <FilterChip
+                  key={cat}
+                  category={cat}
+                  isActive={topicsCategoryFilter === cat}
+                  onClick={() => setTopicsCategoryFilter(cat as FilterCategory)}
+                  testIdPrefix="filter-topics"
+                  user={user}
+                  onAuthRequired={handleAuthRequired}
+                />
+              ))}
+            </ScrollMaskedChipRow>
+          </UnifiedSectionHeader>
+          
+          {pollsLoading ? (
+            <CardGridSkeleton count={3} />
+          ) : filteredTopics.length > 0 ? (
+            <CardSection desktopLimit={9} gap="gap-5" testIdPrefix="section-topics">
+              {filteredTopics.map((topic) => (
+                <div key={topic.id} role="button" tabIndex={0} onClick={(e) => handleCardEmptyTap(e, "sentiment", topic.id)} onKeyDown={(e) => { if (e.key === "Enter") handleCardEmptyTap(e as any, "sentiment", topic.id); }} className="h-full">
+                  <DiscourseCard 
+                    topic={topic} 
+                    onVote={(choice) => handleDiscourseVote(topic.id, choice)}
+                    onFilterCategory={handleCategoryPillFilter}
+                    categoryRaceMap={raceMap}
+                    leaderboardCategories={leaderboardCats}
+                  />
+                </div>
+              ))}
+            </CardSection>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              No topics match your filter criteria.
+            </div>
+          )}
+
+          <div className="text-center mt-2 md:mt-6">
+            <Button
+              variant="ghost"
+              onClick={() => openOverlay("topics")}
+              className="text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300"
+              data-testid="button-view-all-topics"
+            >
+              View all topics
+              <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
+        </section>
+        )}
+
+        {/* ZONE 1: Public Opinion - Matchups Section (Second) */}
+        {(activeSection === "All" || activeSection === "Matchups") && (
+        <section className="mb-10">
           <UnifiedSectionHeader
             title="Matchups"
             subtitle="Vote on A vs B"
@@ -2400,103 +2497,6 @@ export default function VotePage() {
               data-testid="button-view-all-matchups"
             >
               View all matchups
-              <ChevronRight className="h-4 w-4 ml-1" />
-            </Button>
-          </div>
-        </section>
-        )}
-
-        {/* ZONE 1: Public Opinion - Sentiment Polls Section (Second) */}
-        {(activeSection === "All" || activeSection === "Sentiment Polls") && (
-        <section className="mb-10">
-          <UnifiedSectionHeader
-            title="Sentiment Polls"
-            subtitle="Weigh in on current events"
-            icon={<MessageSquare className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />}
-            accent="cyan"
-            testId="section-header-sentiment"
-            actions={
-              <>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setRulesModalOpen("voice")}
-                      className="text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300"
-                      data-testid="button-rules-voice"
-                    >
-                      <HelpCircle className="h-5 w-5" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent className="bg-popover dark:bg-slate-900/95 border-border dark:border-slate-700 text-popover-foreground dark:text-slate-200 text-xs">
-                    How it works
-                  </TooltipContent>
-                </Tooltip>
-                <Button
-                  onClick={() => setStartPollModalOpen(true)}
-                  className="rounded-full bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/25 dark:hover:bg-cyan-500/20 hidden md:flex"
-                  data-testid="button-suggest-poll"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Suggest
-                </Button>
-                <Button
-                  size="icon"
-                  onClick={() => setStartPollModalOpen(true)}
-                  className="rounded-full bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/25 dark:hover:bg-cyan-500/20 md:hidden"
-                  data-testid="button-suggest-poll-mobile"
-                >
-                  <Plus className="h-4 w-4" />
-                </Button>
-              </>
-            }
-          >
-            <ScrollMaskedChipRow>
-              {getFilterCategories(true).map((cat) => (
-                <FilterChip
-                  key={cat}
-                  category={cat}
-                  isActive={topicsCategoryFilter === cat}
-                  onClick={() => setTopicsCategoryFilter(cat as FilterCategory)}
-                  testIdPrefix="filter-topics"
-                  user={user}
-                  onAuthRequired={handleAuthRequired}
-                />
-              ))}
-            </ScrollMaskedChipRow>
-          </UnifiedSectionHeader>
-          
-          {pollsLoading ? (
-            <CardGridSkeleton count={3} />
-          ) : filteredTopics.length > 0 ? (
-            <CardSection desktopLimit={9} gap="gap-5" testIdPrefix="section-topics">
-              {filteredTopics.map((topic) => (
-                <div key={topic.id} role="button" tabIndex={0} onClick={(e) => handleCardEmptyTap(e, "sentiment", topic.id)} onKeyDown={(e) => { if (e.key === "Enter") handleCardEmptyTap(e as any, "sentiment", topic.id); }} className="h-full">
-                  <DiscourseCard 
-                    topic={topic} 
-                    onVote={(choice) => handleDiscourseVote(topic.id, choice)}
-                    onFilterCategory={handleCategoryPillFilter}
-                    categoryRaceMap={raceMap}
-                    leaderboardCategories={leaderboardCats}
-                  />
-                </div>
-              ))}
-            </CardSection>
-          ) : (
-            <div className="text-center py-8 text-muted-foreground">
-              No topics match your filter criteria.
-            </div>
-          )}
-
-          <div className="text-center mt-2 md:mt-6">
-            <Button
-              variant="ghost"
-              onClick={() => openOverlay("topics")}
-              className="text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300"
-              data-testid="button-view-all-topics"
-            >
-              View all topics
               <ChevronRight className="h-4 w-4 ml-1" />
             </Button>
           </div>

@@ -312,13 +312,7 @@ export function OpinionPollCard({
                   </div>
                   <div className="mt-1 h-1.5 rounded-full bg-slate-700/50 overflow-hidden">
                     <div
-                      className={`h-full rounded-full transition-all duration-700 ease-out ${
-                        isLeading
-                          ? "bg-cyan-500"
-                          : isSelected
-                            ? "bg-cyan-400/60"
-                            : "bg-muted-foreground/30 dark:bg-slate-600/50"
-                      }`}
+                      className="h-full rounded-full bg-cyan-500 transition-all duration-700 ease-out"
                       style={{ width: `${percent}%` }}
                     />
                   </div>

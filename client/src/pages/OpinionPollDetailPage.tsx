@@ -362,9 +362,7 @@ export default function OpinionPollDetailPage() {
                     </div>
                     <div className="mt-1 h-1.5 rounded-full bg-slate-700/50 overflow-hidden">
                       <div
-                        className={`h-full rounded-full transition-all duration-700 ease-out ${
-                          isLeading ? "bg-cyan-500" : isSelected ? "bg-cyan-400/60" : "bg-slate-600/50"
-                        }`}
+                        className="h-full rounded-full bg-cyan-500 transition-all duration-700 ease-out"
                         style={{ width: `${percent}%` }}
                       />
                     </div>
@@ -488,7 +486,13 @@ export default function OpinionPollDetailPage() {
                     <div className="flex-1 h-6 rounded bg-slate-800/60 overflow-hidden">
                       <div
                         className={`h-full rounded transition-all duration-700 ease-out ${
-                          isLeading ? 'bg-cyan-500' : isUserVote ? 'bg-cyan-400/60' : 'bg-slate-600/50'
+                          hasVoted
+                            ? "bg-cyan-500"
+                            : isLeading
+                              ? "bg-cyan-500"
+                              : isUserVote
+                                ? "bg-cyan-400/60"
+                                : "bg-slate-600/50"
                         }`}
                         style={{ width: `${Math.max(percent, 1)}%` }}
                       />

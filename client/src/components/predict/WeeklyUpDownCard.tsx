@@ -7,7 +7,7 @@ import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActi
 import { PredictCard } from "@/components/predict/PredictCard";
 import { ParticipantAvatarStack, type ParticipantPreview } from "@/components/predict/ParticipantAvatarStack";
 import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
-import { Star, Flame } from "lucide-react";
+import { Star, Flame, ListChecks } from "lucide-react";
 import { Link } from "wouter";
 
 type CategoryFilter = "all" | "favorites" | "trending" | "tech" | "politics" | "business" | "music" | "sports" | "film-tv" | "gaming" | "creator" | "food-drink" | "lifestyle" | "misc";
@@ -48,6 +48,7 @@ export function WeeklyUpDownCard({
   onFilterCategory,
   categoryRaceMap,
   leaderboardCategories,
+  pendingPosition,
 }: {
   market: PredictionMarket;
   isMarketClosed?: boolean;
@@ -56,13 +57,18 @@ export function WeeklyUpDownCard({
   onFilterCategory?: (category: string) => void;
   categoryRaceMap?: Map<string, string>;
   leaderboardCategories?: Set<string>;
+  /** When set and market is open, replaces Up/Down with position CTA to detail. */
+  pendingPosition?: { pick: "up" | "down" | null; stakeAmount: number } | null;
 }) {
   const delta = market.currentScore - market.baselineScore;
   const pctDelta = market.baselineScore > 0 ? ((delta / market.baselineScore) * 100).toFixed(1) : "0";
   const cadenceLabel = (market.cadence || "weekly").charAt(0).toUpperCase() + (market.cadence || "weekly").slice(1);
 
   return (
-    <PredictCard testId={`card-weekly-${market.id}`} className={`${isMarketClosed ? 'opacity-75' : ''}`}>
+    <PredictCard
+      testId={`card-weekly-${market.id}`}
+      className={`${isMarketClosed ? "opacity-75" : ""} ${pendingPosition && !isMarketClosed ? "ring-1 ring-violet-500/35 dark:ring-violet-400/25 md:ring-inset rounded-[12px] md:rounded-xl" : ""}`}
+    >
       <div className="flex items-center justify-between mb-2 flex-wrap gap-1">
         <div className="flex items-center gap-1.5">
           <Badge
@@ -87,6 +93,16 @@ export function WeeklyUpDownCard({
           {market.totalPool < 100 && (
             <Badge variant="outline" className="text-amber-600 dark:text-amber-400 border-amber-500/40 dark:border-amber-500/30 text-[10px]">
               Thin Pool
+            </Badge>
+          )}
+          {pendingPosition && !isMarketClosed && (
+            <Badge
+              variant="outline"
+              className="text-violet-700 dark:text-violet-400 border-violet-500/45 dark:border-violet-500/35 text-[10px]"
+              data-testid={`badge-entered-${market.id}`}
+            >
+              <ListChecks className="h-3 w-3 mr-0.5 shrink-0" />
+              Entered
             </Badge>
           )}
         </div>
@@ -150,9 +166,13 @@ export function WeeklyUpDownCard({
 
       <WeeklyUpDownActionButtons
         marketId={market.id}
+        personName={market.personName}
+        baselineScore={market.baselineScore}
+        currentScore={market.currentScore}
         isMarketClosed={!!isMarketClosed}
         closedMessage={closedMessage}
         onSelect={onSelect}
+        pendingPosition={pendingPosition ?? null}
       />
       </div>
     </PredictCard>

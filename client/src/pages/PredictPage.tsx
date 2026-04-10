@@ -103,8 +103,14 @@ import { UnifiedSectionHeader } from "@/components/UnifiedSectionHeader";
 import { PredictCard } from "@/components/predict/PredictCard";
 import { ParticipantAvatarStack, type ParticipantPreview } from "@/components/predict/ParticipantAvatarStack";
 import { WeeklyUpDownCard, type PredictionMarket } from "@/components/predict/WeeklyUpDownCard";
+import { pendingWeeklyUpDownPositionFromBet } from "@/components/predict/WeeklyUpDownYourPositionPanel";
 import { HeadToHeadCard, smartName, type HeadToHeadMarket } from "@/components/predict/HeadToHeadCard";
-import { TopGainerCard, type TopGainerMarket, type GainerCandidate } from "@/components/predict/TopGainerCard";
+import {
+  TopGainerCard,
+  categoryRacePredictionSummaryFromBet,
+  type TopGainerMarket,
+  type GainerCandidate,
+} from "@/components/predict/TopGainerCard";
 import { WeeklyJackpotHero } from "@/components/predict/WeeklyJackpotHero";
 
 const PREDICT_ONBOARDING_STEPS: readonly OnboardingStep[] = [
@@ -2603,6 +2609,7 @@ export default function PredictPage() {
                     onFilterCategory={handleCategoryPillFilter}
                     categoryRaceMap={raceMap}
                     leaderboardCategories={leaderboardCats}
+                    pendingPosition={pendingWeeklyUpDownPositionFromBet(userBetsByMarket.get(market.id))}
                   />
                 ))}
               </CardSection>
@@ -2689,6 +2696,7 @@ export default function PredictPage() {
                       closedMessage={closedMarketMessage}
                       onSelect={(person) => handleH2HSelect(market, person)}
                       userPick={h2hUserPick}
+                      userStake={bet?.stakeAmount}
                       onFilterCategory={handleCategoryPillFilter}
                       categoryRaceMap={raceMap}
                       leaderboardCategories={leaderboardCats}
@@ -2772,6 +2780,7 @@ export default function PredictPage() {
                     closedMessage={closedMarketMessage}
                     onShowAllCandidates={openGainerPicker}
                     isPredicted={predictedMarkets.has(market.id)}
+                    predictionSummary={categoryRacePredictionSummaryFromBet(userBetsByMarket.get(market.id))}
                     isShimmering={false}
                     onFilterCategory={handleCategoryPillFilter}
                     categoryRaceMap={raceMap}
@@ -2846,6 +2855,7 @@ export default function PredictPage() {
               onFilterCategory={(cat) => setOverlayCategoryFilter(normalizeMarketCategory(cat) as CategoryFilter)}
               categoryRaceMap={raceMap}
               leaderboardCategories={leaderboardCats}
+              pendingPosition={pendingWeeklyUpDownPositionFromBet(userBetsByMarket.get(market.id))}
             />
           ))}
       </FullScreenOverlay>
@@ -2882,6 +2892,7 @@ export default function PredictPage() {
                 closedMessage={closedMarketMessage}
                 onSelect={(person) => handleH2HSelect(market, person)}
                 userPick={h2hUserPick}
+                userStake={bet?.stakeAmount}
                 onFilterCategory={(cat) => setOverlayCategoryFilter(normalizeMarketCategory(cat) as CategoryFilter)}
                 categoryRaceMap={raceMap}
                 leaderboardCategories={leaderboardCats}
@@ -2910,6 +2921,7 @@ export default function PredictPage() {
               closedMessage={closedMarketMessage}
               onShowAllCandidates={openGainerPicker}
               isPredicted={predictedMarkets.has(market.id)}
+              predictionSummary={categoryRacePredictionSummaryFromBet(userBetsByMarket.get(market.id))}
               isShimmering={false}
               onFilterCategory={(cat) => setOverlayCategoryFilter(normalizeMarketCategory(cat) as CategoryFilter)}
               categoryRaceMap={raceMap}

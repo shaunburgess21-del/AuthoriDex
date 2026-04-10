@@ -2,18 +2,41 @@ import { Button } from "@/components/ui/button";
 import { TrendingDown, TrendingUp } from "lucide-react";
 import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { ClosedMarketActionTrigger } from "./ClosedMarketActionTrigger";
+import { WeeklyUpDownYourPositionPanel } from "./WeeklyUpDownYourPositionPanel";
 
 export function WeeklyUpDownActionButtons({
   marketId,
+  personName,
+  baselineScore,
+  currentScore,
   isMarketClosed,
   closedMessage,
   onSelect,
+  pendingPosition,
 }: {
   marketId: string;
+  personName: string;
+  baselineScore: number;
+  currentScore: number;
   isMarketClosed: boolean;
   closedMessage: Pick<ClosedMarketMessage, "title" | "lines">;
   onSelect?: (choice: "up" | "down") => void;
+  pendingPosition?: { pick: "up" | "down" | null; stakeAmount: number } | null;
 }) {
+  if (!isMarketClosed && pendingPosition) {
+    return (
+      <WeeklyUpDownYourPositionPanel
+        variant="cardLink"
+        href={`/predict/updown/${marketId}`}
+        pick={pendingPosition.pick}
+        personName={personName}
+        baselineScore={baselineScore}
+        currentScore={currentScore}
+        stakeAmount={pendingPosition.stakeAmount}
+      />
+    );
+  }
+
   return (
     <div className="grid grid-cols-2 gap-2">
       <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMessage} side="top" align="center">

@@ -9,6 +9,7 @@ import { CategoryPill } from "@/components/CategoryPill";
 import { UserMenu } from "@/components/UserMenu";
 import { OutcomePathChart } from "@/components/predict/OutcomePathChart";
 import { WhatNeedsToHappen } from "@/components/predict/WhatNeedsToHappen";
+import { WeeklyUpDownYourPositionPanel } from "@/components/predict/WeeklyUpDownYourPositionPanel";
 import { MarketResolutionInfo } from "@/components/predict/MarketResolutionInfo";
 import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,7 @@ import {
   HelpCircle,
   Users,
   BarChart3,
+  ListChecks,
 } from "lucide-react";
 
 export default function UpDownDetailPage() {
@@ -39,6 +41,14 @@ export default function UpDownDetailPage() {
 
   const [stakeModalOpen, setStakeModalOpen] = useState(false);
   const [pendingSelection, setPendingSelection] = useState<StakeSelection | null>(null);
+
+  const goBack = useCallback(() => {
+    if (window.history.length > 1) {
+      window.history.back();
+    } else {
+      setLocation("/predict");
+    }
+  }, [setLocation]);
 
   const { data: allUpdownMarkets, isLoading } = useQuery<any[]>({
     queryKey: ["/api/native-markets/updown"],
@@ -215,7 +225,7 @@ export default function UpDownDetailPage() {
       <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4 px-4">
         <TrendingUp className="h-12 w-12 text-muted-foreground" />
         <h2 className="text-lg font-semibold">Market not found</h2>
-        <Button variant="outline" onClick={() => setLocation("/predict")}>
+        <Button variant="outline" onClick={goBack}>
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back to Predict
         </Button>
@@ -236,8 +246,10 @@ export default function UpDownDetailPage() {
       <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-md border-b border-border/50">
         <div className="max-w-3xl mx-auto px-4 h-14 flex items-center gap-3">
           <button
-            onClick={() => setLocation("/predict")}
+            type="button"
+            onClick={goBack}
             className="p-1.5 rounded-lg hover:bg-muted transition-colors"
+            aria-label="Go back"
           >
             <ArrowLeft className="h-5 w-5" />
           </button>
@@ -337,47 +349,15 @@ export default function UpDownDetailPage() {
         </Card>
 
         {/* Your Position */}
-        {userBet && userPick && (
-          <Card className="border-green-500/40 dark:border-green-500/30 bg-green-500/8 dark:bg-green-500/5">
-            <div className="p-4">
-              <p className="text-xs font-semibold text-green-700 dark:text-green-500 uppercase tracking-wider mb-2">
-                Your Position
-              </p>
-              <div className="flex items-center gap-3">
-                <div
-                  className={`h-12 w-12 rounded-full flex items-center justify-center ${
-                    userPick === "up"
-                      ? "bg-green-500/25 dark:bg-green-500/20 border border-green-500/50 dark:border-green-500/40"
-                      : "bg-red-500/25 dark:bg-red-500/20 border border-red-500/50 dark:border-red-500/40"
-                  }`}
-                >
-                  {userPick === "up" ? (
-                    <TrendingUp className="h-6 w-6 text-green-700 dark:text-green-500" />
-                  ) : (
-                    <TrendingDown className="h-6 w-6 text-red-700 dark:text-red-500" />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-sm">
-                    {userPick === "up" ? "UP" : "DOWN"} on {firstName}
-                  </p>
-                  <WhatNeedsToHappen
-                    pick={userPick}
-                    baselineScore={hydrated.baselineScore}
-                    currentScore={hydrated.currentScore}
-                    personName={hydrated.personName}
-                    compact
-                  />
-                </div>
-                <div className="text-right">
-                  <p className="text-xs text-muted-foreground">Stake</p>
-                  <p className="font-semibold text-sm">
-                    {Number(userBet.stakeAmount || 0).toLocaleString("en-US")}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </Card>
+        {userBet && (
+          <WeeklyUpDownYourPositionPanel
+            variant="detail"
+            pick={userPick}
+            personName={hydrated.personName}
+            baselineScore={hydrated.baselineScore}
+            currentScore={hydrated.currentScore}
+            stakeAmount={Number(userBet.stakeAmount || 0)}
+          />
         )}
 
         {/* Trend Score Chart */}
@@ -476,7 +456,7 @@ export default function UpDownDetailPage() {
       {/* Sticky Bottom CTA */}
       <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-border/50 bg-background/95 backdrop-blur-md">
         <div className="max-w-3xl mx-auto px-4 py-3">
-          {userPick ? (
+          {userBet && userPick ? (
             <div className="flex items-center gap-3">
               <div
                 className={`h-10 w-10 rounded-full flex items-center justify-center shrink-0 ${
@@ -510,6 +490,19 @@ export default function UpDownDetailPage() {
                   ? "Winning"
                   : "Behind"}
               </Badge>
+            </div>
+          ) : userBet && !userPick ? (
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full flex items-center justify-center shrink-0 bg-violet-500/25 dark:bg-violet-500/20 border border-violet-500/50 dark:border-violet-500/40">
+                <ListChecks className="h-5 w-5 text-violet-700 dark:text-violet-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-muted-foreground">Your position</p>
+                <p className="text-sm font-semibold">Open stake on this market</p>
+              </div>
+              <p className="text-xs text-muted-foreground tabular-nums">
+                {Number(userBet.stakeAmount || 0).toLocaleString("en-US")} cr
+              </p>
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3">
