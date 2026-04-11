@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -10,7 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Search, Image, ArrowUpDown, X, Plus, Trash2, Loader2, ThumbsUp, Crown, Edit
+  Search, Image, ArrowUpDown, X, Plus, Trash2, Loader2, ThumbsUp, Crown, Edit, ZoomIn,
 } from "lucide-react";
 
 interface CurateCard {
@@ -43,7 +43,17 @@ export function AdminCurateProfile() {
   const [editingCard, setEditingCard] = useState<CurateCard | null>(null);
   const [seedVoteInputs, setSeedVoteInputs] = useState<Record<string, string>>({});
   const [uploading, setUploading] = useState(false);
+  const [lightboxImage, setLightboxImage] = useState<CelebrityImageData | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!lightboxImage) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setLightboxImage(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [lightboxImage]);
 
   const { data, isLoading } = useQuery<{ data: CurateCard[]; totalCount: number }>({
     queryKey: ['/api/admin/vote/curate-profile'],
@@ -277,7 +287,13 @@ export function AdminCurateProfile() {
       </Card>
 
       {editingCard && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setEditingCard(null)}>
+        <div
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => {
+            setLightboxImage(null);
+            setEditingCard(null);
+          }}
+        >
           <div
             className="bg-background border rounded-lg shadow-xl w-full max-w-3xl max-h-[85vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
@@ -296,7 +312,15 @@ export function AdminCurateProfile() {
                   </p>
                 </div>
               </div>
-              <Button variant="ghost" size="icon" onClick={() => setEditingCard(null)} data-testid="button-close-curate-modal">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => {
+                  setLightboxImage(null);
+                  setEditingCard(null);
+                }}
+                data-testid="button-close-curate-modal"
+              >
                 <X className="h-5 w-5" />
               </Button>
             </div>
@@ -348,15 +372,30 @@ export function AdminCurateProfile() {
                           className={`overflow-visible ${isWinner ? 'border-amber-500/60 dark:border-amber-500/50' : ''}`}
                           data-testid={`card-image-${img.id}`}
                         >
-                          <div className="relative">
+                          <div
+                            className="relative aspect-square w-full overflow-hidden rounded-t-md bg-muted/30 group cursor-pointer"
+                            onClick={() => setLightboxImage(img)}
+                            title="View larger"
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                setLightboxImage(img);
+                              }
+                            }}
+                            data-testid={`img-preview-${img.id}`}
+                          >
                             <img
                               src={img.imageUrl}
-                              alt="Celebrity"
-                              className="w-full h-48 object-cover rounded-t-md"
-                              data-testid={`img-preview-${img.id}`}
+                              alt={editingCard ? `${editingCard.name} gallery` : "Celebrity"}
+                              className="w-full h-full object-contain"
                             />
+                            <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" aria-hidden>
+                              <ZoomIn className="h-5 w-5 text-foreground/90 drop-shadow-md" />
+                            </div>
                             {isWinner && (
-                              <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-1 rounded-md bg-amber-500/90 text-xs font-semibold text-black">
+                              <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-1 rounded-md bg-amber-500/90 text-xs font-semibold text-black pointer-events-none">
                                 <Crown className="h-3 w-3" />
                                 Active Profile
                               </div>
@@ -428,6 +467,37 @@ export function AdminCurateProfile() {
               </div>
             </ScrollArea>
           </div>
+        </div>
+      )}
+
+      {lightboxImage && (
+        <div
+          className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-4"
+          onClick={() => setLightboxImage(null)}
+          data-testid="curate-image-lightbox"
+          role="presentation"
+        >
+          <Button
+            type="button"
+            variant="secondary"
+            size="icon"
+            className="absolute top-4 right-4 z-10 rounded-full shadow-md"
+            onClick={(e) => {
+              e.stopPropagation();
+              setLightboxImage(null);
+            }}
+            aria-label="Close preview"
+            data-testid="button-close-curate-lightbox"
+          >
+            <X className="h-5 w-5" />
+          </Button>
+          <img
+            src={lightboxImage.imageUrl}
+            alt={editingCard ? `${editingCard.name} — full size` : "Full size preview"}
+            className="max-h-[90vh] max-w-[95vw] object-contain select-none"
+            onClick={(e) => e.stopPropagation()}
+            draggable={false}
+          />
         </div>
       )}
     </>
