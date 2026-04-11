@@ -23,9 +23,9 @@ export function VoteDetailNavCluster({
         aria-label="Previous in list"
         disabled={!prevSlug}
         onClick={goPrev}
-        className="p-2 rounded-lg hover:bg-muted/60 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+        className="h-8 w-8 rounded-lg border border-border/60 flex items-center justify-center bg-transparent hover:bg-muted/30 hover:border-border transition-all duration-150 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:border-border/60"
       >
-        <ChevronLeft className="h-5 w-5" />
+        <ChevronLeft className="h-4 w-4" />
       </button>
       <span className="text-xs text-muted-foreground font-medium tabular-nums px-0.5 min-w-[3.25rem] text-center">
         {currentIndex} of {total}
@@ -35,9 +35,9 @@ export function VoteDetailNavCluster({
         aria-label="Next in list"
         disabled={!nextSlug}
         onClick={goNext}
-        className="p-2 rounded-lg hover:bg-muted/60 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+        className="h-8 w-8 rounded-lg border border-border/60 flex items-center justify-center bg-transparent hover:bg-muted/30 hover:border-border transition-all duration-150 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:border-border/60"
       >
-        <ChevronRight className="h-5 w-5" />
+        <ChevronRight className="h-4 w-4" />
       </button>
     </div>
   );
