@@ -33,6 +33,7 @@ import {
   TrendingUp,
   ChevronRight,
 } from "lucide-react";
+import { MobileDebugOverlay } from "@/components/debug/MobileDebugOverlay";
 
 interface MatchupDetail {
   id: string;
@@ -163,7 +164,7 @@ export default function MatchupDetailPage() {
             </div>
           </div>
         </header>
-        <div className="max-w-3xl mx-auto px-4 py-8">
+        <div className="max-w-3xl mx-auto px-4 pt-8 pb-24 md:pb-6">
           <Card className="p-8 text-center">
             <h1 className="text-xl font-bold mb-2">Matchup Not Found</h1>
             <p className="text-muted-foreground">This matchup may have been removed or doesn't exist.</p>
@@ -182,6 +183,7 @@ export default function MatchupDetailPage() {
 
   return (
     <div className="min-h-screen bg-background" data-testid="matchup-detail-page">
+      {(import.meta.env.DEV || window.location.hostname.includes('railway')) && <MobileDebugOverlay />}
       <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-md border-b border-border/50">
         <div className="max-w-3xl mx-auto px-4 py-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
           <div className="flex items-center gap-3 min-w-0 justify-self-start">
@@ -202,7 +204,7 @@ export default function MatchupDetailPage() {
         </div>
       </header>
 
-      <div className="max-w-3xl mx-auto px-4 py-6">
+      <div className="max-w-3xl mx-auto px-4 pt-6 pb-24 md:pb-6">
         {/* Header Block */}
         <div className="mb-6" data-testid="section-matchup-header">
           <div className="flex items-center gap-2 flex-wrap mb-3">
@@ -553,7 +555,7 @@ export default function MatchupDetailPage() {
       <button
         type="button"
         onClick={() => setCommentsSheetOpen(true)}
-        className="fixed bottom-20 right-4 z-40 md:hidden flex items-center gap-1.5 rounded-full bg-cyan-600 text-white px-4 py-2.5 shadow-lg"
+        className="fixed bottom-24 right-4 z-40 md:hidden flex items-center gap-1.5 rounded-full bg-cyan-600 text-white px-4 py-2.5 shadow-lg"
       >
         <MessageSquare className="h-4 w-4" />
         <span className="text-xs font-semibold">{matchupCommentCount}</span>

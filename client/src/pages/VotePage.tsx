@@ -103,6 +103,7 @@ import { WindowedDotIndicator } from "@/components/WindowedDotIndicator";
 import { ScrollMaskedChipRow } from "@/components/ScrollMaskedChipRow";
 import { VoteSnapScrollView, type SnapItem, type SnapSectionType } from "@/components/snap-scroll/VoteSnapScrollView";
 import { navigateWithVoteList } from "@/lib/voteListNavigation";
+import { MobileDebugOverlay } from "@/components/debug/MobileDebugOverlay";
 
 const VOTE_ONBOARDING_STEPS: readonly OnboardingStep[] = [
   {
@@ -2334,6 +2335,7 @@ export default function VotePage() {
 
   return (
     <div className="min-h-screen pb-20 md:pb-0">
+      {(import.meta.env.DEV || window.location.hostname.includes('railway')) && <MobileDebugOverlay />}
       <AnimatePresence>
         {xpFloaters.map(floater => (
           <XPFloaterAnimation 
