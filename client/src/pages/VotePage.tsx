@@ -1966,10 +1966,6 @@ export default function VotePage() {
 
   const handleMatchupVote = (matchupId: string, option: 'option_a' | 'option_b' | 'neutral', event?: React.MouseEvent) => {
     if (matchupRateLimited) return;
-    if (!user) {
-      toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
-      return;
-    }
     const previousVote = matchupUserVotes[matchupId] || null;
     setLocalMatchupVotes((prev: Record<string, string>) => ({ ...prev, [matchupId]: option }));
     matchupVoteMutation.mutate({ matchupId, option, previousVote });
@@ -1979,10 +1975,6 @@ export default function VotePage() {
   };
   
   const handleMatchupRemoveVote = (matchupId: string) => {
-    if (!user) {
-      toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
-      return;
-    }
     const previousVote = matchupUserVotes[matchupId];
     if (!previousVote) return;
     setLocalMatchupVotes((prev: Record<string, string>) => {
