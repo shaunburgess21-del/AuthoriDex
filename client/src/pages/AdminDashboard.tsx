@@ -1670,6 +1670,7 @@ export default function AdminDashboard() {
   const [isGeneratingPollDescription, setIsGeneratingPollDescription] = useState(false);
   const [isGeneratingOpSubject, setIsGeneratingOpSubject] = useState(false);
   const [isGeneratingOpDescription, setIsGeneratingOpDescription] = useState(false);
+  const [isGeneratingMatchupDescription, setIsGeneratingMatchupDescription] = useState(false);
 
   // ALL HOOKS MUST BE CALLED BEFORE ANY EARLY RETURNS (React rules of hooks)
   
@@ -3166,6 +3167,29 @@ export default function AdminDashboard() {
       toast({ title: "Generation failed", description: err.message, variant: "destructive" });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGenerateMatchupDescriptionDraft = async () => {
+    if (!editingMatchup?.id) return;
+    setIsGeneratingMatchupDescription(true);
+    try {
+      const res = await fetchWithAuth(`/api/admin/matchups/${editingMatchup.id}/generate-ai-draft`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ field: "description", currentContent: matchupForm.description }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Failed to generate draft" }));
+        throw new Error(err.error || "Failed to generate draft");
+      }
+      const data = await res.json();
+      setMatchupForm((prev) => ({ ...prev, description: data.content }));
+      toast({ title: "Draft generated", description: "Review and edit before saving." });
+    } catch (err: any) {
+      toast({ title: "Generation failed", description: err.message, variant: "destructive" });
+    } finally {
+      setIsGeneratingMatchupDescription(false);
     }
   };
 
@@ -8012,7 +8036,26 @@ export default function AdminDashboard() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="matchup-description">Description (optional)</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="matchup-description">Description (optional)</Label>
+                {editingMatchup && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs gap-1"
+                    disabled={isGeneratingMatchupDescription}
+                    onClick={handleGenerateMatchupDescriptionDraft}
+                    data-testid="button-matchup-draft-description"
+                  >
+                    {isGeneratingMatchupDescription ? (
+                      <><Loader2 className="h-3 w-3 animate-spin" /> Generating...</>
+                    ) : (
+                      <><Sparkles className="h-3 w-3" /> Draft with AI</>
+                    )}
+                  </Button>
+                )}
+              </div>
               <Textarea
                 id="matchup-description"
                 value={matchupForm.description}

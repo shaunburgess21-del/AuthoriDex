@@ -8809,6 +8809,88 @@ Only return the JSON object.`;
     }
   });
 
+  app.post("/api/admin/matchups/:id/generate-ai-draft", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const { field, currentContent } = req.body;
+
+      if (!field || field !== "description") {
+        return res.status(400).json({ error: "field must be 'description'" });
+      }
+
+      const [matchup] = await db.select().from(matchups).where(eq(matchups.id, id)).limit(1);
+      if (!matchup) return res.status(404).json({ error: "Matchup not found" });
+
+      let nameA: string | null = null;
+      let nameB: string | null = null;
+      if (matchup.personAId) {
+        const [p] = await db.select({ name: trackedPeople.name }).from(trackedPeople).where(eq(trackedPeople.id, matchup.personAId)).limit(1);
+        if (p) nameA = p.name;
+      }
+      if (matchup.personBId) {
+        const [p] = await db.select({ name: trackedPeople.name }).from(trackedPeople).where(eq(trackedPeople.id, matchup.personBId)).limit(1);
+        if (p) nameB = p.name;
+      }
+      const linkedBlock =
+        nameA || nameB
+          ? `\nLinked profiles: Option A${nameA ? ` (${nameA})` : ""}, Option B${nameB ? ` (${nameB})` : ""}`
+          : "";
+
+      const requestContent = typeof currentContent === "string" ? currentContent.trim() : "";
+      const dbContent = String(matchup.description || "").trim();
+      const existingContent = requestContent || dbContent;
+      const existingBlock = existingContent
+        ? `\nCurrent content for reference (improve upon this):\n"${existingContent}"`
+        : "";
+
+      const systemPrompt = `You are writing content for a head-to-head matchup on VoxDex, a trend-tracking and prediction platform. Matchups let users pick between Option A and Option B. Use web search to keep facts current and accurate. Write plain text only. Keep it concise and easy to scan. Use short paragraphs with blank lines between them. If a list improves clarity, you may use simple '-' bullet points. Do not use markdown headers or bold formatting.`;
+
+      const userPrompt = `Matchup title: "${matchup.title}"
+Category: ${matchup.category || "General"}
+Option A: "${matchup.optionAText}"
+Option B: "${matchup.optionBText}"
+${matchup.promptText ? `Pre-vote prompt shown to users: "${matchup.promptText}"` : ""}${linkedBlock}${existingBlock}
+
+Write a concise context section for this matchup. This is shown on the detail page under a "Context" heading.
+
+Requirements:
+- Prefer 1-2 short paragraphs (1-2 sentences each), separated by a blank line if needed.
+- Optionally use 2-3 '-' bullet points only if it makes the content clearer.
+- Stay balanced: explain both sides without picking a winner.
+- Cover essentials: why this pairing matters, what distinguishes the options, and recent context.
+- Avoid repeating the option labels verbatim if you can vary wording naturally.
+
+Target length: about 45-75 words (shorter than sentiment/opinion poll context blocks).`;
+
+      const openai = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
+      });
+
+      const response = await openai.responses.create({
+        model: "gpt-5.4",
+        tools: [{ type: "web_search" as any }],
+        instructions: systemPrompt,
+        input: userPrompt,
+        max_output_tokens: 230,
+        temperature: 0.7,
+      } as any);
+
+      const content = stripCitations(((response as any).output_text
+        || ((response as any).output || [])
+             .filter((item: any) => item.type === "message")
+             .flatMap((item: any) => item.content || [])
+             .find((part: any) => part.type === "output_text" || part.type === "text")
+             ?.text)?.trim() || "");
+      if (!content) return res.status(500).json({ error: "AI returned empty content" });
+
+      console.log(`[Matchups] AI draft generated for matchup ${id}, field=description`);
+      res.json({ content });
+    } catch (error: any) {
+      console.error("[Matchups] AI draft error:", error?.message || error);
+      res.status(500).json({ error: "Failed to generate draft" });
+    }
+  });
+
   // ===========================================
   // PUBLIC: TRENDING POLLS
   // ===========================================
