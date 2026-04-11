@@ -33,7 +33,6 @@ import {
   TrendingUp,
   ChevronRight,
 } from "lucide-react";
-import { MobileDebugOverlay } from "@/components/debug/MobileDebugOverlay";
 
 interface MatchupDetail {
   id: string;
@@ -183,7 +182,6 @@ export default function MatchupDetailPage() {
 
   return (
     <div className="min-h-screen bg-background" data-testid="matchup-detail-page">
-      {(import.meta.env.DEV || window.location.hostname.includes('railway')) && <MobileDebugOverlay />}
       <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-md border-b border-border/50">
         <div className="max-w-3xl mx-auto px-4 py-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
           <div className="flex items-center gap-3 min-w-0 justify-self-start">
