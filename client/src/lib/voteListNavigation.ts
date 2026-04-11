@@ -5,6 +5,8 @@ export interface VoteListHistoryState {
   type: VoteListNavType;
   slugs: string[];
   currentSlug: string;
+  /** Number of history entries pushed since VotePage (or equivalent list entry). */
+  historyDepth: number;
 }
 
 export const VOTE_DETAIL_PATH_PREFIX: Record<VoteListNavType, string> = {

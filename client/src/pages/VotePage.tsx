@@ -1984,8 +1984,8 @@ export default function VotePage() {
     (slug: string) => {
       navigateWithVoteList(
         setLocation,
-        { type: "sentiment", slugs: sentimentSlugList, currentSlug: slug },
-        `/polls/${slug}`,
+        { type: "sentiment", slugs: sentimentSlugList, currentSlug: slug, historyDepth: 1 },
+        `/polls/${encodeURIComponent(slug)}`,
       );
     },
     [sentimentSlugList, setLocation],
@@ -1994,7 +1994,7 @@ export default function VotePage() {
     (slug: string) => {
       navigateWithVoteList(
         setLocation,
-        { type: "matchup", slugs: matchupSlugList, currentSlug: slug },
+        { type: "matchup", slugs: matchupSlugList, currentSlug: slug, historyDepth: 1 },
         `/vote/matchups/${encodeURIComponent(slug)}`,
       );
     },
@@ -2004,8 +2004,8 @@ export default function VotePage() {
     (slug: string) => {
       navigateWithVoteList(
         setLocation,
-        { type: "opinion", slugs: opinionSlugList, currentSlug: slug },
-        `/vote/opinion-polls/${slug}`,
+        { type: "opinion", slugs: opinionSlugList, currentSlug: slug, historyDepth: 1 },
+        `/vote/opinion-polls/${encodeURIComponent(slug)}`,
       );
     },
     [opinionSlugList, setLocation],

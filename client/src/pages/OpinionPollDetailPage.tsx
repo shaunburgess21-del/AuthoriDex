@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useLocation, Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
@@ -57,13 +57,22 @@ function parseOpinionPollVoteError(err: unknown): string {
 }
 
 export default function OpinionPollDetailPage() {
-  const { slug } = useParams<{ slug: string }>();
+  const params = useParams<{ slug: string }>();
+  const slugParam = params.slug;
+  const slug = useMemo(() => {
+    if (!slugParam) return "";
+    try {
+      return decodeURIComponent(slugParam);
+    } catch {
+      return slugParam;
+    }
+  }, [slugParam]);
   const [, setLocation] = useLocation();
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const opCommentCount = useCommentCount("opinion-poll", slug || "");
-  const { showNav } = useDetailNavigation(slug, "opinion");
+  const { showNav, historyDepth } = useDetailNavigation(slug || undefined, "opinion");
   const [changeDialogOpen, setChangeDialogOpen] = useState(false);
   const [pendingOption, setPendingOption] = useState<{ id: string; name: string } | null>(null);
   const [headerImgError, setHeaderImgError] = useState(false);
@@ -78,7 +87,7 @@ export default function OpinionPollDetailPage() {
       const supabase = await getSupabase();
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.access_token) headers["Authorization"] = `Bearer ${session.access_token}`;
-      const res = await fetch(`/api/opinion-polls/${slug}`, { headers });
+      const res = await fetch(`/api/opinion-polls/${encodeURIComponent(slug)}`, { headers });
       if (!res.ok) throw new Error("Poll not found");
       return res.json();
     },
@@ -87,7 +96,7 @@ export default function OpinionPollDetailPage() {
 
   const voteMutation = useMutation({
     mutationFn: async (optionId: string) => {
-      const res = await apiRequest("POST", `/api/opinion-polls/${slug}/vote`, { optionId });
+      const res = await apiRequest("POST", `/api/opinion-polls/${encodeURIComponent(slug)}/vote`, { optionId });
       return res.json();
     },
     onSuccess: () => {
@@ -110,7 +119,7 @@ export default function OpinionPollDetailPage() {
 
   const removeVoteMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", `/api/opinion-polls/${slug}/vote`, { remove: true });
+      const res = await apiRequest("POST", `/api/opinion-polls/${encodeURIComponent(slug)}/vote`, { remove: true });
       return res.json();
     },
     onSuccess: () => {
@@ -183,7 +192,7 @@ export default function OpinionPollDetailPage() {
             <Link href="/" data-testid="link-logo-home">
               <VoxDexLogo size={28} />
             </Link>
-            <Button variant="ghost" size="sm" onClick={() => { showNav ? setLocation("/vote") : (window.history.length > 1 ? window.history.back() : setLocation("/vote")); }} data-testid="button-back">
+            <Button variant="ghost" size="sm" onClick={() => { showNav ? window.history.go(-historyDepth) : (window.history.length > 1 ? window.history.back() : setLocation("/vote")); }} data-testid="button-back">
               <ArrowLeft className="h-4 w-4 mr-1" />
               Vote
             </Button>

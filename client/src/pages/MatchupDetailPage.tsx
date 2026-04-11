@@ -78,7 +78,7 @@ export default function MatchupDetailPage() {
   const { user, isLoggedIn } = useAuth();
 
   const matchupCommentCount = useCommentCount("matchup", slug || "");
-  const { showNav } = useDetailNavigation(slug || undefined, "matchup");
+  const { showNav, historyDepth } = useDetailNavigation(slug || undefined, "matchup");
   const [commentsSheetOpen, setCommentsSheetOpen] = useState(false);
 
   const { data: matchup, isLoading, error } = useQuery<MatchupDetail>({
@@ -150,7 +150,7 @@ export default function MatchupDetailPage() {
               <Link href="/" data-testid="link-logo-home">
                 <VoxDexLogo size={28} />
               </Link>
-              <Button variant="ghost" size="sm" onClick={() => { showNav ? setLocation("/vote") : (window.history.length > 1 ? window.history.back() : setLocation("/vote")); }} data-testid="button-back">
+              <Button variant="ghost" size="sm" onClick={() => { showNav ? window.history.go(-historyDepth) : (window.history.length > 1 ? window.history.back() : setLocation("/vote")); }} data-testid="button-back">
                 <ArrowLeft className="h-4 w-4 mr-1" />
                 Vote
               </Button>
@@ -188,7 +188,7 @@ export default function MatchupDetailPage() {
             <Link href="/" data-testid="link-logo-home">
               <VoxDexLogo size={28} />
             </Link>
-            <Button variant="ghost" size="sm" onClick={() => { showNav ? setLocation("/vote") : (window.history.length > 1 ? window.history.back() : setLocation("/vote")); }} data-testid="button-back">
+            <Button variant="ghost" size="sm" onClick={() => { showNav ? window.history.go(-historyDepth) : (window.history.length > 1 ? window.history.back() : setLocation("/vote")); }} data-testid="button-back">
               <ArrowLeft className="h-4 w-4 mr-1" />
               Vote
             </Button>

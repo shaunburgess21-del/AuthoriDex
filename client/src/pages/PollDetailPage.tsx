@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useLocation, Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
@@ -66,14 +66,23 @@ interface PollData {
 }
 
 export default function PollDetailPage() {
-  const { slug } = useParams<{ slug: string }>();
+  const params = useParams<{ slug: string }>();
+  const slugParam = params.slug;
+  const slug = useMemo(() => {
+    if (!slugParam) return "";
+    try {
+      return decodeURIComponent(slugParam);
+    } catch {
+      return slugParam;
+    }
+  }, [slugParam]);
   const [, setLocation] = useLocation();
   const { user, isLoggedIn } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const pollCommentCount = useCommentCount("poll", slug || "");
-  const { showNav } = useDetailNavigation(slug, "sentiment");
+  const { showNav, historyDepth } = useDetailNavigation(slug || undefined, "sentiment");
   const [showVoteChange, setShowVoteChange] = useState(false);
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
   const [headerImgError, setHeaderImgError] = useState(false);
@@ -87,7 +96,7 @@ export default function PollDetailPage() {
       const supabase = await getSupabase();
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.access_token) headers["Authorization"] = `Bearer ${session.access_token}`;
-      const res = await fetch(`/api/polls/${slug}`, { headers });
+      const res = await fetch(`/api/polls/${encodeURIComponent(slug)}`, { headers });
       if (!res.ok) throw new Error("Poll not found");
       return res.json();
     },
@@ -96,7 +105,7 @@ export default function PollDetailPage() {
 
   const voteMutation = useMutation({
     mutationFn: async (choice: string) => {
-      const res = await apiRequest("POST", `/api/polls/${slug}/vote`, { choice });
+      const res = await apiRequest("POST", `/api/polls/${encodeURIComponent(slug)}/vote`, { choice });
       return res.json();
     },
     onSuccess: () => {
@@ -153,7 +162,7 @@ export default function PollDetailPage() {
             <Link href="/" data-testid="link-logo-home">
               <VoxDexLogo size={28} />
             </Link>
-            <Button variant="ghost" size="sm" onClick={() => { showNav ? setLocation("/vote") : (window.history.length > 1 ? window.history.back() : setLocation("/vote")); }} data-testid="button-back">
+            <Button variant="ghost" size="sm" onClick={() => { showNav ? window.history.go(-historyDepth) : (window.history.length > 1 ? window.history.back() : setLocation("/vote")); }} data-testid="button-back">
               <ArrowLeft className="h-4 w-4 mr-1" />
               Vote
             </Button>

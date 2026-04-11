@@ -145,11 +145,9 @@ export function VoteSnapScrollView({
       type: listType,
       slugs,
       currentSlug: item.slug,
+      historyDepth: 1,
     };
-    const path =
-      listType === "matchup"
-        ? `${SECTION_DETAIL_PREFIX[sectionType]}${encodeURIComponent(item.slug)}`
-        : `${SECTION_DETAIL_PREFIX[sectionType]}${item.slug}`;
+    const path = `${SECTION_DETAIL_PREFIX[sectionType]}${encodeURIComponent(item.slug)}`;
     navigateWithVoteList(setLocation, voteList, path);
   }, [activeCategory, categoryItems, getVisibleItem, sectionType, setLocation]);
 

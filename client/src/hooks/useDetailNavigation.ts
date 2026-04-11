@@ -43,6 +43,7 @@ export function useDetailNavigation(urlSlug: string | undefined, listType: VoteL
   const total = snapshot?.voteList.slugs.length ?? 0;
   const currentIndex = snapshot ? snapshot.index + 1 : 0;
   const showNav = !!snapshot && total > 1;
+  const historyDepth = snapshot?.voteList.historyDepth ?? 1;
 
   const prefix = VOTE_DETAIL_PATH_PREFIX[listType];
 
@@ -52,11 +53,9 @@ export function useDetailNavigation(urlSlug: string | undefined, listType: VoteL
       const nextList: VoteListHistoryState = {
         ...snapshot.voteList,
         currentSlug: slug,
+        historyDepth: (snapshot.voteList.historyDepth ?? 1) + 1,
       };
-      const path =
-        listType === "matchup"
-          ? `${prefix}${encodeURIComponent(slug)}`
-          : `${prefix}${slug}`;
+      const path = `${prefix}${encodeURIComponent(slug)}`;
       setLocation(path);
       mergeVoteListIntoHistory(nextList);
     },
@@ -73,6 +72,7 @@ export function useDetailNavigation(urlSlug: string | undefined, listType: VoteL
 
   return {
     showNav,
+    historyDepth,
     prevSlug,
     nextSlug,
     total,
