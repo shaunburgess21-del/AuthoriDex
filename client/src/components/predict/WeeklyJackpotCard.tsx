@@ -224,25 +224,48 @@ export function WeeklyJackpotCard({
             {renderCTA()}
           </div>
           
-          <div className={`flex ${compact ? 'flex-row justify-between items-center w-full pt-3 border-t border-amber-500/20' : 'flex-col items-end gap-2'}`}>
-            {marketStatus !== "RESOLVED" && (
-              <div className={compact ? '' : 'text-right'}>
-                <p className="text-xs text-muted-foreground mb-1">{timerLabel}</p>
-                <div className="flex gap-2">
-                  {[
-                    { value: timeRemaining.days, label: 'd' },
-                    { value: timeRemaining.hours, label: 'h' },
-                    { value: timeRemaining.minutes, label: 'm' },
-                  ].map((item, i) => (
-                    <div key={i} className="flex items-baseline gap-0.5">
-                      <span className={`font-mono font-bold text-amber-500 ${compact ? 'text-xl' : 'text-2xl'}`}>{item.value}</span>
-                      <span className="text-xs text-muted-foreground">{item.label}</span>
-                    </div>
-                  ))}
+          <div
+            className={`flex w-full gap-2 ${
+              compact
+                ? "flex-row items-center justify-between border-t border-amber-500/20 pt-3"
+                : "flex-col max-lg:items-stretch lg:items-end"
+            }`}
+          >
+            {marketStatus !== "RESOLVED" &&
+              (compact ? (
+                <div>
+                  <p className="mb-1 text-xs text-muted-foreground">{timerLabel}</p>
+                  <div className="flex gap-2">
+                    {[
+                      { value: timeRemaining.days, label: 'd' },
+                      { value: timeRemaining.hours, label: 'h' },
+                      { value: timeRemaining.minutes, label: 'm' },
+                    ].map((item, i) => (
+                      <div key={i} className="flex items-baseline gap-0.5">
+                        <span className="font-mono text-xl font-bold text-amber-500">{item.value}</span>
+                        <span className="text-xs text-muted-foreground">{item.label}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
-            <p className={`text-sm font-semibold text-amber-500 ${compact ? '' : 'mt-2'}`}>
+              ) : (
+                <div className="flex w-full flex-row flex-wrap items-baseline gap-x-3 gap-y-1 lg:flex-col lg:items-end lg:gap-2">
+                  <p className="shrink-0 text-xs text-muted-foreground lg:text-right">{timerLabel}</p>
+                  <div className="flex gap-2 lg:justify-end">
+                    {[
+                      { value: timeRemaining.days, label: 'd' },
+                      { value: timeRemaining.hours, label: 'h' },
+                      { value: timeRemaining.minutes, label: 'm' },
+                    ].map((item, i) => (
+                      <div key={i} className="flex items-baseline gap-0.5">
+                        <span className="font-mono text-2xl font-bold text-amber-500">{item.value}</span>
+                        <span className="text-xs text-muted-foreground">{item.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            <p className={`text-sm font-semibold text-amber-500 ${compact ? "" : "lg:text-right"}`}>
               Pool: 50,000+ credits
             </p>
           </div>

@@ -327,11 +327,11 @@ export function WeeklyJackpotHero(props: WeeklyJackpotHeroProps) {
             )}
           </div>
 
-          <div className="flex flex-col items-end gap-2 w-full lg:w-auto">
+          <div className="flex w-full flex-col gap-2 max-lg:items-stretch lg:w-auto lg:items-end">
             {marketStatus !== "RESOLVED" && (
-              <>
-                <p className="text-xs text-muted-foreground">{timerLabel}</p>
-                <div className="flex gap-2">
+              <div className="flex w-full flex-row flex-wrap items-baseline gap-x-3 gap-y-1 lg:flex-col lg:items-end lg:gap-2">
+                <p className="shrink-0 text-xs text-muted-foreground lg:text-right">{timerLabel}</p>
+                <div className="flex gap-2 lg:justify-end">
                   {[
                     { value: timeRemaining.days, label: "d" },
                     { value: timeRemaining.hours, label: "h" },
@@ -343,16 +343,18 @@ export function WeeklyJackpotHero(props: WeeklyJackpotHeroProps) {
                     </div>
                   ))}
                 </div>
-              </>
+              </div>
             )}
-            <p className="text-sm font-semibold text-amber-500 mt-2">
-              Pool: {poolSize > 0 ? poolSize.toLocaleString() : "0"} credits
-            </p>
-            {entryCount > 0 && (
-              <p className="text-xs text-muted-foreground">
-                {entryCount} {entryCount === 1 ? "entry" : "entries"}
+            <div className="flex w-full flex-row flex-wrap items-baseline justify-between gap-2 lg:flex-col lg:items-end lg:justify-start">
+              <p className="text-sm font-semibold text-amber-500 lg:text-right">
+                Pool: {poolSize > 0 ? poolSize.toLocaleString() : "0"} credits
               </p>
-            )}
+              {entryCount > 0 && (
+                <p className="text-xs text-muted-foreground lg:text-right">
+                  {entryCount} {entryCount === 1 ? "entry" : "entries"}
+                </p>
+              )}
+            </div>
           </div>
         </div>
         {lastWinnerData?.hasResult && (

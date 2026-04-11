@@ -1927,7 +1927,7 @@ export default function PredictPage() {
       const res = await apiRequest("POST", `/api/native-markets/updown/${marketId}/bet`, { entryId, stakeAmount });
       return res.json();
     },
-    onSuccess: async () => {
+    onSuccess: async (_data, variables) => {
       hapticSuccess();
       toast({
         title: "Prediction placed!",
@@ -1935,6 +1935,36 @@ export default function PredictPage() {
       });
       setStakeModalOpen(false);
       setPendingSelection(null);
+
+      const market = hydratedMarkets.find((m) => m.id === variables.marketId);
+      let entryLabel = "Up";
+      if (market) {
+        if (variables.entryId === market.downEntryId) entryLabel = "Down";
+        else if (variables.entryId === market.upEntryId) entryLabel = "Up";
+      }
+
+      queryClient.setQueryData(["/api/me/predictions"], (old: any) => {
+        if (!old) return old;
+        const newBet = {
+          betId: `optimistic-${Date.now()}`,
+          marketId: variables.marketId,
+          entryId: variables.entryId,
+          entryLabel,
+          stakeAmount: variables.stakeAmount,
+          result: "pending" as const,
+          payout: 0,
+          direction: null,
+        };
+        if (Array.isArray(old)) {
+          const already = old.some((b: any) => b.marketId === variables.marketId);
+          return already ? old : [...old, newBet];
+        }
+        const preds = old.predictions ?? [];
+        const already = preds.some((b: any) => b.marketId === variables.marketId);
+        if (already) return old;
+        return { ...old, predictions: [...preds, newBet] };
+      });
+
       await Promise.all([
         refreshProfile(),
         queryClient.invalidateQueries({ queryKey: ["/api/native-markets/updown"] }),

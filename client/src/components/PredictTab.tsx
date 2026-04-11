@@ -540,10 +540,37 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       const res = await apiRequest("POST", `/api/native-markets/updown/${marketId}/bet`, { entryId, stakeAmount });
       return res.json();
     },
-    onSuccess: async () => {
+    onSuccess: async (_data, variables) => {
       toast({ title: "Prediction placed!", description: "Your weekly up/down prediction has been recorded." });
       setStakeModalOpen(false);
       setPendingSelection(null);
+
+      let entryLabel = "Up";
+      if (variables.entryId === weeklyMarket?.downEntryId) entryLabel = "Down";
+      else if (variables.entryId === weeklyMarket?.upEntryId) entryLabel = "Up";
+
+      queryClient.setQueryData(["/api/me/predictions"], (old: any) => {
+        if (!old) return old;
+        const newBet = {
+          betId: `optimistic-${Date.now()}`,
+          marketId: variables.marketId,
+          entryId: variables.entryId,
+          entryLabel,
+          stakeAmount: variables.stakeAmount,
+          result: "pending" as const,
+          payout: 0,
+          direction: null,
+        };
+        if (Array.isArray(old)) {
+          const already = old.some((b: any) => b.marketId === variables.marketId);
+          return already ? old : [...old, newBet];
+        }
+        const preds = old.predictions ?? [];
+        const already = preds.some((b: any) => b.marketId === variables.marketId);
+        if (already) return old;
+        return { ...old, predictions: [...preds, newBet] };
+      });
+
       await Promise.all([
         refreshProfile?.(),
         queryClient.invalidateQueries({ queryKey: ["/api/native-markets/updown"] }),

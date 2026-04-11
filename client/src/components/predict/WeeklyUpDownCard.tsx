@@ -124,17 +124,17 @@ export function WeeklyUpDownCard({
           <PersonAvatar name={market.personName} avatar={market.personAvatar} className="h-20 w-20 md:h-16 md:w-16 shrink-0" />
           <div className="flex-1 min-w-0">
             <WeeklyUpDownNameBlock text={market.personName} />
-            <p className="text-xs text-muted-foreground font-mono mt-0.5">
+            <p className="text-sm md:text-xs text-muted-foreground font-mono mt-0.5 leading-[1.4]">
               Now: {market.currentScore.toLocaleString('en-US')}
             </p>
           </div>
         </div>
 
-        <p className="text-xs text-muted-foreground mb-2 leading-[1.4]">
+        <p className="text-sm md:text-xs text-muted-foreground mb-2 leading-[1.4]">
           Will <span className="font-semibold text-foreground">{market.personName.split(" ")[0]}</span> close above or below the weekly baseline?
         </p>
 
-        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mb-0 flex-wrap">
+        <div className="flex items-center gap-1.5 text-sm md:text-[11px] text-muted-foreground mb-0 flex-wrap">
           <span>Baseline: <span className="font-mono text-foreground">{market.baselineScore.toLocaleString('en-US')}</span></span>
           <span className="text-muted-foreground/40">&middot;</span>
           <span>Delta: <span className={`font-mono ${delta >= 0 ? "text-green-500" : "text-red-500"}`}>{delta >= 0 ? "+" : ""}{delta.toLocaleString('en-US')}</span></span>
