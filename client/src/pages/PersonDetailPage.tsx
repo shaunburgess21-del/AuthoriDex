@@ -804,17 +804,6 @@ export default function PersonDetailPage() {
     refetchInterval: 5 * 60 * 1000,
   });
 
-  const { data: momentumData } = useQuery<{ categoryRank: { overall: number; category: string; categoryRank: number } | null }>({
-    queryKey: ['/api/people', person?.id, 'momentum'],
-    queryFn: async () => {
-      const res = await fetch(`/api/people/${person?.id ?? ""}/momentum`);
-      if (!res.ok) throw new Error('Failed to fetch momentum');
-      return res.json();
-    },
-    enabled: !!person?.id,
-    staleTime: 5 * 60 * 1000,
-  });
-
   const { isHotMover, exceptionalIndicator } = useMemo(() => {
     if (!person || !leaderboardForThresholds?.thresholds) {
       return { isHotMover: false, exceptionalIndicator: null };
@@ -1224,13 +1213,6 @@ export default function PersonDetailPage() {
                     <CategoryRankPill
                       category={person.category}
                       rank={person.categoryRank}
-                      personName={person.name}
-                    />
-                  )}
-                  {momentumData?.categoryRank && (
-                    <CategoryRankPill
-                      category={momentumData.categoryRank.category}
-                      rank={momentumData.categoryRank.categoryRank}
                       personName={person.name}
                     />
                   )}
