@@ -48,11 +48,6 @@ import { generateWeeklyUpDown, generateWeeklyJackpot, generateWeeklyH2H, generat
 import { voidMarketBets } from "./jobs/market-resolver";
 import { deriveNativeMarketLifecycle, getWeeklyBettingCutoff } from "./native-markets/lifecycle";
 import { recomputeCelebrityMetrics } from "./services/celebrity-metrics-recompute";
-import {
-  getSeedApprovalCounts,
-  parseApprovalSeedCounts,
-  replaceSeedApprovalBreakdown,
-} from "./services/seed-approval-breakdown";
 import { runPostInductionOnboarding } from "./services/induction-onboarding";
 import { CANONICAL_MARKET_CATEGORIES, getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
 import { resolvePublicMatchupBySlugOrId } from "./utils/matchup-resolve";
@@ -5715,8 +5710,6 @@ Only return the JSON object.`;
         return {
           betId: b.betId,
           marketId: b.marketId,
-          entryId: b.entryId,
-          direction: b.direction ?? null,
           marketSlug: b.marketSlug,
           marketTitle: b.marketTitle,
           marketStatus: b.marketStatus,
@@ -7165,7 +7158,32 @@ Only return the JSON object.`;
         .limit(1);
       if (!existing) return res.status(404).json({ error: "Celebrity not found" });
 
-      const counts = await getSeedApprovalCounts(id);
+      const seedRatingRows = await db
+        .select({
+          rating: userVotes.rating,
+          cnt: sql<number>`cast(count(*) as int)`,
+        })
+        .from(userVotes)
+        .where(
+          and(
+            eq(userVotes.personId, id),
+            sql`${userVotes.userId} LIKE 'seed-system-approval%'`,
+          ),
+        )
+        .groupBy(userVotes.rating);
+
+      const counts: Record<"1" | "2" | "3" | "4" | "5", number> = {
+        "1": 0,
+        "2": 0,
+        "3": 0,
+        "4": 0,
+        "5": 0,
+      };
+      for (const row of seedRatingRows) {
+        const rating = Number(row.rating);
+        if (rating >= 1 && rating <= 5) counts[String(rating) as keyof typeof counts] = Number(row.cnt);
+      }
+
       const totalSeedVotes = counts["1"] + counts["2"] + counts["3"] + counts["4"] + counts["5"];
       res.json({ counts, totalSeedVotes });
     } catch (error: any) {
@@ -7179,7 +7197,21 @@ Only return the JSON object.`;
     try {
       const { id } = req.params;
       const adminId = req.userId!;
-      const counts = parseApprovalSeedCounts(req.body?.counts);
+      const incoming = req.body?.counts ?? {};
+
+      const parseCount = (value: any) => {
+        const n = Number(value);
+        if (!Number.isFinite(n)) return 0;
+        return Math.max(0, Math.floor(n));
+      };
+
+      const counts: Record<"1" | "2" | "3" | "4" | "5", number> = {
+        "1": parseCount(incoming["1"]),
+        "2": parseCount(incoming["2"]),
+        "3": parseCount(incoming["3"]),
+        "4": parseCount(incoming["4"]),
+        "5": parseCount(incoming["5"]),
+      };
 
       const [existing] = await db
         .select({ id: trackedPeople.id, name: trackedPeople.name })
@@ -7188,25 +7220,112 @@ Only return the JSON object.`;
         .limit(1);
       if (!existing) return res.status(404).json({ error: "Celebrity not found" });
 
-      try {
-        const result = await replaceSeedApprovalBreakdown({
-          personId: id,
-          personName: existing.name,
-          counts,
-          audit: { adminId },
-        });
-        res.json({
-          success: true,
-          counts: result.counts,
-          seedApprovalCount: result.seedApprovalCount,
-          approvalVotesCount: result.approvalVotesCount,
-          approvalAvgRating: result.approvalAvgRating,
-          approvalPct: result.approvalPct,
-        });
-      } catch (e: any) {
-        console.error("Error replacing seed approval breakdown:", e);
-        return res.status(500).json({ error: e?.message || "Failed to replace seed votes" });
+      // Remove all existing seed rows for this celebrity
+      const { error: deleteError } = await supabaseServer
+        .from("user_votes")
+        .delete()
+        .eq("person_id", id)
+        .like("user_id", "seed-system-approval%");
+      if (deleteError) {
+        console.error("Error deleting existing seed votes:", deleteError);
+        return res.status(500).json({ error: "Failed to replace seed votes" });
       }
+
+      // Insert replacement seed rows with unique user_id values
+      const rows: Array<{ user_id: string; person_id: string; person_name: string; rating: number }> = [];
+      (["1", "2", "3", "4", "5"] as const).forEach((ratingKey) => {
+        const rating = Number(ratingKey);
+        for (let i = 0; i < counts[ratingKey]; i++) {
+          rows.push({
+            user_id: `seed-system-approval-manual-${id}-r${rating}-i${i + 1}`,
+            person_id: id,
+            person_name: existing.name,
+            rating,
+          });
+        }
+      });
+
+      const batchSize = 500;
+      for (let i = 0; i < rows.length; i += batchSize) {
+        const chunk = rows.slice(i, i + batchSize);
+        const { error: insertError } = await supabaseServer
+          .from("user_votes")
+          .insert(chunk);
+        if (insertError) {
+          console.error("Error inserting replacement seed votes:", insertError);
+          return res.status(500).json({ error: "Failed to replace seed votes" });
+        }
+      }
+
+      // Recompute display metrics from all votes (seed + real) — aggregate in DB
+      const [allVotesAgg] = await db
+        .select({
+          cnt: sql<number>`cast(count(*) as int)`,
+          sumRating: sql<number>`coalesce(sum(${userVotes.rating}), 0)::double precision`,
+        })
+        .from(userVotes)
+        .where(eq(userVotes.personId, id));
+
+      const approvalVotesCount = Number(allVotesAgg?.cnt ?? 0);
+      const totalSum = Number(allVotesAgg?.sumRating ?? 0);
+      const approvalAvgRating = approvalVotesCount > 0 ? totalSum / approvalVotesCount : null;
+      const approvalPct = approvalAvgRating != null ? Math.round(((approvalAvgRating - 1) / 4) * 100) : null;
+
+      const seedApprovalCount = counts["1"] + counts["2"] + counts["3"] + counts["4"] + counts["5"];
+      const seedApprovalSum =
+        counts["1"] * 1 +
+        counts["2"] * 2 +
+        counts["3"] * 3 +
+        counts["4"] * 4 +
+        counts["5"] * 5;
+
+      await db
+        .insert(celebrityMetrics)
+        .values({
+          celebrityId: id,
+          seedApprovalCount,
+          seedApprovalSum,
+          approvalVotesCount,
+          approvalAvgRating,
+          approvalPct,
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: celebrityMetrics.celebrityId,
+          set: {
+            seedApprovalCount,
+            seedApprovalSum,
+            approvalVotesCount,
+            approvalAvgRating,
+            approvalPct,
+            updatedAt: new Date(),
+          },
+        });
+
+      await db.insert(adminAuditLog).values({
+        adminId,
+        adminEmail: null,
+        actionType: "update_seed_approval_breakdown",
+        targetTable: "user_votes",
+        targetId: id,
+        newData: {
+          counts,
+          seedApprovalCount,
+          seedApprovalSum,
+          approvalVotesCount,
+          approvalAvgRating,
+          approvalPct,
+        },
+      });
+
+      res.json({
+        success: true,
+        counts,
+        seedApprovalCount,
+        approvalVotesCount,
+        approvalAvgRating,
+        approvalPct,
+      });
     } catch (error: any) {
       console.error("Error in seed approval breakdown PUT:", error);
       res.status(500).json({ error: "Failed to update seed approval breakdown" });
@@ -8854,13 +8973,13 @@ ${matchup.promptText ? `Pre-vote prompt shown to users: "${matchup.promptText}"`
 Write a concise context section for this matchup. This is shown on the detail page under a "Context" heading.
 
 Requirements:
-- Prefer 1-2 short paragraphs (1-2 sentences each), separated by a blank line if needed.
-- Optionally use 2-3 '-' bullet points only if it makes the content clearer.
+- Prefer 2-3 short paragraphs (1-3 sentences each), separated by blank lines.
+- Optionally use 3-5 '-' bullet points only if it makes the content clearer.
 - Stay balanced: explain both sides without picking a winner.
-- Cover essentials: why this pairing matters, what distinguishes the options, and recent context.
-- Avoid repeating the option labels verbatim if you can vary wording naturally.
+- Cover only the essentials: why this pairing matters, what distinguishes the options, and recent context.
+- Avoid long tangents and avoid repeating the option labels verbatim if you can vary wording naturally.
 
-Target length: about 45-75 words (shorter than sentiment/opinion poll context blocks).`;
+Target length: about 90-150 words.`;
 
       const openai = new OpenAI({
         apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
@@ -8871,7 +8990,7 @@ Target length: about 45-75 words (shorter than sentiment/opinion poll context bl
         tools: [{ type: "web_search" as any }],
         instructions: systemPrompt,
         input: userPrompt,
-        max_output_tokens: 230,
+        max_output_tokens: 450,
         temperature: 0.7,
       } as any);
 
