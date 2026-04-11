@@ -211,34 +211,35 @@ export default function OpinionPollDetailPage() {
             )}
           </div>
 
-          <div className="flex items-start gap-4 mb-4">
-            {!headerImgError && poll.imageUrl && (
-              <div
-                className="w-20 h-20 rounded-lg overflow-hidden shrink-0 bg-slate-800 cursor-pointer"
-                onClick={() => setExpandedImage({ url: poll.imageUrl, alt: poll.title })}
-              >
-                <img
-                  src={poll.imageUrl}
-                  alt={poll.title}
-                  className="w-full h-full object-cover"
-                  onError={() => setHeaderImgError(true)}
-                />
-              </div>
-            )}
-            <div className="flex-1 min-w-0">
-              <h1
-                className={`text-2xl sm:text-3xl font-serif font-bold leading-tight ${poll.description ? "mb-3" : ""}`}
-                data-testid="text-poll-title"
-              >
-                {poll.title}
-              </h1>
-
-              {poll.description && (
-                <p className="text-base text-muted-foreground mb-4 whitespace-pre-wrap" data-testid="text-poll-description">
-                  {poll.description}
-                </p>
+          <div className="mb-4">
+            <div className="flex items-start gap-4">
+              {!headerImgError && poll.imageUrl && (
+                <div
+                  className="w-20 h-20 rounded-lg overflow-hidden shrink-0 bg-slate-800 cursor-pointer"
+                  onClick={() => setExpandedImage({ url: poll.imageUrl, alt: poll.title })}
+                >
+                  <img
+                    src={poll.imageUrl}
+                    alt={poll.title}
+                    className="w-full h-full object-cover"
+                    onError={() => setHeaderImgError(true)}
+                  />
+                </div>
               )}
+              <div className="flex-1 min-w-0">
+                <h1
+                  className="text-2xl sm:text-3xl font-serif font-bold leading-tight"
+                  data-testid="text-poll-title"
+                >
+                  {poll.title}
+                </h1>
+              </div>
             </div>
+            {poll.description && (
+              <p className="mt-3 text-base text-muted-foreground mb-4 whitespace-pre-wrap" data-testid="text-poll-description">
+                {poll.description}
+              </p>
+            )}
           </div>
 
           <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">

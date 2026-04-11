@@ -182,28 +182,30 @@ export default function PollDetailPage() {
             )}
           </div>
 
-          <div className="flex items-start gap-4 mb-4">
-            {!headerImgError && (poll.imageUrl || poll.personAvatar) && (
-              <div
-                className="w-20 h-20 rounded-lg overflow-hidden shrink-0 bg-slate-800 cursor-pointer"
-                onClick={() => setExpandedImage((poll.imageUrl || poll.personAvatar)!)}
-              >
-                <img
-                  src={(poll.imageUrl || poll.personAvatar)!}
-                  alt={poll.headline}
-                  className="w-full h-full object-cover"
-                  onError={() => setHeaderImgError(true)}
-                />
+          <div className="mb-4">
+            <div className="flex items-start gap-4">
+              {!headerImgError && (poll.imageUrl || poll.personAvatar) && (
+                <div
+                  className="w-20 h-20 rounded-lg overflow-hidden shrink-0 bg-slate-800 cursor-pointer"
+                  onClick={() => setExpandedImage((poll.imageUrl || poll.personAvatar)!)}
+                >
+                  <img
+                    src={(poll.imageUrl || poll.personAvatar)!}
+                    alt={poll.headline}
+                    className="w-full h-full object-cover"
+                    onError={() => setHeaderImgError(true)}
+                  />
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <h1 className="text-2xl sm:text-3xl font-serif font-bold mb-0 leading-tight" data-testid="text-poll-title">
+                  {poll.headline}
+                </h1>
               </div>
-            )}
-            <div className="flex-1 min-w-0">
-              <h1 className="text-2xl sm:text-3xl font-serif font-bold mb-2 leading-tight" data-testid="text-poll-title">
-                {poll.headline}
-              </h1>
-              <p className="text-base text-muted-foreground" data-testid="text-poll-question">
-                {poll.subjectText}
-              </p>
             </div>
+            <p className="mt-2 text-base text-muted-foreground" data-testid="text-poll-question">
+              {poll.subjectText}
+            </p>
           </div>
 
           <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
