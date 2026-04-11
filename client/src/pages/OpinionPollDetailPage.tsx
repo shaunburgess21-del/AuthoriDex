@@ -166,7 +166,7 @@ export default function OpinionPollDetailPage() {
   if (!poll) {
     return (
       <div className="min-h-screen bg-background">
-        <div className="max-w-3xl mx-auto px-4 py-8">
+        <div className="max-w-3xl mx-auto px-4 pt-8 pb-24 md:pb-6">
           <Button variant="ghost" onClick={() => setLocation("/vote")} className="mb-4" data-testid="button-back-to-vote">
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Vote
@@ -596,7 +596,7 @@ export default function OpinionPollDetailPage() {
       <button
         type="button"
         onClick={() => setCommentsSheetOpen(true)}
-        className="fixed bottom-20 right-4 z-40 md:hidden flex items-center gap-1.5 rounded-full bg-cyan-600 text-white px-4 py-2.5 shadow-lg"
+        className="fixed bottom-24 right-4 z-40 md:hidden flex items-center gap-1.5 rounded-full bg-cyan-600 text-white px-4 py-2.5 shadow-lg"
       >
         <MessageSquare className="h-4 w-4" />
         <span className="text-xs font-semibold">{opCommentCount}</span>

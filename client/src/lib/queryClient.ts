@@ -1,10 +1,26 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 import { getSupabase } from "./supabase";
 
+export class ApiError extends Error {
+  status: number;
+  retryAfter?: number;
+  constructor(status: number, message: string, retryAfter?: number) {
+    super(`${status}: ${message}`);
+    this.name = "ApiError";
+    this.status = status;
+    this.retryAfter = retryAfter;
+  }
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
-    throw new Error(`${res.status}: ${text}`);
+    let retryAfter: number | undefined;
+    if (res.status === 429) {
+      const ra = res.headers.get("retry-after");
+      retryAfter = ra ? parseInt(ra, 10) || 60 : 60;
+    }
+    throw new ApiError(res.status, text, retryAfter);
   }
 }
 

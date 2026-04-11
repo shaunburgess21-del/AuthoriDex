@@ -743,7 +743,7 @@ export default function MarketDetailPage() {
 
   if (error || !market) {
     return (
-      <div className="min-h-screen pb-20 md:pb-0">
+      <div className="min-h-screen">
         <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">
           <div className="container mx-auto px-4 h-16 flex items-center justify-between gap-4">
             <div className="flex items-center gap-4">
@@ -760,7 +760,7 @@ export default function MarketDetailPage() {
             <UserMenu />
           </div>
         </header>
-        <div className="container mx-auto px-4 py-20 text-center" data-testid="market-not-found">
+        <div className="container mx-auto px-4 pt-20 pb-24 md:pb-6 text-center" data-testid="market-not-found">
           <AlertTriangle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
           <h1 className="text-2xl font-serif font-bold mb-2">Market Not Found</h1>
           <p className="text-muted-foreground mb-6">This market doesn't exist or has been removed.</p>
@@ -800,7 +800,7 @@ export default function MarketDetailPage() {
   }
 
   return (
-    <div className="min-h-screen pb-20 md:pb-0">
+    <div className="min-h-screen">
       <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
@@ -821,7 +821,7 @@ export default function MarketDetailPage() {
         </div>
       </header>
 
-      <div className="container mx-auto px-4 py-6 max-w-3xl">
+      <div className="container mx-auto px-4 pt-6 pb-24 md:pb-6 max-w-3xl">
         <div className="mb-6">
           <div className="flex items-center gap-2 flex-wrap mb-3">
             <Badge variant="outline" className={statusConfig.className} data-testid="badge-status">
@@ -1459,7 +1459,7 @@ export default function MarketDetailPage() {
           <button
             type="button"
             onClick={() => setCommentsSheetOpen(true)}
-            className="fixed bottom-20 right-4 z-40 md:hidden flex items-center gap-1.5 rounded-full bg-violet-600 text-white px-4 py-2.5 shadow-lg"
+            className="fixed bottom-24 right-4 z-40 md:hidden flex items-center gap-1.5 rounded-full bg-violet-600 text-white px-4 py-2.5 shadow-lg"
           >
             <MessageSquare className="h-4 w-4" />
             <span className="text-xs font-semibold">{marketCommentCount}</span>

@@ -140,7 +140,7 @@ export default function PollDetailPage() {
   if (pollError || !poll) {
     return (
       <div className="min-h-screen bg-background">
-        <div className="max-w-3xl mx-auto px-4 py-8">
+        <div className="max-w-3xl mx-auto px-4 pt-8 pb-24 md:pb-6">
           <Button variant="ghost" onClick={() => setLocation("/vote")} className="mb-4" data-testid="button-back-to-vote">
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Vote
@@ -176,7 +176,7 @@ export default function PollDetailPage() {
         </div>
       </header>
 
-      <div className="max-w-3xl mx-auto px-4 py-6">
+      <div className="max-w-3xl mx-auto px-4 pt-6 pb-24 md:pb-6">
         {/* Header Block */}
         <div className="mb-6" data-testid="section-poll-header">
           <div className="flex items-center gap-2 flex-wrap mb-3">
@@ -483,7 +483,7 @@ export default function PollDetailPage() {
       <button
         type="button"
         onClick={() => setCommentsSheetOpen(true)}
-        className="fixed bottom-20 right-4 z-40 md:hidden flex items-center gap-1.5 rounded-full bg-cyan-600 text-white px-4 py-2.5 shadow-lg"
+        className="fixed bottom-24 right-4 z-40 md:hidden flex items-center gap-1.5 rounded-full bg-cyan-600 text-white px-4 py-2.5 shadow-lg"
       >
         <MessageSquare className="h-4 w-4" />
         <span className="text-xs font-semibold">{pollCommentCount}</span>

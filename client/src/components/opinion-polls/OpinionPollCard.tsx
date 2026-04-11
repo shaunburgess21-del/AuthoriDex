@@ -18,21 +18,22 @@ import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedApiError, signInToVoteToastOptions } from "@/lib/signInToVoteToast";
 import { normalizeMarketCategory } from "@shared/constants";
 
-function parseOpinionPollCardError(err: unknown): string {
+function parseOpinionPollCardError(err: unknown): { message: string; retryAfter?: number } {
+  const retryAfter = (err as any)?.retryAfter as number | undefined;
   if (err instanceof Error && err.message) {
     const jsonMatch = err.message.match(/^\d+:\s*(\{[\s\S]*\})\s*$/);
     if (jsonMatch) {
       try {
         const j = JSON.parse(jsonMatch[1]) as { error?: string };
-        if (j.error) return j.error;
+        if (j.error) return { message: j.error, retryAfter };
       } catch {
         /* ignore */
       }
     }
-    if (err.message.startsWith("429")) return "Too many votes. Please slow down.";
-    return err.message;
+    if (err.message.startsWith("429")) return { message: "Too many votes. Please slow down.", retryAfter: retryAfter ?? 60 };
+    return { message: err.message, retryAfter };
   }
-  return "Something went wrong. Please try again.";
+  return { message: "Something went wrong. Please try again." };
 }
 
 const OPINION_POLL_PREVIEW_COUNT = 5;
@@ -98,10 +99,12 @@ export function OpinionPollCard({
         if (isUnauthorizedApiError(err)) {
           toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
         } else {
+          const parsed = parseOpinionPollCardError(err);
           toast({
             title: "Could not record vote",
-            description: parseOpinionPollCardError(err),
+            description: parsed.message,
             variant: "destructive",
+            countdown: parsed.retryAfter,
           });
         }
       }
@@ -125,10 +128,12 @@ export function OpinionPollCard({
       if (isUnauthorizedApiError(err)) {
         toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
       } else {
+        const parsed = parseOpinionPollCardError(err);
         toast({
           title: "Could not change vote",
-          description: parseOpinionPollCardError(err),
+          description: parsed.message,
           variant: "destructive",
+          countdown: parsed.retryAfter,
         });
       }
     }
@@ -143,10 +148,12 @@ export function OpinionPollCard({
       if (isUnauthorizedApiError(err)) {
         toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
       } else {
+        const parsed = parseOpinionPollCardError(err);
         toast({
           title: "Could not remove vote",
-          description: parseOpinionPollCardError(err),
+          description: parsed.message,
           variant: "destructive",
+          countdown: parsed.retryAfter,
         });
       }
     }

@@ -3,6 +3,7 @@ import path from "path";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import { registerRoutes } from "./routes";
+import { resolveAuthContextFromHeader, type AuthRequest } from "./auth-middleware";
 
 import { log } from "./log";
 import { serveStatic } from "./serve-static";
@@ -432,22 +433,68 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
 }));
 
-/** Same default as pre-tiered behavior: one bucket for all /api methods (120/min per IP). */
-const apiLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: parseInt(process.env.API_RATE_LIMIT_MAX || "120", 10),
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: "Too many requests, please try again later." },
-  skip: (req: Request) => {
-    const p = req.path;
-    return p === "/api/config/supabase" || p === "/api/health" || p.endsWith("/config/supabase");
-  },
-});
-app.use("/api/", apiLimiter);
-
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+
+// Lightweight global auth resolution so rate limiters can key on userId.
+// Only does work when a Bearer token is present; per-route requireAuth/optionalAuth
+// still enforce access control on individual endpoints.
+app.use("/api/", async (req: AuthRequest, _res, next) => {
+  try {
+    const auth = await resolveAuthContextFromHeader(req.headers.authorization);
+    if (auth) {
+      req.userId = auth.userId;
+      req.userEmail = auth.userEmail;
+      req.userRole = auth.userRole;
+    }
+  } catch { /* auth resolution is best-effort here */ }
+  next();
+});
+
+const skipRateLimit = (req: Request) => {
+  const p = req.path;
+  return p === "/api/config/supabase" || p === "/api/health" || p.endsWith("/config/supabase");
+};
+
+const readLimiter = rateLimit({
+  windowMs: 60_000,
+  max: parseInt(process.env.API_READ_RATE_LIMIT_MAX || "600", 10),
+  keyGenerator: (req) => (req as AuthRequest).userId ?? req.ip ?? "unknown",
+  skip: skipRateLimit,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests, please slow down." },
+});
+
+const writeLimiter = rateLimit({
+  windowMs: 60_000,
+  max: (req) =>
+    (req as AuthRequest).userId
+      ? parseInt(process.env.API_WRITE_RATE_LIMIT_AUTH_MAX || "60", 10)
+      : parseInt(process.env.API_WRITE_RATE_LIMIT_ANON_MAX || "15", 10),
+  keyGenerator: (req) => (req as AuthRequest).userId ?? req.ip ?? "unknown",
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests, please slow down." },
+});
+
+const authLimiter = rateLimit({
+  windowMs: 60_000,
+  max: parseInt(process.env.API_AUTH_RATE_LIMIT_MAX || "10", 10),
+  keyGenerator: (req) => req.ip ?? "unknown",
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many authentication attempts. Please try again in a minute." },
+});
+
+app.use("/api/auth/", authLimiter);
+app.use("/api/", (req, res, next) => {
+  const method = req.method.toUpperCase();
+  if (method === "GET" || method === "HEAD" || method === "OPTIONS") {
+    return readLimiter(req, res, next);
+  }
+  return writeLimiter(req, res, next);
+});
 
 // Serve attached assets (profile images, etc.)
 app.use("/attached_assets", express.static(path.resolve(import.meta.dirname, "..", "attached_assets")));

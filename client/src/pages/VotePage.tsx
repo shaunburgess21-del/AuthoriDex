@@ -481,10 +481,12 @@ function CurateProfileCard({
       if (isUnauthorizedApiError(error)) {
         toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
       } else {
+        const parsed = parseVoteError(error);
         toast({
-          title: "Error",
-          description: error.message || "Failed to record vote",
+          title: "Couldn't record vote",
+          description: parsed.message,
           variant: "destructive",
+          countdown: parsed.retryAfter,
         });
       }
     },
@@ -953,21 +955,22 @@ function DiscourseCard({
   );
 }
 
-function parseVoteError(err: unknown): string {
+function parseVoteError(err: unknown): { message: string; retryAfter?: number } {
+  const retryAfter = (err as any)?.retryAfter as number | undefined;
   if (err instanceof Error && err.message) {
     const jsonMatch = err.message.match(/^\d+:\s*(\{[\s\S]*\})\s*$/);
     if (jsonMatch) {
       try {
         const j = JSON.parse(jsonMatch[1]) as { error?: string };
-        if (j.error) return j.error;
+        if (j.error) return { message: j.error, retryAfter };
       } catch {
         /* ignore */
       }
     }
-    if (err.message.startsWith("429")) return "Too many votes. Please slow down.";
-    return err.message;
+    if (err.message.startsWith("429")) return { message: "Too many votes. Please slow down.", retryAfter: retryAfter ?? 60 };
+    return { message: err.message, retryAfter };
   }
-  return "Something went wrong. Please try again.";
+  return { message: "Something went wrong. Please try again." };
 }
 
 function CarouselSection({
@@ -1691,10 +1694,12 @@ export default function VotePage() {
       if (isUnauthorizedApiError(err)) {
         toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
       } else {
+        const parsed = parseVoteError(err);
         toast({
-          title: "Error",
-          description: parseVoteError(err),
+          title: "Couldn't record vote",
+          description: parsed.message,
           variant: "destructive",
+          countdown: parsed.retryAfter,
         });
       }
     },
@@ -1869,6 +1874,15 @@ export default function VotePage() {
   }).sort((a: any, b: any) => valuePerceptionCategoryFilter === "Trending" ? ((b.totalVotes ?? 0) - (a.totalVotes ?? 0)) : 0);
   
   const [localMatchupVotes, setLocalMatchupVotes] = useState<Record<string, string>>({});
+  const [rateLimitedUntil, setRateLimitedUntil] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!rateLimitedUntil) return;
+    const ms = rateLimitedUntil - Date.now();
+    if (ms <= 0) { setRateLimitedUntil(null); return; }
+    const id = setTimeout(() => setRateLimitedUntil(null), ms);
+    return () => clearTimeout(id);
+  }, [rateLimitedUntil]);
   
   const matchupUserVotesMerged = { ...existingMatchupVotes, ...localMatchupVotes };
   const matchupUserVotes = Object.fromEntries(
@@ -1903,10 +1917,15 @@ export default function VotePage() {
       if (isUnauthorizedApiError(error)) {
         toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
       } else {
+        const parsed = parseVoteError(error);
+        if (parsed.retryAfter) {
+          setRateLimitedUntil(Date.now() + parsed.retryAfter * 1000);
+        }
         toast({
-          title: "Error",
-          description: parseVoteError(error),
+          title: "Couldn't record vote",
+          description: parsed.message,
           variant: "destructive",
+          countdown: parsed.retryAfter,
         });
       }
     },
@@ -1930,16 +1949,24 @@ export default function VotePage() {
       if (isUnauthorizedApiError(error)) {
         toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
       } else {
+        const parsed = parseVoteError(error);
+        if (parsed.retryAfter) {
+          setRateLimitedUntil(Date.now() + parsed.retryAfter * 1000);
+        }
         toast({
-          title: "Error",
-          description: parseVoteError(error),
+          title: "Couldn't record vote",
+          description: parsed.message,
           variant: "destructive",
+          countdown: parsed.retryAfter,
         });
       }
     },
   });
 
+  const matchupRateLimited = !!(rateLimitedUntil && Date.now() < rateLimitedUntil);
+
   const handleMatchupVote = (matchupId: string, option: 'option_a' | 'option_b' | 'neutral', event?: React.MouseEvent) => {
+    if (matchupRateLimited) return;
     if (!user) {
       toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
       return;
@@ -2278,10 +2305,12 @@ export default function VotePage() {
       if (isUnauthorizedApiError(error)) {
         toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
       } else {
+        const parsed = parseVoteError(error);
         toast({
-          title: "Error",
-          description: parseVoteError(error),
+          title: "Couldn't record vote",
+          description: parsed.message,
           variant: "destructive",
+          countdown: parsed.retryAfter,
         });
       }
     },
