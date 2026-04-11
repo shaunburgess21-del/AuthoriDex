@@ -4420,7 +4420,35 @@ Only return the JSON object.`;
     const folder = `${slugifyMatchupName(optionAText)}-vs-${slugifyMatchupName(optionBText)}`;
     return `${MATCHUP_BUCKET_BASE}/${folder}/${slugifyMatchupName(optionText)}.webp`;
   }
-  
+
+  /** Primary image: explicit DB URL > linked celebrity avatar > convention bucket URL. Fallback: next distinct candidate for img onError. */
+  function resolveMatchupOptionDisplay(
+    dbUrl: string | null,
+    personId: string | null,
+    optionLabelText: string,
+    optionAText: string,
+    optionBText: string,
+    avatarById: Record<string, string | null>,
+    avatarByName: Record<string, string | null>,
+  ): { resolved: string | null; fallback: string | null } {
+    const bucket = matchupBucketUrl(optionAText, optionBText, optionLabelText);
+    const linkedAvatar = personId ? avatarById[personId] ?? null : null;
+    const nameAvatar = avatarByName[optionLabelText.toLowerCase()] ?? null;
+
+    const resolved =
+      dbUrl ||
+      linkedAvatar ||
+      bucket ||
+      null;
+
+    for (const cand of [linkedAvatar, nameAvatar, bucket]) {
+      if (cand && cand !== resolved) {
+        return { resolved, fallback: cand };
+      }
+    }
+    return { resolved, fallback: null };
+  }
+
   // Get all matchups with vote counts (with dynamic avatar lookup from tracked_people)
   app.get("/api/matchups", async (req, res) => {
     try {
@@ -4482,10 +4510,28 @@ Only return the JSON object.`;
         const displayNeutralVotes = counts.neutral + (matchup.seedVotesNeutral || 0);
         const totalVotes = displayAVotes + displayBVotes + displayNeutralVotes;
 
-        const optionAImageResolved = matchup.optionAImage || matchupBucketUrl(matchup.optionAText, matchup.optionBText, matchup.optionAText) || null;
-        const optionBImageResolved = matchup.optionBImage || matchupBucketUrl(matchup.optionAText, matchup.optionBText, matchup.optionBText) || null;
-        const optionAFallback = (matchup.personAId && avatarById[matchup.personAId]) || avatarByName[matchup.optionAText?.toLowerCase()] || null;
-        const optionBFallback = (matchup.personBId && avatarById[matchup.personBId]) || avatarByName[matchup.optionBText?.toLowerCase()] || null;
+        const optA = resolveMatchupOptionDisplay(
+          matchup.optionAImage,
+          matchup.personAId,
+          matchup.optionAText,
+          matchup.optionAText,
+          matchup.optionBText,
+          avatarById,
+          avatarByName,
+        );
+        const optB = resolveMatchupOptionDisplay(
+          matchup.optionBImage,
+          matchup.personBId,
+          matchup.optionBText,
+          matchup.optionAText,
+          matchup.optionBText,
+          avatarById,
+          avatarByName,
+        );
+        const optionAImageResolved = optA.resolved;
+        const optionBImageResolved = optB.resolved;
+        const optionAFallback = optA.fallback;
+        const optionBFallback = optB.fallback;
 
         const optionAPercent = totalVotes > 0 ? Math.round((displayAVotes / totalVotes) * 100) : 50;
         const optionBPercent = totalVotes > 0 ? Math.round((displayBVotes / totalVotes) * 100) : 50;
@@ -4557,10 +4603,28 @@ Only return the JSON object.`;
       const displayNeutralVotes = realNeutralVotes + (matchup.seedVotesNeutral || 0);
       const totalVotes = displayAVotes + displayBVotes + displayNeutralVotes;
 
-      const optionAImageResolved = matchup.optionAImage || matchupBucketUrl(matchup.optionAText, matchup.optionBText, matchup.optionAText) || null;
-      const optionBImageResolved = matchup.optionBImage || matchupBucketUrl(matchup.optionAText, matchup.optionBText, matchup.optionBText) || null;
-      const optionAFallback = (matchup.personAId && avatarById[matchup.personAId]) || avatarByName[matchup.optionAText.toLowerCase()] || null;
-      const optionBFallback = (matchup.personBId && avatarById[matchup.personBId]) || avatarByName[matchup.optionBText.toLowerCase()] || null;
+      const optA = resolveMatchupOptionDisplay(
+        matchup.optionAImage,
+        matchup.personAId,
+        matchup.optionAText,
+        matchup.optionAText,
+        matchup.optionBText,
+        avatarById,
+        avatarByName,
+      );
+      const optB = resolveMatchupOptionDisplay(
+        matchup.optionBImage,
+        matchup.personBId,
+        matchup.optionBText,
+        matchup.optionAText,
+        matchup.optionBText,
+        avatarById,
+        avatarByName,
+      );
+      const optionAImageResolved = optA.resolved;
+      const optionBImageResolved = optB.resolved;
+      const optionAFallback = optA.fallback;
+      const optionBFallback = optB.fallback;
 
       const optionAPercent = totalVotes > 0 ? Math.round((displayAVotes / totalVotes) * 100) : 50;
       const optionBPercent = totalVotes > 0 ? Math.round((displayBVotes / totalVotes) * 100) : 50;
