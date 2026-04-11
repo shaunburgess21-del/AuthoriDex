@@ -306,7 +306,7 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
 
   if (isLoading) {
     return (
-      <div className="p-6">
+      <div>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-2xl font-serif font-bold">Community Insights</h2>
         </div>
@@ -319,7 +319,7 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
   }
 
   return (
-    <div className="px-6 pt-6">
+    <div>
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-serif font-bold" data-testid="text-community-insights-title">
           Community Insights

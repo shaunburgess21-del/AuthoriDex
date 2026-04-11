@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { Drawer } from "vaul";
 import { X } from "lucide-react";
 import { CardComments, type CommentEntityType } from "@/components/comments/CardComments";
@@ -15,13 +16,19 @@ export function CommentsBottomSheet({
   entityType,
   slug,
 }: CommentsBottomSheetProps) {
+  const [activeSnapPoint, setActiveSnapPoint] = useState<number | string | null>(0.5);
+
+  useEffect(() => {
+    if (!open) setActiveSnapPoint(0.5);
+  }, [open]);
+
   return (
     <Drawer.Root
       open={open}
       onOpenChange={onOpenChange}
       snapPoints={[0.5, 1]}
-      activeSnapPoint={open ? 0.5 : undefined}
-      modal={false}
+      activeSnapPoint={activeSnapPoint}
+      setActiveSnapPoint={setActiveSnapPoint}
     >
       <Drawer.Portal>
         <Drawer.Overlay className="fixed inset-0 z-[60] bg-black/40" />
