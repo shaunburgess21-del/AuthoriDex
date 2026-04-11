@@ -11,6 +11,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Crown, ImageIcon, Users } from "lucide-react";
 import { type FilterCategory } from "@shared/constants";
 import type { CuratePerson } from "./CurateProfileCard";
+import { selectCurateDisplayImages } from "./selectCurateDisplayImages";
 
 interface TrendingPerson {
   id: string;
@@ -73,16 +74,25 @@ function CelebCard({
     queryKey: ['/api/people', person.id, 'images'],
   });
 
-  const topImages = useMemo(() => {
-    return [...images]
-      .sort((a, b) => b.votesUp - a.votesUp)
-      .slice(0, 2);
-  }, [images]);
+  const displayImages = useMemo(
+    () => selectCurateDisplayImages(person.id, images, 0),
+    [images, person.id],
+  );
+
+  const crownImageId = useMemo(() => {
+    if (displayImages.length === 0) return null;
+    let best = displayImages[0];
+    for (const img of displayImages) {
+      if (img.votesUp > best.votesUp) best = img;
+    }
+    return best.votesUp > 0 ? best.id : null;
+  }, [displayImages]);
 
   const winningAvatar = useMemo(() => {
-    if (topImages.length > 0 && topImages[0].votesUp > 0) return topImages[0].imageUrl;
+    const sorted = [...images].sort((a, b) => b.votesUp - a.votesUp);
+    if (sorted.length > 0 && sorted[0].votesUp > 0) return sorted[0].imageUrl;
     return person.avatar || person.imageUrl || "";
-  }, [topImages, person.avatar, person.imageUrl]);
+  }, [images, person.avatar, person.imageUrl]);
 
   const totalVotes = images.reduce((sum, img) => sum + img.votesUp, 0);
 
@@ -114,9 +124,9 @@ function CelebCard({
           </div>
         </div>
         
-        <div className="grid grid-cols-2 gap-1.5">
-          {topImages.length > 0 ? (
-            topImages.map((img, idx) => (
+        <div className="grid grid-cols-2 gap-2">
+          {displayImages.length > 0 ? (
+            displayImages.map((img, idx) => (
               <div 
                 key={img.id} 
                 className="relative aspect-square rounded-md overflow-hidden bg-slate-800"
@@ -126,7 +136,7 @@ function CelebCard({
                   alt={`${person.name} photo ${idx + 1}`}
                   className="w-full h-full object-cover"
                 />
-                {idx === 0 && (
+                {img.id === crownImageId && (
                   <div className="absolute top-1 right-1 bg-yellow-500/20 rounded-full p-0.5">
                     <Crown className="h-2.5 w-2.5 text-yellow-600 dark:text-yellow-400" />
                   </div>
@@ -135,12 +145,11 @@ function CelebCard({
             ))
           ) : (
             <>
-              <div className="aspect-square rounded-md bg-slate-800/50 flex items-center justify-center">
-                <ImageIcon className="h-5 w-5 text-slate-600" />
-              </div>
-              <div className="aspect-square rounded-md bg-slate-800/50 flex items-center justify-center">
-                <ImageIcon className="h-5 w-5 text-slate-600" />
-              </div>
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i} className="aspect-square rounded-md bg-slate-800/50 flex items-center justify-center">
+                  <ImageIcon className="h-5 w-5 text-slate-600" />
+                </div>
+              ))}
             </>
           )}
         </div>

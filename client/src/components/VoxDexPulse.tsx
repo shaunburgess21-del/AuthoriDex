@@ -326,8 +326,8 @@ function PulseRow({
         }}
       >
         <div className="relative flex items-center shrink-0">
-          <div className="flex items-center justify-center w-[26px] sm:w-7 self-stretch rounded-l-md bg-transparent">
-            <span className="font-mono font-bold text-muted-foreground dark:text-slate-400 text-[14px] text-center tabular-nums">
+          <div className="flex items-center justify-center w-[26px] sm:w-7 self-stretch rounded-l-md bg-muted dark:bg-[#101318] border-r border-border dark:border-transparent">
+            <span className="font-mono font-semibold text-muted-foreground dark:text-slate-400 text-[13px] text-center tabular-nums">
               {rank}
             </span>
           </div>
@@ -399,8 +399,8 @@ function PulseRow({
         className="relative flex items-center shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 rounded-md"
         aria-label={`View ${person.name} profile`}
       >
-        <div className="flex items-center justify-center w-[26px] sm:w-7 self-stretch rounded-l-md bg-transparent">
-          <span className="font-mono font-bold text-muted-foreground dark:text-slate-400 text-[14px] text-center tabular-nums">
+        <div className="flex items-center justify-center w-[26px] sm:w-7 self-stretch rounded-l-md bg-muted dark:bg-[#101318] border-r border-border dark:border-transparent">
+          <span className="font-mono font-semibold text-muted-foreground dark:text-slate-400 text-[13px] text-center tabular-nums">
             {rank}
           </span>
         </div>
@@ -858,7 +858,7 @@ export function VoxDexPulse({ collapsed, onToggle }: VoxDexPulseProps) {
                     className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all backdrop-blur shrink-0 ${
                       isActive
                         ? "bg-blue-500/25 dark:bg-blue-500/20 text-blue-500 dark:text-blue-300 border border-blue-400/50 shadow-[0_0_8px_rgba(59,130,246,0.15)]"
-                        : "bg-muted/40 border border-border/40 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                        : "bg-muted/60 border border-border/60 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
                     }`}
                   >
                     {r.key}
@@ -895,7 +895,7 @@ export function VoxDexPulse({ collapsed, onToggle }: VoxDexPulseProps) {
                 ? mode === "trend"
                   ? "bg-blue-500/25 dark:bg-blue-500/20 text-blue-500 dark:text-blue-300 border border-blue-500/50 dark:border-blue-400/40"
                   : "bg-cyan-500/25 dark:bg-cyan-500/20 text-cyan-500 dark:text-cyan-300 border border-cyan-500/50 dark:border-cyan-400/40"
-                : "bg-muted/40 border border-border/40 text-muted-foreground hover:bg-muted/60"
+                : "bg-muted/60 border border-border/60 text-muted-foreground hover:bg-muted/60"
             }`}
           >
             {cat}
@@ -939,7 +939,7 @@ export function VoxDexPulse({ collapsed, onToggle }: VoxDexPulseProps) {
       )}
 
       {/* Leaderboard card */}
-      <div className="order-4 sm:order-5 rounded-xl border border-border/50 bg-card/50 backdrop-blur overflow-hidden">
+      <div className="order-4 sm:order-5 rounded-xl border border-border/60 bg-card/80 backdrop-blur overflow-hidden">
         {isLoading ? (
           <div className="h-[280px] flex items-center justify-center">
             <div className="text-center">

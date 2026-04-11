@@ -72,18 +72,64 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const authHeaders = await getAuthHeaders();
-    const res = await fetch(queryKey.join("/") as string, {
-      credentials: "include",
-      headers: authHeaders,
-    });
+    const url = queryKey.join("/") as string;
+    try {
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch(url, {
+        credentials: "include",
+        headers: authHeaders,
+      });
 
-    if (unauthorizedBehavior === "returnNull" && res.status === 401) {
-      return null;
+      if (unauthorizedBehavior === "returnNull" && res.status === 401) {
+        return null;
+      }
+
+      if (!res.ok) {
+        // #region agent log
+        fetch("http://127.0.0.1:7335/ingest/5a3bb67c-8953-4d89-be3b-94579791ed8e", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "6435e1" },
+          body: JSON.stringify({
+            sessionId: "6435e1",
+            hypothesisId: "H4",
+            location: "queryClient.ts:getQueryFn",
+            message: "non-ok response",
+            data: {
+              url,
+              origin: typeof window !== "undefined" ? window.location.origin : "",
+              status: res.status,
+              statusText: res.statusText,
+            },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion
+      }
+
+      await throwIfResNotOk(res);
+      return await res.json();
+    } catch (err) {
+      // #region agent log
+      fetch("http://127.0.0.1:7335/ingest/5a3bb67c-8953-4d89-be3b-94579791ed8e", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "6435e1" },
+        body: JSON.stringify({
+          sessionId: "6435e1",
+          hypothesisId: "H1-H2-H3",
+          location: "queryClient.ts:getQueryFn",
+          message: "queryFn catch",
+          data: {
+            url,
+            origin: typeof window !== "undefined" ? window.location.origin : "",
+            errMsg: err instanceof Error ? err.message : String(err),
+            errName: err instanceof Error ? err.name : "",
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+      throw err;
     }
-
-    await throwIfResNotOk(res);
-    return await res.json();
   };
 
 export const queryClient = new QueryClient({

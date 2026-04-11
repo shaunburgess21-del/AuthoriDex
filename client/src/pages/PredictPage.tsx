@@ -942,7 +942,7 @@ function OpenMarketCard({ market, onNavigate, isMarketClosed = false, userBetRes
     return <UpDownMarketCard market={market} entries={entries} totalPool={totalPool} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} isMarketClosed={isMarketClosed || isInactive} isInactive={isInactive} inactiveMessage={market.inactiveMessage} userBetResult={userBetResult} onFilterCategory={onFilterCategory} categoryRaceMap={categoryRaceMap} leaderboardCategories={leaderboardCategories} />;
   }
   if (market.openMarketType === "multi") {
-    return <MultiMarketCard market={market} entries={entries} totalPool={totalPool} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} isMarketClosed={isMarketClosed || isInactive} isInactive={isInactive} inactiveMessage={market.inactiveMessage} userBetResult={userBetResult} userBetsPerEntry={userBetsPerEntry} onFilterCategory={onFilterCategory} categoryRaceMap={categoryRaceMap} leaderboardCategories={leaderboardCategories} />;
+    return <MultiMarketCard market={market} entries={entries} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} isMarketClosed={isMarketClosed || isInactive} isInactive={isInactive} inactiveMessage={market.inactiveMessage} userBetResult={userBetResult} userBetsPerEntry={userBetsPerEntry} onFilterCategory={onFilterCategory} categoryRaceMap={categoryRaceMap} leaderboardCategories={leaderboardCategories} />;
   }
   return <BinaryMarketCard market={market} entries={entries} totalPool={totalPool} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} isMarketClosed={isMarketClosed || isInactive} isInactive={isInactive} inactiveMessage={market.inactiveMessage} userBetResult={userBetResult} onFilterCategory={onFilterCategory} categoryRaceMap={categoryRaceMap} leaderboardCategories={leaderboardCategories} />;
 }
@@ -975,7 +975,11 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
           titleClassName={`!font-semibold ${isInactive ? "" : "hover:!text-violet-600 dark:hover:!text-violet-400"}`}
         />
       </a>
-      {market.teaser && <p className="text-sm text-muted-foreground mb-3 line-clamp-2 leading-[1.4]">{market.teaser}</p>}
+      {market.teaser && (
+        <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); if (!isInactive) onNavigate(market.slug); }} className={isInactive ? "cursor-default" : "cursor-pointer"}>
+          <p className={`text-sm text-muted-foreground mb-3 line-clamp-2 leading-[1.4] ${!isInactive ? 'hover:text-violet-600 dark:hover:text-violet-400' : ''} transition-colors`}>{market.teaser}</p>
+        </a>
+      )}
       
       {/* Mobile: max-md:mt-auto pulls participants + pool + Yes/No to card base; md:contents keeps desktop flex layout unchanged */}
       <div className="flex flex-col max-md:mt-auto md:contents">
@@ -1032,7 +1036,7 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
   );
 }
 
-function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, onNavigate, isMarketClosed, isInactive = false, inactiveMessage, userBetResult, userBetsPerEntry, onFilterCategory, categoryRaceMap, leaderboardCategories }: { market: any; entries: any[]; totalPool: number; participants: number; timeLabel: string; onNavigate: (slug: string, pick?: string, direction?: string) => void; isMarketClosed: boolean; isInactive?: boolean; inactiveMessage?: string; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number }; userBetsPerEntry?: Map<string, { direction: string; stakeAmount: number }>; onFilterCategory?: (cat: string) => void; categoryRaceMap?: Map<string, string>; leaderboardCategories?: Set<string> }) {
+function MultiMarketCard({ market, entries, participants, timeLabel, onNavigate, isMarketClosed, isInactive = false, inactiveMessage, userBetResult, userBetsPerEntry, onFilterCategory, categoryRaceMap, leaderboardCategories }: { market: any; entries: any[]; participants: number; timeLabel: string; onNavigate: (slug: string, pick?: string, direction?: string) => void; isMarketClosed: boolean; isInactive?: boolean; inactiveMessage?: string; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number }; userBetsPerEntry?: Map<string, { direction: string; stakeAmount: number }>; onFilterCategory?: (cat: string) => void; categoryRaceMap?: Map<string, string>; leaderboardCategories?: Set<string> }) {
   const totalEntryStake = entries.reduce((sum: number, e: any) => sum + Number(e.totalStake || 0) + Number(e.noStake || 0), 0) || 1;
   const rankedEntries = [...entries]
     .map((e: any) => {
@@ -1078,8 +1082,7 @@ function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, 
         <Badge variant="outline" className="text-[10px] ml-auto">{entries.length} options</Badge>
       </div>
 
-      <div className="flex flex-col flex-1 min-h-0">
-        <div className="space-y-1.5">
+      <div className="space-y-1.5">
           {rankedEntries.slice(0, 4).map((entry: any) => {
             const entryBet = userBetsPerEntry?.get(String(entry.id));
             const hasBet = !!entryBet && userBetResult?.result === "pending";
@@ -1132,30 +1135,6 @@ function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, 
               </div>
             );
           })}
-        </div>
-        {entries.length > 4 ? (
-          <div className="mt-auto pt-2 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-end gap-x-2 gap-y-1">
-            <div className="min-w-0 flex justify-start">
-              <button
-                type="button"
-                className="text-xs text-violet-600 dark:text-violet-400 hover:text-violet-500 dark:hover:text-violet-300 text-left pl-11 cursor-pointer transition-colors font-medium"
-                onClick={(e) => { e.stopPropagation(); onNavigate(market.slug); }}
-              >
-                +{entries.length - 4} more
-              </button>
-            </div>
-            <span className="text-sm font-semibold text-muted-foreground shrink-0 text-center tabular-nums">
-              Pool: {totalPool.toLocaleString("en-US")}
-            </span>
-            <div aria-hidden="true" />
-          </div>
-        ) : (
-          <div className="mt-auto pt-2 flex flex-wrap items-end justify-end gap-x-3 gap-y-1">
-            <span className="text-sm font-semibold text-muted-foreground shrink-0 text-right tabular-nums">
-              Pool: {totalPool.toLocaleString("en-US")}
-            </span>
-          </div>
-        )}
       </div>
 
       <UserBetResult betResult={userBetResult} isMarketClosed={isMarketClosed} />
@@ -1191,7 +1170,11 @@ function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel,
           titleClassName={`!font-semibold ${isInactive ? "" : "hover:!text-violet-600 dark:hover:!text-violet-400"}`}
         />
       </a>
-      {market.teaser && <p className="text-sm text-muted-foreground mb-3 line-clamp-2 leading-[1.4]">{market.teaser}</p>}
+      {market.teaser && (
+        <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); if (!isInactive) onNavigate(market.slug); }} className={isInactive ? "cursor-default" : "cursor-pointer"}>
+          <p className={`text-sm text-muted-foreground mb-3 line-clamp-2 leading-[1.4] ${!isInactive ? 'hover:text-violet-600 dark:hover:text-violet-400' : ''} transition-colors`}>{market.teaser}</p>
+        </a>
+      )}
       
       <div className="mt-auto pt-1">
         <div className="mb-2">
@@ -1617,9 +1600,10 @@ export default function PredictPage() {
     const grouped = new Map<string, any[]>();
     const betsArray = Array.isArray(userBetsData) ? userBetsData : (userBetsData as any)?.predictions ?? [];
     (betsArray).forEach((b: any) => {
-      const arr = grouped.get(b.marketId) || [];
+      const mid = String(b.marketId);
+      const arr = grouped.get(mid) || [];
       arr.push(b);
-      grouped.set(b.marketId, arr);
+      grouped.set(mid, arr);
     });
     grouped.forEach((bets, marketId) => {
       const totalStake = bets.reduce((s: number, b: any) => s + b.stakeAmount, 0);
@@ -1635,7 +1619,8 @@ export default function PredictPage() {
       else if (results.has('won') && results.has('lost')) result = 'won';
       else if (results.has('refunded') && results.size === 1) result = 'refunded';
       else result = bets[0].result;
-      map.set(marketId, { result, payout: totalPayout, entryLabel, stakeAmount: totalStake, marketId, entryId });
+      const key = String(marketId);
+      map.set(key, { result, payout: totalPayout, entryLabel, stakeAmount: totalStake, marketId: key, entryId });
     });
     return map;
   }, [userBetsData]);
@@ -1660,10 +1645,10 @@ export default function PredictPage() {
   const walletCredits = profile?.predictCredits ?? 0;
   const visibleMarketIds = useMemo(() => {
     const ids = new Set<string>();
-    openMarkets.forEach((m: any) => ids.add(m.id));
-    (nativeUpdownData || []).forEach((m: any) => ids.add(m.id));
-    (nativeH2hData || []).forEach((m: any) => ids.add(m.id));
-    (nativeGainerData || []).forEach((m: any) => ids.add(m.id));
+    openMarkets.forEach((m: any) => ids.add(String(m.id)));
+    (nativeUpdownData || []).forEach((m: any) => ids.add(String(m.id)));
+    (nativeH2hData || []).forEach((m: any) => ids.add(String(m.id)));
+    (nativeGainerData || []).forEach((m: any) => ids.add(String(m.id)));
     return ids;
   }, [openMarkets, nativeUpdownData, nativeH2hData, nativeGainerData]);
 
@@ -1818,6 +1803,7 @@ export default function PredictPage() {
           activeParticipantCount: Number(m.activeParticipantCount || 0),
           recentParticipants: m.recentParticipants || [],
           bettingCutoff: m.bettingCutoff || null,
+          teaser: typeof m.teaser === "string" && m.teaser.trim() ? m.teaser.trim() : null,
         } as TopGainerMarket;
       });
     }
@@ -1856,6 +1842,49 @@ export default function PredictPage() {
       recentActivityError,
     ],
   );
+
+  useEffect(() => {
+    const labeled: { key: string; message: string }[] = [];
+    const push = (key: string, e: unknown) => {
+      if (!e) return;
+      labeled.push({ key, message: e instanceof Error ? e.message : String(e) });
+    };
+    push("trending", trendingError);
+    push("openMarkets", openMarketsError);
+    push("updown", updownError);
+    push("h2h", h2hError);
+    push("gainer", gainerError);
+    push("jackpot", jackpotError);
+    push("recentActivity", recentActivityError);
+    if (labeled.length === 0) return;
+    // #region agent log
+    fetch("http://127.0.0.1:7335/ingest/5a3bb67c-8953-4d89-be3b-94579791ed8e", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "6435e1" },
+      body: JSON.stringify({
+        sessionId: "6435e1",
+        hypothesisId: "H5",
+        location: "PredictPage.tsx:predictLoadErrors",
+        message: "predict queries failed",
+        data: {
+          origin: typeof window !== "undefined" ? window.location.origin : "",
+          failCount: labeled.length,
+          labeled,
+          showMultiBanner: labeled.length >= 2,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+  }, [
+    trendingError,
+    openMarketsError,
+    updownError,
+    h2hError,
+    gainerError,
+    jackpotError,
+    recentActivityError,
+  ]);
 
   const showPredictMultiFailureBanner = predictLoadErrors.length >= 2;
   const firstPredictErrorMessage =
@@ -1942,18 +1971,30 @@ export default function PredictPage() {
       setStakeModalOpen(false);
       setPendingSelection(null);
 
-      const market = hydratedMarkets.find((m) => m.id === variables.marketId);
+      const market = hydratedMarkets.find((m) => String(m.id) === String(variables.marketId));
       let entryLabel = "Up";
       if (market) {
         if (variables.entryId === market.downEntryId) entryLabel = "Down";
         else if (variables.entryId === market.upEntryId) entryLabel = "Up";
       }
 
+      const seededStats = {
+        total: 1,
+        won: 0,
+        lost: 0,
+        refunded: 0,
+        pending: 1,
+        netCredits: 0,
+        winRate: 0,
+        bestCategory: null,
+        currentStreak: 0,
+      };
+
       queryClient.setQueryData(["/api/me/predictions"], (old: any) => {
-        if (!old) return old;
+        const mid = String(variables.marketId);
         const newBet = {
           betId: `optimistic-${Date.now()}`,
-          marketId: variables.marketId,
+          marketId: mid,
           entryId: variables.entryId,
           entryLabel,
           stakeAmount: variables.stakeAmount,
@@ -1961,12 +2002,15 @@ export default function PredictPage() {
           payout: 0,
           direction: null,
         };
+        if (old == null) {
+          return { predictions: [newBet], stats: seededStats };
+        }
         if (Array.isArray(old)) {
-          const already = old.some((b: any) => b.marketId === variables.marketId);
+          const already = old.some((b: any) => String(b.marketId) === mid);
           return already ? old : [...old, newBet];
         }
         const preds = old.predictions ?? [];
-        const already = preds.some((b: any) => b.marketId === variables.marketId);
+        const already = preds.some((b: any) => String(b.marketId) === mid);
         if (already) return old;
         return { ...old, predictions: [...preds, newBet] };
       });
@@ -2210,8 +2254,8 @@ export default function PredictPage() {
 
   const passesMyPositionsFilter = (marketId: string) =>
     myPositionsFilter === "all" ||
-    (myPositionsFilter === "show-mine" && userBetsByMarket.has(marketId)) ||
-    (myPositionsFilter === "hide-mine" && !userBetsByMarket.has(marketId));
+    (myPositionsFilter === "show-mine" && userBetsByMarket.has(String(marketId))) ||
+    (myPositionsFilter === "hide-mine" && !userBetsByMarket.has(String(marketId)));
 
   const filteredUpDown = hydratedMarkets.filter(m =>
     matchesCategory(updownCategory, m.category, m.personId) &&
@@ -2558,7 +2602,7 @@ export default function PredictPage() {
                     market={market} 
                     onNavigate={(slug, pick, direction) => setLocation(`/markets/${slug}${pick ? `?pick=${pick}${direction ? `&direction=${direction}` : ''}` : ''}`)}
                     isMarketClosed={market.status !== 'OPEN'}
-                    userBetResult={userBetsByMarket.get(market.id)}
+                    userBetResult={userBetsByMarket.get(String(market.id))}
                     userBetsPerEntry={userBetsPerEntry.get(String(market.id))}
                     onFilterCategory={handleCategoryPillFilter}
                     categoryRaceMap={raceMap}
@@ -2776,7 +2820,7 @@ export default function PredictPage() {
                     onFilterCategory={handleCategoryPillFilter}
                     categoryRaceMap={raceMap}
                     leaderboardCategories={leaderboardCats}
-                    pendingPosition={pendingWeeklyUpDownPositionFromBet(userBetsByMarket.get(market.id))}
+                    pendingPosition={pendingWeeklyUpDownPositionFromBet(userBetsByMarket.get(String(market.id)))}
                   />
                 ))}
               </CardSection>
@@ -2849,7 +2893,7 @@ export default function PredictPage() {
             ) : filteredH2H.length > 0 ? (
               <CardSection desktopLimit={9} gap="gap-4" testIdPrefix="section-h2h" dotActiveColor="bg-violet-500">
                 {filteredH2H.map((market) => {
-                  const bet = userBetsByMarket.get(market.id);
+                  const bet = userBetsByMarket.get(String(market.id));
                   const h2hUserPick = h2hUserPickFromBet(
                     market,
                     bet ? { entryLabel: bet.entryLabel, entryId: bet.entryId } : undefined
@@ -2905,7 +2949,7 @@ export default function PredictPage() {
                       variant="ghost" 
                       size="icon" 
                       onClick={() => setRulesModalOpen("gainer")}
-                      className="text-violet-600 dark:text-violet-400 hover:text-violet-500 dark:hover:text-violet-300"
+                      className="text-violet-600 dark:text-violet-400 hover:text-violet-600 dark:hover:text-violet-400"
                       aria-label="How it works"
                       data-testid="button-rules-category-races"
                     >
@@ -2946,7 +2990,7 @@ export default function PredictPage() {
                     closedMessage={closedMarketMessage}
                     onShowAllCandidates={openGainerPicker}
                     isPredicted={predictedMarkets.has(market.id)}
-                    predictionSummary={categoryRacePredictionSummaryFromBet(userBetsByMarket.get(market.id))}
+                    predictionSummary={categoryRacePredictionSummaryFromBet(userBetsByMarket.get(String(market.id)))}
                     isShimmering={false}
                     onFilterCategory={handleCategoryPillFilter}
                     categoryRaceMap={raceMap}
@@ -3021,7 +3065,7 @@ export default function PredictPage() {
               onFilterCategory={(cat) => setOverlayCategoryFilter(normalizeMarketCategory(cat) as CategoryFilter)}
               categoryRaceMap={raceMap}
               leaderboardCategories={leaderboardCats}
-              pendingPosition={pendingWeeklyUpDownPositionFromBet(userBetsByMarket.get(market.id))}
+              pendingPosition={pendingWeeklyUpDownPositionFromBet(userBetsByMarket.get(String(market.id)))}
             />
           ))}
       </FullScreenOverlay>
@@ -3044,7 +3088,7 @@ export default function PredictPage() {
           )
           .sort((a: any, b: any) => overlayCategoryFilter === "trending" ? ((b.totalBets ?? 0) - (a.totalBets ?? 0)) : 0)
           .map((market) => {
-            const bet = userBetsByMarket.get(market.id);
+            const bet = userBetsByMarket.get(String(market.id));
             const h2hUserPick = h2hUserPickFromBet(
               market,
               bet ? { entryLabel: bet.entryLabel, entryId: bet.entryId } : undefined
@@ -3086,7 +3130,7 @@ export default function PredictPage() {
               closedMessage={closedMarketMessage}
               onShowAllCandidates={openGainerPicker}
               isPredicted={predictedMarkets.has(market.id)}
-              predictionSummary={categoryRacePredictionSummaryFromBet(userBetsByMarket.get(market.id))}
+              predictionSummary={categoryRacePredictionSummaryFromBet(userBetsByMarket.get(String(market.id)))}
               isShimmering={false}
               onFilterCategory={(cat) => setOverlayCategoryFilter(normalizeMarketCategory(cat) as CategoryFilter)}
               categoryRaceMap={raceMap}
@@ -3123,7 +3167,7 @@ export default function PredictPage() {
               market={market} 
               onNavigate={(slug, pick, direction) => setLocation(`/markets/${slug}${pick ? `?pick=${pick}${direction ? `&direction=${direction}` : ''}` : ''}`)}
               isMarketClosed={market.status !== 'OPEN'}
-              userBetResult={userBetsByMarket.get(market.id)}
+              userBetResult={userBetsByMarket.get(String(market.id))}
               userBetsPerEntry={userBetsPerEntry.get(String(market.id))}
               onFilterCategory={(cat) => setOverlayCategoryFilter(normalizeMarketCategory(cat) as any)}
               categoryRaceMap={raceMap}

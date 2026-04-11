@@ -37,6 +37,7 @@ export interface TopGainerMarket {
   activeParticipantCount?: number;
   recentParticipants?: ParticipantPreview[];
   bettingCutoff?: string | null;
+  teaser?: string | null;
 }
 
 export type CategoryRacePredictionSummary = { pickLabel: string; stakeAmount: number };
@@ -147,13 +148,24 @@ export function TopGainerCard({
 
       <Link
         href={`/predict/race/${market.id}`}
-        className="text-[16px] font-semibold mb-2 leading-[1.4] inline-flex items-center gap-1 text-foreground hover:text-violet-500 dark:hover:text-violet-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm"
+        className="group text-[16px] font-semibold mb-2 leading-[1.4] inline-flex items-center gap-1 text-foreground hover:text-violet-600 dark:hover:text-violet-400 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm"
       >
         Category Race: {getMarketCategoryLabel(market.category)}
-        <span className="text-violet-600 dark:text-violet-400 font-normal" aria-hidden>
+        <span className="font-normal text-inherit opacity-80" aria-hidden>
           ›
         </span>
       </Link>
+
+      {market.teaser?.trim() ? (
+        <Link
+          href={`/predict/race/${market.id}`}
+          className="block mb-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm"
+        >
+          <p className="text-sm text-muted-foreground line-clamp-2 leading-[1.4] hover:text-violet-600 dark:hover:text-violet-400 transition-colors">
+            {market.teaser.trim()}
+          </p>
+        </Link>
+      ) : null}
 
       <div className="space-y-1.5 mb-3">
         {(() => {
@@ -192,7 +204,7 @@ export function TopGainerCard({
         })()}
         {visibleCandidateCount > 3 && (
           <button
-            className="text-xs text-violet-600 dark:text-violet-400 hover:text-violet-500 dark:hover:text-violet-300 text-center mt-1 w-full cursor-pointer transition-colors"
+            className="text-xs text-violet-600 dark:text-violet-400 hover:text-violet-600 dark:hover:text-violet-400 text-center mt-1 w-full cursor-pointer transition-colors"
             onClick={(e) => { e.stopPropagation(); onShowAllCandidates?.(market); }}
           >
             View all {visibleCandidateCount} candidates
@@ -201,7 +213,7 @@ export function TopGainerCard({
       </div>
 
       <div className="flex items-center justify-between mb-2">
-        <span className="text-sm font-semibold text-violet-700 dark:text-violet-500">
+        <span className="text-sm font-semibold text-muted-foreground">
           Pool: {market.totalPool.toLocaleString('en-US')}
         </span>
       </div>

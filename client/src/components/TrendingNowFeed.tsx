@@ -130,8 +130,17 @@ export function TrendingNowFeed({ onPersonClick, collapsed, onToggle }: Trending
                   onClick={() => onPersonClick(person.id)}
                   data-testid={`trending-now-item-${person.id}`}
                 >
-                  <span className="font-mono font-bold text-muted-foreground dark:text-slate-500 w-4 text-center text-[14px]">{idx + 1}</span>
-                  <PersonAvatar name={displayName} avatar={person.avatar} size="sm" />
+                  <div className="relative flex items-center rounded-md overflow-hidden shrink-0">
+                    <div className="flex items-center justify-center min-w-[24px] self-stretch rounded-l-md bg-muted dark:bg-[#101318] border-r border-border dark:border-transparent">
+                      <span className="font-mono font-semibold text-muted-foreground dark:text-slate-400 text-[12px] tabular-nums">{idx + 1}</span>
+                    </div>
+                    <PersonAvatar
+                      name={displayName}
+                      avatar={person.avatar}
+                      size="sm"
+                      className="h-10 w-10 shrink-0 rounded-none rounded-r-md"
+                    />
+                  </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-xs truncate text-foreground dark:text-slate-200">{displayName}</p>
                     <div className="flex items-center gap-1.5">

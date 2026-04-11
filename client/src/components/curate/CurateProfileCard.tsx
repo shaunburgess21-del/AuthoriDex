@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation } from "wouter";
 import { Check, ChevronRight, Camera, Eye, RefreshCw, User } from "lucide-react";
+import { selectCurateDisplayImages } from "./selectCurateDisplayImages";
 
 interface CelebrityImage {
   id: string;
@@ -69,16 +70,10 @@ export function CurateProfileCard({
     queryKey: ['/api/people', person.id, 'images'],
   });
 
-  const displayImages = useMemo(() => {
-    if (images.length < 4) return images;
-    const seed = (person.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) + cycleNumber * 97) % 1000;
-    const shuffled = [...images].sort((a, b) => {
-      const hashA = ((a.id.charCodeAt(0) || 0) + seed) % 1000;
-      const hashB = ((b.id.charCodeAt(0) || 0) + seed) % 1000;
-      return hashA - hashB;
-    });
-    return shuffled.slice(0, 4);
-  }, [images, person.id, cycleNumber]);
+  const displayImages = useMemo(
+    () => selectCurateDisplayImages(person.id, images, cycleNumber),
+    [images, person.id, cycleNumber],
+  );
 
   const persistedSelectedPhoto = useMemo(
     () => images.find((img) => img.currentUserDirection === 'up')?.id ?? null,

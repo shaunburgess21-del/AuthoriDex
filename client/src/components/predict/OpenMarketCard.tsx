@@ -179,7 +179,11 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
           titleClassName={`!font-semibold ${isInactive ? "" : "hover:!text-violet-600 dark:hover:!text-violet-400"}`}
         />
       </a>
-      {market.teaser && <p className="text-sm text-muted-foreground mb-3 line-clamp-2 leading-[1.4]">{market.teaser}</p>}
+      {market.teaser && (
+        <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); if (!isInactive) onNavigate(market.slug); }} className={isInactive ? "cursor-default" : "cursor-pointer"}>
+          <p className={`text-sm text-muted-foreground mb-3 line-clamp-2 leading-[1.4] ${!isInactive ? 'hover:text-violet-600 dark:hover:text-violet-400' : ''} transition-colors`}>{market.teaser}</p>
+        </a>
+      )}
 
       <div className="flex flex-col max-md:mt-auto md:contents">
         <div className="pt-1 md:mt-auto md:pt-1">
@@ -235,7 +239,7 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
   );
 }
 
-function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, onNavigate, isMarketClosed, isInactive = false, inactiveMessage, userBetResult, userBetsPerEntry, onFilterCategory, categoryRaceMap, leaderboardCategories }: { market: any; entries: any[]; totalPool: number; participants: number; timeLabel: string; onNavigate: (slug: string, pick?: string, direction?: string) => void; isMarketClosed: boolean; isInactive?: boolean; inactiveMessage?: string; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number }; userBetsPerEntry?: Map<string, { direction: string; stakeAmount: number }>; onFilterCategory?: (cat: string) => void; categoryRaceMap?: Map<string, string>; leaderboardCategories?: Set<string> }) {
+function MultiMarketCard({ market, entries, participants, timeLabel, onNavigate, isMarketClosed, isInactive = false, inactiveMessage, userBetResult, userBetsPerEntry, onFilterCategory, categoryRaceMap, leaderboardCategories }: { market: any; entries: any[]; participants: number; timeLabel: string; onNavigate: (slug: string, pick?: string, direction?: string) => void; isMarketClosed: boolean; isInactive?: boolean; inactiveMessage?: string; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number }; userBetsPerEntry?: Map<string, { direction: string; stakeAmount: number }>; onFilterCategory?: (cat: string) => void; categoryRaceMap?: Map<string, string>; leaderboardCategories?: Set<string> }) {
   const totalEntryStake = entries.reduce((sum: number, e: any) => sum + Number(e.totalStake || 0) + Number(e.noStake || 0), 0) || 1;
   const rankedEntries = [...entries]
     .map((e: any) => {
@@ -281,8 +285,7 @@ function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, 
         <Badge variant="outline" className="text-[10px] ml-auto">{entries.length} options</Badge>
       </div>
 
-      <div className="flex flex-col flex-1 min-h-0">
-        <div className="space-y-1.5">
+      <div className="space-y-1.5">
           {rankedEntries.slice(0, 4).map((entry: any) => {
             const entryBet = userBetsPerEntry?.get(String(entry.id));
             const hasBet = !!entryBet && userBetResult?.result === "pending";
@@ -335,30 +338,6 @@ function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, 
               </div>
             );
           })}
-        </div>
-        {entries.length > 4 ? (
-          <div className="mt-auto pt-2 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-end gap-x-2 gap-y-1">
-            <div className="min-w-0 flex justify-start">
-              <button
-                type="button"
-                className="text-xs text-violet-600 dark:text-violet-400 hover:text-violet-500 dark:hover:text-violet-300 text-left pl-11 cursor-pointer transition-colors font-medium"
-                onClick={(e) => { e.stopPropagation(); onNavigate(market.slug); }}
-              >
-                +{entries.length - 4} more
-              </button>
-            </div>
-            <span className="text-sm font-semibold text-muted-foreground shrink-0 text-center tabular-nums">
-              Pool: {totalPool.toLocaleString("en-US")}
-            </span>
-            <div aria-hidden="true" />
-          </div>
-        ) : (
-          <div className="mt-auto pt-2 flex flex-wrap items-end justify-end gap-x-3 gap-y-1">
-            <span className="text-sm font-semibold text-muted-foreground shrink-0 text-right tabular-nums">
-              Pool: {totalPool.toLocaleString("en-US")}
-            </span>
-          </div>
-        )}
       </div>
 
       <UserBetResult betResult={userBetResult} isMarketClosed={isMarketClosed} />
@@ -394,7 +373,11 @@ function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel,
           titleClassName={`!font-semibold ${isInactive ? "" : "hover:!text-violet-600 dark:hover:!text-violet-400"}`}
         />
       </a>
-      {market.teaser && <p className="text-sm text-muted-foreground mb-3 line-clamp-2 leading-[1.4]">{market.teaser}</p>}
+      {market.teaser && (
+        <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); if (!isInactive) onNavigate(market.slug); }} className={isInactive ? "cursor-default" : "cursor-pointer"}>
+          <p className={`text-sm text-muted-foreground mb-3 line-clamp-2 leading-[1.4] ${!isInactive ? 'hover:text-violet-600 dark:hover:text-violet-400' : ''} transition-colors`}>{market.teaser}</p>
+        </a>
+      )}
 
       <div className="mt-auto pt-1">
         <div className="mb-2">
@@ -465,7 +448,7 @@ export function OpenMarketCard({ market, onNavigate, isMarketClosed = false, use
     return <UpDownMarketCard market={market} entries={entries} totalPool={totalPool} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} isMarketClosed={isMarketClosed || isInactive} isInactive={isInactive} inactiveMessage={market.inactiveMessage} userBetResult={userBetResult} onFilterCategory={onFilterCategory} categoryRaceMap={categoryRaceMap} leaderboardCategories={leaderboardCategories} />;
   }
   if (market.openMarketType === "multi") {
-    return <MultiMarketCard market={market} entries={entries} totalPool={totalPool} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} isMarketClosed={isMarketClosed || isInactive} isInactive={isInactive} inactiveMessage={market.inactiveMessage} userBetResult={userBetResult} userBetsPerEntry={userBetsPerEntry} onFilterCategory={onFilterCategory} categoryRaceMap={categoryRaceMap} leaderboardCategories={leaderboardCategories} />;
+    return <MultiMarketCard market={market} entries={entries} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} isMarketClosed={isMarketClosed || isInactive} isInactive={isInactive} inactiveMessage={market.inactiveMessage} userBetResult={userBetResult} userBetsPerEntry={userBetsPerEntry} onFilterCategory={onFilterCategory} categoryRaceMap={categoryRaceMap} leaderboardCategories={leaderboardCategories} />;
   }
   return <BinaryMarketCard market={market} entries={entries} totalPool={totalPool} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} isMarketClosed={isMarketClosed || isInactive} isInactive={isInactive} inactiveMessage={market.inactiveMessage} userBetResult={userBetResult} onFilterCategory={onFilterCategory} categoryRaceMap={categoryRaceMap} leaderboardCategories={leaderboardCategories} />;
 }

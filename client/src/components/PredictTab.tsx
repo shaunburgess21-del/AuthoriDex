@@ -243,7 +243,7 @@ function SectionHeader({
       {infoTooltip && (
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon" className="text-violet-600 dark:text-violet-400 hover:text-violet-500 dark:hover:text-violet-300" aria-label="How it works">
+            <Button variant="ghost" size="icon" className="text-violet-600 dark:text-violet-400 hover:text-violet-600 dark:hover:text-violet-400" aria-label="How it works">
               <HelpCircle className="h-5 w-5" />
             </Button>
           </TooltipTrigger>
@@ -449,6 +449,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
         endTime: "Sun 23:59 UTC",
         totalEntries: entries.length,
         candidateCount: allCandidates.length,
+        teaser: typeof m.teaser === "string" && m.teaser.trim() ? m.teaser.trim() : null,
       };
     });
     return all.filter(g => (g.allCandidates || g.leaders).some(l => l.personId === personId));
@@ -490,9 +491,10 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
     const betsArray = Array.isArray(userPredictionsData) ? userPredictionsData : (userPredictionsData as any)?.predictions ?? [];
     const grouped = new Map<string, any[]>();
     for (const b of betsArray) {
-      const arr = grouped.get(b.marketId) || [];
+      const mid = String(b.marketId);
+      const arr = grouped.get(mid) || [];
       arr.push(b);
-      grouped.set(b.marketId, arr);
+      grouped.set(mid, arr);
     }
     grouped.forEach((bets, marketId) => {
       const totalStake = bets.reduce((s: number, b: any) => s + b.stakeAmount, 0);
@@ -508,7 +510,8 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       else if (results.has("won") && results.has("lost")) result = "won";
       else if (results.has("refunded") && results.size === 1) result = "refunded";
       else result = bets[0].result;
-      map.set(marketId, { result, payout: totalPayout, entryLabel, stakeAmount: totalStake, marketId, entryId });
+      const key = String(marketId);
+      map.set(key, { result, payout: totalPayout, entryLabel, stakeAmount: totalStake, marketId: key, entryId });
     });
     return map;
   }, [userPredictionsData]);
@@ -549,11 +552,23 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       if (variables.entryId === weeklyMarket?.downEntryId) entryLabel = "Down";
       else if (variables.entryId === weeklyMarket?.upEntryId) entryLabel = "Up";
 
+      const seededStats = {
+        total: 1,
+        won: 0,
+        lost: 0,
+        refunded: 0,
+        pending: 1,
+        netCredits: 0,
+        winRate: 0,
+        bestCategory: null,
+        currentStreak: 0,
+      };
+
       queryClient.setQueryData(["/api/me/predictions"], (old: any) => {
-        if (!old) return old;
+        const mid = String(variables.marketId);
         const newBet = {
           betId: `optimistic-${Date.now()}`,
-          marketId: variables.marketId,
+          marketId: mid,
           entryId: variables.entryId,
           entryLabel,
           stakeAmount: variables.stakeAmount,
@@ -561,12 +576,15 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
           payout: 0,
           direction: null,
         };
+        if (old == null) {
+          return { predictions: [newBet], stats: seededStats };
+        }
         if (Array.isArray(old)) {
-          const already = old.some((b: any) => b.marketId === variables.marketId);
+          const already = old.some((b: any) => String(b.marketId) === mid);
           return already ? old : [...old, newBet];
         }
         const preds = old.predictions ?? [];
-        const already = preds.some((b: any) => b.marketId === variables.marketId);
+        const already = preds.some((b: any) => String(b.marketId) === mid);
         if (already) return old;
         return { ...old, predictions: [...preds, newBet] };
       });
@@ -787,7 +805,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
                     setLocation(`/markets/${slug}${pick ? `?pick=${pick}${direction ? `&direction=${direction}` : ''}` : ''}`)
                   }
                   isMarketClosed={market.status !== "OPEN"}
-                  userBetResult={openMarketBets.get(market.id)}
+                  userBetResult={openMarketBets.get(String(market.id))}
                   userBetsPerEntry={userBetsPerEntry.get(String(market.id))}
                   onFilterCategory={handleCategoryFilter}
                   categoryRaceMap={categoryRaceMap}
@@ -859,7 +877,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
             onFilterCategory={handleCategoryFilter}
             categoryRaceMap={categoryRaceMap}
             leaderboardCategories={leaderboardCategories}
-            pendingPosition={pendingWeeklyUpDownPositionFromBet(openMarketBets.get(weeklyMarket.id))}
+            pendingPosition={pendingWeeklyUpDownPositionFromBet(openMarketBets.get(String(weeklyMarket.id)))}
           />
         ) : (
           <div className="text-center py-6 text-muted-foreground">
@@ -880,7 +898,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
         {h2hBattles.length > 0 ? (
           <div className={h2hGrid.container}>
             {h2hBattles.map((battle) => {
-              const aggregated = openMarketBets.get(battle.id);
+              const aggregated = openMarketBets.get(String(battle.id));
               const h2hUserPick = h2hUserPickFromBet(
                 battle,
                 aggregated ? { entryLabel: aggregated.entryLabel, entryId: aggregated.entryId } : undefined
@@ -921,7 +939,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
         {gainerMarkets.length > 0 ? (
           <div className={gainerGrid.container}>
             {gainerMarkets.map((gainer) => {
-              const gainerBet = openMarketBets.get(gainer.id);
+              const gainerBet = openMarketBets.get(String(gainer.id));
               return (
               <div key={gainer.id} className={gainerGrid.item}>
                 <TopGainerCard
@@ -929,7 +947,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
                   isMarketClosed={isMarketClosed}
                   closedMessage={closedMarketMessage}
                   onShowAllCandidates={openGainerPicker}
-                  isPredicted={openMarketBets.has(gainer.id)}
+                  isPredicted={openMarketBets.has(String(gainer.id))}
                   predictionSummary={categoryRacePredictionSummaryFromBet(gainerBet)}
                   onFilterCategory={handleCategoryFilter}
                   categoryRaceMap={categoryRaceMap}
