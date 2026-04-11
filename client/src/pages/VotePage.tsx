@@ -2113,7 +2113,16 @@ export default function VotePage() {
   const handleCardEmptyTap = useCallback((e: React.MouseEvent, section: SnapSectionType, itemId: string) => {
     if (!isMobile) return;
     const target = e.target as HTMLElement;
-    if (target.closest('button, a, input, textarea, select, [role="button"], [data-interactive]')) return;
+    const wrapper = e.currentTarget as HTMLElement;
+    // Walk up from target but stop at the wrapper — excludes interactive descendants
+    // without matching the wrapper's own role="button" attribute.
+    let node: HTMLElement | null = target;
+    while (node && node !== wrapper) {
+      if (node.matches('button, a, input, textarea, select, [role="button"], [data-interactive]')) {
+        return;
+      }
+      node = node.parentElement;
+    }
     e.stopPropagation();
     openSnapScroll(section, itemId);
   }, [isMobile, openSnapScroll]);
