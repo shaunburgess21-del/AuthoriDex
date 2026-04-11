@@ -45,6 +45,7 @@ import {
   Globe,
   BarChart3,
   ListChecks,
+  EyeOff,
   Upload,
   Cpu,
   Landmark,
@@ -1739,6 +1740,12 @@ export default function VotePage() {
   const [pollCustomDate, setPollCustomDate] = useState("");
   
   const [activeSection, setActiveSection] = useState<SectionToggle>("All");
+  const [myVotesFilter, setMyVotesFilter] = useState<"all" | "show-mine" | "hide-mine">("all");
+  const cycleMyVotesFilter = useCallback(() => {
+    setMyVotesFilter((prev) =>
+      prev === "all" ? "show-mine" : prev === "show-mine" ? "hide-mine" : "all",
+    );
+  }, []);
   const [rulesModalOpen, setRulesModalOpen] = useState<string | null>(null);
   const [infoModalOpen, setInfoModalOpen] = useState<"governance" | null>(null);
   const [curateCategoryFilter, setCurateCategoryFilter] = useState<FilterCategory>("All");
@@ -1967,17 +1974,60 @@ export default function VotePage() {
     return matchesCategory && matchesSearch && f.isActive;
   }).sort((a: any, b: any) => matchupsCategoryFilter === "Trending" ? ((b.totalVotes ?? 0) - (a.totalVotes ?? 0)) : 0);
 
+  const myVotesCount = useMemo(() => {
+    const matchupVoted = filteredMatchups.filter((m) => !!matchupUserVotes[m.id]).length;
+    const sentimentVoted = filteredTopics.filter((t: any) => !!t.userVote).length;
+    const opinionVoted = filteredOpinionPolls.filter((p: any) => !!p.userVote).length;
+    return matchupVoted + sentimentVoted + opinionVoted;
+  }, [filteredMatchups, filteredTopics, filteredOpinionPolls, matchupUserVotes]);
+
+  const displayMatchups = useMemo(
+    () =>
+      myVotesFilter === "all"
+        ? filteredMatchups
+        : myVotesFilter === "show-mine"
+          ? filteredMatchups.filter((m) => !!matchupUserVotes[m.id])
+          : filteredMatchups.filter((m) => !matchupUserVotes[m.id]),
+    [filteredMatchups, matchupUserVotes, myVotesFilter],
+  );
+
+  const displayTopics = useMemo(
+    () =>
+      myVotesFilter === "all"
+        ? filteredTopics
+        : myVotesFilter === "show-mine"
+          ? filteredTopics.filter((t: any) => !!t.userVote)
+          : filteredTopics.filter((t: any) => !t.userVote),
+    [filteredTopics, myVotesFilter],
+  );
+
+  const displayOpinionPolls = useMemo(
+    () =>
+      myVotesFilter === "all"
+        ? filteredOpinionPolls
+        : myVotesFilter === "show-mine"
+          ? filteredOpinionPolls.filter((p: any) => !!p.userVote)
+          : filteredOpinionPolls.filter((p: any) => !p.userVote),
+    [filteredOpinionPolls, myVotesFilter],
+  );
+
+  useEffect(() => {
+    if (myVotesCount === 0 && myVotesFilter === "show-mine") {
+      setMyVotesFilter("all");
+    }
+  }, [myVotesCount, myVotesFilter]);
+
   const sentimentSlugList = useMemo(
-    () => filteredTopics.map((t: any) => t.slug).filter(Boolean) as string[],
-    [filteredTopics],
+    () => displayTopics.map((t: any) => t.slug).filter(Boolean) as string[],
+    [displayTopics],
   );
   const matchupSlugList = useMemo(
-    () => filteredMatchups.map((m) => m.slug).filter((s): s is string => !!s),
-    [filteredMatchups],
+    () => displayMatchups.map((m) => m.slug).filter((s): s is string => !!s),
+    [displayMatchups],
   );
   const opinionSlugList = useMemo(
-    () => filteredOpinionPolls.map((p: any) => p.slug).filter(Boolean) as string[],
-    [filteredOpinionPolls],
+    () => displayOpinionPolls.map((p: any) => p.slug).filter(Boolean) as string[],
+    [displayOpinionPolls],
   );
 
   const goSentimentDetail = useCallback(
@@ -2011,29 +2061,40 @@ export default function VotePage() {
     [opinionSlugList, setLocation],
   );
 
-  const matchupSnapItems: SnapItem[] = useMemo(() =>
-    matchups.filter(m => m.isActive).map(m => ({
-      id: m.id,
-      slug: m.slug || m.id,
-      category: m.category,
-      title: m.title,
-    })), [matchups]);
+  const matchupSnapItems: SnapItem[] = useMemo(
+    () =>
+      displayMatchups
+        .filter((m) => m.isActive)
+        .map((m) => ({
+          id: m.id,
+          slug: m.slug || m.id,
+          category: m.category,
+          title: m.title,
+        })),
+    [displayMatchups],
+  );
 
-  const sentimentSnapItems: SnapItem[] = useMemo(() =>
-    dbPolls.map((t: any) => ({
-      id: t.id,
-      slug: t.slug || t.id,
-      category: t.category || "misc",
-      title: t.headline || t.title || "",
-    })), [dbPolls]);
+  const sentimentSnapItems: SnapItem[] = useMemo(
+    () =>
+      displayTopics.map((t: any) => ({
+        id: t.id,
+        slug: t.slug || t.id,
+        category: t.category || "misc",
+        title: t.headline || t.title || "",
+      })),
+    [displayTopics],
+  );
 
-  const opinionSnapItems: SnapItem[] = useMemo(() =>
-    opinionPolls.map((p: any) => ({
-      id: p.id,
-      slug: p.slug || p.id,
-      category: p.category || "misc",
-      title: p.title || "",
-    })), [opinionPolls]);
+  const opinionSnapItems: SnapItem[] = useMemo(
+    () =>
+      displayOpinionPolls.map((p: any) => ({
+        id: p.id,
+        slug: p.slug || p.id,
+        category: p.category || "misc",
+        title: p.title || "",
+      })),
+    [displayOpinionPolls],
+  );
 
   const openSnapScroll = useCallback((section: SnapSectionType, itemId?: string) => {
     if (!isMobile) return;
@@ -2324,7 +2385,27 @@ export default function VotePage() {
                 <Button variant="ghost" size="sm" className="md:text-sm" data-testid="link-nav-predict">Predict</Button>
               </Link>
             </div>
-            
+            {user && (
+              <button
+                type="button"
+                onClick={cycleMyVotesFilter}
+                className={`flex items-center gap-1.5 md:hidden ${
+                  myVotesFilter === "show-mine"
+                    ? "text-cyan-600 dark:text-cyan-400"
+                    : myVotesFilter === "hide-mine"
+                      ? "text-amber-500"
+                      : "text-muted-foreground"
+                }`}
+                aria-label="Cycle votes filter"
+              >
+                {myVotesFilter === "hide-mine" ? (
+                  <EyeOff className="h-[14px] w-[14px]" />
+                ) : (
+                  <Vote className="h-[14px] w-[14px]" />
+                )}
+                <span className="text-sm">{myVotesCount}</span>
+              </button>
+            )}
             <UserMenu />
           </div>
         </div>
@@ -2333,8 +2414,8 @@ export default function VotePage() {
         className="sticky top-16 z-40 bg-background/80 backdrop-blur-xl border-b"
         data-testid="section-toggles-container"
       >
-        <div className="container mx-auto px-4 py-3 max-w-7xl">
-          <ScrollMaskedChipRow className="pb-1 relative">
+            <div className="container mx-auto px-4 py-3 max-w-7xl flex items-center gap-3">
+          <ScrollMaskedChipRow className="pb-1 relative flex-1 min-w-0">
             {SECTION_TOGGLES.map((section) => (
               <button
                 key={section}
@@ -2355,7 +2436,52 @@ export default function VotePage() {
                 {section}
               </button>
             ))}
+            {user && (
+              <button
+                type="button"
+                onClick={cycleMyVotesFilter}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all min-w-fit md:hidden ${
+                  myVotesFilter === "show-mine"
+                    ? "bg-cyan-500/25 dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border border-cyan-500/50 dark:border-cyan-400/40 shadow-sm shadow-cyan-500/30 dark:shadow-cyan-500/20"
+                    : myVotesFilter === "hide-mine"
+                      ? "bg-amber-500/15 dark:bg-amber-500/10 text-amber-600 dark:text-amber-500 border border-amber-500/50 dark:border-amber-500/40"
+                      : "bg-muted/50 text-muted-foreground hover:bg-muted border border-transparent"
+                }`}
+                data-testid="toggle-my-votes-pill"
+              >
+                {myVotesFilter === "hide-mine" ? (
+                  <EyeOff className="h-4 w-4 shrink-0" />
+                ) : (
+                  <Vote className="h-4 w-4 shrink-0" />
+                )}
+                {myVotesFilter === "hide-mine" ? `Hide (${myVotesCount})` : `Votes (${myVotesCount})`}
+              </button>
+            )}
           </ScrollMaskedChipRow>
+          {user && (
+            <Button
+              variant={myVotesFilter === "show-mine" ? "default" : "outline"}
+              size="sm"
+              onClick={cycleMyVotesFilter}
+              className={`whitespace-nowrap shrink-0 hidden md:inline-flex ${
+                myVotesFilter === "show-mine"
+                  ? "bg-cyan-600 hover:bg-cyan-700 text-white dark:bg-cyan-600 dark:hover:bg-cyan-500"
+                  : myVotesFilter === "hide-mine"
+                    ? "border-amber-500/60 text-amber-600 dark:text-amber-500 hover:bg-amber-500/10"
+                    : ""
+              }`}
+              data-testid="toggle-my-votes"
+            >
+              {myVotesFilter === "hide-mine" ? (
+                <EyeOff className="h-3.5 w-3.5 mr-1.5" />
+              ) : (
+                <Vote className="h-3.5 w-3.5 mr-1.5" />
+              )}
+              {myVotesFilter === "hide-mine"
+                ? `Hide Votes (${myVotesCount})`
+                : `My Votes (${myVotesCount})`}
+            </Button>
+          )}
         </div>
       </div>
       <div className="container mx-auto px-4 py-8 max-w-7xl pt-[5px] pb-[5px]">
@@ -2422,9 +2548,9 @@ export default function VotePage() {
           
           {pollsLoading ? (
             <CardGridSkeleton count={3} />
-          ) : filteredTopics.length > 0 ? (
+          ) : displayTopics.length > 0 ? (
             <CardSection desktopLimit={9} gap="gap-5" testIdPrefix="section-topics">
-              {filteredTopics.map((topic) => (
+              {displayTopics.map((topic) => (
                 <div key={topic.id} role="button" tabIndex={0} onClick={(e) => handleCardEmptyTap(e, "sentiment", topic.id)} onKeyDown={(e) => { if (e.key === "Enter") handleCardEmptyTap(e as any, "sentiment", topic.id); }} className="h-full">
                   <DiscourseCard 
                     topic={topic} 
@@ -2526,7 +2652,7 @@ export default function VotePage() {
             </div>
           ) : (
             <CardSection desktopLimit={9} gap="gap-5" testIdPrefix="section-matchups">
-              {filteredMatchups.map((matchup) => (
+              {displayMatchups.map((matchup) => (
                 <div key={matchup.id} role="button" tabIndex={0} onClick={(e) => handleCardEmptyTap(e, "matchups", matchup.id)} onKeyDown={(e) => { if (e.key === "Enter") handleCardEmptyTap(e as any, "matchups", matchup.id); }} className="h-full">
                   <VersusCard
                     matchup={matchup}
@@ -2543,7 +2669,7 @@ export default function VotePage() {
             </CardSection>
           )}
 
-          {filteredMatchups.length === 0 && !matchupsLoading && (
+          {displayMatchups.length === 0 && !matchupsLoading && (
             <div className="text-center py-8 text-muted-foreground">
               No matchups match your filter criteria.
             </div>
@@ -2626,9 +2752,9 @@ export default function VotePage() {
 
           {opinionPollsLoading ? (
             <CardGridSkeleton count={3} />
-          ) : filteredOpinionPolls.length > 0 ? (
+          ) : displayOpinionPolls.length > 0 ? (
             <CardSection desktopLimit={6} gap="gap-5" testIdPrefix="section-opinion-polls">
-              {filteredOpinionPolls.map((poll: any) => (
+              {displayOpinionPolls.map((poll: any) => (
                 <div key={poll.id} role="button" tabIndex={0} onClick={(e) => handleCardEmptyTap(e, "opinion", poll.id)} onKeyDown={(e) => { if (e.key === "Enter") handleCardEmptyTap(e as any, "opinion", poll.id); }} className="h-full">
                   <OpinionPollCard
                     poll={poll}
@@ -3852,7 +3978,7 @@ export default function VotePage() {
             
             <div ref={topicsScrollRef} onScroll={(e) => saveOverlayScroll("topics", e.currentTarget.scrollTop)} className="flex-1 overflow-y-auto p-4">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 max-w-7xl mx-auto">
-                {filteredTopics.map((topic) => (
+                {displayTopics.map((topic) => (
                   <DiscourseCard 
                     key={topic.id} 
                     topic={topic} 
@@ -3864,7 +3990,7 @@ export default function VotePage() {
                   />
                 ))}
               </div>
-              {filteredTopics.length === 0 && (
+              {displayTopics.length === 0 && (
                 <div className="text-center py-12 text-muted-foreground">
                   No topics match your filter criteria.
                 </div>
@@ -3911,7 +4037,7 @@ export default function VotePage() {
             
             <div ref={matchupsScrollRef} onScroll={(e) => saveOverlayScroll("matchups", e.currentTarget.scrollTop)} className="flex-1 overflow-y-auto p-4">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 max-w-7xl mx-auto">
-                {filteredMatchups.map((matchup) => (
+                {displayMatchups.map((matchup) => (
                   <VersusCard 
                     key={matchup.id} 
                     matchup={matchup} 
@@ -3925,7 +4051,7 @@ export default function VotePage() {
                   />
                 ))}
               </div>
-              {filteredMatchups.length === 0 && (
+              {displayMatchups.length === 0 && (
                 <div className="text-center py-12 text-muted-foreground">
                   No matchups match your filter criteria.
                 </div>
@@ -3972,7 +4098,7 @@ export default function VotePage() {
             
             <div ref={opinionPollsScrollRef} onScroll={(e) => saveOverlayScroll("opinion-polls", e.currentTarget.scrollTop)} className="flex-1 overflow-y-auto p-4">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 max-w-7xl mx-auto">
-                {filteredOpinionPolls.map((poll: any) => (
+                {displayOpinionPolls.map((poll: any) => (
                   <OpinionPollCard
                     key={poll.id}
                     poll={poll}
@@ -3991,7 +4117,7 @@ export default function VotePage() {
                   />
                 ))}
               </div>
-              {filteredOpinionPolls.length === 0 && (
+              {displayOpinionPolls.length === 0 && (
                 <div className="text-center py-12 text-muted-foreground">
                   No opinion polls match your filter criteria.
                 </div>

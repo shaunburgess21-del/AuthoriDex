@@ -51,6 +51,7 @@ import {
   Trophy, 
   Wallet, 
   ListChecks,
+  EyeOff,
   HelpCircle,
   Check,
   ChevronRight,
@@ -1478,7 +1479,12 @@ export default function PredictPage() {
   const leaderboardCats = useLeaderboardCategories();
   const onboardingRef = useRef<OnboardingDrawerHandle>(null);
   const [selectedType, setSelectedType] = useState<PredictionType>("all");
-  const [showMyPositions, setShowMyPositions] = useState(false);
+  const [myPositionsFilter, setMyPositionsFilter] = useState<"all" | "show-mine" | "hide-mine">("all");
+  const cycleMyPositionsFilter = useCallback(() => {
+    setMyPositionsFilter((prev) =>
+      prev === "all" ? "show-mine" : prev === "show-mine" ? "hide-mine" : "all",
+    );
+  }, []);
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
 
   const handleCategoryPillFilter = useCallback((category: string) => {
@@ -1668,10 +1674,10 @@ export default function PredictPage() {
     [userBetsByMarket, visibleMarketIds]
   );
   useEffect(() => {
-    if (activePredictions === 0 && showMyPositions) {
-      setShowMyPositions(false);
+    if (activePredictions === 0 && myPositionsFilter === "show-mine") {
+      setMyPositionsFilter("all");
     }
-  }, [activePredictions, showMyPositions]);
+  }, [activePredictions, myPositionsFilter]);
 
   const predictedMarkets = useMemo(() => new Set(Array.from(userBetsByMarket.keys())), [userBetsByMarket]);
   const hydratedMarkets = useMemo((): PredictionMarket[] => {
@@ -2202,27 +2208,32 @@ export default function PredictPage() {
     return normalizeMarketCategory(marketCategory) === cat;
   };
 
+  const passesMyPositionsFilter = (marketId: string) =>
+    myPositionsFilter === "all" ||
+    (myPositionsFilter === "show-mine" && userBetsByMarket.has(marketId)) ||
+    (myPositionsFilter === "hide-mine" && !userBetsByMarket.has(marketId));
+
   const filteredUpDown = hydratedMarkets.filter(m =>
-    (showMyPositions || matchesCategory(updownCategory, m.category, m.personId)) &&
+    matchesCategory(updownCategory, m.category, m.personId) &&
     (!updownSearch || m.personName.toLowerCase().includes(updownSearch.toLowerCase())) &&
-    (!showMyPositions || userBetsByMarket.has(m.id))
+    passesMyPositionsFilter(m.id)
   ).sort((a: any, b: any) => updownCategory === "trending" ? ((b.totalBets ?? 0) - (a.totalBets ?? 0)) : 0);
 
   const filteredH2H = hydratedH2H.filter(m =>
-    (showMyPositions || h2hCategory === "all" || h2hCategory === "trending" ||
+    (h2hCategory === "all" || h2hCategory === "trending" ||
      (h2hCategory === "favorites" ? (favoriteIds.has(m.person1Id || "") || favoriteIds.has(m.person2Id || "")) : matchesCategory(h2hCategory, m.category))) &&
     (!h2hSearch || m.title.toLowerCase().includes(h2hSearch.toLowerCase()) ||
      m.person1.name.toLowerCase().includes(h2hSearch.toLowerCase()) ||
      m.person2.name.toLowerCase().includes(h2hSearch.toLowerCase())) &&
-    (!showMyPositions || userBetsByMarket.has(m.id))
+    passesMyPositionsFilter(m.id)
   ).sort((a: any, b: any) => h2hCategory === "trending" ? ((b.totalBets ?? 0) - (a.totalBets ?? 0)) : 0);
 
   const filteredGainers = hydratedGainers.filter(m =>
-    (showMyPositions || gainerCategory === "all" || gainerCategory === "trending" ||
+    (gainerCategory === "all" || gainerCategory === "trending" ||
      (gainerCategory === "favorites" ? m.leaders.some(l => l.personId && favoriteIds.has(l.personId)) : matchesCategory(gainerCategory, m.category))) &&
     (!gainerSearch || getMarketCategoryLabel(m.category).toLowerCase().includes(gainerSearch.toLowerCase()) ||
      (m.allCandidates || m.leaders).some(l => l.name.toLowerCase().includes(gainerSearch.toLowerCase()))) &&
-    (!showMyPositions || userBetsByMarket.has(m.id))
+    passesMyPositionsFilter(m.id)
   ).sort((a: any, b: any) => gainerCategory === "trending" ? ((b.totalBets ?? 0) - (a.totalBets ?? 0)) : 0);
 
   const hasLiveGainers = hydratedGainers.length > 0;
@@ -2237,7 +2248,7 @@ export default function PredictPage() {
        (m.allCandidates || m.leaders).some(l => l.name.toLowerCase().includes(overlaySearchQuery.toLowerCase())))
     )
     .sort((a: any, b: any) => overlayCategoryFilter === "trending" ? ((b.totalBets ?? 0) - (a.totalBets ?? 0)) : 0);
-  const gainerEmptyMessage = showMyPositions
+  const gainerEmptyMessage = myPositionsFilter === "show-mine"
     ? "You don't have any active Category Race positions yet"
     : hasInactiveOnlyGainers
       ? "No live Category Races are open right now"
@@ -2246,9 +2257,9 @@ export default function PredictPage() {
         : "No Category Races are available right now";
 
   const filteredCommunity = openMarkets.filter((m: any) =>
-    (showMyPositions || communityCategory === "all" || communityCategory === "trending" || m.category === communityCategory) &&
+    (communityCategory === "all" || communityCategory === "trending" || m.category === communityCategory) &&
     (!communitySearch || m.title?.toLowerCase().includes(communitySearch.toLowerCase())) &&
-    (!showMyPositions || userBetsByMarket.has(m.id))
+    passesMyPositionsFilter(m.id)
   ).sort((a: any, b: any) => communityCategory === "trending" ? ((b.totalBets ?? 0) - (a.totalBets ?? 0)) : 0);
 
   const showSection = (type: PredictionType) => selectedType === "all" || selectedType === type;
@@ -2307,13 +2318,27 @@ export default function PredictPage() {
                 <Wallet className="h-[14px] w-[14px] text-violet-700 dark:text-violet-500" />
                 <span className="font-mono font-bold text-sm">{walletCredits.toLocaleString('en-US')}</span>
               </div>
-              <button
-                onClick={() => setShowMyPositions(!showMyPositions)}
-                className={`flex items-center gap-1.5 ${showMyPositions ? 'text-violet-600 dark:text-violet-400' : 'text-muted-foreground'}`}
-              >
-                <ListChecks className="h-[14px] w-[14px]" />
-                <span className="text-sm">{activePredictions}</span>
-              </button>
+              {user && !userBetsError && (
+                <button
+                  type="button"
+                  onClick={cycleMyPositionsFilter}
+                  className={`flex items-center gap-1.5 ${
+                    myPositionsFilter === "show-mine"
+                      ? "text-violet-600 dark:text-violet-400"
+                      : myPositionsFilter === "hide-mine"
+                        ? "text-amber-500"
+                        : "text-muted-foreground"
+                  }`}
+                  aria-label="Cycle positions filter"
+                >
+                  {myPositionsFilter === "hide-mine" ? (
+                    <EyeOff className="h-[14px] w-[14px]" />
+                  ) : (
+                    <ListChecks className="h-[14px] w-[14px]" />
+                  )}
+                  <span className="text-sm">{activePredictions}</span>
+                </button>
+              )}
             </div>
             <UserMenu />
           </div>
@@ -2338,18 +2363,27 @@ export default function PredictPage() {
                 <span className="hidden sm:inline">{type.label}</span>
               </button>
             ))}
-            {user && activePredictions > 0 && !userBetsError && (
+            {user && !userBetsError && (
               <button
-                onClick={() => setShowMyPositions(!showMyPositions)}
+                type="button"
+                onClick={cycleMyPositionsFilter}
                 className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all min-w-fit md:hidden ${
-                  showMyPositions
-                    ? 'bg-violet-500/25 dark:bg-violet-500/20 text-violet-600 dark:text-violet-400 border border-violet-500/50 dark:border-violet-400/40 shadow-sm shadow-violet-500/30 dark:shadow-violet-500/20'
-                    : 'bg-muted/50 text-muted-foreground hover:bg-muted border border-transparent'
+                  myPositionsFilter === "show-mine"
+                    ? "bg-violet-500/25 dark:bg-violet-500/20 text-violet-600 dark:text-violet-400 border border-violet-500/50 dark:border-violet-400/40 shadow-sm shadow-violet-500/30 dark:shadow-violet-500/20"
+                    : myPositionsFilter === "hide-mine"
+                      ? "bg-amber-500/15 dark:bg-amber-500/10 text-amber-600 dark:text-amber-500 border border-amber-500/50 dark:border-amber-500/40"
+                      : "bg-muted/50 text-muted-foreground hover:bg-muted border border-transparent"
                 }`}
                 data-testid="toggle-my-positions-pill"
               >
-                <Wallet className="h-4 w-4" />
-                Positions ({activePredictions})
+                {myPositionsFilter === "hide-mine" ? (
+                  <EyeOff className="h-4 w-4 shrink-0" />
+                ) : (
+                  <ListChecks className="h-4 w-4 shrink-0" />
+                )}
+                {myPositionsFilter === "hide-mine"
+                  ? `Hide (${activePredictions})`
+                  : `Positions (${activePredictions})`}
               </button>
             )}
           </HorizontalScroll>
@@ -2372,16 +2406,28 @@ export default function PredictPage() {
               Retry loading bets
             </Button>
           )}
-          {user && activePredictions > 0 && !userBetsError && (
+          {user && !userBetsError && (
             <Button
-              variant={showMyPositions ? "default" : "outline"}
+              variant={myPositionsFilter === "show-mine" ? "default" : "outline"}
               size="sm"
-              onClick={() => setShowMyPositions(!showMyPositions)}
-              className={`whitespace-nowrap shrink-0 hidden md:inline-flex ${showMyPositions ? 'bg-violet-500 hover:bg-violet-600 text-white' : ''}`}
+              onClick={cycleMyPositionsFilter}
+              className={`whitespace-nowrap shrink-0 hidden md:inline-flex ${
+                myPositionsFilter === "show-mine"
+                  ? "bg-violet-500 hover:bg-violet-600 text-white"
+                  : myPositionsFilter === "hide-mine"
+                    ? "border-amber-500/60 text-amber-600 dark:text-amber-500 hover:bg-amber-500/10"
+                    : ""
+              }`}
               data-testid="toggle-my-positions"
             >
-              <Wallet className="h-3.5 w-3.5 mr-1.5" />
-              My Positions ({activePredictions})
+              {myPositionsFilter === "hide-mine" ? (
+                <EyeOff className="h-3.5 w-3.5 mr-1.5" />
+              ) : (
+                <ListChecks className="h-3.5 w-3.5 mr-1.5" />
+              )}
+              {myPositionsFilter === "hide-mine"
+                ? `Hide Positions (${activePredictions})`
+                : `My Positions (${activePredictions})`}
             </Button>
           )}
         </div>
