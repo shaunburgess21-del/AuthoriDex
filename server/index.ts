@@ -1,7 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import path from "path";
 import helmet from "helmet";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { registerRoutes } from "./routes";
 import { resolveAuthContextFromHeader, type AuthRequest } from "./auth-middleware";
 
@@ -456,10 +456,25 @@ const skipRateLimit = (req: Request) => {
   return p === "/api/config/supabase" || p === "/api/health" || p.endsWith("/config/supabase");
 };
 
+/** IPv6-safe IP key for express-rate-limit (see ERR_ERL_KEY_GEN_IPV6). */
+function rateLimitKeyForRequest(req: Request): string {
+  const userId = (req as AuthRequest).userId;
+  if (userId) return userId;
+  const ip = req.ip;
+  if (!ip) return "unknown";
+  return ipKeyGenerator(ip);
+}
+
+function rateLimitKeyIpOnly(req: Request): string {
+  const ip = req.ip;
+  if (!ip) return "unknown";
+  return ipKeyGenerator(ip);
+}
+
 const readLimiter = rateLimit({
   windowMs: 60_000,
   max: parseInt(process.env.API_READ_RATE_LIMIT_MAX || "600", 10),
-  keyGenerator: (req) => (req as AuthRequest).userId ?? req.ip ?? "unknown",
+  keyGenerator: rateLimitKeyForRequest,
   skip: skipRateLimit,
   standardHeaders: true,
   legacyHeaders: false,
@@ -472,7 +487,7 @@ const writeLimiter = rateLimit({
     (req as AuthRequest).userId
       ? parseInt(process.env.API_WRITE_RATE_LIMIT_AUTH_MAX || "60", 10)
       : parseInt(process.env.API_WRITE_RATE_LIMIT_ANON_MAX || "15", 10),
-  keyGenerator: (req) => (req as AuthRequest).userId ?? req.ip ?? "unknown",
+  keyGenerator: rateLimitKeyForRequest,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many requests, please slow down." },
@@ -481,7 +496,7 @@ const writeLimiter = rateLimit({
 const authLimiter = rateLimit({
   windowMs: 60_000,
   max: parseInt(process.env.API_AUTH_RATE_LIMIT_MAX || "10", 10),
-  keyGenerator: (req) => req.ip ?? "unknown",
+  keyGenerator: rateLimitKeyIpOnly,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many authentication attempts. Please try again in a minute." },

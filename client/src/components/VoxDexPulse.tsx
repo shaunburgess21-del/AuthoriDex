@@ -4,7 +4,7 @@ import { useLocation } from "wouter";
 import { motion, LayoutGroup } from "framer-motion";
 import {
   Zap, ThumbsUp, TrendingUp, TrendingDown,
-  Play, Pause, Info, ChevronDown,
+  Play, Pause, Info, ChevronDown, LayoutGrid,
 } from "lucide-react";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
@@ -884,25 +884,6 @@ export function VoxDexPulse({ collapsed, onToggle }: VoxDexPulseProps) {
         </div>
       </div>
 
-      {/* Category filter only (Top N is in top row beside 48h) */}
-      <div className="order-5 sm:order-3 flex items-center gap-1.5 overflow-x-auto scrollbar-hide mt-2 sm:mt-0 mb-2">
-        {visibleCategories.map(cat => (
-          <button
-            key={cat}
-            onClick={() => setCategory(cat)}
-            className={`px-2.5 py-1 rounded-full text-[11px] font-medium whitespace-nowrap transition-all ${
-              category === cat
-                ? mode === "trend"
-                  ? "bg-blue-500/25 dark:bg-blue-500/20 text-blue-500 dark:text-blue-300 border border-blue-500/50 dark:border-blue-400/40"
-                  : "bg-cyan-500/25 dark:bg-cyan-500/20 text-cyan-500 dark:text-cyan-300 border border-cyan-500/50 dark:border-cyan-400/40"
-                : "bg-muted/60 border border-border/60 text-muted-foreground hover:bg-muted/60"
-            }`}
-          >
-            {cat}
-          </button>
-        ))}
-      </div>
-
       {isTimelapse && (
         <div className="order-6 flex flex-col items-center pb-2 sm:hidden">
           <span className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
@@ -940,6 +921,67 @@ export function VoxDexPulse({ collapsed, onToggle }: VoxDexPulseProps) {
 
       {/* Leaderboard card */}
       <div className="order-4 sm:order-5 rounded-xl border border-border/60 bg-card/80 backdrop-blur overflow-hidden">
+        {/* Header row — category + Top N always visible (loading / empty / data) */}
+        <div className="flex items-center justify-between gap-2 px-3 py-1.5 border-b border-border/40">
+          <span className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium truncate min-w-0">
+            {isLoading
+              ? "Loading…"
+              : currentRankings.length === 0
+                ? `${mode === "trend" ? "Top Trending" : "Most Voted"} \u00B7 ${category === "All" ? "All" : category}`
+                : currentFrameLabel
+                  ? `Trending \u00B7 ${currentFrameLabel}`
+                  : `${mode === "trend" ? "Top Trending" : "Most Voted"} \u00B7 ${category === "All" ? "All" : category}`}
+          </span>
+          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+            <Select
+              value={category}
+              onValueChange={(v) => setCategory(v as (typeof CATEGORIES)[number])}
+            >
+              <SelectTrigger
+                className={
+                  isMobile
+                    ? "h-6 w-9 px-0 justify-center bg-muted/50 border-border/40 rounded-md shrink-0 [&>svg:last-child]:hidden"
+                    : "h-6 min-w-[72px] max-w-[100px] text-[10px] bg-muted/50 border-border/40 rounded-md gap-1 px-1.5 shrink-0"
+                }
+                aria-label={`Category: ${category}`}
+                data-testid="select-pulse-category"
+              >
+                {isMobile && (
+                  <LayoutGrid className="h-3.5 w-3.5 shrink-0 text-muted-foreground pointer-events-none" aria-hidden />
+                )}
+                <SelectValue className={isMobile ? "sr-only" : undefined} />
+              </SelectTrigger>
+              <SelectContent>
+                {visibleCategories.map((cat) => (
+                  <SelectItem key={cat} value={cat}>
+                    {cat}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={String(limit)} onValueChange={(v) => setLimit(Number(v))}>
+              <SelectTrigger
+                className="h-6 w-[66px] text-[10px] bg-muted/50 border-border/40 rounded-md gap-1 px-1.5 shrink-0"
+                data-testid="select-pulse-top-n"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[10, 20, 30, 40, 50, 60, 70, 80, 100].map((n) => (
+                  <SelectItem key={n} value={String(n)}>
+                    Top {n}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <span className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium hidden sm:block">
+              {mode === "trend"
+                ? "Score"
+                : "Votes \u00B7 Rating"}
+            </span>
+          </div>
+        </div>
+
         {isLoading ? (
           <div className="h-[280px] flex items-center justify-center">
             <div className="text-center">
@@ -957,57 +999,21 @@ export function VoxDexPulse({ collapsed, onToggle }: VoxDexPulseProps) {
             </p>
           </div>
         ) : (
-          <div>
-            {/* Header row */}
-            <div className="flex items-center justify-between px-3 py-1.5 border-b border-border/40">
-              <span className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium">
-                {currentFrameLabel
-                  ? `Trending \u00B7 ${currentFrameLabel}`
-                  : `${mode === "trend" ? "Top Trending" : "Most Voted"} \u00B7 ${category === "All" ? "All" : category}`
-                }
-              </span>
-              <div className="flex items-center gap-2">
-                <Select value={String(limit)} onValueChange={(v) => setLimit(Number(v))}>
-                  <SelectTrigger
-                    className="h-6 w-[66px] text-[10px] bg-muted/50 border-border/40 rounded-md gap-1 px-1.5 shrink-0"
-                    data-testid="select-pulse-top-n"
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {[10, 20, 30, 40, 50, 60, 70, 80, 100].map((n) => (
-                      <SelectItem key={n} value={String(n)}>
-                        Top {n}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <span className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium hidden sm:block">
-                  {mode === "trend"
-                    ? "Score"
-                    : "Votes \u00B7 Rating"
-                  }
-                </span>
-              </div>
-            </div>
-
-            {/* Rows */}
-            <LayoutGroup>
-              {currentRankings.map((person, idx) => (
-                <PulseRow
-                  key={person.id}
-                  person={mode === "approval" ? { ...person, score: person.score, approvalAvgRating: approvalRatings[person.id] ?? person.approvalAvgRating } : person}
-                  rank={idx + 1}
-                  mode={mode}
-                  maxScore={maxScore}
-                  onNavigate={() => navigate(`/person/${person.id}`)}
-                  approvalBreakdown={mode === "approval" ? approvalBreakdownCache[person.id] ?? null : null}
-                  onApprovalSegmentTap={mode === "approval" ? handleApprovalSegmentTap : undefined}
-                  showLiveDetails={mode === "trend" && !isPlaying && frameIndex >= (frames.length > 0 ? frames.length - 1 : 0)}
-                />
-              ))}
-            </LayoutGroup>
-          </div>
+          <LayoutGroup>
+            {currentRankings.map((person, idx) => (
+              <PulseRow
+                key={person.id}
+                person={mode === "approval" ? { ...person, score: person.score, approvalAvgRating: approvalRatings[person.id] ?? person.approvalAvgRating } : person}
+                rank={idx + 1}
+                mode={mode}
+                maxScore={maxScore}
+                onNavigate={() => navigate(`/person/${person.id}`)}
+                approvalBreakdown={mode === "approval" ? approvalBreakdownCache[person.id] ?? null : null}
+                onApprovalSegmentTap={mode === "approval" ? handleApprovalSegmentTap : undefined}
+                showLiveDetails={mode === "trend" && !isPlaying && frameIndex >= (frames.length > 0 ? frames.length - 1 : 0)}
+              />
+            ))}
+          </LayoutGroup>
         )}
       </div>
 
