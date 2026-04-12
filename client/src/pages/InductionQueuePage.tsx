@@ -10,7 +10,7 @@ import { PersonAvatar } from "@/components/PersonAvatar";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
 import { useCategoryRaceMap } from "@/hooks/useCategoryRaceMap";
 import { useLeaderboardCategories } from "@/hooks/useLeaderboardCategories";
-import { normalizeMarketCategory, type FilterCategory } from "@shared/constants";
+import { normalizeMarketCategory, type FilterCategory, CATEGORIES_WITH_FILTERS } from "@shared/constants";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -59,20 +59,9 @@ function getRankBg(rank: number) {
   return "";
 }
 
-const FILTER_CATEGORIES: { value: string; label: string }[] = [
-  { value: "All", label: "All" },
-  { value: "Tech", label: "Tech" },
-  { value: "Business", label: "Business" },
-  { value: "Politics", label: "Politics" },
-  { value: "Music", label: "Music" },
-  { value: "Sports", label: "Sports" },
-  { value: "Film & TV", label: "Film & TV" },
-  { value: "Gaming", label: "Gaming" },
-  { value: "Creator", label: "Creator" },
-  { value: "Comedy", label: "Comedy" },
-  { value: "Food & Drink", label: "Food & Drink" },
-  { value: "Lifestyle", label: "Lifestyle" },
-];
+const FILTER_CATEGORIES = CATEGORIES_WITH_FILTERS
+  .filter(c => c.id !== "favorites" && c.id !== "trending")
+  .map(c => ({ value: c.id, label: c.label }));
 
 export default function InductionQueuePage() {
   const [, setLocation] = useLocation();
@@ -81,7 +70,7 @@ export default function InductionQueuePage() {
   const { user, isLoggedIn } = useAuth();
   const raceMap = useCategoryRaceMap();
   const leaderboardCats = useLeaderboardCategories();
-  const [categoryFilter, setCategoryFilter] = useState("All");
+  const [categoryFilter, setCategoryFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [votedIds, setVotedIds] = useState<Set<string>>(new Set());
   const [showVoteAnim, setShowVoteAnim] = useState<string | null>(null);
@@ -148,7 +137,7 @@ export default function InductionQueuePage() {
 
   const filteredCandidates = useMemo(() => {
     return candidates.filter((c) => {
-      const matchesCat = categoryFilter === "All" || c.category?.toLowerCase() === categoryFilter.toLowerCase();
+      const matchesCat = categoryFilter === "all" || c.category?.toLowerCase() === categoryFilter.toLowerCase();
       const matchesSearch = !searchQuery || c.displayName.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesCat && matchesSearch;
     });

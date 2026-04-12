@@ -17,36 +17,36 @@ import { resolve } from "path";
 import { db } from "../server/db";
 import { trendingPolls, trackedPeople } from "../shared/schema";
 import { eq, sql } from "drizzle-orm";
+import { CATEGORIES_OPEN } from "../shared/constants";
 
-const VALID_CATEGORIES = new Set(["Tech", "Politics", "Business", "Music", "Sports", "Film & TV", "Gaming", "Creator", "misc", "Food & Drink", "Lifestyle"]);
+const VALID_CATEGORIES = new Set(CATEGORIES_OPEN.map(c => c.id));
 
 const CATEGORY_MAP: Record<string, string> = {
   "custom topic": "misc",
   "custom": "misc",
   "misc": "misc",
-  "tech": "Tech",
-  "politics": "Politics",
-  "business": "Business",
-  "music": "Music",
-  "sports": "Sports",
-  "sport": "Sports",
-  "acting": "Film & TV",
-  "film-tv": "Film & TV",
-  "film & tv": "Film & TV",
-  "gaming": "Gaming",
-  "creator": "Creator",
-  "food-drink": "Food & Drink",
-  "food & drink": "Food & Drink",
-  "lifestyle": "Lifestyle",
+  "tech": "tech",
+  "politics": "politics",
+  "business": "business",
+  "music": "music",
+  "sports": "sports",
+  "sport": "sports",
+  "acting": "film-tv",
+  "film-tv": "film-tv",
+  "film & tv": "film-tv",
+  "gaming": "gaming",
+  "creator": "creator",
+  "comedy": "comedy",
+  "food-drink": "food-drink",
+  "food & drink": "food-drink",
+  "lifestyle": "lifestyle",
 };
 
 function normalizeCategory(raw: string): string | null {
   const trimmed = raw.trim();
   const lower = trimmed.toLowerCase();
   if (CATEGORY_MAP[lower]) return CATEGORY_MAP[lower];
-  const canonical = trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase();
-  if (VALID_CATEGORIES.has(canonical)) return canonical;
-  if (VALID_CATEGORIES.has(trimmed)) return trimmed;
+  if (VALID_CATEGORIES.has(lower)) return lower;
   return null;
 }
 

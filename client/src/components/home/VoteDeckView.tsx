@@ -39,7 +39,8 @@ import {
   Gamepad2,
   UtensilsCrossed,
   Heart,
-  Laugh
+  Laugh,
+  Flame
 } from "lucide-react";
 import {
   DISCOURSE_TOPICS,
@@ -48,7 +49,11 @@ import {
 } from "@/data/vote";
 import { CurateSection } from "@/components/curate";
 import { HomeSectionHeader } from "@/components/home/HomeSectionHeader";
-import { getFilterCategories, type FilterCategory } from "@shared/constants";
+import {
+  BASE_CATEGORY_FILTER_OPTIONS,
+  normalizeMarketCategory,
+  type FilterCategory,
+} from "@shared/constants";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -464,7 +469,7 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
   const [, setLocation] = useLocation();
   const [activeSection, setActiveSection] = useState<VoteSection>("All");
   const [searchQuery, setSearchQuery] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<FilterCategory>("All");
+  const [categoryFilter, setCategoryFilter] = useState<FilterCategory>("all");
   
   const [matchupVotes, setMatchupVotes] = useState<Record<string, string>>({});
   const [pollVotes, setPollVotes] = useState<Record<string, string>>({});
@@ -484,24 +489,30 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
 
   const filteredMatchups = useMemo(() => 
     matchupsData.filter(fo => {
-      const matchesCategory = categoryFilter === "All" || categoryFilter === "Trending" || fo.category === categoryFilter;
+      const matchesCategory =
+        categoryFilter === "all" ||
+        categoryFilter === "trending" ||
+        normalizeMarketCategory(fo.category) === categoryFilter;
       const matchesSearch = !searchQuery || 
         fo.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         fo.optionAText.toLowerCase().includes(searchQuery.toLowerCase()) ||
         fo.optionBText.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesCategory && matchesSearch;
-    }).sort((a: any, b: any) => categoryFilter === "Trending" ? ((b.totalVotes ?? 0) - (a.totalVotes ?? 0)) : 0),
-    [categoryFilter, searchQuery]
+    }).sort((a: any, b: any) => categoryFilter === "trending" ? ((b.totalVotes ?? 0) - (a.totalVotes ?? 0)) : 0),
+    [categoryFilter, searchQuery, matchupsData]
   );
 
   const filteredPolls = useMemo(() =>
     DISCOURSE_TOPICS.filter(t => {
-      const matchesCategory = categoryFilter === "All" || categoryFilter === "Trending" || t.category === categoryFilter;
+      const matchesCategory =
+        categoryFilter === "all" ||
+        categoryFilter === "trending" ||
+        normalizeMarketCategory(t.category) === categoryFilter;
       const matchesSearch = !searchQuery ||
         t.headline.toLowerCase().includes(searchQuery.toLowerCase()) ||
         t.description.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesCategory && matchesSearch;
-    }).sort((a: any, b: any) => categoryFilter === "Trending" ? ((b.totalVotes ?? 0) - (a.totalVotes ?? 0)) : 0),
+    }).sort((a: any, b: any) => categoryFilter === "trending" ? ((b.totalVotes ?? 0) - (a.totalVotes ?? 0)) : 0),
     [categoryFilter, searchQuery]
   );
 
@@ -556,10 +567,13 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
 
   const filteredInduction = useMemo(() =>
     deckInductionCandidates.filter(c => {
-      const matchesCategory = categoryFilter === "All" || categoryFilter === "Trending" || c.category === categoryFilter;
+      const matchesCategory =
+        categoryFilter === "all" ||
+        categoryFilter === "trending" ||
+        normalizeMarketCategory(c.category) === categoryFilter;
       const matchesSearch = !searchQuery || c.name.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesCategory && matchesSearch;
-    }).sort((a: any, b: any) => categoryFilter === "Trending" ? ((b.votes ?? 0) - (a.votes ?? 0)) : 0),
+    }).sort((a: any, b: any) => categoryFilter === "trending" ? ((b.votes ?? 0) - (a.votes ?? 0)) : 0),
     [categoryFilter, searchQuery, deckInductionCandidates]
   );
 
@@ -579,10 +593,13 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
 
   const filteredValue = useMemo(() =>
     valueCelebrities.filter((c: ValueVotePerson) => {
-      const matchesCategory = categoryFilter === "All" || categoryFilter === "Trending" || c.category?.toLowerCase() === categoryFilter.toLowerCase();
+      const matchesCategory =
+        categoryFilter === "all" ||
+        categoryFilter === "trending" ||
+        normalizeMarketCategory(c.category) === categoryFilter;
       const matchesSearch = !searchQuery || c.name.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesCategory && matchesSearch;
-    }).sort((a: any, b: any) => categoryFilter === "Trending" ? ((b.approvalScore ?? 0) - (a.approvalScore ?? 0)) : 0),
+    }).sort((a: any, b: any) => categoryFilter === "trending" ? ((b.approvalScore ?? 0) - (a.approvalScore ?? 0)) : 0),
     [valueCelebrities, categoryFilter, searchQuery]
   );
 
@@ -707,40 +724,60 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
       </div>
 
       <div ref={dragScrollRef2} className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
-        {getFilterCategories(false).map((cat) => (
+        {BASE_CATEGORY_FILTER_OPTIONS.map(({ id, label }) => {
+          const Icon =
+            id === "all"
+              ? LayoutGrid
+              : id === "favorites"
+                ? Star
+                : id === "trending"
+                  ? Flame
+                  : id === "tech"
+                    ? Cpu
+                    : id === "politics"
+                      ? Landmark
+                      : id === "business"
+                        ? Briefcase
+                        : id === "music"
+                          ? Music2
+                          : id === "sports"
+                            ? Trophy
+                            : id === "film-tv"
+                              ? Clapperboard
+                              : id === "gaming"
+                                ? Gamepad2
+                                : id === "creator"
+                                  ? Video
+                                  : id === "comedy"
+                                    ? Laugh
+                                    : id === "food-drink"
+                                      ? UtensilsCrossed
+                                      : id === "lifestyle"
+                                        ? Heart
+                                        : null;
+          return (
           <button
-            key={cat}
+            key={id}
             onClick={() => {
-              if (cat === "Favorites" && !user) {
+              if (id === "favorites" && !user) {
                 setLocation("/login");
                 return;
               }
-              setCategoryFilter(cat as FilterCategory);
+              setCategoryFilter(id);
             }}
             className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1.5 ${
-              categoryFilter === cat
+              categoryFilter === id
                 ? 'bg-cyan-500/25 dark:bg-cyan-500/20 text-cyan-500 dark:text-cyan-300 border border-cyan-500/50 dark:border-cyan-400/40'
                 : 'bg-muted/30 border border-border/50 text-muted-foreground hover:bg-muted/50'
             }`}
-            data-testid={`chip-vote-category-${cat.toLowerCase()}`}
-            aria-label={cat === "Favorites" ? "Favorites" : undefined}
+            data-testid={`chip-vote-category-${id}`}
+            aria-label={id === "favorites" ? "Favorites" : undefined}
           >
-            {cat === "All" && <LayoutGrid className="h-3.5 w-3.5" />}
-            {cat === "Favorites" && <Star className="h-3.5 w-3.5" />}
-            {cat === "Tech" && <Cpu className="h-3.5 w-3.5" />}
-            {cat === "Politics" && <Landmark className="h-3.5 w-3.5" />}
-            {cat === "Business" && <Briefcase className="h-3.5 w-3.5" />}
-            {cat === "Music" && <Music2 className="h-3.5 w-3.5" />}
-            {cat === "Sports" && <Trophy className="h-3.5 w-3.5" />}
-            {cat === "Film & TV" && <Clapperboard className="h-3.5 w-3.5" />}
-            {cat === "Gaming" && <Gamepad2 className="h-3.5 w-3.5" />}
-            {cat === "Creator" && <Video className="h-3.5 w-3.5" />}
-            {cat === "Comedy" && <Laugh className="h-3.5 w-3.5" />}
-            {cat === "Food & Drink" && <UtensilsCrossed className="h-3.5 w-3.5" />}
-            {cat === "Lifestyle" && <Heart className="h-3.5 w-3.5" />}
-            {cat === "Favorites" ? <span className="hidden md:inline">{cat}</span> : cat}
+            {Icon && <Icon className="h-3.5 w-3.5" />}
+            {id === "favorites" ? <span className="hidden md:inline">{label}</span> : label}
           </button>
-        ))}
+          );
+        })}
       </div>
 
       {showMatchups && filteredMatchups.length > 0 && (

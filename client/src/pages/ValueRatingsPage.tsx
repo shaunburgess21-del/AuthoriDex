@@ -18,7 +18,11 @@ import {
   ArrowLeft, ArrowUp, ArrowDown, Minus, Search, Trophy, Medal,
   Users, BarChart3, Star, Heart, LayoutGrid, Flame, Crown, TrendingUp,
 } from "lucide-react";
-import { BASE_FILTER_CATEGORIES, type FilterCategory } from "@shared/constants";
+import {
+  BASE_CATEGORY_FILTER_OPTIONS,
+  normalizeMarketCategory,
+  type FilterCategory,
+} from "@shared/constants";
 
 interface ValuePerson {
   id: string;
@@ -46,9 +50,22 @@ const SORT_OPTIONS: { value: SortField; label: string }[] = [
   { value: "fairlyRatedPct", label: "Most Fairly Rated" },
 ];
 
-const VOTE_CATEGORY_ICONS: Record<string, React.ComponentType<any>> = {
-  All: LayoutGrid, Favorites: Heart, Trending: Flame, Tech: BarChart3,
-  Business: TrendingUp, Music: Star, Creator: Crown,
+const VOTE_CATEGORY_ICONS: Partial<Record<FilterCategory, React.ComponentType<{ className?: string }>>> = {
+  all: LayoutGrid,
+  favorites: Heart,
+  trending: Flame,
+  tech: BarChart3,
+  politics: Users,
+  business: TrendingUp,
+  music: Star,
+  sports: Trophy,
+  "film-tv": Medal,
+  gaming: Crown,
+  creator: Crown,
+  comedy: Users,
+  "food-drink": Users,
+  lifestyle: Heart,
+  misc: LayoutGrid,
 };
 
 function PerceptionBar({ uPct, fPct, oPct, height = "h-2.5" }: { uPct: number; fPct: number; oPct: number; height?: string }) {
@@ -190,7 +207,7 @@ export default function ValueRatingsPage() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
   const { favoriteIds } = useFavorites();
-  const [categoryFilter, setCategoryFilter] = useState<FilterCategory>("All");
+  const [categoryFilter, setCategoryFilter] = useState<FilterCategory>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [sortField, setSortField] = useState<SortField>("valueScore");
   const filterScrollRef = useRef<HTMLDivElement>(null);
@@ -208,10 +225,10 @@ export default function ValueRatingsPage() {
 
   const filtered = useMemo(() => {
     let list = allPeople;
-    if (categoryFilter === "Favorites") {
+    if (categoryFilter === "favorites") {
       list = list.filter((p) => favoriteIds.has(p.id));
-    } else if (categoryFilter !== "All" && categoryFilter !== "Trending") {
-      list = list.filter((p) => (p.category || "").toLowerCase() === categoryFilter.toLowerCase());
+    } else if (categoryFilter !== "all" && categoryFilter !== "trending") {
+      list = list.filter((p) => normalizeMarketCategory(p.category) === categoryFilter);
     }
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
@@ -268,16 +285,16 @@ export default function ValueRatingsPage() {
 
         <div className="flex flex-col sm:flex-row gap-3 mb-4">
           <div ref={filterScrollRef} onWheel={handleFilterScroll} className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0 sm:flex-1 sm:min-w-0">
-            {BASE_FILTER_CATEGORIES.map((cat) => {
-              const isFavorites = cat === "Favorites";
-              const Icon = VOTE_CATEGORY_ICONS[cat];
-              const isActive = categoryFilter === cat;
+            {BASE_CATEGORY_FILTER_OPTIONS.map(({ id, label }) => {
+              const isFavorites = id === "favorites";
+              const Icon = VOTE_CATEGORY_ICONS[id];
+              const isActive = categoryFilter === id;
               return (
-                <button key={cat} onClick={() => { if (isFavorites && !user) { setLocation("/login"); return; } setCategoryFilter(cat as FilterCategory); }}
+                <button key={id} onClick={() => { if (isFavorites && !user) { setLocation("/login"); return; } setCategoryFilter(id); }}
                   className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-all flex items-center gap-1.5 whitespace-nowrap ${isActive ? "bg-cyan-500/25 dark:bg-cyan-500/20 border-cyan-500/50 dark:border-cyan-500/40 text-cyan-500 dark:text-cyan-300" : "bg-slate-800/30 border-slate-700/40 text-slate-600 dark:text-slate-400 hover:border-slate-600"}`}
-                  data-testid={`filter-value-${cat.toLowerCase()}`}
+                  data-testid={`filter-value-${id}`}
                 >
-                  {Icon && <Icon className="h-3 w-3" />}{cat}
+                  {Icon && <Icon className="h-3 w-3" />}{label}
                 </button>
               );
             })}

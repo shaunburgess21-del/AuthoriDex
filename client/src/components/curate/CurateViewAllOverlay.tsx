@@ -40,19 +40,19 @@ interface CurateViewAllOverlayProps {
 }
 
 const CURATE_CATEGORIES = [
-  { value: "All", label: "All Categories" },
-  { value: "Favorites", label: "Favorites" },
-  { value: "Trending", label: "Trending" },
-  { value: "Tech", label: "Tech" },
-  { value: "Business", label: "Business" },
-  { value: "Politics", label: "Politics" },
-  { value: "Music", label: "Music" },
-  { value: "Sports", label: "Sports" },
-  { value: "Film & TV", label: "Film & TV" },
-  { value: "Gaming", label: "Gaming" },
-  { value: "Creator", label: "Creator" },
-  { value: "Food & Drink", label: "Food & Drink" },
-  { value: "Lifestyle", label: "Lifestyle" },
+  { value: "all", label: "All Categories" },
+  { value: "favorites", label: "Favorites" },
+  { value: "trending", label: "Trending" },
+  { value: "tech", label: "Tech" },
+  { value: "business", label: "Business" },
+  { value: "politics", label: "Politics" },
+  { value: "music", label: "Music" },
+  { value: "sports", label: "Sports" },
+  { value: "film-tv", label: "Film & TV" },
+  { value: "gaming", label: "Gaming" },
+  { value: "creator", label: "Creator" },
+  { value: "food-drink", label: "Food & Drink" },
+  { value: "lifestyle", label: "Lifestyle" },
 ];
 
 function CelebCard({ 
@@ -168,7 +168,7 @@ export function CurateViewAllOverlay({
   const { user } = useAuth();
   const [, setLocation] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<FilterCategory>("All");
+  const [categoryFilter, setCategoryFilter] = useState<FilterCategory>("all");
 
   const { data: celebritiesResponse, isLoading } = useQuery<{ data: TrendingPerson[] } | TrendingPerson[]>({
     queryKey: ['/api/trending?sort=rank&limit=100'],
@@ -185,12 +185,14 @@ export function CurateViewAllOverlay({
 
   const filteredCelebrities = useMemo(() => {
     return celebrities.filter(person => {
-      const matchesCategory = categoryFilter === "All" || categoryFilter === "Trending" ||
-        person.category?.toLowerCase() === categoryFilter.toLowerCase();
+      const matchesCategory =
+        categoryFilter === "all" ||
+        categoryFilter === "trending" ||
+        normalizeMarketCategory(person.category) === categoryFilter;
       const matchesSearch = !searchQuery || 
         person.name?.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesCategory && matchesSearch;
-    }).sort((a: any, b: any) => categoryFilter === "Trending" ? ((b.fameScore ?? b.score ?? 0) - (a.fameScore ?? a.score ?? 0)) : 0);
+    }).sort((a: any, b: any) => categoryFilter === "trending" ? ((b.fameScore ?? b.score ?? 0) - (a.fameScore ?? a.score ?? 0)) : 0);
   }, [celebrities, categoryFilter, searchQuery]);
 
   return (
@@ -218,7 +220,7 @@ export function CurateViewAllOverlay({
         searchValue={searchQuery}
         onSearchChange={setSearchQuery}
         categories={CURATE_CATEGORIES}
-        allValue="All"
+        allValue="all"
         placeholder="Search..."
         testIdPrefix="curate-overlay"
         variant="vote"

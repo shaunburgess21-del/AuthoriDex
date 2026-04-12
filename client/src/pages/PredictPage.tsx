@@ -84,6 +84,7 @@ import {
   Gamepad2,
   UtensilsCrossed,
   Heart,
+  Laugh,
   MessageSquare,
   type LucideIcon
 } from "lucide-react";
@@ -98,7 +99,7 @@ import { CardSection } from "@/components/CardSection";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { UserSocialAvatar } from "@/components/UserSocialAvatar";
 import { formatActivityAge } from "@/lib/formatDate";
-import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
+import { getMarketCategoryLabel, normalizeMarketCategory, CATEGORIES_WITH_FILTERS, CATEGORIES_OPEN } from "@shared/constants";
 import { OnboardingDrawer, type OnboardingStep, type OnboardingDrawerHandle } from "@/components/OnboardingDrawer";
 import { UnifiedSectionHeader } from "@/components/UnifiedSectionHeader";
 import { PredictCard } from "@/components/predict/PredictCard";
@@ -194,7 +195,7 @@ function FreshnessBadge({ market }: { market: any }) {
 
 // Prediction Type definitions
 type PredictionType = "all" | "jackpot" | "updown" | "h2h" | "gainer" | "community";
-type CategoryFilter = "all" | "favorites" | "trending" | "tech" | "politics" | "business" | "music" | "sports" | "film-tv" | "gaming" | "creator" | "food-drink" | "lifestyle" | "misc";
+type CategoryFilter = (typeof CATEGORIES_WITH_FILTERS)[number]["id"];
 
 
 const mockMarkets: PredictionMarket[] = [
@@ -591,21 +592,7 @@ function SectionFilterBar({
   );
 }
 
-const BASE_CATEGORY_FILTERS: { id: CategoryFilter; label: string }[] = [
-  { id: "all", label: "All" },
-  { id: "favorites", label: "Favorites" },
-  { id: "trending", label: "Trending" },
-  { id: "tech", label: "Tech" },
-  { id: "politics", label: "Politics" },
-  { id: "business", label: "Business" },
-  { id: "sports", label: "Sports" },
-  { id: "music", label: "Music" },
-  { id: "film-tv", label: "Film & TV" },
-  { id: "gaming", label: "Gaming" },
-  { id: "creator", label: "Creator" },
-  { id: "food-drink", label: "Food & Drink" },
-  { id: "lifestyle", label: "Lifestyle" },
-];
+const BASE_CATEGORY_FILTERS: { id: CategoryFilter; label: string }[] = CATEGORIES_WITH_FILTERS.map(c => ({ id: c.id as CategoryFilter, label: c.label }));
 
 const CATEGORY_ICONS: Record<CategoryFilter, LucideIcon> = {
   all: LayoutGrid,
@@ -620,26 +607,12 @@ const CATEGORY_ICONS: Record<CategoryFilter, LucideIcon> = {
   gaming: Gamepad2,
   creator: Video,
   "food-drink": UtensilsCrossed,
+  comedy: Laugh,
   lifestyle: Heart,
   misc: Sparkles,
 };
 
-const CATEGORY_FILTERS_WITH_CUSTOM: { id: CategoryFilter; label: string }[] = [
-  { id: "all", label: "All" },
-  { id: "favorites", label: "Favorites" },
-  { id: "trending", label: "Trending" },
-  { id: "tech", label: "Tech" },
-  { id: "politics", label: "Politics" },
-  { id: "business", label: "Business" },
-  { id: "sports", label: "Sports" },
-  { id: "music", label: "Music" },
-  { id: "film-tv", label: "Film & TV" },
-  { id: "gaming", label: "Gaming" },
-  { id: "creator", label: "Creator" },
-  { id: "misc", label: "Misc" },
-  { id: "food-drink", label: "Food & Drink" },
-  { id: "lifestyle", label: "Lifestyle" },
-];
+const CATEGORY_FILTERS_WITH_CUSTOM = BASE_CATEGORY_FILTERS;
 
 const getPredictCategoryFilters = (includeCustomTopic: boolean) => 
   includeCustomTopic ? CATEGORY_FILTERS_WITH_CUSTOM : BASE_CATEGORY_FILTERS;
@@ -1434,8 +1407,8 @@ function CreatePredictionModal({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {CATEGORY_FILTERS.filter(c => c.id !== "all").map((cat) => (
-                    <SelectItem key={cat.id} value={cat.id}>{cat.label}</SelectItem>
+                  {CATEGORIES_OPEN.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

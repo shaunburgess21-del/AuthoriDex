@@ -12,7 +12,7 @@ import { WindowedDotIndicator } from "@/components/WindowedDotIndicator";
 import { CurateProfileCard, type CuratePerson } from "./CurateProfileCard";
 import { CurateViewResultsOverlay } from "./CurateViewResultsOverlay";
 import { CurateViewAllOverlay } from "./CurateViewAllOverlay";
-import type { FilterCategory } from "@shared/constants";
+import { normalizeMarketCategory, type FilterCategory } from "@shared/constants";
 
 interface TrendingPerson {
   id: string;
@@ -58,11 +58,11 @@ export function CurateSection({
   }, [allCelebritiesResponse]);
 
   const filteredCelebrities = useMemo(() => {
-    if (categoryFilter === "All") return allCelebrities;
-    if (categoryFilter === "Trending") return [...allCelebrities].sort((a: any, b: any) => ((b.fameScore ?? b.score ?? 0) - (a.fameScore ?? a.score ?? 0)));
-    if (categoryFilter === "Favorites") return allCelebrities;
+    if (categoryFilter === "all") return allCelebrities;
+    if (categoryFilter === "trending") return [...allCelebrities].sort((a: any, b: any) => ((b.fameScore ?? b.score ?? 0) - (a.fameScore ?? a.score ?? 0)));
+    if (categoryFilter === "favorites") return allCelebrities;
     return allCelebrities.filter(
-      person => person.category?.toLowerCase() === categoryFilter.toLowerCase()
+      person => normalizeMarketCategory(person.category) === categoryFilter
     );
   }, [allCelebrities, categoryFilter]);
 

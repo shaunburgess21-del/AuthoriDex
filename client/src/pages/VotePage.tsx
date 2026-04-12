@@ -85,7 +85,7 @@ import { A11y } from "swiper/modules";
 import type { Swiper as SwiperType } from "swiper";
 import "swiper/css";
 import { motion, AnimatePresence } from "framer-motion";
-import { getFilterCategories, getMarketCategoryLabel, normalizeMarketCategory, type FilterCategory } from "@shared/constants";
+import { getFilterCategories, getMarketCategoryLabel, normalizeMarketCategory, type FilterCategory, CATEGORIES_WITH_FILTERS, CATEGORIES_LEADERBOARD, CATEGORIES_OPEN } from "@shared/constants";
 import type { TrendingPerson } from "@shared/schema";
 import { CurateSection } from "@/components/curate";
 import { UnderratedOverratedCard } from "@/components/UnderratedOverratedCard";
@@ -128,27 +128,16 @@ const VOTE_ONBOARDING_STEPS: readonly OnboardingStep[] = [
   },
 ] as const;
 
-const VOTE_CATEGORIES = [
-  { value: "All", label: "All Categories" },
-  { value: "Favorites", label: "Favorites" },
-  { value: "Trending", label: "Trending" },
-  { value: "Tech", label: "Tech" },
-  { value: "Business", label: "Business" },
-  { value: "Politics", label: "Politics" },
-  { value: "Music", label: "Music" },
-  { value: "Sports", label: "Sports" },
-  { value: "Film & TV", label: "Film & TV" },
-  { value: "Gaming", label: "Gaming" },
-  { value: "Creator", label: "Creator" },
-  { value: "Comedy", label: "Comedy" },
-  { value: "Food & Drink", label: "Food & Drink" },
-  { value: "Lifestyle", label: "Lifestyle" },
-];
+// Derived from CATEGORIES_WITH_FILTERS — all 15 entries (3 UI-only + 12 content).
+// Both VOTE_CATEGORIES and VOTE_CATEGORIES_WITH_CUSTOM are now equivalent since misc
+// is part of the canonical set. VOTE_CATEGORIES_WITH_CUSTOM is kept as an alias so
+// existing JSX prop sites don't need to change.
+const VOTE_CATEGORIES = CATEGORIES_WITH_FILTERS.map(c => ({
+  value: c.id,
+  label: c.id === "all" ? "All Categories" : c.label,
+}));
 
-const VOTE_CATEGORIES_WITH_CUSTOM = [
-  ...VOTE_CATEGORIES,
-  { value: "misc", label: "Misc" },
-];
+const VOTE_CATEGORIES_WITH_CUSTOM = VOTE_CATEGORIES;
 
 const mockCelebrityList = [
   "Taylor Swift", "Elon Musk", "Keanu Reeves", "BeyoncÃ©", "Dwayne Johnson",
@@ -1526,20 +1515,20 @@ function ContenderSelector({
 }
 
 const VOTE_CATEGORY_ICONS: Record<string, LucideIcon> = {
-  All: LayoutGrid,
-  Favorites: Star,
-  Trending: Flame,
-  Tech: Cpu,
-  Politics: Landmark,
-  Business: Briefcase,
-  Music: Music2,
-  Sports: Trophy,
-  "Film & TV": Clapperboard,
-  Gaming: Gamepad2,
-  Creator: Video,
-  Comedy: Laugh,
-  "Food & Drink": UtensilsCrossed,
-  Lifestyle: Heart,
+  all: LayoutGrid,
+  favorites: Star,
+  trending: Flame,
+  tech: Cpu,
+  politics: Landmark,
+  business: Briefcase,
+  music: Music2,
+  sports: Trophy,
+  "film-tv": Clapperboard,
+  gaming: Gamepad2,
+  creator: Video,
+  comedy: Laugh,
+  "food-drink": UtensilsCrossed,
+  lifestyle: Heart,
   misc: Sparkles,
 };
 
@@ -1549,7 +1538,8 @@ function FilterChip({
   onClick, 
   testIdPrefix,
   user,
-  onAuthRequired
+  onAuthRequired,
+  isCustomTopic = false,
 }: { 
   category: string; 
   isActive: boolean; 
@@ -1557,12 +1547,12 @@ function FilterChip({
   testIdPrefix: string;
   user: any;
   onAuthRequired: () => void;
+  isCustomTopic?: boolean;
 }) {
-  const isFavorites = category === "Favorites";
-  const isCustomTopic = category === "misc";
+  const isFavorites = category === "favorites";
   const isIconOnly = isFavorites;
   const IconComponent = VOTE_CATEGORY_ICONS[category] || LayoutGrid;
-  
+
   const handleClick = () => {
     if (isFavorites && !user) {
       onAuthRequired();
@@ -1572,9 +1562,7 @@ function FilterChip({
   };
 
   const getDisplayLabel = () => {
-    if (isFavorites) return "Favorites";
-    if (isCustomTopic) return "Misc";
-    return category;
+    return CATEGORIES_WITH_FILTERS.find(c => c.id === category)?.label ?? category;
   };
 
   const getTestId = () => {
@@ -1725,7 +1713,7 @@ export default function VotePage() {
     votes: c.seedVotes,
   }));
 
-  const [inductionCategoryFilter, setInductionCategoryFilter] = useState<FilterCategory>("All");
+  const [inductionCategoryFilter, setInductionCategoryFilter] = useState<FilterCategory>("all");
   const [inductionSearchQuery, setInductionSearchQuery] = useState("");
   const [inductionOverlayOpen, setInductionOverlayOpen] = useState(() => {
     const params = new URLSearchParams(window.location.search);
@@ -1735,12 +1723,12 @@ export default function VotePage() {
   const prevInductionOverlayOpenRef = useRef(inductionOverlayOpen);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
 
-  const [topicsCategoryFilter, setTopicsCategoryFilter] = useState<FilterCategory>("All");
+  const [topicsCategoryFilter, setTopicsCategoryFilter] = useState<FilterCategory>("all");
   const [topicsSearchQuery, setTopicsSearchQuery] = useState("");
   const [topicsOverlayOpen, setTopicsOverlayOpen] = useState(() => window.history.state?.overlay === "topics");
   const [startPollModalOpen, setStartPollModalOpen] = useState(false);
   
-  const [matchupsCategoryFilter, setMatchupsCategoryFilter] = useState<FilterCategory>("All");
+  const [matchupsCategoryFilter, setMatchupsCategoryFilter] = useState<FilterCategory>("all");
   const [matchupsSearchQuery, setMatchupsSearchQuery] = useState("");
   const [matchupsOverlayOpen, setMatchupsOverlayOpen] = useState(() => window.history.state?.overlay === "matchups");
   const [pollHeadline, setPollHeadline] = useState("");
@@ -1765,20 +1753,20 @@ export default function VotePage() {
   }, []);
   const [rulesModalOpen, setRulesModalOpen] = useState<string | null>(null);
   const [infoModalOpen, setInfoModalOpen] = useState<"governance" | null>(null);
-  const [curateCategoryFilter, setCurateCategoryFilter] = useState<FilterCategory>("All");
+  const [curateCategoryFilter, setCurateCategoryFilter] = useState<FilterCategory>("all");
   const [globalVoteSearchQuery, setGlobalVoteSearchQuery] = useState("");
-  const [globalCategoryFilter, setGlobalCategoryFilter] = useState<FilterCategory>("All");
+  const [globalCategoryFilter, setGlobalCategoryFilter] = useState<FilterCategory>("all");
 
   const handleCategoryPillFilter = useCallback((category: string) => {
-    setGlobalCategoryFilter(getMarketCategoryLabel(category) as FilterCategory);
+    setGlobalCategoryFilter(normalizeMarketCategory(category) as FilterCategory);
   }, []);
   
   const [valuePerceptionOverlayOpen, setValuePerceptionOverlayOpen] = useState(() => window.history.state?.overlay === "value-perception");
-  const [valuePerceptionCategoryFilter, setValuePerceptionCategoryFilter] = useState<FilterCategory>("All");
+  const [valuePerceptionCategoryFilter, setValuePerceptionCategoryFilter] = useState<FilterCategory>("all");
   const [valuePerceptionSearchQuery, setValuePerceptionSearchQuery] = useState("");
 
 
-  const [opinionPollsCategoryFilter, setOpinionPollsCategoryFilter] = useState<FilterCategory>("All");
+  const [opinionPollsCategoryFilter, setOpinionPollsCategoryFilter] = useState<FilterCategory>("all");
   const [opinionPollsSearchQuery, setOpinionPollsSearchQuery] = useState("");
   const [opinionPollsOverlayOpen, setOpinionPollsOverlayOpen] = useState(() => window.history.state?.overlay === "opinion-polls");
   const [opinionSuggestOpen, setOpinionSuggestOpen] = useState(false);
@@ -1803,7 +1791,11 @@ export default function VotePage() {
   const enrichedCandidates = dbInductionCandidates;
   
   const filteredCandidates = enrichedCandidates.filter(c => {
-    const matchesCategory = inductionCategoryFilter === "All" || inductionCategoryFilter === "Trending" || c.category === inductionCategoryFilter;
+    const matchesCategory =
+      inductionCategoryFilter === "all" ||
+      inductionCategoryFilter === "trending" ||
+      (inductionCategoryFilter === "favorites" && favoriteIds.has(c.id)) ||
+      normalizeMarketCategory(c.category) === inductionCategoryFilter;
     const matchesSearch = c.name.toLowerCase().includes(inductionSearchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
   }).sort((a, b) => b.votes - a.votes);
@@ -1823,14 +1815,20 @@ export default function VotePage() {
   });
 
   const filteredTopics = dbPolls.filter((t: any) => {
-    const matchesCategory = topicsCategoryFilter === "All" || topicsCategoryFilter === "Trending" || t.category === topicsCategoryFilter;
+    const matchesCategory =
+      topicsCategoryFilter === "all" ||
+      topicsCategoryFilter === "trending" ||
+      normalizeMarketCategory(t.category) === topicsCategoryFilter;
     const matchesSearch = (t.headline ?? '').toLowerCase().includes(topicsSearchQuery.toLowerCase()) ||
                          (t.description || '').toLowerCase().includes(topicsSearchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
-  }).sort((a: any, b: any) => topicsCategoryFilter === "Trending" ? (b.totalVotes ?? 0) - (a.totalVotes ?? 0) : 0);
+  }).sort((a: any, b: any) => topicsCategoryFilter === "trending" ? (b.totalVotes ?? 0) - (a.totalVotes ?? 0) : 0);
 
   const filteredOpinionPolls = opinionPolls.filter((p: any) => {
-    const matchesCategory = opinionPollsCategoryFilter === "All" || opinionPollsCategoryFilter === "Trending" || (p.category || '').toLowerCase() === opinionPollsCategoryFilter.toLowerCase();
+    const matchesCategory =
+      opinionPollsCategoryFilter === "all" ||
+      opinionPollsCategoryFilter === "trending" ||
+      normalizeMarketCategory(p.category) === opinionPollsCategoryFilter;
     const matchesSearch = (p.title || '').toLowerCase().includes(opinionPollsSearchQuery.toLowerCase()) ||
                          (p.description || '').toLowerCase().includes(opinionPollsSearchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
@@ -1879,10 +1877,14 @@ export default function VotePage() {
   const valueCelebrities = valueCelebritiesData?.data || [];
   
   const filteredValueCelebrities = valueCelebrities.filter(c => {
-    const matchesCategory = valuePerceptionCategoryFilter === "All" || valuePerceptionCategoryFilter === "Trending" || c.category === valuePerceptionCategoryFilter;
+    const matchesCategory =
+      valuePerceptionCategoryFilter === "all" ||
+      valuePerceptionCategoryFilter === "trending" ||
+      (valuePerceptionCategoryFilter === "favorites" && favoriteIds.has(c.id)) ||
+      normalizeMarketCategory(c.category) === valuePerceptionCategoryFilter;
     const matchesSearch = !valuePerceptionSearchQuery || c.name.toLowerCase().includes(valuePerceptionSearchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
-  }).sort((a: any, b: any) => valuePerceptionCategoryFilter === "Trending" ? ((b.totalVotes ?? 0) - (a.totalVotes ?? 0)) : 0);
+  }).sort((a: any, b: any) => valuePerceptionCategoryFilter === "trending" ? ((b.totalVotes ?? 0) - (a.totalVotes ?? 0)) : 0);
   
   const [localMatchupVotes, setLocalMatchupVotes] = useState<Record<string, string>>({});
   const [rateLimitedUntil, setRateLimitedUntil] = useState<number | null>(null);
@@ -1998,12 +2000,15 @@ export default function VotePage() {
   };
   
   const filteredMatchups = matchups.filter(f => {
-    const matchesCategory = matchupsCategoryFilter === "All" || matchupsCategoryFilter === "Trending" || f.category === matchupsCategoryFilter;
+    const matchesCategory =
+      matchupsCategoryFilter === "all" ||
+      matchupsCategoryFilter === "trending" ||
+      normalizeMarketCategory(f.category) === matchupsCategoryFilter;
     const matchesSearch = (f.title ?? '').toLowerCase().includes(matchupsSearchQuery.toLowerCase()) ||
                          (f.optionAText ?? '').toLowerCase().includes(matchupsSearchQuery.toLowerCase()) ||
                          (f.optionBText ?? '').toLowerCase().includes(matchupsSearchQuery.toLowerCase());
     return matchesCategory && matchesSearch && f.isActive;
-  }).sort((a: any, b: any) => matchupsCategoryFilter === "Trending" ? ((b.totalVotes ?? 0) - (a.totalVotes ?? 0)) : 0);
+  }).sort((a: any, b: any) => matchupsCategoryFilter === "trending" ? ((b.totalVotes ?? 0) - (a.totalVotes ?? 0)) : 0);
 
   const myVotesCount = useMemo(() => {
     const matchupVoted = filteredMatchups.filter((m) => !!matchupUserVotes[m.id]).length;
@@ -2395,7 +2400,7 @@ export default function VotePage() {
         type: "matchup",
         payload: {
           title: matchupHeadline,
-          category: matchupCategory.toLowerCase(),
+          category: matchupCategory,
           optionAText: matchupContenderA.name,
           optionBText: matchupContenderB.name,
           personAId: matchupContenderA.type === "celebrity" ? matchupContenderA.celebrityId : undefined,
@@ -3521,13 +3526,9 @@ export default function VotePage() {
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Music">Music</SelectItem>
-                  <SelectItem value="Tech">Tech</SelectItem>
-                  <SelectItem value="Creator">Creator</SelectItem>
-                  <SelectItem value="Sports">Sports</SelectItem>
-                  <SelectItem value="Politics">Politics</SelectItem>
-                  <SelectItem value="Business">Business</SelectItem>
-                  <SelectItem value="misc">Misc</SelectItem>
+                  {CATEGORIES_OPEN.map(c => (
+                    <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -3596,12 +3597,9 @@ export default function VotePage() {
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Music">Music</SelectItem>
-                  <SelectItem value="Tech">Tech</SelectItem>
-                  <SelectItem value="Creator">Creator</SelectItem>
-                  <SelectItem value="Sports">Sports</SelectItem>
-                  <SelectItem value="Politics">Politics</SelectItem>
-                  <SelectItem value="Business">Business</SelectItem>
+                  {CATEGORIES_LEADERBOARD.map(c => (
+                    <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -3800,13 +3798,9 @@ export default function VotePage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="misc">General</SelectItem>
-                  <SelectItem value="tech">Tech</SelectItem>
-                  <SelectItem value="music">Music</SelectItem>
-                  <SelectItem value="sports">Sports</SelectItem>
-                  <SelectItem value="politics">Politics</SelectItem>
-                  <SelectItem value="business">Business</SelectItem>
-                  <SelectItem value="entertainment">Entertainment</SelectItem>
+                  {CATEGORIES_OPEN.map(c => (
+                    <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -4090,7 +4084,7 @@ export default function VotePage() {
               searchValue={inductionSearchQuery}
               onSearchChange={setInductionSearchQuery}
               categories={VOTE_CATEGORIES}
-              allValue="All"
+              allValue="all"
               placeholder="Search..."
               testIdPrefix="overlay-induction"
               variant="vote"
@@ -4147,7 +4141,7 @@ export default function VotePage() {
               searchValue={topicsSearchQuery}
               onSearchChange={setTopicsSearchQuery}
               categories={VOTE_CATEGORIES_WITH_CUSTOM}
-              allValue="All"
+              allValue="all"
               placeholder="Search..."
               testIdPrefix="overlay-topics"
               variant="vote"
@@ -4206,7 +4200,7 @@ export default function VotePage() {
               searchValue={matchupsSearchQuery}
               onSearchChange={setMatchupsSearchQuery}
               categories={VOTE_CATEGORIES_WITH_CUSTOM}
-              allValue="All"
+              allValue="all"
               placeholder="Search..."
               testIdPrefix="overlay-matchups"
               variant="vote"
@@ -4267,7 +4261,7 @@ export default function VotePage() {
               searchValue={opinionPollsSearchQuery}
               onSearchChange={setOpinionPollsSearchQuery}
               categories={VOTE_CATEGORIES_WITH_CUSTOM}
-              allValue="All"
+              allValue="all"
               placeholder="Search..."
               testIdPrefix="overlay-opinion"
               variant="vote"
@@ -4333,7 +4327,7 @@ export default function VotePage() {
               searchValue={valuePerceptionSearchQuery}
               onSearchChange={setValuePerceptionSearchQuery}
               categories={VOTE_CATEGORIES_WITH_CUSTOM}
-              allValue="All"
+              allValue="all"
               placeholder="Search..."
               testIdPrefix="overlay-value"
               variant="vote"
