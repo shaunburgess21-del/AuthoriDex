@@ -977,7 +977,7 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
       </a>
       {market.teaser && (
         <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); if (!isInactive) onNavigate(market.slug); }} className={isInactive ? "cursor-default" : "cursor-pointer"}>
-          <p className={`text-sm text-muted-foreground mb-3 line-clamp-2 leading-[1.4] ${!isInactive ? 'hover:text-violet-600 dark:hover:text-violet-400' : ''} transition-colors`}>{market.teaser}</p>
+          <p className={`text-sm text-muted-foreground mb-3 line-clamp-3 leading-[1.4] ${!isInactive ? 'hover:text-violet-600 dark:hover:text-violet-400' : ''} transition-colors`}>{market.teaser}</p>
         </a>
       )}
       
@@ -1172,7 +1172,7 @@ function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel,
       </a>
       {market.teaser && (
         <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); if (!isInactive) onNavigate(market.slug); }} className={isInactive ? "cursor-default" : "cursor-pointer"}>
-          <p className={`text-sm text-muted-foreground mb-3 line-clamp-2 leading-[1.4] ${!isInactive ? 'hover:text-violet-600 dark:hover:text-violet-400' : ''} transition-colors`}>{market.teaser}</p>
+          <p className={`text-sm text-muted-foreground mb-3 line-clamp-3 leading-[1.4] ${!isInactive ? 'hover:text-violet-600 dark:hover:text-violet-400' : ''} transition-colors`}>{market.teaser}</p>
         </a>
       )}
       

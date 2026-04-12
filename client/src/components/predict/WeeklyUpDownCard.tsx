@@ -130,7 +130,7 @@ export function WeeklyUpDownCard({
           </div>
         </div>
 
-        <p className="text-sm md:text-xs text-muted-foreground mb-2 leading-[1.4]">
+        <p className="text-[1.1375rem] md:text-xs text-muted-foreground mb-2 leading-[1.4]">
           Will <span className="font-semibold text-foreground">{market.personName.split(" ")[0]}</span> close above or below the weekly baseline?
         </p>
 

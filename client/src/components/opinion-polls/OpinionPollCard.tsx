@@ -214,9 +214,17 @@ export function OpinionPollCard({
           linkTestId={`link-opinion-detail-${poll.id}`}
           avatar={
             poll.imageUrl ? (
-              <div className="h-14 w-14 rounded-lg overflow-hidden shrink-0 bg-muted dark:bg-slate-800">
+              <button
+                type="button"
+                aria-label="View larger image"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setExpandedImage({ url: poll.imageUrl!, alt: poll.title });
+                }}
+                className="h-14 w-14 rounded-lg overflow-hidden shrink-0 bg-muted dark:bg-slate-800 cursor-zoom-in border-0 p-0"
+              >
                 <img src={poll.imageUrl} alt={poll.title} className="w-full h-full object-cover" />
-              </div>
+              </button>
             ) : (
               <div className="h-14 w-14 rounded-lg bg-gradient-to-br from-slate-700/50 to-slate-800/50 flex items-center justify-center shrink-0">
                 <ListChecks className="h-5 w-5 text-slate-400" />

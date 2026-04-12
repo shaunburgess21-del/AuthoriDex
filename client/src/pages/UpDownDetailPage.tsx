@@ -285,8 +285,8 @@ export default function UpDownDetailPage() {
                 </div>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span className="text-xs text-muted-foreground flex items-center gap-1 cursor-help">
-                      <HelpCircle className="h-3 w-3" />
+                    <span className="text-[0.975rem] md:text-xs text-muted-foreground flex items-center gap-1 cursor-help">
+                      <HelpCircle className="h-3 w-3 shrink-0" />
                       Will their Trend Score close above or below baseline?
                     </span>
                   </TooltipTrigger>
