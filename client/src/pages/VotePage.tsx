@@ -277,6 +277,17 @@ const DURATION_PRESETS = [
   { label: "Custom", value: "custom" }
 ] as const;
 
+// Map UI DURATION_PRESETS values → wire values expected by suggestionSchemas timeline enum.
+// UI uses "none"/"1week"/"1month" for compactness; the schema uses the full underscore form.
+function toTimelineWireValue(uiValue: string): "no_deadline" | "1_week" | "1_month" | "custom" {
+  switch (uiValue) {
+    case "1week":  return "1_week";
+    case "1month": return "1_month";
+    case "custom": return "custom";
+    default:       return "no_deadline"; // covers "none" and any unexpected value
+  }
+}
+
 interface XPFloater {
   id: number;
   x: number;
@@ -2348,7 +2359,7 @@ export default function VotePage() {
           // Poll modal gets a category picker. Hardcoded to 'misc' for now.
           category: "misc",
           description: pollDescription || undefined,
-          timeline: (pollDuration as "no_deadline" | "1_week" | "1_month" | "custom") || "no_deadline",
+          timeline: toTimelineWireValue(pollDuration),
           deadlineAt: pollDuration === "custom" ? pollCustomDate || undefined : undefined,
         },
       });
@@ -2384,7 +2395,7 @@ export default function VotePage() {
         type: "matchup",
         payload: {
           title: matchupHeadline,
-          category: matchupCategory,
+          category: matchupCategory.toLowerCase(),
           optionAText: matchupContenderA.name,
           optionBText: matchupContenderB.name,
           personAId: matchupContenderA.type === "celebrity" ? matchupContenderA.celebrityId : undefined,
@@ -2510,7 +2521,7 @@ export default function VotePage() {
           title: opinionSuggestTitle,
           description: opinionSuggestDescription || undefined,
           category: opinionSuggestCategory,
-          timeline: (opinionSuggestDuration as "no_deadline" | "1_week" | "1_month" | "custom") || "no_deadline",
+          timeline: toTimelineWireValue(opinionSuggestDuration),
           deadlineAt: opinionSuggestDuration === "custom" ? opinionSuggestCustomDate || undefined : undefined,
           options: filledOptions.map((name) => ({ name })),
         },
