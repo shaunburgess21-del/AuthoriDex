@@ -1476,3 +1476,35 @@ export const approvalSnapshots = pgTable("approval_snapshots", {
 }));
 
 export type ApprovalSnapshot = typeof approvalSnapshots.$inferSelect;
+
+// ============================================================================
+// SUGGESTIONS TABLE (Phase 0)
+// ============================================================================
+
+export const suggestions = pgTable("suggestions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  type: text("type").notNull(), // 'matchup' | 'sentiment_poll' | 'opinion_poll' | 'induction' | 'profile_image' | 'open_market'
+  payload: jsonb("payload").notNull(),
+  submittedBy: varchar("submitted_by").notNull().references(() => profiles.id, { onDelete: "cascade" }),
+  status: text("status").notNull().default("pending"), // 'pending' | 'approved' | 'rejected'
+  adminNotes: text("admin_notes"),
+  approvedAsId: text("approved_as_id"),
+  approvedAsType: text("approved_as_type"),
+  reviewedBy: varchar("reviewed_by").references(() => profiles.id, { onDelete: "set null" }),
+  reviewedAt: timestamp("reviewed_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  submitterIdx: index("suggestions_submitter_idx").on(table.submittedBy, table.createdAt),
+  statusIdx: index("suggestions_status_idx").on(table.status, table.createdAt),
+  typeStatusIdx: index("suggestions_type_status_idx").on(table.type, table.status),
+}));
+
+export const insertSuggestionSchema = createInsertSchema(suggestions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type Suggestion = typeof suggestions.$inferSelect;
+export type InsertSuggestion = z.infer<typeof insertSuggestionSchema>;

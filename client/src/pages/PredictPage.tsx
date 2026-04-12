@@ -1345,25 +1345,47 @@ function FullScreenOverlay({
 function CreatePredictionModal({
   open,
   onClose,
-  onSubmit
 }: {
   open: boolean;
   onClose: () => void;
-  onSubmit: (data: { title: string; type: string; category: CategoryFilter; description: string }) => void;
 }) {
+  const { toast } = useToast();
   const [title, setTitle] = useState("");
   const [type, setType] = useState("binary");
   const [category, setCategory] = useState<CategoryFilter>("tech");
   const [description, setDescription] = useState("");
-  
-  const handleSubmit = () => {
-    if (title.trim() && description.trim()) {
-      onSubmit({ title, type, category, description });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!title.trim() || !description.trim()) return;
+    setIsSubmitting(true);
+    try {
+      await apiRequest("POST", "/api/suggestions", {
+        type: "open_market",
+        payload: {
+          title: title.trim(),
+          openMarketType: type as "binary" | "multi" | "updown",
+          category,
+          description: description.trim() || undefined,
+        },
+      });
       setTitle("");
       setType("binary");
       setCategory("tech");
       setDescription("");
       onClose();
+      toast({
+        title: "Market suggested!",
+        description: "We'll review it shortly. You earned 5 XP!",
+      });
+    } catch (err: any) {
+      toast({
+        title: "Submission failed",
+        description: err?.message ?? "Something went wrong. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
     }
   };
   
@@ -1438,13 +1460,13 @@ function CreatePredictionModal({
           <Button variant="outline" onClick={onClose} className="flex-1">
             Cancel
           </Button>
-          <Button 
+          <Button
             onClick={handleSubmit}
             className="flex-1 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
-            disabled={!title.trim() || !description.trim()}
+            disabled={isSubmitting || !title.trim() || !description.trim()}
             data-testid="button-submit-prediction"
           >
-            Submit Suggestion
+            {isSubmitting ? "Submitting…" : "Submit Suggestion"}
           </Button>
         </div>
       </DialogContent>
@@ -2237,12 +2259,8 @@ export default function PredictPage() {
     nativeUpdownBetMutation.mutate({ marketId: market.id, entryId, stakeAmount: amount });
   };
 
-  const handleCreatePrediction = (data: { title: string; type: string; category: CategoryFilter; description: string }) => {
-    toast({
-      title: "Suggestion submitted!",
-      description: "Your market suggestion has been submitted for admin review.",
-    });
-  };
+  // Kept as a no-op; CreatePredictionModal now handles its own API call and toast.
+  const handleCreatePrediction = () => {};
 
   // Section-specific filtering logic
   const matchesCategory = (cat: CategoryFilter, marketCategory: string, personId?: string) => {
@@ -3207,7 +3225,6 @@ export default function PredictPage() {
       <CreatePredictionModal
         open={createModalOpen}
         onClose={() => setCreateModalOpen(false)}
-        onSubmit={handleCreatePrediction}
       />
       {rulesModalOpen && RULES_CONTENT[rulesModalOpen] && (
         <RulesModal

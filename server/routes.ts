@@ -3,7 +3,8 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { getBaselineDiagnostics } from "./utils/baseline";
 import { db } from "./db";
-import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, matchups, votes, xpActions, xpLedger, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, openMarketComments, openMarketCommentVotes, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, trendingPollComments, trendingPollCommentVotes, matchupComments, matchupCommentVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, opinionPollComments, opinionPollCommentVotes, imageVotes, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
+import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, matchups, votes, xpActions, xpLedger, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, openMarketComments, openMarketCommentVotes, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, trendingPollComments, trendingPollCommentVotes, matchupComments, matchupCommentVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, opinionPollComments, opinionPollCommentVotes, imageVotes, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
+import { validateSuggestionPayload, SUGGESTION_TYPES } from "@shared/suggestionSchemas";
 import { eq, desc, and, gt, sql, count, gte, lte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull } from "drizzle-orm";
 import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
@@ -15352,6 +15353,126 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
     } catch (err: any) {
       console.error("[AgentAdmin] Status failed:", err);
       res.status(500).json({ error: err?.message ?? "Unknown error" });
+    }
+  });
+
+  // ============================================================================
+  // SUGGESTIONS PIPELINE (Phase 0)
+  // ============================================================================
+
+  // User image upload for profile-image suggestions (auth required, 2 MB user limit).
+  // Separate from /api/admin/upload-image which requires admin role and allows 5 MB.
+  const suggestionImageUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 2 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = ["image/png", "image/jpeg", "image/webp"];
+      if (allowed.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new Error("Only PNG, JPG, and WEBP files are allowed"));
+      }
+    },
+  });
+
+  app.post(
+    "/api/suggestions/upload-image",
+    requireAuth,
+    suggestionImageUpload.single("file"),
+    async (req: AuthRequest, res) => {
+      try {
+        const file = req.file;
+        if (!file) {
+          return res.status(400).json({ error: "No file uploaded" });
+        }
+
+        const userId = req.userId!;
+        const optimized = await optimizeImage(file.buffer);
+        const timestamp = Date.now();
+        const filePath = `suggestions/curate/${userId}/${timestamp}${optimized.extension}`;
+        const bucketName = "public-images";
+
+        const { data, error } = await supabaseServer.storage
+          .from(bucketName)
+          .upload(filePath, optimized.buffer, {
+            contentType: optimized.contentType,
+            upsert: false,
+          });
+
+        if (error) {
+          console.error("Suggestion image upload error:", error);
+          return res.status(500).json({ error: `Failed to upload image: ${error.message}` });
+        }
+
+        const { data: urlData } = supabaseServer.storage
+          .from(bucketName)
+          .getPublicUrl(filePath);
+
+        res.json({ url: urlData.publicUrl, path: filePath });
+      } catch (error: any) {
+        console.error("Suggestion image upload error:", error);
+        if (error.message?.includes("Only PNG")) {
+          return res.status(400).json({ error: error.message });
+        }
+        res.status(500).json({ error: "Upload failed" });
+      }
+    }
+  );
+
+  // POST /api/suggestions — persist a user content suggestion and award XP.
+  // Auth: requireAuth. Rate limiting is covered by the existing layered middleware.
+  //
+  // Pre-launch deliberate decision: self-approval rewards are allowed (a user who is
+  // also an admin can submit a suggestion and earn the XP). This is intentional
+  // pre-launch simplicity — the volume of such cases is negligible and the XP value
+  // is low (5 XP). TODO post-launch: add a check to skip XP if req.userRole === 'admin'.
+  app.post("/api/suggestions", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.userId!;
+      const { type, payload } = req.body;
+
+      if (!type || !SUGGESTION_TYPES.includes(type)) {
+        return res.status(400).json({
+          error: `Invalid suggestion type. Must be one of: ${SUGGESTION_TYPES.join(", ")}`,
+        });
+      }
+
+      const validation = validateSuggestionPayload(type, payload);
+      if (!validation.success) {
+        return res.status(400).json({ error: "Validation failed", details: validation.errors });
+      }
+
+      const [created] = await db
+        .insert(suggestions)
+        .values({
+          type,
+          payload: validation.data,
+          submittedBy: userId,
+          status: "pending",
+        })
+        .returning({
+          id: suggestions.id,
+          status: suggestions.status,
+          createdAt: suggestions.createdAt,
+        });
+
+      // Award XP — non-blocking, failure does not fail the request.
+      // Daily cap of 3 prevents farming. Idempotency key is per-suggestion.
+      try {
+        await gamificationService.awardXp(
+          userId,
+          "submit_suggestion",
+          `suggestion_${created.id}`,
+          { suggestionType: type }
+        );
+      } catch (xpErr) {
+        console.error("XP award failed for suggestion:", xpErr);
+      }
+
+      res.status(201).json(created);
+    } catch (error: any) {
+      console.error("Error creating suggestion:", error);
+      res.status(500).json({ error: "Failed to submit suggestion" });
     }
   });
 

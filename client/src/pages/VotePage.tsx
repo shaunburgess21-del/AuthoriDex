@@ -63,7 +63,7 @@ import {
   type LucideIcon
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { isUnauthorizedApiError, signInToVoteToastOptions } from "@/lib/signInToVoteToast";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation, Link } from "wouter";
@@ -1634,6 +1634,7 @@ export default function VotePage() {
   const [matchupContenderA, setMatchupContenderA] = useState<ContenderSelection>({ type: null, name: '' });
   const [matchupContenderB, setMatchupContenderB] = useState<ContenderSelection>({ type: null, name: '' });
   const [matchupCategory, setMatchupCategory] = useState("");
+  const [isSuggestSubmitting, setIsSuggestSubmitting] = useState(false);
   const [countdown, setCountdown] = useState("2d 14h 32m");
 
   const { data: userStats } = useUserStats(!!user);
@@ -2333,8 +2334,24 @@ export default function VotePage() {
     }
   };
 
-  const handlePollSubmit = () => {
-    if (pollHeadline && pollCategory) {
+  const handlePollSubmit = async () => {
+    if (!pollHeadline || !pollEntitySearch) return;
+    setIsSuggestSubmitting(true);
+    try {
+      await apiRequest("POST", "/api/suggestions", {
+        type: "sentiment_poll",
+        payload: {
+          headline: pollHeadline,
+          subjectText: pollEntitySearch,
+          subjectType: pollSubjectType ?? undefined,
+          // TODO: replace with user-selected category in Phase 1 when the Suggest a
+          // Poll modal gets a category picker. Hardcoded to 'misc' for now.
+          category: "misc",
+          description: pollDescription || undefined,
+          timeline: (pollDuration as "no_deadline" | "1_week" | "1_month" | "custom") || "no_deadline",
+          deadlineAt: pollDuration === "custom" ? pollCustomDate || undefined : undefined,
+        },
+      });
       setStartPollModalOpen(false);
       setPollHeadline("");
       setPollCategory("");
@@ -2343,10 +2360,180 @@ export default function VotePage() {
       setPollSubjectType(null);
       setPollSubjectImage(null);
       setPollSubjectImagePreview(null);
+      setPollDuration("none");
+      setPollCustomDate("");
       toast({
-        title: "Poll submitted",
-        description: "Thanks - your poll was submitted for review.",
+        title: "Poll suggested!",
+        description: "We'll review it shortly. You earned 5 XP!",
       });
+    } catch (err: any) {
+      toast({
+        title: "Submission failed",
+        description: err?.message ?? "Something went wrong. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSuggestSubmitting(false);
+    }
+  };
+
+  const handleMatchupSuggestSubmit = async () => {
+    setIsSuggestSubmitting(true);
+    try {
+      await apiRequest("POST", "/api/suggestions", {
+        type: "matchup",
+        payload: {
+          title: matchupHeadline,
+          category: matchupCategory,
+          optionAText: matchupContenderA.name,
+          optionBText: matchupContenderB.name,
+          personAId: matchupContenderA.type === "celebrity" ? matchupContenderA.celebrityId : undefined,
+          personBId: matchupContenderB.type === "celebrity" ? matchupContenderB.celebrityId : undefined,
+          optionAImage: matchupContenderA.type === "celebrity" ? matchupContenderA.imageUrl : undefined,
+          optionBImage: matchupContenderB.type === "celebrity" ? matchupContenderB.imageUrl : undefined,
+        },
+      });
+      setMatchupHeadline("");
+      setMatchupContenderA({ type: null, name: "" });
+      setMatchupContenderB({ type: null, name: "" });
+      setMatchupCategory("");
+      setMatchupSuggestOpen(false);
+      toast({
+        title: "Matchup suggested!",
+        description: "We'll review it shortly. You earned 5 XP!",
+      });
+    } catch (err: any) {
+      toast({
+        title: "Submission failed",
+        description: err?.message ?? "Something went wrong. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSuggestSubmitting(false);
+    }
+  };
+
+  const handleInductionSuggestSubmit = async () => {
+    setIsSuggestSubmitting(true);
+    try {
+      await apiRequest("POST", "/api/suggestions", {
+        type: "induction",
+        payload: {
+          displayName: suggestName,
+          socialUrl: suggestUrl,
+          category: suggestCategory || undefined,
+          reason: suggestReason || undefined,
+        },
+      });
+      setSuggestName("");
+      setSuggestUrl("");
+      setSuggestCategory("");
+      setSuggestReason("");
+      setInductionSuggestOpen(false);
+      toast({
+        title: "Candidate suggested!",
+        description: "We'll review it shortly. You earned 5 XP!",
+      });
+    } catch (err: any) {
+      toast({
+        title: "Submission failed",
+        description: err?.message ?? "Something went wrong. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSuggestSubmitting(false);
+    }
+  };
+
+  const handleCurateSuggestSubmit = async () => {
+    if (!curateImageFile) return;
+    setIsSuggestSubmitting(true);
+    try {
+      // Step 1: upload the image, get a persistent URL.
+      const formData = new FormData();
+      formData.append("file", curateImageFile);
+      const uploadRes = await fetch("/api/suggestions/upload-image", {
+        method: "POST",
+        body: formData,
+        headers: { ...(await getAuthHeaders()) },
+        credentials: "include",
+      });
+      if (!uploadRes.ok) {
+        const body = await uploadRes.json().catch(() => ({}));
+        throw new Error(body?.error ?? "Image upload failed");
+      }
+      const { url: imageUrl } = await uploadRes.json();
+
+      // Step 2: submit the suggestion with the uploaded URL.
+      await apiRequest("POST", "/api/suggestions", {
+        type: "profile_image",
+        payload: {
+          personName: curateCelebrity,
+          imageUrl,
+          sourceCredit: curateImageSource || undefined,
+        },
+      });
+      setCurateCelebrity("");
+      setCurateImageFile(null);
+      setCurateImageSource("");
+      setCurateSuggestOpen(false);
+      toast({
+        title: "Image suggested!",
+        description: "We'll review it shortly. You earned 5 XP!",
+      });
+    } catch (err: any) {
+      toast({
+        title: "Submission failed",
+        description: err?.message ?? "Something went wrong. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSuggestSubmitting(false);
+    }
+  };
+
+  const handleOpinionSuggestSubmit = async () => {
+    const filledOptions = opinionSuggestOptions.filter((o) => o.trim());
+    if (filledOptions.length < 3) {
+      toast({
+        title: "Not enough options",
+        description: "Please provide at least 3 options.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setIsSuggestSubmitting(true);
+    try {
+      await apiRequest("POST", "/api/suggestions", {
+        type: "opinion_poll",
+        payload: {
+          title: opinionSuggestTitle,
+          description: opinionSuggestDescription || undefined,
+          category: opinionSuggestCategory,
+          timeline: (opinionSuggestDuration as "no_deadline" | "1_week" | "1_month" | "custom") || "no_deadline",
+          deadlineAt: opinionSuggestDuration === "custom" ? opinionSuggestCustomDate || undefined : undefined,
+          options: filledOptions.map((name) => ({ name })),
+        },
+      });
+      setOpinionSuggestTitle("");
+      setOpinionSuggestDescription("");
+      setOpinionSuggestOptions(["", "", ""]);
+      setOpinionSuggestCategory("misc");
+      setOpinionSuggestDuration("none");
+      setOpinionSuggestCustomDate("");
+      setOpinionSuggestOpen(false);
+      toast({
+        title: "Poll suggested!",
+        description: "We'll review it shortly. You earned 5 XP!",
+      });
+    } catch (err: any) {
+      toast({
+        title: "Submission failed",
+        description: err?.message ?? "Something went wrong. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSuggestSubmitting(false);
     }
   };
 
@@ -3265,13 +3452,13 @@ export default function VotePage() {
           </div>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setStartPollModalOpen(false)} data-testid="button-cancel-poll">Cancel</Button>
-            <Button 
+            <Button
               onClick={handlePollSubmit}
-              disabled={!pollHeadline || !pollEntitySearch}
+              disabled={isSuggestSubmitting || !pollHeadline || !pollEntitySearch}
               className="bg-cyan-500 text-white"
               data-testid="button-submit-poll"
             >
-              Submit Poll
+              {isSuggestSubmitting ? "Submitting…" : "Submit Poll"}
             </Button>
           </div>
         </DialogContent>
@@ -3336,20 +3523,11 @@ export default function VotePage() {
           </div>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setMatchupSuggestOpen(false)} data-testid="button-cancel-matchup">Cancel</Button>
-            <Button 
-              onClick={() => {
-                toast({
-                  title: "Matchup Suggested!",
-                  description: `Your matchup "${matchupContenderA.name} vs ${matchupContenderB.name}" has been submitted for review.`,
-                });
-                setMatchupHeadline("");
-                setMatchupContenderA({ type: null, name: '' });
-                setMatchupContenderB({ type: null, name: '' });
-                setMatchupCategory("");
-                setMatchupSuggestOpen(false);
-              }}
+            <Button
+              onClick={handleMatchupSuggestSubmit}
               disabled={
-                !matchupHeadline || 
+                isSuggestSubmitting ||
+                !matchupHeadline ||
                 !matchupCategory ||
                 !matchupContenderA.type ||
                 !matchupContenderB.type ||
@@ -3359,7 +3537,7 @@ export default function VotePage() {
               className="bg-cyan-500 text-white"
               data-testid="button-submit-matchup"
             >
-              Submit Matchup
+              {isSuggestSubmitting ? "Submitting…" : "Submit Matchup"}
             </Button>
           </div>
         </DialogContent>
@@ -3428,23 +3606,13 @@ export default function VotePage() {
           </div>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setInductionSuggestOpen(false)} data-testid="button-cancel-induction">Cancel</Button>
-            <Button 
-              onClick={() => {
-                toast({
-                  title: "Candidate Suggested!",
-                  description: `Your suggestion for "${suggestName}" has been submitted for review.`,
-                });
-                setSuggestName("");
-                setSuggestUrl("");
-                setSuggestCategory("");
-                setSuggestReason("");
-                setInductionSuggestOpen(false);
-              }}
-              disabled={!suggestName || !suggestUrl || !suggestUrl.startsWith('http')}
+            <Button
+              onClick={handleInductionSuggestSubmit}
+              disabled={isSuggestSubmitting || !suggestName || !suggestUrl || !suggestUrl.startsWith('http')}
               className="bg-cyan-500 text-white"
               data-testid="button-submit-induction"
             >
-              Submit Suggestion
+              {isSuggestSubmitting ? "Submitting…" : "Submit Suggestion"}
             </Button>
           </div>
         </DialogContent>
@@ -3525,22 +3693,13 @@ export default function VotePage() {
             >
               Cancel
             </Button>
-            <Button 
-              onClick={() => {
-                toast({
-                  title: "Image Submitted!",
-                  description: `Your image for "${curateCelebrity}" has been submitted for review.`,
-                });
-                setCurateCelebrity("");
-                setCurateImageFile(null);
-                setCurateImageSource("");
-                setCurateSuggestOpen(false);
-              }}
-              disabled={!curateCelebrity || !curateImageFile}
+            <Button
+              onClick={handleCurateSuggestSubmit}
+              disabled={isSuggestSubmitting || !curateCelebrity || !curateImageFile}
               className="bg-cyan-500 text-white"
               data-testid="button-submit-curate"
             >
-              Submit Image
+              {isSuggestSubmitting ? "Uploading…" : "Submit Image"}
             </Button>
           </div>
         </DialogContent>
@@ -3682,33 +3841,12 @@ export default function VotePage() {
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setOpinionSuggestOpen(false)} data-testid="button-cancel-opinion-suggest">Cancel</Button>
             <Button
-              onClick={() => {
-                const filledOptions = opinionSuggestOptions.filter(o => o.trim());
-                if (filledOptions.length < 3) {
-                  toast({
-                    title: "Not enough options",
-                    description: "Please provide at least 3 options.",
-                    variant: "destructive",
-                  });
-                  return;
-                }
-                toast({
-                  title: "Poll Suggested!",
-                  description: "Your opinion poll has been submitted for review.",
-                });
-                setOpinionSuggestTitle("");
-                setOpinionSuggestDescription("");
-                setOpinionSuggestOptions(["", "", ""]);
-                setOpinionSuggestCategory("misc");
-                setOpinionSuggestDuration("none");
-                setOpinionSuggestCustomDate("");
-                setOpinionSuggestOpen(false);
-              }}
-              disabled={!opinionSuggestTitle || opinionSuggestOptions.filter(o => o.trim()).length < 3}
+              onClick={handleOpinionSuggestSubmit}
+              disabled={isSuggestSubmitting || !opinionSuggestTitle || opinionSuggestOptions.filter(o => o.trim()).length < 3}
               className="bg-cyan-500 text-white"
               data-testid="button-submit-opinion-suggest"
             >
-              Submit Poll
+              {isSuggestSubmitting ? "Submitting…" : "Submit Poll"}
             </Button>
           </div>
         </DialogContent>

@@ -50,6 +50,13 @@
       "when": 1774900871137,
       "tag": "0006_reduce_face_offs_seed_votes",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1744444800000,
+      "tag": "0007_add_suggestions_table",
+      "breakpoints": true
     }
   ]
 }
