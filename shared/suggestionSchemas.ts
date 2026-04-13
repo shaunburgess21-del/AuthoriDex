@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { OPINION_POLL_MIN_OPTIONS, OPINION_POLL_MAX_OPTIONS } from "./constants";
 
 export const SUGGESTION_TYPES = [
   "matchup",
@@ -61,8 +62,8 @@ export const opinionPollSuggestionSchema = z.object({
         personId: z.string().optional(),
       })
     )
-    .min(3)
-    .max(20),
+    .min(OPINION_POLL_MIN_OPTIONS)
+    .max(OPINION_POLL_MAX_OPTIONS),
 });
 
 export const inductionSuggestionSchema = z.object({

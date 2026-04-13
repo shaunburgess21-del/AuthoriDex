@@ -53,6 +53,10 @@ export const CATEGORIES_OPEN = CANONICAL_CATEGORIES;
 /** 11 categories without misc — for leaderboard-tied suggest modals (induction, profile_image). */
 export const CATEGORIES_LEADERBOARD = CANONICAL_CATEGORIES.filter(c => c.id !== "misc");
 
+// ── Opinion Poll options constraints ──────────────────────────────────────────
+export const OPINION_POLL_MIN_OPTIONS = 3;
+export const OPINION_POLL_MAX_OPTIONS = 20;
+
 /**
  * For filter bars that also need the "all"/"favorites"/"trending" UI-only entries.
  * Keep these SEPARATE from the content categories so they can't leak into submit payloads.

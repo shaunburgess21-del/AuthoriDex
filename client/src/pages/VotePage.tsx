@@ -85,7 +85,7 @@ import { A11y } from "swiper/modules";
 import type { Swiper as SwiperType } from "swiper";
 import "swiper/css";
 import { motion, AnimatePresence } from "framer-motion";
-import { getFilterCategories, getMarketCategoryLabel, normalizeMarketCategory, type FilterCategory, CATEGORIES_WITH_FILTERS, CATEGORIES_LEADERBOARD, CATEGORIES_OPEN } from "@shared/constants";
+import { getFilterCategories, getMarketCategoryLabel, normalizeMarketCategory, type FilterCategory, CATEGORIES_WITH_FILTERS, CATEGORIES_LEADERBOARD, CATEGORIES_OPEN, OPINION_POLL_MIN_OPTIONS, OPINION_POLL_MAX_OPTIONS } from "@shared/constants";
 import type { TrendingPerson } from "@shared/schema";
 import { CurateSection } from "@/components/curate";
 import { UnderratedOverratedCard } from "@/components/UnderratedOverratedCard";
@@ -2562,10 +2562,10 @@ export default function VotePage() {
 
   const handleOpinionSuggestSubmit = async () => {
     const filledOptions = opinionSuggestOptions.filter((o) => o.trim());
-    if (filledOptions.length < 3) {
+    if (filledOptions.length < OPINION_POLL_MIN_OPTIONS) {
       toast({
         title: "Not enough options",
-        description: "Please provide at least 3 options.",
+        description: `Please provide at least ${OPINION_POLL_MIN_OPTIONS} options.`,
         variant: "destructive",
       });
       return;
@@ -3761,7 +3761,7 @@ export default function VotePage() {
                       className="flex-1"
                       data-testid={`input-opinion-option-${idx}`}
                     />
-                    {opinionSuggestOptions.length > 3 && (
+                    {opinionSuggestOptions.length > OPINION_POLL_MIN_OPTIONS && (
                       <Button
                         variant="ghost"
                         size="icon"
@@ -3777,7 +3777,7 @@ export default function VotePage() {
                   </div>
                 ))}
               </div>
-              {opinionSuggestOptions.length < 20 && (
+              {opinionSuggestOptions.length < OPINION_POLL_MAX_OPTIONS && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -3807,7 +3807,7 @@ export default function VotePage() {
             <Button variant="outline" onClick={() => setOpinionSuggestOpen(false)} data-testid="button-cancel-opinion-suggest">Cancel</Button>
             <Button
               onClick={handleOpinionSuggestSubmit}
-              disabled={isSuggestSubmitting || !opinionSuggestTitle || opinionSuggestOptions.filter(o => o.trim()).length < 3}
+              disabled={isSuggestSubmitting || !opinionSuggestTitle || opinionSuggestOptions.filter(o => o.trim()).length < OPINION_POLL_MIN_OPTIONS}
               className="bg-cyan-500 text-white"
               data-testid="button-submit-opinion-suggest"
             >
