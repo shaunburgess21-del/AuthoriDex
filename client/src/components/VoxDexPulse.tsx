@@ -88,8 +88,8 @@ const APPROVAL_COLORS = ["#FF0000", "#FF6D00", "#FFC400", "#76FF03", "#00C853"];
 
 const MIN_SPEED = 1000;
 const MAX_SPEED = 3000;
-/** Default ~10% from Slow (left); center was 50% = 2000ms */
-const DEFAULT_SPEED = Math.round(MAX_SPEED - 0.1 * (MAX_SPEED - MIN_SPEED));
+/** Default centered on the slider (50% between Fast and Slow) */
+const DEFAULT_SPEED = Math.round((MIN_SPEED + MAX_SPEED) / 2);
 const MAX_FRAMES = 100;
 
 // --------------- Helpers ---------------
@@ -887,15 +887,6 @@ export function VoxDexPulse({ collapsed, onToggle }: VoxDexPulseProps) {
         </div>
       </div>
 
-      {isTimelapse && (
-        <div className="order-6 flex flex-col items-center pb-2 sm:hidden">
-          <span className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
-            Playback speed
-          </span>
-          <SpeedSlider speed={speed} onChange={setSpeed} accentColor={accentColor} />
-        </div>
-      )}
-
       {/* Timelapse seek bar (interactive) */}
       {isTimelapse && frames.length > 1 && (
         <div className="order-3 sm:order-4 flex items-center gap-2 mb-2 px-0.5">
@@ -925,8 +916,8 @@ export function VoxDexPulse({ collapsed, onToggle }: VoxDexPulseProps) {
       {/* Leaderboard card */}
       <div className="order-4 sm:order-5 rounded-xl border border-border/60 bg-card/80 backdrop-blur overflow-hidden">
         {/* Header row — category + Top N always visible (loading / empty / data) */}
-        <div className="flex items-center justify-between gap-2 px-3 py-1.5 border-b border-border/40">
-          <span className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium truncate min-w-0">
+        <div className="flex items-center justify-between gap-2 px-3 py-1.5 border-b border-border/40 min-w-0">
+          <span className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium truncate min-w-0 flex-1">
             {isLoading
               ? "Loading…"
               : currentRankings.length === 0
@@ -943,8 +934,8 @@ export function VoxDexPulse({ collapsed, onToggle }: VoxDexPulseProps) {
               <SelectTrigger
                 className={
                   isMobile
-                    ? "h-6 w-9 px-0 justify-center bg-muted/50 border-border/40 rounded-md shrink-0 [&>svg:last-child]:hidden"
-                    : "h-6 min-w-[72px] max-w-[100px] text-[10px] bg-muted/50 border-border/40 rounded-md gap-1 px-1.5 shrink-0"
+                    ? "h-6 w-auto min-w-[2.5rem] max-w-[min(9rem,42vw)] justify-start text-[10px] bg-muted/50 border-border/40 rounded-md gap-1 px-1.5 shrink-0 whitespace-nowrap [&>span]:line-clamp-none [&>span]:min-w-0 [&>span]:truncate"
+                    : "h-6 w-auto min-w-[72px] max-w-[10rem] text-[10px] bg-muted/50 border-border/40 rounded-md gap-1 px-1.5 shrink-0 whitespace-nowrap [&>span]:line-clamp-none [&>span]:min-w-0 [&>span]:truncate"
                 }
                 aria-label={`Category: ${category}`}
                 data-testid="select-pulse-category"
@@ -952,7 +943,7 @@ export function VoxDexPulse({ collapsed, onToggle }: VoxDexPulseProps) {
                 {isMobile && (
                   <LayoutGrid className="h-3.5 w-3.5 shrink-0 text-muted-foreground pointer-events-none" aria-hidden />
                 )}
-                <SelectValue className={isMobile ? "sr-only" : undefined} />
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 {visibleCategories.map((cat) => (
@@ -964,7 +955,7 @@ export function VoxDexPulse({ collapsed, onToggle }: VoxDexPulseProps) {
             </Select>
             <Select value={String(limit)} onValueChange={(v) => setLimit(Number(v))}>
               <SelectTrigger
-                className="h-6 w-[66px] text-[10px] bg-muted/50 border-border/40 rounded-md gap-1 px-1.5 shrink-0"
+                className="h-6 w-auto min-w-[4.25rem] max-w-[6.5rem] text-[10px] bg-muted/50 border-border/40 rounded-md gap-1 px-1.5 shrink-0 whitespace-nowrap [&>span]:line-clamp-none [&>span]:min-w-0 [&>span]:truncate"
                 data-testid="select-pulse-top-n"
               >
                 <SelectValue />
