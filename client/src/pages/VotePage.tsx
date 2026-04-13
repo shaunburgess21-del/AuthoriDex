@@ -1733,6 +1733,7 @@ export default function VotePage() {
   const [matchupsOverlayOpen, setMatchupsOverlayOpen] = useState(() => window.history.state?.overlay === "matchups");
   const [pollHeadline, setPollHeadline] = useState("");
   const [pollCategory, setPollCategory] = useState("");
+  const [sentimentCategory, setSentimentCategory] = useState("misc");
   const [pollDescription, setPollDescription] = useState("");
   const [pollEntitySearch, setPollEntitySearch] = useState("");
   const [pollSubjectType, setPollSubjectType] = useState<'celebrity' | 'custom' | null>(null);
@@ -2360,9 +2361,7 @@ export default function VotePage() {
           headline: pollHeadline,
           subjectText: pollEntitySearch,
           subjectType: pollSubjectType ?? undefined,
-          // TODO: replace with user-selected category in Phase 1 when the Suggest a
-          // Poll modal gets a category picker. Hardcoded to 'misc' for now.
-          category: "misc",
+          category: sentimentCategory,
           description: pollDescription || undefined,
           timeline: toTimelineWireValue(pollDuration),
           deadlineAt: pollDuration === "custom" ? pollCustomDate || undefined : undefined,
@@ -2371,6 +2370,7 @@ export default function VotePage() {
       setStartPollModalOpen(false);
       setPollHeadline("");
       setPollCategory("");
+      setSentimentCategory("misc");
       setPollDescription("");
       setPollEntitySearch("");
       setPollSubjectType(null);
@@ -3345,6 +3345,19 @@ export default function VotePage() {
                 placeholder="e.g. Should AI be regulated?"
                 data-testid="input-poll-headline"
               />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">Category *</label>
+              <Select value={sentimentCategory} onValueChange={setSentimentCategory}>
+                <SelectTrigger data-testid="select-poll-category">
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {CATEGORIES_OPEN.map(c => (
+                    <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <label className="text-sm font-medium mb-1 block">Subject (Entity) *</label>
