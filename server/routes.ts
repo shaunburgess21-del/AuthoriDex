@@ -15425,6 +15425,33 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
     }
   );
 
+  // GET /api/suggestions/mine — return the authenticated user's own suggestions.
+  app.get("/api/suggestions/mine", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.userId!;
+      const rows = await db
+        .select()
+        .from(suggestions)
+        .where(eq(suggestions.submittedBy, userId))
+        .orderBy(desc(suggestions.createdAt));
+
+      const shaped = rows.map((row) => ({
+        id: row.id,
+        type: row.type,
+        status: row.status,
+        category: (row.payload as Record<string, unknown>)?.category as string | null ?? null,
+        createdAt: row.createdAt.toISOString(),
+        approvedAsId: row.approvedAsId,
+        approvedAsType: row.approvedAsType,
+      }));
+
+      res.json(shaped);
+    } catch (error: any) {
+      console.error("Error fetching user suggestions:", error.message);
+      res.status(500).json({ error: "Failed to fetch suggestions" });
+    }
+  });
+
   // POST /api/suggestions — persist a user content suggestion and award XP.
   // Auth: requireAuth. Rate limiting is covered by the existing layered middleware.
   //

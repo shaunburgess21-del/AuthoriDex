@@ -8,11 +8,31 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { UserMenu } from "@/components/UserMenu";
-import { ArrowLeft, Star, TrendingUp, Calendar, Award } from "lucide-react";
+import { ArrowLeft, Star, TrendingUp, Calendar, Award, Lightbulb } from "lucide-react";
 import { UserVote, UserFavourite } from "@shared/schema";
 import { format } from "date-fns";
 import { voteToApprovalPercent } from "@/lib/utils";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
+import { apiRequest } from "@/lib/queryClient";
+
+interface MySuggestion {
+  id: string;
+  type: string;
+  status: string;
+  category: string | null;
+  createdAt: string;
+  approvedAsId: string | null;
+  approvedAsType: string | null;
+}
+
+const SUGGESTION_TYPE_LABELS: Record<string, string> = {
+  matchup: "Matchup",
+  sentiment_poll: "Sentiment Poll",
+  opinion_poll: "Opinion Poll",
+  induction: "Induction",
+  profile_image: "Profile Image",
+  open_market: "Open Market",
+};
 
 // 1-5 scale colors: vivid gradient from red (1) to green (5)
 const SEGMENT_COLORS_5 = [
@@ -58,6 +78,8 @@ export default function UserProfilePage() {
   const [votes, setVotes] = useState<UserVote[]>([]);
   const [favourites, setFavourites] = useState<UserFavourite[]>([]);
   const [loading, setLoading] = useState(true);
+  const [suggestions, setSuggestions] = useState<MySuggestion[]>([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(true);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -101,6 +123,22 @@ export default function UserProfilePage() {
     }
 
     fetchUserData();
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    async function fetchSuggestions() {
+      try {
+        const res = await apiRequest("GET", "/api/suggestions/mine");
+        const data: MySuggestion[] = await res.json();
+        setSuggestions(data);
+      } catch (error) {
+        console.error("Error fetching suggestions:", error);
+      } finally {
+        setSuggestionsLoading(false);
+      }
+    }
+    fetchSuggestions();
   }, [user]);
 
   if (authLoading || !user) {
@@ -357,6 +395,63 @@ export default function UserProfilePage() {
             </CardContent>
           </Card>
         )}
+
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Lightbulb className="h-5 w-5" />
+              My Suggestions
+            </CardTitle>
+            <CardDescription>
+              Content you've submitted for review ({suggestions.length})
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {suggestionsLoading ? (
+              <div className="text-center py-8 text-muted-foreground">Loading...</div>
+            ) : suggestions.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <Lightbulb className="h-12 w-12 mx-auto mb-3 opacity-20" />
+                <p>No suggestions submitted yet.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {suggestions.map((s) => (
+                  <div
+                    key={s.id}
+                    className="flex items-center gap-3 p-3 rounded-lg"
+                    data-testid={`suggestion-${s.id}`}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold truncate">
+                        {SUGGESTION_TYPE_LABELS[s.type] || s.type}
+                      </p>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Calendar className="h-3 w-3" />
+                        {format(new Date(s.createdAt), "d MMM yyyy")}
+                        {s.category && (
+                          <span className="capitalize">{s.category}</span>
+                        )}
+                      </div>
+                    </div>
+                    <Badge
+                      variant={s.status === "approved" ? "default" : "secondary"}
+                      className={`text-xs ${
+                        s.status === "approved"
+                          ? "bg-green-600 hover:bg-green-600 text-white"
+                          : s.status === "rejected"
+                            ? "bg-red-600 hover:bg-red-600 text-white"
+                            : ""
+                      }`}
+                    >
+                      {s.status}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
