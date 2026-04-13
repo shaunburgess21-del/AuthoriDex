@@ -1068,6 +1068,74 @@ function XPFloaterAnimation({ floater, onComplete }: { floater: XPFloater; onCom
   );
 }
 
+interface SuggestCategorySelectProps {
+  value: string;
+  onChange: (value: string) => void;
+  categories?: ReadonlyArray<{ readonly id: string; readonly label: string }>;
+  label?: string;
+  placeholder?: string;
+  "data-testid"?: string;
+}
+
+function SuggestCategorySelect({ value, onChange, categories = CATEGORIES_OPEN, label = "Category *", placeholder = "Select category", "data-testid": testId }: SuggestCategorySelectProps) {
+  return (
+    <div>
+      <label className="text-sm font-medium mb-1 block">{label}</label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger data-testid={testId}>
+          <SelectValue placeholder={placeholder} />
+        </SelectTrigger>
+        <SelectContent>
+          {categories.map(c => (
+            <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+interface SuggestDurationPickerProps {
+  value: string;
+  onChange: (value: string) => void;
+  customDate: string;
+  onCustomDateChange: (value: string) => void;
+  testIdPrefix?: string;
+}
+
+function SuggestDurationPicker({ value, onChange, customDate, onCustomDateChange, testIdPrefix = "poll" }: SuggestDurationPickerProps) {
+  return (
+    <div>
+      <label className="text-sm font-medium mb-1 block">Timeline</label>
+      <div className="flex flex-wrap gap-2">
+        {DURATION_PRESETS.map((preset) => (
+          <button
+            key={preset.value}
+            onClick={() => onChange(preset.value)}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
+              value === preset.value
+                ? "bg-cyan-500/25 dark:bg-cyan-500/20 border-cyan-500/50 dark:border-cyan-500/40 text-cyan-700 dark:text-cyan-300"
+                : "bg-muted/50 border-border/60 text-muted-foreground hover:border-foreground/30 dark:bg-slate-800/30 dark:border-slate-700/40 dark:text-slate-400 dark:hover:border-slate-600"
+            }`}
+            data-testid={`${testIdPrefix}-duration-${preset.value}`}
+          >
+            {preset.label}
+          </button>
+        ))}
+      </div>
+      {value === "custom" && (
+        <Input
+          type="datetime-local"
+          value={customDate}
+          onChange={(e) => onCustomDateChange(e.target.value)}
+          className="mt-2"
+          data-testid={`input-${testIdPrefix}-custom-date`}
+        />
+      )}
+    </div>
+  );
+}
+
 type SubjectSelection = {
   type: 'celebrity' | 'custom';
   value: string;
@@ -1732,7 +1800,6 @@ export default function VotePage() {
   const [matchupsSearchQuery, setMatchupsSearchQuery] = useState("");
   const [matchupsOverlayOpen, setMatchupsOverlayOpen] = useState(() => window.history.state?.overlay === "matchups");
   const [pollHeadline, setPollHeadline] = useState("");
-  const [pollCategory, setPollCategory] = useState("");
   const [sentimentCategory, setSentimentCategory] = useState("misc");
   const [pollDescription, setPollDescription] = useState("");
   const [pollEntitySearch, setPollEntitySearch] = useState("");
@@ -2337,20 +2404,6 @@ export default function VotePage() {
     addXP(25, event as React.MouseEvent);
   };
 
-  const handleSuggestSubmit = () => {
-    if (suggestName && suggestCategory) {
-      setSuggestModalOpen(false);
-      setSuggestName("");
-      setSuggestCategory("");
-      setSuggestReason("");
-      setSuggestUrl("");
-      toast({
-        title: "Suggestion submitted",
-        description: "Thanks - your suggestion was submitted for review.",
-      });
-    }
-  };
-
   const handlePollSubmit = async () => {
     if (!pollHeadline || !pollEntitySearch) return;
     setIsSuggestSubmitting(true);
@@ -2369,7 +2422,6 @@ export default function VotePage() {
       });
       setStartPollModalOpen(false);
       setPollHeadline("");
-      setPollCategory("");
       setSentimentCategory("misc");
       setPollDescription("");
       setPollEntitySearch("");
@@ -3346,19 +3398,7 @@ export default function VotePage() {
                 data-testid="input-poll-headline"
               />
             </div>
-            <div>
-              <label className="text-sm font-medium mb-1 block">Category *</label>
-              <Select value={sentimentCategory} onValueChange={setSentimentCategory}>
-                <SelectTrigger data-testid="select-poll-category">
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {CATEGORIES_OPEN.map(c => (
-                    <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <SuggestCategorySelect value={sentimentCategory} onChange={setSentimentCategory} data-testid="select-poll-category" />
             <div>
               <label className="text-sm font-medium mb-1 block">Subject (Entity) *</label>
               <HybridSubjectCombobox
@@ -3437,34 +3477,7 @@ export default function VotePage() {
                 </div>
               )}
             </div>
-            <div>
-              <label className="text-sm font-medium mb-1 block">Timeline</label>
-              <div className="flex flex-wrap gap-2">
-                {DURATION_PRESETS.map((preset) => (
-                  <button
-                    key={preset.value}
-                    onClick={() => setPollDuration(preset.value)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
-                      pollDuration === preset.value
-                        ? "bg-cyan-500/25 dark:bg-cyan-500/20 border-cyan-500/50 dark:border-cyan-500/40 text-cyan-700 dark:text-cyan-300"
-                        : "bg-muted/50 border-border/60 text-muted-foreground hover:border-foreground/30 dark:bg-slate-800/30 dark:border-slate-700/40 dark:text-slate-400 dark:hover:border-slate-600"
-                    }`}
-                    data-testid={`poll-duration-${preset.value}`}
-                  >
-                    {preset.label}
-                  </button>
-                ))}
-              </div>
-              {pollDuration === "custom" && (
-                <Input
-                  type="datetime-local"
-                  value={pollCustomDate}
-                  onChange={(e) => setPollCustomDate(e.target.value)}
-                  className="mt-2"
-                  data-testid="input-poll-custom-date"
-                />
-              )}
-            </div>
+            <SuggestDurationPicker value={pollDuration} onChange={setPollDuration} customDate={pollCustomDate} onCustomDateChange={setPollCustomDate} testIdPrefix="poll" />
             <div>
               <label className="text-sm font-medium mb-1 block">Short description (max 140 characters)</label>
               <Input
@@ -3529,19 +3542,7 @@ export default function VotePage() {
               placeholder="Search celebrity or enter name..."
               testIdPrefix="matchup-contender-b"
             />
-            <div>
-              <label className="text-sm font-medium mb-1 block">Category *</label>
-              <Select value={matchupCategory} onValueChange={setMatchupCategory}>
-                <SelectTrigger data-testid="select-matchup-category">
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {CATEGORIES_OPEN.map(c => (
-                    <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <SuggestCategorySelect value={matchupCategory} onChange={setMatchupCategory} data-testid="select-matchup-category" />
           </div>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setMatchupSuggestOpen(false)} data-testid="button-cancel-matchup">Cancel</Button>
@@ -3600,19 +3601,7 @@ export default function VotePage() {
                 <p className="text-xs text-muted-foreground mt-1">Required for verification</p>
               )}
             </div>
-            <div>
-              <label className="text-sm font-medium mb-1 block">Category (optional)</label>
-              <Select value={suggestCategory} onValueChange={setSuggestCategory}>
-                <SelectTrigger data-testid="select-induction-category">
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {CATEGORIES_LEADERBOARD.map(c => (
-                    <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <SuggestCategorySelect value={suggestCategory} onChange={setSuggestCategory} categories={CATEGORIES_LEADERBOARD} label="Category (optional)" data-testid="select-induction-category" />
             <div>
               <label className="text-sm font-medium mb-1 block">Why should they be on VoxDex? (optional)</label>
               <Input
@@ -3801,47 +3790,8 @@ export default function VotePage() {
                 </Button>
               )}
             </div>
-            <div>
-              <label className="text-sm font-medium mb-1 block">Category</label>
-              <Select value={opinionSuggestCategory} onValueChange={setOpinionSuggestCategory}>
-                <SelectTrigger data-testid="select-opinion-category">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {CATEGORIES_OPEN.map(c => (
-                    <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-1 block">Timeline</label>
-              <div className="flex flex-wrap gap-2">
-                {DURATION_PRESETS.map((preset) => (
-                  <button
-                    key={preset.value}
-                    onClick={() => setOpinionSuggestDuration(preset.value)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
-                      opinionSuggestDuration === preset.value
-                        ? "bg-cyan-500/25 dark:bg-cyan-500/20 border-cyan-500/50 dark:border-cyan-500/40 text-cyan-700 dark:text-cyan-300"
-                        : "bg-muted/50 border-border/60 text-muted-foreground hover:border-foreground/30 dark:bg-slate-800/30 dark:border-slate-700/40 dark:text-slate-400 dark:hover:border-slate-600"
-                    }`}
-                    data-testid={`opinion-duration-${preset.value}`}
-                  >
-                    {preset.label}
-                  </button>
-                ))}
-              </div>
-              {opinionSuggestDuration === "custom" && (
-                <Input
-                  type="datetime-local"
-                  value={opinionSuggestCustomDate}
-                  onChange={(e) => setOpinionSuggestCustomDate(e.target.value)}
-                  className="mt-2"
-                  data-testid="input-opinion-custom-date"
-                />
-              )}
-            </div>
+            <SuggestCategorySelect value={opinionSuggestCategory} onChange={setOpinionSuggestCategory} label="Category" data-testid="select-opinion-category" />
+            <SuggestDurationPicker value={opinionSuggestDuration} onChange={setOpinionSuggestDuration} customDate={opinionSuggestCustomDate} onCustomDateChange={setOpinionSuggestCustomDate} testIdPrefix="opinion" />
             <div>
               <label className="text-sm font-medium mb-1 block">Short description (max 140 characters)</label>
               <Input
