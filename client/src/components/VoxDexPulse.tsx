@@ -22,6 +22,7 @@ interface PulsePerson {
   id: string;
   name: string;
   category: string;
+  avatar?: string | null;
   imageSlug: string | null;
   trendScore?: number;
   change24h?: number | null;
@@ -333,6 +334,7 @@ function PulseRow({
           </div>
           <PersonAvatar
             name={person.name}
+            avatar={person.avatar}
             imageSlug={person.imageSlug}
             size="sm"
             className="h-10 w-10 shrink-0 rounded-none rounded-r-md"
@@ -406,6 +408,7 @@ function PulseRow({
         </div>
         <PersonAvatar
           name={person.name}
+          avatar={person.avatar}
           imageSlug={person.imageSlug}
           size="sm"
           className="h-10 w-10 shrink-0 rounded-none rounded-r-md"

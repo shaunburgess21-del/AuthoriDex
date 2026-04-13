@@ -1060,6 +1060,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           category: trendingPeople.category,
           trendScore: trendingPeople.trendScore,
           change24h: trendingPeople.change24h,
+          avatar: trendingPeople.avatar,
         })
         .from(trendingPeople)
         .where(trendWhere)
@@ -1130,6 +1131,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           category: p.category,
           trendScore: p.trendScore,
           change24h: p.change24h,
+          avatar: p.avatar,
           imageSlug: slugMap[p.id] || null,
           sparkline: sparkMap[p.id] ?? [],
         })),
@@ -1156,6 +1158,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           id: trendingPeople.id,
           name: trendingPeople.name,
           category: trendingPeople.category,
+          avatar: trendingPeople.avatar,
         })
         .from(trendingPeople)
         .innerJoin(celebrityMetrics, eq(trendingPeople.id, celebrityMetrics.celebrityId))
@@ -1201,6 +1204,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           id: p.id,
           name: p.name,
           category: p.category,
+          avatar: p.avatar,
           imageSlug: slugMap[p.id] || null,
         })),
         series,
@@ -1225,6 +1229,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           id: trendingPeople.id,
           name: trendingPeople.name,
           category: trendingPeople.category,
+          avatar: trendingPeople.avatar,
           approvalAvgRating: celebrityMetrics.approvalAvgRating,
           approvalVotesCount: celebrityMetrics.approvalVotesCount,
         })
@@ -1269,6 +1274,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           id: r.id,
           name: r.name,
           category: r.category,
+          avatar: r.avatar,
           imageSlug: slugMap[r.id] || null,
           approvalAvgRating: r.approvalAvgRating,
           approvalVotesCount: realVoteCountMap[r.id] ?? r.approvalVotesCount ?? 0,
