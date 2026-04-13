@@ -3367,9 +3367,6 @@ export default function VotePage() {
                 onSelect={(selection) => {
                   setPollEntitySearch(selection.value);
                   setPollSubjectType(selection.type);
-                  if (selection.type === 'custom') {
-                    setPollCategory('misc');
-                  }
                 }}
                 placeholder="Search celebrity or create custom topic..."
                 showCustomTopicOption={true}
@@ -3379,7 +3376,7 @@ export default function VotePage() {
                   {pollSubjectType === 'custom' ? (
                     <>
                       <Sparkles className="h-3 w-3" />
-                      Misc
+                      {CATEGORIES_OPEN.find(c => c.id === sentimentCategory)?.label ?? "Misc"}
                     </>
                   ) : (
                     <>
