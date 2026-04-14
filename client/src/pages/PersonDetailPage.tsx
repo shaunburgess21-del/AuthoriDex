@@ -1,4 +1,4 @@
-import { Fragment, useState, useEffect, useRef, useMemo, useCallback, lazy, Suspense } from "react";
+import { Fragment, Fragment, useState, useEffect, useRef, useMemo, useCallback, lazy, Suspense } from "react";
 import { handleImageError } from "@/lib/imageResolver";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -1400,6 +1400,44 @@ export default function PersonDetailPage() {
                   isProfilePage={true}
                 />
               </Suspense>
+            </section>
+
+            {/* Matchups Section */}
+            <section className="mb-10">
+              <UnifiedSectionHeader
+                title="Matchups"
+                subtitle="Vote on A vs B"
+                icon={<Swords className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />}
+                accent="cyan"
+                testId="profile-section-matchups"
+              />
+
+              {matchupsLoading ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                  {[1, 2, 3].map((i) => (
+                    <Card key={i} className="bg-slate-800/30 animate-pulse" style={{ minHeight: "380px" }} />
+                  ))}
+                </div>
+              ) : personMatchups.length > 0 ? (
+                <CardSection desktopLimit={6} gap="gap-5" testIdPrefix="profile-matchups">
+                  {personMatchups.map((matchup) => (
+                    <VersusCard
+                      key={matchup.id}
+                      matchup={matchup}
+                      userVote={matchupUserVotes[matchup.id] || null}
+                      onVote={handleMatchupVote}
+                      onRemoveVote={handleMatchupRemoveVote}
+                      onFilterCategory={handleSentimentCategoryFilter}
+                      categoryRaceMap={categoryRaceMap}
+                      leaderboardCategories={leaderboardCats}
+                    />
+                  ))}
+                </CardSection>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  No matchups featuring {person.name} yet. Check back soon.
+                </div>
+              )}
             </section>
 
             {/* Sentiment Polls Section */}
