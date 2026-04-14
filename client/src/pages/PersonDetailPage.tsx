@@ -1,4 +1,4 @@
-import { Fragment, Fragment, useState, useEffect, useRef, useMemo, useCallback, lazy, Suspense } from "react";
+import { Fragment, useState, useEffect, useRef, useMemo, useCallback, lazy, Suspense } from "react";
 import { handleImageError } from "@/lib/imageResolver";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
