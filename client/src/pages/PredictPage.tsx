@@ -2382,22 +2382,6 @@ export default function PredictPage() {
       <div className="sticky top-16 z-40 bg-background/80 backdrop-blur-xl border-b">
         <div className="container mx-auto px-4 py-3 max-w-7xl flex items-center gap-3">
           <HorizontalScroll className="pb-1 flex-1 min-w-0">
-            {PREDICTION_TYPES.map((type) => (
-              <button
-                key={type.id}
-                onClick={() => setSelectedType(type.id)}
-                className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all min-w-fit ${
-                  selectedType === type.id
-                    ? 'bg-violet-500/25 dark:bg-violet-500/20 text-violet-600 dark:text-violet-400 border border-violet-500/50 dark:border-violet-400/40 shadow-sm shadow-violet-500/30 dark:shadow-violet-500/20'
-                    : 'bg-muted/50 text-muted-foreground hover:bg-muted border border-transparent'
-                }`}
-                data-testid={`toggle-type-${type.id}`}
-              >
-                {type.icon}
-                <span className="sm:hidden">{type.mobileLabel}</span>
-                <span className="hidden sm:inline">{type.label}</span>
-              </button>
-            ))}
             {user && !userBetsError && (
               <button
                 type="button"
@@ -2421,6 +2405,22 @@ export default function PredictPage() {
                   : `Positions (${activePredictions})`}
               </button>
             )}
+            {PREDICTION_TYPES.map((type) => (
+              <button
+                key={type.id}
+                onClick={() => setSelectedType(type.id)}
+                className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all min-w-fit ${
+                  selectedType === type.id
+                    ? 'bg-violet-500/25 dark:bg-violet-500/20 text-violet-600 dark:text-violet-400 border border-violet-500/50 dark:border-violet-400/40 shadow-sm shadow-violet-500/30 dark:shadow-violet-500/20'
+                    : 'bg-muted/50 text-muted-foreground hover:bg-muted border border-transparent'
+                }`}
+                data-testid={`toggle-type-${type.id}`}
+              >
+                {type.icon}
+                <span className="sm:hidden">{type.mobileLabel}</span>
+                <span className="hidden sm:inline">{type.label}</span>
+              </button>
+            ))}
           </HorizontalScroll>
           <Tooltip>
             <TooltipTrigger asChild>

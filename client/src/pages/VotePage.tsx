@@ -2972,26 +2972,6 @@ export default function VotePage() {
       >
             <div className="container mx-auto px-4 py-3 max-w-7xl flex items-center gap-3">
           <ScrollMaskedChipRow className="pb-1 relative flex-1 min-w-0">
-            {SECTION_TOGGLES.map((section) => (
-              <button
-                key={section}
-                onClick={() => setActiveSection(section)}
-                className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all min-w-fit ${
-                  activeSection === section
-                    ? "bg-cyan-500/25 dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border border-cyan-500/50 dark:border-cyan-400/40 shadow-sm shadow-cyan-500/30 dark:shadow-cyan-500/20"
-                    : "bg-muted/50 text-muted-foreground hover:bg-muted border border-transparent"
-                }`}
-                data-testid={`toggle-section-${section.toLowerCase().replace(/['\s]/g, '-')}`}
-              >
-                {section === "Matchups" && <Swords className="h-4 w-4" />}
-                {section === "Sentiment Polls" && <MessageSquare className="h-4 w-4" />}
-                {section === "Opinion Polls" && <Vote className="h-4 w-4" />}
-                {section === "Underrated/Overrated" && <BarChart3 className="h-4 w-4" />}
-                {section === "Induction Queue" && <UserPlus className="h-4 w-4" />}
-                {section === "Curate Profile" && <ImageIcon className="h-4 w-4" />}
-                {section}
-              </button>
-            ))}
             {user && (
               <button
                 type="button"
@@ -3013,6 +2993,26 @@ export default function VotePage() {
                 {myVotesFilter === "hide-mine" ? `Hide (${myVotesCount})` : `Votes (${myVotesCount})`}
               </button>
             )}
+            {SECTION_TOGGLES.map((section) => (
+              <button
+                key={section}
+                onClick={() => setActiveSection(section)}
+                className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all min-w-fit ${
+                  activeSection === section
+                    ? "bg-cyan-500/25 dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border border-cyan-500/50 dark:border-cyan-400/40 shadow-sm shadow-cyan-500/30 dark:shadow-cyan-500/20"
+                    : "bg-muted/50 text-muted-foreground hover:bg-muted border border-transparent"
+                }`}
+                data-testid={`toggle-section-${section.toLowerCase().replace(/['\s]/g, '-')}`}
+              >
+                {section === "Matchups" && <Swords className="h-4 w-4" />}
+                {section === "Sentiment Polls" && <MessageSquare className="h-4 w-4" />}
+                {section === "Opinion Polls" && <Vote className="h-4 w-4" />}
+                {section === "Underrated/Overrated" && <BarChart3 className="h-4 w-4" />}
+                {section === "Induction Queue" && <UserPlus className="h-4 w-4" />}
+                {section === "Curate Profile" && <ImageIcon className="h-4 w-4" />}
+                {section}
+              </button>
+            ))}
           </ScrollMaskedChipRow>
           {user && (
             <Button
