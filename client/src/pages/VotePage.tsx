@@ -3985,7 +3985,7 @@ export default function VotePage() {
       </Dialog>
       {/* Suggest Opinion Poll Modal */}
       <Dialog open={opinionSuggestOpen} onOpenChange={setOpinionSuggestOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <ListChecks className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
@@ -3995,7 +3995,7 @@ export default function VotePage() {
               Create a multi-option poll for the community to vote on.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="flex-1 min-h-0 overflow-y-auto space-y-4 py-4 pr-2 -mr-2">
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="text-sm font-medium">Question / Title *</label>
