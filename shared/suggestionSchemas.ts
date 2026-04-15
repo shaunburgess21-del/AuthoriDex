@@ -87,26 +87,56 @@ export const profileImageSuggestionSchema = z
     message: "Either personId or personName is required",
   });
 
-export const openMarketSuggestionSchema = z.object({
-  title: z.string().min(1),
-  openMarketType: z.enum(["binary", "multi", "updown"]),
-  category: z.string().min(1),
-  description: z.string().max(200).optional(),
-  endAt: z.string().optional(),
-  sourceUrl: z.string().url().optional(),
-  coverImageUrl: z.string().url().optional(),
-  personId: z.string().optional(),
-  entries: z
-    .array(
-      z.object({
-        label: z.string().min(1),
-        description: z.string().optional(),
-        imageUrl: z.string().url().optional(),
-        personId: z.string().optional(),
-      })
-    )
-    .optional(),
-});
+export const openMarketSuggestionSchema = z
+  .object({
+    title: z.string().min(1),
+    openMarketType: z.enum(["binary", "multi", "updown"]),
+    category: z.string().min(1),
+    description: z.string().max(200).optional(),
+    endAt: z.string().optional(),
+    sourceUrl: z.string().url().optional(),
+    coverImageUrl: z.string().url().optional(),
+    personId: z.string().optional(),
+    // Strike-config fields — only meaningful when openMarketType === "updown".
+    // Validation parity with admin CreateMarketModal (AdminDashboard.tsx ~850):
+    // only `underlying` and `strike` are required. `metric` is optional.
+    // `unit` is optional and defaults to "$" when omitted, blank, or whitespace
+    // (admin modal initializes unit state to "$" — same effective default).
+    underlying: z.string().optional(),
+    metric: z.string().optional(),
+    strike: z.number().optional(),
+    unit: z
+      .string()
+      .optional()
+      .transform((v) => (v && v.trim().length > 0 ? v : "$")),
+    entries: z
+      .array(
+        z.object({
+          label: z.string().min(1),
+          description: z.string().optional(),
+          imageUrl: z.string().url().optional(),
+          personId: z.string().optional(),
+        })
+      )
+      .optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.openMarketType !== "updown") return;
+    if (!data.underlying || data.underlying.trim().length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["underlying"],
+        message: "underlying is required for Above/Below markets",
+      });
+    }
+    if (data.strike === undefined || data.strike === null || Number.isNaN(data.strike)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["strike"],
+        message: "strike is required for Above/Below markets",
+      });
+    }
+  });
 
 // ---- Schema dispatch map ----
 const schemaMap: Record<SuggestionType, z.ZodTypeAny> = {
