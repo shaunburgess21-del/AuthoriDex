@@ -1677,6 +1677,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ============ PEOPLE SEARCH (trigram-backed) ============
+  // Backed by pg_trgm GIN index on tracked_people.name (migration 0008).
+  // Consumers: VotePage suggest modals (OpinionOptionRow, ContenderSelector,
+  // Curate HybridSubjectCombobox). Returns all tracked_people regardless of
+  // status — status is a UI hint for consumers, not a filter gate.
+  app.get("/api/people/search", async (req, res) => {
+    try {
+      const rawQ = typeof req.query.q === "string" ? req.query.q.trim() : "";
+      const rawLimit = parseInt(req.query.limit as string, 10);
+      const limit = Math.min(Math.max(Number.isFinite(rawLimit) ? rawLimit : 10, 1), 25);
+
+      if (rawQ.length < 2) {
+        res.json({ data: [], totalCount: 0 });
+        return;
+      }
+
+      const likePattern = `%${rawQ}%`;
+      const rows = await db
+        .select({
+          id: trackedPeople.id,
+          name: trackedPeople.name,
+          avatar: trackedPeople.avatar,
+          status: trackedPeople.status,
+          category: trackedPeople.category,
+        })
+        .from(trackedPeople)
+        .where(sql`${trackedPeople.name} % ${rawQ} OR ${trackedPeople.name} ILIKE ${likePattern}`)
+        .orderBy(sql`similarity(${trackedPeople.name}, ${rawQ}) DESC, ${trackedPeople.displayOrder} ASC NULLS LAST`)
+        .limit(limit);
+
+      res.json({ data: rows, totalCount: rows.length });
+    } catch (error) {
+      console.error("Error searching people:", error);
+      res.status(500).json({ error: "Failed to search people" });
+    }
+  });
+
   // ============ MOMENTUM SIGNALS ENDPOINT ============
   app.get("/api/people/:id/momentum", async (req, res) => {
     try {

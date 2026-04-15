@@ -86,7 +86,6 @@ import type { Swiper as SwiperType } from "swiper";
 import "swiper/css";
 import { motion, AnimatePresence } from "framer-motion";
 import { getFilterCategories, getMarketCategoryLabel, normalizeMarketCategory, type FilterCategory, CATEGORIES_WITH_FILTERS, CATEGORIES_LEADERBOARD, CATEGORIES_OPEN, OPINION_POLL_MIN_OPTIONS, OPINION_POLL_MAX_OPTIONS } from "@shared/constants";
-import type { TrendingPerson } from "@shared/schema";
 import { CurateSection } from "@/components/curate";
 import { UnderratedOverratedCard } from "@/components/UnderratedOverratedCard";
 import { CardSection } from "@/components/CardSection";
@@ -103,6 +102,7 @@ import { WindowedDotIndicator } from "@/components/WindowedDotIndicator";
 import { ScrollMaskedChipRow } from "@/components/ScrollMaskedChipRow";
 import { VoteSnapScrollView, type SnapItem, type SnapSectionType } from "@/components/snap-scroll/VoteSnapScrollView";
 import { navigateWithVoteList } from "@/lib/voteListNavigation";
+import { usePeopleSearch, type SearchablePerson } from "@/hooks/usePeopleSearch";
 
 const VOTE_ONBOARDING_STEPS: readonly OnboardingStep[] = [
   {
@@ -138,15 +138,6 @@ const VOTE_CATEGORIES = CATEGORIES_WITH_FILTERS.map(c => ({
 }));
 
 const VOTE_CATEGORIES_WITH_CUSTOM = VOTE_CATEGORIES;
-
-const mockCelebrityList = [
-  "Taylor Swift", "Elon Musk", "Keanu Reeves", "BeyoncÃ©", "Dwayne Johnson",
-  "Rihanna", "LeBron James", "Kim Kardashian", "Justin Bieber", "Ariana Grande",
-  "Cristiano Ronaldo", "Lionel Messi", "Drake", "Selena Gomez", "Kylie Jenner",
-  "Billie Eilish", "Bad Bunny", "Post Malone", "The Weeknd", "Zendaya",
-  "Tom Holland", "TimothÃ©e Chalamet", "Margot Robbie", "Ryan Reynolds", "Dua Lipa",
-  "Harry Styles", "Olivia Rodrigo", "Ice Spice", "Travis Scott", "SZA"
-];
 
 interface InductionCandidate {
   id: string;
@@ -1164,17 +1155,8 @@ function OpinionOptionRow({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const { data: trendingResponse } = useQuery<{ data: TrendingPerson[], totalCount: number, hasMore: boolean }>({
-    queryKey: ['/api/trending?sort=rank&limit=100'],
-  });
-  const celebrities = trendingResponse?.data || [];
-
-  const filteredCelebrities = useMemo(() => {
-    if (!searchQuery) return [];
-    return celebrities
-      .filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()))
-      .slice(0, 5);
-  }, [celebrities, searchQuery]);
+  const { data: searchResponse } = usePeopleSearch(searchQuery, 5);
+  const filteredCelebrities = searchQuery ? (searchResponse?.data ?? []) : [];
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -1191,7 +1173,7 @@ function OpinionOptionRow({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleSelectCelebrity = (celebrity: TrendingPerson) => {
+  const handleSelectCelebrity = (celebrity: SearchablePerson) => {
     onChange({
       name: celebrity.name,
       personId: celebrity.id,
@@ -1397,16 +1379,11 @@ function HybridSubjectCombobox({
   showCustomTopicOption?: boolean;
 }) {
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [filteredSuggestions, setFilteredSuggestions] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const filtered = mockCelebrityList.filter(name => 
-      name.toLowerCase().includes(value.toLowerCase())
-    ).slice(0, 6);
-    setFilteredSuggestions(filtered);
-  }, [value]);
+  const { data: searchResponse } = usePeopleSearch(value, 6);
+  const filteredPeople = searchResponse?.data ?? [];
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -1433,7 +1410,7 @@ function HybridSubjectCombobox({
     setShowSuggestions(false);
   };
 
-  const hasMatchingCelebrities = filteredSuggestions.length > 0;
+  const hasMatchingCelebrities = filteredPeople.length > 0;
   const showFallbackCustom = value.length >= 2 && !hasMatchingCelebrities;
 
   return (
@@ -1482,15 +1459,21 @@ function HybridSubjectCombobox({
                 <div className="px-3 py-1.5 text-xs text-muted-foreground bg-muted/30 border-b border-border">
                   Celebrities
                 </div>
-                {filteredSuggestions.map((name, index) => (
+                {filteredPeople.map((person, index) => (
                   <button
-                    key={name}
-                    onClick={() => handleSelectCelebrity(name)}
+                    key={person.id}
+                    onClick={() => handleSelectCelebrity(person.name)}
                     className="w-full px-4 py-2.5 text-left text-sm hover:bg-muted transition-colors flex items-center gap-2"
                     data-testid={`suggestion-celebrity-${index}`}
                   >
-                    <PersonAvatar name={name} avatar="" size="sm" />
-                    <span>{name}</span>
+                    {person.avatar ? (
+                      <div className="h-7 w-7 rounded-md overflow-hidden shrink-0 border border-border">
+                        <img src={person.avatar} alt={person.name} className="w-full h-full object-cover" />
+                      </div>
+                    ) : (
+                      <PersonAvatar name={person.name} avatar="" size="sm" />
+                    )}
+                    <span>{person.name}</span>
                   </button>
                 ))}
               </>
@@ -1573,19 +1556,12 @@ function ContenderSelector({
   const suggestionsRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch trending people for suggestions
-  const { data: trendingResponse } = useQuery<{ data: TrendingPerson[], totalCount: number, hasMore: boolean }>({
-    queryKey: ['/api/trending?sort=rank&limit=100'],
-  });
-  const celebrities = trendingResponse?.data || [];
-
-  // Filter celebrities based on search query
-  const filteredCelebrities = useMemo(() => {
-    if (!searchQuery) return celebrities.slice(0, 6);
-    return celebrities
-      .filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()))
-      .slice(0, 6);
-  }, [celebrities, searchQuery]);
+  // Server-side celebrity search (trigram-backed, Phase 1g).
+  // Empty query returns no suggestions — users must type ≥2 chars. The prior
+  // "top 6 when empty" behaviour relied on a client-side leaderboard fetch
+  // and is intentionally dropped as part of the suggest-to-live redesign.
+  const { data: searchResponse } = usePeopleSearch(searchQuery, 6);
+  const filteredCelebrities = searchResponse?.data ?? [];
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -1603,7 +1579,7 @@ function ContenderSelector({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleSelectCelebrity = (celebrity: TrendingPerson) => {
+  const handleSelectCelebrity = (celebrity: SearchablePerson) => {
     onChange({
       type: 'celebrity',
       name: celebrity.name,
