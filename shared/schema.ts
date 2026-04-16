@@ -50,7 +50,9 @@ export const trackedPeople = pgTable("tracked_people", {
   searchQueryOverride: text("search_query_override"),
   newsQueryWidened: text("news_query_widened"),
   status: text("status").notNull().default("main_leaderboard"),
-});
+}, (table) => ({
+  statusIdx: index("tracked_people_status_idx").on(table.status),
+}));
 
 export const insertTrackedPersonSchema = createInsertSchema(trackedPeople).omit({
   id: true,
@@ -90,6 +92,8 @@ export const trendSnapshots = pgTable("trend_snapshots", {
 }, (table) => ({
   uniquePersonTimestamp: unique().on(table.personId, table.timestamp),
   runIdIdx: index("trend_snapshots_run_id_idx").on(table.runId),
+  personTsIdx: index("trend_snapshots_person_ts_idx").on(table.personId, table.timestamp),
+  personOriginTsIdx: index("trend_snapshots_person_origin_ts_idx").on(table.personId, table.snapshotOrigin, table.timestamp),
 }));
 
 // API Cache - stores raw API responses to prevent redundant calls
@@ -101,7 +105,9 @@ export const apiCache = pgTable("api_cache", {
   responseData: text("response_data").notNull(),
   fetchedAt: timestamp("fetched_at").notNull().defaultNow(),
   expiresAt: timestamp("expires_at").notNull(),
-});
+}, (table) => ({
+  providerIdx: index("api_cache_provider_idx").on(table.provider),
+}));
 
 export const insertApiCacheSchema = createInsertSchema(apiCache).omit({
   id: true,
@@ -148,7 +154,10 @@ export const trendingPeople = pgTable("trending_people", {
   change7d: real("change_7d"),
   category: text("category"),
   profileViews10m: integer("profile_views_10m").default(0), // view counter reset each tick
-});
+}, (table) => ({
+  rankIdx: index("trending_people_rank_idx").on(table.rank),
+  categoryIdx: index("trending_people_category_idx").on(table.category),
+}));
 
 export type TrendingPerson = typeof trendingPeople.$inferSelect;
 
@@ -238,6 +247,7 @@ export const sentimentVotes = pgTable("sentiment_votes", {
   votedDate: text("voted_date").notNull(), // YYYY-MM-DD for daily rate limiting
 }, (table) => ({
   uniqueUserPersonDate: unique().on(table.userId, table.personId, table.votedDate),
+  personIdx: index("sentiment_votes_person_idx").on(table.personId),
 }));
 
 export const insertSentimentVoteSchema = createInsertSchema(sentimentVotes).omit({
@@ -441,7 +451,9 @@ export const celebrityImages = pgTable("celebrity_images", {
   votesUp: integer("votes_up").notNull().default(0),
   votesDown: integer("votes_down").notNull().default(0),
   addedAt: timestamp("added_at").notNull().defaultNow(),
-});
+}, (table) => ({
+  personIdx: index("celebrity_images_person_idx").on(table.personId),
+}));
 
 export const insertCelebrityImageSchema = createInsertSchema(celebrityImages).omit({
   id: true,
@@ -1138,7 +1150,10 @@ export const celebrityMetrics = pgTable("celebrity_metrics", {
   visibility: text("visibility").notNull().default("live"), // live | inactive | archived
   curateVisibility: text("curate_visibility").notNull().default("live"), // live | inactive | archived
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
+}, (table) => ({
+  approvalIdx: index("celebrity_metrics_approval_idx").on(table.approvalAvgRating),
+  valueIdx: index("celebrity_metrics_value_idx").on(table.valueScore),
+}));
 
 export const insertCelebrityMetricsSchema = createInsertSchema(celebrityMetrics);
 

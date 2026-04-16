@@ -1,6 +1,6 @@
 import { db } from "../db";
 import { trendSnapshots, trackedPeople, apiCache } from "@shared/schema";
-import { eq, desc, and, sql } from "drizzle-orm";
+import { eq, desc, and, sql, inArray } from "drizzle-orm";
 
 export type TrendDriver = "NEWS" | "SEARCH" | "WIKI";
 
@@ -237,15 +237,15 @@ export function formatRelativeTime(date: Date | null): string {
 
 export async function getTrendContextBatch(personIds: string[]): Promise<Map<string, TrendContext>> {
   const results = new Map<string, TrendContext>();
-  
+  if (personIds.length === 0) return results;
+
   const people = await db.select({
     id: trackedPeople.id,
     name: trackedPeople.name,
     wikiSlug: trackedPeople.wikiSlug,
-  }).from(trackedPeople);
+  }).from(trackedPeople).where(inArray(trackedPeople.id, personIds));
 
-  // Only fetch the 5 columns we need, filtered to last 7 days, to avoid loading the 48MB diagnostics JSONB
-  const allSnapshots = await db
+  const batchSnapshots = await db
     .select({
       personId: trendSnapshots.personId,
       timestamp: trendSnapshots.timestamp,
@@ -255,30 +255,38 @@ export async function getTrendContextBatch(personIds: string[]): Promise<Map<str
     })
     .from(trendSnapshots)
     .where(and(
+      inArray(trendSnapshots.personId, personIds),
       sql`${trendSnapshots.timestamp} = date_trunc('hour', ${trendSnapshots.timestamp})`,
       eq(trendSnapshots.snapshotOrigin, 'ingest'),
       sql`${trendSnapshots.timestamp} >= NOW() - INTERVAL '7 days'`
     ))
     .orderBy(desc(trendSnapshots.timestamp), desc(trendSnapshots.id));
 
-  // api_cache is small (< 1MB) — only fetch provider keys we actually need
-  const allCache = await db.select({
-    cacheKey: apiCache.cacheKey,
-    fetchedAt: apiCache.fetchedAt,
-    responseData: apiCache.responseData,
-  }).from(apiCache).where(
-    sql`${apiCache.provider} IN ('gdelt', 'wiki', 'serper')`
-  );
-  
-  const snapshotMap = new Map<string, typeof allSnapshots[0]>();
-  for (const snap of allSnapshots) {
+  const cacheKeys: string[] = [];
+  for (const p of people) {
+    const slug = p.name.toLowerCase().replace(/ /g, "_");
+    cacheKeys.push(`gdelt:news:${slug}`);
+    cacheKeys.push(`serper:search:${slug}`);
+    if (p.wikiSlug) cacheKeys.push(`wiki:pageviews:${p.wikiSlug}`);
+  }
+
+  const batchCache = cacheKeys.length > 0
+    ? await db.select({
+        cacheKey: apiCache.cacheKey,
+        fetchedAt: apiCache.fetchedAt,
+        responseData: apiCache.responseData,
+      }).from(apiCache).where(inArray(apiCache.cacheKey, cacheKeys))
+    : [];
+
+  const snapshotMap = new Map<string, typeof batchSnapshots[0]>();
+  for (const snap of batchSnapshots) {
     if (!snapshotMap.has(snap.personId)) {
       snapshotMap.set(snap.personId, snap);
     }
   }
   
-  const cacheMap = new Map<string, typeof allCache[0]>();
-  for (const cache of allCache) {
+  const cacheMap = new Map<string, typeof batchCache[0]>();
+  for (const cache of batchCache) {
     cacheMap.set(cache.cacheKey, cache);
   }
   

@@ -635,9 +635,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Store total count before pagination
       const totalCount = enrichedPeople.length;
 
-      // Apply pagination if limit is provided
-      if (limit && typeof limit === 'string') {
-        const limitNum = parseInt(limit, 10);
+      // Apply pagination — default limit prevents unbounded JSON responses
+      const DEFAULT_TRENDING_LIMIT = 200;
+      const requestedLimit = limit && typeof limit === 'string' ? limit : String(DEFAULT_TRENDING_LIMIT);
+      if (requestedLimit !== 'all') {
+        const limitNum = parseInt(requestedLimit, 10);
         const offsetNum = offset && typeof offset === 'string' ? parseInt(offset, 10) : 0;
         
         if (!isNaN(limitNum) && limitNum > 0) {
@@ -5948,21 +5950,31 @@ Only return the JSON object.`;
       // Get user favorites from userFavourites table
       const userFavs = await db.select().from(userFavourites).where(eq(userFavourites.userId, userId)).limit(50);
       
-      // Get celebrity details for each favorite
-      const favoritesWithDetails = await Promise.all(userFavs.map(async (fav) => {
-        const person = await db.select().from(trackedPeople).where(eq(trackedPeople.id, fav.personId)).limit(1);
-        const trending = await db.select().from(trendingPeople).where(eq(trendingPeople.id, fav.personId)).limit(1);
-        
+      const favPersonIds = userFavs.map(f => f.personId);
+      
+      const [personRows, trendingRows] = favPersonIds.length > 0
+        ? await Promise.all([
+            db.select().from(trackedPeople).where(inArray(trackedPeople.id, favPersonIds)),
+            db.select().from(trendingPeople).where(inArray(trendingPeople.id, favPersonIds)),
+          ])
+        : [[], []];
+
+      const personMap = new Map(personRows.map(p => [p.id, p]));
+      const trendingMap = new Map(trendingRows.map(t => [t.id, t]));
+
+      const favoritesWithDetails = userFavs.map(fav => {
+        const person = personMap.get(fav.personId);
+        const trending = trendingMap.get(fav.personId);
         return {
           id: fav.id,
           celebrityId: fav.personId,
-          name: person[0]?.name || "Unknown",
-          imageUrl: person[0]?.avatar || null,
-          category: person[0]?.category || "Other",
-          rank: trending[0]?.rank || null,
-          change: trending[0]?.change24h || 0,
+          name: person?.name || "Unknown",
+          imageUrl: person?.avatar || null,
+          category: person?.category || "Other",
+          rank: trending?.rank || null,
+          change: trending?.change24h || 0,
         };
-      }));
+      });
       
       res.json(favoritesWithDetails);
     } catch (error: any) {

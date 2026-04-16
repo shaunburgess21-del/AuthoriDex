@@ -1,6 +1,6 @@
 import { db } from "../db";
 import { trackedPeople, trendSnapshots, apiCache } from "@shared/schema";
-import { gte, and, eq } from "drizzle-orm";
+import { gte, and, eq, sql } from "drizzle-orm";
 import { computeTrendScore } from "../scoring/trendScore";
 
 /**
@@ -52,7 +52,9 @@ export async function runQuickScoring(): Promise<QuickScoreOutput> {
     const people = await db.select().from(trackedPeople);
     console.log(`[QuickScore] Found ${people.length} tracked people`);
 
-    const cachedData = await db.select().from(apiCache);
+    const cachedData = await db.select().from(apiCache).where(
+      sql`${apiCache.provider} IN ('wiki', 'gdelt', 'serper', 'x')`
+    );
     
     const wikiCache = new Map<string, any>();
     const gdeltCache = new Map<string, any>();

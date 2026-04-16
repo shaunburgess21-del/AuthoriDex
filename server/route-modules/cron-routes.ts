@@ -156,6 +156,32 @@ export function registerCronRoutes(app: Express): void {
     }
   });
 
+  app.post("/api/cron/retention-cleanup", verifyCronSecret, async (_req, res) => {
+    const startTime = Date.now();
+    try {
+      const { runRetentionCleanup } = await import("../jobs/retention-cleanup");
+      const result = await runRetentionCleanup();
+
+      res.json({
+        success: true,
+        message: "Retention cleanup completed",
+        snapshotsDeleted: result.snapshotsDeleted,
+        cacheEntriesDeleted: result.cacheEntriesDeleted,
+        ingestionRunsDeleted: result.ingestionRunsDeleted,
+        duration: result.durationMs,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error("[Cron] Retention cleanup error:", error);
+      res.status(500).json({
+        success: false,
+        error: error.message,
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  });
+
   app.get("/api/cron/health", verifyCronSecret, (_req, res) => {
     res.json({
       status: "ok",

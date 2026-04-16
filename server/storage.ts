@@ -1,6 +1,6 @@
 import { type TrendingPerson, type CelebrityProfile, type InsertCelebrityProfile, celebrityProfiles, trendingPeople } from "@shared/schema";
 import { db } from "./db";
-import { eq, asc } from "drizzle-orm";
+import { eq, asc, sql } from "drizzle-orm";
 
 export interface IStorage {
   getTrendingPeople(): Promise<TrendingPerson[]>;
@@ -63,12 +63,14 @@ export class MemStorage implements IStorage {
       this.trendingPeople.set(person.id, person);
     });
     
-    // Upsert to database for persistent storage
-    for (const person of people) {
+    // Batch upsert to database for persistent storage
+    const BATCH_SIZE = 50;
+    for (let i = 0; i < people.length; i += BATCH_SIZE) {
+      const batch = people.slice(i, i + BATCH_SIZE);
       try {
         await db
           .insert(trendingPeople)
-          .values({
+          .values(batch.map(person => ({
             id: person.id,
             name: person.name,
             category: person.category,
@@ -79,19 +81,19 @@ export class MemStorage implements IStorage {
             rank: person.rank,
             change24h: person.change24h,
             change7d: person.change7d,
-          })
+          })))
           .onConflictDoUpdate({
             target: trendingPeople.id,
             set: {
-              trendScore: person.trendScore,
-              fameIndex: person.fameIndex,
-              rank: person.rank,
-              change24h: person.change24h,
-              change7d: person.change7d,
+              trendScore: sql`excluded.trend_score`,
+              fameIndex: sql`excluded.fame_index`,
+              rank: sql`excluded.rank`,
+              change24h: sql`excluded.change_24h`,
+              change7d: sql`excluded.change_7d`,
             },
           });
       } catch (error) {
-        console.error(`[Storage] Error upserting trending person ${person.name}:`, error);
+        console.error(`[Storage] Error upserting trending people batch ${i}-${i + batch.length}:`, error);
       }
     }
   }

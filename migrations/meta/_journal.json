@@ -64,6 +64,13 @@
       "when": 1776355200000,
       "tag": "0008_people_name_trgm_index",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1776441600000,
+      "tag": "0009_add_scaling_indexes",
+      "breakpoints": true
     }
   ]
 }
