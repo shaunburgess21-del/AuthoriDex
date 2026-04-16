@@ -1910,6 +1910,14 @@ export default function VotePage() {
     addXP(25, event as React.MouseEvent);
   };
 
+  const openSuggestModal = (open: () => void) => {
+    if (!user) {
+      toast({ title: "Sign in required", description: "Please sign in to suggest content.", variant: "destructive" });
+      return;
+    }
+    open();
+  };
+
   const handlePollSubmit = async () => {
     if (!pollHeadline || !pollEntitySearch) return;
     setIsSuggestSubmitting(true);
@@ -1954,6 +1962,30 @@ export default function VotePage() {
   const handleMatchupSuggestSubmit = async () => {
     setIsSuggestSubmitting(true);
     try {
+      // Resolve images: celebrities use imageUrl directly; custom contenders upload their file first.
+      const resolveContenderImage = async (contender: typeof matchupContenderA): Promise<string | undefined> => {
+        if (contender.imageUrl) return contender.imageUrl;
+        if (contender.uploadedFile) {
+          const formData = new FormData();
+          formData.append("file", contender.uploadedFile);
+          const res = await fetch("/api/suggestions/upload-image", {
+            method: "POST",
+            body: formData,
+            headers: { ...(await getAuthHeaders()) },
+            credentials: "include",
+          });
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            throw new Error(body?.error ?? `Upload failed for contender: ${contender.name}`);
+          }
+          const { url } = await res.json();
+          return url as string;
+        }
+        return undefined;
+      };
+      const optionAImage = await resolveContenderImage(matchupContenderA);
+      const optionBImage = await resolveContenderImage(matchupContenderB);
+
       await apiRequest("POST", "/api/suggestions", {
         type: "matchup",
         payload: {
@@ -1963,8 +1995,8 @@ export default function VotePage() {
           optionBText: matchupContenderB.name,
           personAId: matchupContenderA.type === "celebrity" ? matchupContenderA.celebrityId : undefined,
           personBId: matchupContenderB.type === "celebrity" ? matchupContenderB.celebrityId : undefined,
-          optionAImage: matchupContenderA.type === "celebrity" ? matchupContenderA.imageUrl : undefined,
-          optionBImage: matchupContenderB.type === "celebrity" ? matchupContenderB.imageUrl : undefined,
+          optionAImage,
+          optionBImage,
         },
       });
       setMatchupHeadline("");
@@ -2331,7 +2363,7 @@ export default function VotePage() {
                   </TooltipContent>
                 </Tooltip>
                 <Button
-                  onClick={() => setStartPollModalOpen(true)}
+                  onClick={() => openSuggestModal(() => setStartPollModalOpen(true))}
                   className="rounded-full bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/25 dark:hover:bg-cyan-500/20 hidden md:flex"
                   data-testid="button-suggest-poll"
                 >
@@ -2340,7 +2372,7 @@ export default function VotePage() {
                 </Button>
                 <Button
                   size="icon"
-                  onClick={() => setStartPollModalOpen(true)}
+                  onClick={() => openSuggestModal(() => setStartPollModalOpen(true))}
                   className="rounded-full bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/25 dark:hover:bg-cyan-500/20 md:hidden"
                   data-testid="button-suggest-poll-mobile"
                 >
@@ -2429,7 +2461,7 @@ export default function VotePage() {
                   </TooltipContent>
                 </Tooltip>
                 <Button
-                  onClick={() => setMatchupSuggestOpen(true)}
+                  onClick={() => openSuggestModal(() => setMatchupSuggestOpen(true))}
                   className="rounded-full bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/25 dark:hover:bg-cyan-500/20 hidden md:flex"
                   data-testid="button-suggest-matchup"
                 >
@@ -2438,7 +2470,7 @@ export default function VotePage() {
                 </Button>
                 <Button
                   size="icon"
-                  onClick={() => setMatchupSuggestOpen(true)}
+                  onClick={() => openSuggestModal(() => setMatchupSuggestOpen(true))}
                   className="rounded-full bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/25 dark:hover:bg-cyan-500/20 md:hidden"
                   data-testid="button-suggest-matchup-mobile"
                 >
@@ -2535,7 +2567,7 @@ export default function VotePage() {
                   </TooltipContent>
                 </Tooltip>
                 <Button
-                  onClick={() => setOpinionSuggestOpen(true)}
+                  onClick={() => openSuggestModal(() => setOpinionSuggestOpen(true))}
                   className="rounded-full bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/25 dark:hover:bg-cyan-500/20 hidden md:flex"
                   data-testid="button-suggest-opinion"
                 >
@@ -2544,7 +2576,7 @@ export default function VotePage() {
                 </Button>
                 <Button
                   size="icon"
-                  onClick={() => setOpinionSuggestOpen(true)}
+                  onClick={() => openSuggestModal(() => setOpinionSuggestOpen(true))}
                   className="rounded-full bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/25 dark:hover:bg-cyan-500/20 md:hidden"
                   data-testid="button-suggest-opinion-mobile"
                 >
@@ -2744,7 +2776,7 @@ export default function VotePage() {
                   </TooltipContent>
                 </Tooltip>
                 <Button
-                  onClick={() => setInductionSuggestOpen(true)}
+                  onClick={() => openSuggestModal(() => setInductionSuggestOpen(true))}
                   className="rounded-full bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/25 dark:hover:bg-cyan-500/20 hidden md:flex"
                   data-testid="button-suggest-induction"
                 >
@@ -2753,7 +2785,7 @@ export default function VotePage() {
                 </Button>
                 <Button
                   size="icon"
-                  onClick={() => setInductionSuggestOpen(true)}
+                  onClick={() => openSuggestModal(() => setInductionSuggestOpen(true))}
                   className="rounded-full bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/25 dark:hover:bg-cyan-500/20 md:hidden"
                   data-testid="button-suggest-induction-mobile"
                 >
@@ -2856,7 +2888,7 @@ export default function VotePage() {
                   </TooltipContent>
                 </Tooltip>
                 <Button
-                  onClick={() => setCurateSuggestOpen(true)}
+                  onClick={() => openSuggestModal(() => setCurateSuggestOpen(true))}
                   className="rounded-full bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/25 dark:hover:bg-cyan-500/20 hidden md:flex"
                   data-testid="button-suggest-curate"
                 >
@@ -2865,7 +2897,7 @@ export default function VotePage() {
                 </Button>
                 <Button
                   size="icon"
-                  onClick={() => setCurateSuggestOpen(true)}
+                  onClick={() => openSuggestModal(() => setCurateSuggestOpen(true))}
                   className="rounded-full bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/25 dark:hover:bg-cyan-500/20 md:hidden"
                   data-testid="button-suggest-curate-mobile"
                 >

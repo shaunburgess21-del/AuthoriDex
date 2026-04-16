@@ -1723,6 +1723,14 @@ export default function PredictPage() {
   const [viewAllCategory, setViewAllCategory] = useState<string | null>(() => window.history.state?.overlay || null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [rulesModalOpen, setRulesModalOpen] = useState<string | null>(null);
+
+  const openSuggestModal = (open: () => void) => {
+    if (!user) {
+      toast({ title: "Sign in required", description: "Please sign in to suggest content.", variant: "destructive" });
+      return;
+    }
+    open();
+  };
   
   const [pendingSelection, setPendingSelection] = useState<StakeSelection | null>(null);
   const [stakeModalOpen, setStakeModalOpen] = useState(false);
@@ -2767,7 +2775,7 @@ export default function PredictPage() {
                     <TooltipContent className="bg-popover dark:bg-slate-900/95 border-border dark:border-slate-700 text-popover-foreground dark:text-slate-200 text-xs">How it works</TooltipContent>
                   </Tooltip>
                   <Button 
-                    onClick={() => setCreateModalOpen(true)}
+                    onClick={() => openSuggestModal(() => setCreateModalOpen(true))}
                     className="rounded-full bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/40 dark:border-violet-500/30 text-violet-600 dark:text-violet-400 hover:bg-violet-500/25 dark:hover:bg-violet-500/20 hidden md:flex"
                     data-testid="button-start-prediction"
                   >
@@ -2776,7 +2784,7 @@ export default function PredictPage() {
                   </Button>
                   <Button 
                     size="icon"
-                    onClick={() => setCreateModalOpen(true)}
+                    onClick={() => openSuggestModal(() => setCreateModalOpen(true))}
                     className="rounded-full bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/40 dark:border-violet-500/30 text-violet-600 dark:text-violet-400 hover:bg-violet-500/25 dark:hover:bg-violet-500/20 md:hidden"
                     data-testid="button-start-prediction-mobile"
                   >
