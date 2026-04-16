@@ -14,6 +14,7 @@ import { createHash, randomUUID } from "crypto";
 import multer from "multer";
 import path from "path";
 import { gamificationService } from "./services/gamification";
+import { dispatchApproval, markSuggestionApproved, markSuggestionRejected } from "./services/suggestionApproval";
 import { JACKPOT_TICKET_COST, JACKPOT_MAX_PREDICTED_SCORE } from "./config/constants";
 import { isAdminRole } from "./utils/authz";
 import { applyAdminCreditAdjustment } from "./utils/admin-credits";
@@ -15501,6 +15502,139 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
     } catch (error: any) {
       console.error("Error fetching user suggestions:", error.message);
       res.status(500).json({ error: "Failed to fetch suggestions" });
+    }
+  });
+
+  // GET /api/admin/suggestions — list suggestions for the review queue.
+  app.get("/api/admin/suggestions", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const statusParam = typeof req.query.status === "string" ? req.query.status : "pending";
+      const typeParam = typeof req.query.type === "string" ? req.query.type : undefined;
+      const limitRaw = parseInt(String(req.query.limit ?? "50"), 10);
+      const offsetRaw = parseInt(String(req.query.offset ?? "0"), 10);
+      const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? limitRaw : 50, 1), 100);
+      const offset = Math.max(Number.isFinite(offsetRaw) ? offsetRaw : 0, 0);
+
+      const conditions: SQL[] = [];
+      if (statusParam !== "all") {
+        conditions.push(eq(suggestions.status, statusParam));
+      }
+      if (typeParam && SUGGESTION_TYPES.includes(typeParam as any)) {
+        conditions.push(eq(suggestions.type, typeParam));
+      }
+      const whereExpr = conditions.length > 0 ? and(...conditions) : undefined;
+
+      const [totalRow] = await db
+        .select({ count: sql<number>`COUNT(*)::int` })
+        .from(suggestions)
+        .where(whereExpr);
+      const totalCount = Number(totalRow?.count ?? 0);
+
+      const rows = await db
+        .select({
+          id: suggestions.id,
+          type: suggestions.type,
+          payload: suggestions.payload,
+          submittedBy: suggestions.submittedBy,
+          status: suggestions.status,
+          adminNotes: suggestions.adminNotes,
+          approvedAsId: suggestions.approvedAsId,
+          approvedAsType: suggestions.approvedAsType,
+          reviewedBy: suggestions.reviewedBy,
+          reviewedAt: suggestions.reviewedAt,
+          createdAt: suggestions.createdAt,
+          updatedAt: suggestions.updatedAt,
+          submitterUsername: profiles.username,
+          submitterAvatar: profiles.avatarUrl,
+        })
+        .from(suggestions)
+        .leftJoin(profiles, eq(suggestions.submittedBy, profiles.id))
+        .where(whereExpr)
+        .orderBy(desc(suggestions.createdAt))
+        .limit(limit)
+        .offset(offset);
+
+      res.json({ data: rows, totalCount });
+    } catch (error: any) {
+      console.error("Error listing admin suggestions:", error);
+      res.status(500).json({ error: "Failed to fetch suggestions" });
+    }
+  });
+
+  // POST /api/admin/suggestions/:id/approve — dispatcher: translate suggestion
+  // payload to the appropriate admin-create shape, insert, and mark approved.
+  app.post("/api/admin/suggestions/:id/approve", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const adminId = req.userId!;
+      const { id } = req.params;
+      const adminOverrides = (req.body?.adminOverrides ?? undefined) as Record<string, unknown> | undefined;
+
+      const [suggestion] = await db
+        .select()
+        .from(suggestions)
+        .where(eq(suggestions.id, id))
+        .limit(1);
+
+      if (!suggestion) {
+        return res.status(404).json({ error: "Suggestion not found" });
+      }
+      if (suggestion.status !== "pending") {
+        return res.status(400).json({ error: `Suggestion is already ${suggestion.status}` });
+      }
+      if (suggestion.type === "profile_image") {
+        return res.status(400).json({
+          error: "Profile image approval is not yet supported. Please process manually via the admin curate UI.",
+        });
+      }
+
+      const { approvedAsId, approvedAsType } = await dispatchApproval(suggestion, adminId, adminOverrides);
+      await markSuggestionApproved(suggestion.id, approvedAsId, approvedAsType, adminId);
+
+      // Bonus XP — non-blocking; failure does not fail the approval.
+      try {
+        await gamificationService.awardXp(
+          suggestion.submittedBy,
+          "suggestion_approved",
+          `suggestion_approved_${suggestion.id}`,
+          { suggestionType: suggestion.type, approvedAsId }
+        );
+      } catch (xpErr) {
+        console.error("XP award failed for suggestion approval:", xpErr);
+      }
+
+      res.json({ success: true, approvedAsId, approvedAsType });
+    } catch (error: any) {
+      console.error("Error approving suggestion:", error?.message ?? error);
+      res.status(500).json({ error: error?.message ?? "Failed to approve suggestion" });
+    }
+  });
+
+  // PATCH /api/admin/suggestions/:id/reject — mark rejected with optional reason.
+  app.patch("/api/admin/suggestions/:id/reject", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const adminId = req.userId!;
+      const { id } = req.params;
+      const adminNotes = typeof req.body?.adminNotes === "string" ? req.body.adminNotes : null;
+
+      const [suggestion] = await db
+        .select({ id: suggestions.id, status: suggestions.status })
+        .from(suggestions)
+        .where(eq(suggestions.id, id))
+        .limit(1);
+
+      if (!suggestion) {
+        return res.status(404).json({ error: "Suggestion not found" });
+      }
+      if (suggestion.status !== "pending") {
+        return res.status(400).json({ error: `Suggestion is already ${suggestion.status}` });
+      }
+
+      await markSuggestionRejected(id, adminId, adminNotes);
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error rejecting suggestion:", error?.message ?? error);
+      res.status(500).json({ error: "Failed to reject suggestion" });
     }
   });
 

@@ -16,6 +16,8 @@ async function seedXpActions() {
     // Content Creation Actions
     { actionKey: 'post_insight', displayName: 'Post Insight', xpValue: 50, dailyCap: 5, description: 'Post a community insight' },
     { actionKey: 'post_comment', displayName: 'Post Comment', xpValue: 15, dailyCap: 20, description: 'Comment on an insight' },
+    { actionKey: 'submit_suggestion', displayName: 'Submit Suggestion', xpValue: 5, dailyCap: 3, description: 'Earn XP for submitting content suggestions for admin review' },
+    { actionKey: 'suggestion_approved', displayName: 'Suggestion Approved', xpValue: 50, dailyCap: null, description: 'Bonus XP when your suggested content is approved and goes live' },
     
     // Engagement Actions
     { actionKey: 'upvote_insight', displayName: 'Upvote Insight', xpValue: 5, dailyCap: 50, description: 'Upvote a community insight' },
