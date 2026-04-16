@@ -4084,7 +4084,10 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
     return createHash("sha256").update(stableIds.sort().join("||")).digest("hex").slice(0, 16);
   }
 
-  async function getTop10Eligibility(personId: string): Promise<{ eligible: boolean; lastRankSeen: number; consecutiveOutside: number }> {
+  const WHY_TRENDING_RANK_CUTOFF = 20;
+  const WHY_TRENDING_RANK_EXIT = 22;
+
+  async function getTopNEligibility(personId: string): Promise<{ eligible: boolean; lastRankSeen: number; consecutiveOutside: number }> {
     const eligibilityCacheKey = `top10_eligible:${personId}`;
     const [row] = await db.select().from(apiCache).where(eq(apiCache.cacheKey, eligibilityCacheKey)).limit(1);
     if (row) {
@@ -4095,15 +4098,15 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
     return { eligible: false, lastRankSeen: 999, consecutiveOutside: 0 };
   }
 
-  async function updateTop10Eligibility(personId: string, rank: number | null): Promise<boolean> {
+  async function updateTopNEligibility(personId: string, rank: number | null): Promise<boolean> {
     const eligibilityCacheKey = `top10_eligible:${personId}`;
-    const state = await getTop10Eligibility(personId);
+    const state = await getTopNEligibility(personId);
     const currentRank = rank ?? 999;
 
-    if (currentRank <= 10) {
+    if (currentRank <= WHY_TRENDING_RANK_CUTOFF) {
       state.eligible = true;
       state.consecutiveOutside = 0;
-    } else if (currentRank >= 12) {
+    } else if (currentRank >= WHY_TRENDING_RANK_EXIT) {
       state.eligible = false;
       state.consecutiveOutside = 0;
     } else {
@@ -4144,14 +4147,14 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
       
       const hotMover = req.query.hotMover === "true";
       
-      const eligible = hotMover || await updateTop10Eligibility(personId, person.rank ?? null);
+      const eligible = hotMover || await updateTopNEligibility(personId, person.rank ?? null);
       
       if (!eligible) {
         return res.json({
           personId,
           personName: person.name,
           hasContext: false,
-          message: "Why Trending is only available for top 10 ranked celebrities and Hot Movers",
+          message: `Why Trending is only available for top ${WHY_TRENDING_RANK_CUTOFF} ranked celebrities and Hot Movers`,
           fetchedAt: new Date(),
         });
       }

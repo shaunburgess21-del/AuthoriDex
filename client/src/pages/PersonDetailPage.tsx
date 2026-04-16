@@ -54,7 +54,6 @@ import { sharePage } from "@/lib/share";
 import { useFavorites } from "@/hooks/useFavorites";
 import { formatNumber, getApprovalColor } from "@/lib/formatNumber";
 import { WhyTrendingCard } from "@/components/WhyTrendingCard";
-import { getExceptionalIndicator } from "@/lib/leaderboard-exceptional";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { profileSectionGridClass } from "@/lib/profileSectionGridClass";
@@ -790,13 +789,10 @@ export default function PersonDetailPage() {
     enabled: !!params?.id,
   });
 
-  const { data: leaderboardForThresholds } = useQuery<{
-    data: (TrendingPerson & { rankChange?: number | null })[];
-    thresholds?: { rankChangeP90: number; deltaP90: number; negRankChangeP10: number; negDeltaP10: number };
-  }>({
-    queryKey: ['/api/leaderboard', 'thresholds-full'],
+  const { data: hotMoversData } = useQuery<{ data: Array<{ id: string }> }>({
+    queryKey: ['/api/trending/hot-movers'],
     queryFn: async () => {
-      const response = await fetch(`/api/leaderboard?limit=100&offset=0&tab=fame&sortDir=desc`);
+      const response = await fetch('/api/trending/hot-movers');
       if (!response.ok) throw new Error('Failed to fetch');
       return response.json();
     },
@@ -804,16 +800,10 @@ export default function PersonDetailPage() {
     refetchInterval: 5 * 60 * 1000,
   });
 
-  const { isHotMover, exceptionalIndicator } = useMemo(() => {
-    if (!person || !leaderboardForThresholds?.thresholds) {
-      return { isHotMover: false, exceptionalIndicator: null };
-    }
-    const thresholds = leaderboardForThresholds.thresholds;
-    const match = leaderboardForThresholds.data?.find(p => p.id === person.id);
-    if (!match) return { isHotMover: false, exceptionalIndicator: null };
-    const indicator = getExceptionalIndicator(match as any, thresholds);
-    return { isHotMover: indicator?.triggersHotMover === true, exceptionalIndicator: indicator };
-  }, [person, leaderboardForThresholds]);
+  const isHotMover = useMemo(() => {
+    if (!person || !hotMoversData?.data) return false;
+    return hotMoversData.data.some(m => m.id === person.id);
+  }, [person, hotMoversData]);
 
   const isVoteTab = activeTab === "vote";
 
@@ -1362,9 +1352,9 @@ export default function PersonDetailPage() {
               </a>
             </div>
 
-            {((person.rank && person.rank <= 10) || isHotMover) && (
+            {((person.rank && person.rank <= 20) || isHotMover) && (
               <div className="mb-8">
-                <WhyTrendingCard personId={person.id} personName={person.name} hotMover={isHotMover && !(person.rank && person.rank <= 10)} />
+                <WhyTrendingCard personId={person.id} personName={person.name} hotMover={isHotMover && !(person.rank && person.rank <= 20)} />
               </div>
             )}
 
