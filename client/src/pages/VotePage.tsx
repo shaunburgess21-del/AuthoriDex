@@ -1922,6 +1922,24 @@ export default function VotePage() {
     if (!pollHeadline || !pollEntitySearch) return;
     setIsSuggestSubmitting(true);
     try {
+      let pollImageUrl: string | undefined;
+      if (pollSubjectImage) {
+        const formData = new FormData();
+        formData.append("file", pollSubjectImage);
+        const res = await fetch("/api/suggestions/upload-image", {
+          method: "POST",
+          body: formData,
+          headers: { ...(await getAuthHeaders()) },
+          credentials: "include",
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body?.error ?? "Image upload failed");
+        }
+        const { url } = await res.json();
+        pollImageUrl = url as string;
+      }
+
       await apiRequest("POST", "/api/suggestions", {
         type: "sentiment_poll",
         payload: {
@@ -1929,6 +1947,7 @@ export default function VotePage() {
           subjectText: pollEntitySearch,
           subjectType: pollSubjectType ?? undefined,
           category: sentimentCategory,
+          imageUrl: pollImageUrl,
           description: pollDescription || undefined,
           timeline: toTimelineWireValue(pollDuration),
           deadlineAt: pollDuration === "custom" ? pollCustomDate || undefined : undefined,
