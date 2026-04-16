@@ -54,6 +54,7 @@ const FavoritesPage = lazyWithRetry(() => import("@/pages/me/FavoritesPage"));
 const SettingsPage = lazyWithRetry(() => import("@/pages/me/SettingsPage"));
 const PublicProfilePage = lazyWithRetry(() => import("@/pages/PublicProfilePage"));
 const AdminDashboard = lazyWithRetry(() => import("@/pages/AdminDashboard"));
+const AdminSuggestionsPage = lazyWithRetry(() => import("@/pages/admin/AdminSuggestionsPage"));
 const MarketDetailPage = lazyWithRetry(() => import("@/pages/MarketDetailPage"));
 const PollDetailPage = lazyWithRetry(() => import("@/pages/PollDetailPage"));
 const OpinionPollDetailPage = lazyWithRetry(() => import("@/pages/OpinionPollDetailPage"));
@@ -106,6 +107,7 @@ function Router() {
         <Route path="/predict/h2h/:marketId" component={H2HDetailPage} />
         <Route path="/predict/activity" component={TownSquarePage} />
         <Route path="/vote/value-ratings" component={ValueRatingsPage} />
+        <Route path="/admin/suggestions" component={AdminSuggestionsPage} />
         <Route path="/admin" component={AdminDashboard} />
         <Route component={NotFound} />
       </Switch>
