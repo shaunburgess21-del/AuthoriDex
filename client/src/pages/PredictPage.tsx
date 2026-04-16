@@ -23,7 +23,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { TrendingPerson } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { getSupabase } from "@/lib/supabase";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { getCanonicalNativeCycle } from "@/lib/nativeMarketLifecycle";
@@ -99,7 +99,8 @@ import { CardSection } from "@/components/CardSection";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { UserSocialAvatar } from "@/components/UserSocialAvatar";
 import { formatActivityAge } from "@/lib/formatDate";
-import { getMarketCategoryLabel, normalizeMarketCategory, CATEGORIES_WITH_FILTERS, CATEGORIES_OPEN } from "@shared/constants";
+import { getMarketCategoryLabel, normalizeMarketCategory, CATEGORIES_WITH_FILTERS, CATEGORIES_OPEN, OPINION_POLL_MIN_OPTIONS, OPINION_POLL_MAX_OPTIONS } from "@shared/constants";
+import { SuggestCategorySelect, SuggestDurationPicker, OpinionOptionRow, type OpinionOptionInput } from "@/components/suggest";
 import { OnboardingDrawer, type OnboardingStep, type OnboardingDrawerHandle } from "@/components/OnboardingDrawer";
 import { UnifiedSectionHeader } from "@/components/UnifiedSectionHeader";
 import { PredictCard } from "@/components/predict/PredictCard";
@@ -1315,6 +1316,18 @@ function FullScreenOverlay({
 }
 
 
+// TODO: extract to shared (Phase 2 cleanup — mirrors VotePage.tsx:260)
+function toTimelineWireValue(uiValue: string): "no_deadline" | "1_week" | "1_month" | "custom" {
+  switch (uiValue) {
+    case "1week":  return "1_week";
+    case "1month": return "1_month";
+    case "custom": return "custom";
+    default:       return "no_deadline";
+  }
+}
+
+type MarketTypeOption = "binary" | "multi" | "updown";
+
 function CreatePredictionModal({
   open,
   onClose,
@@ -1324,28 +1337,121 @@ function CreatePredictionModal({
 }) {
   const { toast } = useToast();
   const [title, setTitle] = useState("");
-  const [type, setType] = useState("binary");
-  const [category, setCategory] = useState<CategoryFilter>("tech");
+  const [marketType, setMarketType] = useState<MarketTypeOption>("binary");
+  const [category, setCategory] = useState<string>("tech");
   const [description, setDescription] = useState("");
+  const [sourceUrl, setSourceUrl] = useState("");
+  const [duration, setDuration] = useState("none");
+  const [customDate, setCustomDate] = useState("");
+  const [multiOptions, setMultiOptions] = useState<OpinionOptionInput[]>(
+    Array.from({ length: OPINION_POLL_MIN_OPTIONS }, () => ({ name: "" }))
+  );
+  const [underlying, setUnderlying] = useState("");
+  const [metric, setMetric] = useState("");
+  const [strike, setStrike] = useState("");
+  const [unit, setUnit] = useState("$");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const resetAll = () => {
+    setTitle("");
+    setMarketType("binary");
+    setCategory("tech");
+    setDescription("");
+    setSourceUrl("");
+    setDuration("none");
+    setCustomDate("");
+    setMultiOptions(Array.from({ length: OPINION_POLL_MIN_OPTIONS }, () => ({ name: "" })));
+    setUnderlying("");
+    setMetric("");
+    setStrike("");
+    setUnit("$");
+  };
+
+  const handleTypeChange = (next: MarketTypeOption) => {
+    if (next === marketType) return;
+    setMarketType(next);
+    if (next !== "multi") {
+      setMultiOptions(Array.from({ length: OPINION_POLL_MIN_OPTIONS }, () => ({ name: "" })));
+    }
+    if (next !== "updown") {
+      setUnderlying("");
+      setMetric("");
+      setStrike("");
+      setUnit("$");
+    }
+  };
+
+  const handleClose = () => {
+    resetAll();
+    onClose();
+  };
+
+  const filledMultiOptions = multiOptions.filter((o) => o.name.trim().length > 0);
+  const strikeNumber = strike.trim() === "" ? NaN : Number(strike);
+  const canSubmit = (() => {
+    if (!title.trim() || !category) return false;
+    if (marketType === "multi" && filledMultiOptions.length < OPINION_POLL_MIN_OPTIONS) return false;
+    if (marketType === "updown") {
+      if (!underlying.trim()) return false;
+      if (!strike.trim() || Number.isNaN(strikeNumber)) return false;
+    }
+    return true;
+  })();
+
   const handleSubmit = async () => {
-    if (!title.trim() || !description.trim()) return;
+    if (!canSubmit) return;
     setIsSubmitting(true);
     try {
+      const payload: Record<string, unknown> = {
+        title: title.trim(),
+        openMarketType: marketType,
+        category,
+        description: description.trim() || undefined,
+        sourceUrl: sourceUrl.trim() || undefined,
+        endAt: duration === "custom" ? (customDate || undefined) : toTimelineWireValue(duration),
+      };
+
+      if (marketType === "multi") {
+        const resolvedEntries: Array<{ label: string; imageUrl?: string; personId?: string }> = [];
+        for (const opt of filledMultiOptions) {
+          let imageUrl = opt.imageUrl;
+          if (opt.uploadedFile && !imageUrl) {
+            const formData = new FormData();
+            formData.append("file", opt.uploadedFile);
+            const res = await fetch("/api/suggestions/upload-image", {
+              method: "POST",
+              body: formData,
+              headers: { ...(await getAuthHeaders()) },
+              credentials: "include",
+            });
+            if (!res.ok) {
+              const body = await res.json().catch(() => ({}));
+              throw new Error(body?.error ?? `Upload failed for option: ${opt.name}`);
+            }
+            const { url } = await res.json();
+            imageUrl = url;
+          }
+          resolvedEntries.push({
+            label: opt.name.trim(),
+            ...(imageUrl ? { imageUrl } : {}),
+            ...(opt.personId ? { personId: opt.personId } : {}),
+          });
+        }
+        payload.entries = resolvedEntries;
+      }
+
+      if (marketType === "updown") {
+        payload.underlying = underlying.trim();
+        payload.metric = metric.trim() || undefined;
+        payload.strike = strikeNumber;
+        payload.unit = unit.trim() || "$";
+      }
+
       await apiRequest("POST", "/api/suggestions", {
         type: "open_market",
-        payload: {
-          title: title.trim(),
-          openMarketType: type as "binary" | "multi" | "updown",
-          category,
-          description: description.trim() || undefined,
-        },
+        payload,
       });
-      setTitle("");
-      setType("binary");
-      setCategory("tech");
-      setDescription("");
+      resetAll();
       onClose();
       toast({
         title: "Market suggested!",
@@ -1361,10 +1467,10 @@ function CreatePredictionModal({
       setIsSubmitting(false);
     }
   };
-  
+
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="max-w-md">
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
+      <DialogContent className="max-w-md max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Plus className="h-5 w-5 text-violet-700 dark:text-violet-500" />
@@ -1374,69 +1480,201 @@ function CreatePredictionModal({
             Suggest a prediction market for the community. Your submission will be reviewed by an admin before going live.
           </DialogDescription>
         </DialogHeader>
-        
-        <div className="py-4 space-y-4">
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Title</label>
+
+        <div className="flex-1 min-h-0 overflow-y-auto space-y-4 py-4 pr-2 -mr-2">
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-sm font-medium">Title *</label>
+              <span className={`text-xs ${title.length > 60 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}>
+                {title.length}/60
+              </span>
+            </div>
             <Input
               placeholder="e.g., Will Taylor Swift announce a tour?"
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => setTitle(e.target.value.slice(0, 60))}
               data-testid="input-prediction-title"
             />
           </div>
-          
+
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Type</label>
-              <Select value={type} onValueChange={setType}>
+            <div>
+              <label className="text-sm font-medium mb-1 block">Type *</label>
+              <Select value={marketType} onValueChange={(v) => handleTypeChange(v as MarketTypeOption)}>
                 <SelectTrigger data-testid="select-prediction-type">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="binary">Yes/No</SelectItem>
                   <SelectItem value="multi">Multiple Choice</SelectItem>
+                  <SelectItem value="updown">Above/Below</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Category</label>
-              <Select value={category} onValueChange={(v) => setCategory(v as CategoryFilter)}>
-                <SelectTrigger data-testid="select-prediction-category">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {CATEGORIES_OPEN.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <SuggestCategorySelect
+              value={category}
+              onChange={setCategory}
+              data-testid="select-prediction-category"
+            />
           </div>
-          
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Description</label>
+
+          {marketType === "binary" && (
+            <div>
+              <label className="text-sm font-medium mb-1 block">Entries</label>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="px-3 py-2 rounded-lg border border-border bg-muted/30 text-sm font-medium text-center text-emerald-600 dark:text-emerald-400">
+                  Yes
+                </div>
+                <div className="px-3 py-2 rounded-lg border border-border bg-muted/30 text-sm font-medium text-center text-rose-600 dark:text-rose-400">
+                  No
+                </div>
+              </div>
+            </div>
+          )}
+
+          {marketType === "multi" && (
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-sm font-medium">
+                  Options * (min {OPINION_POLL_MIN_OPTIONS}, max {OPINION_POLL_MAX_OPTIONS})
+                </label>
+                <span className="text-xs text-muted-foreground">{multiOptions.length} options</span>
+              </div>
+              <div className="space-y-2">
+                {multiOptions.map((opt, idx) => (
+                  <OpinionOptionRow
+                    key={idx}
+                    value={opt}
+                    onChange={(next) => {
+                      const arr = [...multiOptions];
+                      arr[idx] = next;
+                      setMultiOptions(arr);
+                    }}
+                    onRemove={
+                      multiOptions.length > OPINION_POLL_MIN_OPTIONS
+                        ? () => setMultiOptions(multiOptions.filter((_, i) => i !== idx))
+                        : undefined
+                    }
+                    testIdPrefix="prediction-multi"
+                    index={idx}
+                  />
+                ))}
+              </div>
+              {multiOptions.length < OPINION_POLL_MAX_OPTIONS && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setMultiOptions([...multiOptions, { name: "" }])}
+                  className="mt-2 text-violet-600 dark:text-violet-400"
+                  data-testid="button-add-prediction-multi-option"
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  Add Option
+                </Button>
+              )}
+            </div>
+          )}
+
+          {marketType === "updown" && (
+            <div className="space-y-3">
+              <div>
+                <label className="text-sm font-medium mb-1 block">Entries</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="px-3 py-2 rounded-lg border border-border bg-muted/30 text-sm font-medium text-center text-emerald-600 dark:text-emerald-400">
+                    Above
+                  </div>
+                  <div className="px-3 py-2 rounded-lg border border-border bg-muted/30 text-sm font-medium text-center text-rose-600 dark:text-rose-400">
+                    Below
+                  </div>
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1 block">Asset / Subject *</label>
+                <Input
+                  value={underlying}
+                  onChange={(e) => setUnderlying(e.target.value)}
+                  placeholder="e.g. Bitcoin, S&P 500, Tesla stock"
+                  data-testid="input-prediction-underlying"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1 block">Metric (optional)</label>
+                <Input
+                  value={metric}
+                  onChange={(e) => setMetric(e.target.value)}
+                  placeholder="e.g. price, market cap, revenue"
+                  data-testid="input-prediction-metric"
+                />
+              </div>
+              <div className="grid grid-cols-[1fr_100px] gap-2">
+                <div>
+                  <label className="text-sm font-medium mb-1 block">Strike Value *</label>
+                  <Input
+                    type="number"
+                    value={strike}
+                    onChange={(e) => setStrike(e.target.value)}
+                    placeholder="e.g. 100000"
+                    data-testid="input-prediction-strike"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-1 block">Unit</label>
+                  <Input
+                    value={unit}
+                    onChange={(e) => setUnit(e.target.value)}
+                    placeholder="$"
+                    data-testid="input-prediction-unit"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          <SuggestDurationPicker
+            value={duration}
+            onChange={setDuration}
+            customDate={customDate}
+            onCustomDateChange={setCustomDate}
+            testIdPrefix="prediction"
+          />
+
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-sm font-medium">Description (optional)</label>
+              <span className={`text-xs ${description.length > 200 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}>
+                {description.length}/200
+              </span>
+            </div>
             <Textarea
               placeholder="Add more context for your prediction..."
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={(e) => setDescription(e.target.value.slice(0, 200))}
               maxLength={200}
               className="resize-none"
               data-testid="input-prediction-description"
             />
-            <p className="text-xs text-muted-foreground text-right">{description.length}/200</p>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium mb-1 block">Source URL (optional)</label>
+            <Input
+              type="url"
+              value={sourceUrl}
+              onChange={(e) => setSourceUrl(e.target.value)}
+              placeholder="Link to relevant article or source"
+              data-testid="input-prediction-source-url"
+            />
           </div>
         </div>
-        
+
         <div className="flex gap-2">
-          <Button variant="outline" onClick={onClose} className="flex-1">
+          <Button variant="outline" onClick={handleClose} className="flex-1" data-testid="button-cancel-prediction">
             Cancel
           </Button>
           <Button
             onClick={handleSubmit}
             className="flex-1 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
-            disabled={isSubmitting || !title.trim() || !description.trim()}
+            disabled={isSubmitting || !canSubmit}
             data-testid="button-submit-prediction"
           >
             {isSubmitting ? "Submitting…" : "Submit Suggestion"}
