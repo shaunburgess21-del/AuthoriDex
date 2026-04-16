@@ -23,6 +23,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { getAdminAccessBlock } from "./AdminAccessGate";
+import { SuggestionReviewModal } from "./suggestion-review/SuggestionReviewModal";
 
 // ---------------------------------------------------------------------------
 // Types matching the GET /api/admin/suggestions response shape.
@@ -67,14 +68,13 @@ const TYPE_LABEL: Record<string, string> = {
   open_market: "Open Market",
 };
 
-// Distinct badge class per type — match existing palette (cyan/violet/emerald/amber/fuchsia/rose).
 const TYPE_BADGE_CLASS: Record<string, string> = {
-  matchup: "bg-amber-500/15 border-amber-500/40 text-amber-600 dark:text-amber-300",
-  sentiment_poll: "bg-cyan-500/15 border-cyan-500/40 text-cyan-600 dark:text-cyan-300",
-  opinion_poll: "bg-emerald-500/15 border-emerald-500/40 text-emerald-600 dark:text-emerald-300",
-  induction: "bg-fuchsia-500/15 border-fuchsia-500/40 text-fuchsia-600 dark:text-fuchsia-300",
-  profile_image: "bg-rose-500/15 border-rose-500/40 text-rose-600 dark:text-rose-300",
-  open_market: "bg-violet-500/15 border-violet-500/40 text-violet-600 dark:text-violet-300",
+  matchup: "bg-cyan-500/15 border-cyan-500/40 text-cyan-600 dark:text-cyan-300",
+  sentiment_poll: "bg-amber-500/15 border-amber-500/40 text-amber-600 dark:text-amber-300",
+  opinion_poll: "bg-violet-500/15 border-violet-500/40 text-violet-600 dark:text-violet-300",
+  induction: "bg-emerald-500/15 border-emerald-500/40 text-emerald-600 dark:text-emerald-300",
+  profile_image: "bg-slate-500/15 border-slate-500/40 text-slate-600 dark:text-slate-300",
+  open_market: "bg-rose-500/15 border-rose-500/40 text-rose-600 dark:text-rose-300",
 };
 
 const STATUS_BADGE_CLASS: Record<string, string> = {
@@ -157,30 +157,12 @@ function PayloadPreview({ type, payload }: { type: string; payload: Record<strin
 // ---------------------------------------------------------------------------
 // Single suggestion card — payload preview, expand-JSON toggle, approve/reject.
 // ---------------------------------------------------------------------------
-function SuggestionCard({ row, statusFilter }: { row: SuggestionRow; statusFilter: StatusFilter }) {
+function SuggestionCard({ row, statusFilter, onApprove }: { row: SuggestionRow; statusFilter: StatusFilter; onApprove: (row: SuggestionRow) => void }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [expanded, setExpanded] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
-
-  const approveMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", `/api/admin/suggestions/${row.id}/approve`, {});
-      return res.json();
-    },
-    onSuccess: () => {
-      toast({ title: "Suggestion approved!", description: "Content is now live." });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/suggestions"] });
-    },
-    onError: (err: any) => {
-      toast({
-        title: "Approval failed",
-        description: err?.message ?? "Something went wrong.",
-        variant: "destructive",
-      });
-    },
-  });
 
   const rejectMutation = useMutation({
     mutationFn: async (adminNotes: string) => {
@@ -211,7 +193,7 @@ function SuggestionCard({ row, statusFilter }: { row: SuggestionRow; statusFilte
   const showStatusBadge = statusFilter !== "pending";
 
   return (
-    <Card className="p-4 space-y-3" data-testid={`suggestion-card-${row.id}`}>
+    <Card className="p-4 space-y-3 shadow-sm border-border/60 dark:border-slate-700/50 bg-card/80 dark:bg-slate-900/60" data-testid={`suggestion-card-${row.id}`}>
       {/* Header row: type badge + status badge + timestamp */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2 flex-wrap">
@@ -278,7 +260,7 @@ function SuggestionCard({ row, statusFilter }: { row: SuggestionRow; statusFilte
             variant="outline"
             size="sm"
             onClick={() => setRejecting(true)}
-            disabled={approveMutation.isPending}
+            disabled={rejectMutation.isPending}
             className="border-red-500/50 text-red-600 dark:text-red-400 hover:bg-red-500/10"
             data-testid={`button-reject-${row.id}`}
           >
@@ -287,16 +269,12 @@ function SuggestionCard({ row, statusFilter }: { row: SuggestionRow; statusFilte
           </Button>
           <Button
             size="sm"
-            onClick={() => approveMutation.mutate()}
-            disabled={approveMutation.isPending || rejectMutation.isPending}
+            onClick={() => onApprove(row)}
+            disabled={rejectMutation.isPending}
             className="bg-emerald-600 hover:bg-emerald-700 text-white"
             data-testid={`button-approve-${row.id}`}
           >
-            {approveMutation.isPending ? (
-              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-            ) : (
-              <Check className="h-4 w-4 mr-1" />
-            )}
+            <Check className="h-4 w-4 mr-1" />
             Approve
           </Button>
         </div>
@@ -357,6 +335,7 @@ export default function AdminSuggestionsPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("pending");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [pages, setPages] = useState(1);
+  const [reviewingSuggestion, setReviewingSuggestion] = useState<SuggestionRow | null>(null);
 
   const handleStatusChange = (v: StatusFilter) => {
     setStatusFilter(v);
@@ -386,6 +365,16 @@ export default function AdminSuggestionsPage() {
     // requireAdmin gate — but only fetch once we know the user is an admin.
     enabled: !profileLoading && isAdmin,
   });
+
+  // ---- Stats queries (lightweight: limit=0 for count only) ----
+  const fetchCount = async (status: string) => {
+    const res = await apiRequest("GET", `/api/admin/suggestions?status=${status}&limit=0`);
+    const json = await res.json() as ListResponse;
+    return json.totalCount;
+  };
+  const { data: pendingCount } = useQuery({ queryKey: ["/api/admin/suggestions", "count-pending"], queryFn: () => fetchCount("pending"), enabled: !profileLoading && isAdmin });
+  const { data: approvedCount } = useQuery({ queryKey: ["/api/admin/suggestions", "count-approved"], queryFn: () => fetchCount("approved"), enabled: !profileLoading && isAdmin });
+  const { data: rejectedCount } = useQuery({ queryKey: ["/api/admin/suggestions", "count-rejected"], queryFn: () => fetchCount("rejected"), enabled: !profileLoading && isAdmin });
 
   // ---- Auth gate ----------------------------------------------------------
   const adminAccessBlock = getAdminAccessBlock({
@@ -439,6 +428,22 @@ export default function AdminSuggestionsPage() {
       </header>
 
       <main className="container mx-auto px-4 py-6 max-w-3xl">
+        {/* Stats bar */}
+        <div className="grid grid-cols-3 gap-3 mb-4">
+          <Card className="p-3 flex items-center gap-3 shadow-sm border-amber-500/30 dark:border-amber-500/20 bg-amber-500/5 dark:bg-amber-500/5">
+            <div className="p-2 rounded-lg bg-amber-500/15"><Inbox className="h-4 w-4 text-amber-600 dark:text-amber-400" /></div>
+            <div><p className="text-xl font-bold">{pendingCount ?? "—"}</p><p className="text-xs text-muted-foreground">Pending</p></div>
+          </Card>
+          <Card className="p-3 flex items-center gap-3 shadow-sm border-emerald-500/30 dark:border-emerald-500/20 bg-emerald-500/5 dark:bg-emerald-500/5">
+            <div className="p-2 rounded-lg bg-emerald-500/15"><Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /></div>
+            <div><p className="text-xl font-bold">{approvedCount ?? "—"}</p><p className="text-xs text-muted-foreground">Approved</p></div>
+          </Card>
+          <Card className="p-3 flex items-center gap-3 shadow-sm border-red-500/30 dark:border-red-500/20 bg-red-500/5 dark:bg-red-500/5">
+            <div className="p-2 rounded-lg bg-red-500/15"><X className="h-4 w-4 text-red-600 dark:text-red-400" /></div>
+            <div><p className="text-xl font-bold">{rejectedCount ?? "—"}</p><p className="text-xs text-muted-foreground">Rejected</p></div>
+          </Card>
+        </div>
+
         {/* Filter bar */}
         <Card className="p-3 mb-4">
           <div className="flex items-center gap-3 flex-wrap">
@@ -505,7 +510,7 @@ export default function AdminSuggestionsPage() {
         ) : (
           <div className="space-y-3">
             {rows.map((row) => (
-              <SuggestionCard key={row.id} row={row} statusFilter={statusFilter} />
+              <SuggestionCard key={row.id} row={row} statusFilter={statusFilter} onApprove={setReviewingSuggestion} />
             ))}
             {canLoadMore && (
               <div className="flex justify-center pt-2">
@@ -525,6 +530,16 @@ export default function AdminSuggestionsPage() {
           </div>
         )}
       </main>
+
+      <SuggestionReviewModal
+        open={!!reviewingSuggestion}
+        onClose={() => setReviewingSuggestion(null)}
+        suggestion={reviewingSuggestion}
+        onApproved={() => {
+          queryClient.invalidateQueries({ queryKey: ["/api/admin/suggestions"] });
+          setReviewingSuggestion(null);
+        }}
+      />
     </div>
   );
 }
