@@ -8,6 +8,9 @@ import {
   inductionCandidates,
   predictionMarkets,
   marketEntries,
+  celebrityImages,
+  trackedPeople,
+  trendingPeople,
   adminAuditLog,
   type Suggestion,
 } from "@shared/schema";
@@ -23,6 +26,7 @@ export const APPROVED_AS_TYPE: Record<string, string> = {
   opinion_poll: "opinion_poll",
   induction: "induction_candidate",
   open_market: "prediction_market",
+  profile_image: "celebrity_image",
 };
 
 // ---------------------------------------------------------------------------
@@ -253,6 +257,33 @@ export function translateInductionPayload(
     // the audit log's newData field.
     socialUrl: userPayload.socialUrl ?? null,
     reason: userPayload.reason ?? null,
+  };
+  return mergeOverrides(base, adminOverrides);
+}
+
+type ProfileImageAdminPayload = {
+  personId: string;
+  imageUrl: string;
+  source: string;
+};
+
+export function translateProfileImagePayload(
+  userPayload: Record<string, any>,
+  adminOverrides?: Record<string, unknown>
+): ProfileImageAdminPayload {
+  const personId = String(userPayload.personId ?? "").trim();
+  if (!personId) {
+    throw new Error(
+      "Profile image approval requires a valid personId. The submitter entered a name instead of selecting a known celebrity — reject this suggestion and ask them to resubmit with a celebrity selected from the picker."
+    );
+  }
+  const sourceCredit = userPayload.sourceCredit
+    ? `user_suggestion:${String(userPayload.sourceCredit)}`
+    : "user_suggestion";
+  const base: ProfileImageAdminPayload = {
+    personId,
+    imageUrl: String(userPayload.imageUrl ?? ""),
+    source: sourceCredit,
   };
   return mergeOverrides(base, adminOverrides);
 }
@@ -606,12 +637,45 @@ export async function dispatchApproval(
     }
 
     case "profile_image": {
-      // Deferred — admin endpoint expects multipart upload but suggestions
-      // store a URL. Handle manually via admin curate UI until a JSON variant
-      // of POST /api/admin/vote/curate-profile/:id/images exists.
-      throw new Error(
-        "Profile image approval is not yet supported. Please process manually via the admin curate UI."
-      );
+      const p = translateProfileImagePayload(userPayload, adminOverrides);
+
+      const existingImages = await db
+        .select({ id: celebrityImages.id })
+        .from(celebrityImages)
+        .where(eq(celebrityImages.personId, p.personId))
+        .limit(1);
+      const isFirst = existingImages.length === 0;
+
+      const [created] = await db
+        .insert(celebrityImages)
+        .values({
+          personId: p.personId,
+          imageUrl: p.imageUrl,
+          source: p.source,
+          isPrimary: isFirst,
+          votesUp: 0,
+          votesDown: 0,
+        })
+        .returning();
+
+      if (isFirst) {
+        await db.update(trackedPeople).set({ avatar: p.imageUrl }).where(eq(trackedPeople.id, p.personId));
+        await db.update(trendingPeople).set({ avatar: p.imageUrl }).where(eq(trendingPeople.id, p.personId));
+      }
+
+      await db.insert(adminAuditLog).values({
+        adminId,
+        adminEmail: null,
+        actionType: "approve_suggestion_profile_image",
+        targetTable: "celebrity_images",
+        targetId: created.id,
+        newData: created,
+        metadata: { suggestionId: suggestion.id },
+      });
+
+      // approvedAsId = personId so the user-profile link-through navigates
+      // to the celebrity's profile page (/person/:id).
+      return { approvedAsId: p.personId, approvedAsType: APPROVED_AS_TYPE.profile_image };
     }
 
     default:

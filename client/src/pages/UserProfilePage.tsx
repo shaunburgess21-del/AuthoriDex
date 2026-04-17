@@ -58,6 +58,13 @@ const APPROVED_LINK: Record<string, string> = {
   open_market: "/predict",
 };
 
+function getLiveLink(s: MySuggestion): string | null {
+  if (s.status !== "approved") return null;
+  // profile_image approvedAsId is the celebrity's personId — link to their profile.
+  if (s.type === "profile_image" && s.approvedAsId) return `/person/${s.approvedAsId}`;
+  return APPROVED_LINK[s.type] ?? null;
+}
+
 // 1-5 scale colors: vivid gradient from red (1) to green (5)
 const SEGMENT_COLORS_5 = [
   '#FF0000',
@@ -552,13 +559,13 @@ export default function UserProfilePage() {
                     )}
 
                     {/* Approved: View on Site link */}
-                    {s.status === "approved" && APPROVED_LINK[s.type] && (
+                    {getLiveLink(s) && (
                       <div className="mt-2">
                         <Button
                           variant="ghost"
                           size="sm"
                           className="h-7 px-2 text-xs text-primary hover:text-primary"
-                          onClick={() => setLocation(APPROVED_LINK[s.type])}
+                          onClick={() => setLocation(getLiveLink(s)!)}
                           data-testid={`suggestion-link-${s.id}`}
                         >
                           <ExternalLink className="h-3 w-3 mr-1" />

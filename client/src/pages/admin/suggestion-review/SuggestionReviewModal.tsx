@@ -13,6 +13,7 @@ import { SentimentPollReviewFields, type SentimentPollReviewValues } from "./Sen
 import { OpinionPollReviewFields, type OpinionPollReviewValues, type OpinionOptionValue } from "./OpinionPollReviewFields";
 import { InductionReviewFields, type InductionReviewValues } from "./InductionReviewFields";
 import { OpenMarketReviewFields, type OpenMarketReviewValues } from "./OpenMarketReviewFields";
+import { ProfileImageReviewFields, type ProfileImageReviewValues } from "./ProfileImageReviewFields";
 
 type SuggestionRow = {
   id: string;
@@ -179,6 +180,7 @@ export function SuggestionReviewModal({
   const [opinion, setOpinion] = useState<OpinionPollReviewValues>(initOpinion);
   const [induction, setInduction] = useState<InductionReviewValues>(initInduction);
   const [openMarket, setOpenMarket] = useState<OpenMarketReviewValues>(initOpenMarket);
+  const [profileImage, setProfileImage] = useState<ProfileImageReviewValues>({ sourceCredit: "" });
 
   // Reset state when a new suggestion opens.
   useMemo(() => {
@@ -187,6 +189,7 @@ export function SuggestionReviewModal({
     setOpinion(initOpinion);
     setInduction(initInduction);
     setOpenMarket(initOpenMarket);
+    setProfileImage({ sourceCredit: "" });
     setShowRaw(false);
   }, [suggestion?.id]);
 
@@ -235,6 +238,8 @@ export function SuggestionReviewModal({
       if (openMarket.metric !== init.metric) ov.metric = openMarket.metric;
       if (openMarket.strike !== init.strike) ov.strike = Number(openMarket.strike);
       if (openMarket.unit !== init.unit) ov.unit = openMarket.unit;
+    } else if (type === "profile_image") {
+      if (profileImage.sourceCredit) ov.sourceCredit = profileImage.sourceCredit;
     }
 
     return ov;
@@ -259,7 +264,6 @@ export function SuggestionReviewModal({
 
   if (!suggestion) return null;
 
-  const isProfileImage = type === "profile_image";
   const typeBadgeClass = TYPE_BADGE_CLASS[type] ?? "bg-muted text-foreground";
   const entriesCount = Array.isArray(payload.entries) ? (payload.entries as unknown[]).length : 0;
   const openMarketType = g(payload, "openMarketType") || "binary";
@@ -282,19 +286,21 @@ export function SuggestionReviewModal({
         </DialogHeader>
 
         <div className="flex-1 min-h-0 overflow-y-auto space-y-4 py-4 pr-2 -mr-2">
-          {isProfileImage ? (
-            <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-4 text-sm text-amber-700 dark:text-amber-300">
-              Profile image approval requires manual processing via the admin curate UI. This modal cannot approve profile images.
-            </div>
-          ) : (
-            <>
-              {type === "matchup" && <MatchupReviewFields values={matchup} onChange={setMatchup} />}
-              {type === "sentiment_poll" && <SentimentPollReviewFields values={sentiment} onChange={setSentiment} />}
-              {type === "opinion_poll" && <OpinionPollReviewFields values={opinion} onChange={setOpinion} />}
-              {type === "induction" && <InductionReviewFields values={induction} onChange={setInduction} socialUrl={g(payload, "socialUrl") || null} />}
-              {type === "open_market" && <OpenMarketReviewFields values={openMarket} onChange={setOpenMarket} openMarketType={openMarketType} entriesCount={entriesCount} />}
-            </>
-          )}
+          <>
+            {type === "matchup" && <MatchupReviewFields values={matchup} onChange={setMatchup} />}
+            {type === "sentiment_poll" && <SentimentPollReviewFields values={sentiment} onChange={setSentiment} />}
+            {type === "opinion_poll" && <OpinionPollReviewFields values={opinion} onChange={setOpinion} />}
+            {type === "induction" && <InductionReviewFields values={induction} onChange={setInduction} socialUrl={g(payload, "socialUrl") || null} />}
+            {type === "open_market" && <OpenMarketReviewFields values={openMarket} onChange={setOpenMarket} openMarketType={openMarketType} entriesCount={entriesCount} />}
+            {type === "profile_image" && (
+              <ProfileImageReviewFields
+                values={profileImage}
+                onChange={setProfileImage}
+                personName={g(payload, "personName") || g(payload, "personId")}
+                imageUrl={g(payload, "imageUrl")}
+              />
+            )}
+          </>
 
           <div>
             <button
@@ -319,7 +325,7 @@ export function SuggestionReviewModal({
           </Button>
           <Button
             onClick={() => approveMutation.mutate()}
-            disabled={approveMutation.isPending || isProfileImage}
+            disabled={approveMutation.isPending}
             className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
           >
             {approveMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Check className="h-4 w-4 mr-1" />}
