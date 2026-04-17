@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo, type ReactNode } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, Inbox, ChevronUp, ChevronDown } from "lucide-react";
+import { ArrowLeft, Inbox } from "lucide-react";
 import { sharePage } from "@/lib/share";
 import {
   navigateWithVoteList,
@@ -243,17 +243,17 @@ export function VoteSnapScrollView({
                       </div>
 
                       {/* Drag handle */}
-                      <div
-                        className="flex flex-col items-center py-1 cursor-grab active:cursor-grabbing touch-none select-none"
-                        onTouchStart={handleDragStart}
-                        onTouchEnd={(e) => handleDragEnd(e, item.id)}
-                      >
-                        <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
-                        {isExpanded ? (
-                          <ChevronDown className="h-3 w-3 text-muted-foreground/40 mt-0.5" />
-                        ) : (
-                          <ChevronUp className="h-3 w-3 text-muted-foreground/40 mt-0.5" />
-                        )}
+                      <div className="flex justify-center py-1">
+                        <div
+                          className="flex flex-col items-center px-6 py-2 cursor-grab active:cursor-grabbing touch-none select-none"
+                          onTouchStart={handleDragStart}
+                          onTouchEnd={(e) => handleDragEnd(e, item.id)}
+                          onClick={() => setExpandedItemId(isExpanded ? null : item.id)}
+                          role="button"
+                          aria-label={isExpanded ? "Collapse comments" : "Expand comments"}
+                        >
+                          <div className="w-12 h-1.5 rounded-full bg-muted-foreground/60" />
+                        </div>
                       </div>
 
                       {/* Comments section */}
