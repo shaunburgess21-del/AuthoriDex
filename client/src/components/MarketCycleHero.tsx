@@ -14,7 +14,7 @@ function padZero(num: number): string {
 function TimerSegment({ value, label, testId }: { value: string; label: string; testId: string }) {
   return (
     <div
-      className="flex flex-col items-center justify-center bg-slate-100 border border-slate-300 rounded-md px-1.5 pt-[2px] pb-[2px] min-w-[40px] md:rounded-lg md:px-4 md:min-w-[64px] dark:bg-white/5 dark:border-white/10"
+      className="flex min-w-[36px] flex-col items-center justify-center rounded-md border border-slate-300 bg-slate-100 px-1 pt-[2px] pb-[2px] md:min-w-[64px] md:rounded-lg md:px-4 dark:border-white/10 dark:bg-white/5"
       data-testid={testId}
     >
       <span className="font-mono text-base md:text-2xl font-bold text-slate-900 dark:text-white leading-none">
@@ -91,12 +91,12 @@ export function MarketCycleHero({ marketState, constrainedWidth = false }: Marke
 
   const getLabel = () => {
     if (status === "RESOLVED") {
-      return { desktop: "Market Resolved — New Week Monday", mobile: "Resolved" };
+      return { desktop: "Market Resolved — New Week Monday" };
     }
     if (status === "ENTRIES_CLOSED") {
-      return { desktop: "Results In", mobile: "Results In" };
+      return { desktop: "Results In" };
     }
-    return { desktop: "Betting Closes In", mobile: "Closes In" };
+    return { desktop: "Betting Closes In" };
   };
 
   const label = getLabel();
@@ -109,50 +109,44 @@ export function MarketCycleHero({ marketState, constrainedWidth = false }: Marke
       data-testid="market-cycle-hero"
     >
       <div className="relative z-10 px-2 py-2 md:px-6 md:py-4">
-        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between md:gap-4">
-          <div className="flex w-full items-center justify-between gap-2 md:contents">
-            <p className="hidden text-gray-600 dark:text-gray-400 text-[10px] font-medium uppercase tracking-widest md:block">
-              {label.desktop}
-            </p>
-            <p className="text-gray-600 dark:text-gray-400 text-[9px] font-medium uppercase tracking-widest shrink-0 md:hidden">
-              {label.mobile}
-            </p>
+        <div className="flex min-w-0 flex-row flex-nowrap items-center justify-center gap-1 md:justify-between md:gap-4">
+          <p className="hidden shrink-0 text-gray-600 dark:text-gray-400 text-[10px] font-medium uppercase tracking-widest md:block">
+            {label.desktop}
+          </p>
+          <span className="sr-only md:hidden">{label.desktop}</span>
 
-            {showTimer && (
-              <div
-                className="flex shrink-0 items-center gap-0.5 md:gap-2"
-                data-testid="countdown-timer"
-              >
-                <TimerSegment
-                  value={padZero(timeRemaining.days)}
-                  label="Days"
-                  testId="timer-days"
-                />
-                <span className="text-violet-700 dark:text-violet-500 text-sm font-bold md:text-lg">:</span>
-                <TimerSegment
-                  value={padZero(timeRemaining.hours)}
-                  label="Hrs"
-                  testId="timer-hours"
-                />
-                <span className="text-violet-700 dark:text-violet-500 text-sm font-bold md:text-lg">:</span>
-                <TimerSegment
-                  value={padZero(timeRemaining.minutes)}
-                  label="Min"
-                  testId="timer-minutes"
-                />
-                <span className="text-violet-700 dark:text-violet-500 text-sm font-bold md:text-lg">:</span>
-                <TimerSegment
-                  value={padZero(timeRemaining.seconds)}
-                  label="Sec"
-                  testId="timer-seconds"
-                />
-              </div>
-            )}
-          </div>
+          {showTimer && (
+            <div
+              className="flex shrink-0 items-center gap-0.5 md:gap-2"
+              data-testid="countdown-timer"
+            >
+              <TimerSegment
+                value={padZero(timeRemaining.days)}
+                label="Days"
+                testId="timer-days"
+              />
+              <span className="text-violet-700 dark:text-violet-500 text-sm font-bold md:text-lg">:</span>
+              <TimerSegment
+                value={padZero(timeRemaining.hours)}
+                label="Hrs"
+                testId="timer-hours"
+              />
+              <span className="text-violet-700 dark:text-violet-500 text-sm font-bold md:text-lg">:</span>
+              <TimerSegment
+                value={padZero(timeRemaining.minutes)}
+                label="Min"
+                testId="timer-minutes"
+              />
+              <span className="text-violet-700 dark:text-violet-500 text-sm font-bold md:text-lg">:</span>
+              <TimerSegment
+                value={padZero(timeRemaining.seconds)}
+                label="Sec"
+                testId="timer-seconds"
+              />
+            </div>
+          )}
 
-          <div className="flex w-full justify-end md:w-auto md:shrink-0">
-            {getStatusBadge()}
-          </div>
+          <div className="flex shrink-0">{getStatusBadge()}</div>
         </div>
       </div>
     </div>

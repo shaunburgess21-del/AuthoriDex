@@ -2317,6 +2317,7 @@ export default function VotePage() {
                 }`}
                 data-testid={`toggle-section-${section.toLowerCase().replace(/['\s]/g, '-')}`}
               >
+                {section === "All" && <Sparkles className="h-4 w-4" />}
                 {section === "Matchups" && <Swords className="h-4 w-4" />}
                 {section === "Sentiment Polls" && <MessageSquare className="h-4 w-4" />}
                 {section === "Opinion Polls" && <Vote className="h-4 w-4" />}
