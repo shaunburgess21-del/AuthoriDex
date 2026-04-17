@@ -65,6 +65,7 @@ export function OpinionPollCard({
   categoryRaceMap,
   leaderboardCategories,
   onNavigateToDetail,
+  onBrowseFullScreen,
 }: {
   poll: OpinionPollCardPoll;
   onVote: (pollSlug: string, optionId: string) => Promise<void>;
@@ -73,6 +74,7 @@ export function OpinionPollCard({
   categoryRaceMap: Map<string, string>;
   leaderboardCategories?: Set<string>;
   onNavigateToDetail?: () => void;
+  onBrowseFullScreen?: () => void;
 }) {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
@@ -201,6 +203,7 @@ export function OpinionPollCard({
             detailHref={poll.slug ? `/vote/opinion-polls/${poll.slug}` : undefined}
             detailOnNavigate={onNavigateToDetail}
             detailLabel="View Poll Details"
+            onBrowseFullScreen={onBrowseFullScreen}
             data-testid={`badge-opinion-category-${poll.id}`}
           />
         </div>

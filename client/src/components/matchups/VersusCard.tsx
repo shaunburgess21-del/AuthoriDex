@@ -42,6 +42,7 @@ export function VersusCard({
   categoryRaceMap,
   leaderboardCategories,
   onNavigateToDetail,
+  onBrowseFullScreen,
 }: {
   matchup: VersusCardMatchup;
   userVote: string | null;
@@ -51,6 +52,7 @@ export function VersusCard({
   categoryRaceMap: Map<string, string>;
   leaderboardCategories?: Set<string>;
   onNavigateToDetail?: () => void;
+  onBrowseFullScreen?: () => void;
 }) {
   const hasVoted = userVote !== null;
   const votedA = userVote === "option_a";
@@ -73,6 +75,7 @@ export function VersusCard({
               detailHref={matchup.slug ? `/vote/matchups/${matchup.slug}` : undefined}
               detailOnNavigate={onNavigateToDetail}
               detailLabel="View Matchup Details"
+              onBrowseFullScreen={onBrowseFullScreen}
               data-testid={`badge-matchup-${matchup.id}`}
             />
           </div>

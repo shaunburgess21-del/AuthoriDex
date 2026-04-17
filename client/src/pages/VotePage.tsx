@@ -703,6 +703,7 @@ function DiscourseCard({
   categoryRaceMap,
   leaderboardCategories,
   onNavigateToPollDetail,
+  onBrowseFullScreen,
 }: {
   topic: any;
   onVote: (choice: 'support' | 'neutral' | 'oppose') => void;
@@ -711,6 +712,7 @@ function DiscourseCard({
   leaderboardCategories?: Set<string>;
   /** When set, detail links use history voteList + client navigation (Vote page). */
   onNavigateToPollDetail?: () => void;
+  onBrowseFullScreen?: () => void;
 }) {
   const [voted, setVoted] = useState<'support' | 'neutral' | 'oppose' | null>(topic.userVote || null);
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
@@ -762,6 +764,7 @@ function DiscourseCard({
           detailHref={topic.slug ? `/polls/${topic.slug}` : undefined}
           detailOnNavigate={onNavigateToPollDetail}
           detailLabel="View Poll Details"
+          onBrowseFullScreen={onBrowseFullScreen}
           data-testid={`badge-category-${topic.id}`}
         />
       </div>
@@ -2422,13 +2425,14 @@ export default function VotePage() {
             <CardSection desktopLimit={9} gap="gap-5" testIdPrefix="section-topics">
               {displayTopics.map((topic) => (
                 <div key={topic.id} role="button" tabIndex={0} onClick={(e) => handleCardEmptyTap(e, "sentiment", topic.id)} onKeyDown={(e) => { if (e.key === "Enter") handleCardEmptyTap(e as any, "sentiment", topic.id); }} className="h-full">
-                  <DiscourseCard 
-                    topic={topic} 
+                  <DiscourseCard
+                    topic={topic}
                     onVote={(choice) => handleDiscourseVote(topic.id, choice)}
                     onFilterCategory={handleCategoryPillFilter}
                     categoryRaceMap={raceMap}
                     leaderboardCategories={leaderboardCats}
                     onNavigateToPollDetail={topic.slug ? () => goSentimentDetail(topic.slug) : undefined}
+                    onBrowseFullScreen={isMobile ? () => openSnapScroll("sentiment", topic.id) : undefined}
                   />
                 </div>
               ))}
@@ -2533,6 +2537,7 @@ export default function VotePage() {
                     categoryRaceMap={raceMap}
                     leaderboardCategories={leaderboardCats}
                     onNavigateToDetail={matchup.slug ? () => goMatchupDetail(matchup.slug!) : undefined}
+                    onBrowseFullScreen={isMobile ? () => openSnapScroll("matchups", matchup.id) : undefined}
                   />
                 </div>
               ))}
@@ -2640,6 +2645,7 @@ export default function VotePage() {
                     categoryRaceMap={raceMap}
                     leaderboardCategories={leaderboardCats}
                     onNavigateToDetail={poll.slug ? () => goOpinionDetail(poll.slug) : undefined}
+                    onBrowseFullScreen={isMobile ? () => openSnapScroll("opinion", poll.id) : undefined}
                   />
                 </div>
               ))}
@@ -3684,14 +3690,15 @@ export default function VotePage() {
             <div ref={topicsScrollRef} onScroll={(e) => saveOverlayScroll("topics", e.currentTarget.scrollTop)} className="flex-1 overflow-y-auto p-4">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 max-w-7xl mx-auto">
                 {displayTopics.map((topic) => (
-                  <DiscourseCard 
-                    key={topic.id} 
-                    topic={topic} 
+                  <DiscourseCard
+                    key={topic.id}
+                    topic={topic}
                     onVote={(choice) => handleDiscourseVote(topic.id, choice)}
                     onFilterCategory={handleCategoryPillFilter}
                     categoryRaceMap={raceMap}
                     leaderboardCategories={leaderboardCats}
                     onNavigateToPollDetail={topic.slug ? () => goSentimentDetail(topic.slug) : undefined}
+                    onBrowseFullScreen={isMobile ? () => openSnapScroll("sentiment", topic.id) : undefined}
                   />
                 ))}
               </div>
@@ -3743,9 +3750,9 @@ export default function VotePage() {
             <div ref={matchupsScrollRef} onScroll={(e) => saveOverlayScroll("matchups", e.currentTarget.scrollTop)} className="flex-1 overflow-y-auto p-4">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 max-w-7xl mx-auto">
                 {displayMatchups.map((matchup) => (
-                  <VersusCard 
-                    key={matchup.id} 
-                    matchup={matchup} 
+                  <VersusCard
+                    key={matchup.id}
+                    matchup={matchup}
                     userVote={matchupUserVotes[matchup.id] || null}
                     onVote={handleMatchupVote}
                     onRemoveVote={handleMatchupRemoveVote}
@@ -3753,6 +3760,7 @@ export default function VotePage() {
                     categoryRaceMap={raceMap}
                     leaderboardCategories={leaderboardCats}
                     onNavigateToDetail={matchup.slug ? () => goMatchupDetail(matchup.slug!) : undefined}
+                    onBrowseFullScreen={isMobile ? () => openSnapScroll("matchups", matchup.id) : undefined}
                   />
                 ))}
               </div>
@@ -3819,6 +3827,7 @@ export default function VotePage() {
                     categoryRaceMap={raceMap}
                     leaderboardCategories={leaderboardCats}
                     onNavigateToDetail={poll.slug ? () => goOpinionDetail(poll.slug) : undefined}
+                    onBrowseFullScreen={isMobile ? () => openSnapScroll("opinion", poll.id) : undefined}
                   />
                 ))}
               </div>
