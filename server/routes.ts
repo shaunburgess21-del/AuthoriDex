@@ -15496,6 +15496,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         createdAt: row.createdAt.toISOString(),
         approvedAsId: row.approvedAsId,
         approvedAsType: row.approvedAsType,
+        adminNotes: row.adminNotes,
       }));
 
       res.json(shaped);
