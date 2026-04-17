@@ -14,7 +14,8 @@ import { MarketCycleHero } from "@/components/MarketCycleHero";
 import { useMarketCycle, type MarketStatus } from "@/hooks/useMarketCycle";
 import { StakeModal, type StakeSelection } from "@/components/StakeModal";
 import { JackpotEntryModal } from "@/components/JackpotEntryModal";
-import { RulesModal, RULES_CONTENT } from "@/components/predict/RulesContent";
+import { StepModal } from "@/components/StepModal";
+import { PREDICT_RULES_STEPS } from "@/components/rulesStepData";
 import { OverlayFilterBar } from "@/components/OverlayFilterBar";
 import { ViewAllOverlayHeader } from "@/components/ViewAllOverlayHeader";
 import { AvatarHeightHeadline } from "@/components/AvatarHeightHeadline";
@@ -3445,15 +3446,19 @@ export default function PredictPage() {
         open={createModalOpen}
         onClose={() => setCreateModalOpen(false)}
       />
-      {rulesModalOpen && RULES_CONTENT[rulesModalOpen] && (
-        <RulesModal
-          open={!!rulesModalOpen}
-          onClose={() => setRulesModalOpen(null)}
-          title={RULES_CONTENT[rulesModalOpen].title}
-          description={RULES_CONTENT[rulesModalOpen].description}
-          steps={RULES_CONTENT[rulesModalOpen].steps}
-        />
-      )}
+      {(["predictions", "community", "jackpot", "updown", "h2h", "gainer"] as const).map((key) => {
+        const cfg = PREDICT_RULES_STEPS[key];
+        return (
+          <StepModal
+            key={key}
+            open={rulesModalOpen === key}
+            onClose={() => setRulesModalOpen(null)}
+            steps={cfg.steps}
+            ctaLabel={cfg.ctaLabel}
+            accent={cfg.accent}
+          />
+        );
+      })}
       <GainerCandidatesDialog
         market={gainerPickerState?.market || null}
         initialCandidate={gainerPickerState?.initialCandidate || null}

@@ -96,6 +96,8 @@ import { FilterDropdown } from "@/components/FilterDropdown";
 import { OverlayFilterBar } from "@/components/OverlayFilterBar";
 import { ViewAllOverlayHeader } from "@/components/ViewAllOverlayHeader";
 import { OnboardingDrawer, type OnboardingStep, type OnboardingDrawerHandle } from "@/components/OnboardingDrawer";
+import { StepModal } from "@/components/StepModal";
+import { VOTE_RULES_STEPS } from "@/components/rulesStepData";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { UnifiedSectionHeader } from "@/components/UnifiedSectionHeader";
 import { WindowedDotIndicator } from "@/components/WindowedDotIndicator";
@@ -3394,161 +3396,19 @@ export default function VotePage() {
           </div>
         </DialogContent>
       </Dialog>
-      <Dialog open={!!rulesModalOpen} onOpenChange={() => setRulesModalOpen(null)}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <HelpCircle className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
-              {rulesModalOpen === "induction" && "Induction Queue Rules"}
-              {rulesModalOpen === "curate" && "Curate the Profile Rules"}
-              {rulesModalOpen === "voice" && "Sentiment Polls Rules"}
-              {rulesModalOpen === "matchups" && "Matchups Rules"}
-              {rulesModalOpen === "value" && "How It Works"}
-              {rulesModalOpen === "opinion" && "Opinion Polls Rules"}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4 text-sm">
-            {rulesModalOpen === "induction" && (
-              <div className="space-y-3">
-                <p className="text-muted-foreground">Vote for celebrities you want to see added to the VoxDex leaderboard.</p>
-                <div className="space-y-2">
-                  <div className="flex items-start gap-2">
-                    <Vote className="h-4 w-4 text-cyan-600 dark:text-cyan-400 mt-0.5 shrink-0" />
-                    <span>Each user can vote <span className="text-cyan-600 dark:text-cyan-400 font-medium">once per candidate</span></span>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <Crown className="h-4 w-4 text-cyan-600 dark:text-cyan-400 mt-0.5 shrink-0" />
-                    <span>The <span className="text-cyan-600 dark:text-cyan-400 font-medium">#1 candidate</span> is inducted weekly</span>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <Sparkles className="h-4 w-4 text-cyan-600 dark:text-cyan-400 mt-0.5 shrink-0" />
-                    <span>Earn <span className="text-cyan-600 dark:text-cyan-400 font-medium">+30 XP</span> for each vote</span>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <Zap className="h-4 w-4 text-cyan-600 dark:text-cyan-400 mt-0.5 shrink-0" />
-                    <span>Weekly winner gets inducted to the main leaderboard</span>
-                  </div>
-                </div>
-              </div>
-            )}
-            {rulesModalOpen === "curate" && (
-              <div className="space-y-3">
-                <p className="text-muted-foreground">Help choose the official profile photo displayed across VoxDex.</p>
-                <div className="space-y-2">
-                  <div className="flex items-start gap-2">
-                    <Camera className="h-4 w-4 text-cyan-600 dark:text-cyan-400 mt-0.5 shrink-0" />
-                    <span>Swipe left or right to vote on profile photos</span>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <Crown className="h-4 w-4 text-cyan-600 dark:text-cyan-400 mt-0.5 shrink-0" />
-                    <span>The winning image becomes the official profile photo</span>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <Sparkles className="h-4 w-4 text-cyan-600 dark:text-cyan-400 mt-0.5 shrink-0" />
-                    <span>Earn <span className="text-cyan-600 dark:text-cyan-400 font-medium">+20 XP</span> for each vote</span>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <Clock className="h-4 w-4 text-cyan-600 dark:text-cyan-400 mt-0.5 shrink-0" />
-                    <span>Votes accumulate perpetually to determine the definitive all-time look</span>
-                  </div>
-                </div>
-              </div>
-            )}
-            {rulesModalOpen === "voice" && (
-              <div className="space-y-3">
-                <p className="text-muted-foreground">Share your opinion on trending topics and current events.</p>
-                <div className="space-y-2">
-                  <div className="flex items-start gap-2">
-                    <MessageSquare className="h-4 w-4 text-cyan-600 dark:text-cyan-400 mt-0.5 shrink-0" />
-                    <span>Vote <span className="text-[#00C853] font-medium">Support</span>, <span className="text-slate-400 font-medium">Neutral</span>, or <span className="text-[#FF0000] font-medium">Oppose</span> on various topics.</span>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <Users className="h-4 w-4 text-cyan-600 dark:text-cyan-400 mt-0.5 shrink-0" />
-                    <span>See how your vote compares to the community</span>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <Sparkles className="h-4 w-4 text-cyan-600 dark:text-cyan-400 mt-0.5 shrink-0" />
-                    <span>Earn <span className="text-cyan-600 dark:text-cyan-400 font-medium">+25 XP</span> for each vote</span>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <Plus className="h-4 w-4 text-cyan-600 dark:text-cyan-400 mt-0.5 shrink-0" />
-                    <span>Submit your own poll topics for community voting</span>
-                  </div>
-                </div>
-              </div>
-            )}
-            {rulesModalOpen === "matchups" && (
-              <div className="space-y-3">
-                <p className="text-muted-foreground">Pick a side in head-to-head matchups across anything and everything.</p>
-                <div className="space-y-2">
-                  <div className="flex items-start gap-2">
-                    <Swords className="h-4 w-4 text-cyan-600 dark:text-cyan-400 mt-0.5 shrink-0" />
-                    <span>Vote A vs B: Choose the winner in quick 1v1 battles.</span>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <Globe className="h-4 w-4 text-cyan-600 dark:text-cyan-400 mt-0.5 shrink-0" />
-                    <span>Anything Goes: People, brands, sports, ideas â€” even random preferences.</span>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <Zap className="h-4 w-4 text-cyan-600 dark:text-cyan-400 mt-0.5 shrink-0" />
-                    <span>Earn <span className="text-cyan-600 dark:text-cyan-400 font-medium">+15 XP</span>: Get rewarded for every Matchup vote you cast.</span>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <BarChart3 className="h-4 w-4 text-cyan-600 dark:text-cyan-400 mt-0.5 shrink-0" />
-                    <span>Instant Results: See how your pick compares to the community.</span>
-                  </div>
-                </div>
-              </div>
-            )}
-            {rulesModalOpen === "value" && (
-              <div className="space-y-3">
-                <p className="text-muted-foreground">Do you believe the public perception of this person is accurate?</p>
-                <div className="space-y-2">
-                  <div className="flex items-start gap-2">
-                    <ArrowUp className="h-4 w-4 text-[#00C853] mt-0.5 shrink-0" />
-                    <span>Vote <span className="text-[#00C853] font-medium">Underrated</span> if you think they deserve more recognition than they currently get.</span>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <ArrowDown className="h-4 w-4 text-[#FF0000] mt-0.5 shrink-0" />
-                    <span>Vote <span className="text-[#FF0000] font-medium">Overrated</span> if you think they receive more attention or praise than they deserve.</span>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <Users className="h-4 w-4 text-cyan-600 dark:text-cyan-400 mt-0.5 shrink-0" />
-                    <span>Compare your view with the community results.</span>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <BarChart3 className="h-4 w-4 text-cyan-600 dark:text-cyan-400 mt-0.5 shrink-0" />
-                    <span>Your vote updates the Underrated/Overrated split in real time.</span>
-                  </div>
-                </div>
-              </div>
-            )}
-            {rulesModalOpen === "opinion" && (
-              <div className="space-y-3">
-                <p className="text-muted-foreground">Choose your pick from multiple options on community-created polls.</p>
-                <div className="space-y-2">
-                  <div className="flex items-start gap-2">
-                    <ListChecks className="h-4 w-4 text-cyan-600 dark:text-cyan-400 mt-0.5 shrink-0" />
-                    <span>Pick <span className="text-cyan-600 dark:text-cyan-400 font-medium">one option</span> from multiple choices on each poll</span>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <Users className="h-4 w-4 text-cyan-600 dark:text-cyan-400 mt-0.5 shrink-0" />
-                    <span>See live results and how the community voted</span>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <Sparkles className="h-4 w-4 text-cyan-600 dark:text-cyan-400 mt-0.5 shrink-0" />
-                    <span>Earn <span className="text-cyan-600 dark:text-cyan-400 font-medium">+15 XP</span> for each vote</span>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <Plus className="h-4 w-4 text-cyan-600 dark:text-cyan-400 mt-0.5 shrink-0" />
-                    <span>Suggest your own opinion polls for the community</span>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+      {(["voice", "matchups", "opinion", "value", "induction", "curate"] as const).map((key) => {
+        const cfg = VOTE_RULES_STEPS[key];
+        return (
+          <StepModal
+            key={key}
+            open={rulesModalOpen === key}
+            onClose={() => setRulesModalOpen(null)}
+            steps={cfg.steps}
+            ctaLabel={cfg.ctaLabel}
+            accent={cfg.accent}
+          />
+        );
+      })}
       <OnboardingDrawer
         ref={voteOnboardingRef}
         storageKey="authoridex_vote_welcome_seen"
@@ -3557,48 +3417,13 @@ export default function VotePage() {
         lastStepCta="Cast Your First Vote"
         disableAutoToast={!!user}
       />
-      {/* Community Governance Info Modal */}
-      <Dialog open={infoModalOpen === "governance"} onOpenChange={() => setInfoModalOpen(null)}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
-              You Run the Show
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4 text-sm">
-            <div className="space-y-3">
-              <div className="flex items-start gap-3">
-                <div className="h-6 w-6 rounded-full bg-cyan-500/15 dark:bg-cyan-500/10 flex items-center justify-center shrink-0 mt-0.5">
-                  <span className="text-cyan-600 dark:text-cyan-400 text-xs font-bold">1</span>
-                </div>
-                <div>
-                  <span className="font-medium text-cyan-600 dark:text-cyan-400">Expand the Roster:</span>
-                  <span className="text-muted-foreground"> The leaderboard isn't static. Vote in the Induction Queue to decide exactly who deserves to be added next.</span>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <div className="h-6 w-6 rounded-full bg-cyan-500/15 dark:bg-cyan-500/10 flex items-center justify-center shrink-0 mt-0.5">
-                  <span className="text-cyan-600 dark:text-cyan-400 text-xs font-bold">2</span>
-                </div>
-                <div>
-                  <span className="font-medium text-cyan-600 dark:text-cyan-400">Define the Aesthetic:</span>
-                  <span className="text-muted-foreground"> You are the Art Director. Use Curate Profile to swap out bad press photos and choose the definitive image for every star.</span>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <div className="h-6 w-6 rounded-full bg-cyan-500/15 dark:bg-cyan-500/10 flex items-center justify-center shrink-0 mt-0.5">
-                  <span className="text-cyan-600 dark:text-cyan-400 text-xs font-bold">3</span>
-                </div>
-                <div>
-                  <span className="font-medium text-cyan-600 dark:text-cyan-400">Remove the Gatekeepers:</span>
-                  <span className="text-muted-foreground"> No editors, no bias. This is the first global index that is 100% shaped, ranked, and managed by you.</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <StepModal
+        open={infoModalOpen === "governance"}
+        onClose={() => setInfoModalOpen(null)}
+        steps={VOTE_RULES_STEPS.governance.steps}
+        ctaLabel={VOTE_RULES_STEPS.governance.ctaLabel}
+        accent={VOTE_RULES_STEPS.governance.accent}
+      />
       <AnimatePresence>
         {inductionOverlayOpen && (
           <motion.div

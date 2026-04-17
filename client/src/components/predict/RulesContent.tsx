@@ -1,6 +1,4 @@
 import { TrendingUp, Target, Trophy, Swords, BarChart3, Globe, HelpCircle, Crown, Hash, Clock } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 export interface RulesStep {
   icon: React.ReactNode;
@@ -101,39 +99,3 @@ export function RulesExplainer({ title, description, steps }: RulesEntry) {
   );
 }
 
-export function RulesModal({ open, onClose, title, description, steps }: {
-  open: boolean;
-  onClose: () => void;
-} & RulesEntry) {
-  return (
-    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <HelpCircle className="h-5 w-5 text-violet-500" />
-            {title}
-          </DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-4 py-4">
-          {steps.map((step, i) => (
-            <div key={i} className="flex items-start gap-3">
-              <div className="h-8 w-8 rounded-lg bg-violet-500/15 dark:bg-violet-500/10 flex items-center justify-center shrink-0">
-                {step.icon}
-              </div>
-              <div>
-                <h4 className="font-semibold text-sm">{step.title}</h4>
-                <p className="text-xs text-muted-foreground">{step.description}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <Button onClick={onClose} className="w-full bg-gradient-to-r from-violet-600 to-fuchsia-600">
-          Got it
-        </Button>
-      </DialogContent>
-    </Dialog>
-  );
-}
