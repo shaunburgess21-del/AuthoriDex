@@ -1711,8 +1711,11 @@ export default function VotePage() {
     [displayOpinionPolls],
   );
 
+  const savedSnapWindowScrollRef = useRef<number | null>(null);
+
   const openSnapScroll = useCallback((section: SnapSectionType, itemId?: string) => {
     if (!isMobile) return;
+    savedSnapWindowScrollRef.current = window.scrollY;
     setSnapScrollSection(section);
     setSnapScrollInitialId(itemId);
     setSnapScrollOpen(true);
@@ -1723,6 +1726,21 @@ export default function VotePage() {
     setSnapScrollOpen(false);
     window.history.back();
   }, []);
+
+  // Restore the main-page scroll position after snap view closes. Covers both
+  // the in-snap back button (closeSnapScroll) and OS/browser back (popstate →
+  // applyOverlayState). body.overflow hidden → '' can drop the browser's
+  // scroll-restoration on some mobile browsers, especially when the tap
+  // originated from deep in the page (e.g. Opinion Polls section).
+  useEffect(() => {
+    if (!snapScrollOpen && savedSnapWindowScrollRef.current !== null) {
+      const y = savedSnapWindowScrollRef.current;
+      savedSnapWindowScrollRef.current = null;
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: y, behavior: "auto" });
+      });
+    }
+  }, [snapScrollOpen]);
 
   const handleCardEmptyTap = useCallback((e: React.MouseEvent, section: SnapSectionType, itemId: string) => {
     if (!isMobile) return;

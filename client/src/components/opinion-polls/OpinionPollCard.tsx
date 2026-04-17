@@ -16,7 +16,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedApiError, signInToVoteToastOptions } from "@/lib/signInToVoteToast";
-import { normalizeMarketCategory } from "@shared/constants";
 
 function parseOpinionPollCardError(err: unknown): { message: string; retryAfter?: number } {
   const retryAfter = (err as any)?.retryAfter as number | undefined;
@@ -198,7 +197,6 @@ export function OpinionPollCard({
           <InteractiveCategoryPill
             category={categoryKey}
             onFilter={() => onFilterCategory(categoryKey)}
-            raceMarketId={categoryRaceMap.get(normalizeMarketCategory(categoryKey)) ?? undefined}
             leaderboardCategories={leaderboardCategories}
             detailHref={poll.slug ? `/vote/opinion-polls/${poll.slug}` : undefined}
             detailOnNavigate={onNavigateToDetail}
@@ -408,6 +406,12 @@ export function OpinionPollCard({
       <AlertDialog
         open={changeDialogOpen}
         onOpenChange={(open) => {
+          if (!open) {
+            document.addEventListener("click", (e) => e.stopPropagation(), {
+              capture: true,
+              once: true,
+            });
+          }
           setChangeDialogOpen(open);
           if (!open) setPendingOption(null);
         }}
@@ -433,12 +437,19 @@ export function OpinionPollCard({
       {expandedImage && (
         <div
           className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4"
-          onClick={() => setExpandedImage(null)}
+          data-interactive="true"
+          onClick={(e) => {
+            e.stopPropagation();
+            setExpandedImage(null);
+          }}
         >
           <button
             type="button"
             className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
-            onClick={() => setExpandedImage(null)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setExpandedImage(null);
+            }}
             aria-label="Close"
           >
             <X className="h-6 w-6 text-white" />
