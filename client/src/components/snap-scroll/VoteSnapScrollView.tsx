@@ -243,16 +243,16 @@ export function VoteSnapScrollView({
                       </div>
 
                       {/* Drag handle */}
-                      <div className="flex justify-center py-1">
+                      <div className="flex justify-center py-0">
                         <div
-                          className="flex flex-col items-center px-6 py-2 cursor-grab active:cursor-grabbing touch-none select-none"
+                          className="flex flex-col items-center px-6 pt-0 pb-2 cursor-grab active:cursor-grabbing touch-none select-none"
                           onTouchStart={handleDragStart}
                           onTouchEnd={(e) => handleDragEnd(e, item.id)}
                           onClick={() => setExpandedItemId(isExpanded ? null : item.id)}
                           role="button"
                           aria-label={isExpanded ? "Collapse comments" : "Expand comments"}
                         >
-                          <div className="w-12 h-1.5 rounded-full bg-muted-foreground/60" />
+                          <div className="w-16 h-1.5 rounded-full bg-muted-foreground/60" />
                         </div>
                       </div>
 
