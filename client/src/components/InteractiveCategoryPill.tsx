@@ -194,7 +194,21 @@ export function InteractiveCategoryPill({
 
   if (isMobile) {
     return (
-      <Drawer open={open} onOpenChange={setOpen}>
+      <Drawer
+        open={open}
+        onOpenChange={(v) => {
+          if (!v) {
+            // vaul overlay unmounts during close animation; the browser re-targets the
+            // pointer release to whatever element is underneath, firing a ghost click on
+            // the card. Capture and swallow exactly that one event before it propagates.
+            document.addEventListener("click", (e) => e.stopPropagation(), {
+              capture: true,
+              once: true,
+            });
+          }
+          setOpen(v);
+        }}
+      >
         <DrawerTrigger asChild>{pillButton}</DrawerTrigger>
         <DrawerContent>
           <div className="px-2 pb-4">
