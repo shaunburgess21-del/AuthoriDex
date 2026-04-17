@@ -2306,7 +2306,7 @@ export default function VotePage() {
                 ) : (
                   <Vote className="h-4 w-4 shrink-0" />
                 )}
-                {myVotesFilter === "hide-mine" ? `Hide (${myVotesCount})` : `Votes (${myVotesCount})`}
+                {myVotesFilter === "hide-mine" ? `Hidden (${myVotesCount})` : `Votes (${myVotesCount})`}
               </button>
             )}
             {SECTION_TOGGLES.map((section) => (
@@ -2351,7 +2351,7 @@ export default function VotePage() {
                 <Vote className="h-3.5 w-3.5 mr-1.5" />
               )}
               {myVotesFilter === "hide-mine"
-                ? `Hide Votes (${myVotesCount})`
+                ? `Hidden Votes (${myVotesCount})`
                 : `My Votes (${myVotesCount})`}
             </Button>
           )}

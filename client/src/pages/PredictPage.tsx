@@ -2647,7 +2647,7 @@ export default function PredictPage() {
                   <ListChecks className="h-4 w-4 shrink-0" />
                 )}
                 {myPositionsFilter === "hide-mine"
-                  ? `Hide (${activePredictions})`
+                  ? `Hidden (${activePredictions})`
                   : `Positions (${activePredictions})`}
               </button>
             )}
@@ -2707,7 +2707,7 @@ export default function PredictPage() {
                 <ListChecks className="h-3.5 w-3.5 mr-1.5" />
               )}
               {myPositionsFilter === "hide-mine"
-                ? `Hide Positions (${activePredictions})`
+                ? `Hidden Positions (${activePredictions})`
                 : `My Positions (${activePredictions})`}
             </Button>
           )}
