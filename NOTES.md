@@ -37,3 +37,17 @@ Follow-up work for another session:
 
 The helper scripts `scripts/check-db-state.ts` and `scripts/apply-task-2.ts`
 remain in the repo as reference for future similar one-offs.
+
+## Credits pill tappability (deferred from Task 3.6, 2026-04-18)
+
+The mobile Credits pill (`PredictPage.tsx:~2598`) and the new desktop
+Credits pill (`PredictPage.tsx:~<new line>`) are currently display-only
+`<div>` elements. Plan: convert to `<Link>` or `<button>` routing to
+a Credits management page where users can:
+- View credit transaction history
+- Purchase more credits via Paystack integration (phase 1 revenue)
+- See XP → Credits conversion options (gated by tier per gamification plan)
+
+Scope is its own task — Paystack integration, credits management page,
+auth + rate limiting on purchase endpoints. Do not conflate with pill
+visual work.

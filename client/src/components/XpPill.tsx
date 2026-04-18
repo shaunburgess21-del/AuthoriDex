@@ -44,19 +44,20 @@ type RankRow = {
   description: string | null;
 };
 
-// md and lg kept for future use (e.g. profile hero). sm is the active size
-// for every current placement — matches Credits pill geometry.
+// sm is the canonical pill at every placement. Mobile dimensions match the
+// Credits pill geometry; desktop dimensions (md: breakpoint) match the
+// sub-header "My Votes" / "My Positions" button height.
+// md and lg kept for future use (e.g. profile hero).
 const SIZE = {
-  sm: { pad: "px-2.5 py-1.5", text: "text-sm", icon: 14, gap: "gap-1.5" },
+  sm: {
+    pad: "px-2.5 py-1.5 md:px-3 md:py-1 md:min-h-8",
+    text: "text-sm md:text-xs",
+    icon: 14,
+    gap: "gap-1.5",
+  },
   md: { pad: "px-3 py-1.5", text: "text-sm", icon: 14, gap: "gap-2" },
   lg: { pad: "px-4 py-2", text: "text-base", icon: 16, gap: "gap-2.5" },
 } as const;
-
-// Convert a 0-1 opacity to a two-char hex suffix (for #RRGGBB + AA alpha).
-function toHexAlpha(opacity: number): string {
-  const clamped = Math.max(0, Math.min(1, opacity));
-  return Math.round(clamped * 255).toString(16).padStart(2, "0");
-}
 
 function getRankProgress(xp: number, ranks: RankRow[] | undefined) {
   if (!ranks || ranks.length === 0) return null;
@@ -77,15 +78,36 @@ function getRankProgress(xp: number, ranks: RankRow[] | undefined) {
 
 function GhostPill({ sizeKey }: { sizeKey: "sm" | "md" | "lg" }) {
   const s = SIZE[sizeKey];
-  // Neutral grey — no rank-colour flash before stats resolve.
+  // Subtle metallic hint — no rank-colour flash, no dark grey.
   const widthCh = sizeKey === "sm" ? "w-[88px]" : sizeKey === "md" ? "w-[104px]" : "w-[120px]";
   return (
     <div
-      className={`inline-flex items-center rounded-md ${s.pad} ${widthCh} animate-pulse border border-muted-foreground/20 bg-muted-foreground/10`}
+      className={`inline-flex items-center rounded-md ${s.pad} ${widthCh} animate-pulse border`}
+      style={{
+        background: "linear-gradient(to bottom, rgba(232,232,236,0.4) 0%, rgba(208,208,214,0.4) 100%)",
+        borderColor: "rgba(0, 0, 0, 0.08)",
+      }}
       aria-hidden="true"
     />
   );
 }
+
+// Direction C metallic base: universal silver for ranks 1-7, slightly
+// brighter platinum for tier 8. Rank-specific visual is ONLY the icon colour
+// (plus tier-8 iridescent edge). This is the one gradient exception in this
+// component; everywhere else stays flat.
+const METALLIC_BASE: React.CSSProperties = {
+  background: "linear-gradient(to bottom, #E8E8EC 0%, #D0D0D6 100%)",
+  border: "0.5px solid rgba(0, 0, 0, 0.15)",
+  boxShadow: "inset 0 1px 0 0 rgba(255, 255, 255, 0.6)",
+  color: "#1A1A1E",
+};
+const PLATINUM_BASE: React.CSSProperties = {
+  background: "linear-gradient(to bottom, #F5F5F7 0%, #D5D5DB 100%)",
+  border: "0.5px solid rgba(0, 0, 0, 0.1)",
+  boxShadow: "inset 0 1px 0 0 rgba(255, 255, 255, 0.7)",
+  color: "#1A1A1E",
+};
 
 export function XpPill({ size = "sm", className = "" }: XpPillProps) {
   const [open, setOpen] = useState(false);
@@ -109,17 +131,7 @@ export function XpPill({ size = "sm", className = "" }: XpPillProps) {
   const tier = stats.rank?.tier ?? 1;
   const Icon = RANK_ICONS[currentRankIconName] ?? User;
 
-  // Tier-scaling inner glow. Citizen subtle, Legend strongest.
-  const glowOpacity = Math.min(0.15 + tier * 0.04, 0.4);
-  const glowAlpha = toHexAlpha(glowOpacity);
-  const glowBlur = 8 + tier;
-
-  const pillStyle: React.CSSProperties = {
-    backgroundColor: `${rankColor}26`, // ~15% opacity
-    borderColor: `${rankColor}66`,      // ~40% opacity
-    boxShadow: `inset 0 0 ${glowBlur}px 0 ${rankColor}${glowAlpha}`,
-    color: rankColor,
-  };
+  const pillStyle = tier === 8 ? PLATINUM_BASE : METALLIC_BASE;
 
   const progress = getRankProgress(xp, ranks as RankRow[] | undefined);
   const rankDescription = progress?.current.description ?? null;
@@ -132,7 +144,7 @@ export function XpPill({ size = "sm", className = "" }: XpPillProps) {
           type="button"
           aria-label="Open XP progress"
           aria-expanded={open}
-          className={`relative inline-flex items-center rounded-md border font-mono font-bold tabular-nums ${s.pad} ${s.text} ${s.gap} cursor-pointer transition-[filter] hover:brightness-110 active:brightness-95 focus:outline-none focus:ring-2 focus:ring-white/20 ${className}`}
+          className={`relative inline-flex items-center rounded-md font-mono font-bold tabular-nums ${s.pad} ${s.text} ${s.gap} cursor-pointer transition-[filter] hover:brightness-105 active:brightness-95 focus:outline-none focus:ring-2 focus:ring-black/20 ${className}`}
           style={pillStyle}
           data-testid="xp-pill"
         >

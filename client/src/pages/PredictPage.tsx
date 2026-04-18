@@ -2594,6 +2594,9 @@ export default function PredictPage() {
                 <Button variant="ghost" size="sm" className="text-violet-700 dark:text-violet-500 md:text-sm">Predict</Button>
               </Link>
             </div>
+            {/* TODO(phase1-revenue): wire both mobile and desktop Credits pills to
+                navigate to /me/credits (or similar) for credits insights + purchase
+                flow via Paystack. Plan in NOTES.md. */}
             <div className="flex items-center gap-2.5 md:hidden">
               <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/40 dark:border-violet-500/30">
                 <Wallet className="h-[14px] w-[14px] text-violet-700 dark:text-violet-500" />
@@ -2603,6 +2606,12 @@ export default function PredictPage() {
                 <ScrollText className="h-4 w-4 text-muted-foreground" />
               </Button>
             </div>
+            {user && (
+              <div className="hidden md:flex items-center gap-1.5 px-3 min-h-8 rounded-md bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/40 dark:border-violet-500/30">
+                <Wallet className="h-[14px] w-[14px] text-violet-700 dark:text-violet-500" />
+                <span className="font-mono font-bold text-xs text-violet-700 dark:text-violet-500">{walletCredits.toLocaleString('en-US')}</span>
+              </div>
+            )}
             <XpPill size="sm" />
             <UserMenu />
           </div>
