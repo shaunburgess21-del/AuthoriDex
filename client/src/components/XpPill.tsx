@@ -78,36 +78,18 @@ function getRankProgress(xp: number, ranks: RankRow[] | undefined) {
 
 function GhostPill({ sizeKey }: { sizeKey: "sm" | "md" | "lg" }) {
   const s = SIZE[sizeKey];
-  // Subtle metallic hint — no rank-colour flash, no dark grey.
+  // Transparent silver outline matching the loaded state.
   const widthCh = sizeKey === "sm" ? "w-[88px]" : sizeKey === "md" ? "w-[104px]" : "w-[120px]";
   return (
     <div
-      className={`inline-flex items-center rounded-md ${s.pad} ${widthCh} animate-pulse border`}
-      style={{
-        background: "linear-gradient(to bottom, rgba(232,232,236,0.4) 0%, rgba(208,208,214,0.4) 100%)",
-        borderColor: "rgba(0, 0, 0, 0.08)",
-      }}
+      className={`inline-flex items-center rounded-md border border-slate-300/30 bg-transparent ${s.pad} ${widthCh} animate-pulse`}
       aria-hidden="true"
     />
   );
 }
 
-// Direction C metallic base: universal silver for ranks 1-7, slightly
-// brighter platinum for tier 8. Rank-specific visual is ONLY the icon colour
-// (plus tier-8 iridescent edge). This is the one gradient exception in this
-// component; everywhere else stays flat.
-const METALLIC_BASE: React.CSSProperties = {
-  background: "linear-gradient(to bottom, #E8E8EC 0%, #D0D0D6 100%)",
-  border: "0.5px solid rgba(0, 0, 0, 0.15)",
-  boxShadow: "inset 0 1px 0 0 rgba(255, 255, 255, 0.6)",
-  color: "#1A1A1E",
-};
-const PLATINUM_BASE: React.CSSProperties = {
-  background: "linear-gradient(to bottom, #F5F5F7 0%, #D5D5DB 100%)",
-  border: "0.5px solid rgba(0, 0, 0, 0.1)",
-  boxShadow: "inset 0 1px 0 0 rgba(255, 255, 255, 0.7)",
-  color: "#1A1A1E",
-};
+// Understated silver outline. Transparent background, silver border, silver
+// icon + text. Tier-specific identity lives only in the tier-8 iridescent edge.
 
 export function XpPill({ size = "sm", className = "" }: XpPillProps) {
   const [open, setOpen] = useState(false);
@@ -131,8 +113,6 @@ export function XpPill({ size = "sm", className = "" }: XpPillProps) {
   const tier = stats.rank?.tier ?? 1;
   const Icon = RANK_ICONS[currentRankIconName] ?? User;
 
-  const pillStyle = tier === 8 ? PLATINUM_BASE : METALLIC_BASE;
-
   const progress = getRankProgress(xp, ranks as RankRow[] | undefined);
   const rankDescription = progress?.current.description ?? null;
   const dialogHeadingId = "xp-pill-rank-heading";
@@ -144,13 +124,13 @@ export function XpPill({ size = "sm", className = "" }: XpPillProps) {
           type="button"
           aria-label="Open XP progress"
           aria-expanded={open}
-          className={`relative inline-flex items-center rounded-md font-mono font-bold tabular-nums ${s.pad} ${s.text} ${s.gap} cursor-pointer transition-[filter] hover:brightness-105 active:brightness-95 focus:outline-none focus:ring-2 focus:ring-black/20 ${className}`}
-          style={pillStyle}
+          className={`relative inline-flex items-center rounded-md border border-slate-300/60 bg-transparent text-slate-300 font-mono font-bold tabular-nums ${s.pad} ${s.text} ${s.gap} cursor-pointer transition-colors hover:border-slate-200/80 hover:text-slate-200 active:brightness-95 focus:outline-none focus:ring-2 focus:ring-slate-300/40 ${className}`}
           data-testid="xp-pill"
         >
           <Icon
             aria-hidden="true"
-            style={{ color: rankColor, height: s.icon, width: s.icon }}
+            className="text-slate-300"
+            style={{ height: s.icon, width: s.icon }}
           />
           <span>{xp.toLocaleString("en-US")} XP</span>
 
