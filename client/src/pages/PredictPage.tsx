@@ -2599,27 +2599,6 @@ export default function PredictPage() {
                 <Wallet className="h-[14px] w-[14px] text-violet-700 dark:text-violet-500" />
                 <span className="font-mono font-bold text-sm">{walletCredits.toLocaleString('en-US')}</span>
               </div>
-              {user && !userBetsError && (
-                <button
-                  type="button"
-                  onClick={cycleMyPositionsFilter}
-                  className={`flex items-center gap-1.5 ${
-                    myPositionsFilter === "show-mine"
-                      ? "text-violet-600 dark:text-violet-400"
-                      : myPositionsFilter === "hide-mine"
-                        ? "text-amber-500"
-                        : "text-muted-foreground"
-                  }`}
-                  aria-label="Cycle positions filter"
-                >
-                  {myPositionsFilter === "hide-mine" ? (
-                    <EyeOff className="h-[14px] w-[14px]" />
-                  ) : (
-                    <ListChecks className="h-[14px] w-[14px]" />
-                  )}
-                  <span className="text-sm">{activePredictions}</span>
-                </button>
-              )}
               <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setRulesModalOpen("predictions")} aria-label="View predictions rules">
                 <ScrollText className="h-4 w-4 text-muted-foreground" />
               </Button>
@@ -2715,7 +2694,6 @@ export default function PredictPage() {
                 : `My Positions (${activePredictions})`}
             </Button>
           )}
-          <XpPill size="md" className="hidden md:inline-flex" />
         </div>
       </div>
       <div className="container mx-auto px-4 py-8 max-w-7xl pt-[5px] pb-[5px]">

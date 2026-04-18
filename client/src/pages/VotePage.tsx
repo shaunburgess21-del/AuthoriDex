@@ -2278,27 +2278,6 @@ export default function VotePage() {
                 <Button variant="ghost" size="sm" className="md:text-sm" data-testid="link-nav-predict">Predict</Button>
               </Link>
             </div>
-            {user && (
-              <button
-                type="button"
-                onClick={cycleMyVotesFilter}
-                className={`flex items-center gap-1.5 md:hidden ${
-                  myVotesFilter === "show-mine"
-                    ? "text-cyan-600 dark:text-cyan-400"
-                    : myVotesFilter === "hide-mine"
-                      ? "text-amber-500"
-                      : "text-muted-foreground"
-                }`}
-                aria-label="Cycle votes filter"
-              >
-                {myVotesFilter === "hide-mine" ? (
-                  <EyeOff className="h-[14px] w-[14px]" />
-                ) : (
-                  <Vote className="h-[14px] w-[14px]" />
-                )}
-                <span className="text-sm">{myVotesCount}</span>
-              </button>
-            )}
             <XpPill size="sm" />
             <UserMenu />
           </div>
@@ -2377,7 +2356,6 @@ export default function VotePage() {
                 : `My Votes (${myVotesCount})`}
             </Button>
           )}
-          <XpPill size="md" className="hidden md:inline-flex" />
         </div>
       </div>
       <div className="container mx-auto px-4 py-8 max-w-7xl pt-[5px] pb-[5px]">
