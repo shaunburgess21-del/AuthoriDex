@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { useAuth, UserProfile } from "@/contexts/AuthContext";
 import { useThemeToggle } from "@/hooks/useThemeToggle";
 import {
@@ -221,7 +221,18 @@ function UserMenuContent({
           </Avatar>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <h3 className="font-semibold truncate">{displayName}</h3>
+              {profile?.username ? (
+                <Link
+                  href={`/u/${profile.username}`}
+                  onClick={() => onClose?.()}
+                  className="font-semibold truncate hover:underline cursor-pointer"
+                  data-testid="link-my-profile"
+                >
+                  {displayName}
+                </Link>
+              ) : (
+                <h3 className="font-semibold truncate">{displayName}</h3>
+              )}
               <Button
                 variant="ghost"
                 size="icon"
@@ -232,7 +243,18 @@ function UserMenuContent({
                 <Settings className="h-3.5 w-3.5" />
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground truncate">@{profile?.username}</p>
+            {profile?.username ? (
+              <Link
+                href={`/u/${profile.username}`}
+                onClick={() => onClose?.()}
+                className="block text-xs text-muted-foreground truncate hover:text-foreground hover:underline cursor-pointer"
+                data-testid="link-my-username"
+              >
+                @{profile.username}
+              </Link>
+            ) : (
+              <p className="text-xs text-muted-foreground truncate">@{profile?.username}</p>
+            )}
             <div className="mt-1.5">
               <RankBadgeDisplay rank={profile?.rank || "Citizen"} />
             </div>

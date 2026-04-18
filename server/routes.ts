@@ -11132,7 +11132,7 @@ Target length: about 90-150 words.`;
         .where(
           and(
             eq(predictionMarkets.slug, slug),
-            inArray(predictionMarkets.visibility, ["live", "inactive"])
+            inArray(predictionMarkets.visibility, ["live", "inactive", "archived"])
           )
         )
         .limit(1);
