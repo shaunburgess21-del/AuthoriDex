@@ -10,6 +10,7 @@ import { AvatarHeightHeadline } from "@/components/AvatarHeightHeadline";
 import { useCategoryRaceMap } from "@/hooks/useCategoryRaceMap";
 import { useLeaderboardCategories } from "@/hooks/useLeaderboardCategories";
 import { UserMenu } from "@/components/UserMenu";
+import { XpPill } from "@/components/XpPill";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFavorites } from "@/hooks/useFavorites";
@@ -2298,6 +2299,7 @@ export default function VotePage() {
                 <span className="text-sm">{myVotesCount}</span>
               </button>
             )}
+            <XpPill size="sm" />
             <UserMenu />
           </div>
         </div>
@@ -2375,6 +2377,7 @@ export default function VotePage() {
                 : `My Votes (${myVotesCount})`}
             </Button>
           )}
+          <XpPill size="md" className="hidden md:inline-flex" />
         </div>
       </div>
       <div className="container mx-auto px-4 py-8 max-w-7xl pt-[5px] pb-[5px]">

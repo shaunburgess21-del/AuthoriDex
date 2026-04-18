@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedApiError, signInToVoteToastOptions } from "@/lib/signInToVoteToast";
 import { UserMenu } from "@/components/UserMenu";
+import { XpPill } from "@/components/XpPill";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
 import { useCategoryRaceMap } from "@/hooks/useCategoryRaceMap";
@@ -176,7 +177,10 @@ export default function InductionQueuePage() {
               <VoxDexLogo size={24} />
             </Link>
           </div>
-          <UserMenu />
+          <div className="flex items-center gap-3">
+            <XpPill size="sm" />
+            <UserMenu />
+          </div>
         </div>
       </header>
 

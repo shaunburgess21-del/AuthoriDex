@@ -5212,6 +5212,38 @@ Only return the JSON object.`;
     }
   });
 
+  // XP earned this week. Week starts Monday 00:00 UTC — no pre-existing week
+  // convention in this codebase (daily caps use midnight UTC); picked Monday
+  // for standard financial-market alignment. Uses idx_xp_ledger_user_action_date
+  // composite index on xp_ledger (user_id, action_type, created_at).
+  app.get("/api/gamification/weekly-xp", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.userId!;
+
+      const weekStart = new Date();
+      weekStart.setUTCHours(0, 0, 0, 0);
+      const dayOfWeek = weekStart.getUTCDay(); // 0 = Sunday, 1 = Monday
+      const daysSinceMonday = (dayOfWeek + 6) % 7;
+      weekStart.setUTCDate(weekStart.getUTCDate() - daysSinceMonday);
+
+      const [row] = await db
+        .select({ total: sql<number>`COALESCE(SUM(${xpLedger.xpDelta}), 0)` })
+        .from(xpLedger)
+        .where(and(
+          eq(xpLedger.userId, userId),
+          gte(xpLedger.createdAt, weekStart),
+        ));
+
+      res.json({
+        weeklyXp: Number(row?.total ?? 0),
+        weekStartedAt: weekStart.toISOString(),
+      });
+    } catch (error: any) {
+      console.error("Error fetching weekly XP:", error.message);
+      res.status(500).json({ error: "Failed to fetch weekly XP" });
+    }
+  });
+
   // Admin: Re-seed gamification actions and ranks (idempotent upsert)
   app.post("/api/admin/seed-gamification", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {

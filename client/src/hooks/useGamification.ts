@@ -141,6 +141,14 @@ export function useRanks() {
   });
 }
 
+export function useWeeklyXp(enabled: boolean = true) {
+  return useQuery<{ weeklyXp: number; weekStartedAt: string }>({
+    queryKey: ['/api/gamification/weekly-xp'],
+    enabled,
+    staleTime: 2 * 60 * 1000,
+  });
+}
+
 export function usePermissions() {
   const { data: stats } = useUserStats();
   

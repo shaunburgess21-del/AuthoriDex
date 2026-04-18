@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { UserMenu } from "@/components/UserMenu";
+import { XpPill } from "@/components/XpPill";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -78,6 +79,7 @@ export default function TownSquarePage() {
                 Town Square
               </Button>
             </div>
+            <XpPill size="sm" />
             <UserMenu />
           </div>
         </div>

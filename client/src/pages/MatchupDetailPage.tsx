@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { sharePage } from "@/lib/share";
 import { UserMenu } from "@/components/UserMenu";
+import { XpPill } from "@/components/XpPill";
 import { CategoryPill } from "@/components/CategoryPill";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -158,7 +159,8 @@ export default function MatchupDetailPage() {
             <div className="flex justify-center min-w-0 col-start-2">
               <VoteDetailNavCluster listType="matchup" slug={slug || undefined} />
             </div>
-            <div className="flex justify-end min-w-0 justify-self-end col-start-3">
+            <div className="flex justify-end min-w-0 justify-self-end col-start-3 items-center gap-2">
+              <XpPill size="sm" />
               <UserMenu />
             </div>
           </div>
@@ -196,7 +198,8 @@ export default function MatchupDetailPage() {
           <div className="flex justify-center min-w-0 col-start-2">
             <VoteDetailNavCluster listType="matchup" slug={slug || undefined} />
           </div>
-          <div className="flex justify-end min-w-0 justify-self-end col-start-3">
+          <div className="flex justify-end min-w-0 justify-self-end col-start-3 items-center gap-2">
+            <XpPill size="sm" />
             <UserMenu />
           </div>
         </div>

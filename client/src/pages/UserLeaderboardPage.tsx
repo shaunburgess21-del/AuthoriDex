@@ -4,6 +4,7 @@ import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { UserMenu } from "@/components/UserMenu";
+import { XpPill } from "@/components/XpPill";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -421,6 +422,7 @@ export default function UserLeaderboardPage() {
                 Top Predictors
               </Button>
             </div>
+            <XpPill size="sm" />
             <UserMenu />
           </div>
         </div>

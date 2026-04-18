@@ -8,6 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { UserMenu } from "@/components/UserMenu";
+import { XpPill } from "@/components/XpPill";
 import { ArrowLeft, Star, TrendingUp, Calendar, Award, Lightbulb, ExternalLink } from "lucide-react";
 import { UserVote, UserFavourite } from "@shared/schema";
 import { format, formatDistanceToNow } from "date-fns";
@@ -255,6 +256,7 @@ export default function UserProfilePage() {
                 Predict
               </Button>
             </div>
+            <XpPill size="sm" />
             <UserMenu />
           </div>
         </div>

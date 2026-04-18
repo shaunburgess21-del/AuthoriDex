@@ -9,6 +9,7 @@ import { PersonAvatar } from "@/components/PersonAvatar";
 import { CategoryPill } from "@/components/CategoryPill";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { UserMenu } from "@/components/UserMenu";
+import { XpPill } from "@/components/XpPill";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -263,6 +264,7 @@ export default function CategoryRaceDetailPage() {
             <Clock className="h-3 w-3 mr-1" />
             {pad(timeRemaining.days)}d {pad(timeRemaining.hours)}h {pad(timeRemaining.minutes)}m
           </Badge>
+          <XpPill size="sm" />
           <UserMenu />
         </div>
       </header>

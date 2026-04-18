@@ -5,6 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useFavorites } from "@/hooks/useFavorites";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { UserMenu } from "@/components/UserMenu";
+import { XpPill } from "@/components/XpPill";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { CategoryPill } from "@/components/CategoryPill";
 import { Card } from "@/components/ui/card";
@@ -256,7 +257,7 @@ export default function ValueRatingsPage() {
             </Button>
             <Link href="/"><VoxDexLogo size={24} /></Link>
           </div>
-          <div className="flex items-center gap-2"><UserMenu /></div>
+          <div className="flex items-center gap-2"><XpPill size="sm" /><UserMenu /></div>
         </div>
       </header>
 

@@ -8,6 +8,7 @@ import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
 import { useCategoryRaceMap } from "@/hooks/useCategoryRaceMap";
 import { useLeaderboardCategories } from "@/hooks/useLeaderboardCategories";
 import { UserMenu } from "@/components/UserMenu";
+import { XpPill } from "@/components/XpPill";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { MarketCycleHero } from "@/components/MarketCycleHero";
@@ -54,6 +55,7 @@ import {
   ListChecks,
   EyeOff,
   HelpCircle,
+  ScrollText,
   Check,
   ChevronRight,
   ChevronLeft,
@@ -2593,9 +2595,6 @@ export default function PredictPage() {
               </Link>
             </div>
             <div className="flex items-center gap-2.5 md:hidden">
-              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setRulesModalOpen("predictions")} aria-label="How predictions work">
-                <HelpCircle className="h-4 w-4 text-muted-foreground" />
-              </Button>
               <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/40 dark:border-violet-500/30">
                 <Wallet className="h-[14px] w-[14px] text-violet-700 dark:text-violet-500" />
                 <span className="font-mono font-bold text-sm">{walletCredits.toLocaleString('en-US')}</span>
@@ -2621,7 +2620,11 @@ export default function PredictPage() {
                   <span className="text-sm">{activePredictions}</span>
                 </button>
               )}
+              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setRulesModalOpen("predictions")} aria-label="View predictions rules">
+                <ScrollText className="h-4 w-4 text-muted-foreground" />
+              </Button>
             </div>
+            <XpPill size="sm" />
             <UserMenu />
           </div>
         </div>
@@ -2671,11 +2674,11 @@ export default function PredictPage() {
           </HorizontalScroll>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 hidden md:inline-flex" onClick={() => setRulesModalOpen("predictions")} aria-label="How predictions work">
-                <HelpCircle className="h-4 w-4 text-muted-foreground" />
+              <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 hidden md:inline-flex" onClick={() => setRulesModalOpen("predictions")} aria-label="View predictions rules">
+                <ScrollText className="h-4 w-4 text-muted-foreground" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>How predictions work</TooltipContent>
+            <TooltipContent>Predictions rules</TooltipContent>
           </Tooltip>
           {user && userBetsError && (
             <Button
@@ -2712,6 +2715,7 @@ export default function PredictPage() {
                 : `My Positions (${activePredictions})`}
             </Button>
           )}
+          <XpPill size="md" className="hidden md:inline-flex" />
         </div>
       </div>
       <div className="container mx-auto px-4 py-8 max-w-7xl pt-[5px] pb-[5px]">

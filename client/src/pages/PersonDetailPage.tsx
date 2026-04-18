@@ -7,6 +7,7 @@ import { PersonAvatar } from "@/components/PersonAvatar";
 import { TrendBadge } from "@/components/TrendBadge";
 import { StatCard } from "@/components/StatCard";
 import { UserMenu } from "@/components/UserMenu";
+import { XpPill } from "@/components/XpPill";
 import { ProfileTabs } from "@/components/ProfileTabs";
 import { getCategoryStyle } from "@/components/CategoryPill";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
@@ -1174,6 +1175,7 @@ export default function PersonDetailPage() {
                 Predict
               </Button>
             </div>
+            <XpPill size="sm" />
             <UserMenu />
           </div>
         </div>
