@@ -2607,7 +2607,7 @@ export default function PredictPage() {
               </Button>
             </div>
             {user && (
-              <div className="hidden md:flex items-center gap-1.5 px-3 min-h-8 rounded-md bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/40 dark:border-violet-500/30">
+              <div className="hidden md:flex items-center gap-1.5 px-3 min-h-8 rounded-md bg-violet-500/20 dark:bg-violet-500/15 border border-violet-500/40 dark:border-violet-500/30">
                 <Wallet className="h-[14px] w-[14px] text-violet-700 dark:text-violet-500" />
                 <span className="font-mono font-bold text-xs text-violet-700 dark:text-violet-500">{walletCredits.toLocaleString('en-US')}</span>
               </div>

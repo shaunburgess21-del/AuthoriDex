@@ -82,7 +82,7 @@ function GhostPill({ sizeKey }: { sizeKey: "sm" | "md" | "lg" }) {
   const widthCh = sizeKey === "sm" ? "w-[88px]" : sizeKey === "md" ? "w-[104px]" : "w-[120px]";
   return (
     <div
-      className={`inline-flex items-center rounded-md border border-slate-300/30 bg-transparent ${s.pad} ${widthCh} animate-pulse`}
+      className={`inline-flex items-center rounded-md border border-slate-400/30 bg-slate-900/40 ${s.pad} ${widthCh} animate-pulse`}
       aria-hidden="true"
     />
   );
@@ -124,13 +124,12 @@ export function XpPill({ size = "sm", className = "" }: XpPillProps) {
           type="button"
           aria-label="Open XP progress"
           aria-expanded={open}
-          className={`relative inline-flex items-center rounded-md border border-slate-300/60 bg-transparent text-slate-300 font-mono font-bold tabular-nums ${s.pad} ${s.text} ${s.gap} cursor-pointer transition-colors hover:border-slate-200/80 hover:text-slate-200 active:brightness-95 focus:outline-none focus:ring-2 focus:ring-slate-300/40 ${className}`}
+          className={`relative inline-flex items-center rounded-md border border-slate-400/40 bg-slate-900/60 text-slate-200 font-mono font-bold tabular-nums ${s.pad} ${s.text} ${s.gap} cursor-pointer transition-colors hover:border-slate-300/60 hover:bg-slate-900/80 hover:text-slate-100 active:brightness-95 focus:outline-none focus:ring-2 focus:ring-slate-300/40 ${className}`}
           data-testid="xp-pill"
         >
           <Icon
             aria-hidden="true"
-            className="text-slate-300"
-            style={{ height: s.icon, width: s.icon }}
+            style={{ color: rankColor, height: s.icon, width: s.icon }}
           />
           <span>{xp.toLocaleString("en-US")} XP</span>
 
