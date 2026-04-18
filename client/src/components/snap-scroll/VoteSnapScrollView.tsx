@@ -243,9 +243,9 @@ export function VoteSnapScrollView({
                       </div>
 
                       {/* Drag handle */}
-                      <div className="flex justify-center py-0">
+                      <div className="flex justify-center">
                         <div
-                          className="flex flex-col items-center px-6 pt-0 pb-2 cursor-grab active:cursor-grabbing touch-none select-none"
+                          className="flex flex-col items-center px-6 pt-4 pb-2 cursor-grab active:cursor-grabbing touch-none select-none"
                           onTouchStart={handleDragStart}
                           onTouchEnd={(e) => handleDragEnd(e, item.id)}
                           onClick={() => setExpandedItemId(isExpanded ? null : item.id)}
