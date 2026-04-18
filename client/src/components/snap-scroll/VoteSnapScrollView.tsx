@@ -257,7 +257,10 @@ export function VoteSnapScrollView({
                       </div>
 
                       {/* Comments section */}
-                      <div className="flex-1 min-h-0 overflow-y-auto max-w-lg mx-auto w-full">
+                      <div
+                        className="flex-1 min-h-0 overflow-y-auto max-w-lg mx-auto w-full"
+                        style={isExpanded ? { overscrollBehavior: "contain" } : undefined}
+                      >
                         <CardComments
                           entityType={commentEntityType}
                           slug={item.slug}

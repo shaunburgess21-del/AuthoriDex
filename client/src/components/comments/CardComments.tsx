@@ -339,8 +339,13 @@ export function CardComments({
     </p>
   );
 
+  const inlineExpanded = variant === "inline" && expanded;
+
   const inputArea = isAuthenticated ? (
-    <div className="pt-3 border-t border-border/20" style={{ paddingBottom: "env(safe-area-inset-bottom, 4px)" }}>
+    <div
+      className={`pt-3 border-t border-border/20${inlineExpanded ? " flex-1 flex flex-col" : ""}`}
+      style={{ paddingBottom: "env(safe-area-inset-bottom, 4px)" }}
+    >
       {replyTo && (
         <div className="flex items-center gap-2 mb-2 px-1">
           <span className="text-xs text-cyan-600 dark:text-cyan-400">
@@ -354,14 +359,14 @@ export function CardComments({
           </button>
         </div>
       )}
-      <div className="flex items-center gap-2">
+      <div className={`flex gap-2${inlineExpanded ? " items-start flex-1" : " items-center"}`}>
         <Avatar className="h-7 w-7 shrink-0">
           {profile?.avatarUrl && <AvatarImage src={profile.avatarUrl} alt="" />}
           <AvatarFallback className="bg-cyan-500/25 dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 text-[10px] font-semibold">
             {(profile?.username || user?.email || "?").slice(0, 2).toUpperCase()}
           </AvatarFallback>
         </Avatar>
-        <div className="flex-1 min-w-0 relative">
+        <div className={`flex-1 min-w-0 relative${inlineExpanded ? " flex flex-col" : ""}`}>
           <textarea
             ref={inputRef}
             placeholder={replyTo ? `Reply to @${replyTo.username}...` : placeholder}
@@ -373,8 +378,8 @@ export function CardComments({
                 handlePost();
               }
             }}
-            className="w-full bg-muted/30 border border-border/30 rounded-xl px-3 py-2 pr-16 text-sm resize-none placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-cyan-500/30"
-            rows={expanded ? 4 : 1}
+            className={`w-full bg-muted/30 border border-border/30 rounded-xl px-3 py-2 pr-16 text-base resize-none placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-cyan-500/30${inlineExpanded ? " flex-1 min-h-0" : ""}`}
+            rows={1}
             data-testid="input-comment"
           />
           <div className="absolute right-2 bottom-1.5 flex items-center gap-1">
