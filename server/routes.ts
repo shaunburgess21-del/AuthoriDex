@@ -7313,8 +7313,20 @@ Only return the JSON object.`;
       if (xHandle !== undefined) updates.xHandle = xHandle;
       if (avatar !== undefined) updates.avatar = avatar;
       if (searchQueryOverride !== undefined) updates.searchQueryOverride = searchQueryOverride || null;
-      
-      await db.update(trackedPeople).set(updates).where(eq(trackedPeople.id, id));
+
+      const trendingUpdates: Record<string, unknown> = {};
+      if (name !== undefined) trendingUpdates.name = name;
+      if (category !== undefined) trendingUpdates.category = category;
+      if (avatar !== undefined) trendingUpdates.avatar = avatar;
+
+      await db.transaction(async (tx) => {
+        await tx.update(trackedPeople).set(updates).where(eq(trackedPeople.id, id));
+
+        // Keep the user-facing leaderboard and curate views in sync with admin edits.
+        if (Object.keys(trendingUpdates).length > 0) {
+          await tx.update(trendingPeople).set(trendingUpdates).where(eq(trendingPeople.id, id));
+        }
+      });
       
       // Audit log
       await db.insert(adminAuditLog).values({

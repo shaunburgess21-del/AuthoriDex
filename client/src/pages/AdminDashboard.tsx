@@ -2262,6 +2262,9 @@ export default function AdminDashboard() {
       setSeedApprovalCounts(DEFAULT_SEED_APPROVAL_COUNTS);
       setSeedApprovalLoading(false);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/celebrities"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/vote/curate-profile"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/trending?sort=rank&limit=100"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leaderboard"] });
     },
     onError: (error: any) => {
       toast({ title: "Update Failed", description: error.message, variant: "destructive" });
