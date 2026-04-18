@@ -9,6 +9,7 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { BottomNav } from "@/components/BottomNav";
 import { ScrollToTop } from "@/components/ScrollToTop";
+import { XpBurstProvider } from "@/components/XpBurstProvider";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useXpCelebration } from "@/hooks/useGamification";
 
@@ -130,10 +131,13 @@ function App() {
             <TooltipProvider>
               <ScrollToTop />
               <Toaster />
-              <XpCelebrationWatcher />
-              <ErrorBoundary>
-                <Router />
-              </ErrorBoundary>
+              <XpBurstProvider>
+                {/* Watcher is inside XpBurstProvider so useXpCelebration can fire daily-login bursts via useXpBurst. */}
+                <XpCelebrationWatcher />
+                <ErrorBoundary>
+                  <Router />
+                </ErrorBoundary>
+              </XpBurstProvider>
               <BottomNav />
             </TooltipProvider>
           </AuthProvider>

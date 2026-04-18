@@ -7,6 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { sharePage } from "@/lib/share";
 import { UserMenu } from "@/components/UserMenu";
 import { XpPill } from "@/components/XpPill";
+import { useXpBurst } from "@/components/XpBurstProvider";
 import { CategoryPill } from "@/components/CategoryPill";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -76,6 +77,7 @@ export default function MatchupDetailPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { trigger: triggerXpBurst } = useXpBurst();
   const { user, isLoggedIn } = useAuth();
 
   const matchupCommentCount = useCommentCount("matchup", slug || "");
@@ -101,9 +103,12 @@ export default function MatchupDetailPage() {
       const res = await apiRequest("POST", `/api/matchups/${matchupId}/vote`, { option });
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/matchups/by-slug", slug] });
       queryClient.invalidateQueries({ queryKey: ["/api/matchups/user-votes"] });
+      if (data?.xp?.xpAwarded) {
+        triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
+      }
       toast({ title: "Vote Recorded", description: "Your vote has been counted." });
     },
     onError: () => {

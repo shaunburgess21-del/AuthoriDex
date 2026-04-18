@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { sharePage } from "@/lib/share";
 import { UserMenu } from "@/components/UserMenu";
 import { XpPill } from "@/components/XpPill";
+import { useXpBurst } from "@/components/XpBurstProvider";
 import { CategoryPill } from "@/components/CategoryPill";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -81,6 +82,7 @@ export default function PollDetailPage() {
   const { user, isLoggedIn } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { trigger: triggerXpBurst } = useXpBurst();
 
   const pollCommentCount = useCommentCount("poll", slug || "");
   const { showNav, historyDepth } = useDetailNavigation(slug || undefined, "sentiment");
@@ -109,8 +111,11 @@ export default function PollDetailPage() {
       const res = await apiRequest("POST", `/api/polls/${encodeURIComponent(slug)}/vote`, { choice });
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/polls", slug] });
+      if (data?.xp?.xpAwarded) {
+        triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
+      }
       toast({ title: "Vote Recorded", description: "Your vote has been counted." });
     },
     onError: () => {

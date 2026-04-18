@@ -9,6 +9,7 @@ import { useCategoryRaceMap } from "@/hooks/useCategoryRaceMap";
 import { useLeaderboardCategories } from "@/hooks/useLeaderboardCategories";
 import { UserMenu } from "@/components/UserMenu";
 import { XpPill } from "@/components/XpPill";
+import { useXpBurst } from "@/components/XpBurstProvider";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { MarketCycleHero } from "@/components/MarketCycleHero";
@@ -1339,6 +1340,7 @@ function CreatePredictionModal({
   onClose: () => void;
 }) {
   const { toast } = useToast();
+  const { trigger: triggerXpBurst } = useXpBurst();
   const [title, setTitle] = useState("");
   const [marketType, setMarketType] = useState<MarketTypeOption>("binary");
   const [category, setCategory] = useState<string>("tech");
@@ -1450,10 +1452,14 @@ function CreatePredictionModal({
         payload.unit = unit.trim() || "$";
       }
 
-      await apiRequest("POST", "/api/suggestions", {
+      const suggestRes = await apiRequest("POST", "/api/suggestions", {
         type: "open_market",
         payload,
       });
+      const suggestData = await suggestRes.json();
+      if (suggestData?.xp?.xpAwarded) {
+        triggerXpBurst(suggestData.xp.xpAwarded, undefined, suggestData.xp.reason);
+      }
       resetAll();
       onClose();
       toast({
@@ -1692,6 +1698,7 @@ export default function PredictPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { trigger: triggerXpBurst } = useXpBurst();
   const { user, profile, refreshProfile } = useAuth();
   const { favoriteIds } = useFavorites();
   const raceMap = useCategoryRaceMap();
@@ -2206,8 +2213,11 @@ export default function PredictPage() {
       const res = await apiRequest("POST", `/api/native-markets/updown/${marketId}/bet`, { entryId, stakeAmount });
       return res.json();
     },
-    onSuccess: async (_data, variables) => {
+    onSuccess: async (data, variables) => {
       hapticSuccess();
+      if (data?.xp?.xpAwarded) {
+        triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
+      }
       toast({
         title: "Prediction placed!",
         description: "Your weekly up/down prediction has been recorded.",
@@ -2281,8 +2291,11 @@ export default function PredictPage() {
       const res = await apiRequest("POST", `/api/native-markets/${marketId}/bet`, { entryId, stakeAmount });
       return res.json();
     },
-    onSuccess: async (_data, variables) => {
+    onSuccess: async (data, variables) => {
       hapticSuccess();
+      if (data?.xp?.xpAwarded) {
+        triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
+      }
       toast({
         title: "Prediction placed!",
         description: variables.marketType === "h2h" ? "Your head-to-head prediction has been recorded." : "Your top gainer prediction has been recorded.",

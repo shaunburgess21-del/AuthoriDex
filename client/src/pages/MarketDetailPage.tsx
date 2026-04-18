@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { sharePage } from "@/lib/share";
 import { UserMenu } from "@/components/UserMenu";
 import { XpPill } from "@/components/XpPill";
+import { useXpBurst } from "@/components/XpBurstProvider";
 import { CategoryPill } from "@/components/CategoryPill";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -520,6 +521,7 @@ export default function MarketDetailPage() {
   const { user, isLoggedIn, refreshProfile } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { trigger: triggerXpBurst } = useXpBurst();
   const marketCommentCount = useCommentCount("open-market", params.slug || "");
 
   const urlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
@@ -586,8 +588,11 @@ export default function MarketDetailPage() {
       });
       return res.json();
     },
-    onSuccess: async () => {
+    onSuccess: async (data: any) => {
       toast({ title: "Prediction placed!", description: "Your prediction has been recorded." });
+      if (data?.xp?.xpAwarded) {
+        triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
+      }
       await Promise.all([
         refreshProfile(),
         queryClient.invalidateQueries({ queryKey: ["/api/open-markets"] }),
@@ -635,11 +640,14 @@ export default function MarketDetailPage() {
       }
       return data as { predictedScore: number };
     },
-    onSuccess: async (data) => {
+    onSuccess: async (data: any) => {
       toast({
         title: "Jackpot entry placed!",
         description: `Your prediction ${data.predictedScore.toLocaleString("en-US")} has been recorded.`,
       });
+      if (data?.xp?.xpAwarded) {
+        triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
+      }
       setJackpotScoreInput("");
       setJackpotSuggestions([]);
       await Promise.all([

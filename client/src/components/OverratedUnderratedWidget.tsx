@@ -7,6 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useXpBurst } from "./XpBurstProvider";
 
 interface OverratedUnderratedWidgetProps {
   personId: string;
@@ -28,6 +29,7 @@ export function OverratedUnderratedWidget({
   const { user } = useAuth();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
+  const { trigger: triggerXpBurst } = useXpBurst();
   const [localVote, setLocalVote] = useState<'underrated' | 'overrated' | null>(null);
   const [showChange, setShowChange] = useState(false);
 
@@ -37,14 +39,18 @@ export function OverratedUnderratedWidget({
 
   const voteMutation = useMutation({
     mutationFn: async (vote: 'underrated' | 'overrated') => {
-      return apiRequest('POST', `/api/celebrity/${personId}/value-vote`, { vote });
+      const res = await apiRequest('POST', `/api/celebrity/${personId}/value-vote`, { vote });
+      return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['/api/celebrity', personId, 'value-vote'] });
       queryClient.invalidateQueries({ queryKey: ['/api/trending'] });
       queryClient.invalidateQueries({ queryKey: ['/api/leaderboard'] });
       queryClient.invalidateQueries({ queryKey: ['/api/leaderboard?tab=value&limit=20'] });
       setShowChange(false);
+      if (data?.xp?.xpAwarded) {
+        triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
+      }
     },
     onError: (error: any) => {
       setLocalVote(null);

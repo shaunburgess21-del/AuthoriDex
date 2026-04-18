@@ -9,6 +9,7 @@ import { formatDistanceToNow } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { useXpBurst } from "./XpBurstProvider";
 import { PostOverlayModal } from "./PostOverlayModal";
 
 function getSentimentColor(vote: number): string {
@@ -79,6 +80,7 @@ interface CommunityInsightsProps {
 export function CommunityInsights({ personId, personName }: CommunityInsightsProps) {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { trigger: triggerXpBurst } = useXpBurst();
   const [showForm, setShowForm] = useState(false);
   const [newInsight, setNewInsight] = useState("");
   const [userVotes, setUserVotes] = useState<Record<string, string>>({});
@@ -149,12 +151,15 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
         throw new Error(error.error || "Failed to create insight");
       }
 
-      return response;
+      return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: [`/api/community-insights/${personId}`] });
       setNewInsight("");
       setShowForm(false);
+      if (data?.xp?.xpAwarded) {
+        triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
+      }
       toast({
         title: "Success",
         description: "Your insight has been posted!",
@@ -193,9 +198,9 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
         throw new Error(error.error || "Failed to vote");
       }
 
-      return response;
+      return response.json();
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (data, variables) => {
       setUserVotes(prev => {
         if (prev[variables.insightId] === variables.voteType) {
           const newVotes = { ...prev };
@@ -205,6 +210,9 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
         return { ...prev, [variables.insightId]: variables.voteType };
       });
       queryClient.invalidateQueries({ queryKey: [`/api/community-insights/${personId}`] });
+      if (data?.xp?.xpAwarded) {
+        triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
+      }
     },
     onError: (error: any) => {
       toast({

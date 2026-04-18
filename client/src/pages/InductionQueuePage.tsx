@@ -7,6 +7,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedApiError, signInToVoteToastOptions } from "@/lib/signInToVoteToast";
 import { UserMenu } from "@/components/UserMenu";
 import { XpPill } from "@/components/XpPill";
+import { useXpBurst } from "@/components/XpBurstProvider";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
 import { useCategoryRaceMap } from "@/hooks/useCategoryRaceMap";
@@ -69,6 +70,7 @@ export default function InductionQueuePage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { user, isLoggedIn } = useAuth();
+  const { trigger: triggerXpBurst } = useXpBurst();
   const raceMap = useCategoryRaceMap();
   const leaderboardCats = useLeaderboardCategories();
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -100,10 +102,16 @@ export default function InductionQueuePage() {
   }, []);
 
   const voteMutation = useMutation({
-    mutationFn: (id: string) => apiRequest("POST", `/api/vote/induction/${id}/vote`),
-    onSuccess: () => {
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("POST", `/api/vote/induction/${id}/vote`);
+      return res.json();
+    },
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/vote/induction"] });
       queryClient.invalidateQueries({ queryKey: ["/api/me/induction-votes"] });
+      if (data?.xp?.xpAwarded) {
+        triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
+      }
     },
     onError: (err: any, id: string) => {
       setVotedIds((prev) => {

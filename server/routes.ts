@@ -2159,6 +2159,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .from(imageVotes)
         .where(and(eq(imageVotes.userId, userId), eq(imageVotes.imageId, imageId)));
 
+      let xpResult: Awaited<ReturnType<typeof gamificationService.awardXp>> | undefined;
+
       if (existing) {
         if (existing.direction === direction) {
           return res.json({ message: "Already voted", alreadyVoted: true });
@@ -2196,21 +2198,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
 
         try {
-          await gamificationService.awardXp(
+          xpResult = await gamificationService.awardXp(
             userId, 'vote_curation',
             `curation_${imageId}_${userId}`,
             { imageId, personId, direction }
           );
         } catch (e) { console.error("XP award failed:", e); }
       }
-      
+
       await syncWinningAvatarForPerson(personId);
 
       const [updatedImage] = await db.select()
         .from(celebrityImages)
         .where(eq(celebrityImages.id, imageId));
-      
-      res.json(updatedImage);
+
+      res.json({ ...updatedImage, xp: xpResult ?? null });
     } catch (error) {
       console.error("Error voting on celebrity image:", error);
       res.status(500).json({ error: "Failed to vote on image" });
@@ -5083,7 +5085,8 @@ Only return the JSON object.`;
 
       // Award daily login XP (idempotent per day)
       const today = new Date().toISOString().split('T')[0];
-      let loginXp;
+      let loginXp: Awaited<ReturnType<typeof gamificationService.awardXp>> | undefined;
+      let streakXp: Awaited<ReturnType<typeof gamificationService.awardXp>> | undefined;
       try {
         loginXp = await gamificationService.awardXp(
           userId, 'daily_login',
@@ -5108,7 +5111,7 @@ Only return the JSON object.`;
               .where(eq(profiles.id, userId));
 
             try {
-              await gamificationService.awardXp(
+              streakXp = await gamificationService.awardXp(
                 userId, 'streak_bonus',
                 `streak_bonus_${today}_${userId}`,
                 { date: today }
@@ -5127,7 +5130,21 @@ Only return the JSON object.`;
       if (!stats) {
         return res.status(404).json({ error: "User not found" });
       }
-      res.json(stats);
+
+      // Combine login + streak into a single xp payload for the client burst.
+      // Only include when at least one award fired this call — on polls where
+      // XP was already granted today both success flags are false, so the
+      // client won't re-trigger a burst.
+      const loginAwarded = loginXp?.success ? loginXp.xpAwarded : 0;
+      const streakAwarded = streakXp?.success ? streakXp.xpAwarded : 0;
+      const combinedXpAwarded = loginAwarded + streakAwarded;
+      const xp = combinedXpAwarded > 0
+        ? {
+            xpAwarded: combinedXpAwarded,
+            reason: streakAwarded > 0 ? "Daily login + streak bonus" : "Daily login",
+          }
+        : null;
+      res.json({ ...stats, xp });
     } catch (error: any) {
       console.error("Error fetching user stats:", error.message);
       res.status(500).json({ error: "Failed to fetch user stats" });
@@ -12817,7 +12834,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         remainingCredits: (result as any).remainingCredits,
         totalPool: (result as any).totalPool,
         totalEntries: (result as any).totalEntries,
-        xpResult,
+        xp: xpResult ?? null,
       });
     } catch (error: any) {
       if (error?.message === "Insufficient credits") {
@@ -15754,8 +15771,9 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
 
       // Award XP — non-blocking, failure does not fail the request.
       // Daily cap of 3 prevents farming. Idempotency key is per-suggestion.
+      let xpResult: Awaited<ReturnType<typeof gamificationService.awardXp>> | undefined;
       try {
-        await gamificationService.awardXp(
+        xpResult = await gamificationService.awardXp(
           userId,
           "submit_suggestion",
           `suggestion_${created.id}`,
@@ -15765,7 +15783,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         console.error("XP award failed for suggestion:", xpErr);
       }
 
-      res.status(201).json(created);
+      res.status(201).json({ ...created, xp: xpResult ?? null });
     } catch (error: any) {
       console.error("Error creating suggestion:", error);
       res.status(500).json({ error: "Failed to submit suggestion" });

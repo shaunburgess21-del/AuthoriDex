@@ -2,6 +2,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRef, useEffect } from "react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useXpBurst } from "@/components/XpBurstProvider";
 
 export type Capability = 
   | 'can_vote_sentiment'
@@ -32,6 +33,8 @@ interface UserStats {
   rank: Rank | null;
   currentStreak: number;
   capabilities: Record<Capability, boolean>;
+  /** Present when a daily_login (+ optional streak_bonus) award fired this call. Null otherwise. */
+  xp?: { xpAwarded: number; reason: string } | null;
 }
 
 interface AwardXpResult {
@@ -177,10 +180,24 @@ export function useXpCelebration(enabled: boolean = true) {
   const { data: stats } = useUserStats(enabled);
   const { data: ranks } = useRanks();
   const { toast } = useToast();
+  const { trigger: triggerXpBurst } = useXpBurst();
   const prevRef = useRef<{ xp: number; rank: string } | null>(null);
+  const firedLoginBurstRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!stats) return;
+
+    // Daily-login + streak-bonus: fire a burst the first time we see an xp
+    // payload for this page-session. The server only returns xp once per UTC
+    // day (idempotent); we additionally de-dupe against re-renders by keying
+    // on xpAwarded + reason so two identical payloads won't fire twice.
+    if (stats.xp && stats.xp.xpAwarded > 0) {
+      const key = `${stats.xp.xpAwarded}:${stats.xp.reason}`;
+      if (firedLoginBurstRef.current !== key) {
+        firedLoginBurstRef.current = key;
+        triggerXpBurst(stats.xp.xpAwarded, undefined, stats.xp.reason);
+      }
+    }
 
     const currentXp = stats.xpPoints;
     const currentRank = stats.rank?.name ?? 'Citizen';
@@ -204,7 +221,7 @@ export function useXpCelebration(enabled: boolean = true) {
     }
 
     prevRef.current = { xp: currentXp, rank: currentRank };
-  }, [stats, ranks, toast]);
+  }, [stats, ranks, toast, triggerXpBurst]);
 }
 
 export function generateIdempotencyKey(action: string, targetId?: string): string {

@@ -8,6 +8,7 @@ import { formatDistanceToNow } from "date-fns";
 import { queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { useXpBurst } from "./XpBurstProvider";
 import { voteToApprovalPercent } from "@/lib/utils";
 
 interface Comment {
@@ -47,6 +48,7 @@ function getRatingColor(vote: number | null | undefined): string {
 export function ThreadedComments({ insightId, isOpen, onToggle, commentCount = 0, userSentimentVote }: ThreadedCommentsProps) {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { trigger: triggerXpBurst } = useXpBurst();
   const [newComment, setNewComment] = useState("");
   const [replyingTo, setReplyingTo] = useState<{ id: string; username: string } | null>(null);
   const [replyContent, setReplyContent] = useState("");
@@ -116,11 +118,14 @@ export function ThreadedComments({ insightId, isOpen, onToggle, commentCount = 0
 
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: [`/api/insight-comments/${insightId}`] });
       setNewComment("");
       setReplyContent("");
       setReplyingTo(null);
+      if (data?.xp?.xpAwarded) {
+        triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
+      }
       toast({
         title: "Comment posted",
         description: "Your comment has been added.",
@@ -158,9 +163,10 @@ export function ThreadedComments({ insightId, isOpen, onToggle, commentCount = 0
         throw new Error(error.error || "Failed to vote");
       }
 
-      return { commentId, voteType };
+      const body = await response.json();
+      return { commentId, voteType, xp: body?.xp ?? null };
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (data, variables) => {
       setUserVotes(prev => {
         if (prev[variables.commentId] === variables.voteType) {
           const newVotes = { ...prev };
@@ -173,6 +179,9 @@ export function ThreadedComments({ insightId, isOpen, onToggle, commentCount = 0
         };
       });
       queryClient.invalidateQueries({ queryKey: [`/api/insight-comments/${insightId}`] });
+      if (data?.xp?.xpAwarded) {
+        triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
+      }
     },
     onError: (error: any) => {
       toast({

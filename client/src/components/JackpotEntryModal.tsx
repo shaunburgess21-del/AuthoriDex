@@ -12,6 +12,7 @@ import { Crown, Check, X, Loader2, Lock, TicketCheck, HelpCircle, Clock } from "
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { RULES_CONTENT, RulesExplainer } from "@/components/predict/RulesContent";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
+import { useXpBurst } from "@/components/XpBurstProvider";
 import type { TrendingPerson } from "@shared/schema";
 
 interface JackpotEntry {
@@ -48,6 +49,7 @@ export function JackpotEntryModal({
   const { session, loading } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { trigger: triggerXpBurst } = useXpBurst();
   const [scoreInput, setScoreInput] = useState("");
   const [availabilityStatus, setAvailabilityStatus] = useState<"idle" | "checking" | "available" | "taken">("idle");
   const [suggestions, setSuggestions] = useState<number[]>([]);
@@ -162,6 +164,9 @@ export function JackpotEntryModal({
       queryClient.invalidateQueries({ queryKey: ["/api/native-markets", marketId, "jackpot-taken-numbers"] });
       queryClient.invalidateQueries({ queryKey: ["/api/native-markets", marketId, "jackpot-entries"] });
       queryClient.invalidateQueries({ queryKey: ["/api/user/profile"] });
+      if (data?.xp?.xpAwarded) {
+        triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
+      }
     },
     onError: (error: any) => {
       if (error.code === "NUMBER_TAKEN") {

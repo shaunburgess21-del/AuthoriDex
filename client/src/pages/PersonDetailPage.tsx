@@ -8,6 +8,7 @@ import { TrendBadge } from "@/components/TrendBadge";
 import { StatCard } from "@/components/StatCard";
 import { UserMenu } from "@/components/UserMenu";
 import { XpPill } from "@/components/XpPill";
+import { useXpBurst } from "@/components/XpBurstProvider";
 import { ProfileTabs } from "@/components/ProfileTabs";
 import { getCategoryStyle } from "@/components/CategoryPill";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
@@ -737,6 +738,7 @@ function CategoryRankPill({ category, rank, personName }: { category: string; ra
 
 export default function PersonDetailPage() {
   const { user, session } = useAuth();
+  const { trigger: triggerXpBurst } = useXpBurst();
   const { toast } = useToast();
   const [, params] = useRoute("/person/:id");
   const [location, setLocation] = useLocation();
@@ -1575,8 +1577,12 @@ export default function PersonDetailPage() {
                       key={poll.id}
                       poll={poll}
                       onVote={async (pollSlug, optionId) => {
-                        await apiRequest("POST", `/api/opinion-polls/${pollSlug}/vote`, { optionId });
+                        const res = await apiRequest("POST", `/api/opinion-polls/${pollSlug}/vote`, { optionId });
+                        const data = await res.json();
                         queryClient.invalidateQueries({ queryKey: ["/api/opinion-polls"] });
+                        if (data?.xp?.xpAwarded) {
+                          triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
+                        }
                       }}
                       onRemoveVote={async (pollSlug) => {
                         await apiRequest("POST", `/api/opinion-polls/${pollSlug}/vote`, { remove: true });

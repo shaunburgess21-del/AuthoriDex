@@ -11,6 +11,7 @@ import { useCategoryRaceMap } from "@/hooks/useCategoryRaceMap";
 import { useLeaderboardCategories } from "@/hooks/useLeaderboardCategories";
 import { UserMenu } from "@/components/UserMenu";
 import { XpPill } from "@/components/XpPill";
+import { useXpBurst } from "@/components/XpBurstProvider";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFavorites } from "@/hooks/useFavorites";
@@ -269,13 +270,6 @@ function toTimelineWireValue(uiValue: string): "no_deadline" | "1_week" | "1_mon
   }
 }
 
-interface XPFloater {
-  id: number;
-  x: number;
-  y: number;
-  amount: number;
-}
-
 function getRankBadgeStyle(rank: number) {
   if (rank === 1) return "bg-yellow-500/10 border-yellow-500/20 text-yellow-600 dark:text-yellow-300";
   if (rank === 2) return "bg-slate-400/10 border-slate-400/20 text-slate-600 dark:text-slate-300";
@@ -460,13 +454,17 @@ function CurateProfileCard({
   }, [images, poll.id]);
 
   // Vote mutation
+  const { trigger: triggerXpBurst } = useXpBurst();
   const voteMutation = useMutation({
     mutationFn: async ({ imageId, direction }: { imageId: string; direction: 'up' | 'down' }) => {
       const response = await apiRequest('POST', `/api/people/${poll.personId}/images/${imageId}/vote`, { direction });
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['/api/people', poll.personId, 'images'] });
+      if (data?.xp?.xpAwarded) {
+        triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
+      }
     },
     onError: (error: Error) => {
       if (isUnauthorizedApiError(error)) {
@@ -1042,30 +1040,6 @@ function CarouselSection({
   );
 }
 
-function XPFloaterAnimation({ floater, onComplete }: { floater: XPFloater; onComplete: () => void }) {
-  useEffect(() => {
-    const timer = setTimeout(onComplete, 1000);
-    return () => clearTimeout(timer);
-  }, [onComplete]);
-
-  return (
-    <motion.div
-      className="fixed z-[100] pointer-events-none font-bold text-lg"
-      initial={{ opacity: 1, y: 0, scale: 1 }}
-      animate={{ opacity: 0, y: -60, scale: 1.2 }}
-      transition={{ duration: 1, ease: "easeOut" }}
-      style={{ left: floater.x, top: floater.y }}
-    >
-      <span className="text-cyan-600 dark:text-cyan-400 drop-shadow-[0_0_10px_rgba(34,211,238,0.8)]">
-        +{floater.amount} XP
-      </span>
-    </motion.div>
-  );
-}
-
-
-
-
 
 function CelebrityAutocomplete({ 
   value, 
@@ -1217,9 +1191,8 @@ export default function VotePage() {
   const { data: userStats } = useUserStats(!!user);
   const xp = userStats?.xpPoints ?? 0;
   const rank = userStats?.rank?.name ?? "Citizen";
-  const [xpFloaters, setXpFloaters] = useState<XPFloater[]>([]);
-  const floaterIdRef = useRef(0);
-  
+  const { trigger: triggerXpBurst } = useXpBurst();
+
   const [votedIds, setVotedIds] = useState<Set<string>>(new Set());
 
   interface InductionAPIResponse {
@@ -1255,11 +1228,17 @@ export default function VotePage() {
   }, [user, myInductionVoteIds]);
 
   const inductionVoteMutation = useMutation({
-    mutationFn: (id: string) => apiRequest('POST', `/api/vote/induction/${id}/vote`),
-    onSuccess: () => {
+    mutationFn: async (id: string) => {
+      const res = await apiRequest('POST', `/api/vote/induction/${id}/vote`);
+      return res.json();
+    },
+    onSuccess: (data) => {
       hapticSuccess();
       queryClient.invalidateQueries({ queryKey: ['/api/vote/induction'] });
       queryClient.invalidateQueries({ queryKey: ['/api/me/induction-votes'] });
+      if (data?.xp?.xpAwarded) {
+        triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
+      }
     },
     onError: (err, candidateId) => {
       hapticError();
@@ -1491,6 +1470,9 @@ export default function VotePage() {
       hapticSuccess();
       queryClient.invalidateQueries({ queryKey: ['/api/matchups'] });
       queryClient.invalidateQueries({ queryKey: ['/api/matchups/user-votes'] });
+      if (data?.xp?.xpAwarded) {
+        triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
+      }
       const isChange = !!variables.previousVote;
       toast({
         title: isChange ? "Vote changed!" : "Vote recorded!",
@@ -1558,14 +1540,11 @@ export default function VotePage() {
 
   const matchupRateLimited = !!(rateLimitedUntil && Date.now() < rateLimitedUntil);
 
-  const handleMatchupVote = (matchupId: string, option: 'option_a' | 'option_b' | 'neutral', event?: React.MouseEvent) => {
+  const handleMatchupVote = (matchupId: string, option: 'option_a' | 'option_b' | 'neutral') => {
     if (matchupRateLimited) return;
     const previousVote = matchupUserVotes[matchupId] || null;
     setLocalMatchupVotes((prev: Record<string, string>) => ({ ...prev, [matchupId]: option }));
     matchupVoteMutation.mutate({ matchupId, option, previousVote });
-    if (event && !previousVote) {
-      addXP(15, event);
-    }
   };
   
   const handleMatchupRemoveVote = (matchupId: string) => {
@@ -1822,25 +1801,6 @@ export default function VotePage() {
     if (valuePerceptionOverlayOpen) restoreOverlayScroll("value-perception", valuePerceptionScrollRef.current);
   }, [valuePerceptionOverlayOpen]);
 
-  const addXP = (amount: number, event?: React.MouseEvent) => {
-    const x = event ? event.clientX - 40 : window.innerWidth / 2;
-    const y = event ? event.clientY - 20 : 100;
-    
-    const newFloater: XPFloater = {
-      id: floaterIdRef.current++,
-      x,
-      y,
-      amount
-    };
-    
-    setXpFloaters(prev => [...prev, newFloater]);
-    queryClient.invalidateQueries({ queryKey: ['/api/gamification/stats'] });
-  };
-
-  const removeFloater = (id: number) => {
-    setXpFloaters(prev => prev.filter(f => f.id !== id));
-  };
-
   useEffect(() => {
     const interval = setInterval(() => {
       setCountdown(prev => {
@@ -1892,19 +1852,17 @@ export default function VotePage() {
     inductionVoteMutation.mutate(candidateId);
   };
 
-  const handleInductionXP = (event: React.MouseEvent) => {
-    addXP(30, event);
-  };
-
-
   const discourseVoteMutation = useMutation({
     mutationFn: async ({ slug, choice }: { slug: string; choice: string }) => {
       const res = await apiRequest('POST', `/api/polls/${slug}/vote`, { choice });
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['/api/trending-polls'] });
       queryClient.invalidateQueries({ queryKey: ['/api/gamification/stats'] });
+      if (data?.xp?.xpAwarded) {
+        triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
+      }
     },
     onError: (error: any) => {
       queryClient.invalidateQueries({ queryKey: ['/api/trending-polls'] });
@@ -1922,7 +1880,7 @@ export default function VotePage() {
     },
   });
 
-  const handleDiscourseVote = (topicId: string, choice: 'support' | 'neutral' | 'oppose', event?: React.MouseEvent) => {
+  const handleDiscourseVote = (topicId: string, choice: 'support' | 'neutral' | 'oppose') => {
     if (!user) {
       toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
       return;
@@ -1931,7 +1889,6 @@ export default function VotePage() {
     if (topic?.slug) {
       discourseVoteMutation.mutate({ slug: topic.slug, choice });
     }
-    addXP(25, event as React.MouseEvent);
   };
 
   const openSuggestModal = (open: () => void) => {
@@ -1964,7 +1921,7 @@ export default function VotePage() {
         pollImageUrl = url as string;
       }
 
-      await apiRequest("POST", "/api/suggestions", {
+      const suggestRes = await apiRequest("POST", "/api/suggestions", {
         type: "sentiment_poll",
         payload: {
           headline: pollHeadline,
@@ -1977,6 +1934,10 @@ export default function VotePage() {
           deadlineAt: pollDuration === "custom" ? pollCustomDate || undefined : undefined,
         },
       });
+      const suggestData = await suggestRes.json();
+      if (suggestData?.xp?.xpAwarded) {
+        triggerXpBurst(suggestData.xp.xpAwarded, undefined, suggestData.xp.reason);
+      }
       setStartPollModalOpen(false);
       setPollHeadline("");
       setSentimentCategory("misc");
@@ -2029,7 +1990,7 @@ export default function VotePage() {
       const optionAImage = await resolveContenderImage(matchupContenderA);
       const optionBImage = await resolveContenderImage(matchupContenderB);
 
-      await apiRequest("POST", "/api/suggestions", {
+      const suggestRes = await apiRequest("POST", "/api/suggestions", {
         type: "matchup",
         payload: {
           title: matchupHeadline,
@@ -2042,6 +2003,10 @@ export default function VotePage() {
           optionBImage,
         },
       });
+      const suggestData = await suggestRes.json();
+      if (suggestData?.xp?.xpAwarded) {
+        triggerXpBurst(suggestData.xp.xpAwarded, undefined, suggestData.xp.reason);
+      }
       setMatchupHeadline("");
       setMatchupContenderA({ type: null, name: "" });
       setMatchupContenderB({ type: null, name: "" });
@@ -2065,7 +2030,7 @@ export default function VotePage() {
   const handleInductionSuggestSubmit = async () => {
     setIsSuggestSubmitting(true);
     try {
-      await apiRequest("POST", "/api/suggestions", {
+      const suggestRes = await apiRequest("POST", "/api/suggestions", {
         type: "induction",
         payload: {
           displayName: suggestName,
@@ -2074,6 +2039,10 @@ export default function VotePage() {
           reason: suggestReason || undefined,
         },
       });
+      const suggestData = await suggestRes.json();
+      if (suggestData?.xp?.xpAwarded) {
+        triggerXpBurst(suggestData.xp.xpAwarded, undefined, suggestData.xp.reason);
+      }
       setSuggestName("");
       setSuggestUrl("");
       setSuggestCategory("");
@@ -2114,7 +2083,7 @@ export default function VotePage() {
       const { url: imageUrl } = await uploadRes.json();
 
       // Step 2: submit the suggestion with the uploaded URL.
-      await apiRequest("POST", "/api/suggestions", {
+      const suggestRes = await apiRequest("POST", "/api/suggestions", {
         type: "profile_image",
         payload: {
           personName: curateCelebrity,
@@ -2122,6 +2091,10 @@ export default function VotePage() {
           sourceCredit: curateImageSource || undefined,
         },
       });
+      const suggestData = await suggestRes.json();
+      if (suggestData?.xp?.xpAwarded) {
+        triggerXpBurst(suggestData.xp.xpAwarded, undefined, suggestData.xp.reason);
+      }
       setCurateCelebrity("");
       setCurateImageFile(null);
       setCurateImageSource("");
@@ -2180,7 +2153,7 @@ export default function VotePage() {
         });
       }
 
-      await apiRequest("POST", "/api/suggestions", {
+      const suggestRes = await apiRequest("POST", "/api/suggestions", {
         type: "opinion_poll",
         payload: {
           title: opinionSuggestTitle,
@@ -2191,6 +2164,10 @@ export default function VotePage() {
           options: resolvedOptions,
         },
       });
+      const suggestData = await suggestRes.json();
+      if (suggestData?.xp?.xpAwarded) {
+        triggerXpBurst(suggestData.xp.xpAwarded, undefined, suggestData.xp.reason);
+      }
       setOpinionSuggestTitle("");
       setOpinionSuggestDescription("");
       setOpinionSuggestOptions(Array.from({ length: OPINION_POLL_MIN_OPTIONS }, () => ({ name: "" })));
@@ -2227,15 +2204,6 @@ export default function VotePage() {
 
   return (
     <div className="min-h-screen pb-20 md:pb-0">
-      <AnimatePresence>
-        {xpFloaters.map(floater => (
-          <XPFloaterAnimation 
-            key={floater.id} 
-            floater={floater} 
-            onComplete={() => removeFloater(floater.id)} 
-          />
-        ))}
-      </AnimatePresence>
       <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -2635,8 +2603,12 @@ export default function VotePage() {
                   <OpinionPollCard
                     poll={poll}
                     onVote={async (pollSlug, optionId) => {
-                      await apiRequest("POST", `/api/opinion-polls/${pollSlug}/vote`, { optionId });
+                      const res = await apiRequest("POST", `/api/opinion-polls/${pollSlug}/vote`, { optionId });
+                      const data = await res.json();
                       queryClient.invalidateQueries({ queryKey: ['/api/opinion-polls'] });
+                      if (data?.xp?.xpAwarded) {
+                        triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
+                      }
                     }}
                     onRemoveVote={async (pollSlug) => {
                       await apiRequest("POST", `/api/opinion-polls/${pollSlug}/vote`, { remove: true });
@@ -2860,7 +2832,7 @@ export default function VotePage() {
                   maxVotes={filteredMaxVotes}
                   isVoted={votedIds.has(candidate.id)}
                   onToggleVote={handleToggleVote}
-                  onXPGain={handleInductionXP}
+                  onXPGain={() => { /* bursts now fire from vote mutation onSuccess */ }}
                   onFilterCategory={handleCategoryPillFilter}
                   categoryRaceMap={raceMap}
                   leaderboardCategories={leaderboardCats}
@@ -3464,7 +3436,7 @@ export default function VotePage() {
                     maxVotes={filteredMaxVotes}
                     isVoted={votedIds.has(candidate.id)}
                     onToggleVote={handleToggleVote}
-                    onXPGain={handleInductionXP}
+                    onXPGain={() => { /* bursts now fire from vote mutation onSuccess */ }}
                     onFilterCategory={handleCategoryPillFilter}
                     categoryRaceMap={raceMap}
                     leaderboardCategories={leaderboardCats}
@@ -3640,8 +3612,12 @@ export default function VotePage() {
                     key={poll.id}
                     poll={poll}
                     onVote={async (pollSlug, optionId) => {
-                      await apiRequest("POST", `/api/opinion-polls/${pollSlug}/vote`, { optionId });
+                      const res = await apiRequest("POST", `/api/opinion-polls/${pollSlug}/vote`, { optionId });
+                      const data = await res.json();
                       queryClient.invalidateQueries({ queryKey: ['/api/opinion-polls'] });
+                      if (data?.xp?.xpAwarded) {
+                        triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
+                      }
                     }}
                     onRemoveVote={async (pollSlug) => {
                       await apiRequest("POST", `/api/opinion-polls/${pollSlug}/vote`, { remove: true });
@@ -3787,8 +3763,12 @@ export default function VotePage() {
                 <OpinionPollCard
                   poll={p}
                   onVote={async (pollSlug, optionId) => {
-                    await apiRequest("POST", `/api/opinion-polls/${pollSlug}/vote`, { optionId });
+                    const res = await apiRequest("POST", `/api/opinion-polls/${pollSlug}/vote`, { optionId });
+                    const data = await res.json();
                     queryClient.invalidateQueries({ queryKey: ['/api/opinion-polls'] });
+                    if (data?.xp?.xpAwarded) {
+                      triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
+                    }
                   }}
                   onRemoveVote={async (pollSlug) => {
                     await apiRequest("POST", `/api/opinion-polls/${pollSlug}/vote`, { remove: true });
