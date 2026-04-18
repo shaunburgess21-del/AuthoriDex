@@ -21,6 +21,7 @@ interface Rank {
   voteMultiplier: number;
   color: string;
   icon: string | null;
+  description: string | null;
 }
 
 interface UserStats {
@@ -133,6 +134,13 @@ export function useXpActions() {
   });
 }
 
+export function useRanks() {
+  return useQuery<Rank[]>({
+    queryKey: ['/api/gamification/ranks'],
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 export function usePermissions() {
   const { data: stats } = useUserStats();
   
@@ -157,41 +165,38 @@ export function usePermissions() {
   };
 }
 
-const RANK_ORDER = ['Citizen', 'Aspirant', 'Insider', 'Analyst', 'Expert', 'Maven', 'Hall of Famer'];
-
 export function useXpCelebration(enabled: boolean = true) {
   const { data: stats } = useUserStats(enabled);
+  const { data: ranks } = useRanks();
   const { toast } = useToast();
-  const prevRef = useRef<{ xp: number; rank: string; level: number } | null>(null);
+  const prevRef = useRef<{ xp: number; rank: string } | null>(null);
 
   useEffect(() => {
     if (!stats) return;
 
     const currentXp = stats.xpPoints;
     const currentRank = stats.rank?.name ?? 'Citizen';
-    const currentLevel = Math.floor(currentXp / 500) + 1;
 
     if (prevRef.current === null) {
-      prevRef.current = { xp: currentXp, rank: currentRank, level: currentLevel };
+      prevRef.current = { xp: currentXp, rank: currentRank };
       return;
     }
 
     const prev = prevRef.current;
 
-    if (currentRank !== prev.rank && RANK_ORDER.indexOf(currentRank) > RANK_ORDER.indexOf(prev.rank)) {
-      toast({
-        title: `Rank Up: ${currentRank}!`,
-        description: `You've reached the ${currentRank} rank. Keep going!`,
-      });
-    } else if (currentLevel > prev.level) {
-      toast({
-        title: `Level ${currentLevel}!`,
-        description: `You've reached Level ${currentLevel} with ${currentXp.toLocaleString()} XP.`,
-      });
+    if (currentRank !== prev.rank && ranks && ranks.length > 0) {
+      const prevTier = ranks.find(r => r.name === prev.rank)?.tier ?? 0;
+      const currentTier = ranks.find(r => r.name === currentRank)?.tier ?? 0;
+      if (currentTier > prevTier) {
+        toast({
+          title: `Rank Up: ${currentRank}!`,
+          description: `You've reached the ${currentRank} rank. Keep going!`,
+        });
+      }
     }
 
-    prevRef.current = { xp: currentXp, rank: currentRank, level: currentLevel };
-  }, [stats, toast]);
+    prevRef.current = { xp: currentXp, rank: currentRank };
+  }, [stats, ranks, toast]);
 }
 
 export function generateIdempotencyKey(action: string, targetId?: string): string {

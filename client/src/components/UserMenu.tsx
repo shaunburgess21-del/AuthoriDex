@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useLocation, Link } from "wouter";
 import { useAuth, UserProfile } from "@/contexts/AuthContext";
 import { useThemeToggle } from "@/hooks/useThemeToggle";
+import { useRanks } from "@/hooks/useGamification";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -52,16 +53,6 @@ function useMediaQuery(query: string) {
   return matches;
 }
 
-const RANK_THRESHOLDS = [
-  { name: 'Citizen', minXp: 0, maxXp: 499 },
-  { name: 'Aspirant', minXp: 500, maxXp: 1999 },
-  { name: 'Insider', minXp: 2000, maxXp: 4999 },
-  { name: 'Analyst', minXp: 5000, maxXp: 9999 },
-  { name: 'Expert', minXp: 10000, maxXp: 24999 },
-  { name: 'Maven', minXp: 25000, maxXp: 49999 },
-  { name: 'Hall of Famer', minXp: 50000, maxXp: null },
-];
-
 function RankBadgeDisplay({ rank }: { rank: string }) {
   const badgeConfig: Record<string, { color: string; icon: typeof User }> = {
     "Citizen": { color: "bg-gray-500/25 dark:bg-gray-500/20 text-gray-500 dark:text-gray-300 border-gray-500/40 dark:border-gray-500/30", icon: Shield },
@@ -84,23 +75,35 @@ function RankBadgeDisplay({ rank }: { rank: string }) {
   );
 }
 
-function XPProgressBar({ xp, level }: { xp: number; level: number }) {
-  const currentRank = RANK_THRESHOLDS.find(r => xp >= r.minXp && (r.maxXp === null || xp <= r.maxXp));
-  const currentIdx = RANK_THRESHOLDS.indexOf(currentRank!);
-  const nextRank = currentIdx < RANK_THRESHOLDS.length - 1 ? RANK_THRESHOLDS[currentIdx + 1] : null;
+function XPProgressBar({ xp }: { xp: number }) {
+  const { data: ranks } = useRanks();
+
+  if (!ranks || ranks.length === 0) {
+    return (
+      <div className="flex items-center justify-end text-xs">
+        <span className="font-mono text-amber-600 dark:text-amber-400">{xp.toLocaleString('en-US')} XP</span>
+      </div>
+    );
+  }
+
+  const sortedRanks = [...ranks].sort((a, b) => a.tier - b.tier);
+  const currentRank =
+    sortedRanks.find(r => xp >= r.minXp && (r.maxXp === null || xp <= r.maxXp)) ??
+    sortedRanks[0];
+  const currentIdx = sortedRanks.indexOf(currentRank);
+  const nextRank = currentIdx < sortedRanks.length - 1 ? sortedRanks[currentIdx + 1] : null;
 
   const rankProgress = nextRank
-    ? ((xp - currentRank!.minXp) / (nextRank.minXp - currentRank!.minXp)) * 100
+    ? ((xp - currentRank.minXp) / (nextRank.minXp - currentRank.minXp)) * 100
     : 100;
 
   return (
     <div className="space-y-1.5">
-      <div className="flex items-center justify-between text-xs">
-        <span className="text-muted-foreground">Level {level}</span>
+      <div className="flex items-center justify-end text-xs">
         <span className="font-mono text-amber-600 dark:text-amber-400">{xp.toLocaleString('en-US')} XP</span>
       </div>
       <div className="h-2 bg-muted/50 rounded-full overflow-hidden">
-        <div 
+        <div
           className="h-full bg-gradient-to-r from-amber-500 to-orange-500 rounded-full transition-all duration-500"
           style={{ width: `${Math.min(rankProgress, 100)}%` }}
         />
@@ -108,7 +111,7 @@ function XPProgressBar({ xp, level }: { xp: number; level: number }) {
       <p className="text-[10px] text-muted-foreground text-right">
         {nextRank
           ? `${(nextRank.minXp - xp).toLocaleString()} XP to ${nextRank.name}`
-          : "Max rank achieved"}
+          : "Max rank reached"}
       </p>
     </div>
   );
@@ -203,7 +206,6 @@ function UserMenuContent({
   }
 
   const displayName = profile?.fullName || profile?.username || "User";
-  const xpLevel = Math.floor((profile?.xpPoints || 0) / 500) + 1;
   const showStreakBadge = (profile?.currentStreak || 0) > 1;
 
   return (
@@ -263,7 +265,7 @@ function UserMenuContent({
       </div>
 
       <div className="px-4 pb-3">
-        <XPProgressBar xp={profile?.xpPoints || 0} level={xpLevel} />
+        <XPProgressBar xp={profile?.xpPoints || 0} />
       </div>
 
       <div className="px-4 pb-3 space-y-2">

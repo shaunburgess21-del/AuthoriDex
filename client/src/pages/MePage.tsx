@@ -36,7 +36,6 @@ export default function MePage() {
   const [, setLocation] = useLocation();
 
   const displayName = profile?.fullName || profile?.username || user?.email?.split("@")[0] || "User";
-  const xpLevel = Math.floor((profile?.xpPoints || 0) / 500) + 1;
 
   return (
     <div className="min-h-screen pb-20 md:pb-0">
@@ -123,9 +122,6 @@ export default function MePage() {
                   <p className="text-sm text-muted-foreground">@{profile?.username || "user"}</p>
                   <div className="flex items-center gap-2 mt-2 flex-wrap">
                     <RankBadge rank={profile?.rank || "Citizen"} />
-                    <Badge variant="secondary" className="font-mono">
-                      Level {xpLevel}
-                    </Badge>
                     <Badge variant="outline" className="text-amber-600 dark:text-amber-400">
                       {(profile?.xpPoints || 0).toLocaleString('en-US')} XP
                     </Badge>

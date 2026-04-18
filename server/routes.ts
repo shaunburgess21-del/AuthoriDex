@@ -3572,14 +3572,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         })
         .returning();
 
+      // post_comment XP gates (any failure here skips awardXp but comment still saves):
+      //   1. Daily cap (10/day) — enforced inside gamificationService.awardXp.
+      //   2. Min 20 chars trimmed — blocks low-effort "lol" / "+1" spam from farming XP.
+      //   3. No self-insight XP — commenting on your own insight earns nothing, even
+      //      when replying to someone else's reply in your own thread.
+      const trimmedContent = content.trim();
+      let shouldAwardXp = trimmedContent.length >= 20;
+      if (shouldAwardXp) {
+        const [insight] = await db
+          .select({ userId: communityInsights.userId })
+          .from(communityInsights)
+          .where(eq(communityInsights.id, insightId))
+          .limit(1);
+        if (insight && insight.userId === userId) {
+          shouldAwardXp = false;
+        }
+      }
+
       let xpResult;
-      try {
-        xpResult = await gamificationService.awardXp(
-          userId, 'post_comment',
-          `comment_${newComment.id}_${userId}`,
-          { commentId: newComment.id, insightId }
-        );
-      } catch (e) { console.error("XP award failed:", e); }
+      if (shouldAwardXp) {
+        try {
+          xpResult = await gamificationService.awardXp(
+            userId, 'post_comment',
+            `comment_${newComment.id}_${userId}`,
+            { commentId: newComment.id, insightId }
+          );
+        } catch (e) { console.error("XP award failed:", e); }
+      }
 
       res.status(201).json({
         ...newComment,
@@ -5177,6 +5197,18 @@ Only return the JSON object.`;
     } catch (error: any) {
       console.error("Error fetching XP actions:", error.message);
       res.status(500).json({ error: "Failed to fetch XP actions" });
+    }
+  });
+
+  // Public rank ladder — single source of truth for client rank UI.
+  // Served from the in-memory ranks cache on GamificationService (5-min TTL).
+  app.get("/api/gamification/ranks", async (_req, res) => {
+    try {
+      const ranksList = await gamificationService.getRanks();
+      res.json(ranksList);
+    } catch (error: any) {
+      console.error("Error fetching ranks:", error.message);
+      res.status(500).json({ error: "Failed to fetch ranks" });
     }
   });
 

@@ -411,6 +411,11 @@ class GamificationService {
     return entries;
   }
 
+  async getRanks(): Promise<Rank[]> {
+    await this.ensureCache();
+    return this.ranksCache;
+  }
+
   async getDailyXpSummary(userId: string): Promise<Record<string, { count: number; total: number; cap: number | null }>> {
     await this.ensureCache();
 

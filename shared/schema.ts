@@ -378,7 +378,7 @@ export const insertCelebrityProfileSchema = createInsertSchema(celebrityProfiles
 export type CelebrityProfile = typeof celebrityProfiles.$inferSelect;
 export type InsertCelebrityProfile = z.infer<typeof insertCelebrityProfileSchema>;
 
-// Ranks - 7-tier reputation system with XP thresholds and vote multipliers
+// Ranks - 8-tier reputation system with XP thresholds and vote multipliers
 export const ranks = pgTable("ranks", {
   id: serial("id").primaryKey(),
   name: text("name").notNull().unique(),
@@ -388,6 +388,7 @@ export const ranks = pgTable("ranks", {
   voteMultiplier: real("vote_multiplier").notNull().default(1.0),
   color: text("color").notNull(),
   icon: text("icon"),
+  description: text("description"),
 });
 
 export const insertRankSchema = createInsertSchema(ranks).omit({
@@ -743,6 +744,7 @@ export const xpLedger = pgTable("xp_ledger", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (table) => ({
   uniqueIdempotency: unique().on(table.userId, table.idempotencyKey),
+  userActionDateIdx: index("idx_xp_ledger_user_action_date").on(table.userId, table.actionType, table.createdAt),
 }));
 
 export const insertXpLedgerSchema = createInsertSchema(xpLedger).omit({

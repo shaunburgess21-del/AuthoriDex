@@ -8,6 +8,23 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { getAvatarGradient, getAvatarInitials } from "@/lib/avatar";
 import { getAuthHeaders } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useRanks } from "@/hooks/useGamification";
+
+type RankRow = { tier: number; name: string; minXp: number; maxXp: number | null };
+
+function getRankProgress(xp: number, ranks: RankRow[] | undefined) {
+  if (!ranks || ranks.length === 0) return null;
+  const sorted = [...ranks].sort((a, b) => a.tier - b.tier);
+  const cur = sorted.find(r => xp >= r.minXp && (r.maxXp === null || xp <= r.maxXp)) ?? sorted[0];
+  const idx = sorted.indexOf(cur);
+  const next = idx < sorted.length - 1 ? sorted[idx + 1] : null;
+  const pct = next ? ((xp - cur.minXp) / (next.minXp - cur.minXp)) * 100 : 100;
+  return {
+    pct: Math.min(pct, 100),
+    nextName: next?.name ?? null,
+    xpToNext: next ? next.minXp - xp : null,
+  };
+}
 import {
   ArrowLeft, User, Trophy, Vote, TrendingUp, Calendar, Lock, Sparkles,
   Shield, BrainCircuit, BarChart3, Coins, Target, ChevronRight, Loader2, Share2, Check,
@@ -236,8 +253,8 @@ export default function PublicProfilePage() {
     queryKey: ["/api/profile/u", username],
     enabled: !!username,
   });
+  const { data: ranks } = useRanks();
 
-  const xpLevel = Math.floor((profile?.xpPoints || 0) / 500) + 1;
 
   if (isLoading) {
     return (
@@ -355,7 +372,6 @@ export default function PublicProfilePage() {
               <p className="text-muted-foreground">@{profile.username}</p>
               <div className="flex items-center gap-2 mt-3 flex-wrap">
                 <RankBadge rank={profile.rank || "Citizen"} />
-                <Badge variant="secondary" className="font-mono">Level {xpLevel}</Badge>
               </div>
             </div>
           </div>
@@ -436,52 +452,30 @@ export default function PublicProfilePage() {
           <h2 className="font-semibold mb-4">XP Progress</h2>
             <div className="flex items-center gap-4">
               <div className="flex-1">
-                <div className="flex justify-between text-sm mb-2">
-                  <span className="text-muted-foreground">Level {xpLevel}</span>
+                <div className="flex justify-end text-sm mb-2">
                   <span className="font-mono text-amber-600 dark:text-amber-400">{profile.xpPoints?.toLocaleString('en-US') || 0} XP</span>
                 </div>
-                <div className="h-2 bg-muted rounded-full overflow-hidden">
-                  {(() => {
-                    const xp = profile.xpPoints || 0;
-                    const ranks = [
-                      { name: 'Citizen', minXp: 0, maxXp: 499 },
-                      { name: 'Aspirant', minXp: 500, maxXp: 1999 },
-                      { name: 'Insider', minXp: 2000, maxXp: 4999 },
-                      { name: 'Analyst', minXp: 5000, maxXp: 9999 },
-                      { name: 'Expert', minXp: 10000, maxXp: 24999 },
-                      { name: 'Maven', minXp: 25000, maxXp: 49999 },
-                      { name: 'Hall of Famer', minXp: 50000, maxXp: null },
-                    ];
-                    const cur = ranks.find(r => xp >= r.minXp && (r.maxXp === null || xp <= r.maxXp));
-                    const idx = ranks.indexOf(cur!);
-                    const next = idx < ranks.length - 1 ? ranks[idx + 1] : null;
-                    const pct = next ? ((xp - cur!.minXp) / (next.minXp - cur!.minXp)) * 100 : 100;
-                    return (
-                      <div
-                        className="h-full bg-gradient-to-r from-amber-500 to-orange-500 rounded-full"
-                        style={{ width: `${Math.min(pct, 100)}%` }}
-                      />
-                    );
-                  })()}
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {(() => {
-                    const xp = profile.xpPoints || 0;
-                    const ranks = [
-                      { name: 'Citizen', minXp: 0 },
-                      { name: 'Aspirant', minXp: 500 },
-                      { name: 'Insider', minXp: 2000 },
-                      { name: 'Analyst', minXp: 5000 },
-                      { name: 'Expert', minXp: 10000 },
-                      { name: 'Maven', minXp: 25000 },
-                      { name: 'Hall of Famer', minXp: 50000 },
-                    ];
-                    const next = ranks.find(r => r.minXp > xp);
-                    return next
-                      ? `${(next.minXp - xp).toLocaleString()} XP to ${next.name}`
-                      : "Max rank achieved";
-                  })()}
-                </p>
+                {(() => {
+                  const progress = getRankProgress(profile.xpPoints || 0, ranks);
+                  if (!progress) {
+                    return <div className="h-2 bg-muted rounded-full overflow-hidden" />;
+                  }
+                  return (
+                    <>
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-amber-500 to-orange-500 rounded-full"
+                          style={{ width: `${progress.pct}%` }}
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {progress.nextName && progress.xpToNext !== null
+                          ? `${progress.xpToNext.toLocaleString()} XP to ${progress.nextName}`
+                          : "Max rank reached"}
+                      </p>
+                    </>
+                  );
+                })()}
               </div>
             </div>
           </Card>
