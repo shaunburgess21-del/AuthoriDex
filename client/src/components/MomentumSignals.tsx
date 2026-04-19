@@ -171,13 +171,16 @@ function DeltaPill({ pct, trendWord }: { pct: number; trendWord?: TrendWord }) {
   const tint = isUp
     ? "text-emerald-700 dark:text-emerald-400"
     : "text-rose-700 dark:text-rose-400";
+  // Round for display so the pill always matches the take sentence, which
+  // also rounds (avoids "-88%" in the pill vs "down 80%" in the take copy).
+  const displayPct = Math.round(pct);
   return (
     <div
       className={cn("inline-flex items-center gap-1 text-[11px] font-medium font-mono", tint)}
       data-testid="badge-delta"
     >
       <Arrow className="h-3 w-3" />
-      <span>{isUp ? "+" : ""}{pct}%</span>
+      <span>{isUp ? "+" : ""}{displayPct}%</span>
       {trendWord && trendWord !== "steady" && (
         <span className="text-muted-foreground font-sans font-normal ml-0.5">· {trendWord}</span>
       )}
@@ -464,7 +467,7 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
 // answer to "what is this person's attention doing right now?" without needing
 // to reconcile contradictory-looking percentages against the level traffic lights.
 
-type MomentumState = "peaking" | "rising" | "steady" | "cooling" | "quiet";
+type MomentumState = "peaking" | "rising" | "mixed" | "steady" | "cooling" | "quiet";
 
 const STATE_STYLES: Record<MomentumState, {
   label: string;
@@ -492,6 +495,18 @@ const STATE_STYLES: Record<MomentumState, {
     pulse: false,
     tintBg: "bg-sky-500/[0.04] hover:bg-sky-500/[0.07]",
     tintBar: "bg-gradient-to-r from-transparent via-sky-500/90 to-transparent",
+  },
+  mixed: {
+    // Violet reads as "both directions at once" without leaning optimistic
+    // (green) or alarmed (amber). Used when a source is surging and another
+    // is dropping dramatically at the same time.
+    label: "Mixed",
+    dotClass: "bg-violet-500",
+    glow: "shadow-[0_0_10px_1px_rgba(139,92,246,0.5)]",
+    text: "text-violet-700 dark:text-violet-400",
+    pulse: false,
+    tintBg: "bg-violet-500/[0.04] hover:bg-violet-500/[0.07]",
+    tintBar: "bg-gradient-to-r from-transparent via-violet-500/90 to-transparent",
   },
   steady: {
     label: "Steady",
@@ -537,12 +552,27 @@ function classifyMomentumState(sources: SourceSnapshot[]): MomentumState {
   const risingCount = deltas.filter(d => d > 5).length;
   const fallingCount = deltas.filter(d => d < -5).length;
 
-  // Peaking wins even if one source is softening — the person is still at a peak.
+  const hasStrongRise = deltas.some(d => d >= 20);
+  const hasStrongFall = deltas.some(d => d <= -20);
+
+  // Peaking wins even with some softening — current High levels are the
+  // dominant story, regardless of 24h delta direction.
   if (highCount >= 2) return "peaking";
-  if (risingCount >= 2 && fallingCount === 0) return "rising";
-  if (fallingCount >= 2 && risingCount === 0) return "cooling";
-  // A single dramatic fall (>=20%) with no offsetting rise reads as cooling.
-  if (deltas.some(d => d <= -20) && risingCount === 0) return "cooling";
+
+  // Mixed: genuinely bidirectional movement. A source surging >=20% while
+  // another drops >=20% can't be honestly compressed into "rising" or
+  // "cooling" — the take sentence will name both moves explicitly.
+  if (hasStrongRise && hasStrongFall) return "mixed";
+
+  // Bulk directional movement across multiple sources.
+  if (risingCount >= 2 && !hasStrongFall) return "rising";
+  if (fallingCount >= 2 && !hasStrongRise) return "cooling";
+
+  // Single dramatic move (>=20%) with no opposing pressure — newsworthy on
+  // its own, even from a single source.
+  if (hasStrongRise && fallingCount === 0) return "rising";
+  if (hasStrongFall && risingCount === 0) return "cooling";
+
   // Quiet needs genuine low activity across the board — one strong source
   // flips the read to steady so we can surface it in the take copy instead.
   if (lowCount >= 2 && highCount === 0 && risingCount === 0) return "quiet";
@@ -550,6 +580,12 @@ function classifyMomentumState(sources: SourceSnapshot[]): MomentumState {
 }
 
 const LEVEL_RANK: Record<MomentumLevel, number> = { none: 0, low: 1, medium: 2, high: 3 };
+
+// "Wikipedia" is a proper noun so it stays capitalised mid-sentence; the
+// other two read naturally in lowercase ("search ticking up 12%").
+function nameInSentence(name: SourceSnapshot["name"]): string {
+  return name === "Wikipedia" ? "Wikipedia" : name.toLowerCase();
+}
 
 function composeTake(sources: SourceSnapshot[], state: MomentumState): string {
   const byAbsDelta = [...sources].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
@@ -559,10 +595,26 @@ function composeTake(sources: SourceSnapshot[], state: MomentumState): string {
 
   switch (state) {
     case "peaking": {
-      const high = sources.filter(s => s.level === "high").map(s => s.name);
-      if (high.length === 3) return "Peak attention across every source right now.";
-      if (high.length === 2) return `Strong ${high[0]} and ${high[1]} attention right now.`;
-      return `Peak ${high[0]} attention right now.`;
+      const high = sources.filter(s => s.level === "high");
+      const highNames = high.map(s => s.name);
+      const surge = high.slice().sort((a, b) => b.delta - a.delta)[0];
+      const soften = high.slice().sort((a, b) => a.delta - b.delta)[0];
+
+      let base: string;
+      if (highNames.length === 3) base = "Peak attention across every source";
+      else if (highNames.length === 2) base = `Strong ${highNames[0]} and ${highNames[1]} attention`;
+      else base = `Peak ${highNames[0]} attention`;
+
+      // Within the peak, surface the most dramatic 24h story. Surge wins
+      // over softening because it's the more interesting narrative when a
+      // person is already at peak levels.
+      if (surge && surge.delta >= 15) {
+        return `${base} — ${surge.name} surging ${Math.round(surge.delta)}%.`;
+      }
+      if (soften && soften.delta <= -15) {
+        return `${base} — but ${nameInSentence(soften.name)} softening.`;
+      }
+      return `${base} right now.`;
     }
     case "rising": {
       if (biggestMover && biggestMover.delta >= 15) {
@@ -570,9 +622,27 @@ function composeTake(sources: SourceSnapshot[], state: MomentumState): string {
       }
       return "Signals ticking up across the board.";
     }
+    case "mixed": {
+      const biggestRise = [...sources].sort((a, b) => b.delta - a.delta)[0];
+      const biggestFall = [...sources].sort((a, b) => a.delta - b.delta)[0];
+      if (biggestRise && biggestFall && biggestRise !== biggestFall) {
+        const rPct = Math.round(biggestRise.delta);
+        const fPct = Math.abs(Math.round(biggestFall.delta));
+        return `${biggestRise.name} surging ${rPct}% while ${nameInSentence(biggestFall.name)} down ${fPct}%.`;
+      }
+      return "Signals moving in opposite directions.";
+    }
     case "cooling": {
       if (biggestMover && biggestMover.delta <= -20) {
-        return `${biggestMover.name} down ${Math.abs(Math.round(biggestMover.delta))}% — interest cooling.`;
+        const pct = Math.abs(Math.round(biggestMover.delta));
+        // If another source is still at High level, the interest isn't
+        // really "cooling" — the news cycle is just normalising while
+        // underlying attention stays elevated. Surface that.
+        const stillHigh = sources.find(s => s.level === "high" && s !== biggestMover);
+        if (stillHigh) {
+          return `${biggestMover.name} down ${pct}% — ${nameInSentence(stillHigh.name)} interest still high.`;
+        }
+        return `${biggestMover.name} down ${pct}% — interest cooling.`;
       }
       return "Attention easing across multiple signals.";
     }
@@ -584,10 +654,10 @@ function composeTake(sources: SourceSnapshot[], state: MomentumState): string {
       if (biggestMover && Math.abs(biggestMover.delta) >= 6) {
         const dir = biggestMover.delta > 0 ? "ticking up" : "down";
         const pct = Math.abs(Math.round(biggestMover.delta));
-        return `Steady overall — ${biggestMover.name.toLowerCase()} ${dir} ${pct}%.`;
+        return `Steady overall — ${nameInSentence(biggestMover.name)} ${dir} ${pct}%.`;
       }
       if (strongest && strongest.level === "high") {
-        return `Sustained ${strongest.name.toLowerCase()} attention — no major shifts today.`;
+        return `Sustained ${nameInSentence(strongest.name)} attention — no major shifts today.`;
       }
       if (strongest && strongest.level === "medium") {
         return "Baseline attention — no major shifts today.";
