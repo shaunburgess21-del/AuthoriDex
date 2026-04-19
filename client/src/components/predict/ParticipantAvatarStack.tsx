@@ -1,10 +1,4 @@
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import {
-  AGENT_AVATAR_FALLBACK_CLASS,
-  getAvatarGradient,
-  getAvatarInitials,
-  HUMAN_AVATAR_FALLBACK_CLASS,
-} from "@/lib/avatar";
+import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 
 export interface ParticipantPreview {
   userId: string;
@@ -29,22 +23,13 @@ export function ParticipantAvatarStack({
     <div className="flex items-center gap-2 text-xs text-muted-foreground">
       <div className="flex -space-x-2">
         {participants.slice(0, 3).map((participant) => (
-          <Avatar
+          <UserProfileAvatar
             key={`${participant.userId}-${participant.username || participant.displayName}`}
-            className="h-6 w-6 border-2 border-background"
-          >
-            {participant.avatarUrl && !participant.isAgent ? (
-              <AvatarImage src={participant.avatarUrl} alt={participant.displayName} />
-            ) : (
-              <AvatarFallback
-                className={`text-[10px] ${getAvatarGradient(participant.displayName)} ${
-                  participant.isAgent ? AGENT_AVATAR_FALLBACK_CLASS : HUMAN_AVATAR_FALLBACK_CLASS
-                }`}
-              >
-                {getAvatarInitials(participant.displayName)}
-              </AvatarFallback>
-            )}
-          </Avatar>
+            displayName={participant.displayName}
+            avatarUrl={participant.isAgent ? null : participant.avatarUrl}
+            size="xs"
+            className="border-2 border-background"
+          />
         ))}
       </div>
       <span>

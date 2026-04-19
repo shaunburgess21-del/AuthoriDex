@@ -4,8 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { getAvatarGradient, getAvatarInitials } from "@/lib/avatar";
+import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 import { getAuthHeaders } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useRanks } from "@/hooks/useGamification";
@@ -358,15 +357,12 @@ export default function PublicProfilePage() {
         {/* Identity Card */}
         <Card className="p-6">
           <div className="flex items-start gap-4 mb-6">
-            <Avatar className="h-20 w-20">
-              {profile.avatarUrl && !profile.isAgent ? (
-                <AvatarImage src={profile.avatarUrl} alt={displayName} />
-              ) : (
-                <AvatarFallback className={`${getAvatarGradient(displayName)} text-white font-semibold text-2xl`}>
-                  {getAvatarInitials(displayName)}
-                </AvatarFallback>
-              )}
-            </Avatar>
+            <UserProfileAvatar
+              displayName={displayName}
+              avatarUrl={profile.isAgent ? null : profile.avatarUrl}
+              className="h-20 w-20"
+              fallbackClassName="text-2xl"
+            />
             <div className="flex-1 min-w-0">
               <h1 className="text-2xl font-bold truncate">{displayName}</h1>
               <p className="text-muted-foreground">@{profile.username}</p>

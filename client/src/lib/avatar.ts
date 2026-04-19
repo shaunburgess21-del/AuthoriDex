@@ -33,16 +33,28 @@ export function getAvatarGradient(name: string | null | undefined): string {
   return GRADIENT_PAIRS[index];
 }
 
+/**
+ * Derive 1–2 character initials for a user avatar fallback.
+ *
+ * Rule: first letter of first word + first letter of LAST word (skips middles),
+ * single letter for single-word names, "?" for empty/whitespace input.
+ * Callers that have both displayName and username should pass
+ * `displayName || username` (displayName takes precedence).
+ *
+ * Unicode-safe: uses Array.from to avoid splitting surrogate pairs.
+ */
 export function getAvatarInitials(name: string | null | undefined): string {
   const value = (name ?? "").trim();
-  if (!value) {
-    return "U";
-  }
+  if (!value) return "?";
 
   const parts = value.split(/\s+/).filter(Boolean);
-  if (parts.length >= 2) {
-    return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+  if (parts.length === 0) return "?";
+
+  const firstChar = (word: string) => (Array.from(word)[0] ?? "").toUpperCase();
+
+  if (parts.length === 1) {
+    return firstChar(parts[0]);
   }
 
-  return value.slice(0, 2).toUpperCase();
+  return `${firstChar(parts[0])}${firstChar(parts[parts.length - 1])}`;
 }

@@ -5,9 +5,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { getSupabase } from "@/lib/supabase";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { PersonAvatar } from "@/components/PersonAvatar";
+import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 import { UserMenu } from "@/components/UserMenu";
 import { ArrowLeft, Star, TrendingUp, Calendar, Award, Lightbulb, ExternalLink } from "lucide-react";
 import { UserVote, UserFavourite } from "@shared/schema";
@@ -186,20 +186,7 @@ export default function UserProfilePage() {
     );
   }
 
-  const getInitials = () => {
-    if (user.user_metadata?.full_name) {
-      return user.user_metadata.full_name
-        .split(" ")
-        .map((n: string) => n[0])
-        .join("")
-        .toUpperCase()
-        .slice(0, 2);
-    }
-    if (user.email) {
-      return user.email.slice(0, 2).toUpperCase();
-    }
-    return "U";
-  };
+  const profileDisplayName = user.user_metadata?.full_name || user.email || "";
 
   const averageRating = votes.length > 0
     ? votes.reduce((sum, vote) => sum + vote.rating, 0) / votes.length
@@ -267,10 +254,11 @@ export default function UserProfilePage() {
           <Card>
             <CardContent className="pt-6">
               <div className="flex flex-col md:flex-row gap-6 items-start">
-                <Avatar className="h-24 w-24">
-                  <AvatarImage src={user.user_metadata?.avatar_url} alt={user.email || "User"} />
-                  <AvatarFallback className="text-2xl">{getInitials()}</AvatarFallback>
-                </Avatar>
+                <UserProfileAvatar
+                  displayName={profileDisplayName}
+                  avatarUrl={user.user_metadata?.avatar_url}
+                  size="xl"
+                />
                 <div className="flex-1">
                   <h1 className="text-3xl font-bold font-serif mb-2">
                     {user.user_metadata?.full_name || "User Profile"}

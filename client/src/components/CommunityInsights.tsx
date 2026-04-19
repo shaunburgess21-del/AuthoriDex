@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 import { Badge } from "@/components/ui/badge";
 import { ThumbsUp, ThumbsDown, MessageCircle, Plus, X, Loader2 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
@@ -413,11 +413,11 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
               >
                 <div className="space-y-3">
                   <div className="flex items-center gap-3">
-                    <Avatar className="h-8 w-8 flex-shrink-0">
-                      <AvatarFallback>
-                        {insight.username.substring(0, 2).toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
+                    <UserProfileAvatar
+                      displayName={insight.username}
+                      size="sm"
+                      className="flex-shrink-0"
+                    />
                     <div className="flex items-center gap-2 flex-wrap min-w-0">
                       <span className="font-semibold text-sm" data-testid={`text-username-${insight.id}`}>
                         {insight.username}

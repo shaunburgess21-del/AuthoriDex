@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ThumbsUp, ThumbsDown, MessageCircle, X, Send, Loader2, ChevronDown, ChevronUp } from "lucide-react";
@@ -246,11 +246,11 @@ export function PostOverlayModal({ insight, isOpen, onClose, userVote, onVote }:
       >
         <div className="py-3">
           <div className="flex items-start gap-3">
-            <Avatar className="h-8 w-8 flex-shrink-0">
-              <AvatarFallback className="text-xs">
-                {comment.username.substring(0, 2).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
+            <UserProfileAvatar
+              displayName={comment.username}
+              size="sm"
+              className="flex-shrink-0"
+            />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 text-sm">
                 <span className="font-semibold">{comment.username}</span>
@@ -407,11 +407,11 @@ export function PostOverlayModal({ insight, isOpen, onClose, userVote, onVote }:
 
         <div className="p-6">
           <div className="flex items-start gap-4">
-            <Avatar className="h-12 w-12 flex-shrink-0">
-              <AvatarFallback>
-                {insight.username.substring(0, 2).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
+            <UserProfileAvatar
+              displayName={insight.username}
+              className="h-12 w-12 flex-shrink-0"
+              fallbackClassName="text-base"
+            />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-semibold">{insight.username}</span>
@@ -487,11 +487,11 @@ export function PostOverlayModal({ insight, isOpen, onClose, userVote, onVote }:
 
             {user && (
               <div className="flex gap-3 mb-6">
-                <Avatar className="h-8 w-8 flex-shrink-0">
-                  <AvatarFallback className="text-xs">
-                    {(user.email?.substring(0, 2) || "U").toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
+                <UserProfileAvatar
+                  displayName={user.email || ""}
+                  size="sm"
+                  className="flex-shrink-0"
+                />
                 <div className="flex-1 flex gap-2">
                   <Textarea
                     placeholder="Add a reply..."

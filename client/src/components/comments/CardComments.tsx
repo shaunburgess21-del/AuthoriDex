@@ -6,7 +6,7 @@ import { navigateToLogin } from "@/lib/authReturn";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { formatTimeAgo } from "@/lib/formatDate";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 import { Badge } from "@/components/ui/badge";
 import {
   MessageSquare,
@@ -242,12 +242,12 @@ export function CardComments({
         }`}
         data-testid={`comment-${comment.id}`}
       >
-        <Avatar className={`${isReply ? "h-6 w-6" : "h-8 w-8"} shrink-0`}>
-          {comment.avatarUrl && <AvatarImage src={comment.avatarUrl} alt={comment.username || ""} />}
-          <AvatarFallback className="bg-cyan-500/25 dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 text-[10px] font-semibold">
-            {(comment.username || "?").slice(0, 2).toUpperCase()}
-          </AvatarFallback>
-        </Avatar>
+        <UserProfileAvatar
+          displayName={comment.username || ""}
+          avatarUrl={comment.avatarUrl}
+          size={isReply ? "xs" : "sm"}
+          className="shrink-0"
+        />
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 flex-wrap min-w-0">
@@ -361,12 +361,12 @@ export function CardComments({
         </div>
       )}
       <div className={`flex gap-2${inlineExpanded ? " items-start flex-1" : " items-center"}`}>
-        <Avatar className="h-7 w-7 shrink-0">
-          {profile?.avatarUrl && <AvatarImage src={profile.avatarUrl} alt="" />}
-          <AvatarFallback className="bg-cyan-500/25 dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 text-[10px] font-semibold">
-            {(profile?.username || user?.email || "?").slice(0, 2).toUpperCase()}
-          </AvatarFallback>
-        </Avatar>
+        <UserProfileAvatar
+          displayName={profile?.username || user?.email || ""}
+          avatarUrl={profile?.avatarUrl}
+          className="h-7 w-7 shrink-0"
+          fallbackClassName="text-[10px]"
+        />
         <div className={`flex-1 min-w-0 relative${inlineExpanded ? " flex flex-col" : ""}`}>
           <textarea
             ref={inputRef}

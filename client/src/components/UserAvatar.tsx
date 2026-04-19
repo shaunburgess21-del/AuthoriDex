@@ -1,6 +1,6 @@
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation } from "wouter";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,20 +19,7 @@ export function UserAvatar() {
 
   if (!user) return null;
 
-  const getInitials = () => {
-    if (user.user_metadata?.full_name) {
-      return user.user_metadata.full_name
-        .split(" ")
-        .map((n: string) => n[0])
-        .join("")
-        .toUpperCase()
-        .slice(0, 2);
-    }
-    if (user.email) {
-      return user.email.slice(0, 2).toUpperCase();
-    }
-    return "U";
-  };
+  const displayName = user.user_metadata?.full_name || user.email || "";
 
   const handleSignOut = async () => {
     try {
@@ -58,10 +45,11 @@ export function UserAvatar() {
           className="rounded-md hover-elevate active-elevate-2 overflow-visible"
           data-testid="button-user-avatar"
         >
-          <Avatar className="h-8 w-8">
-            <AvatarImage src={user.user_metadata?.avatar_url} alt={user.email || "User"} />
-            <AvatarFallback>{getInitials()}</AvatarFallback>
-          </Avatar>
+          <UserProfileAvatar
+            displayName={displayName}
+            avatarUrl={user.user_metadata?.avatar_url}
+            size="sm"
+          />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">

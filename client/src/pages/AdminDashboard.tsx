@@ -8352,7 +8352,7 @@ export default function AdminDashboard() {
                     <div className="relative ml-6 min-w-0">
                       <div className="flex items-center gap-1.5">
                         {opt.personId && opt.imageUrl && (
-                          <img src={opt.imageUrl} alt="" className="w-6 h-6 rounded-full object-cover shrink-0 border border-green-500/50" />
+                          <img src={opt.imageUrl} alt="" className="w-6 h-6 rounded-md object-cover shrink-0 border border-green-500/50" />
                         )}
                         {!opt.personId && (
                           <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
@@ -8398,9 +8398,9 @@ export default function AdminDashboard() {
                                 data-testid={`option-celebrity-result-${idx}-${celeb.id}`}
                               >
                                 {celeb.avatar ? (
-                                  <img src={celeb.avatar} alt={celeb.name} className="w-6 h-6 rounded-full object-cover shrink-0" />
+                                  <img src={celeb.avatar} alt={celeb.name} className="w-6 h-6 rounded-md object-cover shrink-0" />
                                 ) : (
-                                  <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-[10px] font-medium shrink-0">
+                                  <div className="w-6 h-6 rounded-md bg-muted flex items-center justify-center text-[10px] font-medium shrink-0">
                                     {celeb.name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2)}
                                   </div>
                                 )}

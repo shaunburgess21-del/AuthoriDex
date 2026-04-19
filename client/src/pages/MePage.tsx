@@ -2,8 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { UserMenu } from "@/components/UserMenu";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { getAvatarGradient, getAvatarInitials } from "@/lib/avatar";
+import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 import { ArrowLeft, User, Star, TrendingUp, Settings, LogOut, Vote, Wallet, Shield, Trophy, Sparkles, Eye, Lock, Flame } from "lucide-react";
 import { useLocation } from "wouter";
 import { navigateToLogin } from "@/lib/authReturn";
@@ -102,15 +101,11 @@ export default function MePage() {
           <div className="space-y-6">
             <Card className="p-6">
               <div className="flex items-start gap-4 mb-6">
-                <Avatar className="h-16 w-16">
-                  {profile?.avatarUrl ? (
-                    <AvatarImage src={profile.avatarUrl} alt={displayName} />
-                  ) : (
-                    <AvatarFallback className={`${getAvatarGradient(displayName)} text-white font-semibold text-xl`}>
-                      {getAvatarInitials(displayName)}
-                    </AvatarFallback>
-                  )}
-                </Avatar>
+                <UserProfileAvatar
+                  displayName={displayName}
+                  avatarUrl={profile?.avatarUrl}
+                  size="lg"
+                />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="font-semibold text-lg truncate">{displayName}</p>

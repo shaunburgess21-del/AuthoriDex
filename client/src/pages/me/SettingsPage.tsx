@@ -8,13 +8,12 @@ import { ArrowLeft, Settings, User, Bell, Shield, Eye, Loader2 } from "lucide-re
 import { useLocation } from "wouter";
 import { navigateToLogin } from "@/lib/authReturn";
 import { useAuth } from "@/contexts/AuthContext";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Badge } from "@/components/ui/badge";
 import { UploadImageInput } from "@/components/ui/upload-image-input";
-import { getAvatarInitials, getAvatarGradient, HUMAN_AVATAR_FALLBACK_CLASS } from "@/lib/avatar";
 
 export default function SettingsPage() {
   const { user, profile, profileLoading, refreshProfile, signOut } = useAuth();
@@ -139,15 +138,12 @@ export default function SettingsPage() {
           
           <div className="flex items-center gap-4 mb-6">
             <div className="relative">
-              <Avatar className="h-20 w-20">
-                {avatarUrl ? (
-                  <AvatarImage src={avatarUrl} alt={displayName} />
-                ) : (
-                  <AvatarFallback className={`${getAvatarGradient(displayName)} ${HUMAN_AVATAR_FALLBACK_CLASS} text-2xl`}>
-                    {getAvatarInitials(displayName)}
-                  </AvatarFallback>
-                )}
-              </Avatar>
+              <UserProfileAvatar
+                displayName={displayName}
+                avatarUrl={avatarUrl}
+                className="h-20 w-20"
+                fallbackClassName="text-2xl"
+              />
             </div>
             <div>
               <p className="font-medium">{displayName}</p>

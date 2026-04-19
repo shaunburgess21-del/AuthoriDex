@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ThumbsUp, ThumbsDown, MessageCircle, ChevronDown, ChevronUp, Send, Loader2, X } from "lucide-react";
@@ -251,11 +251,11 @@ export function ThreadedComments({ insightId, isOpen, onToggle, commentCount = 0
       >
         <div className="py-2">
           <div className="flex items-start gap-2">
-            <Avatar className="h-6 w-6 flex-shrink-0">
-              <AvatarFallback className="text-xs">
-                {comment.username.substring(0, 2).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
+            <UserProfileAvatar
+              displayName={comment.username}
+              size="xs"
+              className="flex-shrink-0"
+            />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 text-xs">
                 <span className="font-medium" data-testid={`comment-username-${comment.id}`}>
@@ -427,11 +427,11 @@ export function ThreadedComments({ insightId, isOpen, onToggle, commentCount = 0
 
           {user && (
             <div className="flex gap-2">
-              <Avatar className="h-6 w-6 flex-shrink-0">
-                <AvatarFallback className="text-xs">
-                  {(user.email?.substring(0, 2) || "U").toUpperCase()}
-                </AvatarFallback>
-              </Avatar>
+              <UserProfileAvatar
+                displayName={user.email || ""}
+                size="xs"
+                className="flex-shrink-0"
+              />
               <div className="flex-1 flex gap-2">
                 <Textarea
                   placeholder="Write a comment..."

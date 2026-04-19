@@ -20,6 +20,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 import { getAvatarInitials, getAvatarGradient, HUMAN_AVATAR_FALLBACK_CLASS } from "@/lib/avatar";
 import { 
   User,
@@ -414,17 +415,11 @@ export function UserMenu() {
       data-testid="button-user-menu"
     >
       {isLoggedIn && profile ? (
-        profile.avatarUrl ? (
-          <img 
-            src={profile.avatarUrl} 
-            alt={avatarDisplayName} 
-            className="h-full w-full object-cover"
-          />
-        ) : (
-          <div className={`h-full w-full flex items-center justify-center text-sm ${getAvatarGradient(avatarDisplayName)} ${HUMAN_AVATAR_FALLBACK_CLASS}`}>
-            {getAvatarInitials(avatarDisplayName)}
-          </div>
-        )
+        <UserProfileAvatar
+          displayName={avatarDisplayName}
+          avatarUrl={profile.avatarUrl}
+          className="h-full w-full"
+        />
       ) : (
         <Menu className="h-4 w-4 text-muted-foreground" />
       )}
@@ -434,23 +429,17 @@ export function UserMenu() {
   if (isMobile) {
     return (
       <>
-        <button 
+        <button
           onClick={() => setSheetOpen(true)}
           className="h-9 w-9 rounded-full ring-2 ring-blue-500/30 hover:ring-blue-500/60 transition-all overflow-hidden flex items-center justify-center bg-muted"
           data-testid="button-user-menu"
         >
           {isLoggedIn && profile ? (
-            profile.avatarUrl ? (
-              <img 
-                src={profile.avatarUrl} 
-                alt={avatarDisplayName} 
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <div className={`h-full w-full flex items-center justify-center text-sm ${getAvatarGradient(avatarDisplayName)} ${HUMAN_AVATAR_FALLBACK_CLASS}`}>
-                {getAvatarInitials(avatarDisplayName)}
-              </div>
-            )
+            <UserProfileAvatar
+              displayName={avatarDisplayName}
+              avatarUrl={profile.avatarUrl}
+              className="h-full w-full"
+            />
           ) : (
             <Menu className="h-4 w-4 text-muted-foreground" />
           )}

@@ -4,11 +4,10 @@ import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { UserMenu } from "@/components/UserMenu";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { getAvatarGradient } from "@/lib/avatar";
+import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 import { getAuthHeaders } from "@/lib/queryClient";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -215,7 +214,6 @@ function UserRow({
   isCurrentUser: boolean;
   onRowClick: (user: LeaderboardUser) => void;
 }) {
-  const initials = user.displayName.slice(0, 2).toUpperCase();
   const canOpenProfile = Boolean(user.username && user.isPublic);
   const showStreak = (user.currentStreak || 0) > 1;
 
@@ -235,15 +233,12 @@ function UserRow({
         <RankCell rank={user.rank} />
       </div>
 
-      <Avatar className="h-8 w-8 shrink-0">
-        {user.avatarUrl && !user.isAgent ? (
-          <AvatarImage src={user.avatarUrl} alt={user.displayName} />
-        ) : (
-          <AvatarFallback className={`${getAvatarGradient(user.displayName)} text-white text-xs font-semibold`}>
-            {initials}
-          </AvatarFallback>
-        )}
-      </Avatar>
+      <UserProfileAvatar
+        displayName={user.displayName}
+        avatarUrl={user.isAgent ? null : user.avatarUrl}
+        size="sm"
+        className="shrink-0"
+      />
 
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
