@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Search, Newspaper, BookOpen, BarChart3, AlertTriangle, Clock, ExternalLink, Info, ArrowUp, ArrowDown, Minus } from "lucide-react";
+import { Search, Newspaper, BookOpen, Sparkles, AlertTriangle, Clock, ExternalLink, Info, ArrowUp, ArrowDown } from "lucide-react";
 import { SiX, SiYoutube, SiInstagram, SiTiktok, SiSpotify } from "react-icons/si";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
 import { cn } from "@/lib/utils";
@@ -82,58 +82,65 @@ function fallbackLevel(source: "search" | "news" | "wiki", value: number): Momen
   return "high";
 }
 
+const LEVEL_SCALE_COPY =
+  "Level compares this person to everyone we track over the last 14 days — Low = bottom 25%, Medium = middle 50%, High = top 25%.";
+
+// Each level gets a distinct dot SHAPE on top of its colour so the indicator is
+// still unambiguous for users who can't rely on red/amber/green alone:
+//   High   = filled + glow + pulse
+//   Medium = filled, no glow, no pulse
+//   Low    = outline-only ring
+//   None   = small muted filled dot
 const LEVEL_STYLES: Record<MomentumLevel, {
   label: string;
-  dot: string;
+  dotClass: string;
   glow: string;
   text: string;
-  ring: string;
+  pulse: boolean;
 }> = {
   high: {
     label: "High",
-    dot: "bg-emerald-500",
+    dotClass: "bg-emerald-500",
     glow: "shadow-[0_0_12px_2px_rgba(16,185,129,0.55)]",
     text: "text-emerald-700 dark:text-emerald-400",
-    ring: "ring-emerald-500/25",
+    pulse: true,
   },
   medium: {
     label: "Medium",
-    dot: "bg-amber-500",
-    glow: "shadow-[0_0_10px_1px_rgba(245,158,11,0.45)]",
+    dotClass: "bg-amber-500",
+    glow: "",
     text: "text-amber-700 dark:text-amber-400",
-    ring: "ring-amber-500/25",
+    pulse: false,
   },
   low: {
     label: "Low",
-    dot: "bg-rose-500",
-    glow: "shadow-[0_0_10px_1px_rgba(244,63,94,0.4)]",
+    dotClass: "bg-transparent ring-2 ring-inset ring-rose-500",
+    glow: "",
     text: "text-rose-700 dark:text-rose-400",
-    ring: "ring-rose-500/25",
+    pulse: false,
   },
   none: {
     label: "Quiet",
-    dot: "bg-muted-foreground/60",
+    dotClass: "bg-muted-foreground/60",
     glow: "",
     text: "text-muted-foreground",
-    ring: "ring-transparent",
+    pulse: false,
   },
 };
 
 function LevelIndicator({ level, testId }: { level: MomentumLevel; testId?: string }) {
   const s = LEVEL_STYLES[level];
-  const pulse = level === "high"
-    ? "motion-safe:animate-pulse motion-reduce:animate-none"
-    : "";
+  const pulseClass = s.pulse ? "motion-safe:animate-pulse motion-reduce:animate-none" : "";
   return (
     <div className="flex items-center gap-2.5" data-testid={testId}>
       <span
         className={cn(
           "relative inline-flex h-2.5 w-2.5 rounded-full shrink-0 transition-colors duration-500",
-          s.dot,
+          s.dotClass,
           s.glow,
-          pulse,
+          pulseClass,
         )}
-        style={level === "high" ? { animationDuration: "2.4s" } : undefined}
+        style={s.pulse ? { animationDuration: "2.4s" } : undefined}
       />
       <span className={cn("text-xl font-semibold tracking-tight transition-colors duration-500", s.text)}>
         {s.label}
@@ -145,15 +152,18 @@ function LevelIndicator({ level, testId }: { level: MomentumLevel; testId?: stri
 type TrendWord = "rising" | "falling" | "steady";
 
 function DeltaPill({ pct, trendWord }: { pct: number; trendWord?: TrendWord }) {
+  // pct === 0 from the API usually means "no prior baseline to compare against"
+  // rather than "measured and genuinely flat" — render a neutral em-dash instead
+  // of asserting "flat", which previously appeared on almost every Wiki card.
   if (!Number.isFinite(pct) || pct === 0) {
     return (
-      <div
-        className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground"
+      <span
+        className="text-[11px] font-medium text-muted-foreground/60 select-none"
         data-testid="badge-delta"
+        aria-label="No change data"
       >
-        <Minus className="h-3 w-3" />
-        <span>flat</span>
-      </div>
+        —
+      </span>
     );
   }
   const isUp = pct > 0;
@@ -207,17 +217,24 @@ function SignalCard({
   return (
     <Card
       className={cn(
-        "relative overflow-hidden border-border/50 bg-card/60 backdrop-blur-sm transition-colors duration-300 hover:bg-card/80",
+        "relative overflow-hidden border-border/50 backdrop-blur-sm transition-colors duration-300",
+        level === "high"
+          ? "bg-emerald-500/[0.04] hover:bg-emerald-500/[0.07]"
+          : level === "medium"
+            ? "bg-amber-500/[0.04] hover:bg-amber-500/[0.07]"
+            : level === "low"
+              ? "bg-rose-500/[0.04] hover:bg-rose-500/[0.07]"
+              : "bg-card/60 hover:bg-card/80",
       )}
       data-testid={testId}
     >
       <span
         aria-hidden
         className={cn(
-          "pointer-events-none absolute inset-x-0 top-0 h-px opacity-70 transition-colors duration-500",
-          level === "high" ? "bg-gradient-to-r from-transparent via-emerald-500/60 to-transparent"
-            : level === "medium" ? "bg-gradient-to-r from-transparent via-amber-500/60 to-transparent"
-              : level === "low" ? "bg-gradient-to-r from-transparent via-rose-500/60 to-transparent"
+          "pointer-events-none absolute inset-x-0 top-0 h-0.5 opacity-90 transition-colors duration-500",
+          level === "high" ? "bg-gradient-to-r from-transparent via-emerald-500/90 to-transparent"
+            : level === "medium" ? "bg-gradient-to-r from-transparent via-amber-500/90 to-transparent"
+              : level === "low" ? "bg-gradient-to-r from-transparent via-rose-500/90 to-transparent"
                 : "bg-transparent",
         )}
       />
@@ -358,8 +375,8 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
           tooltip={
             <TouchTooltip
               side="top"
-              contentClassName="max-w-[220px] text-xs normal-case tracking-normal"
-              content="How actively people are searching for this person on Google right now, scored from 0 to 100."
+              contentClassName="max-w-[240px] text-xs normal-case tracking-normal"
+              content={`How actively people are searching for this person on Google right now, scored from 0 to 100. ${LEVEL_SCALE_COPY}`}
             >
               <Info className="h-3 w-3 text-muted-foreground/50 cursor-help" data-testid="icon-search-tooltip" />
             </TouchTooltip>
@@ -376,6 +393,15 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
           unit={signals.news.count === 1 ? "article (24h)" : "articles (24h)"}
           deltaPct={signals.news.deltaPct}
           trendWord={newsTrend}
+          tooltip={
+            <TouchTooltip
+              side="top"
+              contentClassName="max-w-[240px] text-xs normal-case tracking-normal"
+              content={`News articles mentioning this person in the last 24 hours. ${LEVEL_SCALE_COPY}`}
+            >
+              <Info className="h-3 w-3 text-muted-foreground/50 cursor-help" data-testid="icon-news-tooltip" />
+            </TouchTooltip>
+          }
           footer={
             signals.news.count === 0 && signals.news.recentPeak && signals.news.recentPeakAge ? (
               <p className="text-[10px] text-muted-foreground/60 pt-0.5" data-testid="text-news-recent-peak">
@@ -395,6 +421,15 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
           unit="page views (24h)"
           deltaPct={signals.wiki.deltaPct}
           trendWord={wikiTrend}
+          tooltip={
+            <TouchTooltip
+              side="top"
+              contentClassName="max-w-[240px] text-xs normal-case tracking-normal"
+              content={`Daily Wikipedia page views for this person. ${LEVEL_SCALE_COPY}`}
+            >
+              <Info className="h-3 w-3 text-muted-foreground/50 cursor-help" data-testid="icon-wiki-tooltip" />
+            </TouchTooltip>
+          }
           headerRight={wikiSlug ? (
             <a
               href={`https://en.wikipedia.org/wiki/${encodeURIComponent(wikiSlug)}`}
@@ -409,7 +444,13 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
           ) : undefined}
         />
 
-        <ScoreDriversCard drivers={signals.drivers} />
+        <MomentumTakeCard
+          sources={[
+            { name: "Search", level: searchLevel, delta: signals.search.deltaPct },
+            { name: "News", level: newsLevel, delta: signals.news.deltaPct },
+            { name: "Wikipedia", level: wikiLevel, delta: signals.wiki.deltaPct },
+          ]}
+        />
       </div>
 
       <OfficialProfiles profiles={officialProfiles} />
@@ -417,128 +458,201 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
   );
 }
 
-function ScoreDriversCard({ drivers }: { drivers: NonNullable<MomentumData["signals"]>["drivers"] }) {
-  const isStable = drivers.status === "stable";
-  const source = isStable ? drivers.breakdownPct : drivers.breakdown;
-  const hasData = !!source;
+// ─── Today's Take ─────────────────────────────────────────────────────────────
+// Replaces the old Score Drivers card. Synthesises the three signal cards above
+// into a single human-readable sentence + state badge, so users get a direct
+// answer to "what is this person's attention doing right now?" without needing
+// to reconcile contradictory-looking percentages against the level traffic lights.
 
-  const values = source ?? { search: 0, news: 0, wiki: 0 };
+type MomentumState = "peaking" | "rising" | "steady" | "cooling" | "quiet";
 
-  const method = drivers.method === "exact_velocity_components" || drivers.isExact
-    ? "exact"
-    : "estimate";
+const STATE_STYLES: Record<MomentumState, {
+  label: string;
+  dotClass: string;
+  glow: string;
+  text: string;
+  pulse: boolean;
+  tintBg: string;
+  tintBar: string;
+}> = {
+  peaking: {
+    label: "Peaking",
+    dotClass: "bg-emerald-500",
+    glow: "shadow-[0_0_12px_2px_rgba(16,185,129,0.55)]",
+    text: "text-emerald-700 dark:text-emerald-400",
+    pulse: true,
+    tintBg: "bg-emerald-500/[0.04] hover:bg-emerald-500/[0.07]",
+    tintBar: "bg-gradient-to-r from-transparent via-emerald-500/90 to-transparent",
+  },
+  rising: {
+    label: "Rising",
+    dotClass: "bg-sky-500",
+    glow: "shadow-[0_0_10px_1px_rgba(14,165,233,0.5)]",
+    text: "text-sky-700 dark:text-sky-400",
+    pulse: false,
+    tintBg: "bg-sky-500/[0.04] hover:bg-sky-500/[0.07]",
+    tintBar: "bg-gradient-to-r from-transparent via-sky-500/90 to-transparent",
+  },
+  steady: {
+    label: "Steady",
+    dotClass: "bg-muted-foreground/70",
+    glow: "",
+    text: "text-foreground/80",
+    pulse: false,
+    tintBg: "bg-card/60 hover:bg-card/80",
+    tintBar: "bg-gradient-to-r from-transparent via-muted-foreground/40 to-transparent",
+  },
+  cooling: {
+    label: "Cooling",
+    dotClass: "bg-amber-500",
+    glow: "",
+    text: "text-amber-700 dark:text-amber-400",
+    pulse: false,
+    tintBg: "bg-amber-500/[0.04] hover:bg-amber-500/[0.07]",
+    tintBar: "bg-gradient-to-r from-transparent via-amber-500/90 to-transparent",
+  },
+  quiet: {
+    label: "Quiet",
+    dotClass: "bg-muted-foreground/50",
+    glow: "",
+    text: "text-muted-foreground",
+    pulse: false,
+    tintBg: "bg-card/60 hover:bg-card/80",
+    tintBar: "bg-transparent",
+  },
+};
 
-  const headerRight = isStable ? (
-    <Badge variant="outline" className="text-[10px] font-normal px-1.5 py-0">
-      {drivers.quietSources.length === 3 ? "steady" : `${3 - drivers.quietSources.length}/3 live`}
-    </Badge>
-  ) : (
-    <Badge variant="outline" className="text-[10px] font-normal px-1.5 py-0">
-      {drivers.activeSources}/3 live
-    </Badge>
-  );
+interface SourceSnapshot {
+  name: "Search" | "News" | "Wikipedia";
+  level: MomentumLevel;
+  delta: number;
+}
+
+function classifyMomentumState(sources: SourceSnapshot[]): MomentumState {
+  const levels = sources.map(s => s.level);
+  const deltas = sources.map(s => s.delta).filter(d => Number.isFinite(d));
+
+  const highCount = levels.filter(l => l === "high").length;
+  const lowCount = levels.filter(l => l === "low" || l === "none").length;
+  const risingCount = deltas.filter(d => d > 5).length;
+  const fallingCount = deltas.filter(d => d < -5).length;
+
+  // Peaking wins even if one source is softening — the person is still at a peak.
+  if (highCount >= 2) return "peaking";
+  if (risingCount >= 2 && fallingCount === 0) return "rising";
+  if (fallingCount >= 2 && risingCount === 0) return "cooling";
+  // A single dramatic fall (>=20%) with no offsetting rise reads as cooling.
+  if (deltas.some(d => d <= -20) && risingCount === 0) return "cooling";
+  // Quiet needs genuine low activity across the board — one strong source
+  // flips the read to steady so we can surface it in the take copy instead.
+  if (lowCount >= 2 && highCount === 0 && risingCount === 0) return "quiet";
+  return "steady";
+}
+
+const LEVEL_RANK: Record<MomentumLevel, number> = { none: 0, low: 1, medium: 2, high: 3 };
+
+function composeTake(sources: SourceSnapshot[], state: MomentumState): string {
+  const byAbsDelta = [...sources].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+  const byLevel = [...sources].sort((a, b) => LEVEL_RANK[b.level] - LEVEL_RANK[a.level]);
+  const biggestMover = byAbsDelta[0];
+  const strongest = byLevel[0];
+
+  switch (state) {
+    case "peaking": {
+      const high = sources.filter(s => s.level === "high").map(s => s.name);
+      if (high.length === 3) return "Peak attention across every source right now.";
+      if (high.length === 2) return `Strong ${high[0]} and ${high[1]} attention right now.`;
+      return `Peak ${high[0]} attention right now.`;
+    }
+    case "rising": {
+      if (biggestMover && biggestMover.delta >= 15) {
+        return `${biggestMover.name} surging — up ${Math.round(biggestMover.delta)}% in the last 24h.`;
+      }
+      return "Signals ticking up across the board.";
+    }
+    case "cooling": {
+      if (biggestMover && biggestMover.delta <= -20) {
+        return `${biggestMover.name} down ${Math.abs(Math.round(biggestMover.delta))}% — interest cooling.`;
+      }
+      return "Attention easing across multiple signals.";
+    }
+    case "quiet": {
+      return "Quiet across news, search, and Wikipedia today.";
+    }
+    case "steady":
+    default: {
+      if (biggestMover && Math.abs(biggestMover.delta) >= 6) {
+        const dir = biggestMover.delta > 0 ? "ticking up" : "down";
+        const pct = Math.abs(Math.round(biggestMover.delta));
+        return `Steady overall — ${biggestMover.name.toLowerCase()} ${dir} ${pct}%.`;
+      }
+      if (strongest && strongest.level === "high") {
+        return `Sustained ${strongest.name.toLowerCase()} attention — no major shifts today.`;
+      }
+      if (strongest && strongest.level === "medium") {
+        return "Baseline attention — no major shifts today.";
+      }
+      return "No major movement today.";
+    }
+  }
+}
+
+function MomentumTakeCard({ sources }: { sources: SourceSnapshot[] }) {
+  const state = classifyMomentumState(sources);
+  const take = composeTake(sources, state);
+  const s = STATE_STYLES[state];
+  const pulseClass = s.pulse ? "motion-safe:animate-pulse motion-reduce:animate-none" : "";
 
   return (
     <Card
-      className="relative overflow-hidden border-border/50 bg-card/60 backdrop-blur-sm transition-colors duration-300 hover:bg-card/80"
-      data-testid={isStable ? "card-score-drivers-collapsed" : "card-score-drivers"}
+      className={cn(
+        "relative overflow-hidden border-border/50 backdrop-blur-sm transition-colors duration-300",
+        s.tintBg,
+      )}
+      data-testid="card-momentum-take"
     >
       <span
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-px opacity-70 bg-gradient-to-r from-transparent via-primary/60 to-transparent"
+        className={cn(
+          "pointer-events-none absolute inset-x-0 top-0 h-0.5 opacity-90 transition-colors duration-500",
+          s.tintBar,
+        )}
       />
       <CardHeader className="pb-2 pt-3 px-4">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-primary/10 shrink-0">
-              <BarChart3 className="h-3.5 w-3.5 text-primary" />
-            </span>
-            <span className="text-xs font-medium text-muted-foreground truncate">Score Drivers</span>
-            <TouchTooltip
-              side="top"
-              contentClassName="max-w-[240px] text-xs normal-case tracking-normal"
-              content={isStable
-                ? "Current velocity composition — how each signal contributes to the overall score right now."
-                : "Based on what changed (not raw totals). Shows which signals drove the most movement in the last 24h."}
-            >
-              <Info className="h-3 w-3 text-muted-foreground/50 cursor-help" />
-            </TouchTooltip>
-          </div>
-          {headerRight}
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-primary/10 shrink-0">
+            <Sparkles className="h-3.5 w-3.5 text-primary" />
+          </span>
+          <span className="text-xs font-medium text-muted-foreground truncate">Today's Take</span>
+          <TouchTooltip
+            side="top"
+            contentClassName="max-w-[240px] text-xs normal-case tracking-normal"
+            content="A one-line synthesis of the three signals above, classifying this person's attention as Peaking, Rising, Steady, Cooling, or Quiet based on current levels and 24h movement."
+          >
+            <Info className="h-3 w-3 text-muted-foreground/50 cursor-help" data-testid="icon-take-tooltip" />
+          </TouchTooltip>
         </div>
       </CardHeader>
-      <CardContent className="pt-1 pb-3 px-4 space-y-2.5">
-        {hasData ? (
-          <>
-            <StackedDriverBar search={values.search} news={values.news} wiki={values.wiki} />
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
-              <DriverLegendDot color="bg-blue-500" label="Search" pct={values.search} />
-              <DriverLegendDot color="bg-red-500" label="News" pct={values.news} />
-              <DriverLegendDot color="bg-gray-500 dark:bg-gray-400" label="Wiki" pct={values.wiki} />
-              <span
-                className="ml-auto text-[9px] uppercase tracking-wide text-muted-foreground/60"
-                data-testid={isStable ? "badge-drivers-method-stable" : "badge-drivers-method"}
-              >
-                {method}
-              </span>
-            </div>
-            {isStable ? (
-              <p className="text-[10px] text-muted-foreground/60" data-testid="text-stable-context">
-                Steady — no major shift in the last 24h
-              </p>
-            ) : drivers.quietSources.length > 0 ? (
-              <p className="text-[10px] text-muted-foreground/60" data-testid="text-quiet-sources">
-                {drivers.quietSources.join(" & ")} minimal · compared to ~24h ago
-              </p>
-            ) : (
-              <p className="text-[10px] text-muted-foreground/60" data-testid="text-drivers-clarifier">
-                Drivers explain today's score change · compared to ~24h ago
-              </p>
+      <CardContent className="pt-1 pb-3 px-4 space-y-1.5">
+        <div className="flex items-center gap-2.5" data-testid={`state-${state}`}>
+          <span
+            className={cn(
+              "relative inline-flex h-2.5 w-2.5 rounded-full shrink-0 transition-colors duration-500",
+              s.dotClass,
+              s.glow,
+              pulseClass,
             )}
-          </>
-        ) : (
-          <p className="text-xs text-muted-foreground" data-testid="text-stable-no-data">
-            Insufficient data for attribution
-          </p>
-        )}
+            style={s.pulse ? { animationDuration: "2.4s" } : undefined}
+          />
+          <span className={cn("text-xl font-semibold tracking-tight transition-colors duration-500", s.text)}>
+            {s.label}
+          </span>
+        </div>
+        <p className="text-[13px] text-foreground/80 leading-snug" data-testid="text-momentum-take">
+          {take}
+        </p>
       </CardContent>
     </Card>
-  );
-}
-
-function StackedDriverBar({ search, news, wiki }: { search: number; news: number; wiki: number }) {
-  const total = Math.max(search + news + wiki, 1);
-  const s = Math.max(0, (search / total) * 100);
-  const n = Math.max(0, (news / total) * 100);
-  const w = Math.max(0, (wiki / total) * 100);
-  return (
-    <div className="h-2 w-full rounded-full bg-muted/60 overflow-hidden flex" aria-hidden>
-      <div
-        className="h-full bg-blue-500 transition-[width] duration-500"
-        style={{ width: `${s}%` }}
-        data-testid="driver-bar-search"
-      />
-      <div
-        className="h-full bg-red-500 transition-[width] duration-500"
-        style={{ width: `${n}%` }}
-        data-testid="driver-bar-news"
-      />
-      <div
-        className="h-full bg-gray-500 dark:bg-gray-400 transition-[width] duration-500"
-        style={{ width: `${w}%` }}
-        data-testid="driver-bar-wiki"
-      />
-    </div>
-  );
-}
-
-function DriverLegendDot({ color, label, pct }: { color: string; label: string; pct: number }) {
-  return (
-    <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-      <span className={cn("h-1.5 w-1.5 rounded-full", color)} />
-      <span>{label}</span>
-      <span className="font-mono text-foreground/80">{pct}%</span>
-    </span>
   );
 }
 
