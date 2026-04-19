@@ -5,6 +5,7 @@ import { getBaselineDiagnostics } from "./utils/baseline";
 import { db } from "./db";
 import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, matchups, votes, xpActions, xpLedger, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, openMarketComments, openMarketCommentVotes, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, trendingPollComments, trendingPollCommentVotes, matchupComments, matchupCommentVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, opinionPollComments, opinionPollCommentVotes, imageVotes, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
 import { validateSuggestionPayload, SUGGESTION_TYPES } from "@shared/suggestionSchemas";
+import { normaliseSocialHandles } from "@shared/handleNormalise";
 import { eq, desc, and, gt, sql, count, gte, lte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull } from "drizzle-orm";
 import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
@@ -7364,20 +7365,24 @@ Only return the JSON object.`;
   app.patch("/api/admin/celebrities/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
-      const { name, category, status, wikiSlug, xHandle, avatar, searchQueryOverride } = req.body;
+      const { name, category, status, wikiSlug, avatar, searchQueryOverride } = req.body;
       const adminId = req.userId!;
-      
+
       const [existing] = await db.select().from(trackedPeople).where(eq(trackedPeople.id, id));
       if (!existing) {
         return res.status(404).json({ error: "Celebrity not found" });
       }
-      
-      const updates: any = {};
+
+      const handleResult = normaliseSocialHandles(req.body);
+      if (Object.keys(handleResult.errors).length > 0) {
+        return res.status(400).json({ error: "Invalid handle(s)", fieldErrors: handleResult.errors });
+      }
+
+      const updates: any = { ...handleResult.values };
       if (name !== undefined) updates.name = name;
       if (category !== undefined) updates.category = category;
       if (status !== undefined) updates.status = status;
       if (wikiSlug !== undefined) updates.wikiSlug = wikiSlug;
-      if (xHandle !== undefined) updates.xHandle = xHandle;
       if (avatar !== undefined) updates.avatar = avatar;
       if (searchQueryOverride !== undefined) updates.searchQueryOverride = searchQueryOverride || null;
 
@@ -8447,22 +8452,31 @@ Only return the JSON object.`;
   // Add new celebrity
   app.post("/api/admin/celebrities", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const { name, category, status, wikiSlug, xHandle, avatar, searchQueryOverride } = req.body;
+      const { name, category, status, wikiSlug, avatar, searchQueryOverride } = req.body;
       const adminId = req.userId!;
-      
+
       if (!name) {
         return res.status(400).json({ error: "Name is required" });
       }
-      
+
+      const handleResult = normaliseSocialHandles(req.body);
+      if (Object.keys(handleResult.errors).length > 0) {
+        return res.status(400).json({ error: "Invalid handle(s)", fieldErrors: handleResult.errors });
+      }
+
       const [created] = await db.insert(trackedPeople).values({
         name,
         category: category || 'Other',
         status: status || 'main_leaderboard',
         imageSlug: generateImageSlug(name),
         wikiSlug: wikiSlug || null,
-        xHandle: xHandle || null,
         avatar: avatar || null,
         searchQueryOverride: searchQueryOverride || null,
+        xHandle: handleResult.values.xHandle ?? null,
+        instagramHandle: handleResult.values.instagramHandle ?? null,
+        tiktokHandle: handleResult.values.tiktokHandle ?? null,
+        youtubeId: handleResult.values.youtubeId ?? null,
+        spotifyId: handleResult.values.spotifyId ?? null,
       }).returning();
 
       await db.insert(celebrityMetrics).values({ celebrityId: created.id }).onConflictDoNothing();
@@ -15406,6 +15420,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           category: candidate.category,
           imageSlug: candidate.imageSlug,
           wikiSlug: candidate.wikiSlug,
+          xHandle: candidate.xHandle,
           displayOrder: (maxOrder[0]?.maxOrder || 0) + 1,
           status: 'main_leaderboard',
         }).returning();
