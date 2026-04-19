@@ -348,11 +348,12 @@ export async function fetchMediastackNews(
 
       if (retryData?.pagination && retryData.pagination.total > 0) {
         articleCount24h = retryData.pagination.total;
-        topHeadlines = (retryData.data || [])
-          .slice(0, 3)
-          .map(a => a.title || "");
+        // Intentionally leave topHeadlines empty: the relaxed query returns
+        // non-English titles which we don't want to display. The ingest
+        // pipeline backfills English headlines via Serper for people with
+        // languageRelaxed=true.
         languageRelaxed = true;
-        console.log(`[Mediastack] Language-relaxed retry for "${queryText}": ${articleCount24h} articles (vs 0 with languages=en)`);
+        console.log(`[Mediastack] Language-relaxed retry for "${queryText}": ${articleCount24h} articles (vs 0 with languages=en); headlines left empty for English backfill`);
       }
     }
 

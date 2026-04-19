@@ -552,6 +552,83 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
       sourceTimings.mediastack = Date.now() - msStart;
     }
 
+    // ── ENGLISH HEADLINES BACKFILL (display-only) ────────────────────────────
+    // Mediastack falls back to a no-language query when its English (languages=en)
+    // query returns 0 articles. That returns non-English titles we don't want to
+    // show in the UI. The Mediastack provider now leaves topHeadlines empty in
+    // that case and sets languageRelaxed=true. Here we backfill English headlines
+    // via Serper News for the top-N affected people, for display only — counts
+    // and provider attribution stay as Mediastack's.
+    const englishHeadlineBackfillStats = {
+      considered: 0,
+      attempted: 0,
+      succeeded: 0,
+      failed: 0,
+      patched: [] as string[],
+    };
+    if (newsSource === "mediastack" && newsData.size > 0) {
+      const ENGLISH_BACKFILL_MAX = 15;
+      const relaxedCandidates: Array<{ id: string; name: string; rank: number }> = [];
+
+      const rankRows = await db
+        .select({ id: trendingPeople.id, rank: trendingPeople.rank })
+        .from(trendingPeople);
+      const backfillRankMap = new Map(rankRows.map(r => [r.id, r.rank ?? 9999]));
+
+      for (const [pid, entry] of Array.from(newsData.entries())) {
+        const typed = entry as any;
+        const isRelaxed = typed?.languageRelaxed === true;
+        const headlinesEmpty = !Array.isArray(typed?.topHeadlines) || typed.topHeadlines.length === 0;
+        const hasCount = (typed?.articleCount24h ?? 0) > 0;
+        if (!isRelaxed || !headlinesEmpty || !hasCount) continue;
+
+        const person = people.find(p => p.id === pid);
+        if (!person) continue;
+        relaxedCandidates.push({
+          id: person.id,
+          name: person.name,
+          rank: backfillRankMap.get(person.id) ?? 9999,
+        });
+      }
+
+      englishHeadlineBackfillStats.considered = relaxedCandidates.length;
+
+      if (relaxedCandidates.length > 0) {
+        relaxedCandidates.sort((a, b) => a.rank - b.rank);
+        const selected = relaxedCandidates.slice(0, ENGLISH_BACKFILL_MAX);
+        englishHeadlineBackfillStats.attempted = selected.length;
+
+        console.log(`[English Headlines Backfill] ${relaxedCandidates.length} languageRelaxed people with empty headlines — calling Serper for top ${selected.length}`);
+
+        try {
+          const serperHeadlines = await fetchSerperNewsBatch(
+            selected.map(c => ({ id: c.id, name: c.name })),
+            5,
+            300,
+          );
+
+          for (const c of selected) {
+            const serperResult = serperHeadlines.get(c.id);
+            const headlines = serperResult?.topHeadlines ?? [];
+            if (headlines.length > 0) {
+              const entry = newsData.get(c.id) as any;
+              if (entry) {
+                entry.topHeadlines = headlines.slice(0, 3);
+                englishHeadlineBackfillStats.succeeded++;
+                englishHeadlineBackfillStats.patched.push(c.name);
+              }
+            } else {
+              englishHeadlineBackfillStats.failed++;
+            }
+          }
+
+          console.log(`[English Headlines Backfill] Complete: ${englishHeadlineBackfillStats.succeeded}/${selected.length} patched (${englishHeadlineBackfillStats.failed} had no English headlines)`);
+        } catch (err) {
+          console.error(`[English Headlines Backfill] Serper batch failed:`, err);
+        }
+      }
+    }
+
     // ── TIER 2: GDELT (secondary) ────────────────────────────────────────────
     if (newsSource !== "mediastack") {
       const gdeltCandidates = await computeNewsCandidates(people, wikiData);
@@ -1821,6 +1898,13 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           patched: perPersonFallbackStats.patchedPeople,
           topTriggered: perPersonFallbackStats.topTriggered.slice(0, 5),
         },
+        newsEnglishHeadlineBackfill: {
+          considered: englishHeadlineBackfillStats.considered,
+          attempted: englishHeadlineBackfillStats.attempted,
+          succeeded: englishHeadlineBackfillStats.succeeded,
+          failed: englishHeadlineBackfillStats.failed,
+          patched: englishHeadlineBackfillStats.patched,
+        },
       },
       reliability: (() => {
         const ss = getSerperRunStats();
@@ -2013,6 +2097,13 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
         skippedNotQualified: perPersonFallbackStats.skippedQualified,
         patched: perPersonFallbackStats.patchedPeople,
         topTriggered: perPersonFallbackStats.topTriggered.slice(0, 5),
+      },
+      newsEnglishHeadlineBackfill: {
+        considered: englishHeadlineBackfillStats.considered,
+        attempted: englishHeadlineBackfillStats.attempted,
+        succeeded: englishHeadlineBackfillStats.succeeded,
+        failed: englishHeadlineBackfillStats.failed,
+        patched: englishHeadlineBackfillStats.patched,
       },
     };
     (healthSummary as any).runId = runId;
