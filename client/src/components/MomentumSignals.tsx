@@ -488,13 +488,16 @@ const STATE_STYLES: Record<MomentumState, {
     tintBar: "bg-gradient-to-r from-transparent via-emerald-500/90 to-transparent",
   },
   rising: {
+    // Teal reads as "upward momentum" without colliding with the leaderboard's
+    // blue cooling badge. Distinct from emerald (Peaking) because it's notably
+    // more cyan-leaning.
     label: "Rising",
-    dotClass: "bg-sky-500",
-    glow: "shadow-[0_0_10px_1px_rgba(14,165,233,0.5)]",
-    text: "text-sky-700 dark:text-sky-400",
+    dotClass: "bg-teal-500",
+    glow: "shadow-[0_0_10px_1px_rgba(20,184,166,0.5)]",
+    text: "text-teal-700 dark:text-teal-400",
     pulse: false,
-    tintBg: "bg-sky-500/[0.04] hover:bg-sky-500/[0.07]",
-    tintBar: "bg-gradient-to-r from-transparent via-sky-500/90 to-transparent",
+    tintBg: "bg-teal-500/[0.04] hover:bg-teal-500/[0.07]",
+    tintBar: "bg-gradient-to-r from-transparent via-teal-500/90 to-transparent",
   },
   mixed: {
     // Violet reads as "both directions at once" without leaning optimistic
@@ -596,6 +599,7 @@ function composeTake(sources: SourceSnapshot[], state: MomentumState): string {
   switch (state) {
     case "peaking": {
       const high = sources.filter(s => s.level === "high");
+      const nonHigh = sources.filter(s => s.level !== "high");
       const highNames = high.map(s => s.name);
       const surge = high.slice().sort((a, b) => b.delta - a.delta)[0];
       const soften = high.slice().sort((a, b) => a.delta - b.delta)[0];
@@ -605,13 +609,25 @@ function composeTake(sources: SourceSnapshot[], state: MomentumState): string {
       else if (highNames.length === 2) base = `Strong ${highNames[0]} and ${highNames[1]} attention`;
       else base = `Peak ${highNames[0]} attention`;
 
-      // Within the peak, surface the most dramatic 24h story. Surge wins
-      // over softening because it's the more interesting narrative when a
-      // person is already at peak levels.
+      // Within the peak, surface the most dramatic 24h story. A surge in a
+      // High source wins over softening because it's the more interesting
+      // narrative when a person is already at peak levels. If a non-High
+      // source is moving strongly against the peak (e.g. news +900% but
+      // search -48%), append that divergence too — it signals media-driven
+      // vs organic attention.
       if (surge && surge.delta >= 15) {
+        const opposing = nonHigh.slice().sort((a, b) => a.delta - b.delta)[0];
+        if (opposing && opposing.delta <= -15) {
+          const pct = Math.abs(Math.round(opposing.delta));
+          return `${base} — ${surge.name} surging ${Math.round(surge.delta)}%, though ${nameInSentence(opposing.name)} down ${pct}%.`;
+        }
         return `${base} — ${surge.name} surging ${Math.round(surge.delta)}%.`;
       }
       if (soften && soften.delta <= -15) {
+        const opposing = nonHigh.slice().sort((a, b) => b.delta - a.delta)[0];
+        if (opposing && opposing.delta >= 15) {
+          return `${base} — ${nameInSentence(soften.name)} softening, but ${nameInSentence(opposing.name)} up ${Math.round(opposing.delta)}%.`;
+        }
         return `${base} — but ${nameInSentence(soften.name)} softening.`;
       }
       return `${base} right now.`;

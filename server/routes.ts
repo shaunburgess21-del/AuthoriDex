@@ -1828,10 +1828,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const ageMinutes = Math.round(ageMs / 60000);
       const dataDelayed = ageMs > 3 * 60 * 60 * 1000;
 
+      // activeSources drives the "Sources: …" header in the Momentum Signals
+      // card, so it should reflect which sources actually have data rendered
+      // on-screen — not which sources passed through the primary pipeline
+      // fresh (the `diag.fresh.*` flag flips to false for fallback-sourced
+      // data even when a valid value lands in the snapshot column). Using
+      // the snapshot columns keeps the header in sync with the cards.
       const activeSources: string[] = [];
-      if (fresh.wiki !== false) activeSources.push("wiki");
-      if (fresh.news !== false) activeSources.push("news");
-      if (fresh.search !== false) activeSources.push("search");
+      if ((latest.wikiPageviews ?? 0) > 0) activeSources.push("wiki");
+      if ((latest.newsCount ?? 0) > 0) activeSources.push("news");
+      if ((latest.searchVolume ?? 0) > 0) activeSources.push("search");
 
       const staleFlags: Record<string, boolean> = {};
       if (dataDelayed) staleFlags.dataDelayed = true;
