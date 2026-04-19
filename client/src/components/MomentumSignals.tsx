@@ -2,10 +2,12 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Search, Newspaper, BookOpen, BarChart3, Trophy, AlertTriangle, Clock, ExternalLink, Info, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { Search, Newspaper, BookOpen, BarChart3, AlertTriangle, Clock, ExternalLink, Info, ArrowUp, ArrowDown, Minus } from "lucide-react";
 import { SiX, SiYoutube, SiInstagram, SiTiktok, SiSpotify } from "react-icons/si";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
 import { cn } from "@/lib/utils";
+
+type MomentumLevel = "none" | "low" | "medium" | "high";
 
 interface MomentumData {
   asOf: string | null;
@@ -16,6 +18,7 @@ interface MomentumData {
     search: {
       volume: number;
       deltaPct: number;
+      level?: MomentumLevel;
       relatedSearches: string[];
       peopleAlsoAsk: string[];
     };
@@ -24,6 +27,7 @@ interface MomentumData {
       recentPeak?: number | null;
       recentPeakAge?: string | null;
       deltaPct: number;
+      level?: MomentumLevel;
       headlines: string[];
       topStories?: Array<{ title: string; link: string }>;
       provider: string;
@@ -31,6 +35,7 @@ interface MomentumData {
     wiki: {
       views: number;
       deltaPct: number;
+      level?: MomentumLevel;
       wiki_falling?: boolean;
       wiki_rising?: boolean;
     };
@@ -58,93 +63,200 @@ function formatNum(n: number): string {
   return n.toLocaleString('en-US');
 }
 
-function getNewsActivityLevel(count: number): { label: string; dotClass: string } {
-  if (count >= 16) return { label: "High", dotClass: "bg-green-500" };
-  if (count >= 7) return { label: "Medium", dotClass: "bg-amber-500" };
-  if (count >= 1) return { label: "Low", dotClass: "bg-red-500" };
-  return { label: "None", dotClass: "bg-muted-foreground" };
+// Fallback thresholds used only when the server response doesn't carry `level`
+// (e.g. older cached responses or the first load before stats warm up).
+function fallbackLevel(source: "search" | "news" | "wiki", value: number): MomentumLevel {
+  if (!Number.isFinite(value) || value <= 0) return "none";
+  if (source === "search") {
+    if (value < 20) return "low";
+    if (value < 60) return "medium";
+    return "high";
+  }
+  if (source === "news") {
+    if (value < 7) return "low";
+    if (value < 16) return "medium";
+    return "high";
+  }
+  if (value < 500) return "low";
+  if (value < 5000) return "medium";
+  return "high";
 }
 
-function DeltaBadge({ pct }: { pct: number }) {
-  if (pct === 0) {
-    return (
-      <Badge variant="outline" className="text-xs text-muted-foreground border-muted" data-testid="badge-delta">
-        flat
-      </Badge>
-    );
-  }
-  const isUp = pct > 0;
+const LEVEL_STYLES: Record<MomentumLevel, {
+  label: string;
+  dot: string;
+  glow: string;
+  text: string;
+  ring: string;
+}> = {
+  high: {
+    label: "High",
+    dot: "bg-emerald-500",
+    glow: "shadow-[0_0_12px_2px_rgba(16,185,129,0.55)]",
+    text: "text-emerald-700 dark:text-emerald-400",
+    ring: "ring-emerald-500/25",
+  },
+  medium: {
+    label: "Medium",
+    dot: "bg-amber-500",
+    glow: "shadow-[0_0_10px_1px_rgba(245,158,11,0.45)]",
+    text: "text-amber-700 dark:text-amber-400",
+    ring: "ring-amber-500/25",
+  },
+  low: {
+    label: "Low",
+    dot: "bg-rose-500",
+    glow: "shadow-[0_0_10px_1px_rgba(244,63,94,0.4)]",
+    text: "text-rose-700 dark:text-rose-400",
+    ring: "ring-rose-500/25",
+  },
+  none: {
+    label: "Quiet",
+    dot: "bg-muted-foreground/60",
+    glow: "",
+    text: "text-muted-foreground",
+    ring: "ring-transparent",
+  },
+};
+
+function LevelIndicator({ level, testId }: { level: MomentumLevel; testId?: string }) {
+  const s = LEVEL_STYLES[level];
+  const pulse = level === "high"
+    ? "motion-safe:animate-pulse motion-reduce:animate-none"
+    : "";
   return (
-    <Badge
-      variant="outline"
-      className={`text-xs font-mono ${isUp ? "text-emerald-700 dark:text-emerald-500 border-emerald-500/40 dark:border-emerald-500/30" : "text-red-700 dark:text-red-500 border-red-500/40 dark:border-red-500/30"}`}
-      data-testid="badge-delta"
-    >
-      {isUp ? "+" : ""}{pct}%<span className="ml-1 text-muted-foreground font-normal text-[10px]">24h</span>
-    </Badge>
+    <div className="flex items-center gap-2.5" data-testid={testId}>
+      <span
+        className={cn(
+          "relative inline-flex h-2.5 w-2.5 rounded-full shrink-0 transition-colors duration-500",
+          s.dot,
+          s.glow,
+          pulse,
+        )}
+        style={level === "high" ? { animationDuration: "2.4s" } : undefined}
+      />
+      <span className={cn("text-xl font-semibold tracking-tight transition-colors duration-500", s.text)}>
+        {s.label}
+      </span>
+    </div>
   );
 }
 
-function extractTopics(headlines: string[]): string[] {
-  const stopWords = new Set([
-    "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
-    "have", "has", "had", "do", "does", "did", "will", "would", "could",
-    "should", "may", "might", "shall", "can", "to", "of", "in", "for",
-    "on", "with", "at", "by", "from", "as", "into", "through", "during",
-    "before", "after", "above", "below", "and", "but", "or", "nor", "not",
-    "so", "yet", "both", "either", "neither", "each", "every", "all", "any",
-    "few", "more", "most", "other", "some", "such", "no", "only", "own",
-    "same", "than", "too", "very", "just", "about", "up", "out", "how",
-    "what", "when", "where", "who", "which", "why", "this", "that", "these",
-    "those", "it", "its", "he", "she", "they", "them", "his", "her", "their",
-    "our", "your", "my", "me", "us", "we", "him", "i", "says", "said",
-    "new", "also", "over", "per", "get", "gets", "got", "set", "amid",
-    "back", "last", "first", "now", "top", "big", "day", "may", "make",
-    "report", "reports", "news", "update", "updates", "latest", "video",
-  ]);
-  const genericWords = new Set([
-    "surgery", "money", "team", "game", "show", "fight", "deal", "talk",
-    "star", "fans", "world", "time", "year", "life", "man", "woman",
-  ]);
-  const acronymWhitelist = new Set([
-    "AI", "NBA", "NFL", "UFC", "MLB", "NHL", "FIFA", "F1",
-    "EU", "US", "UK", "UN", "NATO", "GOP",
-    "XRP", "BTC", "ETH", "SOL", "NFT", "CEO", "IPO",
-    "MMA", "MVP", "KO", "GDP", "FBI", "CIA", "SEC",
-  ]);
-  const freq = new Map<string, number>();
-  const seen = new Set<string>();
-  for (const h of headlines) {
-    const words = h.replace(/[^a-zA-Z\s'-]/g, "").split(/\s+/).filter(Boolean);
-    for (const w of words) {
-      const lower = w.toLowerCase();
-      const isWhitelisted = acronymWhitelist.has(w.toUpperCase());
-      if (!isWhitelisted && (lower.length < 4 || stopWords.has(lower))) continue;
-      if (genericWords.has(lower)) continue;
-      if (seen.has(lower)) {
-        const existing = Array.from(freq.keys()).find(k => k.toLowerCase() === lower);
-        if (existing) freq.set(existing, (freq.get(existing) || 0) + 1);
-        continue;
-      }
-      seen.add(lower);
-      freq.set(w, (freq.get(w) || 0) + 1);
-    }
+type TrendWord = "rising" | "falling" | "steady";
+
+function DeltaPill({ pct, trendWord }: { pct: number; trendWord?: TrendWord }) {
+  if (!Number.isFinite(pct) || pct === 0) {
+    return (
+      <div
+        className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground"
+        data-testid="badge-delta"
+      >
+        <Minus className="h-3 w-3" />
+        <span>flat</span>
+      </div>
+    );
   }
-  return Array.from(freq.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 4)
-    .map(([word]) => word);
+  const isUp = pct > 0;
+  const Arrow = isUp ? ArrowUp : ArrowDown;
+  const tint = isUp
+    ? "text-emerald-700 dark:text-emerald-400"
+    : "text-rose-700 dark:text-rose-400";
+  return (
+    <div
+      className={cn("inline-flex items-center gap-1 text-[11px] font-medium font-mono", tint)}
+      data-testid="badge-delta"
+    >
+      <Arrow className="h-3 w-3" />
+      <span>{isUp ? "+" : ""}{pct}%</span>
+      {trendWord && trendWord !== "steady" && (
+        <span className="text-muted-foreground font-sans font-normal ml-0.5">· {trendWord}</span>
+      )}
+    </div>
+  );
+}
+
+interface SignalCardProps {
+  icon: React.ReactNode;
+  iconWrapClass?: string;
+  title: string;
+  level: MomentumLevel;
+  value: string;
+  unit: string;
+  deltaPct: number;
+  trendWord?: TrendWord;
+  headerRight?: React.ReactNode;
+  footer?: React.ReactNode;
+  tooltip?: React.ReactNode;
+  testId?: string;
+}
+
+function SignalCard({
+  icon,
+  iconWrapClass,
+  title,
+  level,
+  value,
+  unit,
+  deltaPct,
+  trendWord,
+  headerRight,
+  footer,
+  tooltip,
+  testId,
+}: SignalCardProps) {
+  return (
+    <Card
+      className={cn(
+        "relative overflow-hidden border-border/50 bg-card/60 backdrop-blur-sm transition-colors duration-300 hover:bg-card/80",
+      )}
+      data-testid={testId}
+    >
+      <span
+        aria-hidden
+        className={cn(
+          "pointer-events-none absolute inset-x-0 top-0 h-px opacity-70 transition-colors duration-500",
+          level === "high" ? "bg-gradient-to-r from-transparent via-emerald-500/60 to-transparent"
+            : level === "medium" ? "bg-gradient-to-r from-transparent via-amber-500/60 to-transparent"
+              : level === "low" ? "bg-gradient-to-r from-transparent via-rose-500/60 to-transparent"
+                : "bg-transparent",
+        )}
+      />
+      <CardHeader className="pb-2 pt-3 px-4">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className={cn("inline-flex h-7 w-7 items-center justify-center rounded-md shrink-0", iconWrapClass)}>
+              {icon}
+            </span>
+            <span className="text-xs font-medium text-muted-foreground truncate">{title}</span>
+            {tooltip}
+          </div>
+          {headerRight}
+        </div>
+      </CardHeader>
+      <CardContent className="pt-1 pb-3 px-4 space-y-0.5">
+        <div className="flex items-center justify-between gap-2">
+          <LevelIndicator level={level} testId={`level-${testId ?? title.toLowerCase()}`} />
+          <DeltaPill pct={deltaPct} trendWord={trendWord} />
+        </div>
+        <div className="text-[11px] text-muted-foreground font-mono">
+          <span className="text-foreground/80">{value}</span>
+          <span className="ml-1">{unit}</span>
+        </div>
+        {footer}
+      </CardContent>
+    </Card>
+  );
 }
 
 function SignalSkeleton() {
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <Skeleton className="h-5 w-32" />
+    <Card className="border-border/50 bg-card/60 backdrop-blur-sm">
+      <CardHeader className="pb-2 pt-3 px-4">
+        <Skeleton className="h-4 w-28" />
       </CardHeader>
-      <CardContent>
-        <Skeleton className="h-8 w-20 mb-2" />
-        <Skeleton className="h-4 w-48" />
+      <CardContent className="pt-1 pb-3 px-4 space-y-2">
+        <Skeleton className="h-6 w-24" />
+        <Skeleton className="h-3 w-16" />
       </CardContent>
     </Card>
   );
@@ -167,7 +279,7 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
       <div className="mt-8" data-testid="section-momentum-signals">
         <h2 className="text-xl font-bold mb-1">Momentum Signals</h2>
         <p className="text-sm text-muted-foreground mb-4">Loading live signals...</p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-3">
           <SignalSkeleton />
           <SignalSkeleton />
           <SignalSkeleton />
@@ -193,13 +305,31 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
     s === "wiki" ? "Wikipedia" : s === "news" ? "News" : s === "search" ? "Search" : s
   );
 
+  const searchLevel: MomentumLevel = signals.search.level ?? fallbackLevel("search", signals.search.volume);
+  const newsLevel: MomentumLevel = signals.news.level ?? fallbackLevel("news", signals.news.count);
+  const wikiLevel: MomentumLevel = signals.wiki.level ?? fallbackLevel("wiki", signals.wiki.views);
+
+  const searchTrend: TrendWord =
+    signals.search.deltaPct > 5 ? "rising" : signals.search.deltaPct < -5 ? "falling" : "steady";
+  const newsTrend: TrendWord =
+    signals.news.deltaPct > 5 ? "rising" : signals.news.deltaPct < -5 ? "falling" : "steady";
+  const wikiTrend: TrendWord =
+    signals.wiki.wiki_rising === true ? "rising"
+      : signals.wiki.wiki_falling === true ? "falling"
+        : signals.wiki.deltaPct > 5 ? "rising"
+          : signals.wiki.deltaPct < -5 ? "falling"
+            : "steady";
+
   return (
-    <div id="momentum-signals" className="mt-8 space-y-6" data-testid="section-momentum-signals">
-        <div className="flex flex-col gap-1">
+    <div id="momentum-signals" className="mt-8 space-y-5" data-testid="section-momentum-signals">
+      <div className="flex flex-col gap-1">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <h2 className="text-xl font-bold">Momentum Signals</h2>
         </div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span className="relative inline-flex items-center">
+            <span className="inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500 motion-safe:animate-pulse motion-reduce:animate-none" style={{ animationDuration: "2s" }} />
+          </span>
           <Clock className="h-3 w-3" />
           <span data-testid="text-freshness">Updated {freshnessText}</span>
           <span>·</span>
@@ -214,299 +344,72 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card data-testid="card-search-interest">
-          <CardHeader className="pb-2 bg-blue-500/15 dark:bg-blue-500/10">
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <div className="flex items-center gap-2">
-                <Search className="h-4 w-4 text-blue-700 dark:text-blue-500" />
-                <span className="font-semibold text-sm">Search Interest</span>
-                <TouchTooltip side="top" contentClassName="max-w-[220px] text-xs normal-case tracking-normal" content="How actively people are searching for this person on Google right now, scored from 0 to 100. Higher means more search buzz.">
-                  <Info className="h-3 w-3 text-muted-foreground/50 cursor-help" data-testid="icon-search-tooltip" />
-                </TouchTooltip>
-              </div>
-              <DeltaBadge pct={signals.search.deltaPct} />
-            </div>
-          </CardHeader>
-          <CardContent className="pt-4 space-y-3">
-            <div className="flex items-baseline justify-between gap-2 flex-wrap" data-testid="text-search-volume">
-              <div className="text-2xl font-bold">
-                {signals.search.volume}<span className="text-sm font-normal text-muted-foreground ml-1">/ 100 search activity score</span>
-              </div>
-              <div className="flex items-center gap-1 text-xs" data-testid="text-search-trend">
-                {signals.search.deltaPct > 5 ? (
-                  <><TrendingUp className="h-3 w-3 text-green-700 dark:text-green-500" /><span className="text-green-700 dark:text-green-500">Rising</span></>
-                ) : signals.search.deltaPct < -5 ? (
-                  <><TrendingDown className="h-3 w-3 text-red-700 dark:text-red-500" /><span className="text-red-700 dark:text-red-500">Falling</span></>
-                ) : (
-                  <><Minus className="h-3 w-3 text-muted-foreground" /><span className="text-muted-foreground">Steady</span></>
-                )}
-              </div>
-            </div>
-            {signals.search.relatedSearches.length > 0 ? (
-              <div>
-                <p className="text-xs font-medium text-muted-foreground mb-1.5">Top searches</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {signals.search.relatedSearches.slice(0, 5).map((q, i) => (
-                    <Badge key={i} variant="outline" className="text-xs font-normal" data-testid={`badge-related-search-${i}`}>
-                      {q}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            ) : signals.search.peopleAlsoAsk.length > 0 ? (
-              <div>
-                <p className="text-xs font-medium text-muted-foreground mb-1.5">People ask</p>
-                <ul className="space-y-1">
-                  {signals.search.peopleAlsoAsk.slice(0, 3).map((q, i) => (
-                    <li key={i} className="text-xs text-muted-foreground" data-testid={`text-paa-${i}`}>
-                      {q}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : signals.news.headlines.length > 0 && extractTopics(signals.news.headlines).length > 0 ? (
-              <div>
-                <p className="text-xs font-medium text-muted-foreground mb-1.5">Topics in the news</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {extractTopics(signals.news.headlines).slice(0, 4).map((topic, i) => (
-                    <Badge key={i} variant="outline" className="text-xs font-normal" data-testid={`badge-news-topic-${i}`}>
-                      {topic}
-                    </Badge>
-                  ))}
-                </div>
-                <p className="text-[10px] text-muted-foreground/50 mt-1.5" data-testid="text-top-searches-hint">Top searches appear when available</p>
-              </div>
-            ) : (
-              <div data-testid="text-search-empty">
-                <p className="text-xs text-muted-foreground">
-                  {signals.search.volume > 0 ? "Search interest steady" : "Collecting search data..."}
-                </p>
-                <p className="text-[10px] text-muted-foreground/60 mt-1">Top searches will appear as we collect more data.</p>
-              </div>
-            )}
-            {signals.search.relatedSearches.length > 0 && signals.search.peopleAlsoAsk.length > 0 && (
-              <div>
-                <p className="text-xs font-medium text-muted-foreground mb-1.5">People ask</p>
-                <ul className="space-y-1">
-                  {signals.search.peopleAlsoAsk.slice(0, 2).map((q, i) => (
-                    <li key={i} className="text-xs text-muted-foreground" data-testid={`text-paa-${i}`}>
-                      {q}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-2 gap-3">
+        <SignalCard
+          testId="card-search-interest"
+          icon={<Search className="h-3.5 w-3.5 text-blue-700 dark:text-blue-400" />}
+          iconWrapClass="bg-blue-500/15 dark:bg-blue-500/10"
+          title="Search Interest"
+          level={searchLevel}
+          value={`${signals.search.volume}`}
+          unit="/ 100"
+          deltaPct={signals.search.deltaPct}
+          trendWord={searchTrend}
+          tooltip={
+            <TouchTooltip
+              side="top"
+              contentClassName="max-w-[220px] text-xs normal-case tracking-normal"
+              content="How actively people are searching for this person on Google right now, scored from 0 to 100."
+            >
+              <Info className="h-3 w-3 text-muted-foreground/50 cursor-help" data-testid="icon-search-tooltip" />
+            </TouchTooltip>
+          }
+        />
 
-        <Card data-testid="card-news-activity">
-          <CardHeader className="pb-2 bg-red-500/15 dark:bg-red-500/10">
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <div className="flex items-center gap-2">
-                <Newspaper className="h-4 w-4 text-red-700 dark:text-red-500" />
-                <span className="font-semibold text-sm">News Activity</span>
-              </div>
-              <DeltaBadge pct={signals.news.deltaPct} />
-            </div>
-          </CardHeader>
-          <CardContent className="pt-4 space-y-3">
-            <div className="flex items-center gap-2 text-base font-semibold" data-testid="text-news-count">
-              {(() => {
-                const { label, dotClass } = getNewsActivityLevel(signals.news.count);
-                return (
-                  <>
-                    <div className={cn("h-2 w-2 rounded-full shrink-0", dotClass)} />
-                    <span>{label}</span>
-                    <span className="text-sm font-normal text-muted-foreground ml-1">(24h)</span>
-                  </>
-                );
-              })()}
-            </div>
-            {signals.news.count === 0 && signals.news.recentPeak && signals.news.recentPeakAge && (
-              <p className="text-[10px] text-muted-foreground/60" data-testid="text-news-recent-peak">
+        <SignalCard
+          testId="card-news-activity"
+          icon={<Newspaper className="h-3.5 w-3.5 text-red-700 dark:text-red-400" />}
+          iconWrapClass="bg-red-500/15 dark:bg-red-500/10"
+          title="News Activity"
+          level={newsLevel}
+          value={`${signals.news.count}`}
+          unit={signals.news.count === 1 ? "article (24h)" : "articles (24h)"}
+          deltaPct={signals.news.deltaPct}
+          trendWord={newsTrend}
+          footer={
+            signals.news.count === 0 && signals.news.recentPeak && signals.news.recentPeakAge ? (
+              <p className="text-[10px] text-muted-foreground/60 pt-0.5" data-testid="text-news-recent-peak">
                 {signals.news.recentPeak} articles found {signals.news.recentPeakAge}
               </p>
-            )}
-            {signals.news.topStories && signals.news.topStories.length > 0 ? (
-              <div>
-                <p className="text-xs font-medium text-muted-foreground mb-1.5">Top Headlines</p>
-                <ul className="space-y-1.5">
-                  {signals.news.topStories.map((s, i) => (
-                    <li key={i} className="text-xs leading-relaxed line-clamp-2" data-testid={`text-headline-${i}`}>
-                      <a
-                        href={s.link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary hover:underline"
-                      >
-                        {s.title}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : signals.news.headlines.length > 0 ? (
-              <div>
-                <p className="text-xs font-medium text-muted-foreground mb-1.5">Top Headlines</p>
-                <ul className="space-y-1.5">
-                  {signals.news.headlines.map((h, i) => (
-                    <li key={i} className="text-xs leading-relaxed line-clamp-2" data-testid={`text-headline-${i}`}>
-                      {h}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : (
-              <p className="text-[10px] text-muted-foreground/60" data-testid="text-news-empty">
-                {signals.news.count > 0 ? "No major headlines in the last 24h" : "No recent headlines available"}
-              </p>
-            )}
-            {((signals.news.topStories && signals.news.topStories.length > 0) || signals.news.headlines.length > 0 || signals.news.count > 0) && (
-              <p className="text-[10px] text-muted-foreground/60">
-                Via {signals.news.topStories && signals.news.topStories.length > 0
-                  ? "Google"
-                  : ({ serper_news: "Google News", gdelt: "GDELT", mediastack: "Mediastack", unknown: "News" } as Record<string, string>)[signals.news.provider] ?? signals.news.provider}
-              </p>
-            )}
-          </CardContent>
-        </Card>
+            ) : null
+          }
+        />
 
-        <Card data-testid="card-wiki-pulse">
-          <CardHeader className="pb-2 bg-muted/50">
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <div className="flex items-center gap-2">
-                <BookOpen className="h-4 w-4 text-muted-foreground" />
-                <span className="font-semibold text-sm">Wikipedia Pulse</span>
-                {wikiSlug && (
-                  <a
-                    href={`https://en.wikipedia.org/wiki/${encodeURIComponent(wikiSlug)}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="group inline-flex"
-                    data-testid="link-wiki-page"
-                  >
-                    <ExternalLink className="h-3.5 w-3.5 text-muted-foreground opacity-60 group-hover:opacity-100 transition-opacity" />
-                  </a>
-                )}
-              </div>
-              <DeltaBadge pct={signals.wiki.deltaPct} />
-            </div>
-          </CardHeader>
-          <CardContent className="pt-4">
-            <div className="flex items-baseline justify-between gap-2 flex-wrap" data-testid="text-wiki-views">
-              <div className="text-2xl font-bold">
-                {formatNum(signals.wiki.views)}<span className="text-sm font-normal text-muted-foreground ml-1">page views (24h)</span>
-              </div>
-              <div className="flex items-center gap-1 text-xs">
-                {signals.wiki.wiki_rising === true && (
-                  <>
-                    <TrendingUp className="h-3 w-3 text-emerald-700 dark:text-emerald-500" />
-                    <span className="text-emerald-700 dark:text-emerald-500">Rising</span>
-                  </>
-                )}
-                {signals.wiki.wiki_falling === true && (
-                  <>
-                    <TrendingDown className="h-3 w-3 text-red-700 dark:text-red-500" />
-                    <span className="text-red-700 dark:text-red-500">Falling</span>
-                  </>
-                )}
-              </div>
-            </div>
-            {signals.wiki.views < 100 && signals.wiki.deltaPct === 0 ? (
-              <p className="text-[10px] text-muted-foreground/60 mt-2" data-testid="text-wiki-quiet">Low curiosity signal today</p>
-            ) : (
-              <TouchTooltip content={<p className="text-xs max-w-[200px]">Wikipedia page views spike when public curiosity increases — often before or alongside news cycles.</p>}>
-                <p className="text-[10px] text-muted-foreground/60 mt-2 cursor-help underline decoration-dotted">
-                  Wikipedia views as curiosity proxy
-                </p>
-              </TouchTooltip>
-            )}
-          </CardContent>
-        </Card>
+        <SignalCard
+          testId="card-wiki-pulse"
+          icon={<BookOpen className="h-3.5 w-3.5 text-muted-foreground" />}
+          iconWrapClass="bg-muted"
+          title="Wikipedia Pulse"
+          level={wikiLevel}
+          value={formatNum(signals.wiki.views)}
+          unit="page views (24h)"
+          deltaPct={signals.wiki.deltaPct}
+          trendWord={wikiTrend}
+          headerRight={wikiSlug ? (
+            <a
+              href={`https://en.wikipedia.org/wiki/${encodeURIComponent(wikiSlug)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group inline-flex p-1 -m-1 rounded-md hover:bg-muted/50"
+              aria-label="Open Wikipedia page"
+              data-testid="link-wiki-page"
+            >
+              <ExternalLink className="h-3.5 w-3.5 text-muted-foreground opacity-60 group-hover:opacity-100 transition-opacity" />
+            </a>
+          ) : undefined}
+        />
 
-        {signals.drivers.status === "stable" ? (
-          <Card data-testid="card-score-drivers-collapsed">
-            <CardHeader className="pb-2 bg-primary/5">
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <div className="flex items-center gap-2">
-                  <BarChart3 className="h-4 w-4 text-primary" />
-                  <span className="font-semibold text-sm">Score Drivers</span>
-                  <TouchTooltip content={<p className="text-xs max-w-[220px]">Current velocity composition — how each signal contributes to the overall score right now.</p>}>
-                    <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
-                  </TouchTooltip>
-                </div>
-                <Badge variant="outline" className="text-xs">
-                  {signals.drivers.quietSources.length === 3 ? "steady" : `${3 - signals.drivers.quietSources.length}/3 active`}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="pt-4">
-              {signals.drivers.breakdownPct ? (
-                <div className="space-y-3">
-                  <div className="space-y-2">
-                    <DriverBar label="Search" pct={signals.drivers.breakdownPct.search} color="bg-blue-500" />
-                    <DriverBar label="News" pct={signals.drivers.breakdownPct.news} color="bg-red-500" />
-                    <DriverBar label="Wiki" pct={signals.drivers.breakdownPct.wiki} color="bg-gray-600 dark:bg-gray-400" />
-                  </div>
-                  <p className="text-[10px] text-muted-foreground/60" data-testid="text-stable-context">
-                    Signals are steady — no major shift in the last 24h
-                  </p>
-                  {signals.drivers.method && (
-                    <Badge variant="outline" className="text-[9px] px-1.5 py-0" data-testid="badge-drivers-method-stable">
-                      {signals.drivers.method === "exact_velocity_components" ? "Exact (from score components)" : "Estimate (from signal changes)"}
-                    </Badge>
-                  )}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground" data-testid="text-stable-no-data">Signals are steady — no major shift in the last 24h</p>
-              )}
-            </CardContent>
-          </Card>
-        ) : (
-          <Card data-testid="card-score-drivers">
-            <CardHeader className="pb-2 bg-primary/5">
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <div className="flex items-center gap-2">
-                  <BarChart3 className="h-4 w-4 text-primary" />
-                  <span className="font-semibold text-sm">Score Drivers (24h change)</span>
-                  <TouchTooltip content={<p className="text-xs max-w-[220px]">Based on what changed, not raw totals. Shows which signals drove the most movement up or down</p>}>
-                    <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
-                  </TouchTooltip>
-                </div>
-                <Badge variant="outline" className="text-xs">
-                  {signals.drivers.activeSources}/3 sources
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="pt-4">
-              {signals.drivers.breakdown ? (
-                <div className="space-y-3">
-                  <div className="space-y-2">
-                    <DriverBar label="Search" pct={signals.drivers.breakdown.search} color="bg-blue-500" />
-                    <DriverBar label="News" pct={signals.drivers.breakdown.news} color="bg-red-500" />
-                    <DriverBar label="Wiki" pct={signals.drivers.breakdown.wiki} color="bg-gray-600 dark:bg-gray-400" />
-                  </div>
-                  <div className="space-y-0.5">
-                    {signals.drivers.quietSources.length > 0 && (
-                      <p className="text-[10px] text-muted-foreground/60" data-testid="text-quiet-sources">
-                        Based on {signals.drivers.activeSources}/3 sources ({signals.drivers.quietSources.join(" & ")} minimal)
-                      </p>
-                    )}
-                    <p className="text-[10px] text-muted-foreground/60" data-testid="text-drivers-clarifier">
-                      Drivers explain today's trend score change (up or down) not total attention · Compared to ~24h ago
-                    </p>
-                    <Badge variant="outline" className="text-[9px] px-1.5 py-0" data-testid="badge-drivers-method">
-                      {(signals.drivers.method === "exact_velocity_components" || signals.drivers.isExact) ? "Exact (from score components)" : "Estimate (from signal changes)"}
-                    </Badge>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">Insufficient data for attribution</p>
-              )}
-            </CardContent>
-          </Card>
-        )}
+        <ScoreDriversCard drivers={signals.drivers} />
       </div>
 
       <OfficialProfiles profiles={officialProfiles} />
@@ -514,18 +417,128 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
   );
 }
 
-function DriverBar({ label, pct, color }: { label: string; pct: number; color: string }) {
+function ScoreDriversCard({ drivers }: { drivers: NonNullable<MomentumData["signals"]>["drivers"] }) {
+  const isStable = drivers.status === "stable";
+  const source = isStable ? drivers.breakdownPct : drivers.breakdown;
+  const hasData = !!source;
+
+  const values = source ?? { search: 0, news: 0, wiki: 0 };
+
+  const method = drivers.method === "exact_velocity_components" || drivers.isExact
+    ? "exact"
+    : "estimate";
+
+  const headerRight = isStable ? (
+    <Badge variant="outline" className="text-[10px] font-normal px-1.5 py-0">
+      {drivers.quietSources.length === 3 ? "steady" : `${3 - drivers.quietSources.length}/3 live`}
+    </Badge>
+  ) : (
+    <Badge variant="outline" className="text-[10px] font-normal px-1.5 py-0">
+      {drivers.activeSources}/3 live
+    </Badge>
+  );
+
   return (
-    <div className="flex items-center gap-2" data-testid={`driver-bar-${label.toLowerCase()}`}>
-      <span className="text-xs w-14 text-muted-foreground">{label}</span>
-      <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-        <div
-          className={`h-full rounded-full transition-all duration-500 ${color}`}
-          style={{ width: `${Math.max(pct, 2)}%` }}
-        />
-      </div>
-      <span className="text-xs font-mono w-10 text-right">{pct}%</span>
+    <Card
+      className="relative overflow-hidden border-border/50 bg-card/60 backdrop-blur-sm transition-colors duration-300 hover:bg-card/80"
+      data-testid={isStable ? "card-score-drivers-collapsed" : "card-score-drivers"}
+    >
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-px opacity-70 bg-gradient-to-r from-transparent via-primary/60 to-transparent"
+      />
+      <CardHeader className="pb-2 pt-3 px-4">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-primary/10 shrink-0">
+              <BarChart3 className="h-3.5 w-3.5 text-primary" />
+            </span>
+            <span className="text-xs font-medium text-muted-foreground truncate">Score Drivers</span>
+            <TouchTooltip
+              side="top"
+              contentClassName="max-w-[240px] text-xs normal-case tracking-normal"
+              content={isStable
+                ? "Current velocity composition — how each signal contributes to the overall score right now."
+                : "Based on what changed (not raw totals). Shows which signals drove the most movement in the last 24h."}
+            >
+              <Info className="h-3 w-3 text-muted-foreground/50 cursor-help" />
+            </TouchTooltip>
+          </div>
+          {headerRight}
+        </div>
+      </CardHeader>
+      <CardContent className="pt-1 pb-3 px-4 space-y-2.5">
+        {hasData ? (
+          <>
+            <StackedDriverBar search={values.search} news={values.news} wiki={values.wiki} />
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+              <DriverLegendDot color="bg-blue-500" label="Search" pct={values.search} />
+              <DriverLegendDot color="bg-red-500" label="News" pct={values.news} />
+              <DriverLegendDot color="bg-gray-500 dark:bg-gray-400" label="Wiki" pct={values.wiki} />
+              <span
+                className="ml-auto text-[9px] uppercase tracking-wide text-muted-foreground/60"
+                data-testid={isStable ? "badge-drivers-method-stable" : "badge-drivers-method"}
+              >
+                {method}
+              </span>
+            </div>
+            {isStable ? (
+              <p className="text-[10px] text-muted-foreground/60" data-testid="text-stable-context">
+                Steady — no major shift in the last 24h
+              </p>
+            ) : drivers.quietSources.length > 0 ? (
+              <p className="text-[10px] text-muted-foreground/60" data-testid="text-quiet-sources">
+                {drivers.quietSources.join(" & ")} minimal · compared to ~24h ago
+              </p>
+            ) : (
+              <p className="text-[10px] text-muted-foreground/60" data-testid="text-drivers-clarifier">
+                Drivers explain today's score change · compared to ~24h ago
+              </p>
+            )}
+          </>
+        ) : (
+          <p className="text-xs text-muted-foreground" data-testid="text-stable-no-data">
+            Insufficient data for attribution
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function StackedDriverBar({ search, news, wiki }: { search: number; news: number; wiki: number }) {
+  const total = Math.max(search + news + wiki, 1);
+  const s = Math.max(0, (search / total) * 100);
+  const n = Math.max(0, (news / total) * 100);
+  const w = Math.max(0, (wiki / total) * 100);
+  return (
+    <div className="h-2 w-full rounded-full bg-muted/60 overflow-hidden flex" aria-hidden>
+      <div
+        className="h-full bg-blue-500 transition-[width] duration-500"
+        style={{ width: `${s}%` }}
+        data-testid="driver-bar-search"
+      />
+      <div
+        className="h-full bg-red-500 transition-[width] duration-500"
+        style={{ width: `${n}%` }}
+        data-testid="driver-bar-news"
+      />
+      <div
+        className="h-full bg-gray-500 dark:bg-gray-400 transition-[width] duration-500"
+        style={{ width: `${w}%` }}
+        data-testid="driver-bar-wiki"
+      />
     </div>
+  );
+}
+
+function DriverLegendDot({ color, label, pct }: { color: string; label: string; pct: number }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+      <span className={cn("h-1.5 w-1.5 rounded-full", color)} />
+      <span>{label}</span>
+      <span className="font-mono text-foreground/80">{pct}%</span>
+    </span>
   );
 }
 

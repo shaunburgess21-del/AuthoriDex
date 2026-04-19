@@ -21,7 +21,7 @@ import { applyAdminCreditAdjustment } from "./utils/admin-credits";
 import { optimizeImage } from "./utils/image-optimize";
 import geoip from "geoip-lite";
 import { getTrendContext, getTrendContextBatch, formatRelativeTime, type TrendContext } from "./services/trend-context";
-import { fetchWebSearchContext, fetchTrendingNewsContext, fetchNetWorthContext, probeSerperSearchLive, refreshSerperCacheForPerson } from "./providers/serper";
+import { fetchWebSearchContext, fetchTrendingNewsContext, fetchNetWorthContext, probeSerperSearchLive, refreshSerperCacheForPerson, getSerperDegradedState, getSerperRunStats } from "./providers/serper";
 import { getSourceStats } from "./scoring/sourceStats";
 import { 
   normalizeSourceValue, 
@@ -1718,6 +1718,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ============ MOMENTUM SIGNALS ENDPOINT ============
+  // Traffic-light level helper. Uses percentile cutoffs from the rolling
+  // 14-day source stats, with safe fixed-threshold fallbacks when the stats
+  // look uninitialized (e.g. fresh DB or persisted defaults).
+  type MomentumLevel = "none" | "low" | "medium" | "high";
+  const FIXED_LEVEL_FALLBACKS: Record<"search" | "news" | "wiki", { low: number; high: number }> = {
+    search: { low: 20, high: 60 },
+    news: { low: 7, high: 16 },
+    wiki: { low: 500, high: 5000 },
+  };
+  const computeLevel = (
+    source: "search" | "news" | "wiki",
+    value: number,
+    stats: { p25: number; p75: number; count: number } | null | undefined,
+  ): MomentumLevel => {
+    if (!Number.isFinite(value) || value <= 0) return "none";
+    const hasGoodStats = stats && stats.count >= 100 && stats.p25 >= 0 && stats.p75 > stats.p25;
+    if (hasGoodStats) {
+      if (value < stats.p25) return "low";
+      if (value < stats.p75) return "medium";
+      return "high";
+    }
+    const fb = FIXED_LEVEL_FALLBACKS[source];
+    if (value < fb.low) return "low";
+    if (value < fb.high) return "medium";
+    return "high";
+  };
+
   app.get("/api/people/:id/momentum", async (req, res) => {
     try {
       const { id } = req.params;
@@ -1989,6 +2016,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (person.youtubeId) officialProfiles.youtube = person.youtubeId;
       if (person.spotifyId) officialProfiles.spotify = person.spotifyId;
 
+      const momentumStats = await getSourceStats().catch(() => null);
+
+      const searchLevel = computeLevel("search", latest.searchVolume ?? 0, momentumStats?.search);
+      const wikiLevel = computeLevel("wiki", latest.wikiPageviews ?? 0, momentumStats?.wiki);
+
       res.json({
         asOf: latest.timestamp.toISOString(),
         ageMinutes,
@@ -1998,6 +2030,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           search: {
             volume: latest.searchVolume,
             deltaPct: searchDeltaPct,
+            level: searchLevel,
             relatedSearches: (evidence.relatedSearches ?? []).slice(0, 5),
             peopleAlsoAsk: (evidence.peopleAlsoAsk ?? []).slice(0, 5),
           },
@@ -2034,6 +2067,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               recentPeak,
               recentPeakAge,
               deltaPct: newsDeltaPct,
+              level: computeLevel("news", displayCount ?? 0, momentumStats?.news),
               headlines: (evidence.newsHeadlines ?? []).slice(0, 3),
               topStories: (evidence.topStories ?? []).slice(0, 3),
               provider: evidence.newsProvider ?? fresh.newsSource ?? "unknown",
@@ -2042,6 +2076,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           wiki: {
             views: latest.wikiPageviews ?? 0,
             deltaPct: wikiDeltaPct,
+            level: wikiLevel,
             ...(wikiFalling === true && { wiki_falling: true }),
             ...(wikiRising === true && { wiki_rising: true }),
           },
@@ -4263,6 +4298,24 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
       
       if (!newsContext || newsContext.sources.length === 0) {
         await releaseLock();
+        // Distinguish a provider outage (auth/quota/rate-limit) from legitimately-empty
+        // results. If Serper flagged itself as degraded, surface that state to the client
+        // and do NOT touch the existing rate-limit marker or main cache row, so real
+        // cached summaries stay visible once the provider recovers.
+        const degraded = getSerperDegradedState();
+        if (degraded) {
+          return res.json({
+            personId,
+            personName: person.name,
+            hasContext: false,
+            cacheStatus: "PROVIDER_UNAVAILABLE",
+            providerReason: degraded.reason,
+            providerSince: degraded.since,
+            staleAgeMinutes: null,
+            message: "Trending insights are temporarily unavailable. Please try again shortly.",
+            fetchedAt: new Date(),
+          });
+        }
         return res.json({
           personId,
           personName: person.name,
@@ -6760,6 +6813,29 @@ Only return the JSON object.`;
     } catch (error) {
       console.error("[Score Audit] Error:", error);
       res.status(500).json({ error: "Failed to generate score audit" });
+    }
+  });
+
+  // Upstream provider health — currently just Serper; extensible to Wiki/GDELT/X later.
+  // Used by admins to verify after a top-up/outage that the provider is back online
+  // without having to visit the provider's dashboard or scrape logs.
+  app.get("/api/admin/providers/health", requireAuth, requireAdmin, async (_req: AuthRequest, res) => {
+    try {
+      const degraded = getSerperDegradedState();
+      res.json({
+        serper: {
+          status: degraded ? "degraded" : "ok",
+          reason: degraded?.reason ?? null,
+          since: degraded?.since ?? null,
+          lastStatus: degraded?.lastStatus ?? null,
+          lastDetail: degraded?.lastDetail ?? null,
+          stats: getSerperRunStats(),
+        },
+        checkedAt: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error("[Providers Health] Error:", error);
+      res.status(500).json({ error: "Failed to load provider health" });
     }
   });
 
