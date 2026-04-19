@@ -367,8 +367,8 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
       <div className="grid grid-cols-2 gap-3">
         <SignalCard
           testId="card-search-interest"
-          icon={<Search className="h-3.5 w-3.5 text-blue-700 dark:text-blue-400" />}
-          iconWrapClass="bg-blue-500/15 dark:bg-blue-500/10"
+          icon={<Search className="h-3.5 w-3.5 text-muted-foreground" />}
+          iconWrapClass="bg-muted"
           title="Search Interest"
           level={searchLevel}
           value={`${signals.search.volume}`}
@@ -388,8 +388,8 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
 
         <SignalCard
           testId="card-news-activity"
-          icon={<Newspaper className="h-3.5 w-3.5 text-red-700 dark:text-red-400" />}
-          iconWrapClass="bg-red-500/15 dark:bg-red-500/10"
+          icon={<Newspaper className="h-3.5 w-3.5 text-muted-foreground" />}
+          iconWrapClass="bg-muted"
           title="News Activity"
           level={newsLevel}
           value={`${signals.news.count}`}
@@ -706,14 +706,14 @@ function MomentumTakeCard({ sources }: { sources: SourceSnapshot[] }) {
       />
       <CardHeader className="pb-2 pt-3 px-4">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-primary/10 shrink-0">
-            <Sparkles className="h-3.5 w-3.5 text-primary" />
+          <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-muted shrink-0">
+            <Sparkles className="h-3.5 w-3.5 text-muted-foreground" />
           </span>
           <span className="text-xs font-medium text-muted-foreground truncate">Today's Take</span>
           <TouchTooltip
             side="top"
             contentClassName="max-w-[240px] text-xs normal-case tracking-normal"
-            content="A one-line synthesis of the three signals above, classifying this person's attention as Peaking, Rising, Steady, Cooling, or Quiet based on current levels and 24h movement."
+            content="A one-line synthesis of the three signals above, classifying this person's attention as Peaking, Rising, Mixed, Steady, Cooling, or Quiet based on current levels and 24h movement."
           >
             <Info className="h-3 w-3 text-muted-foreground/50 cursor-help" data-testid="icon-take-tooltip" />
           </TouchTooltip>
