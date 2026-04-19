@@ -5370,6 +5370,7 @@ Only return the JSON object.`;
         username,
         fullName,
         avatarUrl,
+        avatarSeed: `${userId}:default:v1`,
         isPublic: true,
         role: "user",
         rank: "Citizen",
@@ -5445,6 +5446,36 @@ Only return the JSON object.`;
     } catch (error: any) {
       console.error("Error updating profile:", error.message);
       res.status(500).json({ error: "Failed to update profile" });
+    }
+  });
+
+  // Update current user's avatar (seed + URL)
+  app.patch("/api/profile/avatar", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.userId!;
+      const { seed, avatarUrl } = req.body ?? {};
+
+      if (typeof seed !== "string" || seed.trim().length === 0) {
+        return res.status(400).json({ error: "seed is required and must be a non-empty string" });
+      }
+      if (typeof avatarUrl !== "string" || avatarUrl.trim().length === 0) {
+        return res.status(400).json({ error: "avatarUrl is required and must be a non-empty string" });
+      }
+
+      const updated = await db
+        .update(profiles)
+        .set({ avatarSeed: seed, avatarUrl })
+        .where(eq(profiles.id, userId))
+        .returning();
+
+      if (updated.length === 0) {
+        return res.status(404).json({ error: "Profile not found" });
+      }
+
+      res.json({ profile: updated[0] });
+    } catch (error: any) {
+      console.error("Error updating profile avatar:", error.message);
+      res.status(500).json({ error: "Failed to update profile avatar" });
     }
   });
   

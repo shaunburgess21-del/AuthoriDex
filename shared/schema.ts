@@ -787,6 +787,7 @@ export const profiles = pgTable("profiles", {
   username: text("username").unique(),
   fullName: text("full_name"),
   avatarUrl: text("avatar_url"),
+  avatarSeed: text("avatar_seed"),
   isPublic: boolean("is_public").notNull().default(true),
   role: text("role").notNull().default("user"), // 'user', 'admin', 'moderator'
   rank: text("rank").notNull().default("Citizen"), // From ranks table: Citizen, Verified, etc.

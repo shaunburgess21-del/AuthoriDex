@@ -14,6 +14,8 @@ import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Badge } from "@/components/ui/badge";
 import { UploadImageInput } from "@/components/ui/upload-image-input";
+import { AvatarPicker } from "@/components/avatar/AvatarPicker";
+import { uploadGeneratedAvatar } from "@/lib/avatar/upload";
 
 export default function SettingsPage() {
   const { user, profile, profileLoading, refreshProfile, signOut } = useAuth();
@@ -25,6 +27,7 @@ export default function SettingsPage() {
   const [avatarUrl, setAvatarUrl] = useState(profile?.avatarUrl || "");
   const [isPublic, setIsPublic] = useState(profile?.isPublic ?? true);
   const [hasLocalChanges, setHasLocalChanges] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   useEffect(() => {
     if (!profile || hasLocalChanges) {
@@ -75,6 +78,34 @@ export default function SettingsPage() {
       avatarUrl: avatarUrl.trim() || null,
       isPublic,
     });
+  };
+
+  const handleSaveAvatar = async (seed: string) => {
+    try {
+      const userId = profile?.id || user!.id;
+      const { url } = await uploadGeneratedAvatar(userId, seed);
+
+      await apiRequest("PATCH", "/api/profile/avatar", {
+        seed,
+        avatarUrl: url,
+      });
+
+      setAvatarUrl(url);
+      await refreshProfile();
+
+      toast({
+        title: "Avatar updated",
+        description: "Looking sharp.",
+      });
+    } catch (err) {
+      console.error("[SettingsPage] Avatar save failed:", err);
+      toast({
+        title: "Could not save avatar",
+        description: err instanceof Error ? err.message : "Please try again.",
+        variant: "destructive",
+      });
+      throw err;
+    }
   };
 
   const handleDeleteAccount = async () => {
@@ -157,6 +188,18 @@ export default function SettingsPage() {
               <p className="font-medium">{displayName}</p>
               <p className="text-sm text-muted-foreground">{user.email}</p>
             </div>
+          </div>
+
+          <div className="mb-4">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setPickerOpen(true)}
+              data-testid="button-open-avatar-picker"
+            >
+              Change avatar
+            </Button>
           </div>
 
           <div className="mb-6 space-y-2">
@@ -332,6 +375,15 @@ export default function SettingsPage() {
           </div>
         </Card>
       </div>
+
+      <AvatarPicker
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        userId={profile?.id || user!.id}
+        username={profile?.username}
+        currentSeed={profile?.avatarSeed}
+        onSave={handleSaveAvatar}
+      />
     </div>
   );
 }

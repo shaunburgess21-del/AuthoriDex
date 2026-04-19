@@ -13,7 +13,7 @@ import { User, LogOut } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export function UserAvatar() {
-  const { user, signOut } = useAuth();
+  const { user, profile, signOut } = useAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
 
@@ -47,7 +47,7 @@ export function UserAvatar() {
         >
           <UserProfileAvatar
             displayName={displayName}
-            avatarUrl={user.user_metadata?.avatar_url}
+            avatarUrl={profile?.avatarUrl}
             size="sm"
           />
         </button>

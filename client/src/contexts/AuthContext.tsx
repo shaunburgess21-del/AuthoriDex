@@ -7,6 +7,7 @@ export interface UserProfile {
   username: string | null;
   fullName: string | null;
   avatarUrl: string | null;
+  avatarSeed?: string | null;
   isPublic: boolean;
   role: "user" | "admin" | "moderator";
   rank: string;
