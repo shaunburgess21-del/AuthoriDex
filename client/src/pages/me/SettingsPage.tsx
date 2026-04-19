@@ -60,6 +60,14 @@ export default function SettingsPage() {
     },
   });
 
+  const normalize = (v: string | null | undefined) => (v ?? "").trim();
+  const isDirty = profile
+    ? normalize(username) !== normalize(profile.username) ||
+      normalize(fullName) !== normalize(profile.fullName) ||
+      normalize(avatarUrl) !== normalize(profile.avatarUrl) ||
+      isPublic !== profile.isPublic
+    : false;
+
   const handleSaveProfile = () => {
     updateProfileMutation.mutate({
       username,
@@ -204,14 +212,21 @@ export default function SettingsPage() {
               />
             </div>
 
-            <Button 
-              onClick={handleSaveProfile}
-              disabled={updateProfileMutation.isPending || profileLoading || !profile}
-              data-testid="button-save-profile"
-            >
-              {updateProfileMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Save Changes
-            </Button>
+            <div className="flex items-center gap-3">
+              <Button
+                onClick={handleSaveProfile}
+                disabled={!isDirty || updateProfileMutation.isPending || profileLoading || !profile}
+                data-testid="button-save-profile"
+              >
+                {updateProfileMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Save Changes
+              </Button>
+              {isDirty && !updateProfileMutation.isPending && (
+                <span className="text-xs text-muted-foreground" data-testid="text-unsaved-changes">
+                  Unsaved changes
+                </span>
+              )}
+            </div>
           </div>
         </Card>
 

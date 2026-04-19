@@ -91,3 +91,19 @@ If evidence of abuse appears (ledger rows showing cap+1 entries within
 OR a DB-level check constraint counting same-action rows in the UTC day.
 
 Until then, not worth the complexity.
+
+## Signup return-to-prior-page — deferred (2026-04-19)
+
+The auth-return flow handles sign-IN correctly but does NOT restore the prior page after sign-UP + email verification.
+
+Why it's hard: Supabase email verification sends a link that, when clicked, often opens in a new browser tab or a different context than the one where the user submitted the signup form. The return-path snapshot lives in `sessionStorage`, which is scoped per tab+origin, so the newly opened verification tab cannot see the snapshot written by the original signup tab.
+
+Options considered (all rejected for this PR):
+
+1. **Move snapshot to `localStorage`.** Would survive the tab boundary, but introduces cross-tab leakage: a snapshot written on tab A could hijack the post-login redirect on tab B, even when B's user never went through `navigateToLogin`. Also survives browser restart, which is wrong UX.
+2. **Embed the return path in the verification link's `redirectTo` / `next` param.** Requires server-side awareness of the return path at the time the verification email is sent (signup submission time) and a Supabase redirect allowlist that tolerates arbitrary subpaths. Doable, but expands the allowlist surface area and needs a `sanitizeReturnPath` equivalent on both ends.
+3. **Post-verification handshake.** After verification, land the user on a neutral page that polls a short-lived server record keyed by user-id for the prior path. More moving parts; no compelling UX win over option 2.
+
+Current behaviour: signup → email verification → user lands on `/` (or wherever Supabase's default post-verify redirect points). Not broken, just not contextual. Acceptable for now because signup is a one-time event per user and the post-signup "welcome to the app" destination is fine as a first impression.
+
+Revisit if: analytics show meaningful drop-off between signup-started and signup-completed that correlates with losing context, or if a product requirement explicitly demands signup-context preservation.
