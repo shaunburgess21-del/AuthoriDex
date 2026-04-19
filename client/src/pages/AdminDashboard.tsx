@@ -210,9 +210,26 @@ interface Celebrity {
   imageSlug?: string | null;
   wikiSlug: string | null;
   xHandle: string | null;
+  instagramHandle: string | null;
+  tiktokHandle: string | null;
+  youtubeId: string | null;
+  spotifyId: string | null;
   searchQueryOverride: string | null;
   displayOrder: number;
 }
+
+const EMPTY_CELEBRITY_FORM = {
+  name: "",
+  category: "Tech",
+  status: "main_leaderboard",
+  wikiSlug: "",
+  xHandle: "",
+  instagramHandle: "",
+  tiktokHandle: "",
+  youtubeId: "",
+  spotifyId: "",
+  searchQueryOverride: "",
+};
 
 type SeedRatingKey = "1" | "2" | "3" | "4" | "5";
 
@@ -1532,14 +1549,7 @@ export default function AdminDashboard() {
   const [serperProbeResults, setSerperProbeResults] = useState<Record<string, any>>({});
   const [showCelebrityModal, setShowCelebrityModal] = useState(false);
   const [editingCelebrity, setEditingCelebrity] = useState<Celebrity | null>(null);
-  const [celebrityForm, setCelebrityForm] = useState({
-    name: "",
-    category: "Tech",
-    status: "main_leaderboard",
-    wikiSlug: "",
-    xHandle: "",
-    searchQueryOverride: "",
-  });
+  const [celebrityForm, setCelebrityForm] = useState({ ...EMPTY_CELEBRITY_FORM });
   const MAX_ADD_CELEBRITY_GALLERY = 5;
   const [pendingCelebrityGalleryFiles, setPendingCelebrityGalleryFiles] = useState<File[]>([]);
   const [celebrityGalleryUploading, setCelebrityGalleryUploading] = useState(false);
@@ -2219,7 +2229,7 @@ export default function AdminDashboard() {
       }
       setShowCelebrityModal(false);
       setEditingCelebrity(null);
-      setCelebrityForm({ name: "", category: "Tech", status: "main_leaderboard", wikiSlug: "", xHandle: "", searchQueryOverride: "" });
+      setCelebrityForm({ ...EMPTY_CELEBRITY_FORM });
       setSeedApprovalCounts(DEFAULT_SEED_APPROVAL_COUNTS);
       setSeedApprovalLoading(false);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/celebrities"] });
@@ -2258,7 +2268,7 @@ export default function AdminDashboard() {
       toast({ title: "Celebrity Updated", description: "Celebrity updated successfully" });
       setShowCelebrityModal(false);
       setEditingCelebrity(null);
-      setCelebrityForm({ name: "", category: "Tech", status: "main_leaderboard", wikiSlug: "", xHandle: "", searchQueryOverride: "" });
+      setCelebrityForm({ ...EMPTY_CELEBRITY_FORM });
       setSeedApprovalCounts(DEFAULT_SEED_APPROVAL_COUNTS);
       setSeedApprovalLoading(false);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/celebrities"] });
@@ -2927,6 +2937,10 @@ export default function AdminDashboard() {
       status: celebrity.status,
       wikiSlug: celebrity.wikiSlug || "",
       xHandle: celebrity.xHandle || "",
+      instagramHandle: celebrity.instagramHandle || "",
+      tiktokHandle: celebrity.tiktokHandle || "",
+      youtubeId: celebrity.youtubeId || "",
+      spotifyId: celebrity.spotifyId || "",
       searchQueryOverride: celebrity.searchQueryOverride || "",
     });
     setShowCelebrityModal(true);
@@ -3728,7 +3742,7 @@ export default function AdminDashboard() {
               <Button 
                 onClick={() => {
                   setEditingCelebrity(null);
-                  setCelebrityForm({ name: "", category: "Tech", status: "main_leaderboard", wikiSlug: "", xHandle: "", searchQueryOverride: "" });
+                  setCelebrityForm({ ...EMPTY_CELEBRITY_FORM });
                   setPendingCelebrityGalleryFiles([]);
                   setSeedApprovalCounts(DEFAULT_SEED_APPROVAL_COUNTS);
                   setSeedApprovalLoading(false);
@@ -3842,7 +3856,7 @@ export default function AdminDashboard() {
                       className="mt-4" 
                       onClick={() => {
                         setEditingCelebrity(null);
-                        setCelebrityForm({ name: "", category: "Tech", status: "main_leaderboard", wikiSlug: "", xHandle: "", searchQueryOverride: "" });
+                        setCelebrityForm({ ...EMPTY_CELEBRITY_FORM });
                         setPendingCelebrityGalleryFiles([]);
                         setSeedApprovalCounts(DEFAULT_SEED_APPROVAL_COUNTS);
                         setSeedApprovalLoading(false);
@@ -7248,6 +7262,51 @@ export default function AdminDashboard() {
                 placeholder="e.g., @elonmusk"
                 data-testid="input-celebrity-xhandle"
               />
+              <p className="text-xs text-muted-foreground">X/Twitter username. The leading @ is stripped on save.</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="celeb-instagram">Instagram Handle (optional)</Label>
+              <Input
+                id="celeb-instagram"
+                value={celebrityForm.instagramHandle}
+                onChange={(e) => setCelebrityForm({ ...celebrityForm, instagramHandle: e.target.value })}
+                placeholder="e.g., @zendaya"
+                data-testid="input-celebrity-instagram"
+              />
+              <p className="text-xs text-muted-foreground">Instagram username. The leading @ is stripped on save.</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="celeb-tiktok">TikTok Handle (optional)</Label>
+              <Input
+                id="celeb-tiktok"
+                value={celebrityForm.tiktokHandle}
+                onChange={(e) => setCelebrityForm({ ...celebrityForm, tiktokHandle: e.target.value })}
+                placeholder="e.g., @khaby.lame"
+                data-testid="input-celebrity-tiktok"
+              />
+              <p className="text-xs text-muted-foreground">TikTok username. The leading @ is stripped on save.</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="celeb-youtube">YouTube Channel ID (optional)</Label>
+              <Input
+                id="celeb-youtube"
+                value={celebrityForm.youtubeId}
+                onChange={(e) => setCelebrityForm({ ...celebrityForm, youtubeId: e.target.value })}
+                placeholder="e.g., UCX6OQ3DkcsbYNE6H8uQQuVA"
+                data-testid="input-celebrity-youtube"
+              />
+              <p className="text-xs text-muted-foreground">YouTube channel ID — starts with "UC" and is 24 characters. Not the @handle.</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="celeb-spotify">Spotify Artist ID (optional)</Label>
+              <Input
+                id="celeb-spotify"
+                value={celebrityForm.spotifyId}
+                onChange={(e) => setCelebrityForm({ ...celebrityForm, spotifyId: e.target.value })}
+                placeholder="e.g., 06HL4z0CvFAxyc27GXpf02"
+                data-testid="input-celebrity-spotify"
+              />
+              <p className="text-xs text-muted-foreground">22-character alphanumeric artist ID from the Spotify URL.</p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="celeb-search-override">Search Query Override (optional)</Label>
