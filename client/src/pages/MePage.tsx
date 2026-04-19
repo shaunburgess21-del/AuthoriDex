@@ -2,7 +2,6 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { UserMenu } from "@/components/UserMenu";
-import { XpPill } from "@/components/XpPill";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { getAvatarGradient, getAvatarInitials } from "@/lib/avatar";
 import { ArrowLeft, User, Star, TrendingUp, Settings, LogOut, Vote, Wallet, Shield, Trophy, Sparkles, Eye, Lock, Flame } from "lucide-react";
@@ -83,7 +82,6 @@ export default function MePage() {
                 Predict
               </Button>
             </div>
-            <XpPill size="sm" />
             <UserMenu />
           </div>
         </div>

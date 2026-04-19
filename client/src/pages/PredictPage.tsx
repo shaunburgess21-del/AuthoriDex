@@ -8,7 +8,6 @@ import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
 import { useCategoryRaceMap } from "@/hooks/useCategoryRaceMap";
 import { useLeaderboardCategories } from "@/hooks/useLeaderboardCategories";
 import { UserMenu } from "@/components/UserMenu";
-import { XpPill } from "@/components/XpPill";
 import { useXpBurst } from "@/components/XpBurstProvider";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -2625,7 +2624,6 @@ export default function PredictPage() {
                 <span className="font-mono font-bold text-xs text-violet-700 dark:text-violet-500">{walletCredits.toLocaleString('en-US')}</span>
               </div>
             )}
-            <XpPill size="sm" />
             <UserMenu />
           </div>
         </div>

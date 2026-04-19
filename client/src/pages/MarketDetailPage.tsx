@@ -5,7 +5,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { sharePage } from "@/lib/share";
 import { UserMenu } from "@/components/UserMenu";
-import { XpPill } from "@/components/XpPill";
 import { useXpBurst } from "@/components/XpBurstProvider";
 import { CategoryPill } from "@/components/CategoryPill";
 import { Button } from "@/components/ui/button";
@@ -766,7 +765,6 @@ export default function MarketDetailPage() {
                 </button>
               </Link>
             </div>
-            <XpPill size="sm" />
             <UserMenu />
           </div>
         </header>
@@ -827,7 +825,6 @@ export default function MarketDetailPage() {
               </button>
             </Link>
           </div>
-          <XpPill size="sm" />
           <UserMenu />
         </div>
       </header>

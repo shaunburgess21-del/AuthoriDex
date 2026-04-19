@@ -8,7 +8,6 @@ import { VotingModal } from "@/components/VotingModal";
 import { StakeModal, type StakeSelection } from "@/components/StakeModal";
 import { useToast } from "@/hooks/use-toast";
 import { UserMenu } from "@/components/UserMenu";
-import { XpPill } from "@/components/XpPill";
 import { FilterDropdown } from "@/components/FilterDropdown";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { CategoryPill, getCategoryTextColor } from "@/components/CategoryPill";
@@ -884,7 +883,6 @@ export default function HomePage() {
                 Predict
               </Button>
             </div>
-            <XpPill size="sm" />
             <UserMenu />
           </div>
         </div>

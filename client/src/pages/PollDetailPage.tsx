@@ -5,7 +5,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { sharePage } from "@/lib/share";
 import { UserMenu } from "@/components/UserMenu";
-import { XpPill } from "@/components/XpPill";
 import { useXpBurst } from "@/components/XpBurstProvider";
 import { CategoryPill } from "@/components/CategoryPill";
 import { Button } from "@/components/ui/button";
@@ -176,8 +175,7 @@ export default function PollDetailPage() {
           <div className="flex justify-center min-w-0 col-start-2">
             <VoteDetailNavCluster listType="sentiment" slug={slug} />
           </div>
-          <div className="flex justify-end min-w-0 justify-self-end col-start-3 items-center gap-2">
-            <XpPill size="sm" />
+          <div className="justify-self-end col-start-3">
             <UserMenu />
           </div>
         </div>
