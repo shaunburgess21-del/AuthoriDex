@@ -102,6 +102,13 @@ export interface LastRunMeta {
     patched: string[];
     topTriggered: Array<{ name: string; streak: number; rank: number }>;
   };
+  newsEnglishHeadlineBackfill?: {
+    considered: number;
+    attempted: number;
+    succeeded: number;
+    failed: number;
+    patched: string[];
+  };
 }
 let _lastRunMeta: LastRunMeta | null = null;
 const LAST_RUN_META_KEY = "system:lastRunMeta";
