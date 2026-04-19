@@ -1,9 +1,17 @@
 import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence } from "framer-motion";
-import { XpBurst, type Floater } from "@/components/XpBurst";
+import { XpBurst, type Floater, type XpBurstAccent } from "@/components/XpBurst";
 
 type TriggerEvent = MouseEvent | React.MouseEvent;
+
+function getRouteAccent(): XpBurstAccent {
+  if (typeof window === "undefined") return "cyan";
+  const path = window.location.pathname;
+  if (path.startsWith("/predict") || path.startsWith("/markets")) return "violet";
+  if (path === "/" || path.startsWith("/home")) return "blue";
+  return "cyan";
+}
 
 interface XpBurstContextValue {
   trigger: (amount: number, event?: TriggerEvent, reason?: string) => void;
@@ -44,12 +52,13 @@ export function XpBurstProvider({ children }: XpBurstProviderProps) {
         y = event.clientY - 20;
       } else if (typeof window !== "undefined") {
         x = window.innerWidth / 2 - 40;
-        y = 100;
+        y = window.innerHeight * 0.4;
       } else {
         return;
       }
 
-      setFloaters(prev => [...prev, { id: idRef.current++, x, y, amount, reason }]);
+      const accent = getRouteAccent();
+      setFloaters(prev => [...prev, { id: idRef.current++, x, y, amount, reason, accent }]);
     } catch (err) {
       // Never let a burst failure break the calling mutation's flow.
       // eslint-disable-next-line no-console
