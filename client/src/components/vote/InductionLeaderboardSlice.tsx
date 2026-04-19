@@ -12,6 +12,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedApiError, signInToVoteToastOptions } from "@/lib/signInToVoteToast";
+import { navigateToLogin } from "@/lib/authReturn";
 
 export interface InductionCandidate {
   id: string;
@@ -195,7 +196,7 @@ export function InductionLeaderboardSlice({
         return next;
       });
       if (isUnauthorizedApiError(err)) {
-        toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+        toast({ ...signInToVoteToastOptions(() => navigateToLogin(setLocation)) });
       } else {
         toast({
           title: "Vote failed",
@@ -223,7 +224,7 @@ export function InductionLeaderboardSlice({
 
   const handleVote = onToggleVote || ((id: string) => {
     if (!user) {
-      toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+      toast({ ...signInToVoteToastOptions(() => navigateToLogin(setLocation)) });
       return;
     }
     if (localVotedIds.has(id)) return;

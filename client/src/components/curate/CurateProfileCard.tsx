@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedApiError, signInToVoteToastOptions } from "@/lib/signInToVoteToast";
+import { navigateToLogin } from "@/lib/authReturn";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation } from "wouter";
@@ -107,7 +108,7 @@ export function CurateProfileCard({
     if (selectedPhoto) return;
 
     if (!user) {
-      toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+      toast({ ...signInToVoteToastOptions(() => navigateToLogin(setLocation)) });
       return;
     }
 
@@ -135,7 +136,7 @@ export function CurateProfileCard({
       setSelectedPhoto(persistedSelectedPhoto);
       setShowResults(Boolean(persistedSelectedPhoto));
       if (isUnauthorizedApiError(error)) {
-        toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+        toast({ ...signInToVoteToastOptions(() => navigateToLogin(setLocation)) });
       } else {
         const message = error instanceof Error ? error.message : "Failed to record vote";
         toast({

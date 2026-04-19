@@ -6,6 +6,7 @@ import { OverlayFilterBar } from "@/components/OverlayFilterBar";
 import { ViewAllOverlayHeader } from "@/components/ViewAllOverlayHeader";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation } from "wouter";
+import { navigateToLogin } from "@/lib/authReturn";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { Crown, ImageIcon, Users } from "lucide-react";
@@ -225,7 +226,7 @@ export function CurateViewAllOverlay({
         testIdPrefix="curate-overlay"
         variant="vote"
         user={user}
-        onAuthRequired={() => setLocation("/login")}
+        onAuthRequired={() => navigateToLogin(setLocation)}
       />
       
       <div className="flex-1 overflow-y-auto p-4">

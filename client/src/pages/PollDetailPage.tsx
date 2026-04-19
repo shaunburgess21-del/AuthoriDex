@@ -18,6 +18,7 @@ import { formatTimeAgo, formatDate } from "@/lib/formatDate";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { VoteDetailNavCluster } from "@/components/vote/VoteDetailNavCluster";
 import { useDetailNavigation } from "@/hooks/useDetailNavigation";
+import { navigateToLogin } from "@/lib/authReturn";
 import { CardComments, useCommentCount } from "@/components/comments/CardComments";
 import { CommentsBottomSheet } from "@/components/snap-scroll/CommentsBottomSheet";
 import {
@@ -357,7 +358,7 @@ export default function PollDetailPage() {
           )}
           {!isLoggedIn && (
             <p className="text-xs text-center text-muted-foreground">
-              <Button variant="ghost" className="p-0 h-auto text-cyan-600 dark:text-cyan-400 underline" onClick={() => setLocation("/login")} data-testid="link-login-to-vote">
+              <Button variant="ghost" className="p-0 h-auto text-cyan-600 dark:text-cyan-400 underline" onClick={() => navigateToLogin(setLocation)} data-testid="link-login-to-vote">
                 Sign in
               </Button>{" "}
               to cast your vote

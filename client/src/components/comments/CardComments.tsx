@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation } from "wouter";
+import { navigateToLogin } from "@/lib/authReturn";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { formatTimeAgo } from "@/lib/formatDate";
@@ -411,7 +412,7 @@ export function CardComments({
       <p className="text-sm text-muted-foreground">
         <button
           className="text-cyan-600 dark:text-cyan-400 underline hover:text-cyan-500 dark:hover:text-cyan-300 transition-colors"
-          onClick={() => setLocation("/login")}
+          onClick={() => navigateToLogin(setLocation)}
           data-testid="link-login-to-comment"
         >
           Sign in

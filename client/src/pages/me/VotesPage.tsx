@@ -16,6 +16,7 @@ import {
   Check,
 } from "lucide-react";
 import { useLocation } from "wouter";
+import { navigateToLogin } from "@/lib/authReturn";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -110,7 +111,7 @@ export default function VotesPage() {
         <Card className="p-8 text-center max-w-md">
           <Vote className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
           <h2 className="text-xl font-semibold mb-2">Sign in to view your votes</h2>
-          <Button onClick={() => setLocation("/login")} className="mt-4" data-testid="button-sign-in">
+          <Button onClick={() => navigateToLogin(setLocation)} className="mt-4" data-testid="button-sign-in">
             Sign In
           </Button>
         </Card>

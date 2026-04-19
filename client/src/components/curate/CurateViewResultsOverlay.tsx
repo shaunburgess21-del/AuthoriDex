@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedApiError, signInToVoteToastOptions } from "@/lib/signInToVoteToast";
+import { navigateToLogin } from "@/lib/authReturn";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { X, Crown, ThumbsUp, ChevronLeft, Maximize2, ZoomIn } from "lucide-react";
@@ -70,7 +71,7 @@ export function CurateViewResultsOverlay({
     },
     onError: (error: Error) => {
       if (isUnauthorizedApiError(error)) {
-        toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+        toast({ ...signInToVoteToastOptions(() => navigateToLogin(setLocation)) });
       } else {
         toast({
           title: "Error",

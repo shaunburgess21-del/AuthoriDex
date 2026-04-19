@@ -9,6 +9,7 @@ import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover
 import { useMarketCycle } from "@/hooks/useMarketCycle";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation } from "wouter";
+import { navigateToLogin } from "@/lib/authReturn";
 import { MarketResolutionInfo } from "@/components/predict/MarketResolutionInfo";
 import { WhatNeedsToHappen } from "@/components/predict/WhatNeedsToHappen";
 import { OutcomePathChart } from "@/components/predict/OutcomePathChart";
@@ -530,7 +531,7 @@ export function StakeModal({
             )
           ) : (
             <Button
-              onClick={() => { onClose(); setLocation("/login"); }}
+              onClick={() => { onClose(); navigateToLogin(setLocation); }}
               className="flex-1 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white gap-1.5"
               data-testid="button-signin-stake"
             >

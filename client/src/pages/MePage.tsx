@@ -6,6 +6,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { getAvatarGradient, getAvatarInitials } from "@/lib/avatar";
 import { ArrowLeft, User, Star, TrendingUp, Settings, LogOut, Vote, Wallet, Shield, Trophy, Sparkles, Eye, Lock, Flame } from "lucide-react";
 import { useLocation } from "wouter";
+import { navigateToLogin } from "@/lib/authReturn";
 import { useAuth } from "@/contexts/AuthContext";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
 
@@ -277,7 +278,7 @@ export default function MePage() {
             <p className="text-muted-foreground mb-6">
               Track your favorites, view predictions, and manage your profile.
             </p>
-            <Button onClick={() => setLocation("/login")} data-testid="button-sign-in">
+            <Button onClick={() => navigateToLogin(setLocation)} data-testid="button-sign-in">
               Sign In
             </Button>
           </Card>

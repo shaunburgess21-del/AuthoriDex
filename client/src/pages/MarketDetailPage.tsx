@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { apiRequest, getAuthHeaders } from "@/lib/queryClient";
+import { navigateToLogin } from "@/lib/authReturn";
 import { formatTimeAgo, formatDate } from "@/lib/formatDate";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { CardComments, useCommentCount } from "@/components/comments/CardComments";
@@ -729,7 +730,7 @@ export default function MarketDetailPage() {
 
   const handlePlaceBet = () => {
     if (!isLoggedIn) {
-      setLocation("/login");
+      navigateToLogin(setLocation);
       return;
     }
     if (!selectedEntry || !stakeAmount) return;
@@ -980,7 +981,7 @@ export default function MarketDetailPage() {
               <div className="text-center py-4">
                 <Lock className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
                 <p className="text-sm text-muted-foreground mb-3">Sign in to place predictions</p>
-                <Button onClick={() => setLocation("/login")} data-testid="button-login-to-predict">
+                <Button onClick={() => navigateToLogin(setLocation)} data-testid="button-login-to-predict">
                   Sign In
                 </Button>
               </div>

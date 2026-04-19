@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
+import { navigateToLogin } from "@/lib/authReturn";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFavorites } from "@/hooks/useFavorites";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
@@ -290,7 +291,7 @@ export default function ValueRatingsPage() {
               const Icon = VOTE_CATEGORY_ICONS[id];
               const isActive = categoryFilter === id;
               return (
-                <button key={id} onClick={() => { if (isFavorites && !user) { setLocation("/login"); return; } setCategoryFilter(id); }}
+                <button key={id} onClick={() => { if (isFavorites && !user) { navigateToLogin(setLocation); return; } setCategoryFilter(id); }}
                   className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-all flex items-center gap-1.5 whitespace-nowrap ${isActive ? "bg-cyan-500/25 dark:bg-cyan-500/20 border-cyan-500/50 dark:border-cyan-500/40 text-cyan-500 dark:text-cyan-300" : "bg-slate-800/30 border-slate-700/40 text-slate-600 dark:text-slate-400 hover:border-slate-600"}`}
                   data-testid={`filter-value-${id}`}
                 >

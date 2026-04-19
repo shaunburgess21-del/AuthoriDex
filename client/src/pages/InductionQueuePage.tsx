@@ -5,6 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedApiError, signInToVoteToastOptions } from "@/lib/signInToVoteToast";
+import { navigateToLogin } from "@/lib/authReturn";
 import { UserMenu } from "@/components/UserMenu";
 import { useXpBurst } from "@/components/XpBurstProvider";
 import { PersonAvatar } from "@/components/PersonAvatar";
@@ -119,7 +120,7 @@ export default function InductionQueuePage() {
         return next;
       });
       if (isUnauthorizedApiError(err)) {
-        toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+        toast({ ...signInToVoteToastOptions(() => navigateToLogin(setLocation)) });
       } else {
         toast({ title: "Vote failed", description: err.message || "Something went wrong", variant: "destructive" });
       }
@@ -128,7 +129,7 @@ export default function InductionQueuePage() {
 
   const handleVote = (id: string) => {
     if (!user) {
-      toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+      toast({ ...signInToVoteToastOptions(() => navigateToLogin(setLocation)) });
       return;
     }
     if (votedIds.has(id)) return;

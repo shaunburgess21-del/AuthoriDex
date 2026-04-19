@@ -5,6 +5,7 @@ import { TrendingUp, Vote, LineChart } from "lucide-react";
 import { useLocation } from "wouter";
 
 import { useAuth } from "@/contexts/AuthContext";
+import { navigateToLogin } from "@/lib/authReturn";
 
 import { OnboardingDrawer, type OnboardingStep, type OnboardingDrawerHandle } from "@/components/OnboardingDrawer";
 
@@ -82,7 +83,7 @@ export const WelcomeModal = forwardRef<OnboardingDrawerHandle>(function WelcomeM
 
       onComplete={() => {
 
-        if (!isLoggedIn) navigate("/login?mode=signup");
+        if (!isLoggedIn) navigateToLogin(navigate, { mode: "signup" });
 
       }}
 

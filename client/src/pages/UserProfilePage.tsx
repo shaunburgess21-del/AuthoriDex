@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
+import { navigateToLogin } from "@/lib/authReturn";
 import { useAuth } from "@/contexts/AuthContext";
 import { getSupabase } from "@/lib/supabase";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -116,7 +117,7 @@ export default function UserProfilePage() {
 
   useEffect(() => {
     if (!authLoading && !user) {
-      setLocation("/login");
+      navigateToLogin(setLocation);
     }
   }, [user, authLoading, setLocation]);
 

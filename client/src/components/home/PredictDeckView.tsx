@@ -16,6 +16,7 @@ import { TrendingPerson } from "@shared/schema";
 import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation } from "wouter";
+import { navigateToLogin } from "@/lib/authReturn";
 import { useQuery } from "@tanstack/react-query";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { getCanonicalNativeCycle } from "@/lib/nativeMarketLifecycle";
@@ -731,7 +732,7 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
             key={cat.id}
             onClick={() => {
               if (cat.id === "favorites" && !user) {
-                setLocation("/login");
+                navigateToLogin(setLocation);
                 return;
               }
               setCategoryFilter(cat.id);

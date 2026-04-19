@@ -1,6 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { getSupabase } from "@/lib/supabase";
+import { useAuth } from "@/contexts/AuthContext";
+import {
+  redirectAfterLogin,
+  stashAuthReturnSnapshot,
+  hasPendingAuthReturnSnapshot,
+  clearStaleAuthReturnSnapshotOnDirectVisit,
+  markAuthNavIntent,
+} from "@/lib/authReturn";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,11 +20,31 @@ import { VoxDexLogo } from "@/components/VoxDexLogo";
 export default function LoginPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { user, loading: authLoading } = useAuth();
   const params = new URLSearchParams(window.location.search);
   const [isLogin, setIsLogin] = useState(params.get("mode") !== "signup");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  /** Prevents OAuth redirect effect from consuming snapshot while email sign-in handler runs. */
+  const emailAuthInProgressRef = useRef(false);
+
+  // On direct /login visit (bookmark, refresh, external link) drop any stale snapshot so
+  // a successful sign-in doesn't kick the user to an unrelated prior-session page.
+  // navigateToLogin() and the Google OAuth handler both call markAuthNavIntent() before
+  // redirecting, so intentional auth flows survive this cleanup.
+  useEffect(() => {
+    clearStaleAuthReturnSnapshotOnDirectVisit();
+  }, []);
+
+  // Google OAuth returns here with a session; redirect using the snapshot stashed before OAuth.
+  useEffect(() => {
+    if (authLoading || !user) return;
+    if (window.location.pathname !== "/login") return;
+    if (emailAuthInProgressRef.current) return;
+    if (!hasPendingAuthReturnSnapshot()) return;
+    redirectAfterLogin(setLocation);
+  }, [user, authLoading, setLocation]);
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,6 +54,7 @@ export default function LoginPage() {
       const supabase = await getSupabase();
 
       if (isLogin) {
+        emailAuthInProgressRef.current = true;
         const { error } = await supabase.auth.signInWithPassword({
           email,
           password,
@@ -37,7 +66,7 @@ export default function LoginPage() {
           title: "Welcome back!",
           description: "You've successfully signed in.",
         });
-        setLocation("/me", { replace: true });
+        redirectAfterLogin(setLocation);
       } else {
         const { error } = await supabase.auth.signUp({
           email,
@@ -58,17 +87,27 @@ export default function LoginPage() {
         variant: "destructive",
       });
     } finally {
+      emailAuthInProgressRef.current = false;
       setLoading(false);
     }
   };
 
   const handleGoogleAuth = async () => {
     try {
+      // Snapshot was written when the user opened /login via navigateToLogin; only stash if missing
+      // (e.g. bookmarked /login) so we do not overwrite a good stash with "/".
+      if (!hasPendingAuthReturnSnapshot()) {
+        stashAuthReturnSnapshot();
+      }
+      // Full-page OAuth redirect remounts LoginPage on return; mark the intent so the
+      // direct-visit cleanup doesn't discard the fresh snapshot.
+      markAuthNavIntent();
       const supabase = await getSupabase();
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/me`,
+          // Allowlist this URL in Supabase Dashboard → Authentication → URL Configuration.
+          redirectTo: `${window.location.origin}/login`,
         },
       });
 

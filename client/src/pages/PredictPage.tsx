@@ -96,6 +96,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useLocation, Link } from "wouter";
+import { navigateToLogin } from "@/lib/authReturn";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { CardSection } from "@/components/CardSection";
@@ -2158,7 +2159,7 @@ export default function PredictPage() {
     if (!selectedJackpotPerson) return;
     if (!user) {
       toast({ title: "Sign in required", description: "Sign in to place predictions." });
-      setLocation("/login");
+      navigateToLogin(setLocation);
       return;
     }
     setJackpotModalOpen(true);
@@ -2289,7 +2290,7 @@ export default function PredictPage() {
         title: "Sign in required",
         description: "Sign in to place predictions.",
       });
-      setLocation("/login");
+      navigateToLogin(setLocation);
       return;
     }
 
@@ -2327,7 +2328,7 @@ export default function PredictPage() {
     }
     if (!user) {
       toast({ title: "Sign in required", description: "Sign in to place predictions." });
-      setLocation("/login");
+      navigateToLogin(setLocation);
       return;
     }
 
@@ -2366,7 +2367,7 @@ export default function PredictPage() {
     }
     if (!user) {
       toast({ title: "Sign in required", description: "Sign in to place predictions." });
-      setLocation("/login");
+      navigateToLogin(setLocation);
       return;
     }
 
@@ -2761,7 +2762,7 @@ export default function PredictPage() {
                 searchPlaceholder="Search predictions..."
                 testIdPrefix="community"
                 user={user}
-                onAuthRequired={() => setLocation("/login")}
+                onAuthRequired={() => navigateToLogin(setLocation)}
                 includeCustomTopic={true}
                 showSearch={false}
               />
@@ -2993,7 +2994,7 @@ export default function PredictPage() {
                 searchPlaceholder="Search celebrities..."
                 testIdPrefix="updown"
                 user={user}
-                onAuthRequired={() => setLocation("/login")}
+                onAuthRequired={() => navigateToLogin(setLocation)}
                 showSearch={false}
               />
             </UnifiedSectionHeader>
@@ -3075,7 +3076,7 @@ export default function PredictPage() {
                 searchPlaceholder="Search matchups..."
                 testIdPrefix="h2h"
                 user={user}
-                onAuthRequired={() => setLocation("/login")}
+                onAuthRequired={() => navigateToLogin(setLocation)}
                 showSearch={false}
               />
             </UnifiedSectionHeader>
@@ -3165,7 +3166,7 @@ export default function PredictPage() {
                 searchPlaceholder="Search gainers..."
                 testIdPrefix="gainer"
                 user={user}
-                onAuthRequired={() => setLocation("/login")}
+                onAuthRequired={() => navigateToLogin(setLocation)}
                 showSearch={false}
               />
             </UnifiedSectionHeader>
@@ -3244,7 +3245,7 @@ export default function PredictPage() {
         searchQuery={overlaySearchQuery}
         onSearchChange={setOverlaySearchQuery}
         user={user}
-        onAuthRequired={() => setLocation("/login")}
+        onAuthRequired={() => navigateToLogin(setLocation)}
       >
         {hydratedMarkets
           .filter(m => 
@@ -3276,7 +3277,7 @@ export default function PredictPage() {
         searchQuery={overlaySearchQuery}
         onSearchChange={setOverlaySearchQuery}
         user={user}
-        onAuthRequired={() => setLocation("/login")}
+        onAuthRequired={() => navigateToLogin(setLocation)}
       >
         {hydratedH2H
           .filter(m => 
@@ -3316,7 +3317,7 @@ export default function PredictPage() {
         searchQuery={overlaySearchQuery}
         onSearchChange={setOverlaySearchQuery}
         user={user}
-        onAuthRequired={() => setLocation("/login")}
+        onAuthRequired={() => navigateToLogin(setLocation)}
       >
         {filteredOverlayGainers.length > 0 ? (
           filteredOverlayGainers.map((market) => (
@@ -3350,7 +3351,7 @@ export default function PredictPage() {
         searchQuery={overlaySearchQuery}
         onSearchChange={setOverlaySearchQuery}
         user={user}
-        onAuthRequired={() => setLocation("/login")}
+        onAuthRequired={() => navigateToLogin(setLocation)}
       >
         {openMarkets
           .filter((m: any) => 

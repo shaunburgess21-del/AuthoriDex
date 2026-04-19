@@ -3,6 +3,7 @@ import { useLocation, Link } from "wouter";
 import { useAuth, UserProfile } from "@/contexts/AuthContext";
 import { useThemeToggle } from "@/hooks/useThemeToggle";
 import { useRanks } from "@/hooks/useGamification";
+import { navigateToLogin } from "@/lib/authReturn";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -390,12 +391,12 @@ export function UserMenu() {
   };
   
   const handleSignIn = () => {
-    setLocation("/login");
+    navigateToLogin(setLocation);
     setSheetOpen(false);
   };
   
   const handleCreateAccount = () => {
-    setLocation("/login?mode=signup");
+    navigateToLogin(setLocation, { mode: "signup" });
     setSheetOpen(false);
   };
   

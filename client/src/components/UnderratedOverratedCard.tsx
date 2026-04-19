@@ -8,6 +8,7 @@ import { ArrowUp, ArrowDown, Minus, Users, Loader2, BarChart2, ChevronRight } fr
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedApiError, signInToVoteToastOptions } from "@/lib/signInToVoteToast";
+import { navigateToLogin } from "@/lib/authReturn";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { Link, useLocation } from "wouter";
@@ -78,7 +79,7 @@ export function UnderratedOverratedCard({
     onError: (error: any) => {
       setLocalVote(person.userValueVote ?? null);
       if (isUnauthorizedApiError(error)) {
-        toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+        toast({ ...signInToVoteToastOptions(() => navigateToLogin(setLocation)) });
       } else {
         toast({
           title: "Vote failed",
@@ -91,7 +92,7 @@ export function UnderratedOverratedCard({
 
   const handleVote = (voteType: VoteType) => {
     if (!user) {
-      toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+      toast({ ...signInToVoteToastOptions(() => navigateToLogin(setLocation)) });
       return;
     }
     if (!localVote) {

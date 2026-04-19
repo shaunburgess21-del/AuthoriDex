@@ -14,6 +14,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { formatSignedPercent, formatSignedPoints } from "@/lib/predict-display";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation, Link } from "wouter";
+import { navigateToLogin } from "@/lib/authReturn";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
@@ -632,7 +633,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
     }
     if (!user) {
       toast({ title: "Sign in required", description: "Sign in to place predictions." });
-      setLocation("/login");
+      navigateToLogin(setLocation);
       return;
     }
     const entryId = choice === "up" ? market.upEntryId : market.downEntryId;
@@ -664,7 +665,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
     }
     if (!user) {
       toast({ title: "Sign in required", description: "Sign in to place predictions." });
-      setLocation("/login");
+      navigateToLogin(setLocation);
       return;
     }
     const entryId = person === 1 ? market.person1EntryId : market.person2EntryId;
@@ -700,7 +701,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
     }
     if (!user) {
       toast({ title: "Sign in required", description: "Sign in to place predictions." });
-      setLocation("/login");
+      navigateToLogin(setLocation);
       return;
     }
     if (!candidate.entryId) {

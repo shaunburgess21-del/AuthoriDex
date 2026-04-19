@@ -104,6 +104,11 @@ import { UnifiedSectionHeader } from "@/components/UnifiedSectionHeader";
 import { WindowedDotIndicator } from "@/components/WindowedDotIndicator";
 import { ScrollMaskedChipRow } from "@/components/ScrollMaskedChipRow";
 import { VoteSnapScrollView, type SnapItem, type SnapSectionType } from "@/components/snap-scroll/VoteSnapScrollView";
+import {
+  navigateToLogin,
+  AUTH_APPLY_VOTE_UI_ONCE_KEY,
+  type VoteResumePayload,
+} from "@/lib/authReturn";
 import { navigateWithVoteList } from "@/lib/voteListNavigation";
 import { usePeopleSearch, type SearchablePerson } from "@/hooks/usePeopleSearch";
 import { SuggestCategorySelect } from "@/components/suggest/SuggestCategorySelect";
@@ -467,7 +472,7 @@ function CurateProfileCard({
     },
     onError: (error: Error) => {
       if (isUnauthorizedApiError(error)) {
-        toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+        toast({ ...signInToVoteToastOptions(() => navigateToLogin(setLocation)) });
       } else {
         const parsed = parseVoteError(error);
         toast({
@@ -1170,9 +1175,6 @@ export default function VotePage() {
   const raceMap = useCategoryRaceMap();
   const leaderboardCats = useLeaderboardCategories();
 
-  const handleAuthRequired = () => {
-    setLocation("/login");
-  };
   const [suggestModalOpen, setSuggestModalOpen] = useState(false);
   const [inductionSuggestOpen, setInductionSuggestOpen] = useState(false);
   const [matchupSuggestOpen, setMatchupSuggestOpen] = useState(false);
@@ -1197,6 +1199,20 @@ export default function VotePage() {
   const { trigger: triggerXpBurst } = useXpBurst();
 
   const [votedIds, setVotedIds] = useState<Set<string>>(new Set());
+
+  /**
+   * Current Vote hub UI state as a serializable snapshot. Read synchronously at click time
+   * (via .current) to stash into the auth-return payload before navigating to /login.
+   * Kept in sync with React state by the overlay/snap sync effect further below.
+   */
+  const voteLoginSnapshotRef = useRef<VoteResumePayload>({
+    inductionOverlayOpen: false,
+    topicsOverlayOpen: false,
+    matchupsOverlayOpen: false,
+    opinionPollsOverlayOpen: false,
+    valuePerceptionOverlayOpen: false,
+    snapScrollOpen: false,
+  });
 
   interface InductionAPIResponse {
     data: Array<{
@@ -1251,7 +1267,7 @@ export default function VotePage() {
         return next;
       });
       if (isUnauthorizedApiError(err)) {
-        toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+        toast({ ...signInToVoteToastOptions(() => navigateToLogin(setLocation, { voteUi: voteLoginSnapshotRef.current })) });
       } else {
         const parsed = parseVoteError(err);
         toast({
@@ -1349,6 +1365,8 @@ export default function VotePage() {
   const [snapScrollOpen, setSnapScrollOpen] = useState(false);
   const [snapScrollSection, setSnapScrollSection] = useState<SnapSectionType>("matchups");
   const [snapScrollInitialId, setSnapScrollInitialId] = useState<string | undefined>();
+  // Hoisted so handleAuthRequired / snapshot sync below can read the saved scroll Y.
+  const savedSnapWindowScrollRef = useRef<number | null>(null);
 
   const enrichedCandidates = dbInductionCandidates;
   
@@ -1493,7 +1511,7 @@ export default function VotePage() {
         });
       }
       if (isUnauthorizedApiError(error)) {
-        toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+        toast({ ...signInToVoteToastOptions(() => navigateToLogin(setLocation, { voteUi: voteLoginSnapshotRef.current })) });
       } else {
         const parsed = parseVoteError(error);
         if (parsed.retryAfter) {
@@ -1525,7 +1543,7 @@ export default function VotePage() {
     onError: (error: any, variables) => {
       setLocalMatchupVotes((prev: Record<string, string>) => ({ ...prev, [variables.matchupId]: variables.previousVote }));
       if (isUnauthorizedApiError(error)) {
-        toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+        toast({ ...signInToVoteToastOptions(() => navigateToLogin(setLocation, { voteUi: voteLoginSnapshotRef.current })) });
       } else {
         const parsed = parseVoteError(error);
         if (parsed.retryAfter) {
@@ -1694,8 +1712,6 @@ export default function VotePage() {
     [displayOpinionPolls],
   );
 
-  const savedSnapWindowScrollRef = useRef<number | null>(null);
-
   const openSnapScroll = useCallback((section: SnapSectionType, itemId?: string) => {
     if (!isMobile) return;
     savedSnapWindowScrollRef.current = window.scrollY;
@@ -1774,6 +1790,92 @@ export default function VotePage() {
     applyOverlayState(name);
   }, [applyOverlayState]);
 
+  // Keep the auth-return snapshot in lockstep with the current Vote hub UI. Reading the
+  // ref synchronously inside a click handler will reflect the most recently flushed state,
+  // so overlays/snap that were open just before "Sign In" are restored on return.
+  useEffect(() => {
+    voteLoginSnapshotRef.current = {
+      inductionOverlayOpen,
+      topicsOverlayOpen,
+      matchupsOverlayOpen,
+      opinionPollsOverlayOpen,
+      valuePerceptionOverlayOpen,
+      snapScrollOpen,
+      ...(snapScrollOpen ? { snapScrollSection } : {}),
+      ...(snapScrollOpen && snapScrollInitialId ? { snapScrollInitialId } : {}),
+      ...(savedSnapWindowScrollRef.current != null
+        ? { savedWindowScrollY: savedSnapWindowScrollRef.current }
+        : {}),
+    };
+  }, [
+    inductionOverlayOpen,
+    topicsOverlayOpen,
+    matchupsOverlayOpen,
+    opinionPollsOverlayOpen,
+    valuePerceptionOverlayOpen,
+    snapScrollOpen,
+    snapScrollSection,
+    snapScrollInitialId,
+  ]);
+
+  const handleAuthRequired = useCallback(() => {
+    navigateToLogin(setLocation, { voteUi: voteLoginSnapshotRef.current });
+  }, [setLocation]);
+
+  // One-shot restoration of Vote hub UI after a successful sign-in return. The key is
+  // seeded by redirectAfterLogin() when the snapshot target was /vote, and removed here
+  // so subsequent mounts (manual nav to /vote) do not re-open overlays.
+  useEffect(() => {
+    if (!user) return;
+    let raw: string | null = null;
+    try {
+      raw = sessionStorage.getItem(AUTH_APPLY_VOTE_UI_ONCE_KEY);
+    } catch {
+      return;
+    }
+    if (!raw) return;
+    try {
+      sessionStorage.removeItem(AUTH_APPLY_VOTE_UI_ONCE_KEY);
+    } catch {
+      /* ignore */
+    }
+    let payload: VoteResumePayload;
+    try {
+      payload = JSON.parse(raw) as VoteResumePayload;
+    } catch {
+      return;
+    }
+    if (!payload || typeof payload !== "object") return;
+
+    // Prefer the snap-scroll restoration (mobile) since overlays + snap are mutually
+    // exclusive by construction. Fall back to a single overlay (first-truthy wins).
+    if (payload.snapScrollOpen && payload.snapScrollSection) {
+      if (typeof payload.savedWindowScrollY === "number") {
+        savedSnapWindowScrollRef.current = payload.savedWindowScrollY;
+      }
+      setSnapScrollSection(payload.snapScrollSection);
+      setSnapScrollInitialId(payload.snapScrollInitialId);
+      setSnapScrollOpen(true);
+      window.history.pushState({ overlay: `snap-${payload.snapScrollSection}` }, "");
+      return;
+    }
+    const overlayName = payload.inductionOverlayOpen
+      ? "induction"
+      : payload.topicsOverlayOpen
+      ? "topics"
+      : payload.matchupsOverlayOpen
+      ? "matchups"
+      : payload.opinionPollsOverlayOpen
+      ? "opinion-polls"
+      : payload.valuePerceptionOverlayOpen
+      ? "value-perception"
+      : null;
+    if (overlayName) {
+      window.history.pushState({ overlay: overlayName }, "");
+      applyOverlayState(overlayName);
+    }
+  }, [user, applyOverlayState]);
+
   const closeOverlay = useCallback(() => {
     ["induction", "topics", "matchups", "opinion-polls", "value-perception"].forEach(clearOverlayScroll);
     applyOverlayState(undefined);
@@ -1843,7 +1945,7 @@ export default function VotePage() {
 
   const handleToggleVote = (candidateId: string) => {
     if (!user) {
-      toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+      toast({ ...signInToVoteToastOptions(() => navigateToLogin(setLocation, { voteUi: voteLoginSnapshotRef.current })) });
       return;
     }
     if (votedIds.has(candidateId)) return;
@@ -1870,7 +1972,7 @@ export default function VotePage() {
     onError: (error: any) => {
       queryClient.invalidateQueries({ queryKey: ['/api/trending-polls'] });
       if (isUnauthorizedApiError(error)) {
-        toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+        toast({ ...signInToVoteToastOptions(() => navigateToLogin(setLocation, { voteUi: voteLoginSnapshotRef.current })) });
       } else {
         const parsed = parseVoteError(error);
         toast({
@@ -1888,7 +1990,7 @@ export default function VotePage() {
     choice: 'support' | 'neutral' | 'oppose',
   ): Promise<void> => {
     if (!user) {
-      toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+      toast({ ...signInToVoteToastOptions(() => navigateToLogin(setLocation, { voteUi: voteLoginSnapshotRef.current })) });
       throw new Error("Not authenticated");
     }
     const topic = dbPolls.find((t: any) => t.id === topicId);

@@ -59,6 +59,7 @@ import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { profileSectionGridClass } from "@/lib/profileSectionGridClass";
 import { isUnauthorizedApiError, signInToVoteToastOptions } from "@/lib/signInToVoteToast";
+import { navigateToLogin } from "@/lib/authReturn";
 import { ViewAllOverlayHeader } from "@/components/ViewAllOverlayHeader";
 import { AvatarHeightHeadline } from "@/components/AvatarHeightHeadline";
 import { VersusCard, type VersusCardMatchup } from "@/components/matchups/VersusCard";
@@ -870,7 +871,7 @@ export default function PersonDetailPage() {
         return next;
       });
       if (isUnauthorizedApiError(error)) {
-        toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+        toast({ ...signInToVoteToastOptions(() => navigateToLogin(setLocation)) });
       } else {
         toast({
           title: "Error",
@@ -908,7 +909,7 @@ export default function PersonDetailPage() {
         return next;
       });
       if (isUnauthorizedApiError(error)) {
-        toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+        toast({ ...signInToVoteToastOptions(() => navigateToLogin(setLocation)) });
       } else {
         toast({
           title: "Error",
@@ -921,7 +922,7 @@ export default function PersonDetailPage() {
 
   const handleMatchupVote = (matchupId: string, option: "option_a" | "option_b" | "neutral") => {
     if (!user || !session?.access_token) {
-      toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+      toast({ ...signInToVoteToastOptions(() => navigateToLogin(setLocation)) });
       return;
     }
     const previousVote = matchupUserVotes[matchupId] || null;
@@ -930,7 +931,7 @@ export default function PersonDetailPage() {
 
   const handleMatchupRemoveVote = (matchupId: string) => {
     if (!user || !session?.access_token) {
-      toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+      toast({ ...signInToVoteToastOptions(() => navigateToLogin(setLocation)) });
       return;
     }
     const previousVote = matchupUserVotes[matchupId];
@@ -1053,7 +1054,7 @@ export default function PersonDetailPage() {
         description: "Please sign in to add favorites",
         variant: "destructive",
       });
-      setLocation("/login");
+      navigateToLogin(setLocation);
       return;
     }
 

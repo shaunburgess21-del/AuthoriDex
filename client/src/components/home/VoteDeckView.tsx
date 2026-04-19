@@ -12,6 +12,7 @@ import { PersonAvatar } from "@/components/PersonAvatar";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation, Link } from "wouter";
+import { navigateToLogin } from "@/lib/authReturn";
 import { 
   Swords, 
   MessageSquare, 
@@ -640,7 +641,7 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
 
   const handleInductionVote = (id: string) => {
     if (!user) {
-      setLocation("/login");
+      navigateToLogin(setLocation);
       return;
     }
     if (inductionVotes.has(id)) return;
@@ -760,7 +761,7 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
             key={id}
             onClick={() => {
               if (id === "favorites" && !user) {
-                setLocation("/login");
+                navigateToLogin(setLocation);
                 return;
               }
               setCategoryFilter(id);

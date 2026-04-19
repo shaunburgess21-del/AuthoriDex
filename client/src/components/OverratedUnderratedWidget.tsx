@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
+import { navigateToLogin } from "@/lib/authReturn";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useXpBurst } from "./XpBurstProvider";
 
@@ -64,7 +65,7 @@ export function OverratedUnderratedWidget({
 
   const handleVote = (voteType: 'underrated' | 'overrated') => {
     if (!user) {
-      setLocation("/login");
+      navigateToLogin(setLocation);
       return;
     }
     setLocalVote(voteType);
@@ -223,7 +224,7 @@ export function OverratedUnderratedWidget({
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setLocation("/login")}
+              onClick={() => navigateToLogin(setLocation)}
               className="w-full gap-2 text-muted-foreground"
               data-testid="button-login-to-vote"
             >
