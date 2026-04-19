@@ -15652,16 +15652,26 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       const { approvedAsId, approvedAsType } = await dispatchApproval(suggestion, adminId, adminOverrides);
       await markSuggestionApproved(suggestion.id, approvedAsId, approvedAsType, adminId);
 
-      // Bonus XP — non-blocking; failure does not fail the approval.
-      try {
-        await gamificationService.awardXp(
-          suggestion.submittedBy,
-          "suggestion_approved",
-          `suggestion_approved_${suggestion.id}`,
-          { suggestionType: suggestion.type, approvedAsId }
+      // Integrity guard: prevent admins from approving their own suggestions for XP.
+      // Admins may still approve their own suggestions (the approval itself is valid),
+      // but XP is NOT awarded in that case — otherwise an admin could flood suggestions
+      // and self-approve for unlimited XP, corrupting the public leaderboard.
+      if (suggestion.submittedBy === adminId) {
+        console.log(
+          `[suggestion_approved] Skipping XP award: admin ${adminId} approved own suggestion ${suggestion.id}`
         );
-      } catch (xpErr) {
-        console.error("XP award failed for suggestion approval:", xpErr);
+      } else {
+        // Bonus XP — non-blocking; failure does not fail the approval.
+        try {
+          await gamificationService.awardXp(
+            suggestion.submittedBy,
+            "suggestion_approved",
+            `suggestion_approved_${suggestion.id}`,
+            { suggestionType: suggestion.type, approvedAsId }
+          );
+        } catch (xpErr) {
+          console.error("XP award failed for suggestion approval:", xpErr);
+        }
       }
 
       res.json({ success: true, approvedAsId, approvedAsType });
@@ -15703,10 +15713,8 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
   // POST /api/suggestions — persist a user content suggestion and award XP.
   // Auth: requireAuth. Rate limiting is covered by the existing layered middleware.
   //
-  // Pre-launch deliberate decision: self-approval rewards are allowed (a user who is
-  // also an admin can submit a suggestion and earn the XP). This is intentional
-  // pre-launch simplicity — the volume of such cases is negligible and the XP value
-  // is low (5 XP). TODO post-launch: add a check to skip XP if req.userRole === 'admin'.
+  // Self-approval XP guard is enforced in the approve endpoint — admins cannot earn
+  // XP from approving their own suggestions, though they may still approve them.
   app.post("/api/suggestions", requireAuth, async (req: AuthRequest, res) => {
     try {
       const userId = req.userId!;

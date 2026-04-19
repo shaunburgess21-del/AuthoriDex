@@ -51,3 +51,43 @@ a Credits management page where users can:
 Scope is its own task — Paystack integration, credits management page,
 auth + rate limiting on purchase endpoints. Do not conflate with pill
 visual work.
+
+## XP awards on vote removal — design decision (2026-04-19)
+
+Finding from Task 5.4 Phase 1 audit: Users who remove a vote (on matchups,
+opinion polls, etc.) keep the XP they earned when they first voted. There is
+no negative ledger entry or "refund" on vote removal.
+
+This is working as intended, not a bug.
+
+Rationale: XP rewards the *engagement* (participating in the vote), not the
+final state of the vote. Penalising users for changing their mind with
+retroactive XP loss creates bad incentives:
+- Users become reluctant to vote when uncertain (voting feels "locked in")
+- Users who realise they were wrong feel worse about self-correcting
+- Encourages excessive deliberation before any vote
+
+The current asymmetric design (earn on first vote, keep on removal) is
+psychologically correct. Do not "fix" this as a bug in future refactors.
+
+If a user could exploit this by repeated vote-remove-revote cycles, that
+WOULD be a bug — but the Phase 1 audit confirmed it's not exploitable:
+every vote action's idempotency key is keyed by (target, userId) only,
+and ledger rows persist when vote rows are deleted. Re-voting after
+removal hits the same idempotency key and is blocked at the DB constraint
+level. Users can earn XP once per target, period.
+
+## Daily-cap race condition — deferred hardening (2026-04-19)
+
+Phase 1 audit flagged a theoretical race in GamificationService.awardXp:
+two concurrent requests with distinct idempotency keys can both pass the
+dailyCount check before either inserts, briefly exceeding the cap by 1.
+
+Real-world impact: near zero. Would require sub-50ms concurrent requests
+from the same user, which legitimate browser usage can't generate.
+
+If evidence of abuse appears (ledger rows showing cap+1 entries within
+<100ms for a user), the fix is a SELECT ... FOR UPDATE on a user lock row,
+OR a DB-level check constraint counting same-action rows in the UTC day.
+
+Until then, not worth the complexity.
