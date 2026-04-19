@@ -2093,49 +2093,6 @@ export default function PredictPage() {
     ],
   );
 
-  useEffect(() => {
-    const labeled: { key: string; message: string }[] = [];
-    const push = (key: string, e: unknown) => {
-      if (!e) return;
-      labeled.push({ key, message: e instanceof Error ? e.message : String(e) });
-    };
-    push("trending", trendingError);
-    push("openMarkets", openMarketsError);
-    push("updown", updownError);
-    push("h2h", h2hError);
-    push("gainer", gainerError);
-    push("jackpot", jackpotError);
-    push("recentActivity", recentActivityError);
-    if (labeled.length === 0) return;
-    // #region agent log
-    fetch("http://127.0.0.1:7335/ingest/5a3bb67c-8953-4d89-be3b-94579791ed8e", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "6435e1" },
-      body: JSON.stringify({
-        sessionId: "6435e1",
-        hypothesisId: "H5",
-        location: "PredictPage.tsx:predictLoadErrors",
-        message: "predict queries failed",
-        data: {
-          origin: typeof window !== "undefined" ? window.location.origin : "",
-          failCount: labeled.length,
-          labeled,
-          showMultiBanner: labeled.length >= 2,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
-  }, [
-    trendingError,
-    openMarketsError,
-    updownError,
-    h2hError,
-    gainerError,
-    jackpotError,
-    recentActivityError,
-  ]);
-
   const showPredictMultiFailureBanner = predictLoadErrors.length >= 2;
   const firstPredictErrorMessage =
     predictLoadErrors[0] instanceof Error ? predictLoadErrors[0].message : "";

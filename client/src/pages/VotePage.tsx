@@ -706,7 +706,7 @@ function DiscourseCard({
   onBrowseFullScreen,
 }: {
   topic: any;
-  onVote: (choice: 'support' | 'neutral' | 'oppose') => void;
+  onVote: (choice: 'support' | 'neutral' | 'oppose') => Promise<void>;
   onFilterCategory: (category: string) => void;
   categoryRaceMap: Map<string, string>;
   leaderboardCategories?: Set<string>;
@@ -738,10 +738,14 @@ function DiscourseCard({
     }
   };
 
-  const handleVote = (choice: 'support' | 'neutral' | 'oppose') => {
-    if (!voted) {
-      setVoted(choice);
-      onVote(choice);
+  const handleVote = async (choice: 'support' | 'neutral' | 'oppose') => {
+    if (voted) return;
+    const prev = voted;
+    setVoted(choice);
+    try {
+      await onVote(choice);
+    } catch {
+      setVoted(prev);
     }
   };
 
@@ -1879,15 +1883,19 @@ export default function VotePage() {
     },
   });
 
-  const handleDiscourseVote = (topicId: string, choice: 'support' | 'neutral' | 'oppose') => {
+  const handleDiscourseVote = async (
+    topicId: string,
+    choice: 'support' | 'neutral' | 'oppose',
+  ): Promise<void> => {
     if (!user) {
       toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
-      return;
+      throw new Error("Not authenticated");
     }
     const topic = dbPolls.find((t: any) => t.id === topicId);
-    if (topic?.slug) {
-      discourseVoteMutation.mutate({ slug: topic.slug, choice });
+    if (!topic?.slug) {
+      throw new Error("Topic not found");
     }
+    await discourseVoteMutation.mutateAsync({ slug: topic.slug, choice });
   };
 
   const openSuggestModal = (open: () => void) => {
