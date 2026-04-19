@@ -37,7 +37,7 @@ export default function LoginPage() {
           title: "Welcome back!",
           description: "You've successfully signed in.",
         });
-        setLocation("/me");
+        setLocation("/me", { replace: true });
       } else {
         const { error } = await supabase.auth.signUp({
           email,
