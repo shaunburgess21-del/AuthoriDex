@@ -182,10 +182,21 @@ export function registerCronRoutes(app: Express): void {
     }
   });
 
-  app.get("/api/cron/health", verifyCronSecret, (_req, res) => {
+  app.get("/api/cron/health", verifyCronSecret, async (_req, res) => {
+    // Include upstream provider state so external monitors can alert on Serper
+    // auth/quota/rate-limit outages instead of silently degrading product features.
+    const { getSerperDegradedState } = await import("../providers/serper");
+    const serperDegraded = getSerperDegradedState();
     res.json({
       status: "ok",
       serverTime: new Date().toISOString(),
+      providers: {
+        serper: {
+          status: serperDegraded ? "degraded" : "ok",
+          reason: serperDegraded?.reason ?? null,
+          since: serperDegraded?.since ?? null,
+        },
+      },
     });
   });
 }

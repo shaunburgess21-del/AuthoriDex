@@ -29,6 +29,54 @@ export function resetSerperRunStats() {
 export function incrementSerperSearchCalls() { _serperSearchCallsAttempted++; }
 export function incrementSerperFallbackCalls() { _serperFallbackCallsAttempted++; }
 
+// Degraded-state tracking: distinguishes provider-side failures (auth/quota/rate-limit)
+// from legitimately-empty results. Single source of truth for both the Why Trending
+// endpoint and the admin/cron health surfaces.
+export type SerperDegradedReason = "auth" | "quota" | "rate_limit";
+export interface SerperDegradedState {
+  reason: SerperDegradedReason;
+  since: string;
+  lastStatus: number;
+  lastDetail?: string;
+}
+
+let _serperDegradedState: SerperDegradedState | null = null;
+
+export function getSerperDegradedState(): SerperDegradedState | null {
+  return _serperDegradedState;
+}
+
+export function clearSerperDegradedState(): void {
+  if (_serperDegradedState) {
+    console.info(`[Serper] Degraded state cleared (was ${_serperDegradedState.reason} since ${_serperDegradedState.since})`);
+    _serperDegradedState = null;
+  }
+}
+
+function classifyDegradedStatus(status: number, body?: string): SerperDegradedReason | null {
+  if (status === 401 || status === 403) return "auth";
+  if (status === 402) return "quota";
+  if (status === 429) return "rate_limit";
+  // Serper sometimes returns 400/500 with a credits-exhausted body when the plan runs out.
+  if (body && /credit|quota|insufficient|balance/i.test(body)) return "quota";
+  return null;
+}
+
+function markSerperDegraded(reason: SerperDegradedReason, status: number, detail?: string): void {
+  const prev = _serperDegradedState;
+  if (prev && prev.reason === reason) {
+    _serperDegradedState = { ...prev, lastStatus: status, lastDetail: detail };
+    return;
+  }
+  _serperDegradedState = {
+    reason,
+    since: new Date().toISOString(),
+    lastStatus: status,
+    lastDetail: detail,
+  };
+  console.warn(`[Serper] Entering degraded state: reason=${reason} status=${status}${detail ? ` detail=${detail.slice(0, 120)}` : ""}`);
+}
+
 async function serperFetch(url: string, options: RequestInit): Promise<Response> {
   _serperCallsAttempted++;
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -43,6 +91,20 @@ async function serperFetch(url: string, options: RequestInit): Promise<Response>
         console.warn(`[Serper] Got ${response.status}, retrying in ${jitter.toFixed(0)}ms`);
         await new Promise(r => setTimeout(r, jitter));
         continue;
+      }
+      if (response.ok) {
+        clearSerperDegradedState();
+      } else {
+        // Peek body for credits/quota hints without consuming it for the caller.
+        // We clone so downstream .json()/.text() still works.
+        let bodyPeek: string | undefined;
+        try {
+          bodyPeek = await response.clone().text();
+        } catch {}
+        const reason = classifyDegradedStatus(response.status, bodyPeek);
+        if (reason) {
+          markSerperDegraded(reason, response.status, bodyPeek);
+        }
       }
       return response;
     } catch (err: any) {

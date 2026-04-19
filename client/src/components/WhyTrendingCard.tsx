@@ -17,6 +17,8 @@ interface WhyTrendingData {
   fetchedAt: string;
   message?: string;
   cacheStatus?: string;
+  providerReason?: "auth" | "quota" | "rate_limit";
+  providerSince?: string;
 }
 
 interface WhyTrendingCardProps {
@@ -110,6 +112,37 @@ export function WhyTrendingCard({ personId, personName, hotMover }: WhyTrendingC
   }
 
   if (!data || !data.hasContext) {
+    const isUnavailable = data?.cacheStatus === "PROVIDER_UNAVAILABLE";
+    if (isUnavailable) {
+      return (
+        <Card className="border-border/50 bg-card/50 backdrop-blur-sm" data-testid="card-why-trending-unavailable">
+          <CardHeader className="pb-2">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-primary" />
+              <CardTitle className="text-base font-medium">Why They're Trending</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>Insights temporarily unavailable. Please try again shortly.</span>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleRetry}
+                disabled={isFetching}
+                aria-label="Retry loading trending summary"
+                data-testid="button-retry-why-trending-unavailable"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? 'animate-spin' : ''}`} />
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      );
+    }
     const isGenerating = data?.cacheStatus === "LOCKED_COLD";
     if (isGenerating) {
       return (
