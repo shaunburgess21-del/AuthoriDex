@@ -129,10 +129,28 @@ async function resolveQidByName(name: string): Promise<{ qid: string; descriptio
 
 // ---------- Wikidata entity -> claims ----------
 
-type Claim = { mainsnak?: { datavalue?: { value?: unknown; type?: string } } };
+type ClaimRank = "preferred" | "normal" | "deprecated";
+type Claim = {
+  rank?: ClaimRank;
+  mainsnak?: { datavalue?: { value?: unknown; type?: string } };
+};
 type EntityData = {
   entities?: Record<string, { claims?: Record<string, Claim[]> }>;
 };
+
+// Wikidata supports multiple values per property with ranks. The
+// recommended consumer behaviour is: use "preferred" values when present,
+// otherwise fall back to "normal", and never use "deprecated" values.
+// Without this, we were picking whatever Wikidata ordered first, which
+// occasionally surfaced a fan account over the person's real profile.
+function sortClaimsByRank(claims: Claim[]): Claim[] {
+  const rank = (c: Claim): number =>
+    c.rank === "preferred" ? 0 : c.rank === "deprecated" ? 2 : 1;
+  return claims
+    .filter(c => c.rank !== "deprecated")
+    .slice()
+    .sort((a, b) => rank(a) - rank(b));
+}
 
 async function fetchEntityClaims(qid: string): Promise<Record<string, Claim[]> | null> {
   const url = `https://www.wikidata.org/wiki/Special:EntityData/${qid}.json`;
@@ -166,7 +184,7 @@ function buildPatch(
     if (person[key]) continue; // null-only write
     const rawClaims = claims[prop];
     if (!rawClaims || rawClaims.length === 0) continue;
-    for (const c of rawClaims) {
+    for (const c of sortClaimsByRank(rawClaims)) {
       const raw = claimToString(c);
       if (!raw) continue;
       const normalised = normalise(prop, raw);
