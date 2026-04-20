@@ -103,10 +103,11 @@ const MAX_CACHE_ENTRIES = 500;
  * Generate a PNG data URL for a given seed. Cached in memory.
  * Safe to call repeatedly — second call for the same seed is free.
  *
- * Render scale of 6 gives a 144x144 PNG which is crisp at any display
- * size up to ~96px with `image-rendering: pixelated`.
+ * Default scale of 14 produces a 140x140 PNG (10x10 grid * 14 px cells)
+ * which is crisp at any display size up to ~128px with
+ * `image-rendering: pixelated`.
  */
-export function generateAvatarDataURL(seed: string, renderScale = 6): string {
+export function generateAvatarDataURL(seed: string, renderScale = 14): string {
   if (!seed) return '';
   const key = `${seed}:${renderScale}`;
   const cached = dataUrlCache.get(key);
@@ -128,8 +129,9 @@ export function generateAvatarDataURL(seed: string, renderScale = 6): string {
 /**
  * Render a seed directly to a PNG Blob at a specified size.
  * Used by the upload flow to produce the bytes that go to Supabase Storage.
+ * Default scale of 30 produces a 300x300 PNG (10x10 grid * 30 px cells).
  */
-export async function renderAvatarToBlob(seed: string, renderScale = 12): Promise<Blob> {
+export async function renderAvatarToBlob(seed: string, renderScale = 30): Promise<Blob> {
   const result = generateAvatar(seed);
   const canvas = renderAvatarToCanvas(result, renderScale);
   return new Promise<Blob>((resolve, reject) => {
