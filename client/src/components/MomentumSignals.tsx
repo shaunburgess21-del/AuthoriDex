@@ -754,7 +754,7 @@ const profileConfig: Record<string, {
     label: "X",
     urlPrefix: "https://x.com/",
     color: "text-foreground",
-    bgColor: "bg-foreground/5",
+    bgColor: "bg-foreground/15",
   },
   youtube: {
     icon: SiYoutube,
