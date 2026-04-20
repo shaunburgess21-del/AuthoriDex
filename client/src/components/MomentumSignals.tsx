@@ -253,7 +253,7 @@ function SignalCard({
         </div>
       </CardHeader>
       <CardContent className="pt-1 pb-3 px-4 space-y-0.5">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-3 flex-wrap">
           <LevelIndicator level={level} testId={`level-${testId ?? title.toLowerCase()}`} />
           <DeltaPill pct={deltaPct} trendWord={trendWord} />
         </div>
@@ -345,14 +345,15 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
         <div className="flex items-center justify-between flex-wrap gap-2">
           <h2 className="text-xl font-bold">Momentum Signals</h2>
         </div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span className="relative inline-flex items-center">
-            <span className="inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500 motion-safe:animate-pulse motion-reduce:animate-none" style={{ animationDuration: "2s" }} />
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="relative inline-flex items-center">
+              <span className="inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500 motion-safe:animate-pulse motion-reduce:animate-none" style={{ animationDuration: "2s" }} />
+            </span>
+            <Clock className="h-3 w-3" />
+            <span data-testid="text-freshness">Updated {freshnessText}</span>
           </span>
-          <Clock className="h-3 w-3" />
-          <span data-testid="text-freshness">Updated {freshnessText}</span>
-          <span>·</span>
-          <span>Sources: {sourceLabels.join(", ")}</span>
+          <span className="whitespace-nowrap">Sources: {sourceLabels.join(", ")}</span>
         </div>
       </div>
 
@@ -833,13 +834,14 @@ function OfficialProfiles({ profiles }: { profiles: Record<string, string> }) {
               title={`${config.label} — @${handle}`}
               aria-label={`${config.label} profile: @${handle}`}
               className={cn(
-                "inline-flex h-10 w-10 items-center justify-center rounded-full border border-border/60 transition-all",
-                "hover:scale-105 hover:border-border active:scale-95 motion-reduce:hover:scale-100 motion-reduce:active:scale-100",
+                "inline-flex h-11 w-11 items-center justify-center rounded-full border border-border/60 transition-all",
+                "hover:scale-105 hover:border-border hover:ring-2 hover:ring-border/40 hover:ring-offset-2 hover:ring-offset-background",
+                "active:scale-95 motion-reduce:hover:scale-100 motion-reduce:active:scale-100",
                 config.bgColor,
               )}
               data-testid={`link-profile-${platform}`}
             >
-              <Icon className={cn("h-4 w-4", config.color)} />
+              <Icon className={cn("h-[18px] w-[18px]", config.color)} />
             </a>
           );
         })}
