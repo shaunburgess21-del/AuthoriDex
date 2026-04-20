@@ -18,18 +18,78 @@ export function renderAvatarToCanvas(result: AvatarResult, scale: number): HTMLC
   canvas.height = size;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Could not get 2D context');
+
+  // Step 1: draw pixel art across the ENTIRE canvas (including corners).
+  // Null cells get their nearest neighbor's color so the circular mask
+  // applied below never clips to transparent corners — which would
+  // otherwise show the stair-stepped edge of the 24x24 design circle.
   ctx.imageSmoothingEnabled = false;
   ctx.clearRect(0, 0, size, size);
-  const { grid } = result;
+  const filled = fillOuterCells(result.grid);
   for (let y = 0; y < AVATAR_GRID_SIZE; y++) {
     for (let x = 0; x < AVATAR_GRID_SIZE; x++) {
-      const c = grid[y][x];
-      if (c === null) continue;
-      ctx.fillStyle = c;
+      ctx.fillStyle = filled[y][x];
       ctx.fillRect(x * scale, y * scale, scale, scale);
     }
   }
+
+  // Step 2: trim the square of pixel art down to a mathematically
+  // perfect, anti-aliased circle. `destination-in` keeps only pixels
+  // covered by the next draw call; the arc is drawn with smoothing
+  // enabled so the boundary is sub-pixel accurate.
+  ctx.globalCompositeOperation = 'destination-in';
+  ctx.imageSmoothingEnabled = true;
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalCompositeOperation = 'source-over';
+
   return canvas;
+}
+
+/**
+ * Replace every null cell in the 24x24 grid with the color of its
+ * nearest non-null neighbor (squared-distance). Pushes pixel colors
+ * into the corners so the anti-aliased circular mask in
+ * `renderAvatarToCanvas` has fully-covered material to clip against.
+ */
+function fillOuterCells(grid: (string | null)[][]): string[][] {
+  const n = AVATAR_GRID_SIZE;
+  const out: string[][] = Array.from({ length: n }, () => new Array<string>(n).fill('#000000'));
+  const filled: Array<{ x: number; y: number; color: string }> = [];
+
+  for (let y = 0; y < n; y++) {
+    for (let x = 0; x < n; x++) {
+      const c = grid[y][x];
+      if (c !== null) {
+        out[y][x] = c;
+        filled.push({ x, y, color: c });
+      }
+    }
+  }
+
+  if (filled.length === 0) return out;
+
+  for (let y = 0; y < n; y++) {
+    for (let x = 0; x < n; x++) {
+      if (grid[y][x] !== null) continue;
+      let best = filled[0];
+      let bestD = Infinity;
+      for (const f of filled) {
+        const dx = f.x - x;
+        const dy = f.y - y;
+        const d = dx * dx + dy * dy;
+        if (d < bestD) {
+          bestD = d;
+          best = f;
+        }
+      }
+      out[y][x] = best.color;
+    }
+  }
+
+  return out;
 }
 
 /* ------------------------------------------------------------------ */
