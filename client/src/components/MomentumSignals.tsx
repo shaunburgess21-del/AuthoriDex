@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Search, Newspaper, BookOpen, Sparkles, AlertTriangle, Clock, ExternalLink, Info, ArrowUp, ArrowDown } from "lucide-react";
 import { SiX, SiYoutube, SiInstagram, SiTiktok, SiSpotify } from "react-icons/si";
@@ -299,7 +298,7 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
       <div className="mt-8" data-testid="section-momentum-signals">
         <h2 className="text-xl font-bold mb-1">Momentum Signals</h2>
         <p className="text-sm text-muted-foreground mb-4">Loading live signals...</p>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <SignalSkeleton />
           <SignalSkeleton />
           <SignalSkeleton />
@@ -364,7 +363,7 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <SignalCard
           testId="card-search-interest"
           icon={<Search className="h-3.5 w-3.5 text-muted-foreground" />}
@@ -796,17 +795,16 @@ export function InlineProfileBadge({ platform, handle }: { platform: string; han
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      className="group"
+      title={`${config.label} — @${handle}`}
+      aria-label={`${config.label} profile: @${handle}`}
+      className={cn(
+        "inline-flex h-8 w-8 items-center justify-center rounded-full border border-border/60 transition-all",
+        "hover:scale-105 hover:border-border active:scale-95 motion-reduce:hover:scale-100 motion-reduce:active:scale-100",
+        config.bgColor,
+      )}
       data-testid={`link-inline-profile-${platform}`}
     >
-      <Badge
-        variant="outline"
-        className={`${config.bgColor} gap-1.5 py-1 px-2.5 text-xs cursor-pointer`}
-      >
-        <Icon className={`h-3 w-3 ${config.color}`} />
-        <span className="font-normal">@{handle}</span>
-        <ExternalLink className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-      </Badge>
+      <Icon className={cn("h-3.5 w-3.5", config.color)} />
     </a>
   );
 }
@@ -817,10 +815,10 @@ function OfficialProfiles({ profiles }: { profiles: Record<string, string> }) {
 
   return (
     <div data-testid="section-official-profiles">
-      <div className="flex items-center gap-3 flex-wrap">
-        <h3 className="text-sm font-semibold text-muted-foreground">
-          {entries.length === 1 ? "Official Profile" : "Official Profiles"}
-        </h3>
+      <h3 className="text-sm font-semibold text-muted-foreground mb-2">
+        {entries.length === 1 ? "Official Profile" : "Official Profiles"}
+      </h3>
+      <div className="flex flex-wrap gap-2">
         {entries.map(([platform, handle]) => {
           const config = profileConfig[platform];
           if (!config) return null;
@@ -832,17 +830,16 @@ function OfficialProfiles({ profiles }: { profiles: Record<string, string> }) {
               href={url}
               target="_blank"
               rel="noopener noreferrer"
-              className="group"
+              title={`${config.label} — @${handle}`}
+              aria-label={`${config.label} profile: @${handle}`}
+              className={cn(
+                "inline-flex h-10 w-10 items-center justify-center rounded-full border border-border/60 transition-all",
+                "hover:scale-105 hover:border-border active:scale-95 motion-reduce:hover:scale-100 motion-reduce:active:scale-100",
+                config.bgColor,
+              )}
               data-testid={`link-profile-${platform}`}
             >
-              <Badge
-                variant="outline"
-                className={`${config.bgColor} gap-1.5 py-1.5 px-3 text-xs cursor-pointer`}
-              >
-                <Icon className={`h-3.5 w-3.5 ${config.color}`} />
-                <span className="font-normal">@{handle}</span>
-                <ExternalLink className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-              </Badge>
+              <Icon className={cn("h-4 w-4", config.color)} />
             </a>
           );
         })}
