@@ -73,11 +73,17 @@ export async function generateWeeklyUpDown(): Promise<number> {
   const existingPersonIds = new Set(existing.map(e => e.personId));
 
   const personIdList = people.map(p => p.id);
+  // Only scan the last 14 days of snapshots. Snapshots are written every 10
+  // minutes for active people so the "latest" snapshot is virtually always
+  // within hours; 14 days is a generous cushion. Without this bound the
+  // planner sometimes falls off the (person_id, timestamp DESC) index on a
+  // long IN-list and times out on Supabase's statement_timeout.
   const openingSnapRows = personIdList.length > 0
     ? await db.execute(sql`
         SELECT DISTINCT ON (person_id) person_id, fame_index, timestamp
         FROM trend_snapshots
         WHERE person_id IN (${sql.join(personIdList.map(id => sql`${id}`), sql`, `)})
+          AND timestamp > NOW() - INTERVAL '14 days'
         ORDER BY person_id, timestamp DESC
       `)
     : { rows: [] };

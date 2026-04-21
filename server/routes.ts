@@ -855,6 +855,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           };
           const time24hIso = new Date(time24h).toISOString();
 
+          // Drizzle's `sql` template binds a JS array as a composite record,
+          // which fails at runtime with "cannot cast type record to text[]".
+          // Expanding via `sql.join` binds each id as its own parameter, which
+          // is what `market-generator.ts` already does for the same pattern.
+          const moverIdList = sql.join(moverIds.map(id => sql`${id}`), sql`, `);
+
           const [currentResult, prevResult] = await Promise.all([
             db.execute(sql`
               SELECT DISTINCT ON (person_id)
@@ -865,7 +871,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 timestamp,
                 diagnostics
               FROM trend_snapshots
-              WHERE person_id = ANY(${moverIds}::text[])
+              WHERE person_id IN (${moverIdList})
                 AND timestamp >= ${window18h.toISOString()}
               ORDER BY person_id, timestamp DESC, id DESC
             `),
@@ -878,7 +884,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 timestamp,
                 diagnostics
               FROM trend_snapshots
-              WHERE person_id = ANY(${moverIds}::text[])
+              WHERE person_id IN (${moverIdList})
                 AND timestamp >= ${window30h.toISOString()}
                 AND timestamp <= ${window18h.toISOString()}
               ORDER BY person_id, ABS(EXTRACT(EPOCH FROM (timestamp - ${time24hIso}::timestamptz))) ASC, id DESC
