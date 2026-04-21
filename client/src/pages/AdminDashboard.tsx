@@ -1869,6 +1869,32 @@ export default function AdminDashboard() {
     refetchOnWindowFocus: false,
   });
 
+  // Force-refresh the rolling p25/p50/p75 source-stats cache (use after flipping NEWS_AGGREGATION_FLIPPED_AT)
+  const refreshSourceStatsMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetchWithAuth("/api/admin/source-stats/refresh", { method: "POST" });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(text || `Failed (${res.status})`);
+      }
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      const stats = data?.stats;
+      const newsP50 = stats?.news?.p50;
+      toast({
+        title: "Percentile cache refreshed",
+        description: newsP50 != null
+          ? `New news p50: ${Number(newsP50).toFixed(2)} (p25 ${Number(stats?.news?.p25).toFixed(2)} / p75 ${Number(stats?.news?.p75).toFixed(2)})`
+          : "Source stats recomputed from latest snapshots.",
+      });
+      refetchEngineHealth();
+    },
+    onError: (err: any) => {
+      toast({ title: "Refresh failed", description: err?.message || "Unknown error", variant: "destructive" });
+    },
+  });
+
   const settleMarket = settleMarketId ? markets?.find(m => m.id === settleMarketId) : null;
   const { data: settleMarketDetail } = useQuery<{ entries: { id: string; label: string; totalStake: number }[] }>({
     queryKey: ["/api/open-markets", settleMarket?.slug],
@@ -5797,16 +5823,29 @@ export default function AdminDashboard() {
                 <h2 className="text-2xl font-bold">System Tools</h2>
                 <p className="text-muted-foreground">Control data pipelines and scoring engine</p>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => refetchEngineHealth()}
-                disabled={engineHealthLoading}
-                data-testid="button-refresh-engine-health"
-              >
-                {engineHealthLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
-                Refresh Health
-              </Button>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => refreshSourceStatsMutation.mutate()}
+                  disabled={refreshSourceStatsMutation.isPending}
+                  title="Force-recompute the rolling p25/p50/p75 percentiles used by Momentum Signals. Use after flipping NEWS_AGGREGATION_FLIPPED_AT."
+                  data-testid="button-refresh-source-stats"
+                >
+                  {refreshSourceStatsMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+                  Refresh Percentile Cache
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => refetchEngineHealth()}
+                  disabled={engineHealthLoading}
+                  data-testid="button-refresh-engine-health"
+                >
+                  {engineHealthLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+                  Refresh Health
+                </Button>
+              </div>
             </div>
 
             {engineHealth && (
@@ -5819,6 +5858,83 @@ export default function AdminDashboard() {
                   <CardDescription>Real-time trend score engine diagnostics</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  {engineHealth.engineModes && (() => {
+                    const m = engineHealth.engineModes;
+                    const flipped = m.newsAggregationFlippedAt
+                      ? new Date(m.newsAggregationFlippedAt)
+                      : null;
+                    const flippedLabel = flipped
+                      ? `${flipped.toLocaleDateString()} ${flipped.toLocaleTimeString()}`
+                      : "not set";
+                    const smoothingTone =
+                      m.smoothingMode === "off"
+                        ? "bg-red-500/15 text-red-500 border-red-500/40"
+                        : m.smoothingMode === "relaxed"
+                          ? "bg-yellow-500/15 text-yellow-500 border-yellow-500/40"
+                          : "bg-green-500/15 text-green-500 border-green-500/40";
+                    const newsModeTone =
+                      m.newsAggregationMode === "union"
+                        ? "bg-cyan-500/15 text-cyan-500 border-cyan-500/40"
+                        : "bg-muted text-muted-foreground border-border";
+                    return (
+                      <div className="p-3 rounded-lg border bg-muted/30" data-testid="panel-engine-modes">
+                        <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+                          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            Engine Modes (live config)
+                          </span>
+                          <span className="text-[10px] text-muted-foreground">
+                            From env vars at server start
+                          </span>
+                        </div>
+                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 text-xs">
+                          <div className="flex flex-col gap-1">
+                            <span className="text-muted-foreground">Smoothing</span>
+                            <Badge variant="outline" className={cn("w-fit", smoothingTone)} data-testid="badge-smoothing-mode">
+                              {m.smoothingMode ?? "legacy"}
+                            </Badge>
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <span className="text-muted-foreground">News Aggregation</span>
+                            <Badge variant="outline" className={cn("w-fit", newsModeTone)} data-testid="badge-news-mode">
+                              {m.newsAggregationMode ?? "tiered"}
+                            </Badge>
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <span className="text-muted-foreground">Ingest Cadence</span>
+                            <span className="font-medium" data-testid="text-ingest-cadence">
+                              every {m.ingestIntervalMinutes}m
+                            </span>
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <span className="text-muted-foreground">Mediastack Refresh</span>
+                            <span className="font-medium" data-testid="text-mediastack-cadence">
+                              every {m.mediastackRefreshIntervalMinutes}m
+                            </span>
+                          </div>
+                          <div className="flex flex-col gap-1 sm:col-span-2">
+                            <span className="text-muted-foreground">News Flipped-At Cutoff</span>
+                            <span className="font-medium text-[11px]" data-testid="text-flipped-at">
+                              {flippedLabel}
+                            </span>
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <span className="text-muted-foreground">Relaxed Cap ×</span>
+                            <span className="font-medium">{m.relaxedCapMultiplier}</span>
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <span className="text-muted-foreground">Relaxed α Floor</span>
+                            <span className="font-medium">{m.relaxedAlphaFloor}</span>
+                          </div>
+                          <div className="flex flex-col gap-1 sm:col-span-2 lg:col-span-4">
+                            <span className="text-muted-foreground">Diagnostics Verbose</span>
+                            <Badge variant="outline" className={cn("w-fit", m.diagnosticsVerbose ? "bg-blue-500/15 text-blue-500 border-blue-500/40" : "bg-muted text-muted-foreground border-border")}>
+                              {m.diagnosticsVerbose ? "on" : "off"}
+                            </Badge>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                   {(() => {
                     const freshnessOk = engineHealth.ingestion?.status === "fresh";
                     const freshnessWarn = engineHealth.ingestion?.status === "aging";
