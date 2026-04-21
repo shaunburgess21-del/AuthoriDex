@@ -21,6 +21,8 @@ import {
   SourceHealthStates,
   EMA_DOWNWARD_MULTIPLIER,
   VelocitySubScores,
+  SmoothingMode,
+  getSmoothingMode,
 } from "./normalize";
 import { 
   normalizeMass, 
@@ -76,6 +78,7 @@ export interface StabilizationDetail {
   emaDeltaPct: number;
   rateLimitStepPct: number;
   emaStepPct: number;
+  smoothingMode: SmoothingMode;
 }
 
 export interface TrendScoreResult {
@@ -191,11 +194,24 @@ export function computeTrendScore(
   const baseWeights = PLATFORM_WEIGHTS.velocity;
   const newsFreshness = inputs.newsStalenessFactor ?? 1.0;
   const searchFreshness = inputs.searchStalenessFactor ?? 1.0;
-  
+
+  // Wiki-lag mute: Wikipedia pageview analytics lag 24-48h, so on day 1 of a
+  // breaking story wiki velocity is often BELOW the person's baseline and
+  // drags the score down just as news is peaking. Detect that condition and
+  // mute the wiki velocity weight so the news/search signals can express
+  // themselves. The mute auto-releases once wiki pageviews catch up.
+  const newsBaselineForMute = inputs.newsBaseline ?? 0;
+  const wiki7dForMute = inputs.wikiPageviews7dAvg ?? 0;
+  const wiki24hForMute = inputs.wikiPageviews ?? 0;
+  const newsSurging3x = newsBaselineForMute > 0 && newsRaw >= newsBaselineForMute * 3;
+  const wikiFalling = wiki7dForMute > 0 && wiki24hForMute < wiki7dForMute * 0.7;
+  const wikiLagMuteActive = newsSurging3x && wikiFalling;
+  const wikiLagMute = wikiLagMuteActive ? 0.30 : 1.00;
+
   const effectiveNewsWeight = baseWeights.news * newsFreshness;
   const effectiveSearchWeight = baseWeights.search * searchFreshness;
-  const effectiveWikiWeight = baseWeights.wiki;
-  
+  const effectiveWikiWeight = baseWeights.wiki * wikiLagMute;
+
   const totalEffectiveWeight = effectiveWikiWeight + effectiveNewsWeight + effectiveSearchWeight;
   const totalBaseWeight = baseWeights.wiki + baseWeights.news + baseWeights.search;
   const renormFactor = totalEffectiveWeight > 0 
@@ -316,91 +332,115 @@ export function computeTrendScore(
   const recoveryRateBoost = getRecoveryRateBoost(recoveringSources);
   
   let stabilizationApplied = false;
-  let stabDetail: {
-    prevFame: number;
-    rawFame: number;
-    afterRateLimit: number;
-    afterEma: number;
-    finalFame: number;
-    capUsed: number;
-    alphaUsed: number;
-    asymmetric: boolean;
-    rawVsPrevPct: number;
-    rateLimitDeltaPct: number;
-    emaDeltaPct: number;
-    rateLimitStepPct: number;
-    emaStepPct: number;
-  } | null = null;
+  let stabDetail: StabilizationDetail | null = null;
+  const smoothingMode = getSmoothingMode();
 
   if (previousFameIndex !== undefined) {
-    stabilizationApplied = true;
-    
-    let effectiveCap = getDynamicRateLimit(spikingSourceCount);
-    
-    if (recoveryRateBoost > 0 && recoveryRateBoost > effectiveCap) {
-      effectiveCap = recoveryRateBoost;
-    }
-    
-    const DOWN_CAP_MULTIPLIER = 1.2;
-    const maxChangeUp = previousFameIndex * effectiveCap;
-    const maxChangeDown = previousFameIndex * effectiveCap * DOWN_CAP_MULTIPLIER;
-    const actualChange = fameIndex - previousFameIndex;
-    let afterRateLimiting = fameIndex;
-    if (actualChange > maxChangeUp) {
-      afterRateLimiting = previousFameIndex + maxChangeUp;
-    } else if (actualChange < -maxChangeDown) {
-      afterRateLimiting = previousFameIndex - maxChangeDown;
-    }
-    afterRateLimiting = Math.round(afterRateLimiting);
-    
-    const velSubScores: VelocitySubScores = {
-      wiki: wikiVelocityScore,
-      news: newsVelocityScore,
-      search: searchVelocityScore,
-    };
-
-    let usedAlpha: number;
-    let isAsymmetric = false;
-    if (afterRateLimiting < previousFameIndex) {
-      const baseAlpha = getDynamicAlpha(spikingSourceCount, velocityScore, velSubScores);
-      usedAlpha = Math.min(0.30, baseAlpha * EMA_DOWNWARD_MULTIPLIER);
-      isAsymmetric = true;
-      fameIndex = Math.round((usedAlpha * afterRateLimiting) + ((1 - usedAlpha) * previousFameIndex));
-    } else {
-      usedAlpha = getDynamicAlpha(spikingSourceCount, velocityScore, velSubScores);
-      fameIndex = Math.round(applyDynamicEmaSmoothing(afterRateLimiting, previousFameIndex, spikingSourceCount, velocityScore, velSubScores));
-    }
-
     const prevF = previousFameIndex;
-    const rawVsPrevPct = prevF > 0 ? Math.round(((rawFameIndex - prevF) / prevF) * 1000) / 10 : 0;
-    const rateLimitDeltaPct = prevF > 0 ? Math.round(((afterRateLimiting - prevF) / prevF) * 1000) / 10 : 0;
-    const emaDeltaPct = prevF > 0 ? Math.round(((fameIndex - prevF) / prevF) * 1000) / 10 : 0;
-    const rateLimitStepPct = rawFameIndex > 0 ? Math.round(((afterRateLimiting - rawFameIndex) / rawFameIndex) * 1000) / 10 : 0;
-    const emaStepPct = afterRateLimiting > 0 ? Math.round(((fameIndex - afterRateLimiting) / afterRateLimiting) * 1000) / 10 : 0;
 
-    stabDetail = {
-      prevFame: prevF,
-      rawFame: rawFameIndex,
-      afterRateLimit: afterRateLimiting,
-      afterEma: fameIndex,
-      finalFame: fameIndex,
-      capUsed: Math.round(effectiveCap * 1000) / 1000,
-      alphaUsed: Math.round(usedAlpha * 1000) / 1000,
-      asymmetric: isAsymmetric,
-      rawVsPrevPct,
-      rateLimitDeltaPct,
-      emaDeltaPct,
-      rateLimitStepPct,
-      emaStepPct,
-    };
-    
-    const rawChange = Math.abs((rawFameIndex - previousFameIndex) / previousFameIndex);
-    if (rawChange > 0.10) {
-      const recalMode = isRecalibrationModeActive() ? ' [RECAL]' : '';
-      const recoveryMode = recoveringSources > 0 ? ` [RECOVERY:${recoveringSources}]` : '';
-      console.log(`[Stabilization] Raw: ${rawFameIndex}, Prev: ${previousFameIndex}, Final: ${fameIndex} ` +
-        `(${Math.round(rawChange * 100)}% raw, ${Math.round(effectiveCap * 100)}% cap, α=${usedAlpha.toFixed(2)}, ` +
-        `${spikingSourceCount} spiking)${recalMode}${recoveryMode}`);
+    if (smoothingMode === "off") {
+      // Test mode: no rate limit, no EMA. Raw fame goes straight through.
+      // Anti-spam damping, velocity taper, diversity multiplier, and catch-up
+      // mode have already shaped the raw score above; we simply trust it.
+      stabilizationApplied = false;
+      const rawVsPrevPct = prevF > 0 ? Math.round(((rawFameIndex - prevF) / prevF) * 1000) / 10 : 0;
+      stabDetail = {
+        prevFame: prevF,
+        rawFame: rawFameIndex,
+        afterRateLimit: rawFameIndex,
+        afterEma: rawFameIndex,
+        finalFame: rawFameIndex,
+        capUsed: 1.0,
+        alphaUsed: 1.0,
+        asymmetric: false,
+        rawVsPrevPct,
+        rateLimitDeltaPct: rawVsPrevPct,
+        emaDeltaPct: rawVsPrevPct,
+        rateLimitStepPct: 0,
+        emaStepPct: 0,
+        smoothingMode,
+      };
+
+      const rawChange = prevF > 0 ? Math.abs((rawFameIndex - prevF) / prevF) : 0;
+      if (rawChange > 0.10) {
+        console.log(`[Stabilization] mode=off Raw: ${rawFameIndex}, Prev: ${prevF}, Final: ${rawFameIndex} ` +
+          `(${Math.round(rawChange * 100)}% raw, bypass, ${spikingSourceCount} spiking)`);
+      }
+      // fameIndex is already rawFameIndex (no mutation needed since we never
+      // overwrote it in this branch).
+    } else {
+      stabilizationApplied = true;
+
+      let effectiveCap = getDynamicRateLimit(spikingSourceCount);
+
+      if (recoveryRateBoost > 0 && recoveryRateBoost > effectiveCap) {
+        effectiveCap = recoveryRateBoost;
+      }
+
+      const DOWN_CAP_MULTIPLIER = 1.2;
+      const maxChangeUp = previousFameIndex * effectiveCap;
+      const maxChangeDown = previousFameIndex * effectiveCap * DOWN_CAP_MULTIPLIER;
+      const actualChange = fameIndex - previousFameIndex;
+      let afterRateLimiting = fameIndex;
+      if (actualChange > maxChangeUp) {
+        afterRateLimiting = previousFameIndex + maxChangeUp;
+      } else if (actualChange < -maxChangeDown) {
+        afterRateLimiting = previousFameIndex - maxChangeDown;
+      }
+      afterRateLimiting = Math.round(afterRateLimiting);
+
+      const velSubScores: VelocitySubScores = {
+        wiki: wikiVelocityScore,
+        news: newsVelocityScore,
+        search: searchVelocityScore,
+      };
+
+      let usedAlpha: number;
+      let isAsymmetric = false;
+      if (afterRateLimiting < previousFameIndex) {
+        const baseAlpha = getDynamicAlpha(spikingSourceCount, velocityScore, velSubScores);
+        // Downward alpha cap: 0.30 in legacy to match historical behaviour,
+        // 0.50 in relaxed so cool-downs after news cycles can actually move.
+        const downCap = smoothingMode === "relaxed" ? 0.50 : 0.30;
+        usedAlpha = Math.min(downCap, baseAlpha * EMA_DOWNWARD_MULTIPLIER);
+        isAsymmetric = true;
+        fameIndex = Math.round((usedAlpha * afterRateLimiting) + ((1 - usedAlpha) * previousFameIndex));
+      } else {
+        usedAlpha = getDynamicAlpha(spikingSourceCount, velocityScore, velSubScores);
+        fameIndex = Math.round(applyDynamicEmaSmoothing(afterRateLimiting, previousFameIndex, spikingSourceCount, velocityScore, velSubScores));
+      }
+
+      const rawVsPrevPct = prevF > 0 ? Math.round(((rawFameIndex - prevF) / prevF) * 1000) / 10 : 0;
+      const rateLimitDeltaPct = prevF > 0 ? Math.round(((afterRateLimiting - prevF) / prevF) * 1000) / 10 : 0;
+      const emaDeltaPct = prevF > 0 ? Math.round(((fameIndex - prevF) / prevF) * 1000) / 10 : 0;
+      const rateLimitStepPct = rawFameIndex > 0 ? Math.round(((afterRateLimiting - rawFameIndex) / rawFameIndex) * 1000) / 10 : 0;
+      const emaStepPct = afterRateLimiting > 0 ? Math.round(((fameIndex - afterRateLimiting) / afterRateLimiting) * 1000) / 10 : 0;
+
+      stabDetail = {
+        prevFame: prevF,
+        rawFame: rawFameIndex,
+        afterRateLimit: afterRateLimiting,
+        afterEma: fameIndex,
+        finalFame: fameIndex,
+        capUsed: Math.round(effectiveCap * 1000) / 1000,
+        alphaUsed: Math.round(usedAlpha * 1000) / 1000,
+        asymmetric: isAsymmetric,
+        rawVsPrevPct,
+        rateLimitDeltaPct,
+        emaDeltaPct,
+        rateLimitStepPct,
+        emaStepPct,
+        smoothingMode,
+      };
+
+      const rawChange = Math.abs((rawFameIndex - previousFameIndex) / previousFameIndex);
+      if (rawChange > 0.10) {
+        const recalMode = isRecalibrationModeActive() ? ' [RECAL]' : '';
+        const recoveryMode = recoveringSources > 0 ? ` [RECOVERY:${recoveringSources}]` : '';
+        console.log(`[Stabilization] mode=${smoothingMode} Raw: ${rawFameIndex}, Prev: ${previousFameIndex}, Final: ${fameIndex} ` +
+          `(${Math.round(rawChange * 100)}% raw, ${Math.round(effectiveCap * 100)}% cap, α=${usedAlpha.toFixed(2)}, ` +
+          `${spikingSourceCount} spiking)${recalMode}${recoveryMode}`);
+      }
     }
   }
   

@@ -347,34 +347,51 @@ function startIngestionScheduler() {
     log("[Ingestion Scheduler] Skipped - serverless mode enabled. Use /api/cron/refresh-data instead.");
     return;
   }
-  
+
   // Single source of ingestion: use EITHER this scheduler OR external cron (POST /api/cron/refresh-data), not both.
   // If both run, the second trigger will be locked_out or skipped (0s/0 snap) and gdelt/wiki cache may not refresh as often as expected.
-  log(`[Ingestion Scheduler] Starting (absolute hourly scheduling at :02 past each hour)`);
-  
+
+  // Cadence is env-driven so we can react faster to breaking news without a
+  // redeploy. Valid divisors of 60: 60 (hourly, default), 30, 20, 15, 10, 5.
+  const rawInterval = parseInt(process.env.INGEST_INTERVAL_MINUTES ?? "60", 10);
+  const ALLOWED_INTERVALS = [5, 10, 15, 20, 30, 60];
+  const intervalMinutes = ALLOWED_INTERVALS.includes(rawInterval) ? rawInterval : 60;
+  if (intervalMinutes !== rawInterval) {
+    log(`[Ingestion Scheduler] INGEST_INTERVAL_MINUTES=${rawInterval} is not one of ${ALLOWED_INTERVALS.join(",")}; falling back to 60`);
+  }
+  // Keep the original :02 offset so snapshots stay aligned to hour boundaries.
+  const OFFSET_MINUTES = 2;
+
+  log(`[Ingestion Scheduler] Starting (every ${intervalMinutes} min, first tick at :${String(OFFSET_MINUTES).padStart(2, "0")} past each ${intervalMinutes === 60 ? "hour" : `${intervalMinutes}-min boundary`})`);
+
   // Run initial ingestion after 30 second delay (let server fully initialize)
   setTimeout(() => {
     scheduledIngestion();
   }, 30000);
-  
-  // Schedule next run at :02 past the next hour, then repeat every hour
-  // This ensures consistent timing regardless of when the server started
-  function scheduleNextHourlyRun() {
+
+  // Schedule next run at the next interval boundary, then repeat at the
+  // configured cadence. The absolute scheduling keeps ticks aligned to the
+  // clock (e.g. :02, :32) regardless of when the server started.
+  function scheduleNextRun() {
     const now = new Date();
-    const nextHour = new Date(now);
-    nextHour.setMinutes(2, 0, 0); // :02:00 past the hour
-    if (nextHour <= now) {
-      nextHour.setHours(nextHour.getHours() + 1);
-    }
-    const msUntilNext = nextHour.getTime() - now.getTime();
-    log(`[Ingestion Scheduler] Next scheduled run at ${nextHour.toISOString()} (in ${Math.round(msUntilNext / 1000 / 60)} min)`);
+    const next = new Date(now);
+    next.setSeconds(0, 0);
+    const minuteOfHour = next.getMinutes();
+    // Find the next minute-offset that satisfies: ((m - OFFSET) % interval) === 0
+    // and is strictly in the future.
+    const normalizedNow = ((minuteOfHour - OFFSET_MINUTES) % intervalMinutes + intervalMinutes) % intervalMinutes;
+    let addMinutes = intervalMinutes - normalizedNow;
+    if (addMinutes === 0) addMinutes = intervalMinutes;
+    next.setMinutes(minuteOfHour + addMinutes);
+    const msUntilNext = Math.max(next.getTime() - now.getTime(), 1000);
+    log(`[Ingestion Scheduler] Next scheduled run at ${next.toISOString()} (in ${Math.round(msUntilNext / 1000 / 60)} min)`);
     setTimeout(async () => {
       await scheduledIngestion();
-      scheduleNextHourlyRun();
+      scheduleNextRun();
     }, msUntilNext);
   }
-  
-  scheduleNextHourlyRun();
+
+  scheduleNextRun();
 }
 
 function startSeedEngineScheduler() {

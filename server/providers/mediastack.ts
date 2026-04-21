@@ -607,7 +607,17 @@ export function isMediastackConfigured(): boolean {
 }
 
 const LAST_FETCH_KEY = "system:mediastack:last_fetch_at";
-const MEDIASTACK_REFRESH_INTERVAL_MS = 2 * 60 * 60 * 1000;
+// Default refresh cadence: 120 minutes. Keep default at 2h to stay well under
+// the 50k/month budget (~360 refreshes/month × ~100 people ≈ 36k calls).
+// Set MEDIASTACK_REFRESH_INTERVAL_MINUTES=60 to halve latency on breaking
+// news — but verify the monthly budget headroom first. The existing hard-stop
+// budget check at 95% will throttle automatically if usage exceeds safe bounds.
+const MEDIASTACK_REFRESH_INTERVAL_MINUTES = (() => {
+  const raw = parseInt(process.env.MEDIASTACK_REFRESH_INTERVAL_MINUTES ?? "120", 10);
+  if (!Number.isFinite(raw) || raw < 30 || raw > 360) return 120;
+  return raw;
+})();
+const MEDIASTACK_REFRESH_INTERVAL_MS = MEDIASTACK_REFRESH_INTERVAL_MINUTES * 60 * 1000;
 const MEDIASTACK_MONTHLY_LIMIT = 50_000;
 const BUDGET_WARN_PCT = 85;
 const BUDGET_HARD_STOP_PCT = 95;
