@@ -72,6 +72,39 @@ export const MAX_HOURLY_CHANGE_PERCENT = 0.12;
 export const EMA_ALPHA = EMA_ALPHA_DEFAULT;
 
 // ============================================================================
+// SMOOTHING MODE - Live-tunable dampening envelope
+// ============================================================================
+// Apr 2026: Smoothing was originally added when API providers were noisy and
+// erratic. The APIs are now stable, so the dampening is actively delaying
+// legitimate breaking-news moves (e.g. Tim Cook/Apple CEO departure) and
+// letting cooled-off stories linger.
+//
+// SMOOTHING_MODE lets us flip behaviour without a redeploy:
+//   - "legacy"  = original full dampening envelope (rate-limit + EMA). Default.
+//   - "relaxed" = doubles rate caps and raises alpha floor to 0.40.
+//   - "off"     = no rate-limit, no EMA. Raw fameIndex goes straight to the DB.
+//                 Anti-spam damping, velocity taper, diversity multiplier,
+//                 percentile normalization and catch-up mode all stay ON.
+//
+// Relaxed multipliers compose cleanly with catch-up/recalibration boosts.
+
+export type SmoothingMode = "legacy" | "relaxed" | "off";
+
+export const RELAXED_CAP_MULTIPLIER = parseEnvFloat("SMOOTHING_RELAXED_CAP_MULTIPLIER", 2.0);
+export const RELAXED_ALPHA_FLOOR = parseEnvFloat("SMOOTHING_RELAXED_ALPHA_FLOOR", 0.40);
+
+/**
+ * Read the current smoothing mode from env. Default is "legacy" for safety.
+ * Unknown values fall back to "legacy" so a typo can never silently disable
+ * stabilization in production.
+ */
+export function getSmoothingMode(): SmoothingMode {
+  const raw = (process.env.SMOOTHING_MODE ?? "legacy").trim().toLowerCase();
+  if (raw === "off" || raw === "relaxed") return raw;
+  return "legacy";
+}
+
+// ============================================================================
 // AUTO CATCH-UP MODE - Gap-driven dynamic rate boosting (DB-persisted)
 // ============================================================================
 // When the median gap between raw and final scores exceeds a threshold,
@@ -401,8 +434,17 @@ export function getDynamicAlpha(spikingCount: number, velocityScore?: number, su
       baseAlpha = Math.max(baseAlpha, EMA_HIGH_BASELINE_MIN_ALPHA);
     }
   }
+  // Relaxed smoothing mode: raise the alpha floor so EMA pulls harder toward
+  // the new value. Applied before catch-up/recalibration so those still stack.
+  const mode = getSmoothingMode();
+  if (mode === "relaxed") {
+    baseAlpha = Math.max(baseAlpha, RELAXED_ALPHA_FLOOR);
+  }
   const recalBoosted = getRecalibrationAlphaBoost(baseAlpha);
-  return Math.min(recalBoosted * getCatchUpAlphaMultiplier(), 0.40);
+  // Legacy keeps the historical 0.40 ceiling; relaxed opens it to 0.60 so the
+  // higher floor + catch-up multiplier can actually translate into motion.
+  const cap = mode === "relaxed" ? 0.60 : 0.40;
+  return Math.min(recalBoosted * getCatchUpAlphaMultiplier(), cap);
 }
 
 /**
@@ -695,6 +737,10 @@ export function getDynamicRateLimit(spikingCount: number): number {
       break;
     default:
       baseCap = MAX_HOURLY_CHANGE_PERCENT; // 12% - default steady-state (relaxed from 8%)
+  }
+  // Relaxed smoothing mode: double the base cap before recal/catch-up boosts.
+  if (getSmoothingMode() === "relaxed") {
+    baseCap = baseCap * RELAXED_CAP_MULTIPLIER;
   }
   const recalBoosted = getRecalibrationRateBoost(baseCap);
   return recalBoosted * getCatchUpCapMultiplier();

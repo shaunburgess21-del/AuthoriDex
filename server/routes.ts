@@ -35,6 +35,7 @@ import {
   MASS_ALLOCATION,
   VELOCITY_ALLOCATION,
   SCORE_VERSION,
+  getSmoothingMode,
 } from "./scoring/normalize";
 import {
   getCurrentHealthSnapshot,
@@ -783,6 +784,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.json({
           baselineStatus,
           thresholds,
+          smoothingMode: getSmoothingMode(),
           totalQualified: sorted.length,
           cap: 8,
           candidates: sorted.map((c, i) => ({
@@ -952,6 +954,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           baselineStatus: baselineMeta.baseline24hStatus,
           coveragePct: baselineMeta.baseline24hCoveragePct,
           scoreVersion: baselineMeta.scoreVersion,
+          smoothingMode: getSmoothingMode(),
         },
       };
       _cachedHotMovers = responseWithMeta;

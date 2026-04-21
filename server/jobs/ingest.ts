@@ -37,6 +37,7 @@ import {
   EMA_ALPHA_2_SOURCES,
   EMA_ALPHA_3_SOURCES,
   SCORE_VERSION,
+  getSmoothingMode,
 } from "../scoring/normalize";
 
 const GDELT_CANDIDATE_COUNT = 25;
@@ -890,6 +891,11 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     
     const newsBaselineMap = new Map<string, number>();
     const searchBaselineMap = new Map<string, number>();
+    // Count of non-zero observations per person, used to decide whether the
+    // personal median has enough history to be trusted as a spike baseline
+    // (vs. falling back to the population p50 for brand-new celebs).
+    const newsBaselineCountMap = new Map<string, number>();
+    const searchBaselineCountMap = new Map<string, number>();
     {
       const newsValues = new Map<string, number[]>();
       const searchValues = new Map<string, number[]>();
@@ -908,12 +914,19 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
       newsValues.forEach((vals, pid) => {
         vals.sort((a: number, b: number) => a - b);
         newsBaselineMap.set(pid, vals[Math.floor(vals.length / 2)]);
+        newsBaselineCountMap.set(pid, vals.length);
       });
       searchValues.forEach((vals, pid) => {
         vals.sort((a: number, b: number) => a - b);
         searchBaselineMap.set(pid, vals[Math.floor(vals.length / 2)]);
+        searchBaselineCountMap.set(pid, vals.length);
       });
     }
+
+    // Minimum non-zero historical observations required before we trust the
+    // personal p50 as a spike baseline. ~14 gives us ~2 weeks of daily data
+    // at hourly cadence with some gap tolerance.
+    const PERSONAL_BASELINE_MIN_OBSERVATIONS = 14;
 
     console.log(`[Ingest] Bootstrap maps: ${lastNonZeroNewsMap.size} people with non-zero news history, ${lastNonZeroSearchMap.size} with non-zero search history`);
     
@@ -1477,10 +1490,25 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           // Flag whether current data is fresh (for recovery detection)
           newsIsFresh: !newsUsedFallback && (news?.articleCount24h ?? 0) > 0,
           searchIsFresh: !searchUsedFallback && (serper?.searchVolume ?? 0) > 0,
-          // Baseline medians for spike detection (p50 is more robust than mean)
+          // Baseline medians for spike detection (p50 is more robust than mean).
+          // Personal-p50 preferred when we have enough history; falls back to
+          // population p50 for brand-new celebs with sparse data. This makes
+          // spike detection relative to the individual's own normal rather
+          // than a global median, so someone like Tim Cook (usually near zero
+          // news) correctly registers as spiking when a story breaks.
           wikiBaseline: wiki?.averageDaily7d || sourceStats.wiki.p50,
-          newsBaseline: sourceStats.news.p50,  // Use median (p50), not mean - more robust
-          searchBaseline: sourceStats.search.p50,
+          newsBaseline: (
+            (newsBaselineCountMap.get(person.id) ?? 0) >= PERSONAL_BASELINE_MIN_OBSERVATIONS
+              && (newsBaselineMap.get(person.id) ?? 0) > 0
+          )
+            ? newsBaselineMap.get(person.id)!
+            : sourceStats.news.p50,
+          searchBaseline: (
+            (searchBaselineCountMap.get(person.id) ?? 0) >= PERSONAL_BASELINE_MIN_OBSERVATIONS
+              && (searchBaselineMap.get(person.id) ?? 0) > 0
+          )
+            ? searchBaselineMap.get(person.id)!
+            : sourceStats.search.p50,
           activePlatforms: {
             wiki: !!person.wikiSlug,
             instagram: !!person.instagramHandle,
@@ -1880,6 +1908,7 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
       duration: `${jobDuration}ms`,
       rows: processed,
       lock: "acquired",
+      smoothingMode: getSmoothingMode(),
       sources: {
         wiki: wikiData.size < people.length * 0.7 ? "DEGRADED" : "OK",
         news: newsApiUsedFallback > people.length * 0.3 ? "DEGRADED" : "OK",
