@@ -5918,6 +5918,18 @@ export default function AdminDashboard() {
                             </span>
                           </div>
                           <div className="flex flex-col gap-1">
+                            <span className="text-muted-foreground">Baseline Window</span>
+                            <span className="font-medium" data-testid="text-baseline-window-days">
+                              {m.rollingWindowDaysBaseline ?? 14}d (wiki, search)
+                            </span>
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <span className="text-muted-foreground">News Window</span>
+                            <span className="font-medium" data-testid="text-news-window-days">
+                              {m.rollingWindowDaysNews ?? 7}d (news)
+                            </span>
+                          </div>
+                          <div className="flex flex-col gap-1">
                             <span className="text-muted-foreground">Relaxed Cap ×</span>
                             <span className="font-medium">{m.relaxedCapMultiplier}</span>
                           </div>

@@ -1,21 +1,31 @@
 import { db } from "../db";
 import { apiCache } from "@shared/schema";
 import { sql, eq } from "drizzle-orm";
-import { SourceStats, AllSourceStats, DEFAULT_SOURCE_STATS, getNewsAggregationFlippedAt } from "./normalize";
+import {
+  SourceStats,
+  AllSourceStats,
+  DEFAULT_SOURCE_STATS,
+  getNewsAggregationFlippedAt,
+  getRollingWindowDaysBaseline,
+  getRollingWindowDaysNews,
+} from "./normalize";
 
 const STATS_CACHE_KEY = "system:source_stats_reference";
-const ROLLING_WINDOW_DAYS = 14;
 const MIN_SNAPSHOT_COUNT = 100;
-// When NEWS_AGGREGATION_FLIPPED_AT is set, the post-flip window needs at least
-// this many snapshots before we trust it for news percentile calibration.
-// Below this we fall back to the full 14-day window to keep thresholds stable
-// on day 1 of the flip (before enough union-scale data has accumulated).
-const MIN_POST_FLIP_NEWS_COUNT = 500;
+// Minimum news snapshots required before we trust a narrower news window
+// (either the rolling ROLLING_WINDOW_DAYS_NEWS or a NEWS_AGGREGATION_FLIPPED_AT
+// cutoff). Below this threshold we fall back to the full baseline window to
+// keep thresholds statistically stable on day 1 of a cadence/flip change.
+const MIN_NEWS_OVERRIDE_COUNT = 500;
 
 export async function fetchRollingSourceStats(): Promise<AllSourceStats> {
-  const windowStart = new Date();
-  windowStart.setDate(windowStart.getDate() - ROLLING_WINDOW_DAYS);
-  
+  const baselineDays = getRollingWindowDaysBaseline();
+  const newsDays = getRollingWindowDaysNews();
+  const baselineWindowStart = new Date();
+  baselineWindowStart.setDate(baselineWindowStart.getDate() - baselineDays);
+  const newsWindowStart = new Date();
+  newsWindowStart.setDate(newsWindowStart.getDate() - newsDays);
+
   try {
     const result = await db.execute(sql`
       WITH recent_snapshots AS (
@@ -24,7 +34,7 @@ export async function fetchRollingSourceStats(): Promise<AllSourceStats> {
           news_count,
           search_volume
         FROM trend_snapshots
-        WHERE timestamp >= ${windowStart}
+        WHERE timestamp >= ${baselineWindowStart}
           AND timestamp = date_trunc('hour', timestamp)
           AND snapshot_origin = 'ingest'
           AND wiki_pageviews IS NOT NULL
@@ -61,7 +71,7 @@ export async function fetchRollingSourceStats(): Promise<AllSourceStats> {
     `);
     
     if (!result.rows || result.rows.length === 0 || !result.rows[0].total_count) {
-      console.log(`[SourceStats] No data in ${ROLLING_WINDOW_DAYS}-day window, trying persisted reference`);
+      console.log(`[SourceStats] No data in ${baselineDays}-day baseline window, trying persisted reference`);
       return await loadPersistedStats();
     }
     
@@ -69,7 +79,7 @@ export async function fetchRollingSourceStats(): Promise<AllSourceStats> {
     const count = Number(row.total_count);
     
     if (count < MIN_SNAPSHOT_COUNT) {
-      console.log(`[SourceStats] Only ${count} snapshots in ${ROLLING_WINDOW_DAYS}-day window, trying persisted reference`);
+      console.log(`[SourceStats] Only ${count} snapshots in ${baselineDays}-day baseline window, trying persisted reference`);
       return await loadPersistedStats();
     }
     
@@ -85,20 +95,34 @@ export async function fetchRollingSourceStats(): Promise<AllSourceStats> {
       mean: n(Number(row.news_mean), DEFAULT_SOURCE_STATS.news.mean),
       count,
     };
-    let newsWindowSource: "full-14d" | "post-flip" = "full-14d";
+    type NewsWindowSource = "baseline" | "news-rolling" | "post-flip";
+    let newsWindowSource: NewsWindowSource = "baseline";
 
-    // If the user flipped NEWS_AGGREGATION_MODE=union, recompute news percentiles
-    // from post-flip snapshots only. This stops the 14-day mix of legacy+union
-    // snapshots from inflating everyone's momentum level during the transition.
-    // We keep the full-14d news stats if the post-flip window is still too thin.
+    // Decide whether to override news percentiles with a narrower window:
+    //  (a) NEWS_AGGREGATION_FLIPPED_AT is set and inside the baseline window
+    //      (so the legacy/union mix in the baseline would otherwise skew p75), or
+    //  (b) ROLLING_WINDOW_DAYS_NEWS is narrower than the baseline window
+    //      (the common case — news cycles shorter than wiki/search baselines).
+    // The effective start is the MOST RECENT of (flippedAt, newsWindowStart),
+    // so a very recent flip overrides the news rolling window and vice versa.
     const flippedAt = getNewsAggregationFlippedAt();
-    if (flippedAt && flippedAt > windowStart && flippedAt < new Date()) {
+    const candidateStarts: Date[] = [];
+    if (flippedAt && flippedAt > baselineWindowStart && flippedAt < new Date()) {
+      candidateStarts.push(flippedAt);
+    }
+    if (newsWindowStart > baselineWindowStart) {
+      candidateStarts.push(newsWindowStart);
+    }
+    if (candidateStarts.length > 0) {
+      const effectiveStart = new Date(Math.max(...candidateStarts.map((d) => d.getTime())));
+      const overrideReason: NewsWindowSource =
+        flippedAt && effectiveStart.getTime() === flippedAt.getTime() ? "post-flip" : "news-rolling";
       try {
-        // Match the NULL-filters from the 14d query so the post-flip population
-        // is identical (snapshots where wiki/search failed but news was written
-        // are excluded here too). Keeps post-flip stats comparable with full-14d
-        // stats and with wiki/search which always use the 14d window.
-        const postFlipResult = await db.execute(sql`
+        // Match the NULL-filters from the baseline query so the override
+        // population is identical (snapshots where wiki/search failed but news
+        // was written are excluded here too). Keeps news stats comparable with
+        // wiki/search, which always use the baseline window.
+        const overrideResult = await db.execute(sql`
           SELECT
             MIN(news_count) as news_min,
             MAX(news_count) as news_max,
@@ -109,31 +133,40 @@ export async function fetchRollingSourceStats(): Promise<AllSourceStats> {
             AVG(news_count) as news_mean,
             COUNT(*) as total_count
           FROM trend_snapshots
-          WHERE timestamp >= ${flippedAt}
+          WHERE timestamp >= ${effectiveStart}
             AND timestamp = date_trunc('hour', timestamp)
             AND snapshot_origin = 'ingest'
             AND wiki_pageviews IS NOT NULL
             AND news_count IS NOT NULL
             AND search_volume IS NOT NULL
         `);
-        const pfRow = (postFlipResult.rows?.[0] ?? {}) as Record<string, number>;
-        const pfCount = Number(pfRow.total_count ?? 0);
-        if (pfCount >= MIN_POST_FLIP_NEWS_COUNT) {
-          newsStats.min = n(Number(pfRow.news_min), newsStats.min);
-          newsStats.max = n(Number(pfRow.news_max), newsStats.max);
-          newsStats.p25 = n(Number(pfRow.news_p25), newsStats.p25);
-          newsStats.p50 = n(Number(pfRow.news_p50), newsStats.p50);
-          newsStats.p75 = n(Number(pfRow.news_p75), newsStats.p75);
-          newsStats.p90 = n(Number(pfRow.news_p90), newsStats.p90);
-          newsStats.mean = n(Number(pfRow.news_mean), newsStats.mean);
-          newsStats.count = pfCount;
-          newsWindowSource = "post-flip";
-          console.log(`[SourceStats] News using POST-FLIP window (${pfCount} snapshots since ${flippedAt.toISOString()}) — p25=${newsStats.p25.toFixed(1)}, p50=${newsStats.p50.toFixed(1)}, p75=${newsStats.p75.toFixed(1)}`);
+        const ovRow = (overrideResult.rows?.[0] ?? {}) as Record<string, number>;
+        const ovCount = Number(ovRow.total_count ?? 0);
+        if (ovCount >= MIN_NEWS_OVERRIDE_COUNT) {
+          newsStats.min = n(Number(ovRow.news_min), newsStats.min);
+          newsStats.max = n(Number(ovRow.news_max), newsStats.max);
+          newsStats.p25 = n(Number(ovRow.news_p25), newsStats.p25);
+          newsStats.p50 = n(Number(ovRow.news_p50), newsStats.p50);
+          newsStats.p75 = n(Number(ovRow.news_p75), newsStats.p75);
+          newsStats.p90 = n(Number(ovRow.news_p90), newsStats.p90);
+          newsStats.mean = n(Number(ovRow.news_mean), newsStats.mean);
+          newsStats.count = ovCount;
+          newsWindowSource = overrideReason;
+          console.log(
+            `[SourceStats] News using ${overrideReason.toUpperCase()} window (${ovCount} snapshots since ${effectiveStart.toISOString()}) — ` +
+            `p25=${newsStats.p25.toFixed(1)}, p50=${newsStats.p50.toFixed(1)}, p75=${newsStats.p75.toFixed(1)}`
+          );
         } else {
-          console.log(`[SourceStats] News POST-FLIP window has only ${pfCount} snapshots (<${MIN_POST_FLIP_NEWS_COUNT}), falling back to full ${ROLLING_WINDOW_DAYS}-day window`);
+          console.log(
+            `[SourceStats] News ${overrideReason.toUpperCase()} window has only ${ovCount} snapshots ` +
+            `(<${MIN_NEWS_OVERRIDE_COUNT}), falling back to baseline ${baselineDays}-day window`
+          );
         }
-      } catch (pfErr) {
-        console.warn(`[SourceStats] Post-flip news query failed, falling back to ${ROLLING_WINDOW_DAYS}-day window:`, pfErr);
+      } catch (ovErr) {
+        console.warn(
+          `[SourceStats] News ${overrideReason} query failed, falling back to baseline ${baselineDays}-day window:`,
+          ovErr
+        );
       }
     }
 
@@ -161,10 +194,13 @@ export async function fetchRollingSourceStats(): Promise<AllSourceStats> {
       },
     };
 
-    console.log(`[SourceStats] Computed from ${count} snapshots (${ROLLING_WINDOW_DAYS}-day window, news=${newsWindowSource}): ` +
-      `wiki p50=${stats.wiki.p50.toFixed(0)}, news p50=${stats.news.p50.toFixed(1)}, search p50=${stats.search.p50.toFixed(0)}`);
+    console.log(
+      `[SourceStats] Computed from ${count} snapshots ` +
+      `(baseline=${baselineDays}d, news=${newsDays}d/source=${newsWindowSource}): ` +
+      `wiki p50=${stats.wiki.p50.toFixed(0)}, news p50=${stats.news.p50.toFixed(1)}, search p50=${stats.search.p50.toFixed(0)}`
+    );
 
-    await persistStats(stats);
+    await persistStats(stats, baselineDays, newsDays);
 
     return stats;
   } catch (error) {
@@ -173,12 +209,13 @@ export async function fetchRollingSourceStats(): Promise<AllSourceStats> {
   }
 }
 
-async function persistStats(stats: AllSourceStats): Promise<void> {
+async function persistStats(stats: AllSourceStats, baselineDays: number, newsDays: number): Promise<void> {
   try {
     const payload = {
       ...stats,
       computedAt: new Date().toISOString(),
-      windowDays: ROLLING_WINDOW_DAYS,
+      baselineWindowDays: baselineDays,
+      newsWindowDays: newsDays,
     };
     
     const existing = await db.query.apiCache.findFirst({
@@ -235,31 +272,37 @@ export { fetchRollingSourceStats as fetch7DaySourceStats };
 
 let cachedStats: AllSourceStats | null = null;
 let cacheTimestamp: number = 0;
-// Cache key includes the flipped-at timestamp so flipping NEWS_AGGREGATION_FLIPPED_AT
-// at runtime busts the cache on the next call instead of waiting up to an hour.
-let cachedFlippedAtKey: string = "";
+// Cache key combines every env input that would change the computed stats so
+// flipping any of them at runtime busts the cache on the next call instead of
+// waiting up to an hour: NEWS_AGGREGATION_FLIPPED_AT, ROLLING_WINDOW_DAYS_*
+let cachedConfigKey: string = "";
 const CACHE_TTL_MS = 60 * 60 * 1000;
+
+function computeConfigKey(): string {
+  const flippedKey = getNewsAggregationFlippedAt()?.toISOString() ?? "";
+  return `baseline=${getRollingWindowDaysBaseline()};news=${getRollingWindowDaysNews()};flipped=${flippedKey}`;
+}
 
 export async function getSourceStats(): Promise<AllSourceStats> {
   const now = Date.now();
-  const flippedKey = getNewsAggregationFlippedAt()?.toISOString() ?? "";
+  const configKey = computeConfigKey();
   if (
     cachedStats &&
     (now - cacheTimestamp) < CACHE_TTL_MS &&
-    cachedFlippedAtKey === flippedKey
+    cachedConfigKey === configKey
   ) {
     return cachedStats;
   }
 
   cachedStats = await fetchRollingSourceStats();
   cacheTimestamp = now;
-  cachedFlippedAtKey = flippedKey;
+  cachedConfigKey = configKey;
   return cachedStats;
 }
 
 export async function refreshSourceStats(): Promise<AllSourceStats> {
   cachedStats = await fetchRollingSourceStats();
   cacheTimestamp = Date.now();
-  cachedFlippedAtKey = getNewsAggregationFlippedAt()?.toISOString() ?? "";
+  cachedConfigKey = computeConfigKey();
   return cachedStats;
 }

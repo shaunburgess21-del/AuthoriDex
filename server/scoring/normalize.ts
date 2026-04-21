@@ -163,6 +163,33 @@ export function isDiagnosticsVerbose(): boolean {
   return raw !== "false" && raw !== "0" && raw !== "off";
 }
 
+/**
+ * Rolling percentile-window size, in days, used for Momentum Signals traffic
+ * lights AND for the `normalizeSourceValue()` mapping from raw provider values
+ * → 0..1 importance scores that feed `fameIndex`.
+ *
+ * Two independent windows:
+ *  - `baseline` (default 14) applies to Wikipedia pageviews + Serper search
+ *    volume. These have slower natural decay and benefit from a longer window
+ *    for statistical stability.
+ *  - `news` (default 7) applies to news_count. News cycles are fast and the
+ *    baseline drifts quickly — a shorter window lets trending people cool off
+ *    faster and prevents stale stories from dragging `p75` upward for weeks.
+ *
+ * Both clamped to [3, 30]. Returns the default if unset / invalid.
+ */
+function parseWindowDays(raw: string | undefined, fallback: number): number {
+  const parsed = parseInt((raw ?? "").trim(), 10);
+  if (Number.isNaN(parsed) || parsed < 3 || parsed > 30) return fallback;
+  return parsed;
+}
+export function getRollingWindowDaysBaseline(): number {
+  return parseWindowDays(process.env.ROLLING_WINDOW_DAYS_BASELINE, 14);
+}
+export function getRollingWindowDaysNews(): number {
+  return parseWindowDays(process.env.ROLLING_WINDOW_DAYS_NEWS, 7);
+}
+
 // ============================================================================
 // AUTO CATCH-UP MODE - Gap-driven dynamic rate boosting (DB-persisted)
 // ============================================================================

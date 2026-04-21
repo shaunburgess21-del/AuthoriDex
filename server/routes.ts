@@ -38,6 +38,8 @@ import {
   getSmoothingMode,
   getNewsAggregationMode,
   getNewsAggregationFlippedAt,
+  getRollingWindowDaysBaseline,
+  getRollingWindowDaysNews,
   RELAXED_CAP_MULTIPLIER,
   RELAXED_ALPHA_FLOOR,
 } from "./scoring/normalize";
@@ -6773,6 +6775,8 @@ Only return the JSON object.`;
           })(),
           relaxedCapMultiplier: RELAXED_CAP_MULTIPLIER,
           relaxedAlphaFloor: RELAXED_ALPHA_FLOOR,
+          rollingWindowDaysBaseline: getRollingWindowDaysBaseline(),
+          rollingWindowDaysNews: getRollingWindowDaysNews(),
           diagnosticsVerbose: (process.env.DIAGNOSTICS_VERBOSE ?? "true").trim().toLowerCase() !== "false",
         },
       });
