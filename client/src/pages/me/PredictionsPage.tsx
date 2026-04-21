@@ -1,10 +1,9 @@
-import { useState, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
   ArrowLeft,
   TrendingUp,
-  TrendingDown,
   Clock,
   CheckCircle,
   XCircle,
@@ -13,11 +12,12 @@ import {
   Trophy,
   Coins,
   BarChart3,
-  ChevronDown,
-  ChevronUp,
+  Eye,
+  EyeOff,
   Zap,
   Share2,
   Check,
+  Info,
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { navigateToLogin } from "@/lib/authReturn";
@@ -26,40 +26,14 @@ import { useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { PLChart } from "@/components/predict/PLChart";
-import { OutcomePathChart } from "@/components/predict/OutcomePathChart";
-import { PersonAvatar } from "@/components/PersonAvatar";
-import { inferPredictionDirection } from "./predictions-utils";
+import { ProfileTabs, type ProfileTab } from "@/components/ProfileTabs";
+import { MyPredictionCard, type MyPredictionCardData } from "@/components/me/MyPredictionCard";
+import { DoughnutChart, type DoughnutSegment } from "@/components/charts/DoughnutChart";
+import { useItemVisibility } from "@/hooks/useItemVisibility";
+import { cn } from "@/lib/utils";
 
-interface UserPrediction {
-  betId: string;
-  marketId: string;
-  marketSlug: string;
-  marketTitle: string;
-  marketStatus: string;
-  marketType: string;
-  entryLabel: string;
-  stakeAmount: number;
-  result: "won" | "lost" | "refunded" | "pending";
-  payout: number;
-  baselineScore: number;
-  currentScore: number;
-  betCreatedAt: string;
-  marketCadence: string;
-  marketCategory: string;
-  potentialPayout: number;
-  personName: string;
-  personAvatar: string;
-  startAt: string;
-  endAt: string;
-}
+type UserPrediction = MyPredictionCardData;
 
 interface PredictionStats {
   total: number;
@@ -69,7 +43,7 @@ interface PredictionStats {
   pending: number;
   netCredits: number;
   winRate: number;
-  bestCategory: string;
+  bestCategory: string | null;
   currentStreak: number;
 }
 
@@ -88,17 +62,14 @@ const STATUS_TABS: { value: StatusFilter; label: string }[] = [
   { value: "refunded", label: "Refunded" },
 ];
 
-function formatScore(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return n.toLocaleString("en-US");
-}
+const VALID_TABS = ["overview", "predictions", "open"] as const;
+type PredictionsTab = (typeof VALID_TABS)[number];
 
-function formatDate(ts: string): string {
-  const d = new Date(ts);
-  if (isNaN(d.getTime())) return ts;
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
+const TABS: ProfileTab[] = [
+  { id: "overview", label: "Overview", icon: Eye, accent: "#3C83F6" },
+  { id: "predictions", label: "Predictions", icon: TrendingUp, accent: "#8B5CF6" },
+  { id: "open", label: "Open", icon: Flame, accent: "#F97316" },
+];
 
 function normalizeResponse(data: unknown): { predictions: UserPrediction[]; stats: PredictionStats | null } {
   if (Array.isArray(data)) {
@@ -126,18 +97,139 @@ function useCopyToClipboard() {
   return { copiedId, copy };
 }
 
+function getInitialTab(): PredictionsTab {
+  if (typeof window === "undefined") return "overview";
+  const param = new URLSearchParams(window.location.search).get("tab");
+  return VALID_TABS.includes(param as PredictionsTab) ? (param as PredictionsTab) : "overview";
+}
+
+const STATUS_VALUES: StatusFilter[] = ["all", "pending", "won", "lost", "refunded"];
+
+function getInitialStatusFilter(): StatusFilter {
+  if (typeof window === "undefined") return "all";
+  const param = new URLSearchParams(window.location.search).get("status");
+  return STATUS_VALUES.includes(param as StatusFilter) ? (param as StatusFilter) : "all";
+}
+
+function getInitialCategoryFilter(): string {
+  if (typeof window === "undefined") return "all";
+  return new URLSearchParams(window.location.search).get("category") || "all";
+}
+
+function getInitialHiddenOnly(): boolean {
+  if (typeof window === "undefined") return false;
+  return new URLSearchParams(window.location.search).get("hidden") === "1";
+}
+
+// Small inline pill used by filter rows. Mirrors the helper on VotesPage but
+// defaults to the Predict-tab blue/violet palette.
+function FilterPill({
+  active,
+  onClick,
+  children,
+  accent = "blue",
+  count,
+  dataTestId,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+  accent?: "cyan" | "violet" | "amber" | "emerald" | "rose" | "blue" | "slate";
+  count?: number;
+  dataTestId?: string;
+}) {
+  const accentClass: Record<string, string> = {
+    cyan: "border-cyan-500/50 bg-cyan-500/15 text-cyan-600 dark:text-cyan-300",
+    violet: "border-violet-500/50 bg-violet-500/15 text-violet-600 dark:text-violet-300",
+    amber: "border-amber-500/50 bg-amber-500/15 text-amber-700 dark:text-amber-300",
+    emerald: "border-emerald-500/50 bg-emerald-500/15 text-emerald-600 dark:text-emerald-300",
+    rose: "border-rose-500/50 bg-rose-500/15 text-rose-600 dark:text-rose-300",
+    blue: "border-blue-500/50 bg-blue-500/15 text-blue-600 dark:text-blue-300",
+    slate: "border-slate-400/50 bg-slate-500/15 text-slate-600 dark:text-slate-300",
+  };
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      data-testid={dataTestId}
+      aria-pressed={active}
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-medium transition-colors",
+        active
+          ? accentClass[accent]
+          : "border-border/60 text-muted-foreground hover:border-border hover:text-foreground",
+      )}
+    >
+      {children}
+      {count !== undefined && count > 0 && (
+        <span
+          className={cn(
+            "rounded-full px-1.5 text-[10px] tabular-nums",
+            active ? "bg-background/40" : "bg-muted/60",
+          )}
+        >
+          {count}
+        </span>
+      )}
+    </button>
+  );
+}
+
+const STATUS_ACCENTS: Record<StatusFilter, "blue" | "emerald" | "rose" | "slate" | "violet"> = {
+  all: "violet",
+  pending: "blue",
+  won: "emerald",
+  lost: "rose",
+  refunded: "slate",
+};
+
 export default function PredictionsPage() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [, setLocation] = useLocation();
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [categoryFilter, setCategoryFilter] = useState<string>("all");
-  const [expandedBet, setExpandedBet] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<PredictionsTab>(getInitialTab);
+  const [statusFilter, setStatusFilterState] = useState<StatusFilter>(getInitialStatusFilter);
+  const [categoryFilter, setCategoryFilterState] = useState<string>(getInitialCategoryFilter);
+  const [hiddenOnly, setHiddenOnlyState] = useState<boolean>(getInitialHiddenOnly);
   const { copiedId, copy } = useCopyToClipboard();
+
+  const writeQuery = (patch: Record<string, string | null>) => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    for (const [key, value] of Object.entries(patch)) {
+      if (value === null || value === "") url.searchParams.delete(key);
+      else url.searchParams.set(key, value);
+    }
+    window.history.replaceState({}, "", url.toString());
+  };
+
+  const handleTabChange = (next: string) => {
+    const tab = VALID_TABS.includes(next as PredictionsTab) ? (next as PredictionsTab) : "overview";
+    setActiveTab(tab);
+    writeQuery({ tab: tab === "overview" ? null : tab });
+  };
+
+  const setStatusFilter = (next: StatusFilter) => {
+    setStatusFilterState(next);
+    writeQuery({ status: next === "all" ? null : next });
+  };
+
+  const setCategoryFilter = (next: string) => {
+    setCategoryFilterState(next);
+    writeQuery({ category: next === "all" ? null : next });
+  };
+
+  const setHiddenOnly = (next: boolean) => {
+    setHiddenOnlyState(next);
+    writeQuery({ hidden: next ? "1" : null });
+  };
 
   const { data: rawData, isLoading, error } = useQuery<PredictionsResponse | UserPrediction[]>({
     queryKey: ["/api/me/predictions"],
     enabled: !!user,
   });
+
+  const visibility = useItemVisibility();
+  const profileIsPrivate = profile ? profile.isPublic === false : false;
 
   if (!user) {
     return (
@@ -145,7 +237,11 @@ export default function PredictionsPage() {
         <Card className="p-8 text-center max-w-md">
           <TrendingUp className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
           <h2 className="text-xl font-semibold mb-2">Sign in to view your predictions</h2>
-          <Button onClick={() => navigateToLogin(setLocation)} className="mt-4" data-testid="button-sign-in">
+          <Button
+            onClick={() => navigateToLogin(setLocation)}
+            className="mt-4"
+            data-testid="button-sign-in"
+          >
             Sign In
           </Button>
         </Card>
@@ -153,47 +249,67 @@ export default function PredictionsPage() {
     );
   }
 
-  const { predictions, stats } = rawData ? normalizeResponse(rawData) : { predictions: [], stats: null };
+  const { predictions, stats } = rawData
+    ? normalizeResponse(rawData)
+    : { predictions: [], stats: null };
 
-  const categories = Array.from(new Set(predictions.map((p) => p.marketCategory).filter(Boolean)));
+  const categories = useMemo(
+    () => Array.from(new Set(predictions.map((p) => p.marketCategory).filter(Boolean))),
+    [predictions],
+  );
 
-  const filtered = predictions.filter((p) => {
-    if (statusFilter !== "all" && p.result !== statusFilter) return false;
-    if (categoryFilter !== "all" && p.marketCategory !== categoryFilter) return false;
-    return true;
-  });
+  const filtered = useMemo(
+    () =>
+      predictions.filter((p) => {
+        if (statusFilter !== "all" && p.result !== statusFilter) return false;
+        if (categoryFilter !== "all" && p.marketCategory !== categoryFilter) return false;
+        if (hiddenOnly && !p.hidden) return false;
+        return true;
+      }),
+    [predictions, statusFilter, categoryFilter, hiddenOnly],
+  );
 
-  const plChartData = predictions.map((p) => ({
-    createdAt: p.betCreatedAt,
-    result: p.result,
-    stakeAmount: p.stakeAmount,
-    payout: p.payout,
-  }));
+  const openBets = useMemo(
+    () =>
+      predictions
+        .filter((p) => p.result === "pending")
+        .sort((a, b) => {
+          const ae = new Date(a.endAt).getTime();
+          const be = new Date(b.endAt).getTime();
+          if (Number.isNaN(ae)) return 1;
+          if (Number.isNaN(be)) return -1;
+          return ae - be;
+        }),
+    [predictions],
+  );
 
-  const getStatusBadge = (status: UserPrediction["result"]) => {
-    switch (status) {
-      case "pending":
-        return <Badge className="bg-blue-500/25 dark:bg-blue-500/20 text-blue-500 dark:text-blue-300 border-blue-500/40 dark:border-blue-500/30"><Clock className="h-3 w-3 mr-1" />Active</Badge>;
-      case "won":
-        return <Badge className="bg-green-500/25 dark:bg-green-500/20 text-green-500 dark:text-green-300 border-green-500/40 dark:border-green-500/30"><CheckCircle className="h-3 w-3 mr-1" />Won</Badge>;
-      case "lost":
-        return <Badge className="bg-red-500/25 dark:bg-red-500/20 text-red-500 dark:text-red-300 border-red-500/40 dark:border-red-500/30"><XCircle className="h-3 w-3 mr-1" />Lost</Badge>;
-      case "refunded":
-        return <Badge className="bg-zinc-500/25 dark:bg-zinc-500/20 text-zinc-600 dark:text-zinc-400 border-zinc-500/40 dark:border-zinc-500/30">Refunded</Badge>;
-      default:
-        return <Badge variant="secondary">{status}</Badge>;
-    }
+  const hiddenCount = useMemo(
+    () => predictions.filter((p) => p.hidden).length,
+    [predictions],
+  );
+
+  const plChartData = useMemo(
+    () =>
+      predictions.map((p) => ({
+        createdAt: p.betCreatedAt,
+        result: p.result,
+        stakeAmount: p.stakeAmount,
+        payout: p.payout,
+      })),
+    [predictions],
+  );
+
+  const handleToggleVisibility = (prediction: UserPrediction, hidden: boolean) => {
+    visibility.mutate({ itemType: "market_bet", itemId: String(prediction.betId), hidden });
   };
 
-  const getDirectionIcon = (direction: string) => {
-    switch (direction) {
-      case "up":
-        return <TrendingUp className="h-4 w-4 text-green-600 dark:text-green-400" />;
-      case "down":
-        return <TrendingDown className="h-4 w-4 text-red-600 dark:text-red-400" />;
-      default:
-        return <Target className="h-4 w-4 text-violet-600 dark:text-violet-400" />;
-    }
+  const handleShareWin = (p: UserPrediction) => {
+    const pnl = p.payout - p.stakeAmount;
+    copy(
+      `I won +${pnl.toLocaleString()} credits on "${p.marketTitle}" on VoxDex!\n${window.location.origin}/markets/${p.marketSlug}`,
+      "Win shared to clipboard!",
+      p.betId,
+    );
   };
 
   return (
@@ -204,11 +320,8 @@ export default function PredictionsPage() {
             variant="ghost"
             size="icon"
             onClick={() => {
-              if (window.history.length > 1) {
-                window.history.back();
-              } else {
-                setLocation("/me");
-              }
+              if (window.history.length > 1) window.history.back();
+              else setLocation("/me");
             }}
             data-testid="button-back"
           >
@@ -216,351 +329,1083 @@ export default function PredictionsPage() {
           </Button>
           <div>
             <h1 className="font-semibold">My Predictions</h1>
-            <p className="text-xs text-muted-foreground">
-              Track your prediction performance
-            </p>
+            <p className="text-xs text-muted-foreground">Track your prediction journey</p>
           </div>
         </div>
       </header>
 
+      <div
+        id="profile-tabs-section"
+        className="sticky top-14 z-40 border-b bg-background/80 backdrop-blur-xl"
+      >
+        <div className="container mx-auto px-4 py-2 max-w-3xl">
+          <ProfileTabs
+            activeTab={activeTab}
+            onTabChange={handleTabChange}
+            tabs={TABS}
+            noBottomMargin
+          />
+        </div>
+      </div>
+
       <div className="container mx-auto px-4 py-6 max-w-3xl space-y-6">
-        {/* ---------- Summary Bar ---------- */}
-        {isLoading ? (
-          <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <Skeleton key={i} className="h-20 w-full rounded-xl" />
-            ))}
-          </div>
-        ) : stats ? (
-          <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
-            <Card className="p-3 text-center space-y-1">
-              <Clock className="h-4 w-4 mx-auto text-blue-600 dark:text-blue-400" />
-              <p className="text-xl font-bold text-blue-600 dark:text-blue-400">{stats.pending}</p>
-              <p className="text-[10px] text-muted-foreground leading-tight">Open</p>
-            </Card>
-            <Card className="p-3 text-center space-y-1">
-              <Trophy className="h-4 w-4 mx-auto text-green-600 dark:text-green-400" />
-              <p className="text-xl font-bold text-green-600 dark:text-green-400">{stats.won}</p>
-              <p className="text-[10px] text-muted-foreground leading-tight">Won</p>
-            </Card>
-            <Card className="p-3 text-center space-y-1">
-              <XCircle className="h-4 w-4 mx-auto text-red-600 dark:text-red-400" />
-              <p className="text-xl font-bold text-red-600 dark:text-red-400">{stats.lost}</p>
-              <p className="text-[10px] text-muted-foreground leading-tight">Lost</p>
-            </Card>
-            <Card className="p-3 text-center space-y-1">
-              <Coins className="h-4 w-4 mx-auto text-amber-600 dark:text-amber-400" />
-              <p className={`text-xl font-bold ${stats.netCredits >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
-                {stats.netCredits >= 0 ? "+" : ""}{stats.netCredits.toLocaleString()}
-              </p>
-              <p className="text-[10px] text-muted-foreground leading-tight">Net Credits</p>
-            </Card>
-            <Card className="p-3 text-center space-y-1">
-              <BarChart3 className="h-4 w-4 mx-auto text-violet-600 dark:text-violet-400" />
-              <p className="text-xl font-bold text-violet-600 dark:text-violet-400">{stats.winRate}%</p>
-              <p className="text-[10px] text-muted-foreground leading-tight">Win Rate</p>
-            </Card>
-            <Card className="p-3 text-center space-y-1">
-              <Flame className="h-4 w-4 mx-auto text-orange-600 dark:text-orange-400" />
-              <p className="text-xl font-bold text-orange-600 dark:text-orange-400">{stats.currentStreak}</p>
-              <p className="text-[10px] text-muted-foreground leading-tight">Streak</p>
-            </Card>
-          </div>
-        ) : null}
-
-        {stats && (
-          <div className="flex justify-end">
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5 text-xs"
-              onClick={() => copy(
-                `My VoxDex predictions: ${stats.winRate}% win rate | ${stats.netCredits >= 0 ? "+" : ""}${stats.netCredits.toLocaleString()} net credits | ${stats.total} predictions\n${window.location.origin}/predict`,
-                "Stats copied to clipboard!"
-              )}
-            >
-              {copiedId === "_stats" ? <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-400" /> : <Share2 className="h-3.5 w-3.5" />}
-              Share Stats
-            </Button>
-          </div>
-        )}
-
-        {/* ---------- P/L Chart ---------- */}
-        {!isLoading && predictions.length > 0 && (
-          <Card className="p-4">
-            <PLChart predictions={plChartData} />
+        {profileIsPrivate && (
+          <Card className="p-3 border-amber-500/30 bg-amber-500/5">
+            <div className="flex items-start gap-2 text-xs sm:text-sm">
+              <Info className="h-4 w-4 mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
+              <div>
+                <p className="font-medium text-amber-700 dark:text-amber-300">
+                  Your profile is private
+                </p>
+                <p className="text-muted-foreground">
+                  Nothing below is currently visible to others. You can still stage visibility
+                  choices here — they&apos;ll apply the moment your profile goes public.
+                </p>
+              </div>
+            </div>
           </Card>
         )}
 
-        {/* ---------- Filter Bar ---------- */}
-        {!isLoading && predictions.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {STATUS_TABS.map((tab) => (
-                <Badge
-                  key={tab.value}
-                  variant={statusFilter === tab.value ? "default" : "outline"}
-                  className={`cursor-pointer transition-colors ${
-                    statusFilter === tab.value
-                      ? ""
-                      : "hover:bg-accent"
-                  }`}
-                  onClick={() => setStatusFilter(tab.value)}
-                >
-                  {tab.label}
-                  {stats && tab.value !== "all" && (
-                    <span className="ml-1 opacity-70">
-                      {stats[tab.value as keyof Pick<PredictionStats, "pending" | "won" | "lost" | "refunded">]}
-                    </span>
-                  )}
-                  {stats && tab.value === "all" && (
-                    <span className="ml-1 opacity-70">{stats.total}</span>
-                  )}
-                </Badge>
-              ))}
-            </div>
+        {activeTab === "overview" && (
+          <OverviewTab
+            isLoading={isLoading}
+            stats={stats}
+            predictions={predictions}
+            plChartData={plChartData}
+            hiddenCount={hiddenCount}
+            copiedId={copiedId}
+            copy={copy}
+            onJumpToPredictions={() => handleTabChange("predictions")}
+            onJumpToOpen={() => handleTabChange("open")}
+            onJumpToHidden={() => {
+              setHiddenOnly(true);
+              handleTabChange("predictions");
+            }}
+          />
+        )}
 
-            {categories.length > 1 && (
-              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                <SelectTrigger className="w-[140px] h-8 text-xs ml-auto">
-                  <SelectValue placeholder="Category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Categories</SelectItem>
-                  {categories.map((cat) => (
-                    <SelectItem key={cat} value={cat}>
-                      {cat.charAt(0).toUpperCase() + cat.slice(1)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+        {activeTab === "predictions" && (
+          <PredictionsTabPanel
+            isLoading={isLoading}
+            error={error as Error | undefined}
+            predictions={predictions}
+            filtered={filtered}
+            stats={stats}
+            categories={categories}
+            statusFilter={statusFilter}
+            onStatusFilterChange={setStatusFilter}
+            categoryFilter={categoryFilter}
+            onCategoryFilterChange={setCategoryFilter}
+            hiddenOnly={hiddenOnly}
+            onToggleHiddenOnly={() => setHiddenOnly(!hiddenOnly)}
+            hiddenCount={hiddenCount}
+            profileIsPrivate={profileIsPrivate}
+            onToggleVisibility={handleToggleVisibility}
+            isPending={visibility.isPending}
+            copiedId={copiedId}
+            onShareWin={handleShareWin}
+            setLocation={setLocation}
+          />
+        )}
+
+        {activeTab === "open" && (
+          <OpenTabPanel
+            openBets={openBets}
+            isLoading={isLoading}
+            profileIsPrivate={profileIsPrivate}
+            onToggleVisibility={handleToggleVisibility}
+            isPending={visibility.isPending}
+            setLocation={setLocation}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------- Tab: Overview ----------
+
+function PredictionHeadlineHero({
+  stats,
+  copiedId,
+  copy,
+}: {
+  stats: PredictionStats;
+  copiedId: string | null;
+  copy: (text: string, label: string, id?: string) => Promise<void>;
+}) {
+  // Lead with the most brag-worthy stat. Once a user has enough resolved bets
+  // to have a meaningful win rate, put it front and centre. Otherwise highlight
+  // Net Credits, which is a more personal "you've put skin in the game" metric.
+  const resolved = stats.won + stats.lost;
+  const leadWithWinRate = resolved >= 3;
+  const leadValue = leadWithWinRate
+    ? `${stats.winRate}%`
+    : `${stats.netCredits >= 0 ? "+" : ""}${stats.netCredits.toLocaleString()}`;
+  const leadLabel = leadWithWinRate ? "Win Rate" : "Net Credits";
+  const secondaryLabel = leadWithWinRate ? "Net Credits" : "Open positions";
+  const secondaryValue = leadWithWinRate
+    ? `${stats.netCredits >= 0 ? "+" : ""}${stats.netCredits.toLocaleString()}`
+    : `${stats.pending}`;
+  const leadClass = cn(
+    "font-mono text-4xl font-bold tabular-nums leading-none",
+    leadWithWinRate
+      ? "text-foreground"
+      : stats.netCredits > 0
+        ? "text-emerald-500"
+        : stats.netCredits < 0
+          ? "text-rose-500"
+          : "text-foreground",
+  );
+
+  const shareText = `My VoxDex predictions: ${stats.winRate}% win rate | ${
+    stats.netCredits >= 0 ? "+" : ""
+  }${stats.netCredits.toLocaleString()} net credits | ${stats.total} predictions\n${
+    window.location.origin
+  }/predict`;
+
+  return (
+    <Card className="relative overflow-hidden p-4 sm:p-5">
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-violet-500/15 via-blue-500/10 to-transparent" />
+      <div className="relative flex items-center gap-4">
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            {leadLabel}
+          </p>
+          <p className={leadClass}>{leadValue}</p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            <span className="font-semibold text-foreground tabular-nums">{secondaryValue}</span>{" "}
+            {secondaryLabel.toLowerCase()}
+            <span className="mx-1.5 text-muted-foreground/60">&middot;</span>
+            <span className="tabular-nums">{stats.total}</span> predictions
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="shrink-0 gap-1.5 text-xs"
+          onClick={() => copy(shareText, "Stats copied to clipboard!", "_stats")}
+          data-testid="button-hero-share-stats"
+        >
+          {copiedId === "_stats" ? (
+            <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+          ) : (
+            <Share2 className="h-3.5 w-3.5" />
+          )}
+          Share
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
+function OverviewTab({
+  isLoading,
+  stats,
+  predictions,
+  plChartData,
+  hiddenCount,
+  copiedId,
+  copy,
+  onJumpToPredictions,
+  onJumpToOpen,
+  onJumpToHidden,
+}: {
+  isLoading: boolean;
+  stats: PredictionStats | null;
+  predictions: UserPrediction[];
+  plChartData: { createdAt: string; result: "won" | "lost" | "refunded" | "pending"; stakeAmount: number; payout: number }[];
+  hiddenCount: number;
+  copiedId: string | null;
+  copy: (text: string, label: string, id?: string) => Promise<void>;
+  onJumpToPredictions: () => void;
+  onJumpToOpen: () => void;
+  onJumpToHidden: () => void;
+}) {
+  const categoryAccuracy = useMemo(() => {
+    const map = new Map<string, { won: number; resolved: number }>();
+    for (const p of predictions) {
+      if (!p.marketCategory) continue;
+      if (p.result !== "won" && p.result !== "lost") continue;
+      const cur = map.get(p.marketCategory) ?? { won: 0, resolved: 0 };
+      cur.resolved += 1;
+      if (p.result === "won") cur.won += 1;
+      map.set(p.marketCategory, cur);
+    }
+    return Array.from(map.entries())
+      .map(([category, c]) => ({
+        category,
+        resolved: c.resolved,
+        won: c.won,
+        rate: c.resolved > 0 ? (c.won / c.resolved) * 100 : 0,
+      }))
+      .sort((a, b) => b.rate - a.rate)
+      .slice(0, 5);
+  }, [predictions]);
+
+  // Doughnut: Result split
+  const resultSegments: DoughnutSegment[] = useMemo(() => {
+    if (!stats) return [];
+    return [
+      { id: "won", label: "Won", value: stats.won, color: "#10B981" },
+      { id: "lost", label: "Lost", value: stats.lost, color: "#F43F5E" },
+      { id: "pending", label: "Pending", value: stats.pending, color: "#3B82F6" },
+      { id: "refunded", label: "Refunded", value: stats.refunded, color: "#64748B" },
+    ];
+  }, [stats]);
+
+  // Doughnut: Category distribution (count of predictions per category).
+  const categoryDistribution: DoughnutSegment[] = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const p of predictions) {
+      if (!p.marketCategory) continue;
+      counts.set(p.marketCategory, (counts.get(p.marketCategory) ?? 0) + 1);
+    }
+    const palette = ["#8B5CF6", "#22D3EE", "#F59E0B", "#10B981", "#EC4899", "#3B82F6", "#F97316", "#64748B"];
+    return Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([category, count], i) => ({
+        id: category,
+        label: category.replace(/_/g, " "),
+        value: count,
+        color: palette[i % palette.length],
+      }));
+  }, [predictions]);
+
+  // Best / worst category by win rate (only consider those with >= 2 resolved bets
+  // so a single lucky or unlucky call doesn't hijack the headline).
+  const categoryMinResolved = 2;
+  const bestCategoryCallout = useMemo(() => {
+    const candidates = categoryAccuracy.filter((c) => c.resolved >= categoryMinResolved);
+    return candidates[0] ?? null;
+  }, [categoryAccuracy]);
+  const worstCategoryCallout = useMemo(() => {
+    const candidates = categoryAccuracy.filter((c) => c.resolved >= categoryMinResolved);
+    return candidates.length > 0 ? candidates[candidates.length - 1] : null;
+  }, [categoryAccuracy]);
+
+  // Contrarian index: bets with decimal odds > 2.0 were underdog calls.
+  const contrarian = useMemo(() => {
+    let eligible = 0;
+    let underdog = 0;
+    let underdogWins = 0;
+    for (const p of predictions) {
+      const odds =
+        p.oddsAtBet != null
+          ? p.oddsAtBet
+          : p.stakeAmount > 0
+            ? p.potentialPayout / p.stakeAmount
+            : null;
+      if (odds == null || !Number.isFinite(odds)) continue;
+      eligible += 1;
+      if (odds > 2.0) {
+        underdog += 1;
+        if (p.result === "won") underdogWins += 1;
+      }
+    }
+    const pct = eligible > 0 ? Math.round((underdog / eligible) * 100) : null;
+    return { eligible, underdog, underdogWins, pct };
+  }, [predictions]);
+
+  const visibleCount = predictions.length - hiddenCount;
+
+  // Matches the predicate PLChart uses internally. Used to hide the P&L card
+  // entirely when there's nothing to plot, rather than rendering a blank box.
+  const resolvedCount = useMemo(
+    () => plChartData.filter((p) => p.result === "won" || p.result === "lost").length,
+    [plChartData],
+  );
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-24 w-full rounded-xl" />
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-20 w-full rounded-xl" />
+          ))}
+        </div>
+        <Skeleton className="h-56 w-full rounded-xl" />
+      </div>
+    );
+  }
+
+  if (!stats || predictions.length === 0) {
+    return <OverviewEmpty onStart={() => window.location.assign("/predict")} />;
+  }
+
+  return (
+    <div className="space-y-6">
+      <PredictionHeadlineHero stats={stats} copiedId={copiedId} copy={copy} />
+
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+        <Card className="p-3 text-center space-y-1 border-white/5 bg-card/60 backdrop-blur-sm">
+          <Clock className="h-4 w-4 mx-auto text-blue-600 dark:text-blue-400" />
+          <p className="text-2xl font-mono font-bold tabular-nums">{stats.pending}</p>
+          <p className="text-[10px] uppercase tracking-wide text-muted-foreground leading-tight">
+            Open
+          </p>
+        </Card>
+        <Card className="p-3 text-center space-y-1 border-white/5 bg-card/60 backdrop-blur-sm">
+          <Trophy className="h-4 w-4 mx-auto text-green-600 dark:text-green-400" />
+          <p className="text-2xl font-mono font-bold tabular-nums">{stats.won}</p>
+          <p className="text-[10px] uppercase tracking-wide text-muted-foreground leading-tight">
+            Won
+          </p>
+        </Card>
+        <Card className="p-3 text-center space-y-1 border-white/5 bg-card/60 backdrop-blur-sm">
+          <XCircle className="h-4 w-4 mx-auto text-red-600 dark:text-red-400" />
+          <p className="text-2xl font-mono font-bold tabular-nums">{stats.lost}</p>
+          <p className="text-[10px] uppercase tracking-wide text-muted-foreground leading-tight">
+            Lost
+          </p>
+        </Card>
+        <Card className="p-3 text-center space-y-1 border-white/5 bg-card/60 backdrop-blur-sm">
+          <Coins className="h-4 w-4 mx-auto text-amber-600 dark:text-amber-400" />
+          <p
+            className={cn(
+              "text-2xl font-mono font-bold tabular-nums",
+              stats.netCredits > 0 && "text-green-600 dark:text-green-400",
+              stats.netCredits < 0 && "text-red-600 dark:text-red-400",
+            )}
+          >
+            {stats.netCredits >= 0 ? "+" : ""}
+            {stats.netCredits.toLocaleString()}
+          </p>
+          <p className="text-[10px] uppercase tracking-wide text-muted-foreground leading-tight">
+            Net Credits
+          </p>
+        </Card>
+        <Card className="p-3 text-center space-y-1 border-white/5 bg-card/60 backdrop-blur-sm">
+          <BarChart3 className="h-4 w-4 mx-auto text-violet-600 dark:text-violet-400" />
+          <p className="text-2xl font-mono font-bold tabular-nums">{stats.winRate}%</p>
+          <p className="text-[10px] uppercase tracking-wide text-muted-foreground leading-tight">
+            Win Rate
+          </p>
+        </Card>
+        <Card className="p-3 text-center space-y-1 border-white/5 bg-card/60 backdrop-blur-sm">
+          <Flame className="h-4 w-4 mx-auto text-orange-600 dark:text-orange-400" />
+          <p className="text-2xl font-mono font-bold tabular-nums">{stats.currentStreak}</p>
+          <p className="text-[10px] uppercase tracking-wide text-muted-foreground leading-tight">
+            Streak
+          </p>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <Card className="p-4 sm:p-5 border-white/5 bg-card/60 backdrop-blur-sm">
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <h3 className="font-semibold text-sm">Result split</h3>
+              <p className="text-xs text-muted-foreground">Won, lost, pending, refunded</p>
+            </div>
+          </div>
+          <DoughnutChart
+            data={resultSegments}
+            centerTitle={stats.total}
+            centerSubtitle="predictions"
+            height={220}
+          />
+        </Card>
+
+        <Card className="p-4 sm:p-5 border-white/5 bg-card/60 backdrop-blur-sm">
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <h3 className="font-semibold text-sm">Category mix</h3>
+              <p className="text-xs text-muted-foreground">Where you put your credits</p>
+            </div>
+          </div>
+          <DoughnutChart
+            data={categoryDistribution}
+            centerTitle={categoryDistribution.length}
+            centerSubtitle="categories"
+            height={220}
+          />
+        </Card>
+      </div>
+
+      {resolvedCount > 0 && (
+        <Card className="p-4 sm:p-5 border-white/5 bg-card/60 backdrop-blur-sm">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h3 className="font-semibold text-sm">Profit &amp; loss</h3>
+              <p className="text-xs text-muted-foreground">
+                Cumulative credits across resolved predictions
+              </p>
+            </div>
+            <Badge variant="outline" className="gap-1 text-[10px]">
+              {resolvedCount} resolved
+            </Badge>
+          </div>
+          <PLChart predictions={plChartData} />
+        </Card>
+      )}
+
+      {categoryAccuracy.length > 0 && (
+        <Card className="p-4 sm:p-5 border-white/5 bg-card/60 backdrop-blur-sm">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h3 className="font-semibold text-sm">Win rate by category</h3>
+              <p className="text-xs text-muted-foreground">Where your calls are sharpest</p>
+            </div>
+            <Button variant="ghost" size="sm" className="text-xs" onClick={onJumpToPredictions}>
+              Browse all →
+            </Button>
+          </div>
+
+          {(bestCategoryCallout || worstCategoryCallout) && (
+            <div className="mb-3 flex flex-wrap gap-2">
+              {bestCategoryCallout && (
+                <Badge
+                  variant="outline"
+                  className="gap-1 border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300"
+                >
+                  <Trophy className="h-3 w-3" /> Strongest:{" "}
+                  <span className="capitalize">
+                    {bestCategoryCallout.category.replace(/_/g, " ")}
+                  </span>{" "}
+                  <span className="tabular-nums">({bestCategoryCallout.rate.toFixed(0)}%)</span>
+                </Badge>
+              )}
+              {worstCategoryCallout &&
+                worstCategoryCallout.category !== bestCategoryCallout?.category && (
+                  <Badge
+                    variant="outline"
+                    className="gap-1 border-rose-500/40 bg-rose-500/10 text-rose-600 dark:text-rose-300"
+                  >
+                    <Target className="h-3 w-3" /> Needs work:{" "}
+                    <span className="capitalize">
+                      {worstCategoryCallout.category.replace(/_/g, " ")}
+                    </span>{" "}
+                    <span className="tabular-nums">({worstCategoryCallout.rate.toFixed(0)}%)</span>
+                  </Badge>
+                )}
+            </div>
+          )}
+
+          <div className="space-y-2.5">
+            {categoryAccuracy.map((c) => (
+              <div key={c.category} className="space-y-1">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="capitalize text-muted-foreground">
+                    {c.category.replace(/_/g, " ")}
+                  </span>
+                  <span className="font-medium">
+                    {c.won}/{c.resolved}{" "}
+                    <span className="text-muted-foreground">({c.rate.toFixed(0)}%)</span>
+                  </span>
+                </div>
+                <div className="h-1.5 rounded-full bg-muted/60 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full ${
+                      c.rate >= 60
+                        ? "bg-gradient-to-r from-emerald-500 to-green-500"
+                        : c.rate >= 40
+                          ? "bg-gradient-to-r from-amber-500 to-yellow-500"
+                          : "bg-gradient-to-r from-rose-500 to-red-500"
+                    }`}
+                    style={{ width: `${Math.max(2, c.rate)}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      <PredictionContrarianTile
+        pct={contrarian.pct}
+        eligible={contrarian.eligible}
+        underdog={contrarian.underdog}
+        underdogWins={contrarian.underdogWins}
+      />
+
+      <PredictionsJourneyTimeline stats={stats} predictions={predictions} />
+
+      <Card className="p-4 sm:p-5 border-white/5 bg-card/60 backdrop-blur-sm">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-semibold text-sm">Visibility snapshot</h3>
+            <p className="text-xs text-muted-foreground">
+              {visibleCount} visible &middot; {hiddenCount} hidden
+            </p>
+          </div>
+          {hiddenCount > 0 ? (
+            <Button variant="outline" size="sm" className="text-xs" onClick={onJumpToHidden}>
+              <EyeOff className="h-3.5 w-3.5 mr-1.5" /> Review hidden
+            </Button>
+          ) : (
+            <Badge
+              variant="outline"
+              className="gap-1 border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300"
+            >
+              <Eye className="h-3 w-3" /> All public
+            </Badge>
+          )}
+        </div>
+      </Card>
+
+      <div className="flex items-center justify-between gap-2 flex-wrap pt-2">
+        <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={onJumpToOpen}>
+          <Flame className="h-3.5 w-3.5" /> View open positions ({stats.pending})
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1.5 text-xs"
+          onClick={() =>
+            copy(
+              `My VoxDex predictions: ${stats.winRate}% win rate | ${
+                stats.netCredits >= 0 ? "+" : ""
+              }${stats.netCredits.toLocaleString()} net credits | ${stats.total} predictions\n${window.location.origin}/predict`,
+              "Stats copied to clipboard!",
+              "_stats",
+            )
+          }
+        >
+          {copiedId === "_stats" ? (
+            <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+          ) : (
+            <Share2 className="h-3.5 w-3.5" />
+          )}
+          Share Stats
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// Contrarian index tile for predictions - underdog = decimal odds > 2.0.
+function PredictionContrarianTile({
+  pct,
+  eligible,
+  underdog,
+  underdogWins,
+}: {
+  pct: number | null;
+  eligible: number;
+  underdog: number;
+  underdogWins: number;
+}) {
+  const readyThreshold = 3;
+  const ready = pct !== null && eligible >= readyThreshold;
+  const underdogHitRate =
+    underdog > 0 ? Math.round((underdogWins / underdog) * 100) : null;
+  const persona = ready
+    ? pct! >= 60
+      ? "Underdog Hunter"
+      : pct! >= 40
+        ? "Long-Shot Believer"
+        : pct! >= 20
+          ? "Balanced Bettor"
+          : "Favourites Backer"
+    : null;
+
+  return (
+    <Card className="relative overflow-hidden p-4 sm:p-5">
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-violet-500/15 via-fuchsia-500/10 to-transparent" />
+      <div className="relative flex items-start gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-500/10 text-violet-600 dark:text-violet-300">
+          <Target className="h-5 w-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="font-semibold text-sm">Contrarian index</h3>
+            {persona && (
+              <Badge
+                variant="outline"
+                className="border-violet-500/30 bg-violet-500/10 text-[10px] text-violet-600 dark:text-violet-300"
+              >
+                {persona}
+              </Badge>
             )}
           </div>
-        )}
+          {ready ? (
+            <>
+              <p className="mt-2 text-3xl font-mono font-bold tabular-nums">{pct}%</p>
+              <p className="text-xs text-muted-foreground">
+                of your predictions were underdog calls (decimal odds &gt; 2.0)
+                <span className="ml-1 text-muted-foreground/80">
+                  ({underdog} of {eligible})
+                </span>
+              </p>
+              {underdog > 0 && underdogHitRate !== null && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Underdog hit rate:{" "}
+                  <span className="font-semibold text-foreground tabular-nums">
+                    {underdogHitRate}%
+                  </span>{" "}
+                  ({underdogWins}/{underdog})
+                </p>
+              )}
+              <div className="mt-3 h-2 rounded-full bg-muted/60 overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-violet-500 to-fuchsia-400"
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+            </>
+          ) : (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Your contrarian streak unlocks after {readyThreshold} predictions with priced odds.
+              You&apos;ve got {eligible} so far.
+            </p>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+}
 
-        {/* ---------- Content ---------- */}
-        {isLoading ? (
-          <div className="space-y-4">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <Skeleton key={i} className="h-28 w-full rounded-xl" />
-            ))}
-          </div>
-        ) : error ? (
-          <Card className="p-8 text-center">
-            <TrendingUp className="h-12 w-12 mx-auto mb-4 text-destructive" />
-            <h2 className="text-lg font-semibold mb-2">Couldn&apos;t load predictions</h2>
-            <p className="text-muted-foreground mb-4">Please try again in a moment.</p>
-            <Button onClick={() => window.location.reload()} data-testid="button-retry-predictions">
-              Retry
-            </Button>
-          </Card>
-        ) : filtered.length > 0 ? (
-          <div className="space-y-3">
-            {filtered.map((prediction) => {
-              const direction = inferPredictionDirection(prediction.entryLabel);
-              const isExpanded = expandedBet === prediction.betId;
-              const delta = (prediction.currentScore || 0) - (prediction.baselineScore || 0);
-              const pctDelta =
-                prediction.baselineScore > 0
-                  ? ((delta / prediction.baselineScore) * 100).toFixed(1)
-                  : "0";
-              const isResolved = prediction.result === "won" || prediction.result === "lost";
-              const payoutDisplay = isResolved
-                ? prediction.payout
-                : prediction.potentialPayout || prediction.payout;
+interface PredictionMilestone {
+  id: string;
+  label: string;
+  earned: boolean;
+  progress?: number;
+  hint?: string;
+}
 
-              return (
-                <Card
-                  key={prediction.betId}
-                  className="overflow-hidden transition-colors hover:bg-accent/5 cursor-pointer"
-                  data-testid={`prediction-item-${prediction.betId}`}
-                  onClick={() => setExpandedBet(isExpanded ? null : prediction.betId)}
-                >
-                  <div className="p-4">
-                    {/* Top row: avatar + title + status */}
-                    <div className="flex items-start gap-3 mb-3">
-                      {prediction.personName && (
-                        <PersonAvatar
-                          name={prediction.personName}
-                          avatar={prediction.personAvatar}
-                          size="sm"
-                        />
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm leading-snug line-clamp-2">
-                          {prediction.marketTitle || "Prediction"}
-                        </p>
-                        <div className="flex items-center gap-1.5 mt-1 text-xs text-muted-foreground">
-                          {getDirectionIcon(direction)}
-                          <span>Picked: <span className="text-foreground font-medium">{prediction.entryLabel || "Unknown"}</span></span>
-                        </div>
-                      </div>
-                      <div className="flex flex-col items-end gap-1.5 shrink-0">
-                        {getStatusBadge(prediction.result)}
-                        <button
-                          className="text-muted-foreground hover:text-foreground transition-colors"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setExpandedBet(isExpanded ? null : prediction.betId);
-                          }}
-                        >
-                          {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                        </button>
-                      </div>
-                    </div>
+function PredictionsJourneyTimeline({
+  stats,
+  predictions,
+}: {
+  stats: PredictionStats;
+  predictions: UserPrediction[];
+}) {
+  const milestones: PredictionMilestone[] = useMemo(() => {
+    const total = stats.total;
+    const firstWin = stats.won >= 1;
+    const wins10 = stats.won >= 10;
+    const credits100 = stats.netCredits >= 100;
+    const firstUnderdogWin = predictions.some((p) => {
+      if (p.result !== "won") return false;
+      const odds =
+        p.oddsAtBet != null
+          ? p.oddsAtBet
+          : p.stakeAmount > 0
+            ? p.potentialPayout / p.stakeAmount
+            : null;
+      return odds != null && odds > 2.0;
+    });
+    const bestCategoryWin = stats.bestCategory
+      ? predictions.some((p) => p.marketCategory === stats.bestCategory && p.result === "won")
+      : false;
+    const pn = (needed: number) => ({
+      earned: total >= needed,
+      progress: Math.min(1, total / needed),
+      hint: `${Math.min(total, needed)}/${needed}`,
+    });
+    return [
+      { id: "first", label: "First prediction", ...pn(1) },
+      { id: "first_win", label: "First win", earned: firstWin, progress: firstWin ? 1 : 0 },
+      {
+        id: "wins_10",
+        label: "10 wins",
+        earned: wins10,
+        progress: Math.min(1, stats.won / 10),
+        hint: `${Math.min(stats.won, 10)}/10`,
+      },
+      {
+        id: "credits_100",
+        label: "+100 credits",
+        earned: credits100,
+        progress: stats.netCredits > 0 ? Math.min(1, stats.netCredits / 100) : 0,
+        hint: stats.netCredits >= 0 ? `+${stats.netCredits}` : `${stats.netCredits}`,
+      },
+      {
+        id: "first_underdog",
+        label: "First underdog win",
+        earned: firstUnderdogWin,
+        progress: firstUnderdogWin ? 1 : 0,
+      },
+      ...(stats.bestCategory
+        ? [
+            {
+              id: "best_category_win",
+              label: `First ${stats.bestCategory.replace(/_/g, " ")} win`,
+              earned: bestCategoryWin,
+              progress: bestCategoryWin ? 1 : 0,
+            } satisfies PredictionMilestone,
+          ]
+        : []),
+    ];
+  }, [stats, predictions]);
 
-                    {/* Score row */}
-                    {prediction.baselineScore > 0 && (
-                      <div className="flex items-center gap-4 text-xs text-muted-foreground mb-3">
-                        <span>Baseline: <span className="font-mono text-foreground">{formatScore(prediction.baselineScore)}</span></span>
-                        <span>
-                          {isResolved ? "Close" : "Current"}:{" "}
-                          <span className="font-mono text-foreground">{formatScore(prediction.currentScore)}</span>
-                        </span>
-                        <span className={`font-mono font-medium ${delta >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
-                          {delta >= 0 ? "+" : ""}{formatScore(delta)} ({delta >= 0 ? "+" : ""}{pctDelta}%)
-                        </span>
-                      </div>
-                    )}
+  const earnedCount = milestones.filter((m) => m.earned).length;
+  const nextIdx = milestones.findIndex((m) => !m.earned);
+  const nextProgress =
+    nextIdx >= 0 && milestones[nextIdx].progress !== undefined
+      ? milestones[nextIdx].progress!
+      : 0;
+  const denom = Math.max(1, milestones.length - 1);
+  const baseFill = earnedCount > 0 ? (earnedCount - 1) / denom : 0;
+  const extraFill = earnedCount < milestones.length ? nextProgress / denom : 0;
+  const progressPct = Math.min(100, Math.max(0, (baseFill + extraFill) * 100));
 
-                    {/* Bottom row: stake, payout, time, tags */}
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
-                      <span className="text-muted-foreground">
-                        Stake: <span className="text-foreground font-medium">{prediction.stakeAmount} credits</span>
-                      </span>
-                      {payoutDisplay > 0 && (
-                        <span className={prediction.result === "lost" ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"}>
-                          {isResolved ? "" : "Est. "}
-                          {prediction.result === "lost" ? "-" : "+"}
-                          {payoutDisplay} credits
-                        </span>
-                      )}
-                      <span className="text-muted-foreground ml-auto">
-                        {formatDate(prediction.betCreatedAt)}
-                      </span>
-                    </div>
+  return (
+    <Card className="p-4 sm:p-5 border-white/5 bg-card/60 backdrop-blur-sm">
+      <div className="mb-4 flex items-center justify-between">
+        <div>
+          <h3 className="font-semibold text-sm">Your prediction journey</h3>
+          <p className="text-xs text-muted-foreground">
+            {earnedCount} of {milestones.length} milestones earned
+          </p>
+        </div>
+        <Trophy className="h-4 w-4 text-amber-500" />
+      </div>
 
-                    <div className="flex items-center gap-1.5 mt-2">
-                      {prediction.marketCategory && (
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                          {prediction.marketCategory}
-                        </Badge>
-                      )}
-                      {prediction.marketCadence && (
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                          {prediction.marketCadence}
-                        </Badge>
-                      )}
-                      {prediction.result === "won" && (
-                        <button
-                          className="ml-auto flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-                          title="Share this win"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const pnl = prediction.payout - prediction.stakeAmount;
-                            copy(
-                              `I won +${pnl.toLocaleString()} credits on "${prediction.marketTitle}" on VoxDex!\n${window.location.origin}/markets/${prediction.marketSlug}`,
-                              "Win shared to clipboard!",
-                              prediction.betId
-                            );
-                          }}
-                        >
-                          {copiedId === prediction.betId ? <Check className="h-3 w-3 text-green-600 dark:text-green-400" /> : <Share2 className="h-3 w-3" />}
-                          Share
-                        </button>
-                      )}
-                    </div>
-                  </div>
+      {/* Desktop: horizontal track with connecting line + glowing earned nodes */}
+      <div className="hidden md:block relative pt-1">
+        <div className="absolute left-5 right-5 top-[22px] h-0.5 rounded-full bg-muted" aria-hidden />
+        <div
+          className="absolute left-5 top-[22px] h-0.5 rounded-full bg-gradient-to-r from-blue-500 to-blue-500/40 transition-all duration-500"
+          style={{ width: `calc((100% - 40px) * ${progressPct / 100})` }}
+          aria-hidden
+        />
+        <ol className="relative flex items-start justify-between gap-1">
+          {milestones.map((m) => (
+            <li key={m.id} className="flex min-w-0 flex-1 flex-col items-center gap-2">
+              <div
+                className={cn(
+                  "relative z-10 flex h-10 w-10 items-center justify-center rounded-full border-2 bg-background transition-all",
+                  m.earned
+                    ? "border-blue-500 bg-blue-500/15 text-blue-500 shadow-[0_0_12px_-2px_rgba(59,130,246,0.65)]"
+                    : "border-dashed border-muted-foreground/40 text-muted-foreground",
+                )}
+              >
+                {m.earned ? <Check className="h-4 w-4" /> : <Target className="h-4 w-4" />}
+              </div>
+              <p
+                className="line-clamp-2 max-w-[96px] text-center text-[10px] font-medium capitalize leading-tight"
+                title={m.label}
+              >
+                {m.label}
+              </p>
+              {!m.earned && m.hint && (
+                <p className="text-[9px] text-muted-foreground tabular-nums">{m.hint}</p>
+              )}
+            </li>
+          ))}
+        </ol>
+      </div>
 
-                  {/* ---------- Expanded Detail ---------- */}
-                  {isExpanded && (
-                    <div className="border-t border-border/50 bg-muted/5 p-4 space-y-4">
-                      {prediction.marketId && prediction.marketType === "native" && (
-                        <OutcomePathChart
-                          marketId={prediction.marketId}
-                          baselineScore={prediction.baselineScore}
-                          currentScore={prediction.currentScore}
-                          personName={prediction.personName || "Person"}
-                          compact
-                          userPick={direction === "up" ? "up" : direction === "down" ? "down" : null}
-                        />
-                      )}
-
-                      <div className="grid grid-cols-2 gap-3 text-xs">
-                        <div className="space-y-1">
-                          <p className="text-muted-foreground">Delta vs Baseline</p>
-                          <p className={`font-mono font-semibold ${delta >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
-                            {delta >= 0 ? "+" : ""}{delta.toLocaleString("en-US")} ({delta >= 0 ? "+" : ""}{pctDelta}%)
-                          </p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-muted-foreground">Market Window</p>
-                          <p className="text-foreground">
-                            {prediction.startAt ? formatDate(prediction.startAt) : "—"} &mdash;{" "}
-                            {prediction.endAt ? formatDate(prediction.endAt) : "—"}
-                          </p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-muted-foreground">Market Status</p>
-                          <p className="text-foreground capitalize">{prediction.marketStatus}</p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-muted-foreground">Market Type</p>
-                          <p className="text-foreground capitalize">{prediction.marketType}</p>
-                        </div>
-                      </div>
-
-                      {prediction.marketSlug && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="w-full"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setLocation(`/predict/${prediction.marketSlug}`);
-                          }}
-                        >
-                          View Market
-                        </Button>
-                      )}
+      {/* Mobile: vertical track with left border */}
+      <ol className="md:hidden relative space-y-4 border-l-2 border-muted pl-5">
+        {milestones.map((m) => (
+          <li key={m.id} className="relative">
+            <div
+              className={cn(
+                "absolute -left-[29px] top-0 flex h-10 w-10 items-center justify-center rounded-full border-2 bg-background",
+                m.earned
+                  ? "border-blue-500 bg-blue-500/15 text-blue-500 shadow-[0_0_12px_-2px_rgba(59,130,246,0.65)]"
+                  : "border-dashed border-muted-foreground/40 text-muted-foreground",
+              )}
+            >
+              {m.earned ? <Check className="h-4 w-4" /> : <Target className="h-4 w-4" />}
+            </div>
+            <div className="pl-8 pt-1">
+              <p className="text-sm font-medium capitalize leading-tight">{m.label}</p>
+              {m.earned ? (
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">
+                  Earned
+                </p>
+              ) : (
+                <>
+                  {m.hint && (
+                    <p className="text-[10px] text-muted-foreground tabular-nums">{m.hint}</p>
+                  )}
+                  {m.progress !== undefined && m.progress > 0 && (
+                    <div className="mt-1.5 h-1 w-24 overflow-hidden rounded-full bg-muted/60">
+                      <div
+                        className="h-full bg-gradient-to-r from-blue-500 to-cyan-500"
+                        style={{ width: `${Math.round(m.progress * 100)}%` }}
+                      />
                     </div>
                   )}
-                </Card>
+                </>
+              )}
+            </div>
+          </li>
+        ))}
+      </ol>
+    </Card>
+  );
+}
+
+function OverviewEmpty({ onStart }: { onStart: () => void }) {
+  return (
+    <Card className="p-10 text-center space-y-4">
+      <div className="inline-flex items-center justify-center h-16 w-16 rounded-2xl bg-primary/10 mx-auto">
+        <Zap className="h-8 w-8 text-primary" />
+      </div>
+      <h2 className="text-xl font-semibold">No predictions yet</h2>
+      <p className="text-muted-foreground max-w-sm mx-auto">
+        Predict which celebrities will rise or fall in fame. Stake credits and earn rewards when
+        you&apos;re right.
+      </p>
+      <Button size="lg" onClick={onStart} data-testid="button-start-predicting">
+        <TrendingUp className="h-4 w-4 mr-2" /> Start Predicting
+      </Button>
+    </Card>
+  );
+}
+
+// ---------- Tab: Predictions ----------
+
+function PredictionsTabPanel({
+  isLoading,
+  error,
+  predictions,
+  filtered,
+  stats,
+  categories,
+  statusFilter,
+  onStatusFilterChange,
+  categoryFilter,
+  onCategoryFilterChange,
+  hiddenOnly,
+  onToggleHiddenOnly,
+  hiddenCount,
+  profileIsPrivate,
+  onToggleVisibility,
+  isPending,
+  copiedId,
+  onShareWin,
+  setLocation,
+}: {
+  isLoading: boolean;
+  error: Error | undefined;
+  predictions: UserPrediction[];
+  filtered: UserPrediction[];
+  stats: PredictionStats | null;
+  categories: string[];
+  statusFilter: StatusFilter;
+  onStatusFilterChange: (v: StatusFilter) => void;
+  categoryFilter: string;
+  onCategoryFilterChange: (v: string) => void;
+  hiddenOnly: boolean;
+  onToggleHiddenOnly: () => void;
+  hiddenCount: number;
+  profileIsPrivate: boolean;
+  onToggleVisibility: (p: UserPrediction, hidden: boolean) => void;
+  isPending: boolean;
+  copiedId: string | null;
+  onShareWin: (p: UserPrediction) => void;
+  setLocation: (to: string) => void;
+}) {
+  return (
+    <div className="space-y-4">
+      {predictions.length > 0 && (
+        <div className="space-y-2" data-testid="predictions-filter-row">
+          <div className="flex flex-wrap items-center gap-2">
+            {STATUS_TABS.map((tab) => {
+              const count =
+                stats && tab.value !== "all"
+                  ? (stats[tab.value as keyof Pick<PredictionStats, "pending" | "won" | "lost" | "refunded">] as number)
+                  : stats && tab.value === "all"
+                    ? stats.total
+                    : undefined;
+              return (
+                <FilterPill
+                  key={tab.value}
+                  active={statusFilter === tab.value}
+                  accent={STATUS_ACCENTS[tab.value]}
+                  onClick={() => onStatusFilterChange(tab.value)}
+                  count={count}
+                  dataTestId={`status-filter-${tab.value}`}
+                >
+                  {tab.label}
+                </FilterPill>
               );
             })}
-          </div>
-        ) : predictions.length > 0 && filtered.length === 0 ? (
-          <Card className="p-8 text-center">
-            <Target className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-            <h2 className="text-lg font-semibold mb-2">No matching predictions</h2>
-            <p className="text-sm text-muted-foreground mb-4">
-              Try adjusting your filters to see more results.
-            </p>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setStatusFilter("all");
-                setCategoryFilter("all");
-              }}
+            <FilterPill
+              active={hiddenOnly}
+              accent="amber"
+              onClick={onToggleHiddenOnly}
+              count={hiddenCount}
+              dataTestId="toggle-prediction-hidden-only"
             >
-              Clear Filters
-            </Button>
-          </Card>
-        ) : (
-          <Card className="p-10 text-center space-y-4">
-            <div className="inline-flex items-center justify-center h-16 w-16 rounded-2xl bg-primary/10 mx-auto">
-              <Zap className="h-8 w-8 text-primary" />
+              <EyeOff className="h-3 w-3" /> Hidden only
+            </FilterPill>
+          </div>
+
+          {categories.length > 1 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Category
+              </span>
+              <FilterPill
+                active={categoryFilter === "all"}
+                accent="violet"
+                onClick={() => onCategoryFilterChange("all")}
+                dataTestId="category-filter-all"
+              >
+                All
+              </FilterPill>
+              {categories.map((cat) => (
+                <FilterPill
+                  key={cat}
+                  active={categoryFilter === cat}
+                  accent="violet"
+                  onClick={() => onCategoryFilterChange(cat)}
+                  dataTestId={`category-filter-${cat}`}
+                >
+                  {cat.charAt(0).toUpperCase() + cat.slice(1)}
+                </FilterPill>
+              ))}
             </div>
-            <h2 className="text-xl font-semibold">No predictions yet</h2>
-            <p className="text-muted-foreground max-w-sm mx-auto">
-              Predict which celebrities will rise or fall in fame. Stake credits and earn rewards when you&apos;re right.
-            </p>
-            <Button size="lg" onClick={() => setLocation("/predict")} data-testid="button-start-predicting">
-              <TrendingUp className="h-4 w-4 mr-2" />
-              Start Predicting
-            </Button>
-          </Card>
-        )}
+          )}
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="space-y-3">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} className="h-28 w-full rounded-xl" />
+          ))}
+        </div>
+      ) : error ? (
+        <Card className="p-8 text-center">
+          <TrendingUp className="h-12 w-12 mx-auto mb-4 text-destructive" />
+          <h2 className="text-lg font-semibold mb-2">Couldn&apos;t load predictions</h2>
+          <p className="text-muted-foreground mb-4">Please try again in a moment.</p>
+          <Button onClick={() => window.location.reload()} data-testid="button-retry-predictions">
+            Retry
+          </Button>
+        </Card>
+      ) : filtered.length > 0 ? (
+        <div className="space-y-3">
+          {filtered.map((p) => (
+            <MyPredictionCard
+              key={p.betId}
+              prediction={p}
+              profileIsPrivate={profileIsPrivate}
+              onToggleVisibility={onToggleVisibility}
+              isPending={isPending}
+              onShareWin={onShareWin}
+              didJustShare={copiedId === p.betId}
+            />
+          ))}
+        </div>
+      ) : predictions.length > 0 ? (
+        <Card className="p-8 text-center">
+          <Target className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+          <h2 className="text-lg font-semibold mb-2">No matching predictions</h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            Try adjusting your filters to see more results.
+          </p>
+          <Button
+            variant="outline"
+            onClick={() => {
+              onStatusFilterChange("all");
+              onCategoryFilterChange("all");
+              if (hiddenOnly) onToggleHiddenOnly();
+            }}
+          >
+            Clear Filters
+          </Button>
+        </Card>
+      ) : (
+        <OverviewEmpty onStart={() => setLocation("/predict")} />
+      )}
+    </div>
+  );
+}
+
+// ---------- Tab: Open ----------
+
+function OpenTabPanel({
+  openBets,
+  isLoading,
+  profileIsPrivate,
+  onToggleVisibility,
+  isPending,
+  setLocation,
+}: {
+  openBets: UserPrediction[];
+  isLoading: boolean;
+  profileIsPrivate: boolean;
+  onToggleVisibility: (p: UserPrediction, hidden: boolean) => void;
+  isPending: boolean;
+  setLocation: (to: string) => void;
+}) {
+  const totalStake = useMemo(
+    () => openBets.reduce((sum, p) => sum + (p.stakeAmount || 0), 0),
+    [openBets],
+  );
+  const projectedPayout = useMemo(
+    () => openBets.reduce((sum, p) => sum + (p.potentialPayout || 0), 0),
+    [openBets],
+  );
+
+  if (isLoading) {
+    return (
+      <div className="space-y-3">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <Skeleton key={i} className="h-28 w-full rounded-xl" />
+        ))}
+      </div>
+    );
+  }
+
+  if (openBets.length === 0) {
+    return (
+      <Card className="p-10 text-center space-y-4">
+        <div className="inline-flex items-center justify-center h-16 w-16 rounded-2xl bg-orange-500/10 mx-auto">
+          <Flame className="h-8 w-8 text-orange-500" />
+        </div>
+        <h2 className="text-xl font-semibold">No live exposure right now</h2>
+        <p className="text-muted-foreground max-w-sm mx-auto">
+          You don&apos;t have any open predictions. Jump into the markets to stake your next call.
+        </p>
+        <Button size="lg" onClick={() => setLocation("/predict")}>
+          <TrendingUp className="h-4 w-4 mr-2" /> Explore markets
+        </Button>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-3 gap-3">
+        <Card className="p-3 text-center space-y-1 border-white/5 bg-card/60 backdrop-blur-sm">
+          <Flame className="h-4 w-4 mx-auto text-orange-500" />
+          <p className="text-2xl font-mono font-bold tabular-nums">{openBets.length}</p>
+          <p className="text-[10px] uppercase tracking-wide text-muted-foreground leading-tight">
+            Open positions
+          </p>
+        </Card>
+        <Card className="p-3 text-center space-y-1 border-white/5 bg-card/60 backdrop-blur-sm">
+          <Coins className="h-4 w-4 mx-auto text-amber-500" />
+          <p className="text-2xl font-mono font-bold tabular-nums">
+            {totalStake.toLocaleString()}
+          </p>
+          <p className="text-[10px] uppercase tracking-wide text-muted-foreground leading-tight">
+            Credits at stake
+          </p>
+        </Card>
+        <Card className="p-3 text-center space-y-1 border-white/5 bg-card/60 backdrop-blur-sm">
+          <TrendingUp className="h-4 w-4 mx-auto text-emerald-500" />
+          <p className="text-2xl font-mono font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+            +{(projectedPayout - totalStake).toLocaleString()}
+          </p>
+          <p className="text-[10px] uppercase tracking-wide text-muted-foreground leading-tight">
+            If all win
+          </p>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {openBets.map((p) => (
+          <MyPredictionCard
+            key={p.betId}
+            prediction={p}
+            profileIsPrivate={profileIsPrivate}
+            onToggleVisibility={onToggleVisibility}
+            isPending={isPending}
+            openMode
+          />
+        ))}
       </div>
     </div>
   );

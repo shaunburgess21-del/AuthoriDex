@@ -836,7 +836,39 @@ export const profilesRelations = relations(profiles, ({ many }) => ({
   votes: many(votes),
   xpLedgerEntries: many(xpLedger),
   creditLedgerEntries: many(creditLedger),
+  itemPrivacy: many(profileItemPrivacy),
 }));
+
+// Per-item public/private overrides for the user's profile. A row means
+// "this specific item is HIDDEN from my public profile". Absence means the
+// item follows the global profiles.isPublic setting.
+// itemType is one of: "matchup", "sentiment", "trending_poll", "opinion_poll",
+//                     "image_curate", "induction", "value_vote", "market_bet".
+// itemId is stored as text so mixed PK types (bigint, uuid, varchar) all fit.
+export const profileItemPrivacy = pgTable("profile_item_privacy", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
+  itemType: text("item_type").notNull(),
+  itemId: text("item_id").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  uniqueUserItem: uniqueIndex("profile_item_privacy_user_item_unique").on(
+    table.userId,
+    table.itemType,
+    table.itemId,
+  ),
+  byUser: index("profile_item_privacy_by_user_idx").on(table.userId),
+}));
+
+export const profileItemPrivacyRelations = relations(profileItemPrivacy, ({ one }) => ({
+  user: one(profiles, {
+    fields: [profileItemPrivacy.userId],
+    references: [profiles.id],
+  }),
+}));
+
+export type ProfileItemPrivacy = typeof profileItemPrivacy.$inferSelect;
+export type InsertProfileItemPrivacy = typeof profileItemPrivacy.$inferInsert;
 
 // ============================================================================
 // PREDICTION MARKETS TABLES (Admin Dashboard)

@@ -7,6 +7,18 @@
     <meta name="description" content="VoxDex — the voice of the people, indexed. Track how famous people are trending online with real-time data from social media, search engines, and more. See the top 1000 trending celebrities and influencers." />
     <link rel="icon" type="image/svg+xml" href="/voxdex-logo.svg" />
     <meta name="theme-color" content="#0f172a" />
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem("theme");
+          if (saved !== "light") {
+            document.documentElement.classList.add("dark");
+          }
+        } catch (e) {
+          document.documentElement.classList.add("dark");
+        }
+      })();
+    </script>
     <link rel="apple-touch-icon" href="/voxdex-logo.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

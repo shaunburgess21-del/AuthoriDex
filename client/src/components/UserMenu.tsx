@@ -214,15 +214,34 @@ function UserMenuContent({
     <div className="space-y-1">
       <div className="p-4 pb-3">
         <div className="flex items-start gap-3">
-          <Avatar className="h-12 w-12 rounded-full">
-            {profile?.avatarUrl ? (
-              <AvatarImage src={profile.avatarUrl} alt={displayName} />
-            ) : (
-              <AvatarFallback className={`rounded-full ${getAvatarGradient(displayName)} ${HUMAN_AVATAR_FALLBACK_CLASS}`}>
-                {getAvatarInitials(displayName)}
-              </AvatarFallback>
-            )}
-          </Avatar>
+          {profile?.username ? (
+            <Link
+              href={`/u/${profile.username}`}
+              onClick={() => onClose?.()}
+              className="shrink-0 rounded-full outline-none ring-offset-background transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              data-testid="link-my-profile-avatar"
+            >
+              <Avatar className="h-12 w-12 rounded-full">
+                {profile.avatarUrl ? (
+                  <AvatarImage src={profile.avatarUrl} alt={displayName} />
+                ) : (
+                  <AvatarFallback className={`rounded-full ${getAvatarGradient(displayName)} ${HUMAN_AVATAR_FALLBACK_CLASS}`}>
+                    {getAvatarInitials(displayName)}
+                  </AvatarFallback>
+                )}
+              </Avatar>
+            </Link>
+          ) : (
+            <Avatar className="h-12 w-12 shrink-0 rounded-full">
+              {profile?.avatarUrl ? (
+                <AvatarImage src={profile.avatarUrl} alt={displayName} />
+              ) : (
+                <AvatarFallback className={`rounded-full ${getAvatarGradient(displayName)} ${HUMAN_AVATAR_FALLBACK_CLASS}`}>
+                  {getAvatarInitials(displayName)}
+                </AvatarFallback>
+              )}
+            </Avatar>
+          )}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               {profile?.username ? (

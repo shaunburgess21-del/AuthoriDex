@@ -29,6 +29,7 @@ import {
   Shield, BrainCircuit, BarChart3, Coins, Target, ChevronRight, Loader2, Share2, Check,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { MyVoteCard, type MyVoteCardData } from "@/components/me/MyVoteCard";
 
 interface PublicProfile {
   username: string;
@@ -122,6 +123,60 @@ function RankBadge({ rank }: { rank: string }) {
       <Icon className="h-3 w-3 mr-1" />
       {rank}
     </Badge>
+  );
+}
+
+function PublicVotesSection({ username }: { username: string }) {
+  const { data, isLoading, error } = useQuery<MyVoteCardData[]>({
+    queryKey: ["/api/profile/u", username, "votes"],
+    queryFn: async () => {
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch(`/api/profile/u/${username}/votes`, {
+        headers: authHeaders,
+        credentials: "include",
+      });
+      if (res.status === 403 || res.status === 404) {
+        // Profile private or gone — render nothing at the section level.
+        return [];
+      }
+      if (!res.ok) throw new Error("Failed to fetch votes");
+      return res.json();
+    },
+    enabled: !!username,
+  });
+
+  // Hide the entire section on error or when there's nothing to show.
+  if (error) return null;
+  if (!isLoading && (!data || data.length === 0)) return null;
+
+  return (
+    <Card className="p-6">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="font-semibold">Recent Public Votes</h2>
+          <p className="text-xs text-muted-foreground">
+            What this user has weighed in on lately
+          </p>
+        </div>
+        <Badge variant="outline" className="gap-1 text-[10px]">
+          <Vote className="h-3 w-3" /> {(data ?? []).length} visible
+        </Badge>
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-20 w-full rounded-xl" />
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {(data ?? []).slice(0, 8).map((vote) => (
+            <MyVoteCard key={`${vote.voteType}-${vote.id}`} vote={vote} />
+          ))}
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -475,6 +530,9 @@ export default function PublicProfilePage() {
               </div>
             </div>
           </Card>
+
+        {/* Public Votes */}
+        {username && <PublicVotesSection username={username} />}
 
         {/* Bet History */}
         {username && <BetHistorySection username={username} />}

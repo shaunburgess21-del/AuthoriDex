@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { ArrowLeft, Settings, User, Bell, Shield, Eye, Loader2 } from "lucide-react";
+import { ArrowLeft, Settings, User, Bell, Shield, Eye, Loader2, Vote, TrendingUp, ChevronRight } from "lucide-react";
 import { useLocation } from "wouter";
 import { navigateToLogin } from "@/lib/authReturn";
 import { useAuth } from "@/contexts/AuthContext";
@@ -278,7 +278,7 @@ export default function SettingsPage() {
             <Eye className="h-5 w-5 text-muted-foreground" />
             <h2 className="font-semibold">Privacy</h2>
           </div>
-          
+
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
@@ -291,7 +291,7 @@ export default function SettingsPage() {
                 <Badge variant={isPublic ? "default" : "secondary"}>
                   {isPublic ? "Public" : "Private"}
                 </Badge>
-                <Switch 
+                <Switch
                   checked={isPublic}
                   onCheckedChange={(checked) => {
                     setHasLocalChanges(true);
@@ -299,6 +299,35 @@ export default function SettingsPage() {
                   }}
                   data-testid="switch-public-profile"
                 />
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-border/60">
+              <p className="text-xs text-muted-foreground mb-2">
+                Hide individual items from your profile — useful when you&apos;ve voted or predicted on
+                something personal but still want to make your voice count.
+              </p>
+              <div className="space-y-1.5">
+                <button
+                  type="button"
+                  onClick={() => setLocation("/me/votes?tab=votes")}
+                  className="flex w-full items-center gap-2 rounded-md border border-border/60 bg-muted/20 px-3 py-2 text-sm hover:bg-muted/40 transition-colors"
+                  data-testid="link-manage-vote-visibility"
+                >
+                  <Vote className="h-4 w-4 text-cyan-500" />
+                  <span className="flex-1 text-left">Manage vote visibility</span>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLocation("/me/predictions?tab=predictions")}
+                  className="flex w-full items-center gap-2 rounded-md border border-border/60 bg-muted/20 px-3 py-2 text-sm hover:bg-muted/40 transition-colors"
+                  data-testid="link-manage-prediction-visibility"
+                >
+                  <TrendingUp className="h-4 w-4 text-violet-500" />
+                  <span className="flex-1 text-left">Manage prediction visibility</span>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                </button>
               </div>
             </div>
           </div>
@@ -313,22 +342,42 @@ export default function SettingsPage() {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label>Email Notifications</Label>
+                <div className="flex items-center gap-2">
+                  <Label>Email Notifications</Label>
+                  <Badge variant="outline" className="text-[10px] font-normal">
+                    Coming soon
+                  </Badge>
+                </div>
                 <p className="text-xs text-muted-foreground">
                   Receive updates about your predictions and votes
                 </p>
               </div>
-              <Switch data-testid="switch-email-notifications" />
+              <Switch
+                checked={false}
+                disabled
+                aria-label="Email notifications (coming soon)"
+                data-testid="switch-email-notifications"
+              />
             </div>
-            
+
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label>Prediction Alerts</Label>
+                <div className="flex items-center gap-2">
+                  <Label>Prediction Alerts</Label>
+                  <Badge variant="outline" className="text-[10px] font-normal">
+                    Coming soon
+                  </Badge>
+                </div>
                 <p className="text-xs text-muted-foreground">
                   Get notified when your predictions resolve
                 </p>
               </div>
-              <Switch defaultChecked data-testid="switch-prediction-alerts" />
+              <Switch
+                checked={false}
+                disabled
+                aria-label="Prediction alerts (coming soon)"
+                data-testid="switch-prediction-alerts"
+              />
             </div>
           </div>
         </Card>

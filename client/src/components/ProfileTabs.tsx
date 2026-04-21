@@ -1,23 +1,37 @@
+import type { ComponentType, SVGProps } from "react";
 import { Eye, Vote, TrendingUp } from "lucide-react";
+
+export interface ProfileTab {
+  id: string;
+  label: string;
+  icon: ComponentType<SVGProps<SVGSVGElement>>;
+  accent: string;
+}
 
 interface ProfileTabsProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
   /** When true (e.g. sticky bar), no bottom margin so content flows flush below */
   noBottomMargin?: boolean;
+  /**
+   * Optional override for the set of tabs. When omitted the component renders the
+   * default "Overview / Vote / Predict" triplet used on celebrity profile pages.
+   */
+  tabs?: ProfileTab[];
 }
 
-const tabs = [
+const DEFAULT_TABS: ProfileTab[] = [
   { id: "overview", label: "Overview", icon: Eye, accent: "#3C83F6" },
   { id: "vote", label: "Vote", icon: Vote, accent: "#22D3EE" },
   { id: "predict", label: "Predict", icon: TrendingUp, accent: "#8B5CF6" },
 ];
 
-export function ProfileTabs({ activeTab, onTabChange, noBottomMargin }: ProfileTabsProps) {
+export function ProfileTabs({ activeTab, onTabChange, noBottomMargin, tabs }: ProfileTabsProps) {
+  const items = tabs ?? DEFAULT_TABS;
   return (
     <div className={noBottomMargin ? "" : "mb-6"} data-testid="profile-tabs">
       <div className="flex items-center rounded-lg bg-muted/50 p-0.5 w-full overflow-hidden">
-        {tabs.map((tab) => {
+        {items.map((tab) => {
           const isActive = activeTab === tab.id;
           const Icon = tab.icon;
           return (

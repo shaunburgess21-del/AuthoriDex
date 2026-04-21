@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { getBaselineDiagnostics } from "./utils/baseline";
 import { db } from "./db";
-import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, matchups, votes, xpActions, xpLedger, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, openMarketComments, openMarketCommentVotes, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, trendingPollComments, trendingPollCommentVotes, matchupComments, matchupCommentVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, opinionPollComments, opinionPollCommentVotes, imageVotes, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
+import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, matchups, votes, xpActions, xpLedger, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, openMarketComments, openMarketCommentVotes, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, trendingPollComments, trendingPollCommentVotes, matchupComments, matchupCommentVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, opinionPollComments, opinionPollCommentVotes, imageVotes, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
 import { validateSuggestionPayload, SUGGESTION_TYPES } from "@shared/suggestionSchemas";
 import { normaliseSocialHandles } from "@shared/handleNormalise";
 import { eq, desc, and, gt, sql, count, gte, lte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull } from "drizzle-orm";
@@ -5567,7 +5567,32 @@ Only return the JSON object.`;
         })
         .from(marketBets)
         .where(and(eq(marketBets.userId, baseProfile.id), inArray(marketBets.status, ["won", "lost"])));
-      
+
+      // Subtract hidden items from the denormalized counters so the public view
+      // reflects only what the user has chosen to expose. /api/profile/me stays
+      // untouched so the owner still sees their real totals on /me/* pages.
+      const [privacyCounts] = await db
+        .select({
+          hiddenVotes: sql<number>`COUNT(*) FILTER (WHERE ${profileItemPrivacy.itemType} IN (
+            'matchup','sentiment','trending_poll','opinion_poll',
+            'image_curate','induction','value_vote','overall_rating'
+          ))::int`.as("hidden_votes"),
+          hiddenPredictions: sql<number>`COUNT(*) FILTER (
+            WHERE ${profileItemPrivacy.itemType} = 'market_bet'
+          )::int`.as("hidden_predictions"),
+        })
+        .from(profileItemPrivacy)
+        .where(eq(profileItemPrivacy.userId, baseProfile.id));
+
+      const visibleTotalVotes = Math.max(
+        0,
+        (baseProfile.totalVotes ?? 0) - Number(privacyCounts?.hiddenVotes ?? 0),
+      );
+      const visibleTotalPredictions = Math.max(
+        0,
+        (baseProfile.totalPredictions ?? 0) - Number(privacyCounts?.hiddenPredictions ?? 0),
+      );
+
       // Return full public profile
       res.json({
         username: baseProfile.username,
@@ -5575,8 +5600,8 @@ Only return the JSON object.`;
         avatarUrl: baseProfile.avatarUrl,
         rank: baseProfile.rank,
         xpPoints: baseProfile.xpPoints,
-        totalVotes: baseProfile.totalVotes,
-        totalPredictions: baseProfile.totalPredictions,
+        totalVotes: visibleTotalVotes,
+        totalPredictions: visibleTotalPredictions,
         winRate: baseProfile.winRate,
         isAgent: baseProfile.isAgent,
         isPublic: true,
@@ -5635,6 +5660,12 @@ Only return the JSON object.`;
           statusFilter,
           sql`${predictionMarkets.visibility} NOT IN ('draft', 'hidden')`,
           sql`NOT (${predictionMarkets.visibility} = 'archived' AND ${marketBets.status} = 'active')`,
+          sql`NOT EXISTS (
+            SELECT 1 FROM ${profileItemPrivacy}
+            WHERE ${profileItemPrivacy.userId} = ${user.id}
+              AND ${profileItemPrivacy.itemType} = 'market_bet'
+              AND ${profileItemPrivacy.itemId} = ${marketBets.id}::text
+          )`,
         ))
         .orderBy(tab === "active" ? desc(marketBets.createdAt) : desc(marketBets.settledAt))
         .limit(limit)
@@ -5676,6 +5707,293 @@ Only return the JSON object.`;
     }
   });
 
+  // GET /api/profile/u/:username/votes — public votes feed for a user's profile.
+  // Mirrors the /api/me/votes response shape but:
+  //  - 403 when the owner's profile is private
+  //  - Excludes any items the owner has explicitly hidden via profileItemPrivacy
+  //  - Returns a slimmer payload (no hidden flag)
+  app.get("/api/profile/u/:username/votes", async (req, res) => {
+    try {
+      const { username } = req.params;
+      const [user] = await db
+        .select({ id: profiles.id, isPublic: profiles.isPublic })
+        .from(profiles)
+        .where(eq(profiles.username, username))
+        .limit(1);
+      if (!user) return res.status(404).json({ error: "User not found" });
+      if (!user.isPublic) return res.status(403).json({ error: "Profile is private" });
+
+      const userId = user.id;
+
+      type PublicVote = {
+        id: string;
+        voteType: string;
+        value: number;
+        targetName: string;
+        detail: string | null;
+        createdAt: Date;
+        subjectId: string | null;
+        subjectAvatar: string | null;
+        subjectImageSlug: string | null;
+      };
+
+      const [faceOffVotes, sentVotes, valVotes, pollVotes, opVotes, imgVotes, indVotes, ovRatings] = await Promise.all([
+        db
+          .select({
+            id: votes.id,
+            targetId: votes.targetId,
+            value: votes.value,
+            votedAt: votes.votedAt,
+            matchupTitle: matchups.title,
+            optionA: matchups.optionAText,
+            optionB: matchups.optionBText,
+          })
+          .from(votes)
+          .leftJoin(matchups, eq(matchups.id, votes.targetId))
+          .where(and(eq(votes.userId, userId), eq(votes.voteType, "face_off")))
+          .orderBy(desc(votes.votedAt))
+          .limit(50),
+        db
+          .select({
+            id: sentimentVotes.id,
+            personId: sentimentVotes.personId,
+            personName: sentimentVotes.personName,
+            voteType: sentimentVotes.voteType,
+            votedAt: sentimentVotes.votedAt,
+            avatar: trackedPeople.avatar,
+            imageSlug: trackedPeople.imageSlug,
+          })
+          .from(sentimentVotes)
+          .leftJoin(trackedPeople, eq(trackedPeople.id, sentimentVotes.personId))
+          .where(eq(sentimentVotes.userId, userId))
+          .orderBy(desc(sentimentVotes.votedAt))
+          .limit(50),
+        db
+          .select({
+            id: celebrityValueVotes.id,
+            vote: celebrityValueVotes.vote,
+            createdAt: celebrityValueVotes.createdAt,
+            personId: trackedPeople.id,
+            personName: trackedPeople.name,
+            avatar: trackedPeople.avatar,
+            imageSlug: trackedPeople.imageSlug,
+          })
+          .from(celebrityValueVotes)
+          .leftJoin(trackedPeople, eq(trackedPeople.id, celebrityValueVotes.celebrityId))
+          .where(eq(celebrityValueVotes.userId, userId))
+          .orderBy(desc(celebrityValueVotes.createdAt))
+          .limit(50),
+        db
+          .select({
+            id: trendingPollVotes.id,
+            choice: trendingPollVotes.choice,
+            createdAt: trendingPollVotes.createdAt,
+            headline: trendingPolls.headline,
+          })
+          .from(trendingPollVotes)
+          .leftJoin(trendingPolls, eq(trendingPolls.id, trendingPollVotes.pollId))
+          .where(eq(trendingPollVotes.userId, userId))
+          .orderBy(desc(trendingPollVotes.createdAt))
+          .limit(50),
+        db
+          .select({
+            id: opinionPollVotes.id,
+            createdAt: opinionPollVotes.createdAt,
+            pollTitle: opinionPolls.title,
+            optionName: opinionPollOptions.name,
+          })
+          .from(opinionPollVotes)
+          .leftJoin(opinionPolls, eq(opinionPolls.id, opinionPollVotes.pollId))
+          .leftJoin(opinionPollOptions, eq(opinionPollOptions.id, opinionPollVotes.optionId))
+          .where(eq(opinionPollVotes.userId, userId))
+          .orderBy(desc(opinionPollVotes.createdAt))
+          .limit(50),
+        db
+          .select({
+            id: imageVotes.id,
+            direction: imageVotes.direction,
+            votedAt: imageVotes.votedAt,
+            personId: trackedPeople.id,
+            personName: trackedPeople.name,
+            avatar: trackedPeople.avatar,
+            imageSlug: trackedPeople.imageSlug,
+          })
+          .from(imageVotes)
+          .leftJoin(celebrityImages, eq(celebrityImages.id, imageVotes.imageId))
+          .leftJoin(trackedPeople, eq(trackedPeople.id, celebrityImages.personId))
+          .where(eq(imageVotes.userId, userId))
+          .orderBy(desc(imageVotes.votedAt))
+          .limit(50),
+        db
+          .select({
+            id: inductionVotes.id,
+            votedAt: inductionVotes.votedAt,
+            candidateName: inductionCandidates.displayName,
+          })
+          .from(inductionVotes)
+          .leftJoin(inductionCandidates, eq(inductionCandidates.id, inductionVotes.candidateId))
+          .where(eq(inductionVotes.userId, userId))
+          .orderBy(desc(inductionVotes.votedAt))
+          .limit(50),
+        db
+          .select({
+            id: userVotes.id,
+            rating: userVotes.rating,
+            votedAt: userVotes.votedAt,
+            personId: userVotes.personId,
+            personName: userVotes.personName,
+            avatar: trackedPeople.avatar,
+            imageSlug: trackedPeople.imageSlug,
+          })
+          .from(userVotes)
+          .leftJoin(trackedPeople, eq(trackedPeople.id, userVotes.personId))
+          .where(eq(userVotes.userId, userId))
+          .orderBy(desc(userVotes.votedAt))
+          .limit(50),
+      ]);
+
+      const results: PublicVote[] = [];
+
+      for (const v of faceOffVotes) {
+        const name = v.matchupTitle || (v.optionA && v.optionB ? `${v.optionA} vs ${v.optionB}` : "Matchup");
+        const side = v.value === "option_a" ? v.optionA : v.value === "option_b" ? v.optionB : null;
+        results.push({
+          id: v.id,
+          voteType: "face_off",
+          value: 1,
+          targetName: name,
+          detail: side ? `Voted: ${side}` : null,
+          createdAt: v.votedAt ?? new Date(),
+          subjectId: null,
+          subjectAvatar: null,
+          subjectImageSlug: null,
+        });
+      }
+      for (const v of sentVotes) {
+        results.push({
+          id: v.id,
+          voteType: "sentiment",
+          value: v.voteType === "overrated" ? -1 : 1,
+          targetName: v.personName || "Unknown",
+          detail: v.voteType === "overrated" ? "Overrated" : "Underrated",
+          createdAt: v.votedAt ?? new Date(),
+          subjectId: v.personId ?? null,
+          subjectAvatar: v.avatar ?? null,
+          subjectImageSlug: v.imageSlug ?? null,
+        });
+      }
+      for (const v of valVotes) {
+        const label = v.vote === "underrated" ? "Underrated" : v.vote === "overrated" ? "Overrated" : "Fairly Rated";
+        results.push({
+          id: v.id,
+          voteType: "value_vote",
+          value: v.vote === "underrated" ? 1 : v.vote === "overrated" ? -1 : 0,
+          targetName: v.personName || "Unknown",
+          detail: label,
+          createdAt: v.createdAt ?? new Date(),
+          subjectId: v.personId ?? null,
+          subjectAvatar: v.avatar ?? null,
+          subjectImageSlug: v.imageSlug ?? null,
+        });
+      }
+      for (const v of pollVotes) {
+        const choiceLabel = v.choice === "support" ? "Support" : v.choice === "oppose" ? "Oppose" : "Neutral";
+        results.push({
+          id: v.id,
+          voteType: "trending_poll",
+          value: v.choice === "support" ? 1 : v.choice === "oppose" ? -1 : 0,
+          targetName: v.headline || "Poll",
+          detail: choiceLabel,
+          createdAt: v.createdAt ?? new Date(),
+          subjectId: null,
+          subjectAvatar: null,
+          subjectImageSlug: null,
+        });
+      }
+      for (const v of opVotes) {
+        results.push({
+          id: v.id,
+          voteType: "opinion_poll",
+          value: 1,
+          targetName: v.pollTitle || "Opinion Poll",
+          detail: v.optionName ? `Chose: ${v.optionName}` : null,
+          createdAt: v.createdAt ?? new Date(),
+          subjectId: null,
+          subjectAvatar: null,
+          subjectImageSlug: null,
+        });
+      }
+      for (const v of imgVotes) {
+        results.push({
+          id: v.id,
+          voteType: "image_curate",
+          value: v.direction === "up" ? 1 : -1,
+          targetName: v.personName || "Unknown",
+          detail: `Image ${v.direction === "up" ? "upvote" : "downvote"}`,
+          createdAt: v.votedAt ?? new Date(),
+          subjectId: v.personId ?? null,
+          subjectAvatar: v.avatar ?? null,
+          subjectImageSlug: v.imageSlug ?? null,
+        });
+      }
+      for (const v of indVotes) {
+        results.push({
+          id: v.id,
+          voteType: "induction",
+          value: 1,
+          targetName: v.candidateName || "Candidate",
+          detail: "Induction vote",
+          createdAt: v.votedAt ?? new Date(),
+          subjectId: null,
+          subjectAvatar: null,
+          subjectImageSlug: null,
+        });
+      }
+      for (const v of ovRatings) {
+        const ZONE_LABELS = ["Hate", "Dislike", "Neutral", "Like", "Love"];
+        const zoneLabel = ZONE_LABELS[(v.rating ?? 3) - 1] ?? "Neutral";
+        results.push({
+          id: v.id,
+          voteType: "overall_rating",
+          value: v.rating ?? 0,
+          targetName: v.personName || "Unknown",
+          detail: `Rated ${v.rating}/5 - ${zoneLabel}`,
+          createdAt: v.votedAt ?? new Date(),
+          subjectId: v.personId ?? null,
+          subjectAvatar: v.avatar ?? null,
+          subjectImageSlug: v.imageSlug ?? null,
+        });
+      }
+
+      // Filter out explicitly hidden items.
+      const hiddenSet = await loadHiddenItemSet(userId);
+      const privacyTypeFor = (voteType: string): PrivacyItemType | null => {
+        switch (voteType) {
+          case "face_off": return "matchup";
+          case "sentiment": return "sentiment";
+          case "value_vote": return "value_vote";
+          case "trending_poll": return "trending_poll";
+          case "opinion_poll": return "opinion_poll";
+          case "image_curate": return "image_curate";
+          case "induction": return "induction";
+          case "overall_rating": return "overall_rating";
+          default: return null;
+        }
+      };
+      const visible = results.filter(r => {
+        const pType = privacyTypeFor(r.voteType);
+        return pType ? !hiddenSet.has(`${pType}:${r.id}`) : true;
+      });
+
+      visible.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+      res.json(visible.slice(0, 50));
+    } catch (error: any) {
+      console.error("Error fetching public profile votes:", error.message);
+      res.status(500).json({ error: "Failed to fetch votes" });
+    }
+  });
+
   // Check if current user is admin
   app.get("/api/profile/is-admin", requireAuth, async (req: AuthRequest, res) => {
     try {
@@ -5692,14 +6010,102 @@ Only return the JSON object.`;
   // ==================
   // /me User Activity Endpoints
   // ==================
-  
+
+  // Allowlist of item types a user can hide from their public profile.
+  const VALID_PRIVACY_ITEM_TYPES = [
+    "matchup",
+    "sentiment",
+    "trending_poll",
+    "opinion_poll",
+    "image_curate",
+    "induction",
+    "value_vote",
+    "overall_rating",
+    "market_bet",
+  ] as const;
+  type PrivacyItemType = (typeof VALID_PRIVACY_ITEM_TYPES)[number];
+
+  // Load the set of { type, id } pairs the user has explicitly hidden.
+  async function loadHiddenItemSet(userId: string): Promise<Set<string>> {
+    const rows = await db
+      .select({ itemType: profileItemPrivacy.itemType, itemId: profileItemPrivacy.itemId })
+      .from(profileItemPrivacy)
+      .where(eq(profileItemPrivacy.userId, userId));
+    const set = new Set<string>();
+    for (const r of rows) set.add(`${r.itemType}:${r.itemId}`);
+    return set;
+  }
+
+  // PATCH /api/me/item-visibility — toggle per-item visibility on the user's public profile.
+  app.patch("/api/me/item-visibility", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.userId!;
+      const { itemType, itemId, hidden } = req.body ?? {};
+
+      if (typeof itemType !== "string" || !VALID_PRIVACY_ITEM_TYPES.includes(itemType as PrivacyItemType)) {
+        return res.status(400).json({
+          error: `Invalid itemType. Must be one of: ${VALID_PRIVACY_ITEM_TYPES.join(", ")}`,
+        });
+      }
+      // Accept string OR number: some underlying tables (e.g. serial()) return
+      // numeric PKs over JSON, and we always persist/compare item_id as text.
+      if (typeof itemId !== "string" && typeof itemId !== "number") {
+        return res.status(400).json({ error: "Invalid itemId" });
+      }
+      const itemIdStr = String(itemId);
+      if (itemIdStr.length < 1 || itemIdStr.length > 128) {
+        return res.status(400).json({ error: "Invalid itemId" });
+      }
+      if (typeof hidden !== "boolean") {
+        return res.status(400).json({ error: "`hidden` must be a boolean" });
+      }
+
+      if (hidden) {
+        // No target arg: Postgres finds ANY matching unique constraint/index.
+        // With an explicit target, Drizzle would require a named unique constraint
+        // (not a unique index), which is a frequent source of 500s across envs.
+        await db
+          .insert(profileItemPrivacy)
+          .values({ userId, itemType, itemId: itemIdStr })
+          .onConflictDoNothing();
+      } else {
+        await db
+          .delete(profileItemPrivacy)
+          .where(and(
+            eq(profileItemPrivacy.userId, userId),
+            eq(profileItemPrivacy.itemType, itemType),
+            eq(profileItemPrivacy.itemId, itemIdStr),
+          ));
+      }
+
+      return res.json({ hidden, code: "OK" });
+    } catch (error: any) {
+      // Log the FULL error object so Drizzle/Postgres diagnostics are visible in the
+      // server logs (error.message alone hides error.code / .detail / .constraint).
+      console.error("Error updating item visibility:", error);
+      return res.status(500).json({
+        error: "Failed to update item visibility",
+        code: "ITEM_VISIBILITY_FAILED",
+      });
+    }
+  });
+
   // Get user's votes
   app.get("/api/me/votes", requireAuth, async (req: AuthRequest, res) => {
     try {
       const userId = req.userId!;
       const typeFilter = req.query.type as string | undefined;
 
-      const VALID_VOTE_TYPES = ["face_off", "sentiment", "value_vote", "trending_poll", "opinion_poll", "image_curate", "induction"] as const;
+      const VALID_VOTE_TYPES = [
+        "face_off",
+        "sentiment",
+        "value_vote",
+        "trending_poll",
+        "opinion_poll",
+        "image_curate",
+        "induction",
+        "overall_rating",
+      ] as const;
       if (typeFilter && !VALID_VOTE_TYPES.includes(typeFilter as any)) {
         return res.status(400).json({ error: `Invalid vote type. Must be one of: ${VALID_VOTE_TYPES.join(", ")}` });
       }
@@ -5711,11 +6117,36 @@ Only return the JSON object.`;
         targetName: string;
         detail: string | null;
         createdAt: Date;
+        hidden: boolean;
+        subjectId: string | null;
+        subjectAvatar: string | null;
+        subjectImageSlug: string | null;
+        /**
+         * Whether the user's pick matched the crowd's majority. Null when we
+         * either don't have enough community data or the vote type isn't
+         * directly comparable (e.g. opinion_poll, image_curate, induction).
+         */
+        alignedWithMajority: boolean | null;
+      };
+
+      // voteType -> privacy itemType mapping. "face_off" maps to "matchup".
+      const privacyTypeFor = (voteType: string): PrivacyItemType | null => {
+        switch (voteType) {
+          case "face_off": return "matchup";
+          case "sentiment": return "sentiment";
+          case "value_vote": return "value_vote";
+          case "trending_poll": return "trending_poll";
+          case "opinion_poll": return "opinion_poll";
+          case "image_curate": return "image_curate";
+          case "induction": return "induction";
+          case "overall_rating": return "overall_rating";
+          default: return null;
+        }
       };
 
       const want = (t: string) => !typeFilter || typeFilter === t;
 
-      const [faceOffVotes, sentVotes, valVotes, pollVotes, opVotes, imgVotes, indVotes] = await Promise.all([
+      const [faceOffVotes, sentVotes, valVotes, pollVotes, opVotes, imgVotes, indVotes, ovRatings] = await Promise.all([
         want("face_off") ? db
           .select({
             id: votes.id,
@@ -5734,8 +6165,21 @@ Only return the JSON object.`;
           .limit(50) : Promise.resolve([]),
 
         want("sentiment") ? db
-          .select()
+          .select({
+            id: sentimentVotes.id,
+            userId: sentimentVotes.userId,
+            personId: sentimentVotes.personId,
+            personName: sentimentVotes.personName,
+            voteType: sentimentVotes.voteType,
+            votedAt: sentimentVotes.votedAt,
+            avatar: trackedPeople.avatar,
+            imageSlug: trackedPeople.imageSlug,
+            communityUnderratedPct: celebrityMetrics.underratedPct,
+            communityOverratedPct: celebrityMetrics.overratedPct,
+          })
           .from(sentimentVotes)
+          .leftJoin(trackedPeople, eq(trackedPeople.id, sentimentVotes.personId))
+          .leftJoin(celebrityMetrics, eq(celebrityMetrics.celebrityId, sentimentVotes.personId))
           .where(eq(sentimentVotes.userId, userId))
           .orderBy(desc(sentimentVotes.votedAt))
           .limit(50) : Promise.resolve([]),
@@ -5745,10 +6189,17 @@ Only return the JSON object.`;
             id: celebrityValueVotes.id,
             vote: celebrityValueVotes.vote,
             createdAt: celebrityValueVotes.createdAt,
+            personId: trackedPeople.id,
             personName: trackedPeople.name,
+            avatar: trackedPeople.avatar,
+            imageSlug: trackedPeople.imageSlug,
+            communityUnderratedPct: celebrityMetrics.underratedPct,
+            communityOverratedPct: celebrityMetrics.overratedPct,
+            communityFairlyRatedPct: celebrityMetrics.fairlyRatedPct,
           })
           .from(celebrityValueVotes)
           .leftJoin(trackedPeople, eq(trackedPeople.id, celebrityValueVotes.celebrityId))
+          .leftJoin(celebrityMetrics, eq(celebrityMetrics.celebrityId, celebrityValueVotes.celebrityId))
           .where(eq(celebrityValueVotes.userId, userId))
           .orderBy(desc(celebrityValueVotes.createdAt))
           .limit(50) : Promise.resolve([]),
@@ -5756,9 +6207,13 @@ Only return the JSON object.`;
         want("trending_poll") ? db
           .select({
             id: trendingPollVotes.id,
+            pollId: trendingPollVotes.pollId,
             choice: trendingPollVotes.choice,
             createdAt: trendingPollVotes.createdAt,
             headline: trendingPolls.headline,
+            seedSupport: trendingPolls.seedSupportCount,
+            seedOppose: trendingPolls.seedOpposeCount,
+            seedNeutral: trendingPolls.seedNeutralCount,
           })
           .from(trendingPollVotes)
           .leftJoin(trendingPolls, eq(trendingPolls.id, trendingPollVotes.pollId))
@@ -5785,7 +6240,10 @@ Only return the JSON object.`;
             id: imageVotes.id,
             direction: imageVotes.direction,
             votedAt: imageVotes.votedAt,
+            personId: trackedPeople.id,
             personName: trackedPeople.name,
+            avatar: trackedPeople.avatar,
+            imageSlug: trackedPeople.imageSlug,
           })
           .from(imageVotes)
           .leftJoin(celebrityImages, eq(celebrityImages.id, imageVotes.imageId))
@@ -5805,13 +6263,138 @@ Only return the JSON object.`;
           .where(eq(inductionVotes.userId, userId))
           .orderBy(desc(inductionVotes.votedAt))
           .limit(50) : Promise.resolve([]),
+
+        want("overall_rating") ? db
+          .select({
+            id: userVotes.id,
+            rating: userVotes.rating,
+            votedAt: userVotes.votedAt,
+            personId: userVotes.personId,
+            personName: userVotes.personName,
+            avatar: trackedPeople.avatar,
+            imageSlug: trackedPeople.imageSlug,
+            communityApprovalAvg: celebrityMetrics.approvalAvgRating,
+          })
+          .from(userVotes)
+          .leftJoin(trackedPeople, eq(trackedPeople.id, userVotes.personId))
+          .leftJoin(celebrityMetrics, eq(celebrityMetrics.celebrityId, userVotes.personId))
+          .where(eq(userVotes.userId, userId))
+          .orderBy(desc(userVotes.votedAt))
+          .limit(50) : Promise.resolve([]),
       ]);
+
+      // TEMP DIAGNOSTIC: verify overall_rating row counts match between Drizzle
+      // ORM and raw SQL for the authenticated user. Remove after root cause is
+      // identified.
+      if (typeFilter === "overall_rating") {
+        try {
+          const raw = await db.execute(
+            sql`select count(*)::int as c from user_votes where user_id = ${userId}`,
+          );
+          const rawRows = (raw as any)?.rows?.[0]?.c
+            ?? (Array.isArray(raw) ? (raw as any)[0]?.c : undefined)
+            ?? raw;
+          console.log("[me/votes overall_rating diag]", {
+            userId,
+            ormRows: ovRatings.length,
+            rawRows,
+          });
+        } catch (diagErr: any) {
+          console.log("[me/votes overall_rating diag error]", {
+            userId,
+            ormRows: ovRatings.length,
+            error: diagErr?.message ?? String(diagErr),
+          });
+        }
+      }
+
+      // ---------- Community signal: face_off + trending_poll ----------
+      // For the matchups the user voted on, aggregate ALL votes per option so
+      // we can flag whether the user's pick matched the crowd's majority.
+      const faceOffMatchupIds = Array.from(
+        new Set(faceOffVotes.map((v) => v.targetId).filter(Boolean) as string[]),
+      );
+      const faceOffMajority = new Map<string, string>();
+      if (faceOffMatchupIds.length > 0) {
+        const tallies = await db
+          .select({
+            matchupId: votes.targetId,
+            option: votes.value,
+            c: sql<number>`count(*)::int`,
+          })
+          .from(votes)
+          .where(and(
+            eq(votes.voteType, "face_off"),
+            inArray(votes.targetId, faceOffMatchupIds),
+          ))
+          .groupBy(votes.targetId, votes.value);
+        const byMatchup = new Map<string, Map<string, number>>();
+        for (const row of tallies) {
+          if (!row.matchupId || !row.option) continue;
+          const m = byMatchup.get(row.matchupId) ?? new Map<string, number>();
+          m.set(row.option, (m.get(row.option) ?? 0) + Number(row.c ?? 0));
+          byMatchup.set(row.matchupId, m);
+        }
+        for (const [matchupId, opts] of byMatchup.entries()) {
+          let top: string | null = null;
+          let topN = -1;
+          let tie = false;
+          for (const [opt, n] of opts.entries()) {
+            if (n > topN) { top = opt; topN = n; tie = false; }
+            else if (n === topN) { tie = true; }
+          }
+          if (top && !tie) faceOffMajority.set(matchupId, top);
+        }
+      }
+
+      const pollIds = Array.from(
+        new Set(pollVotes.map((v) => v.pollId).filter(Boolean) as string[]),
+      );
+      const pollMajority = new Map<string, string>();
+      if (pollIds.length > 0) {
+        const tallies = await db
+          .select({
+            pollId: trendingPollVotes.pollId,
+            choice: trendingPollVotes.choice,
+            c: sql<number>`count(*)::int`,
+          })
+          .from(trendingPollVotes)
+          .where(inArray(trendingPollVotes.pollId, pollIds))
+          .groupBy(trendingPollVotes.pollId, trendingPollVotes.choice);
+        // Seed with the curator-provided seed counts so early-stage polls have a majority.
+        const byPoll = new Map<string, Map<string, number>>();
+        for (const v of pollVotes) {
+          if (!v.pollId) continue;
+          const m = byPoll.get(v.pollId) ?? new Map<string, number>();
+          m.set("support", (m.get("support") ?? 0) + (v.seedSupport ?? 0));
+          m.set("oppose", (m.get("oppose") ?? 0) + (v.seedOppose ?? 0));
+          m.set("neutral", (m.get("neutral") ?? 0) + (v.seedNeutral ?? 0));
+          byPoll.set(v.pollId, m);
+        }
+        for (const row of tallies) {
+          if (!row.pollId || !row.choice) continue;
+          const m = byPoll.get(row.pollId) ?? new Map<string, number>();
+          m.set(row.choice, (m.get(row.choice) ?? 0) + Number(row.c ?? 0));
+          byPoll.set(row.pollId, m);
+        }
+        for (const [pollId, opts] of byPoll.entries()) {
+          let top: string | null = null;
+          let topN = -1;
+          let tie = false;
+          for (const [opt, n] of opts.entries()) {
+            if (n > topN) { top = opt; topN = n; tie = false; }
+            else if (n === topN && n > 0) { tie = true; }
+          }
+          if (top && !tie) pollMajority.set(pollId, top);
+        }
+      }
 
       const results: UnifiedVote[] = [];
 
       for (const v of faceOffVotes) {
         const name = v.matchupTitle || (v.optionA && v.optionB ? `${v.optionA} vs ${v.optionB}` : "Matchup");
         const side = v.value === "option_a" ? v.optionA : v.value === "option_b" ? v.optionB : null;
+        const majority = v.targetId ? faceOffMajority.get(v.targetId) ?? null : null;
         results.push({
           id: v.id,
           voteType: "face_off",
@@ -5819,10 +6402,23 @@ Only return the JSON object.`;
           targetName: name,
           detail: side ? `Voted: ${side}` : null,
           createdAt: v.votedAt ?? new Date(),
+          hidden: false,
+          subjectId: null,
+          subjectAvatar: null,
+          subjectImageSlug: null,
+          alignedWithMajority:
+            majority && typeof v.value === "string" ? v.value === majority : null,
         });
       }
 
       for (const v of sentVotes) {
+        const over = Number(v.communityOverratedPct ?? 0);
+        const under = Number(v.communityUnderratedPct ?? 0);
+        let aligned: boolean | null = null;
+        if (over > 0 || under > 0) {
+          const majority = over > under ? "overrated" : under > over ? "underrated" : null;
+          if (majority) aligned = v.voteType === majority;
+        }
         results.push({
           id: v.id,
           voteType: "sentiment",
@@ -5830,11 +6426,31 @@ Only return the JSON object.`;
           targetName: v.personName || "Unknown",
           detail: v.voteType === "overrated" ? "Overrated" : "Underrated",
           createdAt: v.votedAt ?? new Date(),
+          hidden: false,
+          subjectId: v.personId ?? null,
+          subjectAvatar: v.avatar ?? null,
+          subjectImageSlug: v.imageSlug ?? null,
+          alignedWithMajority: aligned,
         });
       }
 
       for (const v of valVotes) {
         const label = v.vote === "underrated" ? "Underrated" : v.vote === "overrated" ? "Overrated" : "Fairly Rated";
+        const under = Number(v.communityUnderratedPct ?? 0);
+        const over = Number(v.communityOverratedPct ?? 0);
+        const fair = Number(v.communityFairlyRatedPct ?? 0);
+        let aligned: boolean | null = null;
+        if (under + over + fair > 0) {
+          const pairs: Array<[string, number]> = [
+            ["underrated", under],
+            ["overrated", over],
+            ["fairly_rated", fair],
+          ];
+          pairs.sort((a, b) => b[1] - a[1]);
+          const [top, topN] = pairs[0];
+          const [, secondN] = pairs[1];
+          if (topN > secondN) aligned = v.vote === top;
+        }
         results.push({
           id: v.id,
           voteType: "value_vote",
@@ -5842,11 +6458,17 @@ Only return the JSON object.`;
           targetName: v.personName || "Unknown",
           detail: label,
           createdAt: v.createdAt ?? new Date(),
+          hidden: false,
+          subjectId: v.personId ?? null,
+          subjectAvatar: v.avatar ?? null,
+          subjectImageSlug: v.imageSlug ?? null,
+          alignedWithMajority: aligned,
         });
       }
 
       for (const v of pollVotes) {
         const choiceLabel = v.choice === "support" ? "Support" : v.choice === "oppose" ? "Oppose" : "Neutral";
+        const majority = v.pollId ? pollMajority.get(v.pollId) ?? null : null;
         results.push({
           id: v.id,
           voteType: "trending_poll",
@@ -5854,6 +6476,11 @@ Only return the JSON object.`;
           targetName: v.headline || "Poll",
           detail: choiceLabel,
           createdAt: v.createdAt ?? new Date(),
+          hidden: false,
+          subjectId: null,
+          subjectAvatar: null,
+          subjectImageSlug: null,
+          alignedWithMajority: majority ? v.choice === majority : null,
         });
       }
 
@@ -5865,6 +6492,11 @@ Only return the JSON object.`;
           targetName: v.pollTitle || "Opinion Poll",
           detail: v.optionName ? `Chose: ${v.optionName}` : null,
           createdAt: v.createdAt ?? new Date(),
+          hidden: false,
+          subjectId: null,
+          subjectAvatar: null,
+          subjectImageSlug: null,
+          alignedWithMajority: null,
         });
       }
 
@@ -5876,6 +6508,11 @@ Only return the JSON object.`;
           targetName: v.personName || "Unknown",
           detail: `Image ${v.direction === "up" ? "upvote" : "downvote"}`,
           createdAt: v.votedAt ?? new Date(),
+          hidden: false,
+          subjectId: v.personId ?? null,
+          subjectAvatar: v.avatar ?? null,
+          subjectImageSlug: v.imageSlug ?? null,
+          alignedWithMajority: null,
         });
       }
 
@@ -5887,7 +6524,45 @@ Only return the JSON object.`;
           targetName: v.candidateName || "Candidate",
           detail: "Induction vote",
           createdAt: v.votedAt ?? new Date(),
+          hidden: false,
+          subjectId: null,
+          subjectAvatar: null,
+          subjectImageSlug: null,
+          alignedWithMajority: null,
         });
+      }
+
+      for (const v of ovRatings) {
+        // 1-5 zone: 1 Hate, 2 Dislike, 3 Neutral, 4 Like, 5 Love.
+        const ZONE_LABELS = ["Hate", "Dislike", "Neutral", "Like", "Love"];
+        const zoneLabel = ZONE_LABELS[(v.rating ?? 3) - 1] ?? "Neutral";
+        const avg = v.communityApprovalAvg != null ? Number(v.communityApprovalAvg) : null;
+        // Align if the user's rating rounds to the same zone as the community avg.
+        const aligned = avg != null && Number.isFinite(avg)
+          ? Math.round(avg) === v.rating
+          : null;
+        results.push({
+          id: v.id,
+          voteType: "overall_rating",
+          value: v.rating ?? 0,
+          targetName: v.personName || "Unknown",
+          detail: `Rated ${v.rating}/5 - ${zoneLabel}`,
+          createdAt: v.votedAt ?? new Date(),
+          hidden: false,
+          subjectId: v.personId ?? null,
+          subjectAvatar: v.avatar ?? null,
+          subjectImageSlug: v.imageSlug ?? null,
+          alignedWithMajority: aligned,
+        });
+      }
+
+      // Annotate with per-item visibility overrides.
+      const hiddenSet = await loadHiddenItemSet(userId);
+      for (const r of results) {
+        const pType = privacyTypeFor(r.voteType);
+        if (pType && hiddenSet.has(`${pType}:${r.id}`)) {
+          r.hidden = true;
+        }
       }
 
       results.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -5948,6 +6623,8 @@ Only return the JSON object.`;
           .limit(100),
       ]);
 
+      const hiddenSet = await loadHiddenItemSet(userId);
+
       const predictions = bets.map(b => {
         let result: 'won' | 'lost' | 'refunded' | 'pending' = 'pending';
         let payout = 0;
@@ -5970,6 +6647,13 @@ Only return the JSON object.`;
 
         const isNative = b.marketType !== 'community';
 
+        // Decimal odds at bet time: potentialPayout / stakeAmount.
+        // Used client-side to label contrarian (underdog) picks.
+        const oddsAtBet =
+          b.potentialPayout != null && b.stakeAmount && b.stakeAmount > 0
+            ? Number((b.potentialPayout / b.stakeAmount).toFixed(2))
+            : null;
+
         return {
           betId: b.betId,
           marketId: b.marketId,
@@ -5982,6 +6666,7 @@ Only return the JSON object.`;
           entryLabel: displayEntryLabel,
           stakeAmount: b.stakeAmount,
           potentialPayout: b.potentialPayout,
+          oddsAtBet,
           result,
           payout,
           baselineScore: b.baselineScore,
@@ -5991,6 +6676,7 @@ Only return the JSON object.`;
           personAvatar: isNative ? b.personAvatar : null,
           startAt: b.startAt,
           endAt: b.endAt,
+          hidden: hiddenSet.has(`market_bet:${b.betId}`),
         };
       });
 
