@@ -6,6 +6,7 @@ import { useLocation } from "wouter";
 import { ArrowLeft, Users, Loader2 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest, getAuthHeaders } from "@/lib/queryClient";
+import { parseVoteError } from "@/lib/voteErrors";
 import { useToast } from "@/hooks/use-toast";
 
 interface AnimatedSentimentVotingWidgetProps {
@@ -304,10 +305,11 @@ export function AnimatedSentimentVotingWidget({
         });
       } catch (error: any) {
         console.error("Error saving approval rating:", error);
+        const parsed = parseVoteError(error);
         toast({
-          title: "Couldn't save your vote",
-          description: error?.message?.length && error.message.length < 160
-            ? error.message
+          title: parsed.retryAfter ? "Slow down" : "Couldn't save your vote",
+          description: parsed.message && parsed.message.length < 160
+            ? parsed.message
             : "Please check your connection and try again.",
           variant: "destructive",
         });

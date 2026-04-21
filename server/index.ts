@@ -5,9 +5,9 @@ import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { registerRoutes } from "./routes";
 import { resolveAuthContextFromHeader, type AuthRequest } from "./auth-middleware";
 
-import { log } from "./log";
+import { log, logger, requestIdMiddleware } from "./log";
+import { initSentry, sentryErrorHandler, captureBackgroundError } from "./sentry";
 import { serveStatic } from "./serve-static";
-import { startSnapshotScheduler } from "./jobs/snapshot-scheduler";
 import { runDataIngestion, hydrateTrendingPeopleFromSnapshots } from "./jobs/ingest";
 import { startLiveTickScheduler, setLastFullRefreshAt, applySnapBackDampening } from "./jobs/live-tick";
 import { startMarketResolverScheduler } from "./jobs/market-resolver";
@@ -25,12 +25,17 @@ import { celebrityMetrics, approvalSnapshots } from "@shared/schema";
 
 console.log(`[BOOT] started at ${new Date().toISOString()} (env=${process.env.NODE_ENV || "unknown"})`);
 
+// Initialize Sentry as early as possible so any boot-time errors are captured.
+// No-op when SENTRY_DSN isn't set.
+initSentry();
+
 // ===========================================
 // GLOBAL ERROR HANDLERS
 // ===========================================
 process.on("uncaughtException", (err) => {
   // Uncaught sync exceptions leave the process in an indeterminate state —
   // exit so the supervisor (Railway) can restart us cleanly.
+  captureBackgroundError(err, { kind: "uncaughtException" });
   process.stderr.write(`[FATAL] Uncaught exception: ${err?.stack || err}\n`);
   process.exit(1);
 });
@@ -40,6 +45,7 @@ process.on("unhandledRejection", (reason) => {
   // background job misbehaved. In production we just log loudly; in dev/test
   // we keep the old exit-on-reject behavior so bad code is noticed during
   // development. Set STRICT_UNHANDLED_REJECTION=true to force exit in prod.
+  captureBackgroundError(reason, { kind: "unhandledRejection" });
   const msg = reason instanceof Error ? (reason.stack || reason.message) : String(reason);
   process.stderr.write(`[FATAL] Unhandled promise rejection: ${msg}\n`);
   const forceExit = (process.env.STRICT_UNHANDLED_REJECTION ?? "false").trim().toLowerCase() === "true";
@@ -468,6 +474,10 @@ function startScheduler(name: string, start: () => void) {
 const app = express();
 app.set('trust proxy', 1);
 
+// Attach a per-request `x-request-id` and child logger (`req.log`) BEFORE any
+// other middleware so even helmet/json-parsing errors can be correlated by ID.
+app.use(requestIdMiddleware);
+
 app.use(helmet({
   contentSecurityPolicy: false,
   crossOriginEmbedderPolicy: false,
@@ -542,8 +552,31 @@ const authLimiter = rateLimit({
   message: { error: "Too many authentication attempts. Please try again in a minute." },
 });
 
+// Admin endpoints often involve bulk operations (refreshing stats, running
+// audits, triggering backfills) that legitimately hit dozens of requests in a
+// short window. The default write limiter (60/min for authenticated users)
+// triggers on the admin UI during normal use, so admin calls go through their
+// own higher bucket keyed by userId.
+const adminLimiter = rateLimit({
+  windowMs: 60_000,
+  max: parseInt(process.env.API_ADMIN_RATE_LIMIT_MAX || "300", 10),
+  keyGenerator: rateLimitKeyForRequest,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many admin requests, please slow down." },
+});
+
 app.use("/api/auth/", authLimiter);
+// Admin routes get their own bucket before the generic /api/ read/write split.
+// The requireAdmin middleware on each endpoint still enforces authz — this is
+// purely a throughput ceiling.
+app.use("/api/admin/", adminLimiter);
 app.use("/api/", (req, res, next) => {
+  // Skip the generic read/write bucket for /api/admin/* so admin requests only
+  // count against the adminLimiter bucket above.
+  if (req.path.startsWith("/admin/")) {
+    return next();
+  }
   const method = req.method.toUpperCase();
   if (method === "GET" || method === "HEAD" || method === "OPTIONS") {
     return readLimiter(req, res, next);
@@ -580,7 +613,11 @@ app.use((req, res, next) => {
 async function startServer() {
   const server = await registerRoutes(app);
 
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  // Sentry first — so it sees the raw error before our JSON responder swallows
+  // it into a 500. No-op when SENTRY_DSN isn't configured.
+  app.use(sentryErrorHandler);
+
+  app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
     if (res.headersSent) {
       return;
     }
@@ -588,8 +625,9 @@ async function startServer() {
     const status = err.status || err.statusCode || 500;
     const message = status >= 500 ? "Internal Server Error" : (err.message || "Request failed");
 
-    process.stderr.write(`[ERROR] Request failed: ${err?.stack || err}\n`);
-    res.status(status).json({ message });
+    const reqLog = (req as Request & { log?: typeof logger }).log ?? logger;
+    reqLog.error({ err, path: req.path, method: req.method, status }, "Request failed");
+    res.status(status).json({ message, requestId: req.id });
   });
 
   // importantly only setup vite in development and after
@@ -626,15 +664,39 @@ async function startServer() {
       log(`[Startup] Weekly market reconcile complete for week ${generation.weekNumber}`);
     });
 
+    // ─── Ingest mode announcement ─────────────────────────────────────────
+    // The app supports two mutually-exclusive ingest modes:
+    //   (a) In-process schedulers — this Node process runs Ingestion /
+    //       LiveTick / MarketResolver / etc. itself (DEFAULT).
+    //   (b) External cron — a platform scheduler (Railway cron, Vercel cron,
+    //       GitHub Actions) hits /api/cron/* with CRON_SECRET. In that case,
+    //       DISABLE_SCHEDULERS=true must be set so the in-process timers
+    //       don't race with the external ones and spam `locked_out`
+    //       ingestion_runs rows.
+    //
+    // If BOTH appear to be configured (CRON_SECRET present AND
+    // DISABLE_SCHEDULERS not set) we warn loudly on boot — the configuration
+    // still works, but the dual-trigger risk is real.
     const schedulersDisabled = process.env.DISABLE_SCHEDULERS === "true";
-    if (schedulersDisabled) {
-      log("[Schedulers] DISABLE_SCHEDULERS=true — skipping all background schedulers (Ingestion, LiveTick, Seed Engine, MarketResolver, MarketGenerator, VoteWorker, Staleness Monitor, Snapshot).");
+    const cronSecretConfigured = !!(process.env.CRON_SECRET && process.env.CRON_SECRET.trim().length > 0);
+
+    if (schedulersDisabled && !cronSecretConfigured) {
+      log("[Schedulers] FATAL MISCONFIG — DISABLE_SCHEDULERS=true but no CRON_SECRET is set. Nothing will drive ingestion. Either unset DISABLE_SCHEDULERS or configure CRON_SECRET + external cron.");
+    } else if (schedulersDisabled) {
+      log("[Schedulers] Mode: EXTERNAL CRON. DISABLE_SCHEDULERS=true — skipping all background schedulers. Ingestion, LiveTick, etc. must be triggered via POST /api/cron/* with CRON_SECRET.");
       return;
+    } else if (cronSecretConfigured) {
+      log("[Schedulers] Mode: IN-PROCESS (with CRON_SECRET also configured). Warning — if you have an external cron hitting /api/cron/*, you will get duplicate runs and `locked_out` ingestion_runs rows. Set DISABLE_SCHEDULERS=true to hand control to external cron.");
+    } else {
+      log("[Schedulers] Mode: IN-PROCESS. Background schedulers are running inside this Node process.");
     }
-    
-    // Start hourly snapshot scheduler (captures data points for graphs)
-    startScheduler("Snapshot", () => startSnapshotScheduler(60 * 60 * 1000));
-    
+
+    // NOTE: The standalone snapshot scheduler was removed — ingest.ts is now the
+    // single writer for trend_snapshots. Historically there was a second hourly
+    // job ("startSnapshotScheduler") that wrote snapshots independently, but it
+    // caused duplicate/conflicting data points (jagged graphs) and was reduced
+    // to a no-op log line long before being deleted.
+
     // Start data ingestion scheduler (fetches fresh API data every 8 hours)
     startScheduler("Ingestion", startIngestionScheduler);
 

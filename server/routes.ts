@@ -63,7 +63,7 @@ import { sendError, sendBadRequest, sendZodError } from "./utils/api-response";
 import { runPostInductionOnboarding } from "./services/induction-onboarding";
 import { CANONICAL_MARKET_CATEGORIES, getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
 import { resolvePublicMatchupBySlugOrId } from "./utils/matchup-resolve";
-import { registerCronRoutes, registerPublicRoutes } from "./route-modules";
+import { registerCronRoutes, registerPublicRoutes, registerGamificationRoutes, registerFavoritesRoutes } from "./route-modules";
 
 const VIEW_DEDUPE_WINDOW_MS = 10 * 60 * 1000;
 const VIEW_IP_RATE_LIMIT = 30;
@@ -147,7 +147,20 @@ function shouldCountView(req: Request, personId: string): boolean {
 let _cachedPrevRanks: Map<string, number> | null = null;
 let _lastCompletedRunId: string | null = null;
 
-let _cachedHotMovers: any | null = null;
+type HotMoversResponse = {
+  data: Array<Record<string, unknown>>;
+  meta: {
+    currentRunId: string | null;
+    baseline24hRunId: string | null;
+    baseline24hAgeHours: number | null;
+    baselineStatus: string;
+    coveragePct: number | null;
+    scoreVersion: string | null;
+    smoothingMode: string;
+    newsAggregationMode: string;
+  };
+};
+let _cachedHotMovers: HotMoversResponse | null = null;
 let _hotMoversCachedAt: number = 0;
 let _hotMoversCachedRunId: string | null = null;
 const HOT_MOVERS_TTL_MS = 10 * 60 * 1000; // 10 minutes
@@ -482,6 +495,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   registerPublicRoutes(app);
+  registerGamificationRoutes(app);
+  registerFavoritesRoutes(app);
 
   // Manual seeding endpoint for testing
   app.post("/api/admin/seed-supabase", requireAuth, requireAdmin, async (req, res) => {
@@ -823,49 +838,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const window18h = new Date(now.getTime() - 18 * 60 * 60 * 1000);
           const time24h = now.getTime() - 24 * 60 * 60 * 1000;
 
-          const [currentSnaps, prevSnaps] = await Promise.all([
-            db.select({
-              personId: trendSnapshots.personId,
-              searchVolume: trendSnapshots.searchVolume,
-              newsCount: trendSnapshots.newsCount,
-              wikiPageviews: trendSnapshots.wikiPageviews,
-              timestamp: trendSnapshots.timestamp,
-              diagnostics: trendSnapshots.diagnostics,
-            })
-              .from(trendSnapshots)
-              .where(and(
-                inArray(trendSnapshots.personId, moverIds),
-                gte(trendSnapshots.timestamp, window18h),
-              ))
-              .orderBy(desc(trendSnapshots.timestamp), desc(trendSnapshots.id)),
+          // Previously this fetched every snapshot for each mover in both
+          // windows and deduped in JS — typically 5-10× the rows we actually
+          // needed. Use `DISTINCT ON (person_id)` so Postgres returns exactly
+          // one row per person, picked by the ORDER BY clause:
+          //   • current:   latest snapshot within the last 18h
+          //   • previous:  snapshot closest to exactly 24h ago within the
+          //                30h–18h window (closest wins via ABS(...) sort).
+          type SnapRow = {
+            personId: string;
+            searchVolume: number | null;
+            newsCount: number | null;
+            wikiPageviews: number | null;
+            timestamp: Date;
+            diagnostics: Record<string, unknown> | null;
+          };
+          const time24hIso = new Date(time24h).toISOString();
 
-            db.select({
-              personId: trendSnapshots.personId,
-              searchVolume: trendSnapshots.searchVolume,
-              newsCount: trendSnapshots.newsCount,
-              wikiPageviews: trendSnapshots.wikiPageviews,
-              timestamp: trendSnapshots.timestamp,
-              diagnostics: trendSnapshots.diagnostics,
-            })
-              .from(trendSnapshots)
-              .where(and(
-                inArray(trendSnapshots.personId, moverIds),
-                gte(trendSnapshots.timestamp, window30h),
-                lte(trendSnapshots.timestamp, window18h),
-              ))
-              .orderBy(desc(trendSnapshots.timestamp), desc(trendSnapshots.id)),
+          const [currentResult, prevResult] = await Promise.all([
+            db.execute(sql`
+              SELECT DISTINCT ON (person_id)
+                person_id       AS "personId",
+                search_volume   AS "searchVolume",
+                news_count      AS "newsCount",
+                wiki_pageviews  AS "wikiPageviews",
+                timestamp,
+                diagnostics
+              FROM trend_snapshots
+              WHERE person_id = ANY(${moverIds}::text[])
+                AND timestamp >= ${window18h.toISOString()}
+              ORDER BY person_id, timestamp DESC, id DESC
+            `),
+            db.execute(sql`
+              SELECT DISTINCT ON (person_id)
+                person_id       AS "personId",
+                search_volume   AS "searchVolume",
+                news_count      AS "newsCount",
+                wiki_pageviews  AS "wikiPageviews",
+                timestamp,
+                diagnostics
+              FROM trend_snapshots
+              WHERE person_id = ANY(${moverIds}::text[])
+                AND timestamp >= ${window30h.toISOString()}
+                AND timestamp <= ${window18h.toISOString()}
+              ORDER BY person_id, ABS(EXTRACT(EPOCH FROM (timestamp - ${time24hIso}::timestamptz))) ASC, id DESC
+            `),
           ]);
+          const currentSnaps = currentResult.rows as unknown as SnapRow[];
+          const prevSnaps = prevResult.rows as unknown as SnapRow[];
 
-          const latestByPerson = new Map<string, typeof currentSnaps[0]>();
+          const latestByPerson = new Map<string, SnapRow>();
           for (const s of currentSnaps) {
-            if (!latestByPerson.has(s.personId)) latestByPerson.set(s.personId, s);
+            latestByPerson.set(s.personId, s);
           }
-          const prevByPerson = new Map<string, typeof prevSnaps[0]>();
+          const prevByPerson = new Map<string, SnapRow>();
           for (const s of prevSnaps) {
-            const existing = prevByPerson.get(s.personId);
-            if (!existing || Math.abs(new Date(s.timestamp).getTime() - time24h) < Math.abs(new Date(existing.timestamp).getTime() - time24h)) {
-              prevByPerson.set(s.personId, s);
-            }
+            prevByPerson.set(s.personId, s);
           }
 
           for (const id of moverIds) {
@@ -5250,83 +5278,25 @@ Only return the JSON object.`;
     }
   });
 
-  // Check a specific permission
-  app.get("/api/gamification/check-permission/:capability", requireAuth, async (req: AuthRequest, res) => {
-    try {
-      const { capability } = req.params;
-      const hasPermission = await gamificationService.checkPermission(req.userId!, capability as any);
-      res.json({ capability, hasPermission });
-    } catch (error: any) {
-      console.error("Error checking permission:", error.message);
-      res.status(500).json({ error: "Failed to check permission" });
-    }
-  });
-
+  // NOTE: The following gamification read endpoints have been extracted into
+  // server/route-modules/gamification-routes.ts (registered above):
+  //   GET /api/gamification/check-permission/:capability
+  //   GET /api/gamification/xp-history
+  //   GET /api/gamification/credit-history
+  //   GET /api/gamification/daily-summary
+  //   GET /api/gamification/xp-actions
+  //   GET /api/gamification/ranks
+  //
+  // /api/gamification/stats stays in this file because it has daily-login
+  // and streak-award side effects that touch multiple subsystems.
+  //
   // NOTE: XP awarding is handled INTERNALLY by action handlers (votes, comments, etc.)
-  // There is NO public endpoint for XP awards - this prevents forging
-  // XP is awarded via gamificationService.awardXp() called directly in handlers
-
-  // NOTE: Credit adjustments are handled INTERNALLY by prediction handlers
-  // Debits occur when placing predictions (via stake handlers)
-  // Credits occur when winning predictions (via settlement handlers)
-
-  // Get XP history for current user
-  app.get("/api/gamification/xp-history", requireAuth, async (req: AuthRequest, res) => {
-    try {
-      const limit = parseInt(req.query.limit as string) || 20;
-      const history = await gamificationService.getXpHistory(req.userId!, limit);
-      res.json(history);
-    } catch (error: any) {
-      console.error("Error fetching XP history:", error.message);
-      res.status(500).json({ error: "Failed to fetch XP history" });
-    }
-  });
-
-  // Get credit history for current user
-  app.get("/api/gamification/credit-history", requireAuth, async (req: AuthRequest, res) => {
-    try {
-      const limit = parseInt(req.query.limit as string) || 20;
-      const history = await gamificationService.getCreditHistory(req.userId!, limit);
-      res.json(history);
-    } catch (error: any) {
-      console.error("Error fetching credit history:", error.message);
-      res.status(500).json({ error: "Failed to fetch credit history" });
-    }
-  });
-
-  // Get daily XP summary (for showing remaining caps)
-  app.get("/api/gamification/daily-summary", requireAuth, async (req: AuthRequest, res) => {
-    try {
-      const summary = await gamificationService.getDailyXpSummary(req.userId!);
-      res.json(summary);
-    } catch (error: any) {
-      console.error("Error fetching daily summary:", error.message);
-      res.status(500).json({ error: "Failed to fetch daily summary" });
-    }
-  });
-
-  // Get available XP actions (for UI display)
-  app.get("/api/gamification/xp-actions", async (req, res) => {
-    try {
-      const actions = await db.select().from(xpActions).where(eq(xpActions.isActive, true));
-      res.json(actions);
-    } catch (error: any) {
-      console.error("Error fetching XP actions:", error.message);
-      res.status(500).json({ error: "Failed to fetch XP actions" });
-    }
-  });
-
-  // Public rank ladder — single source of truth for client rank UI.
-  // Served from the in-memory ranks cache on GamificationService (5-min TTL).
-  app.get("/api/gamification/ranks", async (_req, res) => {
-    try {
-      const ranksList = await gamificationService.getRanks();
-      res.json(ranksList);
-    } catch (error: any) {
-      console.error("Error fetching ranks:", error.message);
-      res.status(500).json({ error: "Failed to fetch ranks" });
-    }
-  });
+  // There is NO public endpoint for XP awards - this prevents forging.
+  // XP is awarded via gamificationService.awardXp() called directly in handlers.
+  //
+  // NOTE: Credit adjustments are handled INTERNALLY by prediction handlers.
+  // Debits occur when placing predictions (via stake handlers).
+  // Credits occur when winning predictions (via settlement handlers).
 
   // Admin: Re-seed gamification actions and ranks (idempotent upsert)
   app.post("/api/admin/seed-gamification", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
@@ -6123,95 +6093,9 @@ Only return the JSON object.`;
   });
 
   // Get user's favorites
-  app.get("/api/me/favorites", requireAuth, async (req: AuthRequest, res) => {
-    try {
-      const userId = req.userId!;
-      
-      // Get user favorites from userFavourites table
-      const userFavs = await db.select().from(userFavourites).where(eq(userFavourites.userId, userId)).limit(50);
-      
-      const favPersonIds = userFavs.map(f => f.personId);
-      
-      const [personRows, trendingRows] = favPersonIds.length > 0
-        ? await Promise.all([
-            db.select().from(trackedPeople).where(inArray(trackedPeople.id, favPersonIds)),
-            db.select().from(trendingPeople).where(inArray(trendingPeople.id, favPersonIds)),
-          ])
-        : [[], []];
-
-      const personMap = new Map(personRows.map(p => [p.id, p]));
-      const trendingMap = new Map(trendingRows.map(t => [t.id, t]));
-
-      const favoritesWithDetails = userFavs.map(fav => {
-        const person = personMap.get(fav.personId);
-        const trending = trendingMap.get(fav.personId);
-        return {
-          id: fav.id,
-          celebrityId: fav.personId,
-          name: person?.name || "Unknown",
-          imageUrl: person?.avatar || null,
-          category: person?.category || "Other",
-          rank: trending?.rank || null,
-          change: trending?.change24h || 0,
-        };
-      });
-      
-      res.json(favoritesWithDetails);
-    } catch (error: any) {
-      console.error("Error fetching user favorites:", error.message);
-      res.status(500).json({ error: "Failed to fetch favorites" });
-    }
-  });
-
-  app.post("/api/me/favorites/:personId", requireAuth, async (req: AuthRequest, res) => {
-    try {
-      const userId = req.userId!;
-      const { personId } = req.params;
-      const { personName, personAvatar, personCategory } = req.body || {};
-
-      let name = personName;
-      let avatar = personAvatar;
-      let category = personCategory;
-
-      if (!name) {
-        const person = await db.select().from(trackedPeople).where(eq(trackedPeople.id, personId)).limit(1);
-        if (person[0]) {
-          name = person[0].name;
-          avatar = avatar ?? person[0].avatar;
-          category = category ?? person[0].category;
-        }
-      }
-
-      await db.insert(userFavourites).values({
-        userId,
-        personId,
-        personName: name || "Unknown",
-        personAvatar: avatar || null,
-        personCategory: category || null,
-      }).onConflictDoNothing();
-
-      res.json({ ok: true });
-    } catch (error: any) {
-      console.error("Error adding favorite:", error.message);
-      res.status(500).json({ error: "Failed to add favorite" });
-    }
-  });
-
-  app.delete("/api/me/favorites/:personId", requireAuth, async (req: AuthRequest, res) => {
-    try {
-      const userId = req.userId!;
-      const { personId } = req.params;
-
-      await db.delete(userFavourites).where(
-        and(eq(userFavourites.userId, userId), eq(userFavourites.personId, personId))
-      );
-
-      res.json({ ok: true });
-    } catch (error: any) {
-      console.error("Error removing favorite:", error.message);
-      res.status(500).json({ error: "Failed to remove favorite" });
-    }
-  });
+  // NOTE: Favorites CRUD (GET / POST / DELETE /api/me/favorites[/:personId])
+  // has been extracted into server/route-modules/favorites-routes.ts
+  // (registered above alongside the other route modules).
   
   // ==================
   // Admin Endpoints
@@ -7375,22 +7259,10 @@ Only return the JSON object.`;
     }
   });
 
-  // Capture snapshots (admin version - uses session auth)
-  app.post("/api/admin/capture-snapshots", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
-    try {
-      const { captureHourlySnapshots } = await import("./jobs/snapshot-scheduler");
-      const result = await captureHourlySnapshots();
-      res.json({ 
-        success: true, 
-        message: "Snapshots captured",
-        captured: result.captured,
-        errors: result.errors,
-      });
-    } catch (error: any) {
-      console.error("Error capturing snapshots:", error.message);
-      res.status(500).json({ error: "Failed to capture snapshots" });
-    }
-  });
+  // NOTE: POST /api/admin/capture-snapshots was removed. It called a no-op
+  // (captureHourlySnapshots) that always returned `{ captured: 0, errors: 0 }`.
+  // Snapshots are written exclusively by the ingest job; trigger a run via
+  // POST /api/cron/refresh-data (or the in-process Ingestion scheduler).
 
   // Admin image upload to Supabase Storage
   const upload = multer({

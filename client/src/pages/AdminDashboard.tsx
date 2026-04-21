@@ -97,359 +97,30 @@ import { PersonAvatar } from "@/components/PersonAvatar";
 import { getAdminAccessBlock } from "@/pages/admin/AdminAccessGate";
 import * as Flags from "country-flag-icons/react/3x2";
 import type { TrendingPoll } from "@shared/schema";
-import { MARKET_CATEGORY_OPTIONS, normalizeMarketCategory, type CanonicalMarketCategory } from "@shared/constants";
-
-const MARKET_CATEGORIES = MARKET_CATEGORY_OPTIONS;
-
-const GAINER_MARKET_CATEGORIES = MARKET_CATEGORY_OPTIONS;
-
-type AdminSection = "overview" | "celebrities" | "predictions" | "voting" | "moderation" | "settlement" | "users" | "tools";
-
-interface AdminStats {
-  totalUsers: number;
-  totalCelebrities: number;
-  totalVotes: number;
-  totalPredictions: number;
-  lastDataRefresh: string | null;
-}
-
-interface TrafficStats {
-  total: number;
-  today: number;
-  last7Days: number;
-  last30Days: number;
-  topPages: { path: string; views: number }[];
-  topCountries?: { country: string; views: number }[];
-}
-
-interface UserProfile {
-  id: string;
-  username: string | null;
-  fullName: string | null;
-  role: string;
-  rank: string;
-  xpPoints: number;
-  predictCredits: number;
-  totalVotes: number;
-  totalPredictions: number;
-  createdAt: string;
-  isBanned?: boolean;
-}
-
-interface PredictionMarket {
-  id: string;
-  marketType: string;
-  openMarketType: string | null;
-  status: string;
-  title: string;
-  slug: string;
-  teaser: string | null;
-  summary: string | null;
-  description: string | null;
-  category: string | null;
-  tags: string[] | null;
-  coverImageUrl: string | null;
-  sourceUrl: string | null;
-  featured: boolean | null;
-  timezone: string | null;
-  resolutionCriteria: string[] | null;
-  resolutionSources: { label: string; url?: string }[] | null;
-  resolutionNotes: string | null;
-  resolveMethod: string | null;
-  seedParticipants: number | null;
-  seedVolume: string | null;
-  underlying: string | null;
-  metric: string | null;
-  strike: string | null;
-  unit: string | null;
-  closeAt: string | null;
-  endAt: string;
-  startAt: string;
-  createdAt: string;
-  updatedAt: string;
-  createdBy: string | null;
-  settledBy: string | null;
-  resolvedAt: string | null;
-  voidReason: string | null;
-  rules: string | null;
-  metadata: any;
-  personId: string | null;
-  visibility: string | null;
-  isLive: boolean | null;
-  inactiveMessage: string | null;
-  seedConfig: any;
-  weekNumber: number | null;
-}
-
-interface MarketEntryForm {
-  label: string;
-  description: string;
-  seedCount: number;
-  imageUrl: string;
-  entryPersonId: string;
-  entryPersonName: string;
-}
-
-interface AuditLogEntry {
-  id: string;
-  adminId: string;
-  adminEmail: string;
-  actionType: string;
-  targetTable: string;
-  targetId: string | null;
-  previousData: any;
-  newData: any;
-  metadata: any;
-  createdAt: string;
-}
-
-interface Celebrity {
-  id: string;
-  name: string;
-  category: string;
-  status: string;
-  avatar: string | null;
-  imageSlug?: string | null;
-  wikiSlug: string | null;
-  xHandle: string | null;
-  instagramHandle: string | null;
-  tiktokHandle: string | null;
-  youtubeId: string | null;
-  spotifyId: string | null;
-  searchQueryOverride: string | null;
-  displayOrder: number;
-}
-
-const EMPTY_CELEBRITY_FORM = {
-  name: "",
-  category: "Tech",
-  status: "main_leaderboard",
-  wikiSlug: "",
-  xHandle: "",
-  instagramHandle: "",
-  tiktokHandle: "",
-  youtubeId: "",
-  spotifyId: "",
-  searchQueryOverride: "",
-};
-
-type SeedRatingKey = "1" | "2" | "3" | "4" | "5";
-
-type SeedApprovalCounts = Record<SeedRatingKey, number>;
-
-const DEFAULT_SEED_APPROVAL_COUNTS: SeedApprovalCounts = {
-  "1": 0,
-  "2": 0,
-  "3": 0,
-  "4": 0,
-  "5": 0,
-};
-
-interface Matchup {
-  id: string;
-  title: string;
-  category: string;
-  optionAText: string;
-  optionAImage: string | null;
-  optionBText: string;
-  optionBImage: string | null;
-  promptText: string | null;
-  isActive: boolean;
-  visibility: string;
-  featured: boolean;
-  slug: string | null;
-  personAId: string | null;
-  personBId: string | null;
-  displayOrder: number;
-  seedVotesA: number;
-  seedVotesB: number;
-  createdAt: string;
-}
-
-interface CommunityInsight {
-  id: string;
-  personId: string;
-  userId: string;
-  content: string;
-  createdAt: string;
-  upvotes: number;
-  downvotes: number;
-}
-
-interface InsightComment {
-  id: string;
-  insightId: string;
-  userId: string;
-  content: string;
-  createdAt: string;
-}
-
-interface ScoreBreakdownData {
-  celebrity: {
-    id: string;
-    name: string;
-    category: string;
-    avatar: string | null;
-  };
-  snapshotTimestamp: string;
-  rawInputs: {
-    wikiPageviews: number;
-    newsCount: number;
-    searchVolume: number;
-  };
-  baselines: {
-    wiki: number;
-    news: number;
-    search: number;
-  };
-  normalizedPercentiles: {
-    wiki: number;
-    news: number;
-    search: number;
-  };
-  spikeStatus: {
-    wiki: boolean;
-    news: boolean;
-    search: boolean;
-  };
-  stabilizationParams: {
-    spikingSourceCount: number;
-    effectiveRateCap: number;
-    effectiveAlpha: number;
-    isRecalibrationActive: boolean;
-  };
-  scoreBreakdown: {
-    massScore: number;
-    velocityScore: number;
-    velocityAdjusted: number;
-    diversityMultiplier: number;
-    trendScore: number;
-    fameIndex: number;
-    momentum: string;
-    drivers: string[];
-  };
-  weights: {
-    mass: number;
-    velocity: number;
-    velocityBreakdown: {
-      wiki: number;
-      news: number;
-      search: number;
-      x: number;
-    };
-  };
-  populationStats: {
-    wiki: { min: number; max: number; p25: number; p50: number; p75: number; p90: number; mean: number; count: number };
-    news: { min: number; max: number; p25: number; p50: number; p75: number; p90: number; mean: number; count: number };
-    search: { min: number; max: number; p25: number; p50: number; p75: number; p90: number; mean: number; count: number };
-  };
-  historicalSnapshots: Array<{
-    timestamp: string;
-    fameIndex: number;
-    trendScore: number;
-    wikiPageviews: number;
-    newsCount: number;
-    searchVolume: number;
-  }>;
-  previousHourComparison: {
-    previousFameIndex: number;
-    rawFameIndexBeforeStabilization: number;
-    currentFameIndex: number;
-    rawChangePercent: number;
-    finalChangePercent: number;
-    wasRateLimited: boolean;
-    previousRank: number;
-    currentRank: number;
-  } | null;
-  sourceFreshness: {
-    wiki: { lastUpdated: string; value: number; isStale: boolean };
-    news: { lastUpdated: string; value: number; isStale: boolean };
-    search: { lastUpdated: string; value: number; isStale: boolean };
-  };
-  currentRank: number;
-}
-
-// Helper function to get auth headers
-async function getAuthHeaders(): Promise<HeadersInit> {
-  const client = await getSupabase();
-  const { data: { session } } = await client.auth.getSession();
-  if (!session?.access_token) {
-    throw new Error("Not authenticated");
-  }
-  return {
-    "Content-Type": "application/json",
-    "Authorization": `Bearer ${session.access_token}`,
-  };
-}
-
-// Fetch with auth helper
-async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
-  const headers = await getAuthHeaders();
-  return fetch(url, {
-    ...options,
-    headers: {
-      ...headers,
-      ...options.headers,
-    },
-    credentials: "include",
-  });
-}
-
-// Copy Debug Summary Button Component
-function CopyDebugSummaryButton({ scoreBreakdown }: { scoreBreakdown: ScoreBreakdownData }) {
-  const [copied, setCopied] = useState(false);
-  
-  const copyDebugSummary = () => {
-    const prev = scoreBreakdown.previousHourComparison;
-    const spikes = [
-      scoreBreakdown.spikeStatus.wiki && "Wiki",
-      scoreBreakdown.spikeStatus.news && "News",
-      scoreBreakdown.spikeStatus.search && "Search"
-    ].filter(Boolean).join("+") || "None";
-    
-    const rankChange = prev ? 
-      (prev.previousRank !== prev.currentRank ? `#${prev.previousRank}→#${prev.currentRank}` : `#${prev.currentRank}`) : 
-      `#${scoreBreakdown.currentRank}`;
-    
-    const changeStr = prev && prev.finalChangePercent !== 0 ? 
-      `(${prev.finalChangePercent >= 0 ? "+" : ""}${prev.finalChangePercent.toFixed(1)}%)` : "";
-    
-    const summary = `${scoreBreakdown.celebrity.name} ${rankChange} | Fame: ${scoreBreakdown.scoreBreakdown.fameIndex.toLocaleString()} ${changeStr} | Spikes: ${spikes} (${scoreBreakdown.stabilizationParams.spikingSourceCount}) | Cap: ${(scoreBreakdown.stabilizationParams.effectiveRateCap * 100).toFixed(0)}% | Alpha: ${scoreBreakdown.stabilizationParams.effectiveAlpha.toFixed(2)}${scoreBreakdown.stabilizationParams.isRecalibrationActive ? " | RECAL" : ""}`;
-    
-    navigator.clipboard.writeText(summary).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }).catch((err) => {
-      console.error("[AdminDashboard] Clipboard copy failed:", err);
-      // Fallback: create temporary textarea for copying
-      try {
-        const textarea = document.createElement('textarea');
-        textarea.value = summary;
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textarea);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      } catch (fallbackErr) {
-        console.error("[AdminDashboard] Fallback copy also failed:", fallbackErr);
-      }
-    });
-  };
-  
-  return (
-    <Button
-      variant="ghost"
-      size="sm"
-      onClick={copyDebugSummary}
-      className="h-7 text-xs gap-1"
-      data-testid="button-copy-debug"
-    >
-      {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-      {copied ? "Copied!" : "Copy Summary"}
-    </Button>
-  );
-}
+import { normalizeMarketCategory, type CanonicalMarketCategory } from "@shared/constants";
+import {
+  MARKET_CATEGORIES,
+  GAINER_MARKET_CATEGORIES,
+  EMPTY_CELEBRITY_FORM,
+  DEFAULT_SEED_APPROVAL_COUNTS,
+  type AdminSection,
+  type AdminStats,
+  type TrafficStats,
+  type UserProfile,
+  type PredictionMarket,
+  type MarketEntryForm,
+  type AuditLogEntry,
+  type Celebrity,
+  type SeedRatingKey,
+  type SeedApprovalCounts,
+  type Matchup,
+  type CommunityInsight,
+  type InsightComment,
+  type ScoreBreakdownData,
+} from "@/pages/admin/adminTypes";
+import { fetchWithAuth, getAuthHeaders } from "@/pages/admin/adminAuth";
+import { CopyDebugSummaryButton } from "@/pages/admin/CopyDebugSummaryButton";
+import { SettleMarketModal } from "@/pages/admin/SettleMarketModal";
 
 function RelatedCelebritiesField({
   value,
@@ -1422,70 +1093,10 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
   );
 }
 
-function SettleMarketModal({ market, entries, open, onClose, onSettle, isPending }: {
-  market: PredictionMarket | null;
-  entries: { id: string; label: string; totalStake: number }[];
-  open: boolean;
-  onClose: () => void;
-  onSettle: (winnerEntryId: string, notes: string) => void;
-  isPending: boolean;
-}) {
-  const [winnerId, setWinnerId] = useState("");
-  const [notes, setNotes] = useState("");
-
-  if (!market) return null;
-
-  return (
-    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Settle Market</DialogTitle>
-          <DialogDescription>Select the winning outcome for: {market.title}</DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4 py-4">
-          <div className="space-y-2">
-            <Label>Winning Outcome</Label>
-            {entries.map(entry => (
-              <div 
-                key={entry.id}
-                className={cn(
-                  "flex items-center justify-between gap-2 p-3 rounded-lg border cursor-pointer transition-colors",
-                  winnerId === entry.id ? "border-green-500 bg-green-500/15 dark:bg-green-500/10" : "hover-elevate"
-                )}
-                onClick={() => setWinnerId(entry.id)}
-                data-testid={`settle-entry-${entry.id}`}
-              >
-                <span className="font-medium">{entry.label}</span>
-                <Badge variant="outline">{entry.totalStake} staked</Badge>
-              </div>
-            ))}
-          </div>
-          <div className="space-y-2">
-            <Label>Resolution Notes (optional)</Label>
-            <Textarea 
-              value={notes} 
-              onChange={(e) => setNotes(e.target.value)} 
-              placeholder="Why was this outcome selected?"
-              className="resize-none"
-              data-testid="input-settle-notes"
-            />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button 
-            onClick={() => onSettle(winnerId, notes)}
-            disabled={!winnerId || isPending}
-            data-testid="button-confirm-settle"
-          >
-            {isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle className="h-4 w-4 mr-2" />}
-            Settle Market
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
+// NOTE: SettleMarketModal is now imported from "@/pages/admin/SettleMarketModal".
+// CreateMarketModal (immediately above) is still defined inline because it
+// has deep ties to the admin component's toast/query state; extracting it is
+// scheduled for a follow-up refactor.
 
 export default function AdminDashboard() {
   const [, setLocation] = useLocation();
@@ -2071,26 +1682,9 @@ export default function AdminDashboard() {
     },
   });
 
-  const captureSnapshotsMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetchWithAuth("/api/admin/capture-snapshots", { method: "POST" });
-      if (!res.ok) throw new Error("Failed to capture snapshots");
-      return res.json();
-    },
-    onSuccess: (data: any) => {
-      toast({
-        title: "Snapshots Captured",
-        description: `Captured ${data.captured} trend snapshots`,
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Snapshot Failed",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
+  // NOTE: captureSnapshotsMutation was removed along with its backing endpoint.
+  // /api/admin/capture-snapshots always returned 0 — snapshots are written
+  // only by the hourly ingest job. Use "Refresh Data" to force a run.
 
   // Seed approval data mutation
   const seedApprovalMutation = useMutation({
@@ -6939,37 +6533,9 @@ export default function AdminDashboard() {
                 </CardContent>
               </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Camera className="h-5 w-5 text-amber-500" />
-                    Capture Snapshots
-                  </CardTitle>
-                  <CardDescription>
-                    Save current trend data for historical charts
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Button
-                    className="w-full"
-                    onClick={() => captureSnapshotsMutation.mutate()}
-                    disabled={captureSnapshotsMutation.isPending}
-                    data-testid="button-capture-snapshots"
-                  >
-                    {captureSnapshotsMutation.isPending ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Capturing...
-                      </>
-                    ) : (
-                      <>
-                        <Play className="h-4 w-4 mr-2" />
-                        Capture Snapshots
-                      </>
-                    )}
-                  </Button>
-                </CardContent>
-              </Card>
+              {/* "Capture Snapshots" card removed — its endpoint was a no-op.
+                  Snapshots are written only by the hourly ingest job; use
+                  "Refresh Data" to force a run. */}
 
               <Card>
                 <CardHeader>

@@ -1,4 +1,4 @@
-# VoxDex — Background Jobs & Schedulers
+﻿# VoxDex â€” Background Jobs & Schedulers
 
 ## Overview
 
@@ -10,8 +10,7 @@ VoxDex runs multiple background jobs on the backend service. They are bootstrapp
 
 | Job | Frequency | Purpose |
 |---|---|---|
-| Snapshot Scheduler | Every 60 minutes | Captures historical score snapshots for charts and backfills |
-| Ingestion Scheduler | Every hour at :02 | Full data fetch + score calculation |
+| Ingestion Scheduler | Every hour at :02 | Full data fetch + score calculation (also writes snapshots) |
 | LiveTick | Every 10 minutes | Fast rank recalculation (no external API calls) |
 | Seed Engine | Hourly at :30 (Mon-Tue only) | Discovers and seeds new people candidates |
 | Market Resolver | Every 5 minutes | Resolves completed prediction markets |
@@ -19,19 +18,7 @@ VoxDex runs multiple background jobs on the backend service. They are bootstrapp
 
 ---
 
-## 1. Snapshot Scheduler
-
-**Runs:** Every 60 minutes
-**Location:** `server/jobs/snapshot-scheduler.ts`
-
-### What it does:
-1. Captures point-in-time score data for charts and history views
-2. Preserves the historical series used by trend comparisons and diagnostics
-3. Gives the app a stable baseline for backfills and freshness monitoring
-
----
-
-## 2. Ingestion Scheduler
+## 1. Ingestion Scheduler
 
 **Runs:** Every hour at :02 past the hour (e.g. 14:02, 15:02)
 **Location:** `server/jobs/` + `server/ingestion/`
@@ -44,15 +31,15 @@ VoxDex runs multiple background jobs on the backend service. They are bootstrapp
 5. Releases lock and logs completion
 
 ### External APIs used:
-- **Serper** — Google search results / news mentions
-- **Mediastack** — News article volume and sentiment
-- **Wiki** — Wikipedia pageview counts
-- **GDELT** — Global news event database
+- **Serper** â€” Google search results / news mentions
+- **Mediastack** â€” News article volume and sentiment
+- **Wiki** â€” Wikipedia pageview counts
+- **GDELT** â€” Global news event database
 
 ### Source health states:
-- `HEALTHY` — API responding normally
-- `DEGRADED` — Some failures, using cached data
-- `OUTAGE` — API down, fully using cache
+- `HEALTHY` â€” API responding normally
+- `DEGRADED` â€” Some failures, using cached data
+- `OUTAGE` â€” API down, fully using cache
 
 ### Lock system:
 - Uses `ingest_locks` table in Supabase
@@ -62,11 +49,11 @@ VoxDex runs multiple background jobs on the backend service. They are bootstrapp
 ### Deduplication:
 - Each hour has a unique `hourBucket` timestamp
 - If a run already completed for that hour, it skips (`SKIP_ALREADY_INGESTED`)
-- Safe to restart — won't double-process
+- Safe to restart â€” won't double-process
 
 ---
 
-## 3. LiveTick
+## 2. LiveTick
 
 **Runs:** Every 10 minutes
 **Location:** `server/jobs/live-tick.ts`
@@ -88,7 +75,7 @@ Keeps the leaderboard feeling "live" between full hourly ingestions. Captures vo
 
 ---
 
-## 4. Seed Engine
+## 3. Seed Engine
 
 **Runs:** Hourly at :30 past the hour, Monday and Tuesday only
 **Location:** Bootstrapped in `server/index.ts`
@@ -99,11 +86,11 @@ Keeps the leaderboard feeling "live" between full hourly ingestions. Captures vo
 - Seeds approved candidates into the tracking pool
 
 ### Why Mon-Tue only:
-Limits API usage — seeding is expensive and only needs to run a couple of times per week.
+Limits API usage â€” seeding is expensive and only needs to run a couple of times per week.
 
 ---
 
-## 5. Market Resolver
+## 4. Market Resolver
 
 **Runs:** Every 5 minutes (with 2-minute startup delay)
 **Location:** `server/jobs/market-resolver.ts`
@@ -116,7 +103,7 @@ Limits API usage — seeding is expensive and only needs to run a couple of time
 
 ---
 
-## 6. Staleness Monitor
+## 5. Staleness Monitor
 
 **Runs:** Every 30 minutes
 **Location:** Bootstrapped in `server/index.ts`
@@ -124,11 +111,11 @@ Limits API usage — seeding is expensive and only needs to run a couple of time
 ### What it does:
 - Checks timestamp of latest `trend_snapshot`
 - If latest snapshot is >2.5 hours old, logs a staleness alert
-- Does not auto-fix — alerts only
+- Does not auto-fix â€” alerts only
 
 ### Log to watch:
 ```
-[STALENESS ALERT] Latest snapshot is 2h 29m old — ingestion may be delayed
+[STALENESS ALERT] Latest snapshot is 2h 29m old â€” ingestion may be delayed
 ```
 
 ---
@@ -161,9 +148,9 @@ GET /api/system/freshness
 ```
 
 Response includes:
-- `systemStatus` — healthy / degraded / outage
-- `fullRefreshAt` — last ingestion timestamp
-- `liveUpdatedAt` — last LiveTick timestamp
+- `systemStatus` â€” healthy / degraded / outage
+- `fullRefreshAt` â€” last ingestion timestamp
+- `liveUpdatedAt` â€” last LiveTick timestamp
 - Source health per provider (serper, mediastack, wiki, gdelt)
 
 ---
@@ -171,7 +158,7 @@ Response includes:
 ## Manual Trigger (if needed)
 
 If ingestion needs to be manually triggered on Railway:
-- Go to Railway → your backend service → terminal
+- Go to Railway â†’ your backend service â†’ terminal
 - The ingestion job runs automatically but can be inspected via logs
 
 ---
@@ -185,6 +172,7 @@ If ingestion missed an hour (e.g. Railway restart), the backfill system:
 
 Log to watch:
 ```
-[Backfill] Found 1 gap(s) in last 12h — filling sequentially
+[Backfill] Found 1 gap(s) in last 12h â€” filling sequentially
 [Backfill] SKIP_ALREADY_INGESTED: Hour already has completed run
 ```
+

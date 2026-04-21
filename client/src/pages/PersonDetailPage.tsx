@@ -60,6 +60,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { profileSectionGridClass } from "@/lib/profileSectionGridClass";
 import { isUnauthorizedApiError, signInToVoteToastOptions } from "@/lib/signInToVoteToast";
 import { navigateToLogin } from "@/lib/authReturn";
+import { parseVoteError } from "@/lib/voteErrors";
 import { ViewAllOverlayHeader } from "@/components/ViewAllOverlayHeader";
 import { AvatarHeightHeadline } from "@/components/AvatarHeightHeadline";
 import { VersusCard, type VersusCardMatchup } from "@/components/matchups/VersusCard";
@@ -873,9 +874,10 @@ export default function PersonDetailPage() {
       if (isUnauthorizedApiError(error)) {
         toast({ ...signInToVoteToastOptions(() => navigateToLogin(setLocation)) });
       } else {
+        const parsed = parseVoteError(error);
         toast({
-          title: "Error",
-          description: error.message || "Failed to submit vote",
+          title: parsed.retryAfter ? "Slow down" : "Error",
+          description: parsed.message || "Failed to submit vote",
           variant: "destructive",
         });
       }
@@ -911,9 +913,10 @@ export default function PersonDetailPage() {
       if (isUnauthorizedApiError(error)) {
         toast({ ...signInToVoteToastOptions(() => navigateToLogin(setLocation)) });
       } else {
+        const parsed = parseVoteError(error);
         toast({
-          title: "Error",
-          description: error.message || "Failed to update vote",
+          title: parsed.retryAfter ? "Slow down" : "Error",
+          description: parsed.message || "Failed to update vote",
           variant: "destructive",
         });
       }

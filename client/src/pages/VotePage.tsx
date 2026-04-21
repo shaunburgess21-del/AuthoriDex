@@ -110,6 +110,7 @@ import {
   type VoteResumePayload,
 } from "@/lib/authReturn";
 import { navigateWithVoteList } from "@/lib/voteListNavigation";
+import { parseVoteError } from "@/lib/voteErrors";
 import { usePeopleSearch, type SearchablePerson } from "@/hooks/usePeopleSearch";
 import { SuggestCategorySelect } from "@/components/suggest/SuggestCategorySelect";
 import { SuggestDurationPicker } from "@/components/suggest/SuggestDurationPicker";
@@ -955,23 +956,9 @@ function DiscourseCard({
   );
 }
 
-function parseVoteError(err: unknown): { message: string; retryAfter?: number } {
-  const retryAfter = (err as any)?.retryAfter as number | undefined;
-  if (err instanceof Error && err.message) {
-    const jsonMatch = err.message.match(/^\d+:\s*(\{[\s\S]*\})\s*$/);
-    if (jsonMatch) {
-      try {
-        const j = JSON.parse(jsonMatch[1]) as { error?: string };
-        if (j.error) return { message: j.error, retryAfter };
-      } catch {
-        /* ignore */
-      }
-    }
-    if (err.message.startsWith("429")) return { message: "Too many votes. Please slow down.", retryAfter: retryAfter ?? 60 };
-    return { message: err.message, retryAfter };
-  }
-  return { message: "Something went wrong. Please try again." };
-}
+// parseVoteError was extracted to client/src/lib/voteErrors.ts so other vote
+// surfaces (PersonDetailPage, AnimatedSentimentVotingWidget) can share the
+// same rate-limit-aware UX. Imported at the top of this file.
 
 function CarouselSection({
   title,

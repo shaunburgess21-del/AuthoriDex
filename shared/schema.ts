@@ -12,8 +12,8 @@ export const marketOutcomeEnum = pgEnum("market_outcome", ["yes", "no"]);
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
-  /** @deprecated Legacy field — auth is handled by Supabase. Never read or write this. */
-  password: text("password").notNull(),
+  // Note: the legacy `password` column was dropped in migration 0012. Auth is
+  // handled exclusively by Supabase via the `profiles` table.
   email: text("email").unique(),
   walletAddress: text("wallet_address"),
   xpPoints: integer("xp_points").notNull().default(0),
@@ -216,7 +216,8 @@ export const insightItemsRelations = relations(insightItems, ({ one }) => ({
 export const userVotes = pgTable("user_votes", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull(), // Supabase auth user ID
-  personId: varchar("person_id").notNull(), // References tracked person
+  // FK added in migration 0013 (NOT VALID → needs VALIDATE after orphan cleanup)
+  personId: varchar("person_id").notNull().references(() => trackedPeople.id, { onDelete: "cascade" }),
   personName: text("person_name").notNull(), // Cached for quick display
   rating: integer("rating").notNull(), // 1-10 sentiment score
   votedAt: timestamp("voted_at").notNull().defaultNow(),
@@ -282,7 +283,8 @@ export type InsertUserFavourite = z.infer<typeof insertUserFavouriteSchema>;
 // Community Insights - user-generated insights/posts about tracked people
 export const communityInsights = pgTable("community_insights", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  personId: varchar("person_id").notNull(), // References tracked person
+  // FK added in migration 0013 (NOT VALID → needs VALIDATE after orphan cleanup)
+  personId: varchar("person_id").notNull().references(() => trackedPeople.id, { onDelete: "cascade" }),
   userId: varchar("user_id").notNull(), // Supabase auth user ID
   username: text("username").notNull(), // Cached for quick display
   content: text("content").notNull(),
@@ -358,7 +360,8 @@ export type InsertCommentVote = z.infer<typeof insertCommentVoteSchema>;
 // Celebrity Profiles - AI-generated biographical data with caching
 export const celebrityProfiles = pgTable("celebrity_profiles", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  personId: varchar("person_id").notNull().unique(),
+  // FK added in migration 0013 (NOT VALID → needs VALIDATE after orphan cleanup)
+  personId: varchar("person_id").notNull().unique().references(() => trackedPeople.id, { onDelete: "cascade" }),
   personName: text("person_name").notNull(),
   shortBio: text("short_bio").notNull(),
   longBio: text("long_bio"), // Extended bio for "read more"
@@ -758,7 +761,9 @@ export type InsertXpLedger = z.infer<typeof insertXpLedgerSchema>;
 // Credit Ledger - Immutable transaction log for virtual/real credits (Source of Truth)
 export const creditLedger = pgTable("credit_ledger", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull(),
+  // FK added in migration 0013 (NOT VALID → needs VALIDATE after orphan cleanup).
+  // NO cascade — credit history is an audit log and must survive profile deletion.
+  userId: varchar("user_id").notNull().references(() => profiles.id, { onDelete: "restrict" }),
   txnType: text("txn_type").notNull(), // 'prediction_stake', 'prediction_payout', 'bonus', 'admin_adjustment'
   amount: integer("amount").notNull(), // Positive = credit, Negative = debit
   walletType: text("wallet_type").notNull().default("VIRTUAL"), // 'VIRTUAL' (Phase 1), 'REAL' (Phase 2)
@@ -1372,7 +1377,8 @@ export type OpinionPollCommentVote = typeof opinionPollCommentVotes.$inferSelect
 
 export const commentReports = pgTable("comment_reports", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  commentId: varchar("comment_id").notNull(),
+  // FK added in migration 0013 (NOT VALID → needs VALIDATE after orphan cleanup)
+  commentId: varchar("comment_id").notNull().references(() => insightComments.id, { onDelete: "cascade" }),
   entityType: text("entity_type").notNull(),
   reporterId: varchar("reporter_id").notNull(),
   reason: text("reason"),

@@ -5,15 +5,35 @@ import https from "https";
 
 const GDELT_API_BASE = "https://api.gdeltproject.org/api/v2/doc/doc";
 
-const GDELT_RELAX_SSL = process.env.GDELT_RELAX_SSL === "true";
+// GDELT_RELAX_SSL is an escape hatch for environments that can't validate the
+// GDELT certificate chain (corporate MITM proxies, older Node/OpenSSL builds).
+// It must NEVER be left on in production — disabling TLS verification opens
+// the door to on-path tampering with the news-volume data we ingest.
+const GDELT_RELAX_SSL_RAW = (process.env.GDELT_RELAX_SSL ?? "").trim().toLowerCase();
+const GDELT_RELAX_SSL_REQUESTED = GDELT_RELAX_SSL_RAW === "true" || GDELT_RELAX_SSL_RAW === "1";
+const IS_PROD = process.env.NODE_ENV === "production";
+
+// Hard-gate: in production we refuse to relax TLS verification even if the env
+// var is set. This stops a stray Railway/Heroku config from silently weakening
+// our news ingest. To override (emergency only), set GDELT_RELAX_SSL_FORCE=true.
+const GDELT_RELAX_SSL_FORCE = (process.env.GDELT_RELAX_SSL_FORCE ?? "").trim().toLowerCase() === "true";
+const GDELT_RELAX_SSL = GDELT_RELAX_SSL_REQUESTED && (!IS_PROD || GDELT_RELAX_SSL_FORCE);
 
 const httpsAgent = new https.Agent({
   rejectUnauthorized: !GDELT_RELAX_SSL,
   timeout: 15000,
 });
 
+if (GDELT_RELAX_SSL_REQUESTED && !GDELT_RELAX_SSL) {
+  console.warn(
+    "[GDELT] GDELT_RELAX_SSL=true is ignored in production. Set GDELT_RELAX_SSL_FORCE=true only as an emergency override — disabling TLS verification lets news counts be tampered with in transit."
+  );
+}
 if (GDELT_RELAX_SSL) {
-  console.warn("[GDELT] SSL certificate verification disabled via GDELT_RELAX_SSL=true");
+  const warning = IS_PROD
+    ? "[GDELT] DANGER — SSL certificate verification disabled in PRODUCTION via GDELT_RELAX_SSL_FORCE=true. News-volume data is no longer authenticated. Remove this flag as soon as the underlying issue is resolved."
+    : "[GDELT] SSL certificate verification disabled via GDELT_RELAX_SSL=true (non-production environment).";
+  console.warn(warning);
 }
 
 const MAX_RETRIES = 3;

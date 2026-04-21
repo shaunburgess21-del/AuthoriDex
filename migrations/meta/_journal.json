@@ -85,6 +85,20 @@
       "when": 1776614400000,
       "tag": "0011_xp_ledger_user_action_date_idx",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1776700800000,
+      "tag": "0012_drop_legacy_users_password",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1776787200000,
+      "tag": "0013_add_missing_foreign_keys",
+      "breakpoints": true
     }
   ]
 }

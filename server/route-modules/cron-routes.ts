@@ -33,30 +33,9 @@ export function registerCronRoutes(app: Express): void {
     next();
   };
 
-  app.post("/api/cron/capture-snapshots", verifyCronSecret, async (_req, res) => {
-    const startTime = Date.now();
-    try {
-      const { captureHourlySnapshots } = await import("../jobs/snapshot-scheduler");
-      const result = await captureHourlySnapshots();
-
-      res.json({
-        success: true,
-        message: "Snapshots captured successfully",
-        captured: result.captured,
-        errors: result.errors,
-        duration: Date.now() - startTime,
-        timestamp: new Date().toISOString(),
-      });
-    } catch (error: any) {
-      console.error("[Cron] Snapshot capture error:", error);
-      res.status(500).json({
-        success: false,
-        error: error.message,
-        duration: Date.now() - startTime,
-        timestamp: new Date().toISOString(),
-      });
-    }
-  });
+  // NOTE: POST /api/cron/capture-snapshots was removed. It called a no-op
+  // (captureHourlySnapshots) that always returned zero writes. Snapshots are
+  // written exclusively by the ingest job — use /api/cron/refresh-data.
 
   app.post("/api/cron/refresh-data", verifyCronSecret, async (_req, res) => {
     const startTime = Date.now();
