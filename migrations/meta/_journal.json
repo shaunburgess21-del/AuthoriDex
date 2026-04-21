@@ -113,6 +113,13 @@
       "when": 1776960000000,
       "tag": "0015_page_views_country",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1777046400000,
+      "tag": "0016_create_missing_tables",
+      "breakpoints": true
     }
   ]
 }

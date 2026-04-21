@@ -11,8 +11,14 @@
 --     then audit + clean them up, and run `ALTER TABLE ... VALIDATE
 --     CONSTRAINT` on your own schedule.
 --
--- All constraints use IF NOT EXISTS so this migration is idempotent and safe
--- to re-run against an environment that was patched by hand.
+-- Every block is guarded by `to_regclass(...) IS NOT NULL` on BOTH the source
+-- and target table, plus a `pg_constraint` existence check. This makes the
+-- migration:
+--   • Idempotent — re-running against an already-patched environment is a no-op.
+--   • Drift-tolerant — if a referenced table doesn't yet exist in this environment
+--     (e.g. `comment_reports` exists in schema.ts but wasn't in prod yet), the
+--     FK is silently skipped with a NOTICE instead of crashing the deploy.
+--     A later migration that creates the missing table can add the FK itself.
 --
 -- To validate (scan + enforce) later, after cleaning orphans:
 --   ALTER TABLE user_votes         VALIDATE CONSTRAINT fk_user_votes_person;
@@ -26,7 +32,10 @@
 -- the person. This is rare (tracked_people deletion is basically never).
 DO $$
 BEGIN
-  IF NOT EXISTS (
+  IF to_regclass('public.user_votes') IS NULL
+     OR to_regclass('public.tracked_people') IS NULL THEN
+    RAISE NOTICE 'Skipping fk_user_votes_person: source or target table missing.';
+  ELSIF NOT EXISTS (
     SELECT 1 FROM pg_constraint WHERE conname = 'fk_user_votes_person'
   ) THEN
     ALTER TABLE user_votes
@@ -39,7 +48,10 @@ END$$;
 -- ─── community_insights.person_id → tracked_people.id ──────────────────────
 DO $$
 BEGIN
-  IF NOT EXISTS (
+  IF to_regclass('public.community_insights') IS NULL
+     OR to_regclass('public.tracked_people') IS NULL THEN
+    RAISE NOTICE 'Skipping fk_community_insights_person: source or target table missing.';
+  ELSIF NOT EXISTS (
     SELECT 1 FROM pg_constraint WHERE conname = 'fk_community_insights_person'
   ) THEN
     ALTER TABLE community_insights
@@ -53,7 +65,10 @@ END$$;
 -- Already has a UNIQUE constraint; adding the FK completes the logical 1:1.
 DO $$
 BEGIN
-  IF NOT EXISTS (
+  IF to_regclass('public.celebrity_profiles') IS NULL
+     OR to_regclass('public.tracked_people') IS NULL THEN
+    RAISE NOTICE 'Skipping fk_celebrity_profiles_person: source or target table missing.';
+  ELSIF NOT EXISTS (
     SELECT 1 FROM pg_constraint WHERE conname = 'fk_celebrity_profiles_person'
   ) THEN
     ALTER TABLE celebrity_profiles
@@ -68,7 +83,10 @@ END$$;
 -- because a profile row was pruned. Use RESTRICT so deletions surface explicitly.
 DO $$
 BEGIN
-  IF NOT EXISTS (
+  IF to_regclass('public.credit_ledger') IS NULL
+     OR to_regclass('public.profiles') IS NULL THEN
+    RAISE NOTICE 'Skipping fk_credit_ledger_user: source or target table missing.';
+  ELSIF NOT EXISTS (
     SELECT 1 FROM pg_constraint WHERE conname = 'fk_credit_ledger_user'
   ) THEN
     ALTER TABLE credit_ledger
@@ -82,7 +100,10 @@ END$$;
 -- CASCADE so removing a comment also removes any reports against it.
 DO $$
 BEGIN
-  IF NOT EXISTS (
+  IF to_regclass('public.comment_reports') IS NULL
+     OR to_regclass('public.insight_comments') IS NULL THEN
+    RAISE NOTICE 'Skipping fk_comment_reports_comment: source or target table missing.';
+  ELSIF NOT EXISTS (
     SELECT 1 FROM pg_constraint WHERE conname = 'fk_comment_reports_comment'
   ) THEN
     ALTER TABLE comment_reports
