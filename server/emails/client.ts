@@ -67,9 +67,9 @@ const senderDomainReady =
  */
 export const senders = senderDomainReady
   ? {
-      auth:       "VoxDex <no-reply@auth.voxdex.com>",
+      auth:       "VoxDex <hello@voxdex.com>",
       lifecycle:  "VoxDex <hello@voxdex.com>",
-      engagement: "VoxDex Weekly <weekly@news.voxdex.com>",
+      engagement: "VoxDex Weekly <weekly@voxdex.com>",
     }
   : {
       auth:       "VoxDex (dev) <onboarding@resend.dev>",
