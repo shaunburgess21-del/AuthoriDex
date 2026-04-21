@@ -105,6 +105,27 @@ export function getSmoothingMode(): SmoothingMode {
 }
 
 // ============================================================================
+// NEWS AGGREGATION MODE - Multi-source news count vs tiered fallback
+// ============================================================================
+// "tiered" = legacy behaviour. Mediastack primary, GDELT fallback, Serper News
+//            emergency fallback. Exactly one provider wins per run.
+// "union"  = new multi-source mode. All three providers called in parallel,
+//            URLs deduplicated, finalCount = max(mediastackPaginationTotal,
+//            unionCount). Preserves Mediastack's uncapped signal for
+//            mega-stories and captures articles other providers catch that
+//            Mediastack missed.
+//
+// Default is "tiered" for zero-risk rollout. Flip to "union" via
+// NEWS_AGGREGATION_MODE env var on Railway; no redeploy required.
+
+export type NewsAggregationMode = "tiered" | "union";
+
+export function getNewsAggregationMode(): NewsAggregationMode {
+  const raw = (process.env.NEWS_AGGREGATION_MODE ?? "tiered").trim().toLowerCase();
+  return raw === "union" ? "union" : "tiered";
+}
+
+// ============================================================================
 // AUTO CATCH-UP MODE - Gap-driven dynamic rate boosting (DB-persisted)
 // ============================================================================
 // When the median gap between raw and final scores exceeds a threshold,

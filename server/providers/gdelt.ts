@@ -164,6 +164,9 @@ export interface GdeltNewsData {
   averageDaily7d: number;
   delta: number;
   topHeadlines: string[];
+  // Optional URL list used by the multi-source news aggregator for dedup.
+  // Legacy cached entries may not have this field; aggregator falls back to counts.
+  articles?: Array<{ url: string; title?: string; publishedAt?: string }>;
 }
 
 async function getCachedResponse(cacheKey: string): Promise<string | null> {
@@ -295,6 +298,7 @@ export async function fetchGdeltNews(
     let articleCount24h = 0;
     let articleCount7d = 0;
     let topHeadlines: string[] = [];
+    let articles: Array<{ url: string; title?: string; publishedAt?: string }> = [];
 
     if (response24h?.ok) {
       const text = await response24h.text();
@@ -304,6 +308,13 @@ export async function fetchGdeltNews(
         topHeadlines = (data.articles || [])
           .slice(0, 3)
           .map((a: { title?: string }) => a.title || "");
+        articles = (data.articles || [])
+          .filter((a: { url?: string }) => !!a.url)
+          .map((a: { url: string; title?: string; seendate?: string }) => ({
+            url: a.url,
+            title: a.title,
+            publishedAt: a.seendate,
+          }));
       } catch {
         articleCount24h = 0;
       }
@@ -331,6 +342,7 @@ export async function fetchGdeltNews(
       averageDaily7d,
       delta,
       topHeadlines,
+      articles,
     };
 
     await setCachedResponse(cacheKey, "gdelt", personId || null, JSON.stringify(result), 2);

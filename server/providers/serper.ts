@@ -447,6 +447,9 @@ export interface SerperNewsCountData {
   delta: number;
   topHeadlines: string[];
   source: "serper_news";
+  // Optional URL list used by the multi-source news aggregator for dedup.
+  // Legacy cached entries may not have this field; aggregator falls back to counts.
+  articles?: Array<{ url: string; title?: string; publishedAt?: string }>;
 }
 
 export async function fetchSerperNewsCount(name: string, personId?: string): Promise<SerperNewsCountData | null> {
@@ -509,6 +512,14 @@ export async function fetchSerperNewsCount(name: string, personId?: string): Pro
       .slice(0, 3)
       .map((a: any) => a.title || "");
 
+    const articles = (data24h.news || [])
+      .filter((a: any) => !!a.link)
+      .map((a: any) => ({
+        url: a.link as string,
+        title: a.title as string | undefined,
+        publishedAt: a.date as string | undefined,
+      }));
+
     const result: SerperNewsCountData = {
       query: name,
       articleCount24h,
@@ -517,6 +528,7 @@ export async function fetchSerperNewsCount(name: string, personId?: string): Pro
       delta,
       topHeadlines,
       source: "serper_news",
+      articles,
     };
 
     await setCachedResponse(cacheKey, "serper_news", JSON.stringify(result), CACHE_TTL_HOURS);

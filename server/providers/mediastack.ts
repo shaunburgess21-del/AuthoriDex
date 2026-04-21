@@ -12,6 +12,12 @@ const REQUEST_TIMEOUT_MS = 15000;
 
 const BUDGET_TRACKER_KEY = "system:mediastack_budget";
 
+export interface NewsArticleRef {
+  url: string;
+  title?: string;
+  publishedAt?: string;
+}
+
 export interface MediastackNewsData {
   query: string;
   articleCount24h: number;
@@ -22,6 +28,9 @@ export interface MediastackNewsData {
   source: "mediastack";
   paginationTotal: number;
   languageRelaxed?: boolean;
+  // Used by the multi-source aggregator for URL-level dedup. Legacy cached
+  // entries may not have this field; aggregator falls back to counts in that case.
+  articles?: NewsArticleRef[];
 }
 
 export interface MediastackBatchStats {
@@ -339,6 +348,9 @@ export async function fetchMediastackNews(
     let topHeadlines = (data.data || [])
       .slice(0, 3)
       .map(a => a.title || "");
+    let articles: NewsArticleRef[] = (data.data || [])
+      .filter(a => !!a.url)
+      .map(a => ({ url: a.url, title: a.title, publishedAt: a.published_at }));
     let languageRelaxed = false;
 
     if (articleCount24h === 0) {
@@ -353,6 +365,9 @@ export async function fetchMediastackNews(
         // pipeline backfills English headlines via Serper for people with
         // languageRelaxed=true.
         languageRelaxed = true;
+        articles = (retryData.data || [])
+          .filter(a => !!a.url)
+          .map(a => ({ url: a.url, title: a.title, publishedAt: a.published_at }));
         console.log(`[Mediastack] Language-relaxed retry for "${queryText}": ${articleCount24h} articles (vs 0 with languages=en); headlines left empty for English backfill`);
       }
     }
@@ -367,6 +382,7 @@ export async function fetchMediastackNews(
       source: "mediastack",
       paginationTotal: articleCount24h,
       languageRelaxed,
+      articles,
     };
 
     await setCachedResponse(cacheKey, "mediastack", JSON.stringify(result), CACHE_TTL_HOURS);

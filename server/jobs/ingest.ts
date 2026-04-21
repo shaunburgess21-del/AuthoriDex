@@ -6,6 +6,7 @@ import { fetchBatchWikiPageviews } from "../providers/wiki";
 import { fetchBatchGdeltNews, GdeltBatchOptions, GdeltBatchStats } from "../providers/gdelt";
 import { fetchSerperBatch, fetchSerperNewsBatch, getSerperRunStats, resetSerperRunStats } from "../providers/serper";
 import { fetchMediastackBatch, isMediastackConfigured, MediastackBatchStats, shouldRefreshMediastack } from "../providers/mediastack";
+import { fetchMultiSourceNewsBatch, type AggregatorStats } from "../providers/news-aggregator";
 import { computeTrendScore } from "../scoring/trendScore";
 import { refreshSourceStats } from "../scoring/sourceStats";
 import { evaluateCanaries, CanaryReport, getCanaryNames } from "../scoring/canaryMonitor";
@@ -38,6 +39,7 @@ import {
   EMA_ALPHA_3_SOURCES,
   SCORE_VERSION,
   getSmoothingMode,
+  getNewsAggregationMode,
 } from "../scoring/normalize";
 
 const GDELT_CANDIDATE_COUNT = 25;
@@ -81,7 +83,7 @@ export const SNAPSHOT_DIAGNOSTICS_VERSION = 1;
 
 export interface LastRunMeta {
   runId: string;
-  newsProviderUsed: "mediastack" | "gdelt" | "serper_news";
+  newsProviderUsed: "mediastack" | "gdelt" | "serper_news" | "union";
   newsFreshCoveragePct: number;
   searchFreshCoveragePct: number;
   newsGovernorFactor: number;
@@ -488,28 +490,131 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     sourceStatuses.wiki = wikiData.size > 0 ? "OK" : "FAILED";
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // NEWS DATA FETCHING — Cascading provider chain:
-    //   1. Mediastack (primary, paid, every 2 hours)
-    //   2. GDELT (secondary, free, fallback)
-    //   3. Serper News (emergency, paid, last resort)
+    // NEWS DATA FETCHING
     //
-    // On even UTC hours: call Mediastack fresh for all people
-    // On odd UTC hours: reuse Mediastack cache (2h TTL) — no API calls
-    // If Mediastack fails or isn't configured: fall through to GDELT → Serper
+    // Two modes, gated by NEWS_AGGREGATION_MODE env:
+    //
+    //   "tiered" (default) — Cascading provider chain:
+    //     1. Mediastack (primary, paid, every 2 hours)
+    //     2. GDELT (secondary, free, fallback)
+    //     3. Serper News (emergency, paid, last resort)
+    //
+    //   "union" — Multi-source parallel aggregation:
+    //     All three providers called in parallel every tick. Articles
+    //     deduplicated by canonicalised URL. finalCount preserves
+    //     Mediastack's uncapped paginationTotal while picking up articles
+    //     other providers catch that Mediastack missed.
     // ═══════════════════════════════════════════════════════════════════════════
     const COVERAGE_THRESHOLD = 0.70;
     const SERPER_NEWS_FALLBACK_THRESHOLD = 0.30;
     const GDELT_QUALITY_THRESHOLD = 3;
-    let newsSource: "mediastack" | "gdelt" | "serper_news" = "gdelt";
+    const newsAggregationMode = getNewsAggregationMode();
+    let newsSource: "mediastack" | "gdelt" | "serper_news" | "union" = "gdelt";
     let newsData = new Map<string, any>();
     let gdeltBatchStats: GdeltBatchStats | null = null;
     let mediastackBatchStats: MediastackBatchStats | null = null;
+    let aggregatorStats: AggregatorStats | null = null;
 
     const mediastackAvailable = isMediastackConfigured();
     let mediastackCadence: { shouldRefresh: boolean; lastFetchAt: Date | null; ageMs: number | null; budgetThrottled: boolean } | null = null;
 
-    // ── TIER 1: Mediastack (primary) ──────────────────────────────────────────
-    if (mediastackAvailable) {
+    if (newsAggregationMode === "union") {
+      console.log(`[Ingest] NEWS_AGGREGATION_MODE=union — calling Mediastack + GDELT + Serper News in parallel`);
+      const unionStart = Date.now();
+      try {
+        const leaderboardRanks = await db.select({ name: trendingPeople.name, rank: trendingPeople.rank }).from(trendingPeople);
+        const rankMap = new Map(leaderboardRanks.map(r => [r.name, r.rank ?? 9999]));
+        const peopleSortedByRank = [...people].sort((a, b) => (rankMap.get(a.name) ?? 9999) - (rankMap.get(b.name) ?? 9999));
+        const top25Ids = new Set(peopleSortedByRank.slice(0, 25).map(p => p.id));
+        const canaryNames = new Set(getCanaryNames());
+        const canaryIds = new Set(people.filter(p => canaryNames.has(p.name)).map(p => p.id));
+        const widenCandidateIds = new Set([...Array.from(top25Ids), ...Array.from(canaryIds)]);
+        const gdeltCandidates = await computeNewsCandidates(people, wikiData);
+        const newsHealth = getCurrentHealthSnapshot().news;
+        const gdeltIsDegraded = newsHealth.state === "DEGRADED" || newsHealth.state === "OUTAGE" || newsHealth.state === "RECOVERY";
+
+        const aggResult = await fetchMultiSourceNewsBatch(
+          people.map(p => ({
+            id: p.id,
+            name: p.name,
+            newsQueryWidened: p.newsQueryWidened,
+            searchQueryOverride: p.searchQueryOverride,
+          })),
+          {
+            gdeltCandidates,
+            mediastackWidenCandidateIds: widenCandidateIds,
+            gdeltIsDegraded,
+            gdeltTimeBudgetMs: 120000,
+            peopleSortedByRank: peopleSortedByRank.map(p => ({
+              id: p.id,
+              name: p.name,
+              newsQueryWidened: p.newsQueryWidened,
+              searchQueryOverride: p.searchQueryOverride,
+            })),
+          },
+        );
+
+        newsData = aggResult.data as Map<string, any>;
+        newsSource = "union";
+        mediastackBatchStats = aggResult.mediastackBatchStats;
+        gdeltBatchStats = aggResult.gdeltBatchStats;
+        mediastackCadence = aggResult.mediastackCadence;
+        aggregatorStats = aggResult.stats;
+
+        const ps = aggResult.stats.providers;
+        sourceStatuses.mediastack = ps.mediastack.succeeded
+          ? (ps.mediastack.peopleWithData > 0 ? "OK" : "DEGRADED")
+          : (ps.mediastack.attempted ? "FAILED" : "SKIPPED");
+        sourceStatuses.gdelt = ps.gdelt.succeeded
+          ? (ps.gdelt.peopleWithData > 0 ? "OK" : "DEGRADED")
+          : "FAILED";
+        sourceStatuses.serper = ps.serper.succeeded
+          ? (ps.serper.peopleWithData > 0 ? "OK" : "DEGRADED")
+          : "FAILED";
+
+        sourceTimings.mediastack = ps.mediastack.elapsedMs;
+        sourceTimings.gdelt = ps.gdelt.elapsedMs;
+        sourceTimings.serper = ps.serper.elapsedMs;
+      } catch (err) {
+        console.error(`[Ingest] Union aggregator failed, aborting news fetch:`, err);
+        sourceStatuses.mediastack = "FAILED";
+        sourceStatuses.gdelt = "FAILED";
+        newsData = new Map();
+      }
+      console.log(`[Ingest] Union aggregation complete in ${((Date.now() - unionStart) / 1000).toFixed(1)}s — ${newsData.size}/${people.length} people with data`);
+
+      // Baseline drift logging — for each person where union materially beats
+      // the legacy tiered count, log it so we can calibrate DEFAULT_SOURCE_STATS
+      // after 24h of observation before deciding to retune.
+      if (aggregatorStats) {
+        const DRIFT_MULTIPLIER_THRESHOLD = 3;
+        const DRIFT_ABSOLUTE_THRESHOLD = 5;
+        const drifts: Array<{ name: string; legacy: number; final: number; ratio: number }> = [];
+        for (const person of people) {
+          const entry = newsData.get(person.id);
+          if (!entry || entry.source !== "union") continue;
+          const legacy = entry.legacyTieredCount ?? 0;
+          const final = entry.articleCount24h ?? 0;
+          if (final < DRIFT_ABSOLUTE_THRESHOLD) continue;
+          const ratio = legacy > 0 ? final / legacy : (final > 0 ? Infinity : 0);
+          if (ratio >= DRIFT_MULTIPLIER_THRESHOLD) {
+            drifts.push({ name: person.name, legacy, final, ratio });
+          }
+        }
+        drifts.sort((a, b) => b.final - a.final);
+        if (drifts.length > 0) {
+          const top = drifts.slice(0, 10).map(d =>
+            `${d.name}: legacy=${d.legacy} → final=${d.final} (${d.ratio === Infinity ? "∞" : d.ratio.toFixed(1) + "x"})`
+          ).join("; ");
+          console.log(`[News Aggregator] Baseline drift (${drifts.length} people with >=${DRIFT_MULTIPLIER_THRESHOLD}x gain): ${top}`);
+        } else {
+          console.log(`[News Aggregator] Baseline drift: 0 people crossed >=${DRIFT_MULTIPLIER_THRESHOLD}x threshold — union counts align with legacy tiered counts`);
+        }
+      }
+    }
+
+    // ── TIER 1: Mediastack (primary) — TIERED MODE ONLY ──────────────────────
+    if (newsAggregationMode !== "union" && mediastackAvailable) {
       const msStart = Date.now();
       try {
         mediastackCadence = await shouldRefreshMediastack();
@@ -637,8 +742,8 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
       }
     }
 
-    // ── TIER 2: GDELT (secondary) ────────────────────────────────────────────
-    if (newsSource !== "mediastack") {
+    // ── TIER 2: GDELT (secondary) — TIERED MODE ONLY ─────────────────────────
+    if (newsAggregationMode !== "union" && newsSource !== "mediastack") {
       const gdeltCandidates = await computeNewsCandidates(people, wikiData);
       let gdeltStart = Date.now();
       try {
@@ -1190,7 +1295,7 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     // global_zero signal so the health state can transition out of OUTAGE.
     // Without this, the near-zero threshold (5) in detectGlobalOutage would keep
     // re-triggering OUTAGE even when fallback data is meaningful (median >= 3).
-    const fallbackOverridesOutage = (newsSource === "serper_news" && !gdeltQualityLow) || newsSource === "mediastack";
+    const fallbackOverridesOutage = (newsSource === "serper_news" && !gdeltQualityLow) || newsSource === "mediastack" || newsSource === "union";
 
     if (newsSource !== "gdelt") {
       console.log(`[Ingest] Post-news-fetch quality (${newsSource}): globalZero=${globalHealth.isNewsGlobalOutage}, nearZeroPct=${(globalHealth.newsNearZeroPercent * 100).toFixed(0)}%, fallbackOverride=${fallbackOverridesOutage}`);
@@ -1330,7 +1435,7 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
         // per-person Serper) and has meaningful article counts, prefer it over decayed
         // fill-forward values. This prevents the system from ignoring good fallback data.
         const hasPerPersonFallback = news?._perPersonFallback === true;
-        const newsHasGoodFallbackData = (newsSource === "serper_news" || hasPerPersonFallback) && news && newsCount >= 3;
+        const newsHasGoodFallbackData = (newsSource === "serper_news" || newsSource === "union" || hasPerPersonFallback) && news && newsCount >= 3;
         
         // Also detect individual suspicious drop, but only activate fallback if global outage
         const suspiciousNewsDrop = news && prevNewsCount >= 5 && 
@@ -1584,6 +1689,15 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
             newsSource: hasPerPersonFallback ? "serper_news" : newsSource,
             newsIsRefresh: newsSource === "mediastack" ? (mediastackCadence?.shouldRefresh ?? true) : true,
             ...(hasPerPersonFallback ? { fallbackReason: news?._fallbackReason ?? "per_person_zero_streak" } : {}),
+            ...(newsSource === "union" && news?.source === "union" ? {
+              newsUnion: {
+                unionCount: news.unionCount ?? 0,
+                mediastackTotal: news.mediastackPaginationTotal ?? 0,
+                legacyTieredCount: news.legacyTieredCount ?? 0,
+                contributingProviders: news.contributingProviders ?? [],
+                perSourceCounts: news.perSourceCounts ?? null,
+              },
+            } : {}),
             newsEmaHeld,
             searchEmaHeld,
             stickyZeroGuard,
@@ -1909,6 +2023,7 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
       rows: processed,
       lock: "acquired",
       smoothingMode: getSmoothingMode(),
+      newsAggregationMode,
       sources: {
         wiki: wikiData.size < people.length * 0.7 ? "DEGRADED" : "OK",
         news: newsApiUsedFallback > people.length * 0.3 ? "DEGRADED" : "OK",
@@ -1964,11 +2079,11 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
         searchFreshnessGovernor: `${(searchGovernorFactor * 100).toFixed(0)}%`,
         newsProviderUsed: newsSource,
         newsFreshCoveragePct: `${newsCoveragePctActual.toFixed(0)}%`,
-        newsLiveApiFetched: newsSource === "mediastack"
-          ? (mediastackBatchStats?.fetched ?? 0)
+        newsLiveApiFetched: newsSource === "mediastack" || newsSource === "union"
+          ? ((mediastackBatchStats?.fetched ?? 0) + (gdeltBatchStats?.liveApiFetched ?? 0))
           : (gdeltBatchStats?.liveApiFetched ?? 0),
-        newsCacheReused: newsSource === "mediastack"
-          ? (mediastackBatchStats?.cached ?? 0)
+        newsCacheReused: newsSource === "mediastack" || newsSource === "union"
+          ? ((mediastackBatchStats?.cached ?? 0) + (gdeltBatchStats?.cacheReused ?? 0))
           : (gdeltBatchStats?.cacheReused ?? 0),
         avgGdeltSpacingMs: gdeltBatchStats?.avgSpacingMs ?? 0,
         mediastackApiCalls: mediastackBatchStats?.apiCallsMade ?? 0,
@@ -1981,6 +2096,38 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           ageHours: mediastackCadence.ageMs != null ? Math.round(mediastackCadence.ageMs / (1000 * 60 * 60) * 10) / 10 : null,
         } : null,
         mediastackWidening: mediastackBatchStats?.widening ?? null,
+        newsAggregator: aggregatorStats ? {
+          peopleWithAnyData: aggregatorStats.peopleWithAnyData,
+          totalUniqueUrls: aggregatorStats.totalUniqueUrls,
+          totalOverlappingUrls: aggregatorStats.totalOverlappingUrls,
+          dedupRatePct: aggregatorStats.totalUniqueUrls + aggregatorStats.totalOverlappingUrls > 0
+            ? Math.round(100 * aggregatorStats.totalOverlappingUrls / (aggregatorStats.totalUniqueUrls + aggregatorStats.totalOverlappingUrls))
+            : 0,
+          avgUnionCount: Math.round(aggregatorStats.avgUnionCount * 10) / 10,
+          peopleUnionBeatsMediastack: aggregatorStats.peopleUnionBeatsMediastack,
+          peopleMediastackBeatsUnion: aggregatorStats.peopleMediastackBeatsUnion,
+          biggestGainPerson: aggregatorStats.biggestGainPerson,
+          providers: {
+            mediastack: {
+              succeeded: aggregatorStats.providers.mediastack.succeeded,
+              peopleWithData: aggregatorStats.providers.mediastack.peopleWithData,
+              peopleWithArticles: aggregatorStats.providers.mediastack.peopleWithArticles,
+              elapsedMs: aggregatorStats.providers.mediastack.elapsedMs,
+            },
+            gdelt: {
+              succeeded: aggregatorStats.providers.gdelt.succeeded,
+              peopleWithData: aggregatorStats.providers.gdelt.peopleWithData,
+              peopleWithArticles: aggregatorStats.providers.gdelt.peopleWithArticles,
+              elapsedMs: aggregatorStats.providers.gdelt.elapsedMs,
+            },
+            serper: {
+              succeeded: aggregatorStats.providers.serper.succeeded,
+              peopleWithData: aggregatorStats.providers.serper.peopleWithData,
+              peopleWithArticles: aggregatorStats.providers.serper.peopleWithArticles,
+              elapsedMs: aggregatorStats.providers.serper.elapsedMs,
+            },
+          },
+        } : null,
       },
       newsQuality: {
         medianArticles: gdeltMedianArticles,
