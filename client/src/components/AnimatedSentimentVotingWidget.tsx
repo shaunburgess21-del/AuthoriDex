@@ -6,6 +6,7 @@ import { useLocation } from "wouter";
 import { ArrowLeft, Users, Loader2 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest, getAuthHeaders } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 interface AnimatedSentimentVotingWidgetProps {
   personId: string;
@@ -218,6 +219,7 @@ export function AnimatedSentimentVotingWidget({
 }: AnimatedSentimentVotingWidgetProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [currentValue, setCurrentValue] = useState<number | null>(null);
   const [hasInteracted, setHasInteracted] = useState(false);
@@ -288,45 +290,57 @@ export function AnimatedSentimentVotingWidget({
   const handleVoteSubmit = async () => {
     if (!currentValue) return;
 
-    try {
-      localStorage.setItem("authoridex-has-ever-voted", "1");
-    } catch {
-      /* ignore */
-    }
-    window.dispatchEvent(new CustomEvent("authoridex-ever-voted"));
-    window.dispatchEvent(
-      new CustomEvent("sentiment-vote-updated", {
-        detail: { personId, value: currentValue },
-      })
-    );
-
     if (user) {
+      // For authenticated users, wait on the server to persist the vote BEFORE
+      // showing "vote submitted" and firing global events. The previous flow
+      // was fire-and-forget: we'd flip isSubmitted, broadcast events, and
+      // swallow errors — so a 500 / rate-limit / auth failure looked identical
+      // to success. On failure we now surface a toast, don't write the
+      // local-storage marker, and leave the user on the voting screen so they
+      // can retry.
       try {
         await apiRequest("POST", `/api/celebrity/${personId}/approval-rating`, {
           rating: currentValue,
         });
-        try {
-          localStorage.setItem(`sentiment-vote-${personId}`, currentValue.toString());
-        } catch {
-          /* ignore */
-        }
-        setIsSubmitted(true);
-        await queryClient.invalidateQueries({
-          queryKey: ["/api/celebrity", personId, "approval-rating"],
-        });
-        await queryClient.invalidateQueries({ queryKey: [`/api/trending/${personId}`] });
-        await queryClient.invalidateQueries({
-          queryKey: ["/api/celebrity", personId, "sentiment-stats"],
-        });
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error saving approval rating:", error);
+        toast({
+          title: "Couldn't save your vote",
+          description: error?.message?.length && error.message.length < 160
+            ? error.message
+            : "Please check your connection and try again.",
+          variant: "destructive",
+        });
+        return;
       }
+
+      try { localStorage.setItem("authoridex-has-ever-voted", "1"); } catch { /* ignore */ }
+      try { localStorage.setItem(`sentiment-vote-${personId}`, currentValue.toString()); } catch { /* ignore */ }
+      window.dispatchEvent(new CustomEvent("authoridex-ever-voted"));
+      window.dispatchEvent(
+        new CustomEvent("sentiment-vote-updated", {
+          detail: { personId, value: currentValue },
+        })
+      );
+
+      setIsSubmitted(true);
+      await queryClient.invalidateQueries({
+        queryKey: ["/api/celebrity", personId, "approval-rating"],
+      });
+      await queryClient.invalidateQueries({ queryKey: [`/api/trending/${personId}`] });
+      await queryClient.invalidateQueries({
+        queryKey: ["/api/celebrity", personId, "sentiment-stats"],
+      });
     } else {
-      try {
-        localStorage.setItem(`sentiment-vote-${personId}`, currentValue.toString());
-      } catch {
-        /* ignore */
-      }
+      // Anonymous vote — we keep the local-only flow (no server call).
+      try { localStorage.setItem("authoridex-has-ever-voted", "1"); } catch { /* ignore */ }
+      try { localStorage.setItem(`sentiment-vote-${personId}`, currentValue.toString()); } catch { /* ignore */ }
+      window.dispatchEvent(new CustomEvent("authoridex-ever-voted"));
+      window.dispatchEvent(
+        new CustomEvent("sentiment-vote-updated", {
+          detail: { personId, value: currentValue },
+        })
+      );
       setIsSubmitted(true);
     }
   };

@@ -29,12 +29,24 @@ console.log(`[BOOT] started at ${new Date().toISOString()} (env=${process.env.NO
 // GLOBAL ERROR HANDLERS
 // ===========================================
 process.on("uncaughtException", (err) => {
+  // Uncaught sync exceptions leave the process in an indeterminate state —
+  // exit so the supervisor (Railway) can restart us cleanly.
   process.stderr.write(`[FATAL] Uncaught exception: ${err?.stack || err}\n`);
   process.exit(1);
 });
 process.on("unhandledRejection", (reason) => {
-  process.stderr.write(`[FATAL] Unhandled promise rejection: ${reason}\n`);
-  process.exit(1);
+  // Unhandled promise rejections are usually isolated (one bad await) and
+  // exiting on them has repeatedly caused a crash loop when a single
+  // background job misbehaved. In production we just log loudly; in dev/test
+  // we keep the old exit-on-reject behavior so bad code is noticed during
+  // development. Set STRICT_UNHANDLED_REJECTION=true to force exit in prod.
+  const msg = reason instanceof Error ? (reason.stack || reason.message) : String(reason);
+  process.stderr.write(`[FATAL] Unhandled promise rejection: ${msg}\n`);
+  const forceExit = (process.env.STRICT_UNHANDLED_REJECTION ?? "false").trim().toLowerCase() === "true";
+  const isProd = process.env.NODE_ENV === "production";
+  if (!isProd || forceExit) {
+    process.exit(1);
+  }
 });
 process.on("exit", (code) => {
   process.stderr.write(`[EXIT] Process exiting with code ${code}\n`);
@@ -333,10 +345,21 @@ async function scheduledIngestion() {
   try {
     const result = await runDataIngestion();
     log(`[Ingestion Scheduler] Complete: ${result.processed} processed, ${result.errors} errors, ${result.duration}ms`);
-    setLastFullRefreshAt(new Date());
-    applySnapBackDampening().catch(e => log(`[Ingestion Scheduler] Dampening error: ${e}`));
-    // After a successful primary run, automatically fill any gaps in the last 12h
-    detectAndBackfillGaps().catch(e => log(`[Backfill] Unexpected error: ${e}`));
+    // Only record "last full refresh" when real work happened — not on skip
+    // (already ingested this hour) or lock-out (another worker has it).
+    // Otherwise downstream freshness checks can wrongly conclude the stack is
+    // up-to-date when the last hour actually did nothing.
+    const didRealWork = result.processed > 0 && !(result as any).skipped && !(result as any).lockedOut;
+    if (didRealWork) {
+      setLastFullRefreshAt(new Date());
+      applySnapBackDampening().catch(e => log(`[Ingestion Scheduler] Dampening error: ${e}`));
+      // After a successful primary run, automatically fill any gaps in the last 12h
+      detectAndBackfillGaps().catch(e => log(`[Backfill] Unexpected error: ${e}`));
+    } else if ((result as any).skipped) {
+      log(`[Ingestion Scheduler] Skipped: ${(result as any).skippedReason ?? "unknown"} — not bumping last-refresh timestamp.`);
+    } else if ((result as any).lockedOut) {
+      log(`[Ingestion Scheduler] Locked out by another worker — not bumping last-refresh timestamp.`);
+    }
   } catch (error) {
     log(`[Ingestion Scheduler] Error during ingestion: ${error}`);
   }

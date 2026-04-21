@@ -23,6 +23,8 @@ import {
   VelocitySubScores,
   SmoothingMode,
   getSmoothingMode,
+  getRenormalizedVelocityWeights,
+  isOutageWeightRedistEnabled,
 } from "./normalize";
 import { 
   normalizeMass, 
@@ -191,7 +193,17 @@ export function computeTrendScore(
   const newsVelocityScore = newsNormalized * 100;
   const searchVelocityScore = searchNormalized * 100;
   
-  const baseWeights = PLATFORM_WEIGHTS.velocity;
+  // Base velocity weights. If OUTAGE_WEIGHT_REDIST=true AND any source is in
+  // a full outage state, we swap in outage-aware weights that redistribute the
+  // disabled source's share proportionally to the active ones (see
+  // getRenormalizedVelocityWeights in normalize.ts). Default-off so this is a
+  // pure additive safety net; ingest.ts's decay/hold path remains the primary
+  // outage response.
+  const health = inputs.sourceHealthStates;
+  const anyOutage = !!(health && (health.wikiOutage || health.newsOutage || health.searchOutage));
+  const baseWeights = (isOutageWeightRedistEnabled() && anyOutage && health)
+    ? getRenormalizedVelocityWeights(health)
+    : PLATFORM_WEIGHTS.velocity;
   const newsFreshness = inputs.newsStalenessFactor ?? 1.0;
   const searchFreshness = inputs.searchStalenessFactor ?? 1.0;
 

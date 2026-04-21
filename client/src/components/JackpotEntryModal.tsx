@@ -46,7 +46,7 @@ export function JackpotEntryModal({
   bettingCutoff,
   isCutoffPassed,
 }: JackpotEntryModalProps) {
-  const { session, loading } = useAuth();
+  const { session, loading, refreshProfile } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { trigger: triggerXpBurst } = useXpBurst();
@@ -70,7 +70,10 @@ export function JackpotEntryModal({
   }, [bettingCutoff]);
 
   const { data: takenData } = useQuery({
-    queryKey: ["/api/native-markets", marketId, "jackpot-taken-numbers", session?.access_token],
+    // Auth-scoped cache key: use a stable flag (isAuthReady) rather than the
+    // raw access_token. Including the token makes the cache churn on every
+    // token refresh and leaks it into React DevTools/cache snapshots.
+    queryKey: ["/api/native-markets", marketId, "jackpot-taken-numbers", isAuthReady],
     queryFn: async () => {
       if (!marketId) return { takenNumbers: [] };
       const sb = await getSupabase();
@@ -89,7 +92,7 @@ export function JackpotEntryModal({
   });
 
   const { data: userEntries, refetch: refetchEntries } = useQuery({
-    queryKey: ["/api/native-markets", marketId, "jackpot-entries", session?.access_token],
+    queryKey: ["/api/native-markets", marketId, "jackpot-entries", isAuthReady],
     queryFn: async () => {
       if (!marketId) return { entries: [], totalPool: 0, totalEntries: 0 };
       const sb = await getSupabase();
@@ -163,7 +166,10 @@ export function JackpotEntryModal({
       setSuggestions([]);
       queryClient.invalidateQueries({ queryKey: ["/api/native-markets", marketId, "jackpot-taken-numbers"] });
       queryClient.invalidateQueries({ queryKey: ["/api/native-markets", marketId, "jackpot-entries"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/user/profile"] });
+      // Profile/credits live in AuthContext, not in a React Query cache — the
+      // previous `["/api/user/profile"]` invalidation did nothing. Pull a fresh
+      // profile so the user's credit balance reflects the ticket cost.
+      refreshProfile().catch((err) => console.warn("[JackpotEntryModal] refreshProfile failed", err));
       if (data?.xp?.xpAwarded) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }

@@ -186,7 +186,11 @@ function generateFallbackHistory(
       const baseScore = person.trendScore || 50000 + idx * 10000;
       const variation = Math.sin((i / totalPoints) * Math.PI * 2 + idx) * 0.15;
       const trend = (1 - i / totalPoints) * 0.1 * (idx % 2 === 0 ? 1 : -1);
-      const noise = (Math.random() - 0.5) * 0.05;
+      // Deterministic per-(i, idx) pseudo-noise. Math.random() made the whole
+      // chart jitter on every React re-render because the fallback generator
+      // re-ran with new values each time; using cos with a mixed frequency
+      // gives a stable "noisy" shape that doesn't change across renders.
+      const noise = Math.cos(i * 1.7 + idx * 2.3) * 0.025;
       entry[person.id] = Math.round(baseScore * (1 + variation + trend + noise));
     });
 

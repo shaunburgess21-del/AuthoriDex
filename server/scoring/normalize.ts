@@ -1012,6 +1012,20 @@ export interface RenormalizedVelocityWeights {
 }
 
 /**
+ * Check whether outage-based velocity-weight redistribution is enabled.
+ * Controlled by OUTAGE_WEIGHT_REDIST (default "false"). When false,
+ * computeTrendScore ignores `sourceHealthStates` and uses base weights —
+ * relying on the ingest pipeline's decay / fill-forward / EMA-hold path to
+ * absorb the outage. Flip to "true" to let the scorer redistribute the
+ * disabled source's share to remaining active sources for the duration of
+ * the outage. Safer default is "false" because it has no behavior change.
+ */
+export function isOutageWeightRedistEnabled(): boolean {
+  const raw = (process.env.OUTAGE_WEIGHT_REDIST ?? "false").trim().toLowerCase();
+  return raw === "true" || raw === "1" || raw === "yes";
+}
+
+/**
  * Renormalize velocity weights when sources are in outage.
  * Redistributes disabled source weights proportionally to active sources.
  * 

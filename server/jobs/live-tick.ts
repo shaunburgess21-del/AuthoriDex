@@ -139,6 +139,18 @@ async function runLiveTickOnce(): Promise<{ processed: number; moved: number }> 
   let moved = 0;
   let written = 0;
 
+  // Build the change set first so we can issue one batched UPDATE rather than
+  // N separate UPDATE-WHERE-id statements. Previously, with ~500 tracked
+  // people, a tick could fire 500 sequential SQL round-trips; on a slow DB
+  // this routinely ate the whole 10-minute tick window.
+  type LiveUpdate = {
+    id: string;
+    fameIndexLive: number;
+    liveRank: number;
+    liveDampen: number;
+  };
+  const pendingUpdates: LiveUpdate[] = [];
+
   for (let i = 0; i < liveScores.length; i++) {
     const item = liveScores[i];
     const newLiveRank = i + 1;
@@ -163,16 +175,37 @@ async function runLiveTickOnce(): Promise<{ processed: number; moved: number }> 
     const viewsNeedReset = item.views > 0;
 
     if (scoreChanged || rankChanged || dampenChanged || viewsNeedReset) {
-      await db.update(trendingPeople)
-        .set({
-          fameIndexLive: item.liveScore,
-          liveRank: finalRank,
-          liveDampen: item.dampen,
-          liveUpdatedAt: now,
-          profileViews10m: 0,
-        })
-        .where(eq(trendingPeople.id, item.id));
-      written++;
+      pendingUpdates.push({
+        id: item.id,
+        fameIndexLive: item.liveScore,
+        liveRank: finalRank,
+        liveDampen: item.dampen,
+      });
+    }
+  }
+
+  if (pendingUpdates.length > 0) {
+    // One UPDATE per chunk via a VALUES table joined on id. Keeps chunks small
+    // enough to stay under PG parameter limits even on very large fleets.
+    const CHUNK = 200;
+    for (let i = 0; i < pendingUpdates.length; i += CHUNK) {
+      const chunk = pendingUpdates.slice(i, i + CHUNK);
+      const valuesSql = sql.join(
+        chunk.map((u) => sql`(${u.id}::varchar, ${u.fameIndexLive}::double precision, ${u.liveRank}::integer, ${u.liveDampen}::double precision)`),
+        sql`, `
+      );
+      await db.execute(sql`
+        UPDATE trending_people AS tp
+        SET
+          fame_index_live = v.fame_index_live,
+          live_rank = v.live_rank,
+          live_dampen = v.live_dampen,
+          live_updated_at = ${now},
+          profile_views_10m = 0
+        FROM (VALUES ${valuesSql}) AS v(id, fame_index_live, live_rank, live_dampen)
+        WHERE tp.id = v.id
+      `);
+      written += chunk.length;
     }
   }
 

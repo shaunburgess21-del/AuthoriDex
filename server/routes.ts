@@ -58,6 +58,8 @@ import { generateWeeklyUpDown, generateWeeklyJackpot, generateWeeklyH2H, generat
 import { voidMarketBets } from "./jobs/market-resolver";
 import { deriveNativeMarketLifecycle, getWeeklyBettingCutoff } from "./native-markets/lifecycle";
 import { recomputeCelebrityMetrics } from "./services/celebrity-metrics-recompute";
+import { z, ZodError } from "zod";
+import { sendError, sendBadRequest, sendZodError } from "./utils/api-response";
 import { runPostInductionOnboarding } from "./services/induction-onboarding";
 import { CANONICAL_MARKET_CATEGORIES, getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
 import { resolvePublicMatchupBySlugOrId } from "./utils/matchup-resolve";
@@ -991,6 +993,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.cookie(SESSION_COOKIE_NAME, newSid, {
           httpOnly: true,
           sameSite: 'lax',
+          // Force Secure in production so the session cookie only rides HTTPS.
+          // Local dev still works because NODE_ENV !== 'production' drops it.
+          secure: process.env.NODE_ENV === 'production',
           maxAge: 365 * 24 * 60 * 60 * 1000,
           path: '/',
         });
@@ -2788,11 +2793,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(429).json({ error: "Too many votes. Please slow down." });
       }
 
-      const raw = req.body?.rating;
-      const rating = typeof raw === "number" ? raw : parseInt(String(raw), 10);
-      if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
-        return res.status(400).json({ error: "rating must be an integer from 1 to 5" });
+      // Hardened input shape: we accept either a numeric body or a numeric
+      // string (some older clients still POST rating as "3"). Coerce and then
+      // validate via Zod so clients can rely on a consistent error envelope.
+      const approvalRatingSchema = z.object({
+        rating: z.coerce.number().int().min(1).max(5),
+      });
+      let parsed: { rating: number };
+      try {
+        parsed = approvalRatingSchema.parse(req.body ?? {});
+      } catch (err) {
+        if (err instanceof ZodError) return sendZodError(res, err);
+        return sendBadRequest(res, "Invalid request body");
       }
+      const rating = parsed.rating;
 
       const [celebrity] = await db
         .select({ id: trendingPeople.id, name: trendingPeople.name })
@@ -3609,15 +3623,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/insight-comments", requireAuth, async (req: AuthRequest, res) => {
     try {
       const userId = req.userId!;
-      const { insightId, parentId, username, content } = req.body;
-      
-      // Validate required fields
-      if (!insightId || !content) {
-        return res.status(400).json({ error: "insightId and content are required" });
+
+      // Comment body shape:
+      // - insightId: UUID/string identifier of the insight being commented on
+      // - parentId: optional — if provided, this is a reply
+      // - username: optional — server falls back to a prefix of userId
+      // - content: non-empty, capped at COMMENT_MAX_LENGTH
+      const insightCommentSchema = z.object({
+        insightId: z.string().min(1).max(128),
+        parentId: z.string().min(1).max(128).optional().nullable(),
+        username: z.string().max(64).optional(),
+        content: z.string().min(1).max(COMMENT_MAX_LENGTH),
+      });
+      let parsed: z.infer<typeof insightCommentSchema>;
+      try {
+        parsed = insightCommentSchema.parse(req.body ?? {});
+      } catch (err) {
+        if (err instanceof ZodError) return sendZodError(res, err);
+        return sendBadRequest(res, "Invalid comment body");
       }
-      if (typeof content !== "string" || content.length > COMMENT_MAX_LENGTH) {
-        return res.status(400).json({ error: `Comment content must be at most ${COMMENT_MAX_LENGTH} characters` });
-      }
+      const { insightId, parentId, username, content } = parsed;
 
       const [newComment] = await db
         .insert(insightComments)
@@ -6783,6 +6808,9 @@ Only return the JSON object.`;
             search: SPIKE_MIN_DELTA.search,
           },
           diagnosticsVerbose: (process.env.DIAGNOSTICS_VERBOSE ?? "true").trim().toLowerCase() !== "false",
+          outageWeightRedist: ["true", "1", "yes"].includes(
+            (process.env.OUTAGE_WEIGHT_REDIST ?? "false").trim().toLowerCase()
+          ),
         },
       });
     } catch (error: any) {
@@ -12916,11 +12944,22 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
     try {
       const authReq = req as AuthRequest;
       const { marketId } = req.params;
-      const { entryId, stakeAmount } = req.body;
 
-      if (!entryId || !stakeAmount || typeof stakeAmount !== "number" || stakeAmount <= 0) {
-        return res.status(400).json({ error: "Valid entryId and positive stakeAmount are required" });
+      // Zod-validate the bet body. stakeAmount is capped at a generous ceiling
+      // (10M credits) so a fat-fingered or malicious payload can't try to bet
+      // BigInts / Infinity and confuse the downstream credit math.
+      const betSchema = z.object({
+        entryId: z.string().min(1).max(128),
+        stakeAmount: z.number().int().positive().max(10_000_000),
+      });
+      let parsed: { entryId: string; stakeAmount: number };
+      try {
+        parsed = betSchema.parse(req.body ?? {});
+      } catch (err) {
+        if (err instanceof ZodError) return sendZodError(res, err);
+        return sendBadRequest(res, "Invalid bet body");
       }
+      const { entryId, stakeAmount } = parsed;
 
       if (!checkBetRateLimit(authReq.userId!)) {
         return res.status(429).json({ error: "You're moving fast! Try again in a moment" });
@@ -13021,14 +13060,21 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
     try {
       const authReq = req as AuthRequest;
       const { marketId } = req.params;
-      const { predictedScore } = req.body;
 
-      if (typeof predictedScore !== "number" || !Number.isInteger(predictedScore) || predictedScore <= 0) {
-        return res.status(400).json({ error: "predictedScore must be a positive integer" });
+      // Zod-validate. JACKPOT_MAX_PREDICTED_SCORE is the enforced cap — using
+      // it directly here keeps the validation error message and business rule
+      // in lock-step if the constant ever changes.
+      const jackpotBetSchema = z.object({
+        predictedScore: z.number().int().positive().max(JACKPOT_MAX_PREDICTED_SCORE),
+      });
+      let parsed: { predictedScore: number };
+      try {
+        parsed = jackpotBetSchema.parse(req.body ?? {});
+      } catch (err) {
+        if (err instanceof ZodError) return sendZodError(res, err);
+        return sendBadRequest(res, "Invalid jackpot bet body");
       }
-      if (predictedScore > JACKPOT_MAX_PREDICTED_SCORE) {
-        return res.status(400).json({ error: `Predicted score cannot exceed ${JACKPOT_MAX_PREDICTED_SCORE.toLocaleString()}` });
-      }
+      const { predictedScore } = parsed;
 
       if (!checkBetRateLimit(authReq.userId!)) {
         return res.status(429).json({ error: "You're moving fast! Try again in a moment" });
@@ -16123,17 +16169,26 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
   app.post("/api/suggestions", requireAuth, async (req: AuthRequest, res) => {
     try {
       const userId = req.userId!;
-      const { type, payload } = req.body;
 
-      if (!type || !SUGGESTION_TYPES.includes(type)) {
-        return res.status(400).json({
-          error: `Invalid suggestion type. Must be one of: ${SUGGESTION_TYPES.join(", ")}`,
-        });
+      // Envelope-level validation. The per-payload validator below is already
+      // strong; here we just guarantee `type` is one of the enum values and
+      // `payload` is an object before we hand it off.
+      const suggestionEnvelopeSchema = z.object({
+        type: z.enum(SUGGESTION_TYPES as unknown as [string, ...string[]]),
+        payload: z.record(z.string(), z.unknown()),
+      });
+      let envelope: { type: string; payload: Record<string, unknown> };
+      try {
+        envelope = suggestionEnvelopeSchema.parse(req.body ?? {});
+      } catch (err) {
+        if (err instanceof ZodError) return sendZodError(res, err);
+        return sendBadRequest(res, "Invalid suggestion body");
       }
+      const { type, payload } = envelope;
 
       const validation = validateSuggestionPayload(type, payload);
       if (!validation.success) {
-        return res.status(400).json({ error: "Validation failed", details: validation.errors });
+        return sendError(res, 400, "VALIDATION_ERROR", "Suggestion payload failed validation", { errors: validation.errors });
       }
 
       const [created] = await db

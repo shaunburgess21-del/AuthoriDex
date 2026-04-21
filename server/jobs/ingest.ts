@@ -921,7 +921,11 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     const lastNonZeroNewsMap = new Map<string, { newsCount: number; newsDelta: number; timestamp: Date }>();
     const lastNonZeroSearchMap = new Map<string, { searchVolume: number; searchDelta: number; timestamp: Date }>();
     const snapshot24hMap = new Map<string, { trendScore: number; fameIndex: number | null; timestamp?: Date; basisHours?: number }>();
-    const snapshot7dMap = new Map<string, { trendScore: number; fameIndex: number | null }>();
+    // 7d baseline: matches the 24h logic — picks the snapshot closest to exactly
+    // 7 days ago within a +/-18h tolerance window. Previously this just kept the
+    // first snapshot seen in the 7d window, which made change7d nondeterministic
+    // (depended on DB row order) and systematically biased toward the older end.
+    const snapshot7dMap = new Map<string, { trendScore: number; fameIndex: number | null; timestamp?: Date; basisHours?: number }>();
     
     for (const snap of historicalSnapshots) {
       const snapTime = new Date(snap.timestamp).getTime();
@@ -986,11 +990,22 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
         }
       }
       
-      // Keep closest snapshot to 7d ago (within 18 hour window to survive gaps)
+      // Keep closest snapshot to 7d ago (within +/-18h window to survive gaps).
+      // Mirrors the 24h logic above: pick the snapshot whose timestamp is closest
+      // to time7dAgo, not the first one seen.
       if (diff7d < 18 * 60 * 60 * 1000) {
         const existing = snapshot7dMap.get(snap.personId);
-        if (!existing) {
-          snapshot7dMap.set(snap.personId, { trendScore: snap.trendScore, fameIndex: snap.fameIndex });
+        const existingDiff = existing?.timestamp
+          ? Math.abs(existing.timestamp.getTime() - time7dAgo.getTime())
+          : Number.POSITIVE_INFINITY;
+        if (!existing || diff7d < existingDiff) {
+          const snapAgeHours7d = (now.getTime() - snapTime) / (1000 * 60 * 60);
+          snapshot7dMap.set(snap.personId, {
+            trendScore: snap.trendScore,
+            fameIndex: snap.fameIndex,
+            timestamp: new Date(snap.timestamp),
+            basisHours: Math.round(snapAgeHours7d * 10) / 10,
+          });
         }
       }
     }
@@ -1860,6 +1875,46 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     }
     console.log(`[Ingest] Loaded ${primaryImageMap.size} primary avatar images from celebrity_images`);
 
+    // ORDERING NOTE: snapshots are written BEFORE the trending_people update.
+    // trend_snapshots is the canonical history; trending_people is a denormalized
+    // leaderboard cache that the next ingest tick fully rebuilds from snapshots.
+    // If we crash between these two writes, the worst case is "current leaderboard
+    // is one tick stale" (next tick will refresh it). The previous order (leaderboard
+    // first, then snapshots) left them out of sync on a crash and broke EMA
+    // continuity on the next run. Moved here from further down in the function.
+    if (pendingSnapshots.length > 0) {
+      const BATCH_SIZE = 50;
+      for (let i = 0; i < pendingSnapshots.length; i += BATCH_SIZE) {
+        const batch = pendingSnapshots.slice(i, i + BATCH_SIZE);
+        await db.insert(trendSnapshots).values(batch)
+          .onConflictDoUpdate({
+            target: [trendSnapshots.personId, trendSnapshots.timestamp],
+            set: {
+              trendScore: sql`excluded.trend_score`,
+              fameIndex: sql`excluded.fame_index`,
+              newsCount: sql`excluded.news_count`,
+              searchVolume: sql`excluded.search_volume`,
+              wikiPageviews: sql`excluded.wiki_pageviews`,
+              wikiDelta: sql`excluded.wiki_delta`,
+              newsDelta: sql`excluded.news_delta`,
+              searchDelta: sql`excluded.search_delta`,
+              massScore: sql`excluded.mass_score`,
+              velocityScore: sql`excluded.velocity_score`,
+              velocityAdjusted: sql`excluded.velocity_adjusted`,
+              confidence: sql`excluded.confidence`,
+              diversityMultiplier: sql`excluded.diversity_multiplier`,
+              momentum: sql`excluded.momentum`,
+              drivers: sql`excluded.drivers`,
+              snapshotOrigin: sql`excluded.snapshot_origin`,
+              diagnostics: sql`excluded.diagnostics`,
+              runId: sql`excluded.run_id`,
+              scoreVersion: sql`excluded.score_version`,
+            },
+          });
+      }
+      console.log(`[Ingest] Batch-inserted ${pendingSnapshots.length} snapshots (pre-leaderboard)`);
+    }
+
     // Use transaction to ensure atomicity - if any insert fails, rollback the delete
     // This prevents data loss if the server crashes/restarts between delete and inserts
     const expectedRowCount = scoreResults.length;
@@ -2306,37 +2361,9 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     };
     (healthSummary as any).runId = runId;
 
-    if (pendingSnapshots.length > 0) {
-      const BATCH_SIZE = 50;
-      for (let i = 0; i < pendingSnapshots.length; i += BATCH_SIZE) {
-        const batch = pendingSnapshots.slice(i, i + BATCH_SIZE);
-        await db.insert(trendSnapshots).values(batch)
-          .onConflictDoUpdate({
-            target: [trendSnapshots.personId, trendSnapshots.timestamp],
-            set: {
-              trendScore: sql`excluded.trend_score`,
-              fameIndex: sql`excluded.fame_index`,
-              newsCount: sql`excluded.news_count`,
-              searchVolume: sql`excluded.search_volume`,
-              wikiPageviews: sql`excluded.wiki_pageviews`,
-              wikiDelta: sql`excluded.wiki_delta`,
-              newsDelta: sql`excluded.news_delta`,
-              searchDelta: sql`excluded.search_delta`,
-              massScore: sql`excluded.mass_score`,
-              velocityScore: sql`excluded.velocity_score`,
-              velocityAdjusted: sql`excluded.velocity_adjusted`,
-              confidence: sql`excluded.confidence`,
-              diversityMultiplier: sql`excluded.diversity_multiplier`,
-              momentum: sql`excluded.momentum`,
-              drivers: sql`excluded.drivers`,
-              snapshotOrigin: sql`excluded.snapshot_origin`,
-              diagnostics: sql`excluded.diagnostics`,
-              runId: sql`excluded.run_id`,
-            },
-          });
-      }
-      console.log(`[Ingest] Batch-inserted ${pendingSnapshots.length} snapshots`);
-    }
+    // NOTE: Snapshot batch-insert was moved above the trending_people transaction
+    // (see ORDERING NOTE earlier in this function) so snapshots land first and a
+    // mid-run crash doesn't leave the leaderboard ahead of history.
 
     const runStatus = processed < people.length && processed > 0 ? "failed_partial" : (errors > 0 ? "failed" : "completed");
     await releaseIngestionLock(runId, runStatus, {

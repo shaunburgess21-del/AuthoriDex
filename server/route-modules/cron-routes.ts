@@ -168,6 +168,7 @@ export function registerCronRoutes(app: Express): void {
         snapshotsDeleted: result.snapshotsDeleted,
         cacheEntriesDeleted: result.cacheEntriesDeleted,
         ingestionRunsDeleted: result.ingestionRunsDeleted,
+        pageViewsDeleted: result.pageViewsDeleted,
         duration: result.durationMs,
         timestamp: new Date().toISOString(),
       });

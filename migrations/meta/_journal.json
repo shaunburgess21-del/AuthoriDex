@@ -71,6 +71,20 @@
       "when": 1776441600000,
       "tag": "0009_add_scaling_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1776528000000,
+      "tag": "0010_add_voxmax_legend_rank",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1776614400000,
+      "tag": "0011_xp_ledger_user_action_date_idx",
+      "breakpoints": true
     }
   ]
 }
