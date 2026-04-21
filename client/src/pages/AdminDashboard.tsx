@@ -5937,6 +5937,22 @@ export default function AdminDashboard() {
                             <span className="text-muted-foreground">Relaxed α Floor</span>
                             <span className="font-medium">{m.relaxedAlphaFloor}</span>
                           </div>
+                          {m.spikeMinDelta && (
+                            <div className="flex flex-col gap-1 sm:col-span-2 lg:col-span-4">
+                              <span className="text-muted-foreground">Spike Min Deltas (min absolute change above median to count as a spike)</span>
+                              <div className="flex flex-wrap gap-2" data-testid="panel-spike-min-delta">
+                                <Badge variant="outline" className="bg-muted/50 text-[11px]">
+                                  wiki ≥ {Number(m.spikeMinDelta.wiki).toLocaleString()} pv
+                                </Badge>
+                                <Badge variant="outline" className="bg-muted/50 text-[11px]">
+                                  news ≥ {m.spikeMinDelta.news} articles
+                                </Badge>
+                                <Badge variant="outline" className="bg-muted/50 text-[11px]">
+                                  search ≥ {m.spikeMinDelta.search} pts
+                                </Badge>
+                              </div>
+                            </div>
+                          )}
                           <div className="flex flex-col gap-1 sm:col-span-2 lg:col-span-4">
                             <span className="text-muted-foreground">Diagnostics Verbose</span>
                             <Badge variant="outline" className={cn("w-fit", m.diagnosticsVerbose ? "bg-blue-500/15 text-blue-500 border-blue-500/40" : "bg-muted text-muted-foreground border-border")}>

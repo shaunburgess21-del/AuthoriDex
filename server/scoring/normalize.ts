@@ -762,12 +762,27 @@ export function getRecoveryRateBoost(recoveringCount: number): number {
 // MULTI-SOURCE BREAKOUT DETECTION
 // ============================================================================
 
-// Minimum absolute deltas to qualify as a spike (prevents noise on low-volume accounts)
-// These thresholds ensure only meaningful changes trigger breakout mode
-export const SPIKE_MIN_DELTA = {
-  wiki: 5000,    // At least 5K pageview increase
-  news: 10,      // At least 10 new articles
-  search: 15,    // At least 15 points increase on 0-100 composite score scale
+// Minimum absolute deltas to qualify as a spike (prevents noise on low-volume
+// accounts). Each threshold is env-configurable via SPIKE_MIN_DELTA_WIKI /
+// _NEWS / _SEARCH on Railway so we can retune without a redeploy. Values are
+// re-read on every access (getters) so runtime env changes take effect on the
+// next ingest tick. Negative or non-numeric env values are ignored.
+//
+// Defaults (updated Apr 2026 for union-mode news volumes):
+//   - wiki   5000  → 5K pageview increase over median
+//   - news   20    → 20 article increase over median (was 10 pre-union; bumped
+//                    because union mode's aggregated counts are ~2-3× higher,
+//                    making 10 too easy to clear from noise)
+//   - search 15    → 15 points on the 0-100 Serper composite
+function parseSpikeMinDelta(raw: string | undefined, fallback: number): number {
+  const parsed = parseFloat((raw ?? "").trim());
+  if (!Number.isFinite(parsed) || parsed < 0) return fallback;
+  return parsed;
+}
+export const SPIKE_MIN_DELTA: { readonly wiki: number; readonly news: number; readonly search: number } = {
+  get wiki() { return parseSpikeMinDelta(process.env.SPIKE_MIN_DELTA_WIKI, 5000); },
+  get news() { return parseSpikeMinDelta(process.env.SPIKE_MIN_DELTA_NEWS, 20); },
+  get search() { return parseSpikeMinDelta(process.env.SPIKE_MIN_DELTA_SEARCH, 15); },
 };
 
 /**

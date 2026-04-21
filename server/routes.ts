@@ -6777,6 +6777,11 @@ Only return the JSON object.`;
           relaxedAlphaFloor: RELAXED_ALPHA_FLOOR,
           rollingWindowDaysBaseline: getRollingWindowDaysBaseline(),
           rollingWindowDaysNews: getRollingWindowDaysNews(),
+          spikeMinDelta: {
+            wiki: SPIKE_MIN_DELTA.wiki,
+            news: SPIKE_MIN_DELTA.news,
+            search: SPIKE_MIN_DELTA.search,
+          },
           diagnosticsVerbose: (process.env.DIAGNOSTICS_VERBOSE ?? "true").trim().toLowerCase() !== "false",
         },
       });
