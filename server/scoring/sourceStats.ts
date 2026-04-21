@@ -94,6 +94,10 @@ export async function fetchRollingSourceStats(): Promise<AllSourceStats> {
     const flippedAt = getNewsAggregationFlippedAt();
     if (flippedAt && flippedAt > windowStart && flippedAt < new Date()) {
       try {
+        // Match the NULL-filters from the 14d query so the post-flip population
+        // is identical (snapshots where wiki/search failed but news was written
+        // are excluded here too). Keeps post-flip stats comparable with full-14d
+        // stats and with wiki/search which always use the 14d window.
         const postFlipResult = await db.execute(sql`
           SELECT
             MIN(news_count) as news_min,
@@ -108,7 +112,9 @@ export async function fetchRollingSourceStats(): Promise<AllSourceStats> {
           WHERE timestamp >= ${flippedAt}
             AND timestamp = date_trunc('hour', timestamp)
             AND snapshot_origin = 'ingest'
+            AND wiki_pageviews IS NOT NULL
             AND news_count IS NOT NULL
+            AND search_volume IS NOT NULL
         `);
         const pfRow = (postFlipResult.rows?.[0] ?? {}) as Record<string, number>;
         const pfCount = Number(pfRow.total_count ?? 0);
@@ -229,21 +235,31 @@ export { fetchRollingSourceStats as fetch7DaySourceStats };
 
 let cachedStats: AllSourceStats | null = null;
 let cacheTimestamp: number = 0;
+// Cache key includes the flipped-at timestamp so flipping NEWS_AGGREGATION_FLIPPED_AT
+// at runtime busts the cache on the next call instead of waiting up to an hour.
+let cachedFlippedAtKey: string = "";
 const CACHE_TTL_MS = 60 * 60 * 1000;
 
 export async function getSourceStats(): Promise<AllSourceStats> {
   const now = Date.now();
-  if (cachedStats && (now - cacheTimestamp) < CACHE_TTL_MS) {
+  const flippedKey = getNewsAggregationFlippedAt()?.toISOString() ?? "";
+  if (
+    cachedStats &&
+    (now - cacheTimestamp) < CACHE_TTL_MS &&
+    cachedFlippedAtKey === flippedKey
+  ) {
     return cachedStats;
   }
-  
+
   cachedStats = await fetchRollingSourceStats();
   cacheTimestamp = now;
+  cachedFlippedAtKey = flippedKey;
   return cachedStats;
 }
 
 export async function refreshSourceStats(): Promise<AllSourceStats> {
   cachedStats = await fetchRollingSourceStats();
   cacheTimestamp = Date.now();
+  cachedFlippedAtKey = getNewsAggregationFlippedAt()?.toISOString() ?? "";
   return cachedStats;
 }

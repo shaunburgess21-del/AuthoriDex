@@ -567,6 +567,105 @@ export async function fetchSerperNewsBatch(
   return results;
 }
 
+/**
+ * 24h-only variant of fetchSerperNewsCount used by the multi-source news
+ * aggregator. Skips the 7d API call (the aggregator already sources 7d from
+ * GDELT), which halves Serper News cost in union mode.
+ *
+ * Uses a separate cache key (`serper:newscount_24h:NAME`) so it can't pollute
+ * the full-fat cache consumed by the legacy tiered-mode Serper fallback.
+ */
+export async function fetchSerperNewsCount24h(name: string, personId?: string): Promise<SerperNewsCountData | null> {
+  if (!SERPER_API_KEY) return null;
+
+  const cacheKey = `serper:newscount_24h:${name.replace(/\s+/g, "_").toLowerCase()}`;
+  const CACHE_TTL_HOURS = 2;
+
+  try {
+    const cached = await getCachedResponse(cacheKey);
+    if (cached) {
+      return JSON.parse(cached.responseData);
+    }
+
+    _serperFallbackCallsAttempted++;
+    const response24h = await serperFetch("https://google.serper.dev/news", {
+      method: "POST",
+      headers: {
+        "X-API-KEY": SERPER_API_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        q: `"${name}"`,
+        num: 100,
+        gl: "us",
+        hl: "en",
+        tbs: "qdr:d",
+      }),
+    });
+
+    const data24h = response24h.ok ? await response24h.json() : { news: [] };
+    const articleCount24h = data24h.news?.length || 0;
+
+    const topHeadlines = (data24h.news || [])
+      .slice(0, 3)
+      .map((a: any) => a.title || "");
+
+    const articles = (data24h.news || [])
+      .filter((a: any) => !!a.link)
+      .map((a: any) => ({
+        url: a.link as string,
+        title: a.title as string | undefined,
+        publishedAt: a.date as string | undefined,
+      }));
+
+    const result: SerperNewsCountData = {
+      query: name,
+      articleCount24h,
+      // 7d intentionally zero — the aggregator sources 7d from GDELT.
+      articleCount7d: 0,
+      averageDaily7d: 0,
+      delta: articleCount24h > 0 ? 1 : 0,
+      topHeadlines,
+      source: "serper_news",
+      articles,
+    };
+
+    await setCachedResponse(cacheKey, "serper_news", JSON.stringify(result), CACHE_TTL_HOURS);
+
+    return result;
+  } catch (error) {
+    console.error(`[Serper News 24h] Error fetching news count for ${name}:`, error);
+    return null;
+  }
+}
+
+export async function fetchSerperNewsBatch24h(
+  people: Array<{ id: string; name: string }>,
+  concurrency: number = 4,
+  delayMs: number = 300
+): Promise<Map<string, SerperNewsCountData>> {
+  const results = new Map<string, SerperNewsCountData>();
+  const limit = pLimit(concurrency);
+
+  console.log(`[Serper News 24h] Fetching 24h news counts for ${people.length} people (aggregator mode)`);
+
+  const tasks = people.map((person, index) =>
+    limit(async () => {
+      if (index > 0) {
+        await new Promise(r => setTimeout(r, delayMs));
+      }
+      const result = await fetchSerperNewsCount24h(person.name, person.id);
+      if (result) {
+        results.set(person.id, result);
+      }
+    })
+  );
+
+  await Promise.all(tasks);
+  console.log(`[Serper News 24h] Fetched ${results.size}/${people.length} news counts`);
+  return results;
+}
+
 export interface WebSearchContext {
   headlines: string[];
   snippets: string[];

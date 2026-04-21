@@ -23,7 +23,7 @@ import { optimizeImage } from "./utils/image-optimize";
 import geoip from "geoip-lite";
 import { getTrendContext, getTrendContextBatch, formatRelativeTime, type TrendContext } from "./services/trend-context";
 import { fetchWebSearchContext, fetchTrendingNewsContext, fetchNetWorthContext, probeSerperSearchLive, refreshSerperCacheForPerson, getSerperDegradedState, getSerperRunStats } from "./providers/serper";
-import { getSourceStats } from "./scoring/sourceStats";
+import { getSourceStats, refreshSourceStats } from "./scoring/sourceStats";
 import { 
   normalizeSourceValue, 
   isSourceSpiking, 
@@ -37,6 +37,9 @@ import {
   SCORE_VERSION,
   getSmoothingMode,
   getNewsAggregationMode,
+  getNewsAggregationFlippedAt,
+  RELAXED_CAP_MULTIPLIER,
+  RELAXED_ALPHA_FLOOR,
 } from "./scoring/normalize";
 import {
   getCurrentHealthSnapshot,
@@ -6754,10 +6757,52 @@ Only return the JSON object.`;
           EMA_DOWNWARD_MULTIPLIER: parseFloat(process.env.EMA_DOWNWARD_MULTIPLIER || '1.2'),
           source: 'env_with_defaults',
         },
+        engineModes: {
+          smoothingMode: getSmoothingMode(),
+          newsAggregationMode: getNewsAggregationMode(),
+          newsAggregationFlippedAt: getNewsAggregationFlippedAt()?.toISOString() ?? null,
+          ingestIntervalMinutes: (() => {
+            const raw = parseInt(process.env.INGEST_INTERVAL_MINUTES ?? "60", 10);
+            const allowed = [5, 10, 15, 20, 30, 60];
+            return allowed.includes(raw) ? raw : 60;
+          })(),
+          mediastackRefreshIntervalMinutes: (() => {
+            const raw = parseInt(process.env.MEDIASTACK_REFRESH_INTERVAL_MINUTES ?? "120", 10);
+            if (Number.isNaN(raw) || raw < 30 || raw > 360) return 120;
+            return raw;
+          })(),
+          relaxedCapMultiplier: RELAXED_CAP_MULTIPLIER,
+          relaxedAlphaFloor: RELAXED_ALPHA_FLOOR,
+          diagnosticsVerbose: (process.env.DIAGNOSTICS_VERBOSE ?? "true").trim().toLowerCase() !== "false",
+        },
       });
     } catch (error: any) {
       console.error("Error fetching engine health:", error.message);
       res.status(500).json({ error: "Failed to fetch engine health diagnostics" });
+    }
+  });
+
+  // Manual source-stats refresh — busts the 1-hour in-memory cache and recomputes
+  // percentiles from the current 14-day window (and post-flip window for news).
+  // Useful right after flipping NEWS_AGGREGATION_FLIPPED_AT on Railway so the
+  // momentum thresholds reflect the new cutoff immediately instead of waiting
+  // up to an hour for the next natural refresh.
+  app.post("/api/admin/source-stats/refresh", requireAuth, requireAdmin, async (_req: AuthRequest, res) => {
+    try {
+      const stats = await refreshSourceStats();
+      res.json({
+        ok: true,
+        refreshedAt: new Date().toISOString(),
+        newsAggregationFlippedAt: getNewsAggregationFlippedAt()?.toISOString() ?? null,
+        stats: {
+          wiki: { count: stats.wiki.count, p25: stats.wiki.p25, p50: stats.wiki.p50, p75: stats.wiki.p75 },
+          news: { count: stats.news.count, p25: stats.news.p25, p50: stats.news.p50, p75: stats.news.p75 },
+          search: { count: stats.search.count, p25: stats.search.p25, p50: stats.search.p50, p75: stats.search.p75 },
+        },
+      });
+    } catch (error: any) {
+      console.error("[Source Stats Refresh] Error:", error?.message ?? error);
+      res.status(500).json({ error: "Failed to refresh source stats" });
     }
   });
 

@@ -342,6 +342,10 @@ export function computeTrendScore(
       // Test mode: no rate limit, no EMA. Raw fame goes straight through.
       // Anti-spam damping, velocity taper, diversity multiplier, and catch-up
       // mode have already shaped the raw score above; we simply trust it.
+      // Explicit assignment (rather than relying on fameIndex starting equal
+      // to rawFameIndex) so any future code inserted before this branch can't
+      // silently smooth the off-mode output.
+      fameIndex = rawFameIndex;
       stabilizationApplied = false;
       const rawVsPrevPct = prevF > 0 ? Math.round(((rawFameIndex - prevF) / prevF) * 1000) / 10 : 0;
       stabDetail = {

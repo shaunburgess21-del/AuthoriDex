@@ -40,6 +40,7 @@ import {
   SCORE_VERSION,
   getSmoothingMode,
   getNewsAggregationMode,
+  isDiagnosticsVerbose,
 } from "../scoring/normalize";
 
 const GDELT_CANDIDATE_COUNT = 25;
@@ -1055,6 +1056,12 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     const PER_PERSON_FALLBACK_COOLDOWN_KEY_PREFIX = "system:pp_fallback_cd:serper_news:";
     const PER_PERSON_BAD_NEWS_THRESHOLD = 2;
 
+    // In union mode the aggregator already calls Serper News in parallel for
+    // every person, so a targeted per-person Serper re-call here would just hit
+    // the same (fresh) result — we skip the whole block. The 90-minute cooldown
+    // rows (system:pp_fallback_cd:serper_news:*) will simply not tick while in
+    // union mode; if you flip back to tiered, the streak starts fresh which is
+    // exactly what we want (old cooldowns shouldn't carry a regime switch).
     if ((newsSource === "gdelt" || newsSource === "mediastack") && newsData.size > 0) {
       const perPersonFallbackStart = Date.now();
 
@@ -1473,7 +1480,12 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
         
         let newsEmaHeld = false;
         let newsHoldDiag: Record<string, any> | null = null;
-        const isMediastackRefreshTick = newsSource === "mediastack" ? (mediastackCadence?.shouldRefresh ?? true) : true;
+        // Union mode shares Mediastack's cache-only / refresh cadence because
+        // Mediastack is still the uncapped signal; when it's cache-only we
+        // want the same sticky-zero protection as in Mediastack-primary mode.
+        const isMediastackRefreshTick = (newsSource === "mediastack" || newsSource === "union")
+          ? (mediastackCadence?.shouldRefresh ?? true)
+          : true;
         const stickyZeroGuard = !isMediastackRefreshTick && newsCount === 0 && (newsBaselineMap.get(person.id) ?? 0) >= 8;
         if (!newsUsedFallback && !newsNeedsOutageFallback && !hasPerPersonFallback && news && (isMediastackRefreshTick || stickyZeroGuard)) {
           const isProviderHealthy = newsHealth.state === "HEALTHY" || newsHealth.state === "RECOVERY";
@@ -1687,15 +1699,18 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
             news: !newsUsedFallback && !newsEmaHeld && (news?.articleCount24h ?? 0) > 0,
             search: !searchUsedFallback && !searchEmaHeld && (serper?.searchVolume ?? 0) > 0,
             newsSource: hasPerPersonFallback ? "serper_news" : newsSource,
-            newsIsRefresh: newsSource === "mediastack" ? (mediastackCadence?.shouldRefresh ?? true) : true,
+            newsIsRefresh: (newsSource === "mediastack" || newsSource === "union")
+              ? (mediastackCadence?.shouldRefresh ?? true)
+              : true,
             ...(hasPerPersonFallback ? { fallbackReason: news?._fallbackReason ?? "per_person_zero_streak" } : {}),
-            ...(newsSource === "union" && news?.source === "union" ? {
+            ...(newsSource === "union" && news?.source === "union" && isDiagnosticsVerbose() ? {
               newsUnion: {
                 unionCount: news.unionCount ?? 0,
                 mediastackTotal: news.mediastackPaginationTotal ?? 0,
                 legacyTieredCount: news.legacyTieredCount ?? 0,
                 contributingProviders: news.contributingProviders ?? [],
                 perSourceCounts: news.perSourceCounts ?? null,
+                uniqueContributed: news.uniqueContributed ?? null,
               },
             } : {}),
             newsEmaHeld,

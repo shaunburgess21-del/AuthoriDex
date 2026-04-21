@@ -151,6 +151,18 @@ export function getNewsAggregationFlippedAt(): Date | null {
   return parsed;
 }
 
+/**
+ * Whether to emit the verbose per-snapshot union-mode diagnostics block
+ * (`diagnostics.fresh.newsUnion`). Defaults to `true` during the union-mode
+ * calibration period so we can spot baseline drift / provider skew per person.
+ * Set DIAGNOSTICS_VERBOSE=false on Railway once the calibration is done to
+ * shrink the `trend_snapshots.diagnostics` payload (~150 bytes per snapshot).
+ */
+export function isDiagnosticsVerbose(): boolean {
+  const raw = (process.env.DIAGNOSTICS_VERBOSE ?? "true").trim().toLowerCase();
+  return raw !== "false" && raw !== "0" && raw !== "off";
+}
+
 // ============================================================================
 // AUTO CATCH-UP MODE - Gap-driven dynamic rate boosting (DB-persisted)
 // ============================================================================
@@ -547,6 +559,13 @@ export interface SourceStats {
   p75: number;
   p90: number;
   mean: number;
+  /**
+   * Number of snapshots used to compute the percentiles. Normally reflects the
+   * full 14-day rolling window. For the `news` source only, this may reflect a
+   * shorter post-flip window when NEWS_AGGREGATION_FLIPPED_AT is set — see
+   * `server/scoring/sourceStats.ts`. `wiki.count` and `search.count` always
+   * reflect the full 14-day window.
+   */
   count: number;
 }
 

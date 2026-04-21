@@ -24,7 +24,7 @@ import {
   type GdeltNewsData,
 } from "./gdelt";
 import {
-  fetchSerperNewsBatch,
+  fetchSerperNewsBatch24h,
   type SerperNewsCountData,
 } from "./serper";
 
@@ -75,7 +75,18 @@ export interface AggregatedNewsData {
     gdelt: number;
     serper: number;
   };
-  /** Legacy-comparable count = what the tier-1 (Mediastack) count alone would have been. */
+  /** URLs first seen by each provider — shows each provider's unique contribution to unionCount. */
+  uniqueContributed: {
+    mediastack: number;
+    gdelt: number;
+    serper: number;
+  };
+  /**
+   * Legacy-comparable count = what the tier cascade (Mediastack → GDELT → Serper)
+   * would have returned in the absence of union mode. Approximate because
+   * tier-gates in the ingest pipeline are batch-wide (coverage/quality) rather
+   * than per-person; this just models the per-person preference order.
+   */
   legacyTieredCount: number;
 }
 
@@ -86,6 +97,13 @@ export interface AggregatorProviderSummary {
   peopleWithArticles: number;
   elapsedMs: number;
   error?: string;
+  /**
+   * Mediastack-only: number of cached entries that predate the `articles[]`
+   * field (added Apr 2026). Those entries still contribute their paginationTotal
+   * count to `finalCount` via the max() operation, but contribute zero URLs to
+   * the dedup union. Watch this drop to 0 as the 2h Mediastack cache cycles.
+   */
+  legacyCacheEntries?: number;
 }
 
 export interface AggregatorStats {
@@ -175,6 +193,14 @@ function mergeHeadlines(
 ): string[] {
   // Prefer Mediastack English headlines (if any), then Serper (Google News, usually English),
   // then GDELT (can be any language). Dedup on a normalised title prefix.
+  //
+  // NOTE on language: when Mediastack widens to a no-language query (languageRelaxed=true),
+  // it intentionally returns `topHeadlines: []` so we never surface non-English titles.
+  // In that case Serper's English headlines take the first slots automatically, which is
+  // why union mode doesn't need the separate english-headline-backfill pass that
+  // tiered mode runs in ingest.ts. If Serper also returns nothing, we fall through to
+  // GDELT which can include non-English titles — acceptable as a last resort since at
+  // that point the person has no English news coverage to show anyway.
   const out: string[] = [];
   const seen = new Set<string>();
   const normalize = (s: string) => s.toLowerCase().replace(/[^\w\s]/g, "").trim().slice(0, 80);
@@ -247,10 +273,12 @@ export async function fetchMultiSourceNewsBatch(
     gdeltOptions,
   );
 
-  const serperPromise = fetchSerperNewsBatch(
+  // 24h-only variant (aggregator sources 7d from GDELT) with bumped concurrency
+  // for faster per-tick completion. Previous: (2, 500ms). Now: (4, 300ms).
+  const serperPromise = fetchSerperNewsBatch24h(
     people.map(p => ({ id: p.id, name: p.name })),
-    2,
-    500,
+    4,
+    300,
   );
 
   const [mediastackSettled, gdeltSettled, serperSettled] = await Promise.allSettled([
@@ -275,6 +303,12 @@ export async function fetchMultiSourceNewsBatch(
     providerSummary.mediastack.peopleWithData = mediastackMap.size;
     providerSummary.mediastack.peopleWithArticles = Array.from(mediastackMap.values())
       .filter(v => (v.articles?.length ?? 0) > 0).length;
+    // Entries where `articles` is undefined are from cache versions that predate
+    // the Apr 2026 articles-field addition. They contribute count via
+    // paginationTotal but 0 URLs to the union — should go to 0 as the 2h cache
+    // cycles through.
+    providerSummary.mediastack.legacyCacheEntries = Array.from(mediastackMap.values())
+      .filter(v => v.articles === undefined).length;
   } else if (mediastackSettled.status === "rejected") {
     providerSummary.mediastack.error = String(mediastackSettled.reason);
     console.warn("[News Aggregator] Mediastack batch failed:", mediastackSettled.reason);
@@ -368,11 +402,30 @@ export async function fetchMultiSourceNewsBatch(
       serper: sn?.articleCount24h ?? 0,
     };
 
+    // Attribution: how many unique URLs each provider was first to see. This is
+    // what each provider actually added to unionCount (vs just overlapping with
+    // what others already had). Sums to unionCount by construction.
+    const uniqueContributed = { mediastack: 0, gdelt: 0, serper: 0 };
+    for (const provider of urlFirstSeenBy.values()) {
+      if (provider === "mediastack") uniqueContributed.mediastack++;
+      else if (provider === "gdelt") uniqueContributed.gdelt++;
+      else uniqueContributed.serper++;
+    }
+
     // Final count formula: preserve Mediastack's uncapped signal for mega
     // stories (where paginationTotal can be 1000+), but override with union
     // when the union caught articles Mediastack missed.
     const mediastackTotal = perSourceCounts.mediastack;
-    const legacyTieredCount = mediastackTotal > 0 ? mediastackTotal : Math.max(perSourceCounts.gdelt, perSourceCounts.serper);
+    // Legacy tiered approximation — models the per-person preference order
+    // (Mediastack → GDELT → Serper News) that the tier cascade would have used.
+    // Matches the real tier cascade's per-person outcome more closely than the
+    // previous max(gdelt, serper) fallback did.
+    const legacyTieredCount =
+      mediastackTotal > 0
+        ? mediastackTotal
+        : perSourceCounts.gdelt > 0
+          ? perSourceCounts.gdelt
+          : perSourceCounts.serper;
     const finalCount = Math.max(mediastackTotal, unionCount);
 
     if (unionCount > mediastackTotal) peopleUnionBeatsMediastack++;
@@ -416,6 +469,7 @@ export async function fetchMultiSourceNewsBatch(
       mediastackPaginationTotal: mediastackTotal,
       contributingProviders,
       perSourceCounts,
+      uniqueContributed,
       legacyTieredCount,
     });
   }
@@ -442,9 +496,10 @@ export async function fetchMultiSourceNewsBatch(
     `avgUnion=${stats.avgUnionCount.toFixed(1)}, unionBeats=${peopleUnionBeatsMediastack}, ` +
     `msBeats=${peopleMediastackBeatsUnion}, elapsed=${(stats.elapsedMs / 1000).toFixed(1)}s`,
   );
+  const msLegacy = providerSummary.mediastack.legacyCacheEntries ?? 0;
   console.log(
     `[News Aggregator] Providers: ` +
-    `mediastack ${providerSummary.mediastack.succeeded ? "OK" : "FAIL"} (${providerSummary.mediastack.peopleWithData} people, ${providerSummary.mediastack.peopleWithArticles} with URLs, ${(providerSummary.mediastack.elapsedMs / 1000).toFixed(1)}s), ` +
+    `mediastack ${providerSummary.mediastack.succeeded ? "OK" : "FAIL"} (${providerSummary.mediastack.peopleWithData} people, ${providerSummary.mediastack.peopleWithArticles} with URLs, ${(providerSummary.mediastack.elapsedMs / 1000).toFixed(1)}s${msLegacy > 0 ? `, ${msLegacy} legacy cache entries` : ""}), ` +
     `gdelt ${providerSummary.gdelt.succeeded ? "OK" : "FAIL"} (${providerSummary.gdelt.peopleWithData} people, ${providerSummary.gdelt.peopleWithArticles} with URLs, ${(providerSummary.gdelt.elapsedMs / 1000).toFixed(1)}s), ` +
     `serper ${providerSummary.serper.succeeded ? "OK" : "FAIL"} (${providerSummary.serper.peopleWithData} people, ${providerSummary.serper.peopleWithArticles} with URLs, ${(providerSummary.serper.elapsedMs / 1000).toFixed(1)}s)`,
   );
