@@ -63,6 +63,8 @@ import { AdminCurateProfile } from "@/components/admin/AdminCurateProfile";
 import { AdminInductionQueue } from "@/components/admin/AdminInductionQueue";
 import { AdminSettlementCenter } from "@/components/admin/AdminSettlementCenter";
 import { AdminUserCreditHistory } from "@/components/admin/AdminUserCreditHistory";
+import { AdminLeaderboardDiff } from "@/components/admin/AdminLeaderboardDiff";
+import { AdminScoreInspector } from "@/components/admin/AdminScoreInspector";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -7239,6 +7241,9 @@ export default function AdminDashboard() {
                 )}
               </CardContent>
             </Card>
+
+            <AdminLeaderboardDiff />
+            <AdminScoreInspector />
           </div>
         )}
       </main>

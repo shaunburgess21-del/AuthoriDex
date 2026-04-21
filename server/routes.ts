@@ -6819,21 +6819,33 @@ Only return the JSON object.`;
   app.get("/api/admin/score-audit/:personId", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { personId } = req.params;
-      
+
+      // days = how many days of history to pull for the inspector; default 2
+      // (48 hourly ticks). Clamped [1, 14] to keep the payload small. Also
+      // drives the minimum snapshot count the UI can render as sparklines.
+      const rawDays = parseInt(String(req.query.days ?? "2"), 10);
+      const days = Number.isFinite(rawDays) && rawDays >= 1 && rawDays <= 14 ? rawDays : 2;
+      const snapshotLimit = days * 24 + 6; // a bit of headroom for live-tick rows
+
       const person = await db.select().from(trackedPeople).where(eq(trackedPeople.id, personId)).limit(1);
       if (person.length === 0) {
         return res.status(404).json({ error: "Person not found" });
       }
-      
+
       const trendingEntry = await db.select().from(trendingPeople).where(eq(trendingPeople.name, person[0].name)).limit(1);
-      
+
       const snapshots = await db.select().from(trendSnapshots)
         .where(eq(trendSnapshots.personId, personId))
         .orderBy(desc(trendSnapshots.timestamp), desc(trendSnapshots.id))
-        .limit(10);
-      
+        .limit(snapshotLimit);
+
       const healthSnapshot = getCurrentHealthSnapshot();
-      
+
+      // Pull the live rolling percentiles so the UI can show baseline context
+      // ("this news count is above/below the market-wide median") next to each
+      // raw value. Cheap — in-memory cached in sourceStats.ts.
+      const sourceStats = await getSourceStats();
+
       const snapshotBreakdown = snapshots.map(s => {
         let diag: Record<string, any> | null = null;
         try {
@@ -6864,11 +6876,12 @@ Only return the JSON object.`;
           diagnostics: diag,
         };
       });
-      
+
       res.json({
         person: {
           id: person[0].id,
           name: person[0].name,
+          category: person[0].category,
           wikiSlug: person[0].wikiSlug,
           searchQueryOverride: person[0].searchQueryOverride,
         },
@@ -6878,8 +6891,14 @@ Only return the JSON object.`;
           rank: trendingEntry[0].rank,
           liveRank: trendingEntry[0].liveRank,
           change24h: trendingEntry[0].change24h,
+          change7d: trendingEntry[0].change7d,
           trendScore: trendingEntry[0].trendScore,
         } : null,
+        sourceStats: {
+          wiki: sourceStats.wiki,
+          news: sourceStats.news,
+          search: sourceStats.search,
+        },
         sourceHealth: {
           news: {
             state: healthSnapshot.news.state,
@@ -6908,12 +6927,207 @@ Only return the JSON object.`;
           asymmetricCaps: "up=base, down=base*1.5",
           asymmetricEma: "down_alpha=base*1.5",
         },
+        // Renamed from last10Snapshots; kept as alias for backward compat
         last10Snapshots: snapshotBreakdown,
+        recentSnapshots: snapshotBreakdown,
+        requestedDays: days,
         auditTimestamp: new Date().toISOString(),
       });
     } catch (error) {
       console.error("[Score Audit] Error:", error);
       res.status(500).json({ error: "Failed to generate score audit" });
+    }
+  });
+
+  // Typeahead-style people search for the admin Score Inspector.
+  // Case-insensitive prefix/substring match on tracked_people.name, capped to
+  // 10 results. No auth beyond admin.
+  app.get("/api/admin/people-search", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const q = String(req.query.q ?? "").trim();
+      if (q.length < 2) {
+        return res.json({ query: q, results: [] });
+      }
+      const like = `%${q.replace(/[%_]/g, "\\$&")}%`;
+      const rows = await db.execute(sql`
+        SELECT tp.id, tp.name, tp.category, tp.avatar, tp.image_slug,
+               trp.rank, trp.fame_index
+        FROM tracked_people tp
+        LEFT JOIN trending_people trp ON trp.name = tp.name
+        WHERE tp.name ILIKE ${like}
+        ORDER BY
+          CASE WHEN LOWER(tp.name) LIKE LOWER(${q + "%"}) THEN 0 ELSE 1 END,
+          trp.rank ASC NULLS LAST,
+          tp.name ASC
+        LIMIT 10
+      `);
+      const results = (rows.rows || []).map((r: any) => ({
+        id: r.id,
+        name: r.name,
+        category: r.category,
+        avatar: r.avatar || r.image_slug || null,
+        rank: r.rank != null ? Number(r.rank) : null,
+        fameIndex: r.fame_index != null ? Number(r.fame_index) : null,
+      }));
+      res.json({ query: q, results });
+    } catch (error: any) {
+      console.error("[People Search] Error:", error);
+      res.status(500).json({ error: error?.message || "Failed to search people" });
+    }
+  });
+
+  // Leaderboard diff: compare the top-N right now against the top-N from
+  // `hours` ago (default 24). Joins current trending_people vs the closest
+  // snapshot to now-hours for each person (within a ±2h window so we don't
+  // mis-match a different day's tick). Returns movement flags the UI can
+  // render as arrows: "new" (wasn't in top N), "dropped" (left top N),
+  // "up"/"down"/"same".
+  app.get("/api/admin/leaderboard-diff", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const rawHours = parseInt(String(req.query.hours ?? "24"), 10);
+      const hours = Number.isFinite(rawHours) && rawHours >= 1 && rawHours <= 168 ? rawHours : 24;
+      const rawLimit = parseInt(String(req.query.limit ?? "20"), 10);
+      const limit = Number.isFinite(rawLimit) && rawLimit >= 5 && rawLimit <= 50 ? rawLimit : 20;
+      // Match window: snapshots within ±this many hours of the target time
+      // count as "at N hours ago". 2h balances tolerance for occasional gaps
+      // against accidentally matching an adjacent day.
+      const matchWindowHours = 2;
+
+      // For each person, pick their snapshot closest to (now - hours), compute
+      // the rank those fame_indexes would have produced at that time, then
+      // join against current trending_people. Using a CTE with ROW_NUMBER on
+      // abs-time-delta picks the single closest snapshot per person.
+      const result = await db.execute(sql`
+        WITH target AS (
+          SELECT (NOW() - (${hours} || ' hours')::interval) AS t
+        ),
+        closest AS (
+          SELECT
+            ts.person_id,
+            ts.fame_index,
+            ROW_NUMBER() OVER (
+              PARTITION BY ts.person_id
+              ORDER BY ABS(EXTRACT(EPOCH FROM ts.timestamp - (SELECT t FROM target)))
+            ) AS rn
+          FROM trend_snapshots ts, target
+          WHERE ts.timestamp BETWEEN target.t - (${matchWindowHours} || ' hours')::interval
+                                 AND target.t + (${matchWindowHours} || ' hours')::interval
+            AND ts.snapshot_origin = 'ingest'
+            AND ts.fame_index IS NOT NULL
+        ),
+        previous_ranked AS (
+          SELECT
+            person_id,
+            fame_index AS prev_fame,
+            ROW_NUMBER() OVER (ORDER BY fame_index DESC) AS prev_rank
+          FROM closest WHERE rn = 1
+        ),
+        current_top AS (
+          SELECT tp.id AS person_id, trp.name, trp.category, trp.avatar,
+                 trp.rank AS current_rank, trp.fame_index AS current_fame,
+                 trp.change_24h
+          FROM trending_people trp
+          LEFT JOIN tracked_people tp ON tp.name = trp.name
+          WHERE trp.rank <= ${limit}
+          ORDER BY trp.rank ASC
+        ),
+        previous_top AS (
+          SELECT pr.person_id, pr.prev_fame, pr.prev_rank, tp.name, tp.category, tp.avatar
+          FROM previous_ranked pr
+          JOIN tracked_people tp ON tp.id = pr.person_id
+          WHERE pr.prev_rank <= ${limit}
+        )
+        SELECT
+          'current' AS which,
+          ct.person_id, ct.name, ct.category, ct.avatar,
+          ct.current_rank, ct.current_fame, ct.change_24h,
+          pr.prev_rank, pr.prev_fame
+        FROM current_top ct
+        LEFT JOIN previous_ranked pr ON pr.person_id = ct.person_id
+        UNION ALL
+        SELECT
+          'dropped' AS which,
+          pt.person_id, pt.name, pt.category, pt.avatar,
+          NULL AS current_rank, NULL AS current_fame, NULL AS change_24h,
+          pt.prev_rank, pt.prev_fame
+        FROM previous_top pt
+        LEFT JOIN current_top ct ON ct.person_id = pt.person_id
+        WHERE ct.person_id IS NULL
+        ORDER BY which ASC, current_rank ASC NULLS LAST, prev_rank ASC NULLS LAST
+      `);
+
+      // Stats about the match window quality — lets the UI warn if we couldn't
+      // find a snapshot near target time (e.g. first day of operation or
+      // after a long ingest outage).
+      const matchStatsRow = await db.execute(sql`
+        WITH target AS (SELECT (NOW() - (${hours} || ' hours')::interval) AS t)
+        SELECT
+          COUNT(*)::int AS total_people,
+          SUM(CASE WHEN exists_then THEN 1 ELSE 0 END)::int AS matched_people
+        FROM (
+          SELECT trp.name,
+                 EXISTS (
+                   SELECT 1 FROM trend_snapshots ts
+                   JOIN tracked_people tp ON tp.id = ts.person_id
+                   WHERE tp.name = trp.name
+                     AND ts.timestamp BETWEEN (SELECT t FROM target) - (${matchWindowHours} || ' hours')::interval
+                                          AND (SELECT t FROM target) + (${matchWindowHours} || ' hours')::interval
+                     AND ts.snapshot_origin = 'ingest'
+                 ) AS exists_then
+          FROM trending_people trp
+          WHERE trp.rank <= ${limit}
+        ) x
+      `);
+      const matchStats = (matchStatsRow.rows?.[0] ?? {}) as Record<string, number>;
+
+      const rows = (result.rows || []).map((r: any) => {
+        const currentRank = r.current_rank != null ? Number(r.current_rank) : null;
+        const prevRank = r.prev_rank != null ? Number(r.prev_rank) : null;
+        let status: "new" | "dropped" | "up" | "down" | "same";
+        let rankDelta: number | null = null;
+        if (currentRank == null) {
+          status = "dropped";
+        } else if (prevRank == null) {
+          status = "new";
+        } else {
+          rankDelta = prevRank - currentRank; // positive = moved up
+          if (rankDelta > 0) status = "up";
+          else if (rankDelta < 0) status = "down";
+          else status = "same";
+        }
+        return {
+          personId: r.person_id,
+          name: r.name,
+          category: r.category,
+          avatar: r.avatar,
+          currentRank,
+          currentFameIndex: r.current_fame != null ? Number(r.current_fame) : null,
+          change24h: r.change_24h != null ? Number(r.change_24h) : null,
+          previousRank: prevRank,
+          previousFameIndex: r.prev_fame != null ? Number(r.prev_fame) : null,
+          rankDelta,
+          fameIndexDelta:
+            r.current_fame != null && r.prev_fame != null
+              ? Number(r.current_fame) - Number(r.prev_fame)
+              : null,
+          status,
+        };
+      });
+
+      res.json({
+        hoursAgo: hours,
+        limit,
+        matchWindowHours,
+        coverage: {
+          totalPeople: Number(matchStats.total_people ?? 0),
+          matchedPeople: Number(matchStats.matched_people ?? 0),
+        },
+        rows,
+        computedAt: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error("[Leaderboard Diff] Error:", error);
+      res.status(500).json({ error: error?.message || "Failed to compute leaderboard diff" });
     }
   });
 
