@@ -135,9 +135,15 @@ export const colors = {
     },
     code: {
       fontFamily: fonts.mono,
-      fontSize: "32px",
+      fontSize: "28px",
       fontWeight: "600",
-      letterSpacing: "8px",
+      letterSpacing: "4px",
       color: colors.brandBright,
+      // Prevent mid-code line breaks on narrow mobile clients.
+      // Gmail Android was wrapping a 6-digit code onto two lines
+      // without these. Keeping the code atomic is non-negotiable
+      // for usability — a wrapped code invites mistyping.
+      whiteSpace: "nowrap",
+      display: "inline-block",
     },
   } as const;
