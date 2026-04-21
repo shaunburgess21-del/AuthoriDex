@@ -1729,9 +1729,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // 14-day source stats, with safe fixed-threshold fallbacks when the stats
   // look uninitialized (e.g. fresh DB or persisted defaults).
   type MomentumLevel = "none" | "low" | "medium" | "high";
+  // Safety fallbacks used only when rolling stats are unhealthy (< 100 snapshots
+  // or degenerate distribution). News bumped for NEWS_AGGREGATION_MODE=union
+  // which roughly 2-3x's raw counts vs the legacy tiered pipeline.
   const FIXED_LEVEL_FALLBACKS: Record<"search" | "news" | "wiki", { low: number; high: number }> = {
     search: { low: 20, high: 60 },
-    news: { low: 7, high: 16 },
+    news: { low: 15, high: 40 },
     wiki: { low: 500, high: 5000 },
   };
   const computeLevel = (

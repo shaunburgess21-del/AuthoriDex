@@ -125,6 +125,32 @@ export function getNewsAggregationMode(): NewsAggregationMode {
   return raw === "union" ? "union" : "tiered";
 }
 
+/**
+ * Timestamp of when NEWS_AGGREGATION_MODE was flipped from tiered to union.
+ * When set, the momentum-signal percentile calibration (p25/p75 used for the
+ * Low/Medium/High traffic lights) will only include news snapshots from AFTER
+ * this cutoff — so the tiered-era (lower) counts don't skew the denominator
+ * during the 14-day transition window, which would otherwise make everyone
+ * look "High" until the rolling window caught up.
+ *
+ * Set as an ISO 8601 string on Railway, e.g.:
+ *   NEWS_AGGREGATION_FLIPPED_AT=2026-04-21T14:30:00Z
+ * Returns null if unset, blank, or unparseable.
+ *
+ * Only affects news percentiles — wiki and search continue to use the full
+ * 14-day rolling window since their data pipelines didn't change.
+ */
+export function getNewsAggregationFlippedAt(): Date | null {
+  const raw = (process.env.NEWS_AGGREGATION_FLIPPED_AT ?? "").trim();
+  if (!raw) return null;
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) {
+    console.warn(`[normalize] NEWS_AGGREGATION_FLIPPED_AT value "${raw}" is not a valid ISO timestamp, ignoring`);
+    return null;
+  }
+  return parsed;
+}
+
 // ============================================================================
 // AUTO CATCH-UP MODE - Gap-driven dynamic rate boosting (DB-persisted)
 // ============================================================================

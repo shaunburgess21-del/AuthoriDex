@@ -1,11 +1,16 @@
 import { db } from "../db";
 import { apiCache } from "@shared/schema";
 import { sql, eq } from "drizzle-orm";
-import { SourceStats, AllSourceStats, DEFAULT_SOURCE_STATS } from "./normalize";
+import { SourceStats, AllSourceStats, DEFAULT_SOURCE_STATS, getNewsAggregationFlippedAt } from "./normalize";
 
 const STATS_CACHE_KEY = "system:source_stats_reference";
 const ROLLING_WINDOW_DAYS = 14;
 const MIN_SNAPSHOT_COUNT = 100;
+// When NEWS_AGGREGATION_FLIPPED_AT is set, the post-flip window needs at least
+// this many snapshots before we trust it for news percentile calibration.
+// Below this we fall back to the full 14-day window to keep thresholds stable
+// on day 1 of the flip (before enough union-scale data has accumulated).
+const MIN_POST_FLIP_NEWS_COUNT = 500;
 
 export async function fetchRollingSourceStats(): Promise<AllSourceStats> {
   const windowStart = new Date();
@@ -69,7 +74,63 @@ export async function fetchRollingSourceStats(): Promise<AllSourceStats> {
     }
     
     const n = (v: number, fallback: number) => (Number.isFinite(v) ? v : fallback);
-    
+
+    const newsStats: SourceStats = {
+      min: n(Number(row.news_min), DEFAULT_SOURCE_STATS.news.min),
+      max: n(Number(row.news_max), DEFAULT_SOURCE_STATS.news.max),
+      p25: n(Number(row.news_p25), DEFAULT_SOURCE_STATS.news.p25),
+      p50: n(Number(row.news_p50), DEFAULT_SOURCE_STATS.news.p50),
+      p75: n(Number(row.news_p75), DEFAULT_SOURCE_STATS.news.p75),
+      p90: n(Number(row.news_p90), DEFAULT_SOURCE_STATS.news.p90),
+      mean: n(Number(row.news_mean), DEFAULT_SOURCE_STATS.news.mean),
+      count,
+    };
+    let newsWindowSource: "full-14d" | "post-flip" = "full-14d";
+
+    // If the user flipped NEWS_AGGREGATION_MODE=union, recompute news percentiles
+    // from post-flip snapshots only. This stops the 14-day mix of legacy+union
+    // snapshots from inflating everyone's momentum level during the transition.
+    // We keep the full-14d news stats if the post-flip window is still too thin.
+    const flippedAt = getNewsAggregationFlippedAt();
+    if (flippedAt && flippedAt > windowStart && flippedAt < new Date()) {
+      try {
+        const postFlipResult = await db.execute(sql`
+          SELECT
+            MIN(news_count) as news_min,
+            MAX(news_count) as news_max,
+            PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY news_count) as news_p25,
+            PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY news_count) as news_p50,
+            PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY news_count) as news_p75,
+            PERCENTILE_CONT(0.90) WITHIN GROUP (ORDER BY news_count) as news_p90,
+            AVG(news_count) as news_mean,
+            COUNT(*) as total_count
+          FROM trend_snapshots
+          WHERE timestamp >= ${flippedAt}
+            AND timestamp = date_trunc('hour', timestamp)
+            AND snapshot_origin = 'ingest'
+            AND news_count IS NOT NULL
+        `);
+        const pfRow = (postFlipResult.rows?.[0] ?? {}) as Record<string, number>;
+        const pfCount = Number(pfRow.total_count ?? 0);
+        if (pfCount >= MIN_POST_FLIP_NEWS_COUNT) {
+          newsStats.min = n(Number(pfRow.news_min), newsStats.min);
+          newsStats.max = n(Number(pfRow.news_max), newsStats.max);
+          newsStats.p25 = n(Number(pfRow.news_p25), newsStats.p25);
+          newsStats.p50 = n(Number(pfRow.news_p50), newsStats.p50);
+          newsStats.p75 = n(Number(pfRow.news_p75), newsStats.p75);
+          newsStats.p90 = n(Number(pfRow.news_p90), newsStats.p90);
+          newsStats.mean = n(Number(pfRow.news_mean), newsStats.mean);
+          newsStats.count = pfCount;
+          newsWindowSource = "post-flip";
+          console.log(`[SourceStats] News using POST-FLIP window (${pfCount} snapshots since ${flippedAt.toISOString()}) — p25=${newsStats.p25.toFixed(1)}, p50=${newsStats.p50.toFixed(1)}, p75=${newsStats.p75.toFixed(1)}`);
+        } else {
+          console.log(`[SourceStats] News POST-FLIP window has only ${pfCount} snapshots (<${MIN_POST_FLIP_NEWS_COUNT}), falling back to full ${ROLLING_WINDOW_DAYS}-day window`);
+        }
+      } catch (pfErr) {
+        console.warn(`[SourceStats] Post-flip news query failed, falling back to ${ROLLING_WINDOW_DAYS}-day window:`, pfErr);
+      }
+    }
+
     const stats: AllSourceStats = {
       wiki: {
         min: n(Number(row.wiki_min), DEFAULT_SOURCE_STATS.wiki.min),
@@ -81,16 +142,7 @@ export async function fetchRollingSourceStats(): Promise<AllSourceStats> {
         mean: n(Number(row.wiki_mean), DEFAULT_SOURCE_STATS.wiki.mean),
         count,
       },
-      news: {
-        min: n(Number(row.news_min), DEFAULT_SOURCE_STATS.news.min),
-        max: n(Number(row.news_max), DEFAULT_SOURCE_STATS.news.max),
-        p25: n(Number(row.news_p25), DEFAULT_SOURCE_STATS.news.p25),
-        p50: n(Number(row.news_p50), DEFAULT_SOURCE_STATS.news.p50),
-        p75: n(Number(row.news_p75), DEFAULT_SOURCE_STATS.news.p75),
-        p90: n(Number(row.news_p90), DEFAULT_SOURCE_STATS.news.p90),
-        mean: n(Number(row.news_mean), DEFAULT_SOURCE_STATS.news.mean),
-        count,
-      },
+      news: newsStats,
       search: {
         min: n(Number(row.search_min), DEFAULT_SOURCE_STATS.search.min),
         max: n(Number(row.search_max), DEFAULT_SOURCE_STATS.search.max),
@@ -102,12 +154,12 @@ export async function fetchRollingSourceStats(): Promise<AllSourceStats> {
         count,
       },
     };
-    
-    console.log(`[SourceStats] Computed from ${count} snapshots (${ROLLING_WINDOW_DAYS}-day window): ` +
+
+    console.log(`[SourceStats] Computed from ${count} snapshots (${ROLLING_WINDOW_DAYS}-day window, news=${newsWindowSource}): ` +
       `wiki p50=${stats.wiki.p50.toFixed(0)}, news p50=${stats.news.p50.toFixed(1)}, search p50=${stats.search.p50.toFixed(0)}`);
-    
+
     await persistStats(stats);
-    
+
     return stats;
   } catch (error) {
     console.error("[SourceStats] Error fetching stats:", error);

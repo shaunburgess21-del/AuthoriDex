@@ -72,8 +72,10 @@ function fallbackLevel(source: "search" | "news" | "wiki", value: number): Momen
     return "high";
   }
   if (source === "news") {
-    if (value < 7) return "low";
-    if (value < 16) return "medium";
+    // Kept in sync with FIXED_LEVEL_FALLBACKS.news in server/routes.ts.
+    // Bumped for NEWS_AGGREGATION_MODE=union which roughly 2-3x's raw counts.
+    if (value < 15) return "low";
+    if (value < 40) return "medium";
     return "high";
   }
   if (value < 500) return "low";
