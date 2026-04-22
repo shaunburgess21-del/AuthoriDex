@@ -1,5 +1,5 @@
 /**
- * Import World Markets from the curated XLSX spreadsheet.
+ * Import World Markets from the curated Excel spreadsheet.
  *
  * Usage:
  *   npx tsx ops/import-world-markets.ts --dry-run          # validate only
@@ -10,7 +10,7 @@
  * Set ADMIN_TOKEN env var to a valid admin session token.
  */
 
-import XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import path from "path";
 
 const DEFAULT_FILE = path.resolve(__dirname, "authoridex_world_markets_launch_top25_final.xlsx");
@@ -22,6 +22,8 @@ const CATEGORY_NORMALIZE: Record<string, string> = {
   "tech/business": "tech",
   "creators": "creator",
 };
+
+type CellValue = string | number | Date | null;
 
 interface RawRow {
   Rank: number;
@@ -45,12 +47,19 @@ interface RawRow {
   "Source / Note": string;
 }
 
-function parseDate(val: string | number | Date): string | null {
+function parseExcelSerialDate(serial: number): Date | null {
+  if (!Number.isFinite(serial) || serial <= 0) return null;
+  const excelEpoch = Date.UTC(1899, 11, 30);
+  const millis = Math.round(serial * 24 * 60 * 60 * 1000);
+  return new Date(excelEpoch + millis);
+}
+
+function parseDate(val: CellValue): string | null {
   if (!val) return null;
   if (val instanceof Date) return val.toISOString();
   if (typeof val === "number") {
-    const d = XLSX.SSF.parse_date_code(val);
-    if (d) return new Date(d.y, d.m - 1, d.d).toISOString();
+    const parsed = parseExcelSerialDate(val);
+    if (parsed && !isNaN(parsed.getTime())) return parsed.toISOString();
   }
   const d = new Date(val);
   return isNaN(d.getTime()) ? null : d.toISOString();
@@ -101,6 +110,61 @@ function rowToPayload(row: RawRow) {
   };
 }
 
+function getCellText(value: ExcelJS.CellValue): string {
+  if (value == null) return "";
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (typeof value === "object") {
+    if ("text" in value && typeof value.text === "string") return value.text;
+    if ("result" in value && value.result != null) return String(value.result);
+    if ("richText" in value && Array.isArray(value.richText)) {
+      return value.richText.map((part) => part.text).join("");
+    }
+    return "";
+  }
+  return String(value);
+}
+
+async function readSheetRows(filePath: string, sheetName: string): Promise<RawRow[]> {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.readFile(filePath);
+  const worksheet = workbook.getWorksheet(sheetName);
+  if (!worksheet) {
+    throw new Error(`Sheet "${sheetName}" not found. Available: ${workbook.worksheets.map((s) => s.name).join(", ")}`);
+  }
+
+  const headerRow = worksheet.getRow(1);
+  const headers = new Map<number, string>();
+  headerRow.eachCell((cell, colNumber) => {
+    headers.set(colNumber, getCellText(cell.value).trim());
+  });
+
+  const rows: RawRow[] = [];
+  worksheet.eachRow((row, rowNumber) => {
+    if (rowNumber === 1) return;
+    const record: Record<string, CellValue> = {};
+    let hasData = false;
+    headers.forEach((header, colNumber) => {
+      if (!header) return;
+      const cell = row.getCell(colNumber);
+      const raw = cell.value;
+      if (raw == null || raw === "") {
+        record[header] = null;
+        return;
+      }
+      hasData = true;
+      if (raw instanceof Date || typeof raw === "number") {
+        record[header] = raw;
+      } else {
+        record[header] = getCellText(raw).trim();
+      }
+    });
+    if (hasData) rows.push(record as unknown as RawRow);
+  });
+
+  return rows;
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const dryRun = args.includes("--dry-run");
@@ -119,14 +183,7 @@ async function main() {
   console.log(`Mode:    ${dryRun ? "DRY RUN (no inserts)" : "LIVE IMPORT"}`);
   console.log();
 
-  const wb = XLSX.readFile(filePath);
-  const ws = wb.Sheets[SHEET_NAME];
-  if (!ws) {
-    console.error(`Sheet "${SHEET_NAME}" not found. Available: ${wb.SheetNames.join(", ")}`);
-    process.exit(1);
-  }
-
-  const rows = XLSX.utils.sheet_to_json<RawRow>(ws);
+  const rows = await readSheetRows(filePath, SHEET_NAME);
   console.log(`Parsed ${rows.length} rows from spreadsheet.\n`);
 
   const markets = rows.map(rowToPayload);

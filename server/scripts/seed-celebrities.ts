@@ -1,4 +1,4 @@
-import XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { db } from '../db';
 import { trackedPeople, trendingPeople, trendSnapshots, apiCache, platformInsights, insightItems } from '@shared/schema';
 import { sql } from 'drizzle-orm';
@@ -39,10 +39,14 @@ async function seedCelebrities() {
 
   console.log('Starting celebrity seed from Excel file...\n');
 
-  const workbook = XLSX.readFile('attached_assets/2025-12-30_FameDex_Leaderboard_-_Final_1767047208792.xlsx');
-  const sheetName = workbook.SheetNames[0];
-  const sheet = workbook.Sheets[sheetName];
-  const data = XLSX.utils.sheet_to_json<ExcelRow>(sheet);
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.readFile('attached_assets/2025-12-30_FameDex_Leaderboard_-_Final_1767047208792.xlsx');
+  const worksheet = workbook.worksheets[0];
+  if (!worksheet) {
+    console.error('No worksheet found in seed spreadsheet. Aborting.');
+    process.exit(1);
+  }
+  const data = readExcelRows<ExcelRow>(worksheet);
 
   console.log(`Found ${data.length} celebrities in Excel file`);
 
@@ -108,6 +112,45 @@ async function seedCelebrities() {
   console.log('   Next: Run data ingestion to fetch fresh scores');
   
   process.exit(0);
+}
+
+function getCellText(value: ExcelJS.CellValue): string {
+  if (value == null) return '';
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (typeof value === 'object') {
+    if ('text' in value && typeof value.text === 'string') return value.text;
+    if ('result' in value && value.result != null) return String(value.result);
+    if ('richText' in value && Array.isArray(value.richText)) {
+      return value.richText.map((part) => part.text).join('');
+    }
+    return '';
+  }
+  return String(value);
+}
+
+function readExcelRows<T>(worksheet: ExcelJS.Worksheet): T[] {
+  const headerRow = worksheet.getRow(1);
+  const headers = new Map<number, string>();
+  headerRow.eachCell((cell, colNumber) => {
+    headers.set(colNumber, getCellText(cell.value).trim());
+  });
+
+  const rows: T[] = [];
+  worksheet.eachRow((row, rowNumber) => {
+    if (rowNumber === 1) return;
+    const record: Record<string, string> = {};
+    let hasData = false;
+    headers.forEach((header, colNumber) => {
+      if (!header) return;
+      const text = getCellText(row.getCell(colNumber).value).trim();
+      if (text.length > 0) hasData = true;
+      record[header] = text;
+    });
+    if (hasData) rows.push(record as unknown as T);
+  });
+
+  return rows;
 }
 
 seedCelebrities().catch((err) => {
