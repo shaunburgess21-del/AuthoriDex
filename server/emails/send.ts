@@ -129,6 +129,8 @@ export async function sendEmail(
 
   // ---- Actual send ----
   try {
+    // Lazy-resolved: throws with a clear message if RESEND_API_KEY
+    // is missing, rather than crashing server boot. Caught below.
     const { data, error } = await resend.emails.send({
       from: senders[category],
       to,

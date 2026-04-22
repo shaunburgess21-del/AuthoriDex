@@ -15,26 +15,48 @@
 
 import { Resend } from "resend";
 
-// ---- Env wiring -----------------------------------------------------------
+// ---- Client ---------------------------------------------------------------
+//
+// The Resend client is constructed lazily so a missing RESEND_API_KEY
+// does NOT crash server boot. Email is a feature, not a dependency
+// of the app being able to start — a misconfigured email key should
+// break email sends, not the leaderboard.
+//
+// Call `getResendClient()` from send paths; it will either return a
+// configured client or throw a descriptive error that callers can
+// catch and surface to logs/monitoring.
 
-const apiKey = process.env.RESEND_API_KEY;
+let cachedClient: Resend | null = null;
 
-if (!apiKey) {
-  // Fail loud at module load rather than silently at first send.
-  // The backend should not start without email capability wired up.
-  throw new Error(
-    "[emails] RESEND_API_KEY is not set. Add it to your .env (dev) " +
-      "or Railway environment (prod).",
-  );
+export function getResendClient(): Resend {
+  if (cachedClient) return cachedClient;
+
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    throw new Error(
+      "[emails] RESEND_API_KEY is not set. Add it to your .env (dev) " +
+        "or Railway environment (prod). Email sending is disabled " +
+        "until this is fixed; the rest of the app is unaffected.",
+    );
+  }
+
+  cachedClient = new Resend(apiKey);
+  return cachedClient;
 }
 
-// ---- Client ---------------------------------------------------------------
-
 /**
- * Shared Resend client. Import from here, don't `new Resend(...)`
- * anywhere else in the codebase.
+ * Back-compat alias. Prefer `getResendClient()` in new code.
+ *
+ * This Proxy shape means that even code doing
+ * `import { resend } from "./client"` gets the lazy behaviour —
+ * the client is only built on first actual property access
+ * (e.g. `resend.emails.send(...)`).
  */
-export const resend = new Resend(apiKey);
+export const resend = new Proxy({} as Resend, {
+  get(_target, prop) {
+    return Reflect.get(getResendClient(), prop);
+  },
+});
 
 // ---- Sender addresses -----------------------------------------------------
 
