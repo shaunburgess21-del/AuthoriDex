@@ -1,4 +1,5 @@
 import type { Express, Request } from "express";
+import express from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { getBaselineDiagnostics } from "./utils/baseline";
@@ -64,6 +65,7 @@ import { runPostInductionOnboarding } from "./services/induction-onboarding";
 import { CANONICAL_MARKET_CATEGORIES, getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
 import { resolvePublicMatchupBySlugOrId } from "./utils/matchup-resolve";
 import { registerCronRoutes, registerPublicRoutes, registerGamificationRoutes, registerFavoritesRoutes } from "./route-modules";
+import { handleAuthHook } from "./emails/routes/auth-hook";
 
 const VIEW_DEDUPE_WINDOW_MS = 10 * 60 * 1000;
 const VIEW_IP_RATE_LIMIT = 30;
@@ -497,6 +499,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerPublicRoutes(app);
   registerGamificationRoutes(app);
   registerFavoritesRoutes(app);
+
+  // ---- Supabase Send Email Auth Hook -------------------------------------
+  // Receives webhooks from Supabase whenever an auth email needs sending.
+  // Uses express.raw() (not json()) because signature verification requires
+  // the exact bytes of the request body. Do not add requireAuth — the caller
+  // is Supabase, authenticated via webhook signature not a user session.
+  app.post(
+    "/api/auth/email-hook",
+    express.raw({ type: "application/json", limit: "1mb" }),
+    handleAuthHook,
+  );
 
   // Manual seeding endpoint for testing
   app.post("/api/admin/seed-supabase", requireAuth, requireAdmin, async (req, res) => {

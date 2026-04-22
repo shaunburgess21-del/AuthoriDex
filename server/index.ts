@@ -483,8 +483,20 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
 }));
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
+// Global body parsers — SKIP for webhook endpoints that need raw bytes.
+// The /api/auth/email-hook route verifies a signature over the raw request
+// body, so it installs its own express.raw() middleware. If we let
+// express.json() run first, the signature check would fail because the
+// body would already be parsed into an object.
+//
+// To add another raw-body webhook in the future, extend the skipList below.
+const rawBodyRoutes = ["/api/auth/email-hook"];
+const skipIfRawBody = (parser: express.RequestHandler): express.RequestHandler =>
+  (req, res, next) =>
+    rawBodyRoutes.includes(req.path) ? next() : parser(req, res, next);
+
+app.use(skipIfRawBody(express.json()));
+app.use(skipIfRawBody(express.urlencoded({ extended: false })));
 
 // Lightweight global auth resolution so rate limiters can key on userId.
 // Only does work when a Bearer token is present; per-route requireAuth/optionalAuth
