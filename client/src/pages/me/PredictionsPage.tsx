@@ -154,7 +154,7 @@ function FilterPill({
       data-testid={dataTestId}
       aria-pressed={active}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-medium transition-colors",
+        "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-medium transition-colors",
         active
           ? accentClass[accent]
           : "border-border/60 text-muted-foreground hover:border-border hover:text-foreground",
@@ -172,6 +172,22 @@ function FilterPill({
         </span>
       )}
     </button>
+  );
+}
+
+function ScrollableFilterRow({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-2 overflow-x-auto md:flex-wrap",
+        "scrollbar-none",
+        "[mask-image:linear-gradient(to_right,black_calc(100%-24px),transparent)]",
+        "md:[mask-image:none]",
+        className,
+      )}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -1196,8 +1212,8 @@ function PredictionsTabPanel({
   return (
     <div className="space-y-4">
       {predictions.length > 0 && (
-        <div className="space-y-2" data-testid="predictions-filter-row">
-          <div className="flex flex-wrap items-center gap-2">
+        <div className="space-y-1.5" data-testid="predictions-filter-row">
+          <ScrollableFilterRow>
             {STATUS_TABS.map((tab) => {
               const count =
                 stats && tab.value !== "all"
@@ -1227,11 +1243,11 @@ function PredictionsTabPanel({
             >
               <EyeOff className="h-3 w-3" /> Hidden only
             </FilterPill>
-          </div>
+          </ScrollableFilterRow>
 
           {categories.length > 1 && (
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <ScrollableFilterRow>
+              <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                 Category
               </span>
               <FilterPill
@@ -1253,7 +1269,7 @@ function PredictionsTabPanel({
                   {cat.charAt(0).toUpperCase() + cat.slice(1)}
                 </FilterPill>
               ))}
-            </div>
+            </ScrollableFilterRow>
           )}
         </div>
       )}

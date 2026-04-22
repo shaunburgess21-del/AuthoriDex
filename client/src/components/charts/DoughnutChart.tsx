@@ -65,7 +65,7 @@ function DoughnutTooltip({ active, payload, total }: TooltipProps) {
   const seg = payload[0].payload;
   const pct = ((seg.value / total) * 100).toFixed(seg.value === total ? 0 : 1);
   return (
-    <div className="rounded-lg border border-border bg-card px-3 py-2 text-xs shadow-xl">
+    <div className="rounded-lg border border-zinc-700/80 bg-zinc-950/95 px-3 py-2 text-xs text-zinc-50 shadow-xl">
       <div className="flex items-center gap-2">
         <span
           className="inline-block h-2.5 w-2.5 rounded-full"
@@ -75,7 +75,7 @@ function DoughnutTooltip({ active, payload, total }: TooltipProps) {
       </div>
       <div className="mt-1 flex items-baseline gap-2 font-mono">
         <span className="font-semibold">{seg.value}</span>
-        <span className="text-muted-foreground">({pct}%)</span>
+        <span className="text-zinc-300">({pct}%)</span>
       </div>
     </div>
   );
@@ -136,16 +136,18 @@ export function DoughnutChart({
   }
 
   return (
-    <div className={cn("w-full", className)}>
+    <div className={cn("w-full overflow-visible", className)}>
       <div
-        className="relative [filter:drop-shadow(0_1px_2px_rgba(0,0,0,0.25))]"
+        className="relative overflow-visible ring-1 ring-black/5 dark:ring-white/10"
         style={{ height }}
       >
         <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
+          <PieChart margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
             <Tooltip
+              allowEscapeViewBox={{ x: true, y: true }}
               content={(props) => <DoughnutTooltip {...(props as any)} total={total} />}
               cursor={false}
+              wrapperStyle={{ zIndex: 50 }}
             />
             <Pie
               data={segments}

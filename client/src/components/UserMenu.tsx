@@ -16,12 +16,10 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
-import { getAvatarInitials, getAvatarGradient, HUMAN_AVATAR_FALLBACK_CLASS } from "@/lib/avatar";
 import { 
   User,
   Menu,
@@ -221,26 +219,18 @@ function UserMenuContent({
               className="shrink-0 rounded-full outline-none ring-offset-background transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               data-testid="link-my-profile-avatar"
             >
-              <Avatar className="h-12 w-12 rounded-full">
-                {profile.avatarUrl ? (
-                  <AvatarImage src={profile.avatarUrl} alt={displayName} />
-                ) : (
-                  <AvatarFallback className={`rounded-full ${getAvatarGradient(displayName)} ${HUMAN_AVATAR_FALLBACK_CLASS}`}>
-                    {getAvatarInitials(displayName)}
-                  </AvatarFallback>
-                )}
-              </Avatar>
+              <UserProfileAvatar
+                displayName={displayName}
+                avatarUrl={profile.avatarUrl}
+                className="h-12 w-12"
+              />
             </Link>
           ) : (
-            <Avatar className="h-12 w-12 shrink-0 rounded-full">
-              {profile?.avatarUrl ? (
-                <AvatarImage src={profile.avatarUrl} alt={displayName} />
-              ) : (
-                <AvatarFallback className={`rounded-full ${getAvatarGradient(displayName)} ${HUMAN_AVATAR_FALLBACK_CLASS}`}>
-                  {getAvatarInitials(displayName)}
-                </AvatarFallback>
-              )}
-            </Avatar>
+            <UserProfileAvatar
+              displayName={displayName}
+              avatarUrl={profile?.avatarUrl}
+              className="h-12 w-12 shrink-0"
+            />
           )}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">

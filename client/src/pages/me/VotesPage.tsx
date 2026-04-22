@@ -31,6 +31,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { getAuthHeaders } from "@/lib/queryClient";
 import { ProfileTabs, type ProfileTab } from "@/components/ProfileTabs";
 import { MyVoteCard, type MyVoteCardData } from "@/components/me/MyVoteCard";
@@ -71,7 +72,7 @@ const STANCE_VOTE_TYPES = new Set([
   "overall_rating",
 ]);
 
-// Person-tied vote types (used for "Subjects you've shaped").
+// Person-tied vote types (used for "People you've influenced" impact list).
 const PERSON_VOTE_TYPES = new Set([
   "sentiment",
   "value_vote",
@@ -158,7 +159,7 @@ function FilterPill({
       data-testid={dataTestId}
       aria-pressed={active}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-medium transition-colors",
+        "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-medium transition-colors",
         active
           ? accentClass[accent]
           : "border-border/60 text-muted-foreground hover:border-border hover:text-foreground",
@@ -176,6 +177,22 @@ function FilterPill({
         </span>
       )}
     </button>
+  );
+}
+
+function ScrollableFilterRow({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-2 overflow-x-auto md:flex-wrap",
+        "scrollbar-none",
+        "[mask-image:linear-gradient(to_right,black_calc(100%-24px),transparent)]",
+        "md:[mask-image:none]",
+        className,
+      )}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -1007,40 +1024,42 @@ function VotesTabPanel({
 }) {
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2" data-testid="votes-filter-row">
-        <FilterPill
-          active={!activeFilter}
-          accent="cyan"
-          onClick={() => onChangeFilter(null)}
-          dataTestId="filter-pill-all"
-        >
-          All
-        </FilterPill>
-        {VOTE_TYPES.map((t) => {
-          const Icon = t.icon;
-          return (
-            <FilterPill
-              key={t.value}
-              active={activeFilter === t.value}
-              accent="cyan"
-              onClick={() => onChangeFilter(t.value)}
-              dataTestId={`filter-pill-${t.value}`}
-            >
-              <Icon className="h-3 w-3" />
-              {t.label}
-            </FilterPill>
-          );
-        })}
-        <FilterPill
-          active={hiddenOnly}
-          accent="amber"
-          onClick={onToggleHiddenOnly}
-          count={hiddenCount}
-          dataTestId="toggle-hidden-only"
-        >
-          <EyeOff className="h-3 w-3" />
-          Hidden only
-        </FilterPill>
+      <div data-testid="votes-filter-row">
+        <ScrollableFilterRow>
+          <FilterPill
+            active={!activeFilter}
+            accent="cyan"
+            onClick={() => onChangeFilter(null)}
+            dataTestId="filter-pill-all"
+          >
+            All
+          </FilterPill>
+          {VOTE_TYPES.map((t) => {
+            const Icon = t.icon;
+            return (
+              <FilterPill
+                key={t.value}
+                active={activeFilter === t.value}
+                accent="cyan"
+                onClick={() => onChangeFilter(t.value)}
+                dataTestId={`filter-pill-${t.value}`}
+              >
+                <Icon className="h-3 w-3" />
+                {t.label}
+              </FilterPill>
+            );
+          })}
+          <FilterPill
+            active={hiddenOnly}
+            accent="amber"
+            onClick={onToggleHiddenOnly}
+            count={hiddenCount}
+            dataTestId="toggle-hidden-only"
+          >
+            <EyeOff className="h-3 w-3" />
+            Hidden only
+          </FilterPill>
+        </ScrollableFilterRow>
       </div>
 
       {isLoading ? (
@@ -1109,6 +1128,125 @@ interface ShapedSubject {
   down: number;
   avatar: string | null;
   imageSlug: string | null;
+  /** Counts per vote section (voteType) for this person within the current filter. */
+  voteMix: Record<string, number>;
+}
+
+function computeSubjectShaperEarned(votes: UnifiedVote[]): boolean {
+  const counts = new Map<string, number>();
+  for (const v of votes) {
+    if (!PERSON_VOTE_TYPES.has(v.voteType)) continue;
+    const name = v.targetName?.trim();
+    if (!name || name === "Unknown") continue;
+    const key = v.subjectId || name;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  for (const n of counts.values()) {
+    if (n >= 5) return true;
+  }
+  return false;
+}
+
+function aggregateShapedSubjects(
+  votes: UnifiedVote[],
+  sectionFilter: VoteTypeValue | null,
+): ShapedSubject[] {
+  const byKey = new Map<string, ShapedSubject>();
+  for (const v of votes) {
+    if (!PERSON_VOTE_TYPES.has(v.voteType)) continue;
+    if (sectionFilter && v.voteType !== sectionFilter) continue;
+    const name = v.targetName?.trim();
+    if (!name || name === "Unknown") continue;
+    const key = v.subjectId || name;
+    const cur = byKey.get(key) ?? {
+      key,
+      name,
+      total: 0,
+      up: 0,
+      down: 0,
+      avatar: null,
+      imageSlug: null,
+      voteMix: {},
+    };
+    cur.total += 1;
+    cur.voteMix[v.voteType] = (cur.voteMix[v.voteType] ?? 0) + 1;
+    if (v.voteType === "overall_rating") {
+      const r = Math.round(v.value || 0);
+      if (r >= 4) cur.up += 1;
+      else if (r <= 2) cur.down += 1;
+    } else {
+      if (v.value > 0) cur.up += 1;
+      if (v.value < 0) cur.down += 1;
+    }
+    if (!cur.avatar && v.subjectAvatar) cur.avatar = v.subjectAvatar;
+    if (!cur.imageSlug && v.subjectImageSlug) cur.imageSlug = v.subjectImageSlug;
+    byKey.set(key, cur);
+  }
+  return Array.from(byKey.values())
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 6);
+}
+
+function ImpactVoteMixRow({ mix }: { mix: Record<string, number> }) {
+  const entries = Object.entries(mix)
+    .filter(([, n]) => n > 0)
+    .sort((a, b) => b[1] - a[1]);
+  const maxShown = 4;
+  const shown = entries.slice(0, maxShown);
+  const overflow = entries.length - shown.length;
+  if (shown.length === 0) return null;
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-1">
+      {shown.map(([type, count]) => (
+        <span
+          key={type}
+          className="inline-flex items-center gap-0.5 rounded-full border border-border/50 bg-muted/20 px-1.5 py-0 text-[9px] tabular-nums text-muted-foreground"
+        >
+          <span
+            className="h-1.5 w-1.5 shrink-0 rounded-full"
+            style={{ backgroundColor: VOTE_TYPE_COLOR[type] ?? "#94a3b8" }}
+          />
+          {getVoteTypeLabel(type)} · {count}
+        </span>
+      ))}
+      {overflow > 0 && <span className="text-[9px] text-muted-foreground">+{overflow}</span>}
+    </div>
+  );
+}
+
+const SIGNAL_TOOLTIP =
+  "Positive vs negative counts how your vote leaned on Vote (e.g. approve vs disapprove, overrated vs underrated). High/low overall ratings count when they are clearly positive or negative. This is not prediction markets.";
+
+function ImpactNetBalanceBlock({ up, down, total }: { up: number; down: number; total: number }) {
+  const net = up - down;
+  const short =
+    net > 0
+      ? `Net +${net}`
+      : net < 0
+        ? `Net ${net}`
+        : up === 0 && down === 0
+          ? "Neutral"
+          : "Balanced";
+  const detail =
+    net > 0
+      ? `Your signals on this person lean positive by ${net} (difference of positive-leaning vs negative-leaning votes). Not related to prediction Up/Down markets.`
+      : net < 0
+        ? `Your signals on this person lean negative by ${Math.abs(net)}. Vote activity only—not prediction markets.`
+        : "Positive and negative-leaning votes are in balance for this person.";
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className="flex shrink-0 cursor-default flex-col items-end gap-0.5 text-right">
+          <span className="font-mono text-lg font-bold tabular-nums leading-none">{total}</span>
+          <span className="max-w-[5.5rem] text-[10px] leading-tight text-muted-foreground">{short}</span>
+        </div>
+      </TooltipTrigger>
+      <TooltipContent side="left" className="max-w-xs text-xs">
+        {detail}
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
 function ImpactTab({
@@ -1122,41 +1260,24 @@ function ImpactTab({
   onJumpToVotes: () => void;
   setLocation: (to: string) => void;
 }) {
-  // Aggregate person-tied votes (incl. overall_rating) by subjectId when available,
-  // falling back to name so older data without a server-side subjectId still clusters.
-  const shapedSubjects = useMemo<ShapedSubject[]>(() => {
-    const byKey = new Map<string, ShapedSubject>();
+  const [impactSectionFilter, setImpactSectionFilter] = useState<VoteTypeValue | null>(null);
+
+  const impactSectionOptions = useMemo(() => {
+    const seen = new Set<VoteTypeValue>();
     for (const v of allVotes) {
-      if (!PERSON_VOTE_TYPES.has(v.voteType)) continue;
-      const name = v.targetName?.trim();
-      if (!name || name === "Unknown") continue;
-      const key = v.subjectId || name;
-      const cur = byKey.get(key) ?? {
-        key,
-        name,
-        total: 0,
-        up: 0,
-        down: 0,
-        avatar: null,
-        imageSlug: null,
-      };
-      cur.total += 1;
-      if (v.voteType === "overall_rating") {
-        const r = Math.round(v.value || 0);
-        if (r >= 4) cur.up += 1;
-        else if (r <= 2) cur.down += 1;
-      } else {
-        if (v.value > 0) cur.up += 1;
-        if (v.value < 0) cur.down += 1;
+      if (PERSON_VOTE_TYPES.has(v.voteType)) {
+        seen.add(v.voteType as VoteTypeValue);
       }
-      if (!cur.avatar && v.subjectAvatar) cur.avatar = v.subjectAvatar;
-      if (!cur.imageSlug && v.subjectImageSlug) cur.imageSlug = v.subjectImageSlug;
-      byKey.set(key, cur);
     }
-    return Array.from(byKey.values())
-      .sort((a, b) => b.total - a.total)
-      .slice(0, 6);
+    return Array.from(seen).sort((a, b) => getVoteTypeLabel(a).localeCompare(getVoteTypeLabel(b)));
   }, [allVotes]);
+
+  const subjectShaperEarned = useMemo(() => computeSubjectShaperEarned(allVotes), [allVotes]);
+
+  const shapedSubjects = useMemo(
+    () => aggregateShapedSubjects(allVotes, impactSectionFilter),
+    [allVotes, impactSectionFilter],
+  );
 
   // Contrarian index: % of comparable votes where the user went against the crowd.
   const contrarian = useMemo(() => {
@@ -1209,10 +1330,10 @@ function ImpactTab({
       label: "Subject Shaper",
       description: "Cast 5+ votes on the same person",
       icon: <Flame className="h-5 w-5 text-orange-500" />,
-      earned: shapedSubjects.some((s) => s.total >= 5),
+      earned: subjectShaperEarned,
     });
     return arr;
-  }, [allVotes, shapedSubjects]);
+  }, [allVotes, subjectShaperEarned]);
 
   if (isLoading) {
     return (
@@ -1231,8 +1352,8 @@ function ImpactTab({
         </div>
         <h2 className="text-xl font-semibold">Your impact is just beginning</h2>
         <p className="text-muted-foreground max-w-sm mx-auto">
-          Cast at least 5 votes to unlock a personalised impact map showing which subjects you&apos;ve
-          shaped the most.
+          Cast at least 5 votes to unlock your Impact tab: where your voice lands across people and
+          vote sections.
         </p>
         <div className="flex items-center justify-center gap-2">
           <Button size="sm" variant="outline" onClick={onJumpToVotes}>
@@ -1255,17 +1376,47 @@ function ImpactTab({
       />
 
       <Card className="p-4 sm:p-5 border-white/5 bg-card/60 backdrop-blur-sm">
-        <div className="flex items-center justify-between mb-4">
+        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h3 className="font-semibold text-sm">Subjects you&apos;ve shaped</h3>
-            <p className="text-xs text-muted-foreground">The people your voice has most weighed in on</p>
+            <h3 className="text-sm font-semibold">People you&apos;ve influenced most</h3>
+            <p className="text-xs text-muted-foreground">
+              Ranked by Vote-tab activity on each person (not prediction markets). Use the filter to
+              focus on one vote section.
+            </p>
           </div>
-          <Badge variant="outline" className="gap-1 text-[10px]">
+          <Badge variant="outline" className="w-fit gap-1 text-[10px] shrink-0">
             <Flame className="h-3 w-3" /> Top 6
           </Badge>
         </div>
+        {impactSectionOptions.length > 0 && (
+          <div className="mb-4 flex flex-wrap gap-2">
+            <FilterPill
+              active={impactSectionFilter === null}
+              onClick={() => setImpactSectionFilter(null)}
+              accent="cyan"
+              dataTestId="impact-filter-all"
+            >
+              All sections
+            </FilterPill>
+            {impactSectionOptions.map((vt) => (
+              <FilterPill
+                key={vt}
+                active={impactSectionFilter === vt}
+                onClick={() => setImpactSectionFilter((prev) => (prev === vt ? null : vt))}
+                accent="cyan"
+                dataTestId={`impact-filter-${vt}`}
+              >
+                {getVoteTypeLabel(vt)}
+              </FilterPill>
+            ))}
+          </div>
+        )}
         {shapedSubjects.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No person-tied votes yet.</p>
+          <p className="text-sm text-muted-foreground">
+            {impactSectionFilter
+              ? "No votes in this section on people yet. Try another section or All."
+              : "No person-tied votes yet."}
+          </p>
         ) : (
           <ol className="space-y-1.5">
             {shapedSubjects.map((s, i) => (
@@ -1283,25 +1434,32 @@ function ImpactTab({
                   className="h-12 w-12"
                 />
                 <div className="min-w-0 flex-1">
-                  <p className="font-semibold text-sm truncate" title={s.name}>
+                  <p className="truncate text-sm font-semibold" title={s.name}>
                     {s.name}
                   </p>
-                  <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                    {s.up > 0 && (
-                      <span className="text-emerald-600 dark:text-emerald-400">+{s.up} up</span>
-                    )}
-                    {s.down > 0 && (
-                      <span className="text-rose-600 dark:text-rose-400">−{s.down} down</span>
-                    )}
-                    {s.up === 0 && s.down === 0 && <span>votes</span>}
-                  </div>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="flex cursor-default flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
+                        {s.up > 0 && (
+                          <span className="text-emerald-600 dark:text-emerald-400">
+                            +{s.up} positive signal{s.up === 1 ? "" : "s"}
+                          </span>
+                        )}
+                        {s.down > 0 && (
+                          <span className="text-rose-600 dark:text-rose-400">
+                            −{s.down} negative signal{s.down === 1 ? "" : "s"}
+                          </span>
+                        )}
+                        {s.up === 0 && s.down === 0 && <span>Neutral or mid ratings only</span>}
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-xs text-xs">
+                      {SIGNAL_TOOLTIP}
+                    </TooltipContent>
+                  </Tooltip>
+                  <ImpactVoteMixRow mix={s.voteMix} />
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="font-mono text-lg font-bold tabular-nums leading-none">
-                    {s.total}
-                  </span>
-                  <MiniTrend direction={s.up - s.down} />
-                </div>
+                <ImpactNetBalanceBlock up={s.up} down={s.down} total={s.total} />
               </li>
             ))}
           </ol>
@@ -1351,12 +1509,6 @@ function ImpactTab({
   );
 }
 
-function MiniTrend({ direction }: { direction: number }) {
-  if (direction > 0) return <TrendingUp className="h-4 w-4 text-emerald-500" />;
-  if (direction < 0) return <TrendingDown className="h-4 w-4 text-rose-500" />;
-  return <div className="h-[2px] w-5 rounded-full bg-muted-foreground/50" />;
-}
-
 function ContrarianIndexCard({
   pct,
   comparable,
@@ -1382,9 +1534,9 @@ function ContrarianIndexCard({
 
   return (
     <Card className="relative overflow-hidden p-4 sm:p-5">
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-violet-500/15 via-fuchsia-500/10 to-transparent" />
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-cyan-500/15 via-sky-500/10 to-transparent" />
       <div className="relative flex items-start gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-500/10 text-violet-600 dark:text-violet-300">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-300">
           <Target className="h-5 w-5" />
         </div>
         <div className="min-w-0 flex-1">
@@ -1393,7 +1545,7 @@ function ContrarianIndexCard({
             {persona && (
               <Badge
                 variant="outline"
-                className="border-violet-500/40 bg-violet-500/15 px-2.5 py-0.5 text-[11px] font-semibold text-violet-600 dark:text-violet-300"
+                className="border-cyan-500/40 bg-cyan-500/15 px-2.5 py-0.5 text-[11px] font-semibold text-cyan-600 dark:text-cyan-300"
               >
                 {persona}
               </Badge>
@@ -1410,7 +1562,7 @@ function ContrarianIndexCard({
               </p>
               <div className="mt-3 h-2 rounded-full bg-muted/60 overflow-hidden">
                 <div
-                  className="h-full bg-gradient-to-r from-violet-500 to-fuchsia-400"
+                  className="h-full bg-gradient-to-r from-cyan-500 to-sky-400"
                   style={{ width: `${pct}%` }}
                 />
               </div>

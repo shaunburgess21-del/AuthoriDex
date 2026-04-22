@@ -694,6 +694,7 @@ async function startServer() {
 
     if (schedulersDisabled && !cronSecretConfigured) {
       log("[Schedulers] FATAL MISCONFIG — DISABLE_SCHEDULERS=true but no CRON_SECRET is set. Nothing will drive ingestion. Either unset DISABLE_SCHEDULERS or configure CRON_SECRET + external cron.");
+      return;
     } else if (schedulersDisabled) {
       log("[Schedulers] Mode: EXTERNAL CRON. DISABLE_SCHEDULERS=true — skipping all background schedulers. Ingestion, LiveTick, etc. must be triggered via POST /api/cron/* with CRON_SECRET.");
       return;
