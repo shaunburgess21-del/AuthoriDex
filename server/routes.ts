@@ -7025,7 +7025,14 @@ Only return the JSON object.`;
           : null,
       }));
 
-      const lastSuccessfulRun = recentRuns.find((r: any) => r.status === "completed");
+      // "Last success" surfaces in the FRESHNESS card on the admin dashboard.
+      // We require snapshotsWritten > 0 so that short-circuit "completed" rows
+      // (e.g. a run that found the hour bucket already populated and exited
+      // early) don't get reported as the latest success — which previously
+      // caused the timestamp and duration to disagree with the runs list.
+      const lastSuccessfulRun = recentRuns.find(
+        (r: any) => r.status === "completed" && (r.snapshotsWritten ?? 0) > 0,
+      );
       const currentlyRunning = recentRuns.find((r: any) => r.status === "running");
 
       const runs24hResult = await db.execute(sql`
@@ -7062,6 +7069,7 @@ Only return the JSON object.`;
           totalHoursWithData: buckets.length,
           lastSuccessfulFinish: lastSuccessfulRun?.finishedAt || null,
           lastSuccessfulDurationMs: lastSuccessfulRun?.durationMs || null,
+          lastSuccessfulSnapshotsWritten: lastSuccessfulRun?.snapshotsWritten ?? null,
           currentlyRunning: !!currentlyRunning,
           currentRunStartedAt: currentlyRunning?.startedAt || null,
           currentRunHeartbeatAt: currentlyRunning?.heartbeatAt || null,

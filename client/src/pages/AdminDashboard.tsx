@@ -122,6 +122,28 @@ import { fetchWithAuth, getAuthHeaders } from "@/pages/admin/adminAuth";
 import { CopyDebugSummaryButton } from "@/pages/admin/CopyDebugSummaryButton";
 import { SettleMarketModal } from "@/pages/admin/SettleMarketModal";
 
+// Human-readable labels for the source keys written by the ingest job
+// (see server/jobs/ingest.ts). Keep in sync if a new source is added —
+// unknown keys fall back to a capitalized version of the key so we never
+// silently mis-label a source as "Wikipedia" again.
+const SOURCE_LABELS = {
+  wiki: "Wikipedia",
+  mediastack: "News (Mediastack)",
+  gdelt: "News (GDELT)",
+  serper: "Search (Serper)",
+} as const;
+
+// Shared color mapping for the per-run W/M/G/S letter badges and any other
+// place we need to color a raw source-status string. Treats OK_FALLBACK
+// (GDELT→Serper news fallback succeeded) as green, since it means the run
+// got useful data from that source.
+function sourceStatusColor(status: string | null | undefined): string {
+  if (status === "OK" || status === "OK_FALLBACK") return "text-green-500";
+  if (status === "DEGRADED") return "text-yellow-500";
+  if (!status || status === "SKIPPED") return "text-muted-foreground";
+  return "text-red-500";
+}
+
 function RelatedCelebritiesField({
   value,
   onChange,
@@ -1141,6 +1163,7 @@ export default function AdminDashboard() {
   const [confirmText, setConfirmText] = useState("");
   
   const [showZeroNewsPeople, setShowZeroNewsPeople] = useState(false);
+  const [showSkippedRuns, setShowSkippedRuns] = useState(false);
   const [wikiAuditResults, setWikiAuditResults] = useState<any>(null);
   const [wikiAuditLoading, setWikiAuditLoading] = useState(false);
   const [wikiAuditExpanded, setWikiAuditExpanded] = useState(false);
@@ -5584,7 +5607,14 @@ export default function AdminDashboard() {
                                 : `${Math.round(engineHealth.ingestion.minutesSinceLastSnapshot / 60)}h ago`
                               : "N/A"}
                           </div>
-                          <p className="text-xs text-muted-foreground mt-1">
+                          <p
+                            className="text-xs text-muted-foreground mt-1"
+                            title={
+                              engineHealth.ingestion?.lastSuccessfulFinish
+                                ? new Date(engineHealth.ingestion.lastSuccessfulFinish).toISOString()
+                                : undefined
+                            }
+                          >
                             {engineHealth.ingestion?.currentlyRunning ? (
                               <span className="text-cyan-500 font-medium">Ingestion running now</span>
                             ) : engineHealth.ingestion?.lastSuccessfulFinish ? (
@@ -5593,9 +5623,17 @@ export default function AdminDashboard() {
                               "No successful runs recorded"
                             )}
                           </p>
-                          {engineHealth.ingestion?.lastSuccessfulDurationMs && (
+                          {(engineHealth.ingestion?.lastSuccessfulDurationMs != null ||
+                            engineHealth.ingestion?.lastSuccessfulSnapshotsWritten != null) && (
                             <p className="text-xs text-muted-foreground">
-                              Duration: {Math.round(engineHealth.ingestion.lastSuccessfulDurationMs / 1000)}s
+                              {engineHealth.ingestion?.lastSuccessfulSnapshotsWritten != null && (
+                                <>{engineHealth.ingestion.lastSuccessfulSnapshotsWritten} snap</>
+                              )}
+                              {engineHealth.ingestion?.lastSuccessfulSnapshotsWritten != null &&
+                                engineHealth.ingestion?.lastSuccessfulDurationMs != null && " · "}
+                              {engineHealth.ingestion?.lastSuccessfulDurationMs != null && (
+                                <>{Math.round(engineHealth.ingestion.lastSuccessfulDurationMs / 1000)}s</>
+                              )}
                             </p>
                           )}
                         </div>
@@ -5642,9 +5680,21 @@ export default function AdminDashboard() {
                     );
                   })()}
 
-                  {engineHealth.ingestionRuns && (
+                  {engineHealth.ingestionRuns && (() => {
+                    // Hide locked-out and skipped rows by default — the 10-minute
+                    // live-tick pings the ingest job ~5x per useful hourly run,
+                    // producing "0s, 0 snap" noise rows. Keep them available
+                    // behind a toggle so operators can still audit them.
+                    const allRuns = engineHealth.ingestionRuns.recentRuns ?? [];
+                    const isNoiseRun = (run: any) =>
+                      run.status === "locked_out" || run.status === "skipped";
+                    const hiddenCount = allRuns.filter(isNoiseRun).length;
+                    const visibleRuns = showSkippedRuns
+                      ? allRuns
+                      : allRuns.filter((r: any) => !isNoiseRun(r));
+                    return (
                     <div className="p-3 rounded-lg border">
-                      <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
                         <span className="text-xs font-medium text-muted-foreground">Ingestion Runs (last 24h)</span>
                         <div className="flex items-center gap-2 text-xs">
                           <Badge variant="outline" className="text-green-500">{engineHealth.ingestionRuns.last24h?.completed || 0} ok</Badge>
@@ -5657,11 +5707,21 @@ export default function AdminDashboard() {
                           {(engineHealth.ingestionRuns.last24h?.currentlyRunning || 0) > 0 && (
                             <Badge variant="outline" className="text-cyan-500">1 running</Badge>
                           )}
+                          {hiddenCount > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setShowSkippedRuns(prev => !prev)}
+                              className="text-muted-foreground hover:text-foreground underline underline-offset-2"
+                              data-testid="toggle-show-skipped-runs"
+                            >
+                              {showSkippedRuns ? `Hide skipped (${hiddenCount})` : `Show skipped (${hiddenCount})`}
+                            </button>
+                          )}
                         </div>
                       </div>
-                      {engineHealth.ingestionRuns.recentRuns?.length > 0 && (
+                      {visibleRuns.length > 0 && (
                         <div className="space-y-1 max-h-48 overflow-y-auto">
-                          {engineHealth.ingestionRuns.recentRuns.map((run: any) => (
+                          {visibleRuns.map((run: any) => (
                             <div key={run.id} className="flex items-center justify-between text-xs py-1 border-b border-border/50 last:border-0">
                               <div className="flex items-center gap-2">
                                 <div className={cn("h-2 w-2 rounded-full",
@@ -5679,9 +5739,10 @@ export default function AdminDashboard() {
                                 <span className="font-medium">{run.snapshotsWritten || 0} snap</span>
                                 {run.sourceStatuses && (
                                   <div className="flex items-center gap-1">
-                                    <span className={cn("text-[10px]", run.sourceStatuses.wiki === "OK" ? "text-green-500" : "text-red-500")}>W</span>
-                                    <span className={cn("text-[10px]", run.sourceStatuses.gdelt === "OK" ? "text-green-500" : run.sourceStatuses.gdelt === "DEGRADED" ? "text-yellow-500" : "text-red-500")}>G</span>
-                                    <span className={cn("text-[10px]", run.sourceStatuses.serper === "OK" ? "text-green-500" : run.sourceStatuses.serper === "DEGRADED" ? "text-yellow-500" : "text-red-500")}>S</span>
+                                    <span title={`Wikipedia: ${run.sourceStatuses.wiki ?? "—"}`} className={cn("text-[10px]", sourceStatusColor(run.sourceStatuses.wiki))}>W</span>
+                                    <span title={`Mediastack: ${run.sourceStatuses.mediastack ?? "—"}`} className={cn("text-[10px]", sourceStatusColor(run.sourceStatuses.mediastack))}>M</span>
+                                    <span title={`GDELT: ${run.sourceStatuses.gdelt ?? "—"}`} className={cn("text-[10px]", sourceStatusColor(run.sourceStatuses.gdelt))}>G</span>
+                                    <span title={`Serper: ${run.sourceStatuses.serper ?? "—"}`} className={cn("text-[10px]", sourceStatusColor(run.sourceStatuses.serper))}>S</span>
                                   </div>
                                 )}
                                 {run.status === "locked_out" && <Badge variant="outline" className="text-[10px] text-yellow-500 py-0">locked</Badge>}
@@ -5691,32 +5752,51 @@ export default function AdminDashboard() {
                           ))}
                         </div>
                       )}
-                      {(!engineHealth.ingestionRuns.recentRuns || engineHealth.ingestionRuns.recentRuns.length === 0) && (
+                      {allRuns.length === 0 && (
                         <p className="text-xs text-muted-foreground text-center py-2">No ingestion runs recorded yet. Runs will appear after the next ingestion cycle.</p>
                       )}
+                      {allRuns.length > 0 && visibleRuns.length === 0 && (
+                        <p className="text-xs text-muted-foreground text-center py-2">
+                          All {allRuns.length} recent run{allRuns.length === 1 ? "" : "s"} were skipped or locked out.
+                          {" "}
+                          <button
+                            type="button"
+                            onClick={() => setShowSkippedRuns(true)}
+                            className="underline underline-offset-2 hover:text-foreground"
+                          >
+                            Show them
+                          </button>
+                          .
+                        </p>
+                      )}
                     </div>
-                  )}
+                    );
+                  })()}
 
                   {engineHealth.sourceHealth?.statuses && (
                     <div className="p-3 rounded-lg border">
                       <span className="text-xs font-medium text-muted-foreground">Source Health (from last successful run)</span>
                       <div className="mt-2 grid gap-2 sm:grid-cols-3">
-                        {Object.entries(engineHealth.sourceHealth.statuses as Record<string, string>).map(([source, status]) => (
-                          <div key={source} className="flex items-center justify-between text-sm p-2 rounded border">
-                            <span className="font-medium capitalize">{source === "gdelt" ? "News (GDELT)" : source === "serper" ? "Search (Serper)" : "Wikipedia"}</span>
-                            <div className="flex items-center gap-2">
-                              <div className={cn("h-2 w-2 rounded-full",
-                                status === "OK" ? "bg-green-500" : status === "DEGRADED" ? "bg-yellow-500" : "bg-red-500"
-                              )} />
-                              <span className={cn("text-xs",
-                                status === "OK" ? "text-green-500" : status === "DEGRADED" ? "text-yellow-500" : "text-red-500"
-                              )}>{status}</span>
-                              {engineHealth.sourceHealth.timings?.[source] && (
-                                <span className="text-xs text-muted-foreground">({Math.round(engineHealth.sourceHealth.timings[source] / 1000)}s)</span>
-                              )}
+                        {Object.entries(engineHealth.sourceHealth.statuses as Record<string, string>).map(([source, status]) => {
+                          const label = SOURCE_LABELS[source as keyof typeof SOURCE_LABELS]
+                            ?? source.charAt(0).toUpperCase() + source.slice(1);
+                          return (
+                            <div key={source} className="flex items-center justify-between text-sm p-2 rounded border">
+                              <span className="font-medium">{label}</span>
+                              <div className="flex items-center gap-2">
+                                <div className={cn("h-2 w-2 rounded-full",
+                                  status === "OK" ? "bg-green-500" : status === "DEGRADED" ? "bg-yellow-500" : "bg-red-500"
+                                )} />
+                                <span className={cn("text-xs",
+                                  status === "OK" ? "text-green-500" : status === "DEGRADED" ? "text-yellow-500" : "text-red-500"
+                                )}>{status}</span>
+                                {engineHealth.sourceHealth.timings?.[source] && (
+                                  <span className="text-xs text-muted-foreground">({Math.round(engineHealth.sourceHealth.timings[source] / 1000)}s)</span>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   )}

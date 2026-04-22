@@ -10,6 +10,22 @@ import { LineChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "rec
 import { Loader2, Search, Microscope, X, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+// 10% headroom above the data peak so spike lines never visually touch the
+// top border of the chart frame.
+const yAxisDomain: [number, (dataMax: number) => number] = [
+  0,
+  (dataMax: number) => (dataMax > 0 ? Math.ceil(dataMax * 1.1) : 1),
+];
+
+// Compact number formatter for Y-axis ticks: 617844 → "617.8K", 1200000 → "1.2M".
+function formatCompactNumber(value: number): string {
+  if (value == null || Number.isNaN(value)) return "";
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (abs >= 1_000) return `${(value / 1_000).toFixed(abs >= 10_000 ? 0 : 1)}K`;
+  return `${Math.round(value)}`;
+}
+
 interface PeopleSearchResult {
   id: string;
   name: string;
@@ -378,7 +394,13 @@ export function AdminScoreInspector() {
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={chartData}>
                         <XAxis dataKey="tLabel" tick={{ fontSize: 10 }} minTickGap={30} />
-                        <YAxis tick={{ fontSize: 10 }} width={40} />
+                        <YAxis
+                          tick={{ fontSize: 10 }}
+                          width={44}
+                          domain={yAxisDomain}
+                          allowDataOverflow={false}
+                          tickFormatter={formatCompactNumber}
+                        />
                         <Tooltip
                           contentStyle={{ fontSize: 11 }}
                           labelFormatter={(v) => v as string}
@@ -398,6 +420,7 @@ export function AdminScoreInspector() {
                         <div className="flex-1">
                           <ResponsiveContainer width="100%" height="100%">
                             <LineChart data={chartData}>
+                              <YAxis hide domain={yAxisDomain} allowDataOverflow={false} />
                               <Tooltip
                                 contentStyle={{ fontSize: 11 }}
                                 labelFormatter={(_: any, payload: any) => payload?.[0]?.payload?.tLabel ?? ""}
