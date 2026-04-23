@@ -2,6 +2,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
 import { navigateToLogin } from "@/lib/authReturn";
+import { goBack } from "@/lib/goBack";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFavorites } from "@/hooks/useFavorites";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
@@ -252,7 +253,7 @@ export default function ValueRatingsPage() {
       <header className="sticky top-0 z-50 border-b border-border/50 bg-background/95 backdrop-blur-md">
         <div className="max-w-5xl mx-auto flex items-center justify-between px-4 h-14">
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={() => setLocation("/vote")} className="shrink-0" data-testid="button-back-vote">
+            <Button variant="ghost" size="icon" onClick={() => goBack(setLocation, "/vote")} className="shrink-0" aria-label="Go back" data-testid="button-back-vote">
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <Link href="/"><VoxDexLogo size={24} /></Link>
@@ -340,7 +341,7 @@ export default function ValueRatingsPage() {
         </Card>
 
         <div className="text-center mt-8 pb-20">
-          <Button variant="ghost" onClick={() => setLocation("/vote")} className="text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300" data-testid="button-back-vote-bottom">
+          <Button variant="ghost" onClick={() => goBack(setLocation, "/vote")} className="text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300" data-testid="button-back-vote-bottom">
             <ArrowLeft className="h-4 w-4 mr-1" />Back to Vote
           </Button>
         </div>

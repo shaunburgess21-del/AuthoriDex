@@ -4,6 +4,7 @@ import { useParams, useLocation, Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { sharePage } from "@/lib/share";
+import { goBack } from "@/lib/goBack";
 import { UserMenu } from "@/components/UserMenu";
 import { CategoryPill } from "@/components/CategoryPill";
 import { Button } from "@/components/ui/button";
@@ -586,7 +587,7 @@ export default function OpinionPollDetailPage() {
         </div>
 
         <div className="text-center pb-8">
-          <Button variant="outline" onClick={() => setLocation("/vote")} data-testid="button-back-bottom">
+          <Button variant="outline" onClick={() => goBack(setLocation, "/vote")} data-testid="button-back-bottom">
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Vote
           </Button>

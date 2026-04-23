@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedApiError, signInToVoteToastOptions } from "@/lib/signInToVoteToast";
 import { navigateToLogin } from "@/lib/authReturn";
+import { goBack } from "@/lib/goBack";
 import { UserMenu } from "@/components/UserMenu";
 import { useXpBurst } from "@/components/XpBurstProvider";
 import { PersonAvatar } from "@/components/PersonAvatar";
@@ -178,7 +179,7 @@ export default function InductionQueuePage() {
       <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-lg border-b border-border">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={() => setLocation("/vote")} aria-label="Back to Vote">
+            <Button variant="ghost" size="icon" onClick={() => goBack(setLocation, "/vote")} aria-label="Back to Vote">
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <Link href="/">

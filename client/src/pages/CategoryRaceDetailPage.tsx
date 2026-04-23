@@ -19,6 +19,7 @@ import { formatSignedPercent, formatSignedPoints } from "@/lib/predict-display";
 import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
 import { apiRequest } from "@/lib/queryClient";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
+import { goBack } from "@/lib/goBack";
 import {
   ArrowLeft,
   TrendingUp,
@@ -251,8 +252,9 @@ export default function CategoryRaceDetailPage() {
       <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-md border-b border-border/50">
         <div className="max-w-3xl mx-auto px-4 h-14 flex items-center gap-3">
           <button
-            onClick={() => setLocation("/predict")}
+            onClick={() => goBack(setLocation, "/predict")}
             className="p-1.5 rounded-lg hover:bg-muted transition-colors"
+            aria-label="Go back"
           >
             <ArrowLeft className="h-5 w-5" />
           </button>

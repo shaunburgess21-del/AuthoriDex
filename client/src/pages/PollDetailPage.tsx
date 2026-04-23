@@ -19,6 +19,7 @@ import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { VoteDetailNavCluster } from "@/components/vote/VoteDetailNavCluster";
 import { useDetailNavigation } from "@/hooks/useDetailNavigation";
 import { navigateToLogin } from "@/lib/authReturn";
+import { goBack } from "@/lib/goBack";
 import { CardComments, useCommentCount } from "@/components/comments/CardComments";
 import { CommentsBottomSheet } from "@/components/snap-scroll/CommentsBottomSheet";
 import {
@@ -479,7 +480,7 @@ export default function PollDetailPage() {
 
         {/* Back link at bottom */}
         <div className="text-center pb-8">
-          <Button variant="outline" onClick={() => setLocation("/vote")} data-testid="button-back-bottom">
+          <Button variant="outline" onClick={() => goBack(setLocation, "/vote")} data-testid="button-back-bottom">
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Vote
           </Button>
