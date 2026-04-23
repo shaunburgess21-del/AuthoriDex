@@ -1999,6 +1999,8 @@ export default function PredictPage() {
           activeParticipantCount: Number(m.activeParticipantCount || 0),
           recentParticipants: m.recentParticipants || [],
           bettingCutoff: m.bettingCutoff || null,
+          modelP1Percent: typeof m.modelP1Percent === "number" ? m.modelP1Percent : undefined,
+          modelConfidence: m.modelConfidence ?? undefined,
         } as HeadToHeadMarket;
       });
     }

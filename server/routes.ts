@@ -58,6 +58,7 @@ import { CANONICAL_MARKET_CATEGORIES, getMarketCategoryLabel, normalizeMarketCat
 import { resolvePublicMatchupBySlugOrId } from "./utils/matchup-resolve";
 import { registerCronRoutes, registerPublicRoutes, registerGamificationRoutes, registerFavoritesRoutes } from "./route-modules";
 import { handleAuthHook } from "./emails/routes/auth-hook";
+import { h2hModelProbability } from "@shared/h2hModel";
 
 const VIEW_DEDUPE_WINDOW_MS = 10 * 60 * 1000;
 const VIEW_IP_RATE_LIMIT = 30;
@@ -14282,17 +14283,40 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         }
         const personMap = Object.fromEntries(persons.map(p => [p.id, p]));
 
-        const enriched = markets.map(m => ({
-          ...m,
-          ...addLifecycleFields(m),
-          entries: entries.filter(e => e.marketId === m.id).map(e => ({
+        const enriched = markets.map(m => {
+          const mEntries = entries.filter(e => e.marketId === m.id).map(e => ({
             ...e,
             person: e.personId ? personMap[e.personId] || null : null,
-          })),
-          recentParticipants: engagement.recentParticipantsByMarket.get(m.id) || [],
-          activeParticipantCount: engagement.activeParticipantCountByMarket.get(m.id) || 0,
-          latestRationale: engagement.latestRationaleByMarket.get(m.id) || null,
-        }));
+          }));
+
+          // Deterministic VoxDex-model probability for H2H cards. Two-entry
+          // markets only; anything else (gainer, malformed) leaves the field
+          // undefined so the client can skip rendering the pill.
+          let modelP1Percent: number | undefined;
+          let modelConfidence: "low" | "medium" | "high" | undefined;
+          if (type === 'h2h' && mEntries.length === 2) {
+            const p1 = mEntries[0]?.person;
+            const p2 = mEntries[1]?.person;
+            if (p1 && p2) {
+              const model = h2hModelProbability(
+                { fameIndex: Number(p1.fameIndex ?? 0), momentum: p1.momentum ?? undefined },
+                { fameIndex: Number(p2.fameIndex ?? 0), momentum: p2.momentum ?? undefined },
+              );
+              modelP1Percent = model.p1;
+              modelConfidence = model.confidence;
+            }
+          }
+
+          return {
+            ...m,
+            ...addLifecycleFields(m),
+            entries: mEntries,
+            recentParticipants: engagement.recentParticipantsByMarket.get(m.id) || [],
+            activeParticipantCount: engagement.activeParticipantCountByMarket.get(m.id) || 0,
+            latestRationale: engagement.latestRationaleByMarket.get(m.id) || null,
+            ...(modelP1Percent !== undefined ? { modelP1Percent, modelConfidence } : {}),
+          };
+        });
         return res.json(enriched);
       }
 

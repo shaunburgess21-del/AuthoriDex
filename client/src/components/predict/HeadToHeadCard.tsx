@@ -33,6 +33,10 @@ export interface HeadToHeadMarket {
   activeParticipantCount?: number;
   recentParticipants?: ParticipantPreview[];
   bettingCutoff?: string | null;
+  /** Deterministic VoxDex model probability (percent for person1) — see `shared/h2hModel.ts`. */
+  modelP1Percent?: number;
+  /** Confidence bucket derived from the gap from 50/50. */
+  modelConfidence?: "low" | "medium" | "high";
 }
 
 export function smartName(fullName: string): string {
@@ -233,6 +237,39 @@ export function HeadToHeadCard({
             style={{ width: `${100 - market.person1Percent}%` }}
           />
         </div>
+
+        {typeof market.modelP1Percent === "number" && (
+          <div className="flex items-center justify-center mb-2">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge
+                  variant="outline"
+                  data-testid={`badge-h2h-model-${market.id}`}
+                  className="text-[10px] font-medium cursor-help px-2 py-0.5 border-violet-400/40 bg-violet-500/5 text-violet-700 dark:text-violet-300"
+                >
+                  <span className="mr-1 opacity-70">VoxDex Model:</span>
+                  <span className="font-semibold">
+                    {smartName(
+                      market.modelP1Percent >= 50 ? market.person1.name : market.person2.name,
+                    )}{" "}
+                    {Math.max(market.modelP1Percent, 100 - market.modelP1Percent)}%
+                  </span>
+                  {market.modelConfidence && (
+                    <span className="ml-1.5 opacity-70">
+                      · {market.modelConfidence}
+                    </span>
+                  )}
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-[240px]">
+                <p className="text-xs leading-snug">
+                  Based on fame index and momentum. Not a guarantee — you're still
+                  predicting.
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </div>
+        )}
 
         <div className="flex items-center justify-center mb-2">
           <span className="text-sm font-semibold text-violet-700 dark:text-violet-500">
