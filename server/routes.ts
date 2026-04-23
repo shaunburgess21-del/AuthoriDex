@@ -14665,6 +14665,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
             SELECT DISTINCT ON (person_id) person_id, fame_index, timestamp
             FROM trend_snapshots
             WHERE person_id IN (${sql.join(personIds.map(id => sql`${id}`), sql`, `)})
+              AND timestamp > NOW() - INTERVAL '14 days'
             ORDER BY person_id, timestamp DESC
           `)
         : { rows: [] };

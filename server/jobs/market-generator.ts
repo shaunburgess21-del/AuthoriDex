@@ -431,6 +431,7 @@ export async function generateWeeklyH2H(): Promise<number> {
           SELECT DISTINCT ON (person_id) person_id, fame_index, timestamp
           FROM trend_snapshots
           WHERE person_id IN (${sql.join(allPersonIds.map(id => sql`${id}`), sql`, `)})
+            AND timestamp > NOW() - INTERVAL '14 days'
           ORDER BY person_id, timestamp DESC
         `)
       : { rows: [] };
@@ -554,6 +555,7 @@ export async function generateWeeklyGainer(): Promise<{ created: number; updated
         SELECT DISTINCT ON (person_id) person_id, fame_index, timestamp
         FROM trend_snapshots
         WHERE person_id IN (${sql.join(allIds.map(id => sql`${id}`), sql`, `)})
+          AND timestamp > NOW() - INTERVAL '14 days'
         ORDER BY person_id, timestamp DESC
       `)
     : { rows: [] };
