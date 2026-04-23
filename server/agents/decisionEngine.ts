@@ -62,9 +62,38 @@ export function computePrediction(
   // Step 3: Score each entry
   const n = entries.length;
   const scores: Record<string, number> = {};
-  entries.forEach((e) => {
-    scores[e.id] = 1 / n;
-  });
+  const isH2H = market.marketType === "h2h";
+
+  // For H2H, seed starting probabilities with a fame-weighted base so the
+  // stronger / more-momentum person starts ahead (same idea as the VoxDex
+  // Model pill shown to users). Without this, the generic 1/n start plus
+  // tiny per-entry boosts almost never clear the edge threshold below, and
+  // agents systematically abstain on every H2H pairing.
+  if (isH2H && entries.length === 2 && entrySignals && entrySignals.size === 2) {
+    const [eA, eB] = entries;
+    const sA = entrySignals.get(eA.id);
+    const sB = entrySignals.get(eB.id);
+    if (sA && sB) {
+      const fA = Math.max(sA.fameIndex ?? 0, 1);
+      const fB = Math.max(sB.fameIndex ?? 0, 1);
+      const momBonus = (s: TrendSignals): number => {
+        const delta = s.scoreDelta7d ?? 0;
+        if (s.wikiPulse === "rising" && delta > 8) return 1.10;
+        if (delta > 3) return 1.05;
+        if (s.wikiPulse === "falling" || delta < -3) return 0.95;
+        return 1.0;
+      };
+      const wA = fA * momBonus(sA);
+      const wB = fB * momBonus(sB);
+      const pA = wA / (wA + wB);
+      scores[eA.id] = Math.max(0.05, Math.min(0.95, pA));
+      scores[eB.id] = Math.max(0.05, Math.min(0.95, 1 - pA));
+    } else {
+      entries.forEach((e) => { scores[e.id] = 1 / n; });
+    }
+  } else {
+    entries.forEach((e) => { scores[e.id] = 1 / n; });
+  }
 
   // Step 3a: Trend signal adjustments
   const signalBoost = computeSignalBoost(signals, agent);
@@ -78,8 +107,11 @@ export function computePrediction(
     }
   });
 
-  // Step 3a-bis: Per-entry trend signals (H2H/gainer — each entry has its own person)
-  if (entrySignals && entrySignals.size > 0) {
+  // Step 3a-bis: Per-entry trend signals (H2H/gainer — each entry has its own person).
+  // For H2H we've already used fame + momentum to seed the base above, so skip
+  // this second pass to avoid double-counting the same signal and to keep the
+  // final probability readable against the pill users see.
+  if (!isH2H && entrySignals && entrySignals.size > 0) {
     for (const [entryId, entrySig] of Array.from(entrySignals)) {
       const momentum = entrySig.scoreDelta7d / 15;
       const wikiBoost = entrySig.wikiPulse === "rising" ? 0.08 : entrySig.wikiPulse === "falling" ? -0.08 : 0;
@@ -144,9 +176,12 @@ export function computePrediction(
   }
 
   // Step 4: Select entry
-  // For multi-outcome community markets (3+ entries), use weighted random
-  // selection so agents distribute across options rather than all piling
-  // onto the top pick. Binary/updown markets still use deterministic top-1.
+  // For multi-outcome community markets (3+ entries) and H2H pairings, use
+  // weighted random selection so agents distribute across options in
+  // proportion to their conviction instead of all piling onto the top pick
+  // (or abstaining together on near-coin-flip H2Hs). Up/Down still uses
+  // deterministic top-1 because the signal there is directional, not a
+  // comparison between two subjects.
   const sorted = Object.entries(scores).sort((a, b) => b[1] - a[1]);
   let chosenEntryId: string;
   let rawProbability: number;
@@ -167,15 +202,33 @@ export function computePrediction(
       if (roll <= cumulative) { picked = candidate; break; }
     }
     [chosenEntryId, rawProbability] = picked;
+  } else if (isH2H) {
+    const totalWeight = sorted.reduce((s, [, v]) => s + v, 0) || 1;
+    const roll = rng.nextFloat() * totalWeight;
+    let cumulative = 0;
+    let picked = sorted[0];
+    for (const candidate of sorted) {
+      cumulative += candidate[1];
+      if (roll <= cumulative) { picked = candidate; break; }
+    }
+    chosenEntryId = picked[0];
+    rawProbability = picked[1] / totalWeight;
   } else {
     [chosenEntryId, rawProbability] = sorted[0];
   }
 
   // Step 5: Edge check
+  // H2H pairings are usually close in fame (markets like Tucker vs Kylie
+  // sit at ~50/50), so the standard "must beat chance by X" gate would force
+  // agents to abstain on nearly every pairing. Since we use weighted random
+  // selection for H2H above, the pool naturally splits in proportion to
+  // conviction — the edge check would just starve the section.
   const chanceLevel = 1 / n;
-  const edge = rawProbability - chanceLevel;
-  const edgeThreshold = agent.riskAppetite * (0.5 / n);
-  if (edge < edgeThreshold) return abstain("low_edge");
+  if (!isH2H) {
+    const edge = rawProbability - chanceLevel;
+    const edgeThreshold = agent.riskAppetite * (0.5 / n);
+    if (edge < edgeThreshold) return abstain("low_edge");
+  }
 
   // Step 6: Confidence calibration
   // confidence_cal > 0.7 → more extreme outputs (bold agent)
