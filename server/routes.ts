@@ -4630,6 +4630,470 @@ Only return the JSON object.`;
     }
   });
 
+  // ==================== Why-Score-Moved API ====================
+  //
+  // Companion to /api/why-trending that explains *why the Fame Index moved*
+  // over the last 24h / 7d. Reuses:
+  // - Same eligibility gate (top-20 + hot-mover) to cap OpenAI cost.
+  // - Same single-flight lock pattern (90s) to prevent cache stampede.
+  // - Same 30-minute per-person rate limit and 4h cache TTL.
+  // - Same input-hash skip: regenerate only when the headlines, change %s,
+  //   or mass/velocity meaningfully change.
+  //
+  // Short-circuits (no OpenAI call) when |change24h| and |change7d| are both
+  // small (< 2%) or unavailable — returns a canned "stable" summary that the
+  // client can render without any UI differentiation.
+
+  const WHY_SCORE_MOVED_PROMPT_VERSION = 1;
+  const WHY_SCORE_MOVED_CACHE_TTL_HOURS = 4;
+  const WHY_SCORE_MOVED_RATE_LIMIT_MINUTES = 30;
+  const WHY_SCORE_MOVED_STABLE_THRESHOLD = 2.0; // |change %| under this = "stable"
+
+  /** Pick the most-moved velocity component between two snapshots for prompt grounding. */
+  function pickPrimaryDriver(args: {
+    change24h: number | null;
+    wikiDelta: number;
+    newsDelta: number;
+    searchDelta: number;
+    massScore: number;
+    velocityScore: number;
+  }): "wiki" | "news" | "search" | "mass" | "stable" {
+    const { change24h } = args;
+    if (change24h == null || Math.abs(change24h) < WHY_SCORE_MOVED_STABLE_THRESHOLD) {
+      return "stable";
+    }
+    const candidates: Array<{ key: "wiki" | "news" | "search"; weight: number }> = [
+      { key: "wiki", weight: Math.abs(args.wikiDelta) },
+      { key: "news", weight: Math.abs(args.newsDelta) },
+      { key: "search", weight: Math.abs(args.searchDelta) },
+    ];
+    candidates.sort((a, b) => b.weight - a.weight);
+    const topVelocity = candidates[0];
+    // If velocity deltas are all ~zero, attribute to mass (baseline shift).
+    if (!topVelocity || topVelocity.weight < 1e-6) {
+      return "mass";
+    }
+    return topVelocity.key;
+  }
+
+  app.get("/api/why-score-moved/:personId", async (req, res) => {
+    try {
+      const { personId } = req.params;
+
+      const person = await storage.getTrendingPerson(personId);
+      if (!person) {
+        return res.status(404).json({ error: "Person not found" });
+      }
+
+      const hotMover = req.query.hotMover === "true";
+      const eligible = hotMover || await updateTopNEligibility(personId, person.rank ?? null);
+
+      if (!eligible) {
+        return res.json({
+          personId,
+          personName: person.name,
+          hasContext: false,
+          message: `Score-move insights are only available for top ${WHY_TRENDING_RANK_CUTOFF} ranked celebrities and Hot Movers`,
+          fetchedAt: new Date(),
+        });
+      }
+
+      // Fetch the latest two snapshots so we have a source of truth for
+      // velocity-component deltas (wikiDelta/newsDelta/searchDelta) even when
+      // the precomputed fields are sparse. We only need 2 rows.
+      const recentSnapshots = await db.select()
+        .from(trendSnapshots)
+        .where(eq(trendSnapshots.personId, personId))
+        .orderBy(desc(trendSnapshots.timestamp))
+        .limit(2);
+
+      if (recentSnapshots.length < 1) {
+        return res.json({
+          personId,
+          personName: person.name,
+          hasContext: false,
+          message: "Not enough trend history to describe score movement yet.",
+          fetchedAt: new Date(),
+        });
+      }
+
+      const latest = recentSnapshots[0];
+      const prev = recentSnapshots[1] ?? null;
+
+      const change24h = typeof person.change24h === "number" ? person.change24h : null;
+      const change7d = typeof person.change7d === "number" ? person.change7d : null;
+      const massScore = Number(latest.massScore ?? 0);
+      const velocityScore = Number(latest.velocityScore ?? 0);
+
+      // Component deltas — prefer stored *_delta fields; fall back to diff vs prev snapshot.
+      const wikiDelta = Number(latest.wikiDelta ?? (prev ? (Number(latest.wikiPageviews ?? 0) - Number(prev.wikiPageviews ?? 0)) : 0));
+      const newsDelta = Number(latest.newsDelta ?? (prev ? (Number(latest.newsCount ?? 0) - Number(prev.newsCount ?? 0)) : 0));
+      const searchDelta = Number(latest.searchDelta ?? (prev ? (Number(latest.searchVolume ?? 0) - Number(prev.searchVolume ?? 0)) : 0));
+
+      const direction: "up" | "down" | "flat" = (() => {
+        const pivot = change24h ?? change7d ?? 0;
+        if (Math.abs(pivot) < WHY_SCORE_MOVED_STABLE_THRESHOLD) return "flat";
+        return pivot > 0 ? "up" : "down";
+      })();
+
+      const primaryDriver = pickPrimaryDriver({
+        change24h,
+        wikiDelta,
+        newsDelta,
+        searchDelta,
+        massScore,
+        velocityScore,
+      });
+
+      // Short-circuit: if the score is essentially flat, skip OpenAI entirely.
+      const bothSmall =
+        (change24h == null || Math.abs(change24h) < WHY_SCORE_MOVED_STABLE_THRESHOLD) &&
+        (change7d == null || Math.abs(change7d) < WHY_SCORE_MOVED_STABLE_THRESHOLD);
+
+      // Cache key + lock key scoped to this endpoint.
+      const cacheKey = `why_score_moved:${personId}`;
+      const [cached] = await db
+        .select()
+        .from(apiCache)
+        .where(eq(apiCache.cacheKey, cacheKey))
+        .limit(1);
+
+      if (cached && cached.expiresAt && cached.expiresAt > new Date()) {
+        const hitResult = JSON.parse(cached.responseData);
+        hitResult.cacheStatus = "HIT";
+        if (hitResult.provenance?.generatedAt) {
+          hitResult.staleAgeMinutes = Math.round(
+            (Date.now() - new Date(hitResult.provenance.generatedAt).getTime()) / 60000,
+          );
+        }
+        return res.json(hitResult);
+      }
+
+      if (bothSmall) {
+        const stableResult = {
+          personId,
+          personName: person.name,
+          hasContext: true,
+          summary: "Score has been stable — no major movement this week.",
+          primaryDriver: "stable" as const,
+          direction: "flat" as const,
+          change24h,
+          change7d,
+          fameIndex: person.fameIndex ?? null,
+          sources: [],
+          fetchedAt: new Date(),
+          inputHash: null,
+          cacheStatus: "REGENERATED_STABLE" as const,
+          staleAgeMinutes: 0,
+          provenance: {
+            model: "none",
+            promptVersion: WHY_SCORE_MOVED_PROMPT_VERSION,
+            generatedAt: new Date().toISOString(),
+            shortCircuit: "stable",
+          },
+        };
+        const cacheNow = new Date();
+        const cacheExpiresAt = new Date(cacheNow.getTime() + WHY_SCORE_MOVED_CACHE_TTL_HOURS * 60 * 60 * 1000);
+        await db.insert(apiCache).values({
+          cacheKey,
+          provider: "ai_score_moved",
+          responseData: JSON.stringify(stableResult),
+          fetchedAt: cacheNow,
+          expiresAt: cacheExpiresAt,
+        }).onConflictDoUpdate({
+          target: apiCache.cacheKey,
+          set: { responseData: JSON.stringify(stableResult), fetchedAt: cacheNow, expiresAt: cacheExpiresAt },
+        });
+        return res.json(stableResult);
+      }
+
+      // Single-flight lock so we don't double-bill when many users hit cold cache.
+      const lockKey = `why_score_moved_lock:${personId}`;
+      const WHY_SCORE_MOVED_LOCK_TTL_SECONDS = 90;
+      const [lockRow] = await db.select().from(apiCache).where(eq(apiCache.cacheKey, lockKey)).limit(1);
+      if (lockRow && lockRow.expiresAt && lockRow.expiresAt > new Date()) {
+        if (cached) {
+          try {
+            const staleResult = JSON.parse(cached.responseData);
+            staleResult.cacheStatus = "LOCKED_STALE";
+            if (staleResult.provenance?.generatedAt) {
+              staleResult.staleAgeMinutes = Math.round(
+                (Date.now() - new Date(staleResult.provenance.generatedAt).getTime()) / 60000,
+              );
+            }
+            return res.json(staleResult);
+          } catch {}
+        }
+        return res.json({
+          personId,
+          personName: person.name,
+          hasContext: false,
+          cacheStatus: "LOCKED_COLD",
+          message: "Summary is being generated, please try again shortly",
+          fetchedAt: new Date(),
+        });
+      }
+
+      const lockNow = new Date();
+      const lockExpires = new Date(lockNow.getTime() + WHY_SCORE_MOVED_LOCK_TTL_SECONDS * 1000);
+      await db.insert(apiCache).values({
+        cacheKey: lockKey,
+        provider: "system",
+        responseData: JSON.stringify({ personId, lockedAt: lockNow.toISOString() }),
+        fetchedAt: lockNow,
+        expiresAt: lockExpires,
+      }).onConflictDoUpdate({
+        target: apiCache.cacheKey,
+        set: { fetchedAt: lockNow, expiresAt: lockExpires, responseData: JSON.stringify({ personId, lockedAt: lockNow.toISOString() }) },
+      });
+
+      const releaseLock = async () => {
+        try {
+          await db.insert(apiCache).values({
+            cacheKey: lockKey,
+            provider: "system",
+            responseData: JSON.stringify({ personId, releasedAt: new Date().toISOString() }),
+            fetchedAt: new Date(),
+            expiresAt: new Date(0),
+          }).onConflictDoUpdate({
+            target: apiCache.cacheKey,
+            set: { expiresAt: new Date(0), fetchedAt: new Date() },
+          });
+        } catch {}
+      };
+
+      // Pull recent news context for grounding the summary. Same helper that
+      // powers Why Trending — inherits Serper's 3h internal cache.
+      const newsContext = await fetchTrendingNewsContext(person.name);
+      const headlineHash = newsContext && newsContext.sources.length
+        ? computeHeadlineHash(newsContext.sources)
+        : "nohead";
+
+      // Input hash = headlines + rounded change %s + rounded mass/velocity.
+      // Rounding to 1dp avoids thrashing on imperceptible deltas.
+      const roundedInputs = [
+        change24h != null ? change24h.toFixed(1) : "null",
+        change7d != null ? change7d.toFixed(1) : "null",
+        massScore.toFixed(1),
+        velocityScore.toFixed(1),
+        primaryDriver,
+      ].join("|");
+      const currentInputHash = createHash("sha256")
+        .update(`${headlineHash}::${roundedInputs}`)
+        .digest("hex")
+        .slice(0, 16);
+
+      // If inputs are unchanged and we have a valid cached prior result, extend TTL instead of calling OpenAI.
+      if (cached) {
+        try {
+          const previousResult = JSON.parse(cached.responseData);
+          const cachedPromptVersion = previousResult.provenance?.promptVersion ?? 0;
+          if (
+            previousResult.inputHash === currentInputHash &&
+            previousResult.hasContext &&
+            cachedPromptVersion >= WHY_SCORE_MOVED_PROMPT_VERSION
+          ) {
+            const extendNow = new Date();
+            const extendExpiresAt = new Date(extendNow.getTime() + WHY_SCORE_MOVED_CACHE_TTL_HOURS * 60 * 60 * 1000);
+            previousResult.fetchedAt = extendNow;
+            previousResult.cacheStatus = "STALE_EXTENDED";
+            previousResult.staleAgeMinutes = previousResult.provenance?.generatedAt
+              ? Math.round((Date.now() - new Date(previousResult.provenance.generatedAt).getTime()) / 60000)
+              : null;
+            const updatedResponseData = JSON.stringify(previousResult);
+            await db.insert(apiCache).values({
+              cacheKey,
+              provider: "ai_score_moved",
+              responseData: updatedResponseData,
+              fetchedAt: extendNow,
+              expiresAt: extendExpiresAt,
+            }).onConflictDoUpdate({
+              target: apiCache.cacheKey,
+              set: { responseData: updatedResponseData, fetchedAt: extendNow, expiresAt: extendExpiresAt },
+            });
+            await releaseLock();
+            return res.json(previousResult);
+          }
+        } catch {}
+      }
+
+      // Per-person rate limit check.
+      const rateLimitKey = `why_score_moved_ratelimit:${personId}`;
+      const [rateLimitRow] = await db.select().from(apiCache).where(eq(apiCache.cacheKey, rateLimitKey)).limit(1);
+      if (rateLimitRow && rateLimitRow.expiresAt && rateLimitRow.expiresAt > new Date()) {
+        await releaseLock();
+        if (cached) {
+          try {
+            const rlResult = JSON.parse(cached.responseData);
+            rlResult.cacheStatus = "RATE_LIMITED";
+            rlResult.staleAgeMinutes = rlResult.provenance?.generatedAt
+              ? Math.round((Date.now() - new Date(rlResult.provenance.generatedAt).getTime()) / 60000)
+              : null;
+            return res.json(rlResult);
+          } catch {}
+        }
+        return res.json({
+          personId,
+          personName: person.name,
+          hasContext: false,
+          cacheStatus: "RATE_LIMITED",
+          message: "Rate limited - please try again later",
+          fetchedAt: new Date(),
+        });
+      }
+
+      // Build prompt. Deterministic context block lets the LLM cite specific
+      // numbers without having to infer them.
+      const openai = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
+      });
+
+      const headlinesText = (newsContext?.sources ?? []).map(s => {
+        const dateLabel = s.date ? ` (${s.date})` : "";
+        return `${s.title}${dateLabel}`;
+      }).join("\n") || "(no recent headlines found)";
+      const todayStr = new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+
+      const driverLabel = primaryDriver === "mass"
+        ? "their long-run popularity baseline"
+        : primaryDriver === "wiki"
+          ? "Wikipedia pageviews"
+          : primaryDriver === "news"
+            ? "news volume"
+            : primaryDriver === "search"
+              ? "search interest"
+              : "no single source";
+
+      const systemPrompt = `You are a neutral wire-service analyst (like AP or Reuters). Today's date is ${todayStr}. You explain movements in a celebrity trend index using facts only — no opinions, no public-sentiment claims.
+
+CRITICAL RULES:
+- Do NOT add titles like "former", "ex-", or "President" unless they appear in a headline.
+- Never characterize public opinion. Describe only what the person DID or what HAPPENED.
+- Never use words like controversial, backlash, scandal, slammed, blasted, embattled, divisive, polarizing, outcry, fury, outrage.
+- Keep tone identical for every figure regardless of politics or popularity.
+- 2-3 sentences. Reference the specific numbers you were given. Say which signal moved most and, if possible, connect it to a headline.`;
+
+      const userPrompt = `Explain in 2-3 sentences why ${person.name}'s Fame Index moved.
+
+DETERMINISTIC CONTEXT (use these numbers verbatim where helpful):
+- 24h change: ${change24h != null ? `${change24h.toFixed(1)}%` : "unavailable"}
+- 7d change: ${change7d != null ? `${change7d.toFixed(1)}%` : "unavailable"}
+- Direction: ${direction}
+- Primary driver: ${driverLabel} (label: ${primaryDriver})
+- Mass score (long-run popularity): ${massScore.toFixed(1)}
+- Velocity score (momentum): ${velocityScore.toFixed(1)}
+- Component deltas since the previous snapshot — wiki: ${wikiDelta.toFixed(0)}, news: ${newsDelta.toFixed(2)}, search: ${searchDelta.toFixed(0)}
+- Momentum label: ${latest.momentum ?? "Stable"}
+- Top drivers: ${(latest.drivers ?? []).join(", ") || "(none)"}
+
+RECENT HEADLINES (most recent first; use them only to identify *what* happened):
+${headlinesText}
+
+STYLE:
+- Start by stating the direction ("up" or "down") and the 24h or 7d percent.
+- Then attribute the move to the primary driver using the exact signal name (Wikipedia pageviews, news volume, or search interest).
+- If a headline plausibly caused the move, reference it in neutral terms; otherwise don't speculate.
+- Never claim the public "loves" or "hates" the person.
+
+Return JSON only:
+{
+  "summary": "2-3 sentence neutral explanation",
+  "primaryDriver": "wiki" | "news" | "search" | "mass" | "stable",
+  "direction": "up" | "down" | "flat"
+}`;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4.1",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        response_format: { type: "json_object" },
+        max_tokens: 220,
+      });
+
+      const content = response.choices[0]?.message?.content;
+      let parsed: { summary?: string; primaryDriver?: string; direction?: string } = {};
+      try {
+        parsed = content ? JSON.parse(content) : {};
+      } catch {
+        parsed = {};
+      }
+
+      const generatedAt = new Date().toISOString();
+      const result = {
+        personId,
+        personName: person.name,
+        hasContext: true,
+        summary: parsed.summary || `${person.name}'s Fame Index moved ${direction} recently, led by ${driverLabel}.`,
+        primaryDriver: (parsed.primaryDriver as any) || primaryDriver,
+        direction: (parsed.direction as any) || direction,
+        change24h,
+        change7d,
+        fameIndex: person.fameIndex ?? null,
+        sources: (newsContext?.sources ?? []).slice(0, 3),
+        fetchedAt: new Date(),
+        inputHash: currentInputHash,
+        cacheStatus: "REGENERATED" as const,
+        staleAgeMinutes: 0,
+        provenance: {
+          model: "gpt-4.1",
+          promptVersion: WHY_SCORE_MOVED_PROMPT_VERSION,
+          serperQuery: person.name,
+          headlinesUsed: (newsContext?.sources ?? []).slice(0, 5).map(s => ({ title: s.title, link: s.link })),
+          generatedAt,
+        },
+      };
+
+      const cacheNow = new Date();
+      const cacheExpiresAt = new Date(cacheNow.getTime() + WHY_SCORE_MOVED_CACHE_TTL_HOURS * 60 * 60 * 1000);
+      await db.insert(apiCache).values({
+        cacheKey,
+        provider: "ai_score_moved",
+        responseData: JSON.stringify(result),
+        fetchedAt: cacheNow,
+        expiresAt: cacheExpiresAt,
+      }).onConflictDoUpdate({
+        target: apiCache.cacheKey,
+        set: { responseData: JSON.stringify(result), fetchedAt: cacheNow, expiresAt: cacheExpiresAt },
+      });
+
+      const rlNow = new Date();
+      const rlExpires = new Date(rlNow.getTime() + WHY_SCORE_MOVED_RATE_LIMIT_MINUTES * 60 * 1000);
+      await db.insert(apiCache).values({
+        cacheKey: rateLimitKey,
+        provider: "system",
+        responseData: JSON.stringify({ personId, generatedAt: rlNow.toISOString() }),
+        fetchedAt: rlNow,
+        expiresAt: rlExpires,
+      }).onConflictDoUpdate({
+        target: apiCache.cacheKey,
+        set: { fetchedAt: rlNow, expiresAt: rlExpires, responseData: JSON.stringify({ personId, generatedAt: rlNow.toISOString() }) },
+      });
+
+      await releaseLock();
+
+      console.log(`[WhyScoreMoved] Generated summary for ${person.name} (hash: ${currentInputHash}, driver: ${primaryDriver})`);
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error fetching why score moved:", error);
+      try {
+        const errLockKey = `why_score_moved_lock:${req.params.personId}`;
+        await db.insert(apiCache).values({
+          cacheKey: errLockKey,
+          provider: "system",
+          responseData: JSON.stringify({ error: true }),
+          fetchedAt: new Date(),
+          expiresAt: new Date(0),
+        }).onConflictDoUpdate({
+          target: apiCache.cacheKey,
+          set: { expiresAt: new Date(0), fetchedAt: new Date() },
+        });
+      } catch {}
+      res.status(500).json({ error: "Failed to fetch score-move context", message: error.message });
+    }
+  });
+
   // ==================== Matchups API ====================
 
   const MATCHUP_BUCKET_BASE = process.env.SUPABASE_URL

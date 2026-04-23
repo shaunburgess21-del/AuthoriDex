@@ -55,6 +55,7 @@ import { sharePage } from "@/lib/share";
 import { useFavorites } from "@/hooks/useFavorites";
 import { formatNumber, getApprovalColor } from "@/lib/formatNumber";
 import { WhyTrendingCard } from "@/components/WhyTrendingCard";
+import { WhyScoreMovedCard } from "@/components/WhyScoreMovedCard";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { profileSectionGridClass } from "@/lib/profileSectionGridClass";
@@ -1359,8 +1360,9 @@ export default function PersonDetailPage() {
             </div>
 
             {((person.rank && person.rank <= 20) || isHotMover) && (
-              <div className="mb-8">
+              <div className="mb-8 space-y-4">
                 <WhyTrendingCard personId={person.id} personName={person.name} hotMover={isHotMover && !(person.rank && person.rank <= 20)} />
+                <WhyScoreMovedCard personId={person.id} personName={person.name} hotMover={isHotMover && !(person.rank && person.rank <= 20)} />
               </div>
             )}
 
