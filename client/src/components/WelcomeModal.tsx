@@ -33,7 +33,7 @@ const STEPS: readonly OnboardingStep[] = [
 
     heading: "Cast Your Vote",
 
-    description: "Shape the rankings \u2014 vote on who deserves to rise or fall.",
+    description: "Weigh in on people, topics, and debates \u2014 and help shape what the world thinks.",
 
     gradient: "from-emerald-500 to-green-600",
 
@@ -47,7 +47,7 @@ const STEPS: readonly OnboardingStep[] = [
 
     heading: "Make Predictions",
 
-    description: "Predict who\u2019s next to trend and earn rewards for being right.",
+    description: "Forecast real outcomes across politics, sports, culture, and markets.",
 
     gradient: "from-violet-500 to-purple-600",
 
