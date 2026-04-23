@@ -182,6 +182,20 @@ function parseBoundedInt(value: unknown, fallback: number, min: number, max: num
   return Math.min(max, Math.max(min, parsed));
 }
 
+async function getSupabaseAuthEmail(userId: string): Promise<string | null> {
+  try {
+    const result = await supabaseServer.auth.admin.getUserById(userId);
+    if (result.error) {
+      console.warn(`[Admin Users] Failed to load auth email for ${userId}: ${result.error.message}`);
+      return null;
+    }
+    return result.data.user?.email || null;
+  } catch (error: any) {
+    console.warn(`[Admin Users] Error loading auth email for ${userId}: ${error?.message || "unknown error"}`);
+    return null;
+  }
+}
+
 async function getLatestCompletedRunId(): Promise<string | null> {
   try {
     const [row] = await db
@@ -8191,6 +8205,96 @@ Only return the JSON object.`;
     }
   });
 
+  // Hard-delete user (Supabase Auth + app data)
+  app.post("/api/admin/delete-user", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const adminId = req.userId!;
+      const { userId, reason } = req.body as { userId?: string; reason?: string };
+      const trimmedReason = reason?.trim();
+
+      if (!userId || !trimmedReason) {
+        return res.status(400).json({ error: "userId and reason are required" });
+      }
+
+      if (userId === adminId) {
+        return res.status(403).json({ error: "You cannot delete your own account from the admin panel" });
+      }
+
+      const [user] = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      if (isAdminRole(user.role)) {
+        return res.status(403).json({ error: "Cannot delete admin users" });
+      }
+
+      const userEmail = await getSupabaseAuthEmail(userId);
+      const { error: authDeleteError } = await supabaseServer.auth.admin.deleteUser(userId);
+      if (authDeleteError) {
+        console.error(`[Admin Users] Supabase auth delete failed for ${userId}:`, authDeleteError.message);
+        return res.status(502).json({ error: `Failed to delete Supabase auth user: ${authDeleteError.message}` });
+      }
+
+      await db.transaction(async (tx) => {
+        await tx.delete(commentReports).where(eq(commentReports.reporterId, userId));
+        await tx.delete(trendingPollCommentVotes).where(eq(trendingPollCommentVotes.userId, userId));
+        await tx.delete(trendingPollComments).where(eq(trendingPollComments.userId, userId));
+        await tx.delete(trendingPollVotes).where(eq(trendingPollVotes.userId, userId));
+        await tx.delete(matchupCommentVotes).where(eq(matchupCommentVotes.userId, userId));
+        await tx.delete(matchupComments).where(eq(matchupComments.userId, userId));
+        await tx.delete(openMarketCommentVotes).where(eq(openMarketCommentVotes.userId, userId));
+        await tx.delete(openMarketComments).where(eq(openMarketComments.userId, userId));
+        await tx.delete(opinionPollCommentVotes).where(eq(opinionPollCommentVotes.userId, userId));
+        await tx.delete(opinionPollComments).where(eq(opinionPollComments.userId, userId));
+        await tx.delete(opinionPollVotes).where(eq(opinionPollVotes.userId, userId));
+        await tx.delete(insightVotes).where(eq(insightVotes.userId, userId));
+        await tx.delete(commentVotes).where(eq(commentVotes.userId, userId));
+        await tx.delete(insightComments).where(eq(insightComments.userId, userId));
+        await tx.delete(communityInsights).where(eq(communityInsights.userId, userId));
+        await tx.delete(marketBets).where(eq(marketBets.userId, userId));
+        await tx.delete(imageVotes).where(eq(imageVotes.userId, userId));
+        await tx.delete(inductionVotes).where(eq(inductionVotes.userId, userId));
+        await tx.delete(celebrityValueVotes).where(eq(celebrityValueVotes.userId, userId));
+        await tx.delete(userVotes).where(eq(userVotes.userId, userId));
+        await tx.delete(sentimentVotes).where(eq(sentimentVotes.userId, userId));
+        await tx.delete(userFavourites).where(eq(userFavourites.userId, userId));
+        await tx.delete(votes).where(eq(votes.userId, userId));
+        await tx.delete(profileItemPrivacy).where(eq(profileItemPrivacy.userId, userId));
+        await tx.delete(pageViews).where(eq(pageViews.userId, userId));
+        await tx.delete(xpLedger).where(eq(xpLedger.userId, userId));
+        await tx.delete(creditLedger).where(eq(creditLedger.userId, userId));
+        await tx.delete(profiles).where(eq(profiles.id, userId));
+
+        await tx.insert(adminAuditLog).values({
+          adminId,
+          actionType: "delete_user",
+          targetTable: "profiles",
+          targetId: userId,
+          previousData: {
+            id: user.id,
+            username: user.username,
+            fullName: user.fullName,
+            role: user.role,
+            rank: user.rank,
+            predictCredits: user.predictCredits,
+          },
+          newData: null,
+          metadata: {
+            reason: trimmedReason,
+            deletedAuthUser: true,
+            authEmail: userEmail,
+          },
+        });
+      });
+
+      res.json({ success: true, userId });
+    } catch (error: any) {
+      console.error("Error deleting user:", error.message);
+      res.status(500).json({ error: "Failed to delete user" });
+    }
+  });
+
   // Get prediction markets (for admin CMS)
   app.get("/api/admin/markets", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
@@ -15492,12 +15596,14 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         .where(eq(creditLedger.userId, id));
       const ledgerSum = allEntries.reduce((s, h) => s + h.amount, 0);
       const drift = profile.predictCredits - ledgerSum;
+      const authEmail = await getSupabaseAuthEmail(id);
 
       res.json({
         profile: {
           id: profile.id,
           username: profile.username,
           fullName: profile.fullName,
+          email: authEmail,
           role: profile.role,
           rank: profile.rank,
           xpPoints: profile.xpPoints,

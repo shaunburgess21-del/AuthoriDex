@@ -50,6 +50,7 @@ interface CreditHistoryResponse {
     id: string;
     username: string | null;
     fullName: string | null;
+    email: string | null;
     role: string;
     rank: string;
     xpPoints: number;
@@ -138,6 +139,9 @@ export function AdminUserCreditHistory({
                 <Badge variant="outline" className="text-xs">{data.profile.role}</Badge>
                 <Badge variant="secondary" className="text-xs">{data.profile.rank}</Badge>
               </div>
+              <p className="text-sm text-muted-foreground" data-testid="text-user-email">
+                {data.profile.email || "No email available"}
+              </p>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
                 <div className="p-3 rounded-md bg-muted/50">
                   <p className="text-muted-foreground text-xs">Credits</p>

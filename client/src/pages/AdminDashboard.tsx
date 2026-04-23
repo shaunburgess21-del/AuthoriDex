@@ -1161,6 +1161,14 @@ export default function AdminDashboard() {
   const [showCreditModal, setShowCreditModal] = useState(false);
   const [creditHistoryUserId, setCreditHistoryUserId] = useState<string | null>(null);
   const [confirmText, setConfirmText] = useState("");
+  const [showDeleteUserModal, setShowDeleteUserModal] = useState(false);
+  const [deleteUserTarget, setDeleteUserTarget] = useState<UserProfile | null>(null);
+  const [deleteUserReason, setDeleteUserReason] = useState("");
+  const [deleteUserConfirmText, setDeleteUserConfirmText] = useState("");
+  const [showBanUserModal, setShowBanUserModal] = useState(false);
+  const [banUserTarget, setBanUserTarget] = useState<UserProfile | null>(null);
+  const [banUserReason, setBanUserReason] = useState("");
+  const [banUserConfirmText, setBanUserConfirmText] = useState("");
   
   const [showZeroNewsPeople, setShowZeroNewsPeople] = useState(false);
   const [showSkippedRuns, setShowSkippedRuns] = useState(false);
@@ -1790,7 +1798,10 @@ export default function AdminDashboard() {
         method: "POST", 
         body: JSON.stringify(params) 
       });
-      if (!res.ok) throw new Error("Failed to ban user");
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error || "Failed to ban user");
+      }
       return res.json();
     },
     onSuccess: () => {
@@ -1798,11 +1809,48 @@ export default function AdminDashboard() {
         title: "User Banned",
         description: "User has been banned from the platform",
       });
+      setShowBanUserModal(false);
+      setBanUserTarget(null);
+      setBanUserReason("");
+      setBanUserConfirmText("");
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
     },
     onError: (error: any) => {
       toast({
         title: "Ban Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Hard-delete user mutation
+  const deleteUserMutation = useMutation({
+    mutationFn: async (params: { userId: string; reason: string }) => {
+      const res = await fetchWithAuth("/api/admin/delete-user", {
+        method: "POST",
+        body: JSON.stringify(params),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error || "Failed to delete user");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "User Deleted",
+        description: "User account and auth record were permanently removed",
+      });
+      setShowDeleteUserModal(false);
+      setDeleteUserTarget(null);
+      setDeleteUserReason("");
+      setDeleteUserConfirmText("");
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Delete Failed",
         description: error.message,
         variant: "destructive",
       });
@@ -2568,6 +2616,36 @@ export default function AdminDashboard() {
       userId: selectedUser.id,
       amount: creditAdjustment.amount,
       reason: creditAdjustment.reason,
+    });
+  };
+
+  const openDeleteUserModal = (user: UserProfile) => {
+    setDeleteUserTarget(user);
+    setDeleteUserReason("");
+    setDeleteUserConfirmText("");
+    setShowDeleteUserModal(true);
+  };
+
+  const handleDeleteUser = () => {
+    if (!deleteUserTarget || deleteUserConfirmText !== "DELETE" || !deleteUserReason.trim()) return;
+    deleteUserMutation.mutate({
+      userId: deleteUserTarget.id,
+      reason: deleteUserReason.trim(),
+    });
+  };
+
+  const openBanUserModal = (user: UserProfile) => {
+    setBanUserTarget(user);
+    setBanUserReason("");
+    setBanUserConfirmText("");
+    setShowBanUserModal(true);
+  };
+
+  const handleBanUser = () => {
+    if (!banUserTarget || banUserConfirmText !== "BAN" || !banUserReason.trim()) return;
+    banUserMutation.mutate({
+      userId: banUserTarget.id,
+      reason: banUserReason.trim(),
     });
   };
 
@@ -5406,10 +5484,22 @@ export default function AdminDashboard() {
                             variant="outline"
                             size="sm"
                             className="text-destructive hover:text-destructive"
+                            onClick={() => openBanUserModal(user)}
+                            disabled={user.isBanned || user.role === "admin" || banUserMutation.isPending}
                             data-testid={`button-ban-${user.id}`}
                           >
                             <Ban className="h-4 w-4 mr-1" />
-                            Ban
+                            {user.isBanned ? "Banned" : "Ban"}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-destructive hover:text-destructive border-destructive/30"
+                            onClick={() => openDeleteUserModal(user)}
+                            data-testid={`button-delete-user-${user.id}`}
+                          >
+                            <Trash2 className="h-4 w-4 mr-1" />
+                            Delete
                           </Button>
                         </div>
                       </div>
@@ -6962,6 +7052,144 @@ export default function AdminDashboard() {
                 </>
               ) : (
                 "Confirm Adjustment"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Ban User Modal */}
+      <Dialog open={showBanUserModal} onOpenChange={setShowBanUserModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-destructive">Ban User</DialogTitle>
+            <DialogDescription>
+              Banned users keep their data but lose platform access until manually restored.
+              <br />
+              Target: {banUserTarget?.username || banUserTarget?.fullName || "user"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="ban-user-reason">Reason (required)</Label>
+              <Textarea
+                id="ban-user-reason"
+                value={banUserReason}
+                onChange={(e) => setBanUserReason(e.target.value)}
+                placeholder="Explain why this user is being banned..."
+                data-testid="input-ban-user-reason"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirm-ban-user">Type "BAN" to confirm</Label>
+              <Input
+                id="confirm-ban-user"
+                value={banUserConfirmText}
+                onChange={(e) => setBanUserConfirmText(e.target.value)}
+                placeholder="BAN"
+                data-testid="input-confirm-ban-user"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowBanUserModal(false);
+                setBanUserTarget(null);
+                setBanUserReason("");
+                setBanUserConfirmText("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleBanUser}
+              disabled={
+                banUserMutation.isPending ||
+                !banUserTarget ||
+                !banUserReason.trim() ||
+                banUserConfirmText !== "BAN"
+              }
+              data-testid="button-confirm-ban-user"
+            >
+              {banUserMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Banning...
+                </>
+              ) : (
+                "Confirm Ban"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete User Modal */}
+      <Dialog open={showDeleteUserModal} onOpenChange={setShowDeleteUserModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-destructive">Delete User Account</DialogTitle>
+            <DialogDescription>
+              This permanently deletes the user from app data and Supabase auth.
+              <br />
+              Target: {deleteUserTarget?.username || deleteUserTarget?.fullName || "user"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="delete-user-reason">Reason (required)</Label>
+              <Textarea
+                id="delete-user-reason"
+                value={deleteUserReason}
+                onChange={(e) => setDeleteUserReason(e.target.value)}
+                placeholder="Explain why this user is being permanently deleted..."
+                data-testid="input-delete-user-reason"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirm-delete-user">Type "DELETE" to confirm</Label>
+              <Input
+                id="confirm-delete-user"
+                value={deleteUserConfirmText}
+                onChange={(e) => setDeleteUserConfirmText(e.target.value)}
+                placeholder="DELETE"
+                data-testid="input-confirm-delete-user"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowDeleteUserModal(false);
+                setDeleteUserTarget(null);
+                setDeleteUserReason("");
+                setDeleteUserConfirmText("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteUser}
+              disabled={
+                deleteUserMutation.isPending ||
+                !deleteUserTarget ||
+                !deleteUserReason.trim() ||
+                deleteUserConfirmText !== "DELETE"
+              }
+              data-testid="button-confirm-delete-user"
+            >
+              {deleteUserMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                "Permanently Delete User"
               )}
             </Button>
           </DialogFooter>
