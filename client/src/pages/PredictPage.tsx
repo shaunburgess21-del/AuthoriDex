@@ -2578,12 +2578,6 @@ export default function PredictPage() {
                 <ScrollText className="h-4 w-4 text-muted-foreground" />
               </Button>
             </div>
-            {user && (
-              <div className="hidden md:flex items-center gap-1.5 px-3 min-h-8 rounded-md bg-violet-500/20 dark:bg-violet-500/15 border border-violet-500/40 dark:border-violet-500/30">
-                <Wallet className="h-[14px] w-[14px] text-violet-700 dark:text-violet-500" />
-                <span className="font-mono font-bold text-xs text-violet-700 dark:text-violet-500">{walletCredits.toLocaleString('en-US')}</span>
-              </div>
-            )}
             <UserMenu />
           </div>
         </div>
@@ -2595,7 +2589,7 @@ export default function PredictPage() {
               <button
                 type="button"
                 onClick={cycleMyPositionsFilter}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all min-w-fit md:hidden ${
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all min-w-fit ${
                   myPositionsFilter === "show-mine"
                     ? "bg-violet-500/25 dark:bg-violet-500/20 text-violet-600 dark:text-violet-400 border border-violet-500/50 dark:border-violet-400/40 shadow-sm shadow-violet-500/30 dark:shadow-violet-500/20"
                     : myPositionsFilter === "hide-mine"
@@ -2631,14 +2625,25 @@ export default function PredictPage() {
               </button>
             ))}
           </HorizontalScroll>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 hidden md:inline-flex" onClick={() => setRulesModalOpen("predictions")} aria-label="View predictions rules">
-                <ScrollText className="h-4 w-4 text-muted-foreground" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Predictions rules</TooltipContent>
-          </Tooltip>
+          <div className="hidden md:flex items-center gap-2 shrink-0">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 hidden md:inline-flex" onClick={() => setRulesModalOpen("predictions")} aria-label="View predictions rules">
+                  <ScrollText className="h-4 w-4 text-muted-foreground" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Predictions rules</TooltipContent>
+            </Tooltip>
+            {user && (
+              <div
+                className="flex items-center gap-1.5 px-3 min-h-8 rounded-md bg-violet-500/20 dark:bg-violet-500/15 border border-violet-500/40 dark:border-violet-500/30"
+                data-testid="predict-desktop-credits-pill"
+              >
+                <Wallet className="h-[14px] w-[14px] text-violet-700 dark:text-violet-500" />
+                <span className="font-mono font-bold text-xs text-violet-700 dark:text-violet-500">{walletCredits.toLocaleString('en-US')}</span>
+              </div>
+            )}
+          </div>
           {user && userBetsError && (
             <Button
               variant="outline"
@@ -2648,30 +2653,6 @@ export default function PredictPage() {
               data-testid="button-retry-user-bets"
             >
               Retry loading bets
-            </Button>
-          )}
-          {user && !userBetsError && (
-            <Button
-              variant={myPositionsFilter === "show-mine" ? "default" : "outline"}
-              size="sm"
-              onClick={cycleMyPositionsFilter}
-              className={`whitespace-nowrap shrink-0 hidden md:inline-flex ${
-                myPositionsFilter === "show-mine"
-                  ? "bg-violet-500 hover:bg-violet-600 text-white"
-                  : myPositionsFilter === "hide-mine"
-                    ? "border-amber-500/60 text-amber-600 dark:text-amber-500 hover:bg-amber-500/10"
-                    : ""
-              }`}
-              data-testid="toggle-my-positions"
-            >
-              {myPositionsFilter === "hide-mine" ? (
-                <EyeOff className="h-3.5 w-3.5 mr-1.5" />
-              ) : (
-                <ListChecks className="h-3.5 w-3.5 mr-1.5" />
-              )}
-              {myPositionsFilter === "hide-mine"
-                ? `Hidden Positions (${activePredictions})`
-                : `My Positions (${activePredictions})`}
             </Button>
           )}
         </div>

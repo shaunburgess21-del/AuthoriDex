@@ -121,15 +121,15 @@ import { ContenderSelector, type ContenderSelection } from "@/components/suggest
 const VOTE_ONBOARDING_STEPS: readonly OnboardingStep[] = [
   {
     icon: Swords,
-    heading: "Pick Your Side",
-    description: "Head-to-head matchups, trending topics, and opinion polls \u2014 your vote decides who rises.",
+    heading: "Make Your Voice Heard",
+    description: "Choose a side, back your opinion, and weigh in on real-world topics.",
     gradient: "from-cyan-500 to-teal-600",
     glow: "shadow-cyan-500/25",
   },
   {
     icon: BarChart3,
-    heading: "Shape the Rankings",
-    description: "Every vote feeds real data into the index. Your opinion directly moves the needle.",
+    heading: "Shape The Rankings",
+    description: "Your vote feeds the index and helps shape the final rankings.",
     gradient: "from-emerald-500 to-green-600",
     glow: "shadow-emerald-500/25",
   },
@@ -2356,7 +2356,7 @@ export default function VotePage() {
               <button
                 type="button"
                 onClick={cycleMyVotesFilter}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all min-w-fit md:hidden ${
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all min-w-fit ${
                   myVotesFilter === "show-mine"
                     ? "bg-cyan-500/25 dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border border-cyan-500/50 dark:border-cyan-400/40 shadow-sm shadow-cyan-500/30 dark:shadow-cyan-500/20"
                     : myVotesFilter === "hide-mine"
@@ -2395,30 +2395,6 @@ export default function VotePage() {
               </button>
             ))}
           </ScrollMaskedChipRow>
-          {user && (
-            <Button
-              variant={myVotesFilter === "show-mine" ? "default" : "outline"}
-              size="sm"
-              onClick={cycleMyVotesFilter}
-              className={`whitespace-nowrap shrink-0 hidden md:inline-flex ${
-                myVotesFilter === "show-mine"
-                  ? "bg-cyan-600 hover:bg-cyan-700 text-white dark:bg-cyan-600 dark:hover:bg-cyan-500"
-                  : myVotesFilter === "hide-mine"
-                    ? "border-amber-500/60 text-amber-600 dark:text-amber-500 hover:bg-amber-500/10"
-                    : ""
-              }`}
-              data-testid="toggle-my-votes"
-            >
-              {myVotesFilter === "hide-mine" ? (
-                <EyeOff className="h-3.5 w-3.5 mr-1.5" />
-              ) : (
-                <Vote className="h-3.5 w-3.5 mr-1.5" />
-              )}
-              {myVotesFilter === "hide-mine"
-                ? `Hidden Votes (${myVotesCount})`
-                : `My Votes (${myVotesCount})`}
-            </Button>
-          )}
         </div>
       </div>
       <div className="container mx-auto px-4 py-8 max-w-7xl pt-[5px] pb-[5px]">
