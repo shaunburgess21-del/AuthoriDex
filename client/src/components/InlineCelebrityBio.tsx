@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { MapPin, DollarSign, Sparkles, Loader2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import * as Flags from "country-flag-icons/react/3x2";
@@ -45,9 +44,7 @@ function CountryDisplay({ countryCode, countryName }: { countryCode: string; cou
   );
 }
 
-export function InlineCelebrityBio({ personId, personName }: InlineCelebrityBioProps) {
-  const [expanded, setExpanded] = useState(false);
-
+export function InlineCelebrityBio({ personId, personName: _personName }: InlineCelebrityBioProps) {
   const { data: profile, isLoading, error } = useQuery<CelebrityProfile>({
     queryKey: ["/api/celebrity-profile", personId],
     queryFn: async () => {
@@ -71,80 +68,65 @@ export function InlineCelebrityBio({ personId, personName }: InlineCelebrityBioP
     return null;
   }
 
-  const aboutText = expanded && profile.longBio ? profile.longBio : profile.shortBio;
+  const aboutText = profile.longBio || profile.shortBio;
 
   return (
     <div className="mb-8 space-y-4" data-testid="inline-celebrity-bio">
+      <p
+        className="text-base leading-relaxed text-muted-foreground"
+        data-testid="text-celebrity-bio"
+      >
+        {aboutText}
+      </p>
+
       <div>
-        <h4 className="text-xs uppercase tracking-wide text-muted-foreground mb-1">About</h4>
-        <p
-          className={`text-base leading-relaxed text-muted-foreground ${!expanded ? "line-clamp-2" : ""}`}
-          data-testid="text-celebrity-bio"
-        >
-          {aboutText}
+        <h4 className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Known For</h4>
+        <p className="text-sm leading-relaxed text-muted-foreground" data-testid="text-celebrity-known-for">
+          {profile.knownFor}
         </p>
-        <button
-          type="button"
-          onClick={() => setExpanded(!expanded)}
-          className="mt-1.5 text-xs text-primary hover:text-primary/80 hover:underline focus:outline-none focus:underline"
-          data-testid="button-read-more"
-        >
-          {expanded ? "Show less" : "Read more"}
-        </button>
       </div>
 
-      {expanded && (
-        <>
-          <div>
-            <h4 className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Known For</h4>
-            <p className="text-sm leading-relaxed text-muted-foreground" data-testid="text-celebrity-known-for">
-              {profile.knownFor}
-            </p>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="bg-muted/30 rounded-lg p-3">
+          <div className="flex items-center gap-2 text-muted-foreground mb-1">
+            <MapPin className="h-3.5 w-3.5" />
+            <span className="text-xs uppercase tracking-wide">From</span>
           </div>
+          <p className="text-sm font-medium" data-testid="text-celebrity-from">
+            <CountryDisplay
+              countryCode={profile.fromCountryCode}
+              countryName={profile.fromCountry}
+            />
+          </p>
+        </div>
+        <div className="bg-muted/30 rounded-lg p-3">
+          <div className="flex items-center gap-2 text-muted-foreground mb-1">
+            <MapPin className="h-3.5 w-3.5" />
+            <span className="text-xs uppercase tracking-wide">Based In</span>
+          </div>
+          <p className="text-sm font-medium" data-testid="text-celebrity-based-in">
+            <CountryDisplay
+              countryCode={profile.basedInCountryCode}
+              countryName={profile.basedIn}
+            />
+          </p>
+        </div>
+      </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-muted/30 rounded-lg p-3">
-              <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                <MapPin className="h-3.5 w-3.5" />
-                <span className="text-xs uppercase tracking-wide">From</span>
-              </div>
-              <p className="text-sm font-medium" data-testid="text-celebrity-from">
-                <CountryDisplay
-                  countryCode={profile.fromCountryCode}
-                  countryName={profile.fromCountry}
-                />
-              </p>
-            </div>
-            <div className="bg-muted/30 rounded-lg p-3">
-              <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                <MapPin className="h-3.5 w-3.5" />
-                <span className="text-xs uppercase tracking-wide">Based In</span>
-              </div>
-              <p className="text-sm font-medium" data-testid="text-celebrity-based-in">
-                <CountryDisplay
-                  countryCode={profile.basedInCountryCode}
-                  countryName={profile.basedIn}
-                />
-              </p>
-            </div>
-          </div>
+      <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
+        <div className="flex items-center gap-2 text-primary mb-1">
+          <DollarSign className="h-4 w-4" />
+          <span className="text-xs uppercase tracking-wide font-medium">Estimated Net Worth (2026)</span>
+        </div>
+        <p className="text-xl font-mono font-bold" data-testid="text-celebrity-net-worth">
+          {formatNetWorth(profile.estimatedNetWorth)}
+        </p>
+      </div>
 
-          <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
-            <div className="flex items-center gap-2 text-primary mb-1">
-              <DollarSign className="h-4 w-4" />
-              <span className="text-xs uppercase tracking-wide font-medium">Estimated Net Worth (2026)</span>
-            </div>
-            <p className="text-xl font-mono font-bold" data-testid="text-celebrity-net-worth">
-              {formatNetWorth(profile.estimatedNetWorth)}
-            </p>
-          </div>
-
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground pt-2 border-t border-border/50">
-            <Sparkles className="h-3 w-3 shrink-0" />
-            <span>AI-generated content. May not be 100% accurate.</span>
-          </div>
-        </>
-      )}
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground pt-2 border-t border-border/50">
+        <Sparkles className="h-3 w-3 shrink-0" />
+        <span>AI-generated content. May not be 100% accurate.</span>
+      </div>
     </div>
   );
 }
