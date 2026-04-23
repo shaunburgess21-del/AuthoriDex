@@ -481,6 +481,37 @@ export const imageVotes = pgTable("image_votes", {
   directionCheck: check("image_votes_direction_check", sql`${table.direction} IN ('up')`),
 }));
 
+// Image Flags - user reports for bad celebrity images (schema foundation; UI TBD)
+export const imageFlags = pgTable("image_flags", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  imageId: varchar("image_id").notNull().references(() => celebrityImages.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull(),
+  reason: text("reason").notNull(),
+  notes: text("notes"),
+  resolved: boolean("resolved").notNull().default(false),
+  resolvedBy: varchar("resolved_by"),
+  resolvedAt: timestamp("resolved_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  imageUserUnique: unique("image_flags_image_user_uniq").on(table.imageId, table.userId),
+  reasonCheck: check(
+    "image_flags_reason_check",
+    sql`${table.reason} IN ('wrong_person','low_quality','inappropriate','duplicate','other')`,
+  ),
+  resolvedCreatedIdx: index("image_flags_resolved_created_idx").on(table.resolved, table.createdAt),
+}));
+
+export const insertImageFlagSchema = createInsertSchema(imageFlags).omit({
+  id: true,
+  resolved: true,
+  resolvedBy: true,
+  resolvedAt: true,
+  createdAt: true,
+});
+
+export type ImageFlag = typeof imageFlags.$inferSelect;
+export type InsertImageFlag = z.infer<typeof insertImageFlagSchema>;
+
 // Induction Votes - deduplication table for induction candidate voting
 export const inductionVotes = pgTable("induction_votes", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

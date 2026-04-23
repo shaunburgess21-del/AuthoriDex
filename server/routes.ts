@@ -4,7 +4,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { getBaselineDiagnostics } from "./utils/baseline";
 import { db } from "./db";
-import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, matchups, votes, xpActions, xpLedger, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, openMarketComments, openMarketCommentVotes, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, trendingPollComments, trendingPollCommentVotes, matchupComments, matchupCommentVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, opinionPollComments, opinionPollCommentVotes, imageVotes, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
+import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, matchups, votes, xpActions, xpLedger, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, openMarketComments, openMarketCommentVotes, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, trendingPollComments, trendingPollCommentVotes, matchupComments, matchupCommentVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, opinionPollComments, opinionPollCommentVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
 import { validateSuggestionPayload, SUGGESTION_TYPES } from "@shared/suggestionSchemas";
 import { normaliseSocialHandles } from "@shared/handleNormalise";
 import { eq, desc, and, gt, sql, count, gte, lte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull } from "drizzle-orm";
@@ -20,6 +20,7 @@ import { dispatchApproval, markSuggestionApproved, markSuggestionRejected } from
 import { JACKPOT_TICKET_COST, JACKPOT_MAX_PREDICTED_SCORE } from "./config/constants";
 import { isAdminRole } from "./utils/authz";
 import { applyAdminCreditAdjustment } from "./utils/admin-credits";
+import { IMAGE_FLAG_WINDOW_MS, isImageFlagRateLimited, isValidImageFlagReason } from "./utils/image-flags";
 import { optimizeImage } from "./utils/image-optimize";
 import geoip from "geoip-lite";
 import { getTrendContext, getTrendContextBatch, formatRelativeTime, type TrendContext } from "./services/trend-context";
@@ -2308,6 +2309,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error voting on celebrity image:", error);
       res.status(500).json({ error: "Failed to vote on image" });
+    }
+  });
+
+  // Flag a celebrity image (schema foundation; UI TBD)
+  app.post("/api/people/:personId/images/:imageId/flag", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { personId, imageId } = req.params;
+      const { reason, notes } = req.body ?? {};
+      const userId = req.userId!;
+
+      if (!isValidImageFlagReason(reason)) {
+        return res.status(400).json({ error: "Invalid reason" });
+      }
+      if (notes !== undefined && notes !== null && typeof notes !== 'string') {
+        return res.status(400).json({ error: "Invalid notes" });
+      }
+
+      const [image] = await db.select()
+        .from(celebrityImages)
+        .where(and(
+          eq(celebrityImages.id, imageId),
+          eq(celebrityImages.personId, personId),
+        ));
+      if (!image) {
+        return res.status(404).json({ error: "Image not found" });
+      }
+
+      const since = new Date(Date.now() - IMAGE_FLAG_WINDOW_MS);
+      const [rateRow] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(imageFlags)
+        .where(and(
+          eq(imageFlags.userId, userId),
+          gte(imageFlags.createdAt, since),
+        ));
+      if (isImageFlagRateLimited(rateRow?.count ?? 0)) {
+        return res.status(429).json({ error: "Flag rate limit exceeded. Try again later." });
+      }
+
+      const [row] = await db.insert(imageFlags)
+        .values({ imageId, userId, reason, notes: notes ?? null })
+        .onConflictDoUpdate({
+          target: [imageFlags.imageId, imageFlags.userId],
+          set: { reason, notes: notes ?? null },
+        })
+        .returning();
+
+      res.status(201).json(row);
+    } catch (error) {
+      console.error("Error flagging celebrity image:", error);
+      res.status(500).json({ error: "Failed to flag image" });
     }
   });
 
