@@ -47,6 +47,7 @@ export interface MyPredictionCardData {
   personAvatar: string | null;
   startAt: string;
   endAt: string;
+  resolutionSummary?: string | null;
   hidden?: boolean;
 }
 
@@ -305,6 +306,15 @@ export function MyPredictionCard({
             {openMode && prediction.endAt ? formatCountdown(prediction.endAt) : formatDate(prediction.betCreatedAt)}
           </span>
         </div>
+
+        {isResolved && prediction.resolutionSummary && (
+          <p
+            className="mt-2 text-xs italic text-muted-foreground leading-snug"
+            data-testid={`resolution-summary-${prediction.betId}`}
+          >
+            {prediction.resolutionSummary}
+          </p>
+        )}
 
         <div className="flex items-center gap-1.5 mt-2 flex-wrap">
           {prediction.marketCategory && (

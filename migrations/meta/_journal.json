@@ -120,6 +120,13 @@
       "when": 1777046400000,
       "tag": "0016_create_missing_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1777132800000,
+      "tag": "0017_prediction_markets_resolution_summary",
+      "breakpoints": true
     }
   ]
 }

@@ -7094,6 +7094,7 @@ Return JSON only:
             startAt: predictionMarkets.startAt,
             endAt: predictionMarkets.endAt,
             personId: predictionMarkets.personId,
+            resolutionSummary: predictionMarkets.resolutionSummary,
             entryResolutionStatus: marketEntries.resolutionStatus,
             entryLabel: marketEntries.label,
             personName: trendingPeople.name,
@@ -7166,6 +7167,7 @@ Return JSON only:
           personAvatar: isNative ? b.personAvatar : null,
           startAt: b.startAt,
           endAt: b.endAt,
+          resolutionSummary: isNative ? b.resolutionSummary ?? null : null,
           hidden: hiddenSet.has(`market_bet:${b.betId}`),
         };
       });

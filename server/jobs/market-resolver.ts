@@ -1,11 +1,13 @@
 import { db, withDbAdvisoryLock } from "../db";
-import { predictionMarkets, marketEntries, marketBets, trendSnapshots, profiles, creditLedger } from "@shared/schema";
+import { predictionMarkets, marketEntries, marketBets, trendSnapshots, profiles, creditLedger, trendingPeople } from "@shared/schema";
 import { eq, and, sql, inArray, lte, gte, desc, asc } from "drizzle-orm";
 import { log } from "../log";
 import { calculateSettlementPayouts } from "./settlement-utils";
 import { scoreResolvedMarket } from "../agents/performanceUpdater";
 import { PLATFORM_FEE } from "../config/constants";
 import { gamificationService } from "../services/gamification";
+import OpenAI from "openai";
+import { fetchTrendingNewsContext } from "../providers/serper";
 
 const RESOLVER_INTERVAL_MS = 5 * 60 * 1000;
 const RESOLVER_STARTUP_DELAY_MS = 2 * 60 * 1000;
@@ -57,6 +59,147 @@ export interface SettlementMeta {
   resolutionNotes?: string;
   settledBy?: string;
   voidReason?: string | null;
+}
+
+/**
+ * Fire-and-forget: write a one-sentence neutral summary to
+ * `prediction_markets.resolution_summary`. Settlement never blocks on this —
+ * any failure is logged and swallowed. Idempotent: skips if the column is
+ * already populated.
+ *
+ * Volume is low (markets resolve ~weekly; dozens per week at launch), so a
+ * single `gpt-4.1` call per market is acceptable without extra caching.
+ */
+export async function generateResolutionSummary(marketId: string): Promise<void> {
+  try {
+    const [market] = await db
+      .select()
+      .from(predictionMarkets)
+      .where(eq(predictionMarkets.id, marketId))
+      .limit(1);
+    if (!market) return;
+    if (market.resolutionSummary) return; // idempotent — don't regenerate
+    if (market.status !== "RESOLVED") return; // only summarize successful settlements
+    // Only native markets — community markets use a different resolutionSummary
+    // shape (synthesized object) on their detail endpoint.
+    if (!["h2h", "updown", "gainer", "jackpot"].includes(market.marketType)) return;
+
+    const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      log(`[ResolutionSummary] ${marketId}: no OpenAI key, skipping`);
+      return;
+    }
+
+    const entries = await db
+      .select()
+      .from(marketEntries)
+      .where(eq(marketEntries.marketId, marketId));
+    const winner = entries.find(e => e.resolutionStatus === "winner");
+    const loser = entries.find(e => e.resolutionStatus === "loser");
+    if (!winner) return;
+
+    // For H2H / gainer / updown, try to anchor the summary in one headline
+    // about the winning person. updown's "winner" is Up/Down (no person), so
+    // we fall back to the market's linked personId in that case.
+    let winningPersonId: string | null = winner.personId ?? null;
+    if (!winningPersonId && market.marketType === "updown" && market.personId) {
+      winningPersonId = market.personId;
+    }
+
+    let winningPersonName: string | null = null;
+    if (winningPersonId) {
+      const [person] = await db
+        .select({ name: trendingPeople.name })
+        .from(trendingPeople)
+        .where(eq(trendingPeople.id, winningPersonId))
+        .limit(1);
+      winningPersonName = person?.name ?? null;
+    }
+
+    let headlineLine = "";
+    if (winningPersonName) {
+      try {
+        const newsContext = await fetchTrendingNewsContext(winningPersonName);
+        if (newsContext && newsContext.sources.length > 0) {
+          headlineLine = `Recent headline: ${newsContext.sources[0].title}`;
+        }
+      } catch (err: any) {
+        log(`[ResolutionSummary] ${marketId}: news fetch failed (${err?.message ?? err}), continuing without headline`);
+      }
+    }
+
+    // Extract the percent margin for updown / gainer from resolutionNotes
+    // (it's JSON-stringified by the resolvers above).
+    let marginLine = "";
+    if (market.resolutionNotes) {
+      try {
+        const notes = JSON.parse(market.resolutionNotes);
+        if (typeof notes?.percentChange === "string") {
+          marginLine = `Margin: ${notes.percentChange}.`;
+        } else if (Array.isArray(notes?.rankings) && notes.rankings[0]?.pctChange) {
+          marginLine = `Winning gain: ${notes.rankings[0].pctChange}.`;
+        }
+      } catch {}
+    }
+
+    const marketTypeLabel = market.marketType === "h2h"
+      ? "head-to-head"
+      : market.marketType === "gainer"
+        ? "top-gainer"
+        : market.marketType === "updown"
+          ? "up/down"
+          : market.marketType;
+
+    const systemPrompt = `You write one-sentence neutral summaries for resolved prediction markets, in the style of a wire-service headline. Past tense. No opinions. No hype words (never use: backlash, scandal, controversy, embattled, slammed, blasted, divisive, polarizing). If a headline is provided, you may reference its event only as a factual anchor — never characterize public reaction.`;
+
+    const userPrompt = `Write ONE sentence (max 25 words) summarising this resolved ${marketTypeLabel} prediction market.
+
+Market title: ${market.title}
+Winner: ${winner.label}${winningPersonName && winningPersonName !== winner.label ? ` (${winningPersonName})` : ""}
+${loser ? `Loser: ${loser.label}` : ""}
+${marginLine}
+${headlineLine}
+
+Rules:
+- Past tense.
+- Name the winner first.
+- If a margin is provided, include it briefly.
+- If a recent headline is provided and relevant, you may reference what happened in neutral terms.
+- Return ONLY the sentence — no quotes, no JSON, no explanation.`;
+
+    const openai = new OpenAI({ apiKey });
+    const response = await openai.chat.completions.create({
+      model: "gpt-4.1",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      max_tokens: 120,
+      temperature: 0.4,
+    });
+
+    const summary = response.choices[0]?.message?.content?.trim();
+    if (!summary) {
+      log(`[ResolutionSummary] ${marketId}: empty LLM response, skipping write`);
+      return;
+    }
+
+    // Strip any wrapping quotes the model might emit despite the rules.
+    const cleaned = summary.replace(/^['"\s]+|['"\s]+$/g, "").slice(0, 500);
+
+    await db
+      .update(predictionMarkets)
+      .set({ resolutionSummary: cleaned, updatedAt: new Date() })
+      .where(and(
+        eq(predictionMarkets.id, marketId),
+        sql`${predictionMarkets.resolutionSummary} IS NULL`, // race-safe
+      ));
+
+    log(`[ResolutionSummary] ${marketId}: wrote summary (${cleaned.length} chars)`);
+  } catch (err: any) {
+    // Fail open — settlement already succeeded.
+    log(`[ResolutionSummary] ${marketId}: generation failed: ${err?.message ?? err}`);
+  }
 }
 
 export async function settleMarketBets(marketId: string, winnerEntryId: string, meta?: SettlementMeta): Promise<SettlementResult> {
@@ -238,6 +381,13 @@ export async function settleMarketBets(marketId: string, winnerEntryId: string, 
         );
       } catch (e) { console.error("XP award for prediction win failed:", e); }
     }
+  }
+
+  // Fire-and-forget AI resolution summary. Never block settlement on it.
+  if (!result.alreadySettled) {
+    generateResolutionSummary(marketId).catch(err =>
+      log(`[ResolutionSummary] fire-and-forget failed for ${marketId}: ${err?.message ?? err}`)
+    );
   }
 
   return result;
@@ -763,6 +913,11 @@ async function resolveJackpot(market: any): Promise<"resolved" | "blocked"> {
       );
     } catch (e) { console.error("XP award for jackpot win failed:", e); }
   }
+
+  // Fire-and-forget resolution summary (jackpot settles outside settleMarketBets).
+  generateResolutionSummary(market.id).catch(err =>
+    log(`[ResolutionSummary] fire-and-forget failed for jackpot ${market.id}: ${err?.message ?? err}`)
+  );
 
   const w = winners[0];
   log(`[MarketResolver] jackpot ${market.id}: resolved. actual=${actualScore}, winner predicted ${w.predictedScore} (off by ${w.diff}), pool=${totalPool}, payout=${distributablePool}, entries=${allBets.length}, tied=${winners.length}`);

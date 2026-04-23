@@ -921,6 +921,7 @@ export const predictionMarkets = pgTable("prediction_markets", {
   tieRule: text("tie_rule").default("refund"), // 'refund' | 'down_wins' | 'up_wins'
   cadence: text("cadence").default("weekly"), // 'daily' | 'weekly' | 'custom'
   baselineScore: integer("baseline_score"), // Denormalized from metadata.openingScore for easy API access
+  resolutionSummary: text("resolution_summary"), // AI-generated one-sentence summary of the resolution; null until generated
 }, (table) => ({
   statusEndIdx: index("prediction_markets_status_end_idx").on(table.status, table.endAt),
   personIdx: index("prediction_markets_person_idx").on(table.personId),
