@@ -5575,12 +5575,6 @@ export default function AdminDashboard() {
                     const flippedLabel = flipped
                       ? `${flipped.toLocaleDateString()} ${flipped.toLocaleTimeString()}`
                       : "not set";
-                    const smoothingTone =
-                      m.smoothingMode === "off"
-                        ? "bg-red-500/15 text-red-500 border-red-500/40"
-                        : m.smoothingMode === "relaxed"
-                          ? "bg-yellow-500/15 text-yellow-500 border-yellow-500/40"
-                          : "bg-green-500/15 text-green-500 border-green-500/40";
                     const newsModeTone =
                       m.newsAggregationMode === "union"
                         ? "bg-cyan-500/15 text-cyan-500 border-cyan-500/40"
@@ -5596,12 +5590,6 @@ export default function AdminDashboard() {
                           </span>
                         </div>
                         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 text-xs">
-                          <div className="flex flex-col gap-1">
-                            <span className="text-muted-foreground">Smoothing</span>
-                            <Badge variant="outline" className={cn("w-fit", smoothingTone)} data-testid="badge-smoothing-mode">
-                              {m.smoothingMode ?? "legacy"}
-                            </Badge>
-                          </div>
                           <div className="flex flex-col gap-1">
                             <span className="text-muted-foreground">News Aggregation</span>
                             <Badge variant="outline" className={cn("w-fit", newsModeTone)} data-testid="badge-news-mode">
@@ -5638,30 +5626,6 @@ export default function AdminDashboard() {
                               {m.rollingWindowDaysNews ?? 7}d (news)
                             </span>
                           </div>
-                          <div className="flex flex-col gap-1">
-                            <span className="text-muted-foreground">Relaxed Cap ×</span>
-                            <span className="font-medium">{m.relaxedCapMultiplier}</span>
-                          </div>
-                          <div className="flex flex-col gap-1">
-                            <span className="text-muted-foreground">Relaxed α Floor</span>
-                            <span className="font-medium">{m.relaxedAlphaFloor}</span>
-                          </div>
-                          {m.spikeMinDelta && (
-                            <div className="flex flex-col gap-1 sm:col-span-2 lg:col-span-4">
-                              <span className="text-muted-foreground">Spike Min Deltas (min absolute change above median to count as a spike)</span>
-                              <div className="flex flex-wrap gap-2" data-testid="panel-spike-min-delta">
-                                <Badge variant="outline" className="bg-muted/50 text-[11px]">
-                                  wiki ≥ {Number(m.spikeMinDelta.wiki).toLocaleString()} pv
-                                </Badge>
-                                <Badge variant="outline" className="bg-muted/50 text-[11px]">
-                                  news ≥ {m.spikeMinDelta.news} articles
-                                </Badge>
-                                <Badge variant="outline" className="bg-muted/50 text-[11px]">
-                                  search ≥ {m.spikeMinDelta.search} pts
-                                </Badge>
-                              </div>
-                            </div>
-                          )}
                           <div className="flex flex-col gap-1 sm:col-span-2 lg:col-span-4">
                             <span className="text-muted-foreground">Diagnostics Verbose</span>
                             <Badge variant="outline" className={cn("w-fit", m.diagnosticsVerbose ? "bg-blue-500/15 text-blue-500 border-blue-500/40" : "bg-muted text-muted-foreground border-border")}>
@@ -7591,21 +7555,8 @@ export default function AdminDashboard() {
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2 justify-center text-xs">
                     <Badge variant="outline">
-                      Spikes: {[
-                        scoreBreakdown.spikeStatus.wiki && "Wiki",
-                        scoreBreakdown.spikeStatus.news && "News",
-                        scoreBreakdown.spikeStatus.search && "Search"
-                      ].filter(Boolean).join("+") || "None"} ({scoreBreakdown.stabilizationParams.spikingSourceCount})
+                      Scoring: raw (no smoothing / rate limit / catch-up)
                     </Badge>
-                    <Badge variant="outline">
-                      Cap: {(scoreBreakdown.stabilizationParams.effectiveRateCap * 100).toFixed(0)}%
-                    </Badge>
-                    <Badge variant="outline">
-                      Alpha: {scoreBreakdown.stabilizationParams.effectiveAlpha.toFixed(2)}
-                    </Badge>
-                    {scoreBreakdown.stabilizationParams.isRecalibrationActive && (
-                      <Badge className="bg-amber-500">RECAL</Badge>
-                    )}
                   </div>
                 </Card>
               )}
@@ -7746,58 +7697,20 @@ export default function AdminDashboard() {
                 </div>
               </Card>
 
-              {/* Stabilization Parameters */}
-              <Card className="p-4" data-testid="card-stabilization">
-                <h3 className="font-semibold mb-3 flex items-center gap-2">
-                  <Settings className="h-4 w-4" />
-                  Stabilization Parameters
-                </h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                  <div className="text-center p-3 bg-muted/50 rounded-lg">
-                    <p className="text-xl font-bold">{scoreBreakdown.stabilizationParams.spikingSourceCount}</p>
-                    <p className="text-xs text-muted-foreground">Sources Spiking</p>
-                  </div>
-                  <div className="text-center p-3 bg-muted/50 rounded-lg">
-                    <p className="text-xl font-bold">{(scoreBreakdown.stabilizationParams.effectiveRateCap * 100).toFixed(0)}%</p>
-                    <p className="text-xs text-muted-foreground">Rate Cap</p>
-                  </div>
-                  <div className="text-center p-3 bg-muted/50 rounded-lg">
-                    <p className="text-xl font-bold">{scoreBreakdown.stabilizationParams.effectiveAlpha.toFixed(2)}</p>
-                    <p className="text-xs text-muted-foreground">EMA Alpha</p>
-                  </div>
-                  <div className="text-center p-3 bg-muted/50 rounded-lg">
-                    {scoreBreakdown.stabilizationParams.isRecalibrationActive ? (
-                      <Badge className="bg-amber-500">ACTIVE</Badge>
-                    ) : (
-                      <Badge variant="secondary">OFF</Badge>
-                    )}
-                    <p className="text-xs text-muted-foreground mt-1">Recalibration</p>
-                  </div>
-                </div>
-              </Card>
-
               {/* Score Calculation */}
               <Card className="p-4" data-testid="card-score-calculation">
                 <h3 className="font-semibold mb-3 flex items-center gap-2">
                   <TrendingUp className="h-4 w-4" />
                   Score Calculation
                 </h3>
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
                   <div className="text-center p-3 bg-muted/50 rounded-lg">
                     <p className="text-lg font-bold">{scoreBreakdown.scoreBreakdown.massScore.toFixed(1)}</p>
                     <p className="text-xs text-muted-foreground">Mass ({(scoreBreakdown.weights.mass * 100).toFixed(0)}%)</p>
                   </div>
                   <div className="text-center p-3 bg-muted/50 rounded-lg">
                     <p className="text-lg font-bold">{scoreBreakdown.scoreBreakdown.velocityScore.toFixed(1)}</p>
-                    <p className="text-xs text-muted-foreground">Velocity (raw)</p>
-                  </div>
-                  <div className="text-center p-3 bg-muted/50 rounded-lg">
-                    <p className="text-lg font-bold">{scoreBreakdown.scoreBreakdown.velocityAdjusted.toFixed(1)}</p>
                     <p className="text-xs text-muted-foreground">Velocity ({(scoreBreakdown.weights.velocity * 100).toFixed(0)}%)</p>
-                  </div>
-                  <div className="text-center p-3 bg-muted/50 rounded-lg">
-                    <p className="text-lg font-bold">{scoreBreakdown.scoreBreakdown.diversityMultiplier.toFixed(2)}x</p>
-                    <p className="text-xs text-muted-foreground">Diversity</p>
                   </div>
                   <div className="text-center p-3 bg-violet-500/25 dark:bg-violet-500/20 rounded-lg border border-violet-500/40 dark:border-violet-500/30">
                     <p className="text-lg font-bold text-violet-600 dark:text-violet-400">{scoreBreakdown.scoreBreakdown.fameIndex.toLocaleString()}</p>

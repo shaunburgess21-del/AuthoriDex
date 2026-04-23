@@ -228,17 +228,9 @@ export interface ScoreBreakdownData {
     news: boolean;
     search: boolean;
   };
-  stabilizationParams: {
-    spikingSourceCount: number;
-    effectiveRateCap: number;
-    effectiveAlpha: number;
-    isRecalibrationActive: boolean;
-  };
   scoreBreakdown: {
     massScore: number;
     velocityScore: number;
-    velocityAdjusted: number;
-    diversityMultiplier: number;
     trendScore: number;
     fameIndex: number;
     momentum: string;

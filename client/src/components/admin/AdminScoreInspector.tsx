@@ -47,15 +47,12 @@ interface SnapshotBreakdown {
   scores: {
     massScore: number | null;
     velocityScore: number | null;
-    velocityAdjusted: number | null;
     trendScore: number | null;
     fameIndex: number | null;
   };
   freshness: any;
-  stabilization: any;
   momentum: string | null;
   confidence: number | null;
-  diversityMultiplier: number | null;
   snapshotOrigin: string | null;
   diagnostics: any;
 }

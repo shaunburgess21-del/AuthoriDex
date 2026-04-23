@@ -23,22 +23,7 @@ import {
   updateCanaryStreak,
 } from "../scoring/sourceHealth";
 import {
-  updateCatchUpMode,
-  isCatchUpModeActive,
-  getCatchUpBand,
-  loadCatchUpStateFromDB,
-  getCatchUpExitStreak,
-  getCatchUpEnteredAtHour,
-  getCatchUpCapMultiplier,
-  getCatchUpAlphaMultiplier,
-  getDynamicRateLimit,
-  getDynamicAlpha,
-  MAX_HOURLY_CHANGE_PERCENT,
-  EMA_ALPHA_DEFAULT,
-  EMA_ALPHA_2_SOURCES,
-  EMA_ALPHA_3_SOURCES,
   SCORE_VERSION,
-  getSmoothingMode,
   getNewsAggregationMode,
   isDiagnosticsVerbose,
 } from "../scoring/normalize";
@@ -475,7 +460,6 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
   console.log(`${logPrefix} Starting data ingestion...`);
 
   await loadHealthFromDB();
-  await loadCatchUpStateFromDB();
   await loadNewsProviderPref();
   await loadLastRunMetaFromDB();
 
@@ -1254,18 +1238,10 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     // Fetch 7-day source statistics for normalization
     const sourceStats = await refreshSourceStats();
 
-    // Stabilization stats tracking for monitoring
-    const stabilizationStats = {
-      totalProcessed: 0,
-      withPreviousScore: 0,  // EMA applied
-      rateLimited: 0,        // Hit rate cap
-      largeChanges: 0,       // >10% raw change
-      maxRawChange: 0,       // Largest raw change %
-      avgRawChange: 0,       // Average raw change %
-      rawChanges: [] as number[],
-      gapPcts: [] as number[], // abs(raw - final) / final for each celebrity
-      spikeDistribution: { 0: 0, 1: 0, 2: 0, 3: 0 } as Record<number, number>,
-    };
+    // Minimal counters retained for the post-ingest health summary.
+    // Stabilization/rate-limit/EMA tracking was removed along with the
+    // underlying mechanisms — the scorer is now a single raw-math path.
+    let totalProcessed = 0;
 
     // Capture old rankings for churn tracking (before we update)
     const oldRankings = await db.select({
@@ -1646,60 +1622,33 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
             instagram: !!person.instagramHandle,
             youtube: !!person.youtubeId,
           },
-          // Source health states for weight renormalization during outages
-          sourceHealthStates: {
-            newsOutage: currentHealthSnapshot.news.state === 'OUTAGE' || currentHealthSnapshot.news.state === 'DEGRADED',
-            searchOutage: currentHealthSnapshot.search.state === 'OUTAGE' || currentHealthSnapshot.search.state === 'DEGRADED',
-            wikiOutage: currentHealthSnapshot.wiki.state === 'OUTAGE' || currentHealthSnapshot.wiki.state === 'DEGRADED',
-          },
-          // Staleness decay for velocity WEIGHT reduction (not just value decay)
-          // Governor factor further dampens weight when coverage drops sharply
+          // Staleness factors are still derived here for legacy callers and
+          // historical diagnostics; computeTrendScore ignores them now but the
+          // values are logged in the health summary and per-snapshot diagnostics
+          // for post-hoc debugging.
           newsStalenessFactor: Math.min(newsUsedFallback ? newsDecayFactor : 1.0, newsGovernorFactor),
           searchStalenessFactor: Math.min(searchUsedFallback ? searchDecayFactor : 1.0, searchGovernorFactor),
         };
 
-        // Get previous scores for change calculations and EMA smoothing
-        // Note: mostRecent already fetched above for graceful degradation
+        // Previous scores for 24h/7d change computation. The third positional
+        // argument (previousFameIndex) was used for EMA smoothing which is now
+        // removed — we pass `undefined` so the scorer doesn't rely on it. The
+        // 24h/7d fameIndex values are still threaded through for change_24h /
+        // change_7d.
         const prev24h = snapshot24hMap.get(person.id);
         const prev7d = snapshot7dMap.get(person.id);
-        
-        // CRITICAL: Use MOST RECENT fameIndex for EMA smoothing (not 24h-ago)
-        // This ensures rate limiting and EMA are always applied for smooth transitions
-        const previousFameIndex = mostRecent?.fameIndex ?? undefined;
-        
+
         const scoreResult = computeTrendScore(
           inputs,
-          prev24h?.trendScore,  // previousScore for change24h calculation (legacy fallback)
-          prev7d?.trendScore,   // previousScore7d for change7d calculation (legacy fallback)
-          previousFameIndex,    // Most recent fameIndex for EMA smoothing
-          sourceStats,          // 7-day stats for normalization
-          prev24h?.fameIndex ?? undefined,  // 24h-ago fameIndex for stable change_24h
-          prev7d?.fameIndex ?? undefined,   // 7d-ago fameIndex for stable change_7d
+          prev24h?.trendScore,
+          prev7d?.trendScore,
+          undefined,
+          sourceStats,
+          prev24h?.fameIndex ?? undefined,
+          prev7d?.fameIndex ?? undefined,
         );
 
-        // Track stabilization stats using pre-stabilization rawFameIndex
-        stabilizationStats.totalProcessed++;
-        // Track spike count distribution (0/1/2/3 sources spiking)
-        const spikeCount = Math.min(3, Math.max(0, scoreResult.spikingSourceCount));
-        stabilizationStats.spikeDistribution[spikeCount]++;
-        
-        if (scoreResult.wasStabilized && previousFameIndex !== undefined && previousFameIndex > 0) {
-          stabilizationStats.withPreviousScore++;
-          const rawChangePct = Math.abs((scoreResult.rawFameIndex - previousFameIndex) / previousFameIndex) * 100;
-          stabilizationStats.rawChanges.push(rawChangePct);
-          if (rawChangePct >= 8) stabilizationStats.rateLimited++; // 8% cap (raised from 5%)
-          if (rawChangePct > 10) stabilizationStats.largeChanges++;
-          if (rawChangePct > stabilizationStats.maxRawChange) stabilizationStats.maxRawChange = rawChangePct;
-        }
-
-        if (scoreResult.fameIndex > 0) {
-          const gapPct = Math.abs(scoreResult.rawFameIndex - scoreResult.fameIndex) / scoreResult.fameIndex;
-          stabilizationStats.gapPcts.push(gapPct);
-        }
-
-        const wasRateLimited = scoreResult.wasStabilized && previousFameIndex !== undefined && previousFameIndex > 0;
-        const appliedCapPct = getDynamicRateLimit(scoreResult.spikingSourceCount);
-        const appliedAlpha = getDynamicAlpha(scoreResult.spikingSourceCount);
+        totalProcessed++;
 
         const diagnosticsData = {
           v: SNAPSHOT_DIAGNOSTICS_VERSION,
@@ -1761,17 +1710,14 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           velocityComponents: scoreResult.velocityComponents,
           driversModel: "velocity_components_v1",
           driversMethod: scoreResult.velocityComponents ? "exact_velocity_components" : "estimate_signal_change",
-          stab: scoreResult.stabDetail ? {
-            ...scoreResult.stabDetail,
-            capPct: scoreResult.stabDetail.capUsed,
-            alpha: scoreResult.stabDetail.alphaUsed,
-            limited: wasRateLimited,
-            spikes: scoreResult.spikingSourceCount,
-          } : {
-            limited: wasRateLimited,
-            capPct: Math.round(appliedCapPct * 1000) / 1000,
-            alpha: Math.round(appliedAlpha * 1000) / 1000,
-            spikes: scoreResult.spikingSourceCount,
+          // `stab` retained for backwards-compat diagnostics consumers. All
+          // stabilization mechanisms are gone, so rawFame === fameIndex and
+          // no cap / alpha was applied.
+          stab: {
+            limited: false,
+            capPct: 1,
+            alpha: 1,
+            spikes: 0,
             rawFame: scoreResult.rawFameIndex,
           },
         };
@@ -1823,19 +1769,9 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
       }
     }
 
-    // Compute gap metrics (raw vs final score divergence) for catch-up mode
-    const sortedGaps = [...stabilizationStats.gapPcts].sort((a, b) => a - b);
-    const medianGapPct = sortedGaps.length > 0 ? sortedGaps[Math.floor(sortedGaps.length / 2)] : 0;
-    const p90GapPct = sortedGaps.length > 0 ? sortedGaps[Math.floor(sortedGaps.length * 0.9)] : 0;
-
-    await updateCatchUpMode(medianGapPct);
-    const catchUpActive = isCatchUpModeActive();
-    const catchUpCurrentBand = getCatchUpBand();
-    const catchUpExitStreak = getCatchUpExitStreak();
-    const catchUpEnteredAt = getCatchUpEnteredAtHour();
-    const capMultiplier = getCatchUpCapMultiplier();
-    const alphaMultiplier = getCatchUpAlphaMultiplier();
-    console.log(`[Gap Metrics] medianGap=${(medianGapPct * 100).toFixed(1)}%, p90Gap=${(p90GapPct * 100).toFixed(1)}%, catchUp=${catchUpCurrentBand}, exitStreak=${catchUpExitStreak}`);
+    // Gap metrics and catch-up mode were removed along with stabilization.
+    // With raw scores there is no "gap" between raw and displayed fame index
+    // (they're identical by construction).
 
     // Sort by fameIndex (displayed on leaderboard) not trendScore - matches quick-score.ts
     scoreResults.sort((a, b) => b.score.fameIndex - a.score.fameIndex);
@@ -2008,18 +1944,10 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     const enteredTop20 = Array.from(newTop20).filter(id => !oldTop20.has(id)).length;
     const exitedTop20 = Array.from(oldTop20).filter(id => !newTop20.has(id)).length;
 
-    // Log stabilization stats summary
-    if (stabilizationStats.rawChanges.length > 0) {
-      stabilizationStats.avgRawChange = stabilizationStats.rawChanges.reduce((a, b) => a + b, 0) / stabilizationStats.rawChanges.length;
-      console.log(`[Stabilization Stats] EMA applied: ${stabilizationStats.withPreviousScore}/${stabilizationStats.totalProcessed}, ` +
-        `Rate limited (>5%): ${stabilizationStats.rateLimited}, Large changes (>10%): ${stabilizationStats.largeChanges}, ` +
-        `Avg raw change: ${stabilizationStats.avgRawChange.toFixed(2)}%, Max: ${stabilizationStats.maxRawChange.toFixed(1)}%`);
-    }
-    
-    // Log spike distribution (how many have 0/1/2/3 sources spiking)
-    const spikeDist = stabilizationStats.spikeDistribution;
-    console.log(`[Spike Distribution] 0 sources: ${spikeDist[0]}, 1 source: ${spikeDist[1]}, 2 sources: ${spikeDist[2]}, 3 sources: ${spikeDist[3]}`);
-    
+    // Stabilization / spike-distribution logs removed alongside the
+    // underlying mechanisms. With the simplified scorer every person's
+    // rawFameIndex === fameIndex, so there is nothing to summarize here.
+
     // Log graceful degradation stats (when APIs fail)
     if (newsApiUsedFallback > 0 || searchApiUsedFallback > 0) {
       const newsBootstrapped = newsApiUsedFallback > 0 && Array.from(lastNonZeroNewsMap.keys()).length > 0 ? 
@@ -2065,18 +1993,16 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
             oldRank,
             newRank: newRank + 1,
             rankChange,
-            rawFameIndex: r.score.rawFameIndex,
-            finalFameIndex: r.score.fameIndex,
-            spikingCount: r.score.spikingSourceCount,
+            fameIndex: r.score.fameIndex,
           };
         })
         .sort((a, b) => Math.abs(b.rankChange) - Math.abs(a.rankChange))
         .slice(0, 5);
-      
+
       console.warn(`[ANOMALY ALERT] Top 5 movers:`);
       for (const m of movers) {
         const direction = m.rankChange > 0 ? '↑' : m.rankChange < 0 ? '↓' : '→';
-        console.warn(`  ${direction} ${m.name}: #${m.oldRank} → #${m.newRank} (raw: ${m.rawFameIndex}, final: ${m.finalFameIndex}, spikes: ${m.spikingCount})`);
+        console.warn(`  ${direction} ${m.name}: #${m.oldRank} → #${m.newRank} (fame: ${m.fameIndex})`);
       }
     }
     
@@ -2092,7 +2018,7 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
       duration: `${jobDuration}ms`,
       rows: processed,
       lock: "acquired",
-      smoothingMode: getSmoothingMode(),
+      smoothingMode: "off",
       newsAggregationMode,
       sources: {
         wiki: wikiData.size < people.length * 0.7 ? "DEGRADED" : "OK",
@@ -2268,48 +2194,10 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
         top10: `+${enteredTop10}/-${exitedTop10}`,
         top20: `+${enteredTop20}/-${exitedTop20}`,
       },
-      rateLimited: stabilizationStats.rateLimited,
-      rateLimitedPct: `${((stabilizationStats.rateLimited / stabilizationStats.totalProcessed) * 100).toFixed(1)}%`,
-      convergence: {
-        medianGapPct: `${(medianGapPct * 100).toFixed(1)}%`,
-        p90GapPct: `${(p90GapPct * 100).toFixed(1)}%`,
-        catchUpMode: catchUpCurrentBand,
-        catchUpExitStreak: catchUpExitStreak,
-        catchUpEnteredAt: catchUpEnteredAt,
-      },
-      capsUsed: {
-        base: `${(MAX_HOURLY_CHANGE_PERCENT * capMultiplier * 100).toFixed(1)}%`,
-        spike1: `${(0.12 * capMultiplier * 100).toFixed(1)}%`,
-        spike2: `${(0.20 * capMultiplier * 100).toFixed(1)}%`,
-        spike3: `${(0.35 * capMultiplier * 100).toFixed(1)}%`,
-        multiplier: `${capMultiplier}x`,
-      },
-      alphaUsed: {
-        base: `${(EMA_ALPHA_DEFAULT * alphaMultiplier).toFixed(3)}`,
-        spike2: `${(EMA_ALPHA_2_SOURCES * alphaMultiplier).toFixed(3)}`,
-        spike3: `${Math.min(EMA_ALPHA_3_SOURCES * alphaMultiplier, 0.40).toFixed(3)}`,
-        multiplier: `${alphaMultiplier}x`,
-      },
+      // Stabilization / convergence / capsUsed / alphaUsed removed — the
+      // scorer is a single raw-math path, so those fields have no meaning.
+      totalProcessed,
     };
-    
-    const stabilizerGaps = scoreResults.map(r => {
-      const raw = r.score.rawFameIndex;
-      const displayed = r.score.fameIndex;
-      const gapPct = displayed > 0 ? ((raw - displayed) / displayed) * 100 : 0;
-      return { name: r.person.name, raw: Math.round(raw), displayed: Math.round(displayed), gapPct };
-    });
-
-    const heldBack = stabilizerGaps.filter(g => g.gapPct > 0).sort((a, b) => b.gapPct - a.gapPct).slice(0, 5);
-    const proppedUp = stabilizerGaps.filter(g => g.gapPct < 0).sort((a, b) => a.gapPct - b.gapPct).slice(0, 5);
-
-    console.log(`[Stabilizer Gaps] Top ${heldBack.length} held back (raw > displayed):`);
-    for (const g of heldBack) {
-      console.log(`  ${g.name}: raw=${g.raw.toLocaleString()} displayed=${g.displayed.toLocaleString()} gap=+${g.gapPct.toFixed(1)}%`);
-    }
-    console.log(`[Stabilizer Gaps] Top ${proppedUp.length} propped up (raw < displayed):`);
-    for (const g of proppedUp) {
-      console.log(`  ${g.name}: raw=${g.raw.toLocaleString()} displayed=${g.displayed.toLocaleString()} gap=${g.gapPct.toFixed(1)}%`);
-    }
 
     let baselineMeta: Record<string, any> = {};
     try {

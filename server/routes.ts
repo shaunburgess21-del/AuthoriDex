@@ -25,24 +25,16 @@ import geoip from "geoip-lite";
 import { getTrendContext, getTrendContextBatch, formatRelativeTime, type TrendContext } from "./services/trend-context";
 import { fetchWebSearchContext, fetchTrendingNewsContext, fetchNetWorthContext, probeSerperSearchLive, refreshSerperCacheForPerson, getSerperDegradedState, getSerperRunStats } from "./providers/serper";
 import { getSourceStats, refreshSourceStats } from "./scoring/sourceStats";
-import { 
-  normalizeSourceValue, 
-  isSourceSpiking, 
-  getDynamicRateLimit, 
-  getDynamicAlpha,
-  isRecalibrationModeActive,
-  SPIKE_MIN_DELTA,
+import {
+  normalizeSourceValue,
   PLATFORM_WEIGHTS,
   MASS_ALLOCATION,
   VELOCITY_ALLOCATION,
   SCORE_VERSION,
-  getSmoothingMode,
   getNewsAggregationMode,
   getNewsAggregationFlippedAt,
   getRollingWindowDaysBaseline,
   getRollingWindowDaysNews,
-  RELAXED_CAP_MULTIPLIER,
-  RELAXED_ALPHA_FLOOR,
 } from "./scoring/normalize";
 import {
   getCurrentHealthSnapshot,
@@ -834,7 +826,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.json({
           baselineStatus,
           thresholds,
-          smoothingMode: getSmoothingMode(),
+          smoothingMode: "off",
           newsAggregationMode: getNewsAggregationMode(),
           totalQualified: sorted.length,
           cap: 8,
@@ -1024,7 +1016,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           baselineStatus: baselineMeta.baseline24hStatus,
           coveragePct: baselineMeta.baseline24hCoveragePct,
           scoreVersion: baselineMeta.scoreVersion,
-          smoothingMode: getSmoothingMode(),
+          smoothingMode: "off",
           newsAggregationMode: getNewsAggregationMode(),
         },
       };
@@ -7385,18 +7377,14 @@ Only return the JSON object.`;
             return { error: "Failed to load resolver stats" };
           }
         })(),
-        emaTuningConfig: {
-          EMA_BASE_ALPHA: parseFloat(process.env.EMA_BASE_ALPHA || '0.15'),
-          EMA_2_SOURCE_ALPHA: parseFloat(process.env.EMA_2_SOURCE_ALPHA || '0.15'),
-          EMA_3_SOURCE_ALPHA: parseFloat(process.env.EMA_3_SOURCE_ALPHA || '0.22'),
-          EMA_HIGH_BASELINE_MIN_ALPHA: parseFloat(process.env.EMA_HIGH_BASELINE_MIN_ALPHA || '0.20'),
-          EMA_HIGH_BASELINE_VELOCITY_THRESHOLD: parseFloat(process.env.EMA_HIGH_BASELINE_VELOCITY_THRESHOLD || '65'),
-          EMA_HIGH_BASELINE_MIN_STRONG_SOURCES: parseFloat(process.env.EMA_HIGH_BASELINE_MIN_STRONG_SOURCES || '2'),
-          EMA_DOWNWARD_MULTIPLIER: parseFloat(process.env.EMA_DOWNWARD_MULTIPLIER || '1.2'),
-          source: 'env_with_defaults',
-        },
+        // Scoring engine was simplified to a single raw-math path (mass * 0.40
+        // + velocity * 0.60). Smoothing modes, EMA, rate limiting, catch-up,
+        // recalibration, spike detection, anti-spam damping, velocity taper,
+        // diversity multiplier, wiki-lag mute, and outage weight redistribution
+        // were all removed. `smoothingMode: "off"` is the only value now and
+        // is kept for client compatibility.
         engineModes: {
-          smoothingMode: getSmoothingMode(),
+          smoothingMode: "off",
           newsAggregationMode: getNewsAggregationMode(),
           newsAggregationFlippedAt: getNewsAggregationFlippedAt()?.toISOString() ?? null,
           ingestIntervalMinutes: (() => {
@@ -7409,19 +7397,9 @@ Only return the JSON object.`;
             if (Number.isNaN(raw) || raw < 30 || raw > 360) return 120;
             return raw;
           })(),
-          relaxedCapMultiplier: RELAXED_CAP_MULTIPLIER,
-          relaxedAlphaFloor: RELAXED_ALPHA_FLOOR,
           rollingWindowDaysBaseline: getRollingWindowDaysBaseline(),
           rollingWindowDaysNews: getRollingWindowDaysNews(),
-          spikeMinDelta: {
-            wiki: SPIKE_MIN_DELTA.wiki,
-            news: SPIKE_MIN_DELTA.news,
-            search: SPIKE_MIN_DELTA.search,
-          },
           diagnosticsVerbose: (process.env.DIAGNOSTICS_VERBOSE ?? "true").trim().toLowerCase() !== "false",
-          outageWeightRedist: ["true", "1", "yes"].includes(
-            (process.env.OUTAGE_WEIGHT_REDIST ?? "false").trim().toLowerCase()
-          ),
         },
       });
     } catch (error: any) {
@@ -9362,24 +9340,12 @@ Only return the JSON object.`;
         news: Number((baselineResult.rows[0] as any)?.news_p50) || rawInputs.newsCount,
         search: Number((baselineResult.rows[0] as any)?.search_p50) || rawInputs.searchVolume,
       };
-      
-      // Check spike status for each source
-      const spikeStatus = {
-        wiki: isSourceSpiking(rawInputs.wikiPageviews, baselines.wiki, 1.5, SPIKE_MIN_DELTA.wiki),
-        news: isSourceSpiking(rawInputs.newsCount, baselines.news, 1.5, SPIKE_MIN_DELTA.news),
-        search: isSourceSpiking(rawInputs.searchVolume, baselines.search, 1.5, SPIKE_MIN_DELTA.search),
-      };
-      
-      const spikingSourceCount = Object.values(spikeStatus).filter(Boolean).length;
-      
-      // Stabilization parameters based on spike count
-      const stabilizationParams = {
-        spikingSourceCount,
-        effectiveRateCap: getDynamicRateLimit(spikingSourceCount),
-        effectiveAlpha: getDynamicAlpha(spikingSourceCount),
-        isRecalibrationActive: isRecalibrationModeActive(),
-      };
-      
+
+      // Spike detection / stabilization parameters were removed along with the
+      // underlying mechanisms. Expose constant placeholders so existing admin
+      // UI consumers don't break.
+      const spikeStatus = { wiki: false, news: false, search: false };
+
       // Final score breakdown
       const scoreBreakdown = {
         massScore: latestSnapshot.massScore || 0,
@@ -9459,7 +9425,6 @@ Only return the JSON object.`;
         baselines,
         normalizedPercentiles,
         spikeStatus,
-        stabilizationParams,
         scoreBreakdown,
         weights,
         populationStats,

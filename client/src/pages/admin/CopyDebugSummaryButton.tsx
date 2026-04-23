@@ -15,13 +15,6 @@ export function CopyDebugSummaryButton({ scoreBreakdown }: { scoreBreakdown: Sco
 
   const copyDebugSummary = () => {
     const prev = scoreBreakdown.previousHourComparison;
-    const spikes = [
-      scoreBreakdown.spikeStatus.wiki && "Wiki",
-      scoreBreakdown.spikeStatus.news && "News",
-      scoreBreakdown.spikeStatus.search && "Search",
-    ]
-      .filter(Boolean)
-      .join("+") || "None";
 
     const rankChange = prev
       ? prev.previousRank !== prev.currentRank
@@ -33,7 +26,10 @@ export function CopyDebugSummaryButton({ scoreBreakdown }: { scoreBreakdown: Sco
       ? `(${prev.finalChangePercent >= 0 ? "+" : ""}${prev.finalChangePercent.toFixed(1)}%)`
       : "";
 
-    const summary = `${scoreBreakdown.celebrity.name} ${rankChange} | Fame: ${scoreBreakdown.scoreBreakdown.fameIndex.toLocaleString()} ${changeStr} | Spikes: ${spikes} (${scoreBreakdown.stabilizationParams.spikingSourceCount}) | Cap: ${(scoreBreakdown.stabilizationParams.effectiveRateCap * 100).toFixed(0)}% | Alpha: ${scoreBreakdown.stabilizationParams.effectiveAlpha.toFixed(2)}${scoreBreakdown.stabilizationParams.isRecalibrationActive ? " | RECAL" : ""}`;
+    const mass = scoreBreakdown.scoreBreakdown.massScore.toFixed(1);
+    const vel = scoreBreakdown.scoreBreakdown.velocityScore.toFixed(1);
+
+    const summary = `${scoreBreakdown.celebrity.name} ${rankChange} | Fame: ${scoreBreakdown.scoreBreakdown.fameIndex.toLocaleString()} ${changeStr} | Mass: ${mass} | Velocity: ${vel} | Scoring: raw`;
 
     navigator.clipboard.writeText(summary).then(() => {
       setCopied(true);
