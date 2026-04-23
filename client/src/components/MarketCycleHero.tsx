@@ -105,10 +105,10 @@ export function MarketCycleHero({ marketState, constrainedWidth = false }: Marke
   return (
     <div 
       style={constrainedWidth ? undefined : { marginLeft: 'calc(-50vw + 50%)', marginRight: 'calc(-50vw + 50%)', paddingLeft: 'calc(50vw - 50%)', paddingRight: 'calc(50vw - 50%)' }}
-      className="sticky top-16 z-[41] relative mb-6 min-h-[52px] border-y border-white/10 bg-background backdrop-blur-sm"
+      className="sticky top-16 z-[41] relative mb-6 min-h-16 border-y border-white/10 bg-background backdrop-blur-sm"
       data-testid="market-cycle-hero"
     >
-      <div className="relative z-10 px-2 py-2 md:px-6 md:py-4">
+      <div className="relative z-10 px-2 py-3 md:px-6 md:py-4">
         <div className="flex min-w-0 flex-row flex-nowrap items-center justify-center gap-1 md:justify-between md:gap-4">
           <p className="hidden shrink-0 text-gray-600 dark:text-gray-400 text-[10px] font-medium uppercase tracking-widest md:block">
             {label.desktop}
