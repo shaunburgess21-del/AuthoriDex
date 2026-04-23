@@ -2192,7 +2192,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .select()
         .from(celebrityImages)
         .where(eq(celebrityImages.personId, id))
-        .orderBy(desc(celebrityImages.isPrimary), desc(sql`(${celebrityImages.votesUp} - ${celebrityImages.votesDown})`));
+        .orderBy(desc(celebrityImages.votesUp), asc(celebrityImages.addedAt));
 
       const userId = req.userId || null;
       if (!userId || images.length === 0) {
@@ -2230,7 +2230,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .select()
         .from(celebrityImages)
         .where(eq(celebrityImages.personId, id))
-        .orderBy(desc(celebrityImages.isPrimary), desc(sql`(${celebrityImages.votesUp} - ${celebrityImages.votesDown})`))
+        .orderBy(desc(celebrityImages.votesUp), asc(celebrityImages.addedAt))
         .limit(1);
       
       if (primaryImage) {
@@ -2254,11 +2254,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!checkVoteRateLimit(userId)) {
         return res.status(429).json({ error: "Too many votes. Please slow down." });
       }
-      
-      if (!direction || (direction !== 'up' && direction !== 'down')) {
-        return res.status(400).json({ error: "Invalid direction. Must be 'up' or 'down'" });
+
+      if (direction !== 'up') {
+        return res.status(400).json({ error: "Invalid direction. Only 'up' is accepted." });
       }
-      
+
       const [image] = await db.select()
         .from(celebrityImages)
         .where(and(
@@ -2277,49 +2277,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let xpResult: Awaited<ReturnType<typeof gamificationService.awardXp>> | undefined;
 
       if (existing) {
-        if (existing.direction === direction) {
-          return res.json({ message: "Already voted", alreadyVoted: true });
-        }
-        // Changing direction: undo old vote, apply new one
-        await db.transaction(async (tx) => {
-          await tx.update(imageVotes)
-            .set({ direction, votedAt: new Date() })
-            .where(eq(imageVotes.id, existing.id));
-          if (existing.direction === 'up') {
-            await tx.update(celebrityImages)
-              .set({ votesUp: sql`GREATEST(${celebrityImages.votesUp} - 1, 0)`, votesDown: sql`${celebrityImages.votesDown} + 1` })
-              .where(eq(celebrityImages.id, imageId));
-          } else {
-            await tx.update(celebrityImages)
-              .set({ votesDown: sql`GREATEST(${celebrityImages.votesDown} - 1, 0)`, votesUp: sql`${celebrityImages.votesUp} + 1` })
-              .where(eq(celebrityImages.id, imageId));
-          }
-        });
-      } else {
-        await db.transaction(async (tx) => {
-          await tx.insert(imageVotes).values({ imageId, userId, direction });
-          if (direction === 'up') {
-            await tx.update(celebrityImages)
-              .set({ votesUp: sql`${celebrityImages.votesUp} + 1` })
-              .where(eq(celebrityImages.id, imageId));
-          } else {
-            await tx.update(celebrityImages)
-              .set({ votesDown: sql`${celebrityImages.votesDown} + 1` })
-              .where(eq(celebrityImages.id, imageId));
-          }
-          await tx.update(profiles)
-            .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
-            .where(eq(profiles.id, userId));
-        });
-
-        try {
-          xpResult = await gamificationService.awardXp(
-            userId, 'vote_curation',
-            `curation_${imageId}_${userId}`,
-            { imageId, personId, direction }
-          );
-        } catch (e) { console.error("XP award failed:", e); }
+        return res.json({ message: "Already voted", alreadyVoted: true });
       }
+
+      await db.transaction(async (tx) => {
+        await tx.insert(imageVotes).values({ imageId, userId, direction: 'up' });
+        await tx.update(celebrityImages)
+          .set({ votesUp: sql`${celebrityImages.votesUp} + 1` })
+          .where(eq(celebrityImages.id, imageId));
+        await tx.update(profiles)
+          .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
+          .where(eq(profiles.id, userId));
+      });
+
+      try {
+        xpResult = await gamificationService.awardXp(
+          userId, 'vote_curation',
+          `curation_${imageId}_${userId}`,
+          { imageId, personId, direction: 'up' }
+        );
+      } catch (e) { console.error("XP award failed:", e); }
 
       await syncWinningAvatarForPerson(personId);
 
@@ -5837,7 +5814,6 @@ Only return the JSON object.`;
         db
           .select({
             id: imageVotes.id,
-            direction: imageVotes.direction,
             votedAt: imageVotes.votedAt,
             personId: trackedPeople.id,
             personName: trackedPeople.name,
@@ -5953,9 +5929,9 @@ Only return the JSON object.`;
         results.push({
           id: v.id,
           voteType: "image_curate",
-          value: v.direction === "up" ? 1 : -1,
+          value: 1,
           targetName: v.personName || "Unknown",
-          detail: `Image ${v.direction === "up" ? "upvote" : "downvote"}`,
+          detail: "Image upvote",
           createdAt: v.votedAt ?? new Date(),
           subjectId: v.personId ?? null,
           subjectAvatar: v.avatar ?? null,
@@ -6264,7 +6240,6 @@ Only return the JSON object.`;
         want("image_curate") ? db
           .select({
             id: imageVotes.id,
-            direction: imageVotes.direction,
             votedAt: imageVotes.votedAt,
             personId: trackedPeople.id,
             personName: trackedPeople.name,
@@ -6530,9 +6505,9 @@ Only return the JSON object.`;
         results.push({
           id: v.id,
           voteType: "image_curate",
-          value: v.direction === "up" ? 1 : -1,
+          value: 1,
           targetName: v.personName || "Unknown",
-          detail: `Image ${v.direction === "up" ? "upvote" : "downvote"}`,
+          detail: "Image upvote",
           createdAt: v.votedAt ?? new Date(),
           hidden: false,
           subjectId: v.personId ?? null,
@@ -9777,7 +9752,7 @@ Only return the JSON object.`;
       const { id } = req.params;
       const images = await db.select().from(celebrityImages)
         .where(eq(celebrityImages.personId, id))
-        .orderBy(desc(celebrityImages.isPrimary), desc(sql`(${celebrityImages.votesUp} - ${celebrityImages.votesDown})`));
+        .orderBy(desc(celebrityImages.votesUp), asc(celebrityImages.addedAt));
       res.json(images);
     } catch (error: any) {
       console.error("Error fetching celebrity images:", error.message);
@@ -16078,7 +16053,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       .select()
       .from(celebrityImages)
       .where(eq(celebrityImages.personId, personId))
-      .orderBy(desc(sql`(${celebrityImages.votesUp} - ${celebrityImages.votesDown})`))
+      .orderBy(desc(celebrityImages.votesUp), asc(celebrityImages.addedAt))
       .limit(1);
 
     if (topImage) {

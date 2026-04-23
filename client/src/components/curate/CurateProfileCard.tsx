@@ -120,9 +120,6 @@ export function CurateProfileCard({
     try {
       const upRes = await apiRequest("POST", `/api/people/${person.id}/images/${imageId}/vote`, { direction: "up" });
       const upData = await upRes.json() as { alreadyVoted?: boolean };
-      for (const img of displayImages.filter((i) => i.id !== imageId)) {
-        await apiRequest("POST", `/api/people/${person.id}/images/${img.id}/vote`, { direction: "down" });
-      }
       await queryClient.invalidateQueries({ queryKey: ["/api/people", person.id, "images"] });
       setResultMessage(upData?.alreadyVoted ? "saved" : "recorded");
       onVote();

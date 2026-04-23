@@ -211,13 +211,9 @@ function PickChip({ vote }: { vote: MyVoteCardData }) {
   }
 
   if (voteType === "image_curate") {
-    return value > 0 ? (
+    return (
       <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border-emerald-500/30 gap-1">
         <ChevronUp className="h-3 w-3" /> Upvote
-      </Badge>
-    ) : (
-      <Badge className="bg-rose-500/15 text-rose-600 dark:text-rose-300 border-rose-500/30 gap-1">
-        <ChevronDown className="h-3 w-3" /> Downvote
       </Badge>
     );
   }

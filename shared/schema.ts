@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, pgEnum, text, varchar, integer, real, timestamp, unique, uniqueIndex, jsonb, serial, boolean, index, numeric } from "drizzle-orm/pg-core";
+import { pgTable, pgEnum, text, varchar, integer, real, timestamp, unique, uniqueIndex, jsonb, serial, boolean, index, numeric, check } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { relations } from "drizzle-orm";
@@ -478,6 +478,7 @@ export const imageVotes = pgTable("image_votes", {
   votedAt: timestamp("voted_at").notNull().defaultNow(),
 }, (table) => ({
   userImageUnique: unique("image_votes_user_image_uniq").on(table.userId, table.imageId),
+  directionCheck: check("image_votes_direction_check", sql`${table.direction} IN ('up')`),
 }));
 
 // Induction Votes - deduplication table for induction candidate voting

@@ -1,6 +1,6 @@
 import { db } from "../db";
 import { trackedPeople, celebrityImages } from "@shared/schema";
-import { eq, desc, sql } from "drizzle-orm";
+import { eq, desc, asc } from "drizzle-orm";
 
 async function syncAvatars() {
   console.log("Starting avatar sync from celebrity_images to tracked_people...\n");
@@ -17,10 +17,7 @@ async function syncAvatars() {
       .select()
       .from(celebrityImages)
       .where(eq(celebrityImages.personId, person.id))
-      .orderBy(
-        desc(celebrityImages.isPrimary),
-        desc(sql`(${celebrityImages.votesUp} - ${celebrityImages.votesDown})`)
-      )
+      .orderBy(desc(celebrityImages.votesUp), asc(celebrityImages.addedAt))
       .limit(1);
 
     if (images.length === 0) {
