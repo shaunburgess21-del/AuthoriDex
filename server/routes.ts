@@ -21,6 +21,7 @@ import { JACKPOT_TICKET_COST, JACKPOT_MAX_PREDICTED_SCORE } from "./config/const
 import { isAdminRole } from "./utils/authz";
 import { applyAdminCreditAdjustment } from "./utils/admin-credits";
 import { IMAGE_FLAG_WINDOW_MS, isImageFlagRateLimited, isValidImageFlagReason } from "./utils/image-flags";
+import { classifyImageVoteAction } from "./utils/image-vote-transition";
 import { optimizeImage } from "./utils/image-optimize";
 import geoip from "geoip-lite";
 import { getTrendContext, getTrendContextBatch, formatRelativeTime, type TrendContext } from "./services/trend-context";
@@ -2271,33 +2272,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Image not found" });
       }
 
-      const [existing] = await db.select()
+      // Scope the existing-vote lookup to this PERSON (not just this image), so that
+      // voting for a different image of the same person is treated as a swap rather
+      // than a brand-new vote. Join imageVotes -> celebrityImages to filter by personId.
+      const [existing] = await db
+        .select({ id: imageVotes.id, imageId: imageVotes.imageId })
         .from(imageVotes)
-        .where(and(eq(imageVotes.userId, userId), eq(imageVotes.imageId, imageId)));
+        .innerJoin(celebrityImages, eq(imageVotes.imageId, celebrityImages.id))
+        .where(and(
+          eq(imageVotes.userId, userId),
+          eq(celebrityImages.personId, personId),
+        ));
 
-      let xpResult: Awaited<ReturnType<typeof gamificationService.awardXp>> | undefined;
+      const action = classifyImageVoteAction(existing, imageId);
 
-      if (existing) {
+      if (action === 'noop') {
         return res.json({ message: "Already voted", alreadyVoted: true });
       }
 
-      await db.transaction(async (tx) => {
-        await tx.insert(imageVotes).values({ imageId, userId, direction: 'up' });
-        await tx.update(celebrityImages)
-          .set({ votesUp: sql`${celebrityImages.votesUp} + 1` })
-          .where(eq(celebrityImages.id, imageId));
-        await tx.update(profiles)
-          .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
-          .where(eq(profiles.id, userId));
-      });
+      let xpResult: Awaited<ReturnType<typeof gamificationService.awardXp>> | undefined;
 
-      try {
-        xpResult = await gamificationService.awardXp(
-          userId, 'vote_curation',
-          `curation_${imageId}_${userId}`,
-          { imageId, personId, direction: 'up' }
-        );
-      } catch (e) { console.error("XP award failed:", e); }
+      if (action === 'swap') {
+        const previousImageId = existing!.imageId;
+        await db.transaction(async (tx) => {
+          await tx.update(imageVotes)
+            .set({ imageId, votedAt: new Date() })
+            .where(eq(imageVotes.id, existing!.id));
+          await tx.update(celebrityImages)
+            .set({ votesUp: sql`GREATEST(${celebrityImages.votesUp} - 1, 0)` })
+            .where(eq(celebrityImages.id, previousImageId));
+          await tx.update(celebrityImages)
+            .set({ votesUp: sql`${celebrityImages.votesUp} + 1` })
+            .where(eq(celebrityImages.id, imageId));
+        });
+      } else {
+        await db.transaction(async (tx) => {
+          await tx.insert(imageVotes).values({ imageId, userId, direction: 'up' });
+          await tx.update(celebrityImages)
+            .set({ votesUp: sql`${celebrityImages.votesUp} + 1` })
+            .where(eq(celebrityImages.id, imageId));
+          await tx.update(profiles)
+            .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
+            .where(eq(profiles.id, userId));
+        });
+
+        try {
+          xpResult = await gamificationService.awardXp(
+            userId, 'vote_curation',
+            `curation_${imageId}_${userId}`,
+            { imageId, personId, direction: 'up' }
+          );
+        } catch (e) { console.error("XP award failed:", e); }
+      }
 
       await syncWinningAvatarForPerson(personId);
 
@@ -2305,7 +2331,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .from(celebrityImages)
         .where(eq(celebrityImages.id, imageId));
 
-      res.json({ ...updatedImage, xp: xpResult ?? null });
+      res.json({ ...updatedImage, xp: xpResult ?? null, swapped: action === 'swap' });
     } catch (error) {
       console.error("Error voting on celebrity image:", error);
       res.status(500).json({ error: "Failed to vote on image" });
