@@ -2469,11 +2469,36 @@ export default function PredictPage() {
     (myPositionsFilter === "show-mine" && userBetsByMarket.has(String(marketId))) ||
     (myPositionsFilter === "hide-mine" && !userBetsByMarket.has(String(marketId)));
 
+  // Trending sort: most bet-on first, then fall back to the subject's popularity
+  // (fame / trend score). Without the fallback, early-week cards with 0 bets all
+  // tie and the Trending tab becomes a no-op.
+  const trendingCompare = (
+    aBets: number | undefined,
+    bBets: number | undefined,
+    aFame: number,
+    bFame: number,
+  ): number => {
+    const betDiff = (bBets ?? 0) - (aBets ?? 0);
+    if (betDiff !== 0) return betDiff;
+    return bFame - aFame;
+  };
+  const h2hFame = (m: HeadToHeadMarket): number =>
+    (m.person1?.currentScore ?? 0) + (m.person2?.currentScore ?? 0);
+  const updownFame = (m: PredictionMarket): number =>
+    Number(m.currentScore ?? 0);
+  const gainerFame = (m: TopGainerMarket): number =>
+    (m.allCandidates || m.leaders || []).reduce(
+      (best, l) => Math.max(best, Number((l as any).currentScore ?? 0)),
+      Number(m.totalPool ?? 0),
+    );
+
   const filteredUpDown = hydratedMarkets.filter(m =>
     matchesCategory(updownCategory, m.category, m.personId) &&
     (!updownSearch || m.personName.toLowerCase().includes(updownSearch.toLowerCase())) &&
     passesMyPositionsFilter(m.id)
-  ).sort((a: any, b: any) => updownCategory === "trending" ? ((b.totalBets ?? 0) - (a.totalBets ?? 0)) : 0);
+  ).sort((a, b) => updownCategory === "trending"
+    ? trendingCompare(a.totalBets, b.totalBets, updownFame(a), updownFame(b))
+    : 0);
 
   const filteredH2H = hydratedH2H.filter(m =>
     (h2hCategory === "all" || h2hCategory === "trending" ||
@@ -2482,7 +2507,9 @@ export default function PredictPage() {
      m.person1.name.toLowerCase().includes(h2hSearch.toLowerCase()) ||
      m.person2.name.toLowerCase().includes(h2hSearch.toLowerCase())) &&
     passesMyPositionsFilter(m.id)
-  ).sort((a: any, b: any) => h2hCategory === "trending" ? ((b.totalBets ?? 0) - (a.totalBets ?? 0)) : 0);
+  ).sort((a, b) => h2hCategory === "trending"
+    ? trendingCompare(a.totalBets, b.totalBets, h2hFame(a), h2hFame(b))
+    : 0);
 
   const filteredGainers = hydratedGainers.filter(m =>
     (gainerCategory === "all" || gainerCategory === "trending" ||
@@ -2490,7 +2517,9 @@ export default function PredictPage() {
     (!gainerSearch || getMarketCategoryLabel(m.category).toLowerCase().includes(gainerSearch.toLowerCase()) ||
      (m.allCandidates || m.leaders).some(l => l.name.toLowerCase().includes(gainerSearch.toLowerCase()))) &&
     passesMyPositionsFilter(m.id)
-  ).sort((a: any, b: any) => gainerCategory === "trending" ? ((b.totalBets ?? 0) - (a.totalBets ?? 0)) : 0);
+  ).sort((a, b) => gainerCategory === "trending"
+    ? trendingCompare(a.totalBets, b.totalBets, gainerFame(a), gainerFame(b))
+    : 0);
 
   const hasLiveGainers = hydratedGainers.length > 0;
   const hasInactiveOnlyGainers = (nativeGainerData || []).length > 0 && !hasLiveGainers;
@@ -2503,7 +2532,9 @@ export default function PredictPage() {
       (!overlaySearchQuery || getMarketCategoryLabel(m.category).toLowerCase().includes(overlaySearchQuery.toLowerCase()) ||
        (m.allCandidates || m.leaders).some(l => l.name.toLowerCase().includes(overlaySearchQuery.toLowerCase())))
     )
-    .sort((a: any, b: any) => overlayCategoryFilter === "trending" ? ((b.totalBets ?? 0) - (a.totalBets ?? 0)) : 0);
+    .sort((a, b) => overlayCategoryFilter === "trending"
+      ? trendingCompare(a.totalBets, b.totalBets, gainerFame(a), gainerFame(b))
+      : 0);
   const gainerEmptyMessage = myPositionsFilter === "show-mine"
     ? "You don't have any active Category Race positions yet"
     : hasInactiveOnlyGainers
@@ -2516,7 +2547,9 @@ export default function PredictPage() {
     (communityCategory === "all" || communityCategory === "trending" || m.category === communityCategory) &&
     (!communitySearch || m.title?.toLowerCase().includes(communitySearch.toLowerCase())) &&
     passesMyPositionsFilter(m.id)
-  ).sort((a: any, b: any) => communityCategory === "trending" ? ((b.totalBets ?? 0) - (a.totalBets ?? 0)) : 0);
+  ).sort((a: any, b: any) => communityCategory === "trending"
+    ? trendingCompare(a.totalBets, b.totalBets, Number(a.totalPool ?? a.seedVolume ?? 0), Number(b.totalPool ?? b.seedVolume ?? 0))
+    : 0);
 
   const showSection = (type: PredictionType) => selectedType === "all" || selectedType === type;
 
@@ -3235,7 +3268,9 @@ export default function PredictPage() {
             (overlayCategoryFilter === "all" || overlayCategoryFilter === "trending" || m.category === overlayCategoryFilter) &&
             (!overlaySearchQuery || m.personName.toLowerCase().includes(overlaySearchQuery.toLowerCase()))
           )
-          .sort((a: any, b: any) => overlayCategoryFilter === "trending" ? ((b.totalBets ?? 0) - (a.totalBets ?? 0)) : 0)
+          .sort((a, b) => overlayCategoryFilter === "trending"
+            ? trendingCompare(a.totalBets, b.totalBets, updownFame(a), updownFame(b))
+            : 0)
           .map((market) => (
             <WeeklyUpDownCard 
               key={market.id} 
@@ -3267,7 +3302,9 @@ export default function PredictPage() {
             (overlayCategoryFilter === "all" || overlayCategoryFilter === "trending" || m.category === overlayCategoryFilter) &&
             (!overlaySearchQuery || m.title.toLowerCase().includes(overlaySearchQuery.toLowerCase()))
           )
-          .sort((a: any, b: any) => overlayCategoryFilter === "trending" ? ((b.totalBets ?? 0) - (a.totalBets ?? 0)) : 0)
+          .sort((a, b) => overlayCategoryFilter === "trending"
+            ? trendingCompare(a.totalBets, b.totalBets, h2hFame(a), h2hFame(b))
+            : 0)
           .map((market) => {
             const bet = userBetsByMarket.get(String(market.id));
             const h2hUserPick = h2hUserPickFromBet(
@@ -3341,7 +3378,9 @@ export default function PredictPage() {
             (overlayCategoryFilter === "all" || overlayCategoryFilter === "trending" || m.category === overlayCategoryFilter) &&
             (!overlaySearchQuery || m.title?.toLowerCase().includes(overlaySearchQuery.toLowerCase()))
           )
-          .sort((a: any, b: any) => overlayCategoryFilter === "trending" ? ((b.totalBets ?? 0) - (a.totalBets ?? 0)) : 0)
+          .sort((a: any, b: any) => overlayCategoryFilter === "trending"
+            ? trendingCompare(a.totalBets, b.totalBets, Number(a.totalPool ?? a.seedVolume ?? 0), Number(b.totalPool ?? b.seedVolume ?? 0))
+            : 0)
           .map((market: any) => (
             <OpenMarketCard 
               key={market.id} 

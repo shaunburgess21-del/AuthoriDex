@@ -1399,7 +1399,7 @@ export default function VotePage() {
     const matchesSearch = (p.title || '').toLowerCase().includes(opinionPollsSearchQuery.toLowerCase()) ||
                          (p.description || '').toLowerCase().includes(opinionPollsSearchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
-  });
+  }).sort((a: any, b: any) => opinionPollsCategoryFilter === "trending" ? ((b.totalVotes ?? 0) - (a.totalVotes ?? 0)) : 0);
 
   const { data: detailImages = [] } = useQuery<CelebrityImage[]>({
     queryKey: ['/api/people', selectedCuratePerson?.personId, 'images'],
@@ -1451,7 +1451,14 @@ export default function VotePage() {
       normalizeMarketCategory(c.category) === valuePerceptionCategoryFilter;
     const matchesSearch = !valuePerceptionSearchQuery || c.name.toLowerCase().includes(valuePerceptionSearchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
-  }).sort((a: any, b: any) => valuePerceptionCategoryFilter === "trending" ? ((b.totalVotes ?? 0) - (a.totalVotes ?? 0)) : 0);
+  }).sort((a: any, b: any) => {
+    if (valuePerceptionCategoryFilter !== "trending") return 0;
+    // Most-voted-on first; fall back to fameIndex so the Trending tab is still
+    // meaningful when nobody has rated anyone yet.
+    const votesDiff = (b.approvalVotesCount ?? 0) - (a.approvalVotesCount ?? 0);
+    if (votesDiff !== 0) return votesDiff;
+    return (Number(b.fameIndex ?? 0)) - (Number(a.fameIndex ?? 0));
+  });
   
   const [localMatchupVotes, setLocalMatchupVotes] = useState<Record<string, string>>({});
   const [rateLimitedUntil, setRateLimitedUntil] = useState<number | null>(null);

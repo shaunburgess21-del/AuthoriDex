@@ -600,7 +600,14 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
         normalizeMarketCategory(c.category) === categoryFilter;
       const matchesSearch = !searchQuery || c.name.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesCategory && matchesSearch;
-    }).sort((a: any, b: any) => categoryFilter === "trending" ? ((b.approvalScore ?? 0) - (a.approvalScore ?? 0)) : 0),
+    }).sort((a: ValueVotePerson, b: ValueVotePerson) => {
+      if (categoryFilter !== "trending") return 0;
+      const voteTotal = (p: ValueVotePerson) =>
+        (p.underratedCount ?? 0) + (p.overratedCount ?? 0) + (p.fairlyRatedCount ?? 0);
+      const votesDiff = voteTotal(b) - voteTotal(a);
+      if (votesDiff !== 0) return votesDiff;
+      return Number(b.fameIndex ?? 0) - Number(a.fameIndex ?? 0);
+    }),
     [valueCelebrities, categoryFilter, searchQuery]
   );
 
