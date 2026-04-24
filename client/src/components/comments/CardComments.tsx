@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation } from "wouter";
@@ -41,6 +41,8 @@ interface CardComment {
 }
 
 type ComposerMode = "auto" | "manual" | "fullscreen";
+
+const COMPOSER_MAX_HEIGHT_PX = 160;
 
 const API_BASE: Record<CommentEntityType, string> = {
   matchup: "/api/matchups",
@@ -171,6 +173,26 @@ export function CardComments({
     if (!commentBody.trim()) return;
     commentMutation.mutate({ body: commentBody.trim(), parentId: replyTo?.id });
   }, [commentBody, replyTo, commentMutation]);
+
+  const resizeAutoComposer = useCallback((textarea: HTMLTextAreaElement) => {
+    textarea.style.height = "auto";
+    const nextHeight = Math.min(textarea.scrollHeight, COMPOSER_MAX_HEIGHT_PX);
+    textarea.style.height = `${nextHeight}px`;
+    textarea.style.overflowY = textarea.scrollHeight > COMPOSER_MAX_HEIGHT_PX ? "auto" : "hidden";
+  }, []);
+
+  useEffect(() => {
+    const textarea = inputRef.current;
+    if (!textarea) return;
+
+    if (composerMode !== "auto") {
+      textarea.style.height = "";
+      textarea.style.overflowY = "";
+      return;
+    }
+
+    resizeAutoComposer(textarea);
+  }, [composerMode, commentBody, resizeAutoComposer]);
 
   const startReply = useCallback((comment: CardComment) => {
     setReplyTo({ id: comment.id, username: comment.username || "Anonymous" });
@@ -378,7 +400,12 @@ export function CardComments({
             ref={inputRef}
             placeholder={replyTo ? `Reply to @${replyTo.username}...` : placeholder}
             value={commentBody}
-            onChange={(e) => setCommentBody(e.target.value)}
+            onChange={(e) => {
+              setCommentBody(e.target.value);
+              if (composerMode === "auto") {
+                resizeAutoComposer(e.currentTarget);
+              }
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
