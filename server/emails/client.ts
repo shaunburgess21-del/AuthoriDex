@@ -12,9 +12,9 @@
  * Mirrors the singleton pattern used in server/db.ts and
  * server/supabase.ts so the codebase stays consistent.
  */
-
+ 
 import { Resend } from "resend";
-
+ 
 // ---- Client ---------------------------------------------------------------
 //
 // The Resend client is constructed lazily so a missing RESEND_API_KEY
@@ -25,12 +25,12 @@ import { Resend } from "resend";
 // Call `getResendClient()` from send paths; it will either return a
 // configured client or throw a descriptive error that callers can
 // catch and surface to logs/monitoring.
-
+ 
 let cachedClient: Resend | null = null;
-
+ 
 export function getResendClient(): Resend {
   if (cachedClient) return cachedClient;
-
+ 
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
     throw new Error(
@@ -39,11 +39,11 @@ export function getResendClient(): Resend {
         "until this is fixed; the rest of the app is unaffected.",
     );
   }
-
+ 
   cachedClient = new Resend(apiKey);
   return cachedClient;
 }
-
+ 
 /**
  * Back-compat alias. Prefer `getResendClient()` in new code.
  *
@@ -57,9 +57,9 @@ export const resend = new Proxy({} as Resend, {
     return Reflect.get(getResendClient(), prop);
   },
 });
-
+ 
 // ---- Sender addresses -----------------------------------------------------
-
+ 
 /**
  * True when Resend has a verified voxdex.com domain configured AND
  * we've opted into using it. Until both are true, we send from the
@@ -71,7 +71,7 @@ export const resend = new Proxy({} as Resend, {
  */
 const senderDomainReady =
   process.env.EMAIL_SENDER_DOMAIN_READY === "true";
-
+ 
 /**
  * Sender identities, one per email category.
  *
@@ -83,30 +83,40 @@ const senderDomainReady =
  * sender (onboarding@resend.dev), which only delivers to the
  * email address that owns the Resend account. Perfect for dev.
  *
- * After domain is ready: each category uses its own subdomain so
- * reputation is isolated — a marketing-email complaint can't hurt
- * auth-email deliverability.
+ * After domain is ready:
+ *   - auth + lifecycle share `hello@` so users see a consistent
+ *     "warm" sender for anything human-facing (verify, welcome,
+ *     password reset). Stripe, Linear, Notion all use this pattern.
+ *   - engagement uses `updates@` so power users can filter digest
+ *     mail separately from transactional mail without losing
+ *     important account messages.
+ *
+ * Reply-to on all categories is `hello@voxdex.com` — the monitored
+ * alias that lands in team@voxdex.com's inbox.
  */
 export const senders = senderDomainReady
   ? {
       auth:       "VoxDex <hello@voxdex.com>",
       lifecycle:  "VoxDex <hello@voxdex.com>",
-      engagement: "VoxDex Weekly <weekly@voxdex.com>",
+      engagement: "VoxDex Updates <updates@voxdex.com>",
     }
   : {
       auth:       "VoxDex (dev) <onboarding@resend.dev>",
       lifecycle:  "VoxDex (dev) <onboarding@resend.dev>",
       engagement: "VoxDex (dev) <onboarding@resend.dev>",
     };
-
+ 
 /**
  * Where replies go. Users hitting "Reply" on a VoxDex email
  * should reach a human, not a no-reply black hole.
+ *
+ * `hello@voxdex.com` is an alias on the team@voxdex.com mailbox
+ * (Microsoft 365), so replies land in the shared team inbox.
  */
 export const replyTo = senderDomainReady
-  ? "support@voxdex.com"
+  ? "hello@voxdex.com"
   : undefined; // In dev, Resend sandbox doesn't support reply-to.
-
+ 
 // ---- Type export ----------------------------------------------------------
-
+ 
 export type EmailCategory = keyof typeof senders;
