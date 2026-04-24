@@ -367,7 +367,39 @@ export function registerFavoritesRoutes(app: Express): void {
           });
         }
       }
-      const newMarkets = Array.from(marketsById.values()).slice(0, 8);
+
+      // Collapse weekly-recurring markets that share a title+type. Users
+      // only care about the soonest-closing instance; keeping every past
+      // week makes the list look duplicated. We dedupe by
+      // `${marketType}::${title}` and keep the one with the earliest
+      // future close/end time.
+      const dedupedMarketsByTitle = new Map<string, ReturnType<typeof marketsById.values> extends IterableIterator<infer T> ? T : never>();
+      for (const m of marketsById.values()) {
+        const key = `${m.marketType}::${m.title.trim().toLowerCase()}`;
+        const existing = dedupedMarketsByTitle.get(key);
+        if (!existing) {
+          dedupedMarketsByTitle.set(key, m);
+          continue;
+        }
+        const pickTs = (c: typeof m) => {
+          const raw = c.closeAt || c.endAt;
+          const t = raw ? new Date(raw).getTime() : NaN;
+          return Number.isFinite(t) ? t : Infinity;
+        };
+        if (pickTs(m) < pickTs(existing)) {
+          dedupedMarketsByTitle.set(key, m);
+        }
+      }
+      const newMarkets = Array.from(dedupedMarketsByTitle.values())
+        .sort((a, b) => {
+          const ta = a.closeAt || a.endAt;
+          const tb = b.closeAt || b.endAt;
+          if (!ta && !tb) return 0;
+          if (!ta) return 1;
+          if (!tb) return -1;
+          return new Date(ta).getTime() - new Date(tb).getTime();
+        })
+        .slice(0, 6);
 
       // ----- newPolls (union of opinion polls, matchups, trending polls) -----
       const pollsById = new Map<
@@ -454,9 +486,22 @@ export function registerFavoritesRoutes(app: Express): void {
             : new Date().toISOString(),
         });
       }
-      const newPolls = Array.from(pollsById.values())
+      // Same weekly-recurrence dedupe as markets: collapse polls with the
+      // same kind+title and keep the newest one, then take the 6 newest.
+      const dedupedPollsByTitle = new Map<
+        string,
+        ReturnType<typeof pollsById.values> extends IterableIterator<infer T> ? T : never
+      >();
+      for (const p of pollsById.values()) {
+        const key = `${p.kind}::${p.title.trim().toLowerCase()}`;
+        const existing = dedupedPollsByTitle.get(key);
+        if (!existing || p.createdAt.localeCompare(existing.createdAt) > 0) {
+          dedupedPollsByTitle.set(key, p);
+        }
+      }
+      const newPolls = Array.from(dedupedPollsByTitle.values())
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-        .slice(0, 8);
+        .slice(0, 6);
 
       // ----- alerts -----
       type DashboardAlert =

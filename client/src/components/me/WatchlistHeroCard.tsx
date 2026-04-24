@@ -144,15 +144,20 @@ export function WatchlistHeroCard({ mover, isLoading }: WatchlistHeroCardProps) 
           </div>
 
           {(driverLabel || mover.reasonTag) && (
-            <div className="mt-3 flex items-start gap-2 text-xs text-muted-foreground">
+            <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
               {mover.driver && (
                 <span className="flex-shrink-0 inline-flex items-center gap-1 rounded-full bg-muted/60 px-2 py-0.5 text-foreground/80">
                   <DriverIcon driver={mover.driver as TrendDriver} />
                   <span className="font-medium">{driverLabel}</span>
                 </span>
               )}
+              {mover.driver && mover.reasonTag && (
+                <span className="text-muted-foreground/60" aria-hidden>·</span>
+              )}
               {mover.reasonTag && (
-                <p className="line-clamp-2 pt-0.5">{mover.reasonTag}</p>
+                <span className="italic text-muted-foreground line-clamp-2">
+                  {mover.reasonTag}
+                </span>
               )}
             </div>
           )}
