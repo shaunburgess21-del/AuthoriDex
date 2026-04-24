@@ -57,6 +57,7 @@ interface CardCommentsProps {
   variant?: "card" | "inline";
   maxHeight?: string;
   placeholder?: string;
+  parentExpanded?: boolean;
   onDetail?: () => void;
   onShare?: () => void;
 }
@@ -67,6 +68,7 @@ export function CardComments({
   variant = "card",
   maxHeight = "500px",
   placeholder = "Share your thoughts...",
+  parentExpanded = false,
   onDetail,
   onShare,
 }: CardCommentsProps) {
@@ -81,6 +83,7 @@ export function CardComments({
   const [composerMode, setComposerMode] = useState<ComposerMode>("auto");
   const [drawerComment, setDrawerComment] = useState<CardComment | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fullscreenInputRef = useRef<HTMLTextAreaElement>(null);
 
   const base = API_BASE[entityType];
   const queryKey = [base, slug, "comments"];
@@ -193,6 +196,18 @@ export function CardComments({
 
     resizeAutoComposer(textarea);
   }, [composerMode, commentBody, resizeAutoComposer]);
+
+  useEffect(() => {
+    if (composerMode === "fullscreen" && !parentExpanded) {
+      setComposerMode("auto");
+    }
+  }, [composerMode, parentExpanded]);
+
+  useEffect(() => {
+    if (composerMode === "fullscreen") {
+      setTimeout(() => fullscreenInputRef.current?.focus(), 50);
+    }
+  }, [composerMode]);
 
   const startReply = useCallback((comment: CardComment) => {
     setReplyTo({ id: comment.id, username: comment.username || "Anonymous" });
@@ -367,6 +382,12 @@ export function CardComments({
   const isManualComposer = composerMode === "manual";
   const isFullscreenComposer = composerMode === "fullscreen";
   const inlineExpanded = variant === "inline" && isFullscreenComposer;
+  const handleComposerToggle = useCallback(() => {
+    setComposerMode((mode) => {
+      if (mode !== "auto") return "auto";
+      return parentExpanded ? "fullscreen" : "manual";
+    });
+  }, [parentExpanded]);
 
   const inputArea = isAuthenticated ? (
     <div
@@ -418,7 +439,7 @@ export function CardComments({
           />
           <div className="absolute right-2 bottom-1.5 flex items-center gap-1">
             <button
-              onClick={() => setComposerMode((mode) => (mode === "auto" ? "manual" : "auto"))}
+              onClick={handleComposerToggle}
               className="p-1 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
               type="button"
               aria-label={composerMode === "auto" ? "Expand comment input" : "Collapse comment input"}
@@ -484,6 +505,56 @@ export function CardComments({
         commentId={drawerComment?.id || null}
         entitySlug={slug}
       />
+      {isFullscreenComposer && (
+        <div className="fixed inset-0 z-[70] flex flex-col bg-background p-4 safe-top" data-testid="comment-composer-fullscreen">
+          <div className="mb-3 flex items-center justify-between border-b border-border/20 pb-3">
+            <div>
+              <p className="text-sm font-semibold">Write a comment</p>
+              {replyTo && (
+                <p className="text-xs text-cyan-600 dark:text-cyan-400">
+                  Replying to @{replyTo.username}
+                </p>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setComposerMode("auto")}
+              className="rounded-lg p-2 text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
+              aria-label="Close full-screen composer"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          <div className="relative flex-1 min-h-0">
+            <textarea
+              ref={fullscreenInputRef}
+              placeholder={replyTo ? `Reply to @${replyTo.username}...` : placeholder}
+              value={commentBody}
+              onChange={(e) => setCommentBody(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handlePost();
+                }
+              }}
+              className="h-full w-full resize-none rounded-2xl border border-border/30 bg-muted/30 px-4 py-4 pr-14 text-base placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-cyan-500/30"
+              data-testid="input-comment-fullscreen"
+            />
+            <button
+              disabled={!commentBody.trim() || commentMutation.isPending}
+              onClick={handlePost}
+              className="absolute bottom-3 right-3 flex h-10 w-10 items-center justify-center rounded-full bg-background/80 text-cyan-600 shadow-sm backdrop-blur dark:text-cyan-400 disabled:text-muted-foreground/30"
+              data-testid="button-submit-comment-fullscreen"
+            >
+              {commentMutation.isPending ? (
+                <Loader2 className="h-6 w-6 animate-spin" />
+              ) : (
+                <Send className="h-6 w-6" />
+              )}
+            </button>
+          </div>
+        </div>
+      )}
     </>
   );
 }
