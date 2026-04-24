@@ -18,7 +18,6 @@ import { VoteDetailNavCluster } from "@/components/vote/VoteDetailNavCluster";
 import { useDetailNavigation } from "@/hooks/useDetailNavigation";
 import { navigateToLogin } from "@/lib/authReturn";
 import { CardComments, useCommentCount } from "@/components/comments/CardComments";
-import { CommentsBottomSheet } from "@/components/snap-scroll/CommentsBottomSheet";
 import {
   ArrowLeft,
   Clock,
@@ -33,7 +32,6 @@ import {
   Check,
   Swords,
   TrendingUp,
-  ChevronRight,
 } from "lucide-react";
 
 interface MatchupDetail {
@@ -82,7 +80,6 @@ export default function MatchupDetailPage() {
 
   const matchupCommentCount = useCommentCount("matchup", slug || "");
   const { showNav, historyDepth } = useDetailNavigation(slug || undefined, "matchup");
-  const [commentsSheetOpen, setCommentsSheetOpen] = useState(false);
 
   const { data: matchup, isLoading, error } = useQuery<MatchupDetail>({
     queryKey: ["/api/matchups/by-slug", slug],
@@ -527,50 +524,26 @@ export default function MatchupDetailPage() {
           </Card>
         )}
 
-        {/* Discussion */}
-        <button
-          type="button"
-          onClick={() => setCommentsSheetOpen(true)}
-          className="w-full flex items-center justify-between rounded-xl border border-border/50 bg-card p-4 mb-6 md:hidden"
-        >
-          <div className="flex items-center gap-2">
-            <MessageSquare className="h-4 w-4 text-cyan-700 dark:text-cyan-500" />
-            <span className="text-sm font-semibold">Discussion</span>
-            <span className="text-xs text-muted-foreground">({matchupCommentCount})</span>
-          </div>
-          <ChevronRight className="h-4 w-4 text-muted-foreground" />
-        </button>
+        <div className="md:hidden mb-6">
+          <CardComments
+            entityType="matchup"
+            slug={slug || ""}
+            variant="inline"
+            maxHeight="none"
+            placeholder="Share your thoughts on this matchup..."
+            onShare={handleShare}
+          />
+        </div>
 
         <div className="hidden md:block">
-          <CardComments entityType="matchup" slug={slug || ""} placeholder="Share your thoughts on this matchup..." />
-        </div>
-
-        {/* Back to Vote */}
-        <div className="flex justify-center pb-8">
-          <Link href="/vote">
-            <Button variant="outline" data-testid="button-back-to-vote">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Vote
-            </Button>
-          </Link>
+          <CardComments
+            entityType="matchup"
+            slug={slug || ""}
+            placeholder="Share your thoughts on this matchup..."
+            onShare={handleShare}
+          />
         </div>
       </div>
-
-      <button
-        type="button"
-        onClick={() => setCommentsSheetOpen(true)}
-        className="fixed bottom-24 right-4 z-40 md:hidden flex items-center gap-1.5 rounded-full bg-cyan-600 text-white px-4 py-2.5 shadow-lg"
-      >
-        <MessageSquare className="h-4 w-4" />
-        <span className="text-xs font-semibold">{matchupCommentCount}</span>
-      </button>
-
-      <CommentsBottomSheet
-        open={commentsSheetOpen}
-        onOpenChange={setCommentsSheetOpen}
-        entityType="matchup"
-        slug={slug || ""}
-      />
     </div>
   );
 }
