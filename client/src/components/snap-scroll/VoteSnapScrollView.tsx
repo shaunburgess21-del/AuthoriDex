@@ -55,6 +55,8 @@ const SNAP_TO_VOTE_LIST_TYPE: Record<SnapSectionType, VoteListNavType> = {
 
 const DRAG_THRESHOLD = 40;
 const COMMENT_TAP_THRESHOLD = 12;
+const COMMENT_SWIPE_TOP_THRESHOLD = 8;
+const COMMENT_SWIPE_VELOCITY_THRESHOLD = 0.5;
 
 function isInteractiveTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -79,6 +81,7 @@ export function VoteSnapScrollView({
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
   const dragStartY = useRef<number | null>(null);
   const commentTapStartRef = useRef<{ itemId: string; x: number; y: number } | null>(null);
+  const commentSwipeStartRef = useRef<{ itemId: string; x: number; y: number; time: number } | null>(null);
   const commentTapMovedRef = useRef(false);
 
   const categories = useMemo(() => {
@@ -187,9 +190,24 @@ export function VoteSnapScrollView({
   }, []);
 
   const handleCommentTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>, itemId: string, isExpanded: boolean) => {
-    if (isExpanded || isInteractiveTarget(e.target)) {
+    if (isInteractiveTarget(e.target)) {
+      commentTapStartRef.current = null;
+      commentSwipeStartRef.current = null;
+      commentTapMovedRef.current = false;
+      return;
+    }
+
+    if (isExpanded) {
       commentTapStartRef.current = null;
       commentTapMovedRef.current = false;
+      commentSwipeStartRef.current = e.currentTarget.scrollTop <= COMMENT_SWIPE_TOP_THRESHOLD
+        ? {
+            itemId,
+            x: e.touches[0].clientX,
+            y: e.touches[0].clientY,
+            time: e.timeStamp,
+          }
+        : null;
       return;
     }
 
@@ -202,6 +220,10 @@ export function VoteSnapScrollView({
   }, []);
 
   const handleCommentTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (commentSwipeStartRef.current) {
+      return;
+    }
+
     if (!commentTapStartRef.current) return;
 
     const deltaX = e.touches[0].clientX - commentTapStartRef.current.x;
@@ -212,6 +234,25 @@ export function VoteSnapScrollView({
   }, []);
 
   const handleCommentTouchEnd = useCallback((e: React.TouchEvent<HTMLDivElement>, itemId: string, isExpanded: boolean) => {
+    const swipeStart = commentSwipeStartRef.current;
+    commentSwipeStartRef.current = null;
+
+    if (swipeStart) {
+      if (swipeStart.itemId !== itemId || !isExpanded || isInteractiveTarget(e.target)) {
+        return;
+      }
+
+      const deltaY = e.changedTouches[0].clientY - swipeStart.y;
+      const deltaX = e.changedTouches[0].clientX - swipeStart.x;
+      const elapsed = Math.max(e.timeStamp - swipeStart.time, 1);
+      const velocity = deltaY / elapsed;
+
+      if (deltaY > 0 && Math.abs(deltaY) >= Math.abs(deltaX) && (deltaY >= DRAG_THRESHOLD || velocity >= COMMENT_SWIPE_VELOCITY_THRESHOLD)) {
+        setExpandedItemId(null);
+      }
+      return;
+    }
+
     const tapStart = commentTapStartRef.current;
     commentTapStartRef.current = null;
 
@@ -226,6 +267,7 @@ export function VoteSnapScrollView({
 
   const handleCommentTouchCancel = useCallback(() => {
     commentTapStartRef.current = null;
+    commentSwipeStartRef.current = null;
     commentTapMovedRef.current = false;
   }, []);
 
@@ -327,6 +369,7 @@ export function VoteSnapScrollView({
                           variant="inline"
                           maxHeight="none"
                           placeholder="Add a comment..."
+                          parentExpanded={isExpanded}
                           onDetail={navigateToDetail}
                           onShare={handleShare}
                         />
