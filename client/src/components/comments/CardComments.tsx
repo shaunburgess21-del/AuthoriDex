@@ -360,13 +360,15 @@ export function CardComments({
           </button>
         </div>
       )}
-      <div className={`flex gap-2${inlineExpanded ? " items-start flex-1" : " items-center"}`}>
-        <UserProfileAvatar
-          displayName={profile?.username || user?.email || ""}
-          avatarUrl={profile?.avatarUrl}
-          className="h-7 w-7 shrink-0"
-          fallbackClassName="text-[10px]"
-        />
+      <div className={`flex gap-2 items-start${inlineExpanded ? " flex-1" : ""}`}>
+        <div className="flex h-[42px] shrink-0 items-center">
+          <UserProfileAvatar
+            displayName={profile?.username || user?.email || ""}
+            avatarUrl={profile?.avatarUrl}
+            className="h-7 w-7"
+            fallbackClassName="text-[10px]"
+          />
+        </div>
         <div className={`flex-1 min-w-0 relative${inlineExpanded ? " flex flex-col" : ""}`}>
           <textarea
             ref={inputRef}
