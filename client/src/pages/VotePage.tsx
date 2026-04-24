@@ -171,6 +171,51 @@ interface CelebrityImage {
   votesUp: number;
   votesDown: number;
   addedAt: string;
+  currentUserDirection?: 'up' | 'down' | null;
+}
+
+type CurateImageVoteResponse = Partial<CelebrityImage> & {
+  alreadyVoted?: boolean;
+  swapped?: boolean;
+};
+
+function applyCurateVoteToImages(
+  currentImages: CelebrityImage[] | undefined,
+  imageId: string,
+  voteData: CurateImageVoteResponse,
+): CelebrityImage[] | undefined {
+  if (!currentImages) return currentImages;
+
+  const previousSelectedId = currentImages.find((img) => img.currentUserDirection === "up")?.id ?? null;
+
+  return currentImages.map((img) => {
+    if (img.id === imageId) {
+      const defaultVotesUp = previousSelectedId === imageId ? img.votesUp : img.votesUp + (voteData.alreadyVoted ? 0 : 1);
+      return {
+        ...img,
+        personId: voteData.personId ?? img.personId,
+        imageUrl: voteData.imageUrl ?? img.imageUrl,
+        source: voteData.source ?? img.source,
+        isPrimary: typeof voteData.isPrimary === "boolean" ? voteData.isPrimary : img.isPrimary,
+        addedAt: voteData.addedAt ?? img.addedAt,
+        votesUp: typeof voteData.votesUp === "number" ? voteData.votesUp : defaultVotesUp,
+        votesDown: typeof voteData.votesDown === "number" ? voteData.votesDown : img.votesDown,
+        currentUserDirection: "up",
+      };
+    }
+
+    if (img.id === previousSelectedId && previousSelectedId !== imageId) {
+      return {
+        ...img,
+        votesUp: voteData.swapped ? Math.max(img.votesUp - 1, 0) : img.votesUp,
+        currentUserDirection: null,
+      };
+    }
+
+    return img.currentUserDirection === "up"
+      ? { ...img, currentUserDirection: null }
+      : img;
+  });
 }
 
 interface CurateProfilePoll {
@@ -435,14 +480,14 @@ function CurateProfileCard({
   const [isExiting, setIsExiting] = useState(false);
   const [showShimmer, setShowShimmer] = useState(false);
   const [showResults, setShowResults] = useState(false);
-  const timeoutRef1 = useRef<ReturnType<typeof setTimeout> | null>(null);
   const timeoutRef2 = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { toast } = useToast();
   const [, setLocation] = useLocation();
+  const imageQueryKey = useMemo(() => ['/api/people', poll.personId, 'images'] as const, [poll.personId]);
 
   // Fetch celebrity images for this person
   const { data: images = [], isLoading } = useQuery<CelebrityImage[]>({
-    queryKey: ['/api/people', poll.personId, 'images'],
+    queryKey: imageQueryKey,
   });
 
   // Pick two random images deterministically based on poll id
@@ -461,12 +506,11 @@ function CurateProfileCard({
   // Vote mutation
   const { trigger: triggerXpBurst } = useXpBurst();
   const voteMutation = useMutation({
-    mutationFn: async ({ imageId, direction }: { imageId: string; direction: 'up' | 'down' }) => {
-      const response = await apiRequest('POST', `/api/people/${poll.personId}/images/${imageId}/vote`, { direction });
+    mutationFn: async ({ imageId }: { imageId: string }) => {
+      const response = await apiRequest('POST', `/api/people/${poll.personId}/images/${imageId}/vote`, { direction: 'up' });
       return response.json();
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['/api/people', poll.personId, 'images'] });
       if (data?.xp?.xpAwarded) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }
@@ -488,7 +532,6 @@ function CurateProfileCard({
 
   useEffect(() => {
     return () => {
-      if (timeoutRef1.current) clearTimeout(timeoutRef1.current);
       if (timeoutRef2.current) clearTimeout(timeoutRef2.current);
     };
   }, []);
@@ -499,15 +542,15 @@ function CurateProfileCard({
       setShowShimmer(true);
 
       const selectedImage = choice === 'a' ? imageA : imageB;
-      const otherImage = choice === 'a' ? imageB : imageA;
       try {
-        await voteMutation.mutateAsync({ imageId: selectedImage.id, direction: "up" });
-        await voteMutation.mutateAsync({ imageId: otherImage.id, direction: "down" });
+        const voteData = await voteMutation.mutateAsync({ imageId: selectedImage.id }) as CurateImageVoteResponse;
+        queryClient.setQueryData<CelebrityImage[]>(imageQueryKey, (currentImages) =>
+          applyCurateVoteToImages(currentImages, selectedImage.id, voteData)
+        );
         onVote();
-        timeoutRef1.current = setTimeout(() => {
-          setShowShimmer(false);
-          setShowResults(true);
-        }, 600);
+        setShowShimmer(false);
+        setShowResults(true);
+        void queryClient.invalidateQueries({ queryKey: imageQueryKey });
       } catch {
         setSelectedChoice(null);
         setShowShimmer(false);

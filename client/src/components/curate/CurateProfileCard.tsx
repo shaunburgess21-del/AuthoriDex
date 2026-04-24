@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
@@ -25,6 +25,50 @@ interface CelebrityImage {
   votesDown: number;
   addedAt: string;
   currentUserDirection?: 'up' | 'down' | null;
+}
+
+type CurateImageVoteResponse = Partial<CelebrityImage> & {
+  alreadyVoted?: boolean;
+  swapped?: boolean;
+};
+
+function applyCurateVoteToImages(
+  currentImages: CelebrityImage[] | undefined,
+  imageId: string,
+  voteData: CurateImageVoteResponse,
+): CelebrityImage[] | undefined {
+  if (!currentImages) return currentImages;
+
+  const previousSelectedId = currentImages.find((img) => img.currentUserDirection === "up")?.id ?? null;
+
+  return currentImages.map((img) => {
+    if (img.id === imageId) {
+      const defaultVotesUp = previousSelectedId === imageId ? img.votesUp : img.votesUp + (voteData.alreadyVoted ? 0 : 1);
+      return {
+        ...img,
+        personId: voteData.personId ?? img.personId,
+        imageUrl: voteData.imageUrl ?? img.imageUrl,
+        source: voteData.source ?? img.source,
+        isPrimary: typeof voteData.isPrimary === "boolean" ? voteData.isPrimary : img.isPrimary,
+        addedAt: voteData.addedAt ?? img.addedAt,
+        votesUp: typeof voteData.votesUp === "number" ? voteData.votesUp : defaultVotesUp,
+        votesDown: typeof voteData.votesDown === "number" ? voteData.votesDown : img.votesDown,
+        currentUserDirection: "up",
+      };
+    }
+
+    if (img.id === previousSelectedId && previousSelectedId !== imageId) {
+      return {
+        ...img,
+        votesUp: voteData.swapped ? Math.max(img.votesUp - 1, 0) : img.votesUp,
+        currentUserDirection: null,
+      };
+    }
+
+    return img.currentUserDirection === "up"
+      ? { ...img, currentUserDirection: null }
+      : img;
+  });
 }
 
 export interface CuratePerson {
@@ -61,14 +105,15 @@ export function CurateProfileCard({
   const [showShimmer, setShowShimmer] = useState(false);
   const [showResults, setShowResults] = useState(false);
   const [isEditingVote, setIsEditingVote] = useState(false);
+  const [isVotePending, setIsVotePending] = useState(false);
   const [resultMessage, setResultMessage] = useState<"recorded" | "saved">("recorded");
-  const timeoutRef1 = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const { user } = useAuth();
+  const imageQueryKey = useMemo(() => ["/api/people", person.id, "images"] as const, [person.id]);
 
   const { data: images = [], isLoading } = useQuery<CelebrityImage[]>({
-    queryKey: ['/api/people', person.id, 'images'],
+    queryKey: imageQueryKey,
   });
 
   const displayImages = useMemo(
@@ -81,14 +126,13 @@ export function CurateProfileCard({
     [images]
   );
 
-  useEffect(() => {
-    return () => {
-      if (timeoutRef1.current) clearTimeout(timeoutRef1.current);
-    };
-  }, []);
+  const selectedImage = useMemo(
+    () => images.find((img) => img.id === selectedPhoto) ?? null,
+    [images, selectedPhoto]
+  );
 
   useEffect(() => {
-    if (isEditingVote) return;
+    if (isEditingVote || isVotePending) return;
 
     if (persistedSelectedPhoto) {
       setSelectedPhoto(persistedSelectedPhoto);
@@ -102,10 +146,10 @@ export function CurateProfileCard({
       setShowResults(false);
       setResultMessage("recorded");
     }
-  }, [persistedSelectedPhoto, isEditingVote, showShimmer]);
+  }, [persistedSelectedPhoto, isEditingVote, isVotePending, showShimmer]);
 
   const handleSelectPhoto = async (imageId: string) => {
-    if (selectedPhoto) return;
+    if (selectedPhoto || isVotePending) return;
 
     if (!user) {
       toast({ ...signInToVoteToastOptions(() => navigateToLogin(setLocation)) });
@@ -114,24 +158,30 @@ export function CurateProfileCard({
 
     setSelectedPhoto(imageId);
     setShowShimmer(true);
-    setIsEditingVote(false);
+    setIsVotePending(true);
     setResultMessage("recorded");
 
     try {
       const upRes = await apiRequest("POST", `/api/people/${person.id}/images/${imageId}/vote`, { direction: "up" });
-      const upData = await upRes.json() as { alreadyVoted?: boolean };
-      await queryClient.invalidateQueries({ queryKey: ["/api/people", person.id, "images"] });
+      const upData = await upRes.json() as CurateImageVoteResponse;
+      queryClient.setQueryData<CelebrityImage[]>(imageQueryKey, (currentImages) =>
+        applyCurateVoteToImages(currentImages, imageId, upData)
+      );
       setResultMessage(upData?.alreadyVoted ? "saved" : "recorded");
+      setIsEditingVote(false);
+      setShowShimmer(false);
+      setShowResults(true);
+      setIsVotePending(false);
       onVote();
       onComplete();
-      timeoutRef1.current = setTimeout(() => {
-        setShowShimmer(false);
-        setShowResults(true);
-      }, 600);
+      void queryClient.invalidateQueries({ queryKey: imageQueryKey });
     } catch (error: unknown) {
       setShowShimmer(false);
+      setIsVotePending(false);
       setSelectedPhoto(persistedSelectedPhoto);
       setShowResults(Boolean(persistedSelectedPhoto));
+      setIsEditingVote(false);
+      setResultMessage(persistedSelectedPhoto ? "saved" : "recorded");
       if (isUnauthorizedApiError(error)) {
         toast({ ...signInToVoteToastOptions(() => navigateToLogin(setLocation)) });
       } else {
@@ -210,23 +260,39 @@ export function CurateProfileCard({
               <p className="text-sm">No images available</p>
             </div>
           ) : showResults ? (
-            <div className="text-center py-6">
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-                className="h-12 w-12 rounded-full bg-green-500/25 dark:bg-green-500/20 flex items-center justify-center mx-auto mb-3"
-              >
-                <Check className="h-6 w-6 text-green-600 dark:text-green-400" />
-              </motion.div>
+            <div className="flex flex-1 flex-col items-center justify-center text-center py-3">
               <p className="font-medium text-green-600 dark:text-green-400 mb-1">
                 {resultMessage === "saved" ? "Your vote is saved!" : "Vote recorded!"}
               </p>
               <p className="text-xs text-muted-foreground mb-4">
                 {totalVotes.toLocaleString('en-US')} total votes
               </p>
+              <motion.div
+                initial={{ opacity: 0, scale: 0.94, y: 8 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+                className="relative w-full max-w-[210px] mb-4"
+              >
+                {selectedImage ? (
+                  <div className="relative aspect-square overflow-hidden rounded-xl border border-slate-600/60 bg-slate-900/80 shadow-lg">
+                    <img
+                      src={selectedImage.imageUrl}
+                      alt={`${person.name} selected photo`}
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-transparent to-transparent" />
+                    <div className="absolute bottom-3 right-3 h-10 w-10 rounded-full bg-green-500 flex items-center justify-center shadow-lg shadow-green-500/40">
+                      <Check className="h-5 w-5 text-white" />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="aspect-square rounded-xl border border-slate-700/50 bg-slate-900/70 flex items-center justify-center">
+                    <Camera className="h-10 w-10 text-slate-500" />
+                  </div>
+                )}
+              </motion.div>
               <div className="flex flex-col gap-2 items-center">
-                <div className="flex gap-2 justify-center">
+                <div className="flex flex-wrap gap-2 justify-center">
                   <Button
                     size="sm"
                     variant="outline"

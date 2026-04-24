@@ -22,6 +22,7 @@ interface CelebrityImage {
   votesUp: number;
   votesDown: number;
   addedAt: string;
+  currentUserDirection?: 'up' | 'down' | null;
 }
 
 interface CurateViewResultsOverlayProps {
@@ -42,6 +43,7 @@ export function CurateViewResultsOverlay({
   leaderboardCategories,
 }: CurateViewResultsOverlayProps) {
   const [expandedImage, setExpandedImage] = useState<CelebrityImage | null>(null);
+  const [pendingVoteImageId, setPendingVoteImageId] = useState<string | null>(null);
   const { toast } = useToast();
   const [, setLocation] = useLocation();
 
@@ -51,6 +53,8 @@ export function CurateViewResultsOverlay({
 
   const sortedImages = [...images].sort((a, b) => b.votesUp - a.votesUp);
   const totalVotes = images.reduce((sum, img) => sum + img.votesUp, 0);
+  const currentUserImageId = images.find((img) => img.currentUserDirection === 'up')?.id ?? null;
+  const activeVotedImageId = pendingVoteImageId ?? currentUserImageId;
 
   const winningAvatar = useMemo(() => {
     if (sortedImages.length > 0 && sortedImages[0].votesUp > 0) return sortedImages[0].imageUrl;
@@ -62,11 +66,16 @@ export function CurateViewResultsOverlay({
       const response = await apiRequest('POST', `/api/people/${person.id}/images/${imageId}/vote`, { direction: 'up' });
       return response.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/people', person.id, 'images'] });
+    onMutate: ({ imageId }) => {
+      setPendingVoteImageId(imageId);
+    },
+    onSuccess: async (data: { alreadyVoted?: boolean }) => {
+      await queryClient.invalidateQueries({ queryKey: ['/api/people', person.id, 'images'] });
       toast({
-        title: "Vote recorded!",
-        description: "Your vote has been counted.",
+        title: data?.alreadyVoted ? "Vote saved!" : "Vote recorded!",
+        description: data?.alreadyVoted
+          ? "This look is already your saved choice."
+          : "Your vote has been counted.",
       });
     },
     onError: (error: Error) => {
@@ -80,10 +89,14 @@ export function CurateViewResultsOverlay({
         });
       }
     },
+    onSettled: () => {
+      setPendingVoteImageId(null);
+    },
   });
 
   const handleVote = (imageId: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (voteMutation.isPending) return;
     voteMutation.mutate({ imageId });
   };
 
@@ -121,6 +134,11 @@ export function CurateViewResultsOverlay({
               <span className="text-sm text-muted-foreground">
                 {totalVotes.toLocaleString('en-US')} total votes
               </span>
+              {activeVotedImageId && (
+                <span className="text-xs text-cyan-600 dark:text-cyan-400">
+                  {pendingVoteImageId ? "Saving your vote..." : "Your saved vote is highlighted below."}
+                </span>
+              )}
             </div>
           </div>
           <Button
@@ -150,6 +168,8 @@ export function CurateViewResultsOverlay({
                   ? Math.round((image.votesUp / totalVotes) * 100) 
                   : 0;
                 const isLeading = idx === 0;
+                const isCurrentUserVote = activeVotedImageId === image.id;
+                const isPendingVote = pendingVoteImageId === image.id;
                 
                 return (
                   <motion.div 
@@ -158,7 +178,9 @@ export function CurateViewResultsOverlay({
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: idx * 0.05 }}
                     className={`flex items-center gap-4 p-3 rounded-lg border transition-all ${
-                      isLeading 
+                      isCurrentUserVote
+                        ? 'bg-cyan-500/10 border-cyan-500/60'
+                        : isLeading 
                         ? 'bg-white/5 border-slate-300/60' 
                         : 'bg-muted/30 border-border hover:border-slate-500/50 dark:border-slate-400/40'
                     }`}
@@ -197,6 +219,11 @@ export function CurateViewResultsOverlay({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="font-bold text-lg">{votePercent}%</span>
+                        {isCurrentUserVote && (
+                          <span className="text-xs text-cyan-600 dark:text-cyan-400 font-medium">
+                            {isPendingVote ? "Saving..." : "Your vote"}
+                          </span>
+                        )}
                         {isLeading && (
                           <span className="text-xs text-cyan-600 dark:text-cyan-400 font-medium">Leading</span>
                         )}
@@ -204,7 +231,7 @@ export function CurateViewResultsOverlay({
                       <div className="h-2 rounded-full bg-slate-700/50 overflow-hidden">
                         <motion.div 
                           className={`h-full ${isLeading ? 'bg-cyan-500' : 'bg-slate-500'}`}
-                          initial={{ width: 0 }}
+                          initial={false}
                           animate={{ width: `${votePercent}%` }}
                           transition={{ duration: 0.5, delay: idx * 0.05 }}
                         />
@@ -216,14 +243,14 @@ export function CurateViewResultsOverlay({
                     
                     <Button
                       size="sm"
-                      variant={isLeading ? "default" : "outline"}
+                      variant={isCurrentUserVote || isLeading ? "default" : "outline"}
                       onClick={(e) => handleVote(image.id, e)}
                       disabled={voteMutation.isPending}
-                      className={isLeading ? "bg-cyan-500 hover:bg-cyan-600" : "border-cyan-500/60 dark:border-cyan-500/50 text-cyan-600 dark:text-cyan-400"}
+                      className={isCurrentUserVote || isLeading ? "bg-cyan-500 hover:bg-cyan-600" : "border-cyan-500/60 dark:border-cyan-500/50 text-cyan-600 dark:text-cyan-400"}
                       data-testid={`button-vote-image-${image.id}`}
                     >
                       <ThumbsUp className="h-3.5 w-3.5 mr-1" />
-                      Vote
+                      {isPendingVote ? "Saving..." : isCurrentUserVote ? "Your vote" : "Vote"}
                     </Button>
                   </motion.div>
                 );
@@ -281,7 +308,11 @@ export function CurateViewResultsOverlay({
                 data-testid="button-vote-lightbox"
               >
                 <ThumbsUp className="h-3.5 w-3.5 mr-1" />
-                Vote for this look
+                {pendingVoteImageId === expandedImage.id
+                  ? "Saving..."
+                  : activeVotedImageId === expandedImage.id
+                    ? "Your vote"
+                    : "Vote for this look"}
               </Button>
             </div>
           </motion.div>
