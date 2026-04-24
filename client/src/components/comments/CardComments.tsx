@@ -381,7 +381,7 @@ export function CardComments({
                 handlePost();
               }
             }}
-            className={`w-full bg-muted/30 border border-border/30 rounded-xl px-3 py-2 pr-16 text-base resize-none placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-cyan-500/30${inlineExpanded ? " flex-1 min-h-0" : ""}`}
+            className={`block w-full bg-muted/30 border border-border/30 rounded-xl px-3 py-2 pr-16 text-base resize-none placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-cyan-500/30${inlineExpanded ? " flex-1 min-h-0" : ""}`}
             rows={1}
             data-testid="input-comment"
           />
@@ -396,13 +396,13 @@ export function CardComments({
             <button
               disabled={!commentBody.trim() || commentMutation.isPending}
               onClick={handlePost}
-              className="p-1 text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300 disabled:text-muted-foreground/30 transition-colors"
+              className="flex h-8 w-8 items-center justify-center text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300 disabled:text-muted-foreground/30 transition-colors"
               data-testid="button-submit-comment"
             >
               {commentMutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="h-6 w-6 animate-spin" />
               ) : (
-                <Send className="h-4 w-4" />
+                <Send className="h-6 w-6" />
               )}
             </button>
           </div>
