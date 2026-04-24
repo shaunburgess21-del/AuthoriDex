@@ -40,6 +40,8 @@ interface CardComment {
   createdAt: string;
 }
 
+type ComposerMode = "auto" | "manual" | "fullscreen";
+
 const API_BASE: Record<CommentEntityType, string> = {
   matchup: "/api/matchups",
   poll: "/api/polls",
@@ -74,7 +76,7 @@ export function CardComments({
   const [commentBody, setCommentBody] = useState("");
   const [commentSort, setCommentSort] = useState<"top" | "newest">("top");
   const [replyTo, setReplyTo] = useState<{ id: string; username: string } | null>(null);
-  const [expanded, setExpanded] = useState(false);
+  const [composerMode, setComposerMode] = useState<ComposerMode>("auto");
   const [drawerComment, setDrawerComment] = useState<CardComment | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -99,7 +101,7 @@ export function CardComments({
     onSuccess: () => {
       setCommentBody("");
       setReplyTo(null);
-      setExpanded(false);
+      setComposerMode("auto");
       queryClient.invalidateQueries({ queryKey });
       if (entityType === "opinion-poll") {
         queryClient.invalidateQueries({ queryKey: [base, slug] });
@@ -172,7 +174,7 @@ export function CardComments({
 
   const startReply = useCallback((comment: CardComment) => {
     setReplyTo({ id: comment.id, username: comment.username || "Anonymous" });
-    setExpanded(true);
+    setComposerMode("manual");
     setTimeout(() => inputRef.current?.focus(), 50);
   }, []);
 
@@ -340,7 +342,9 @@ export function CardComments({
     </p>
   );
 
-  const inlineExpanded = variant === "inline" && expanded;
+  const isManualComposer = composerMode === "manual";
+  const isFullscreenComposer = composerMode === "fullscreen";
+  const inlineExpanded = variant === "inline" && isFullscreenComposer;
 
   const inputArea = isAuthenticated ? (
     <div
@@ -381,17 +385,19 @@ export function CardComments({
                 handlePost();
               }
             }}
-            className={`block w-full bg-muted/30 border border-border/30 rounded-xl px-3 py-2 pr-16 text-base resize-none placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-cyan-500/30${inlineExpanded ? " flex-1 min-h-0" : ""}`}
+            className={`block w-full bg-muted/30 border border-border/30 rounded-xl px-3 py-2 pr-16 text-base resize-none placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-cyan-500/30${isManualComposer ? " h-40 overflow-y-auto" : ""}${inlineExpanded ? " flex-1 min-h-0" : ""}`}
             rows={1}
             data-testid="input-comment"
           />
           <div className="absolute right-2 bottom-1.5 flex items-center gap-1">
             <button
-              onClick={() => setExpanded(!expanded)}
+              onClick={() => setComposerMode((mode) => (mode === "auto" ? "manual" : "auto"))}
               className="p-1 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
               type="button"
+              aria-label={composerMode === "auto" ? "Expand comment input" : "Collapse comment input"}
+              aria-pressed={composerMode !== "auto"}
             >
-              {expanded ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+              {composerMode === "auto" ? <Maximize2 className="h-3.5 w-3.5" /> : <Minimize2 className="h-3.5 w-3.5" />}
             </button>
             <button
               disabled={!commentBody.trim() || commentMutation.isPending}
