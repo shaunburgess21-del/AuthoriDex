@@ -449,7 +449,7 @@ export function MyPredictionCard({
                   className="w-full"
                   onClick={(e) => {
                     e.stopPropagation();
-                    setLocation(`/predict/${prediction.marketSlug}`);
+                    setLocation(`/markets/${prediction.marketSlug}`);
                   }}
                 >
                   View Market
