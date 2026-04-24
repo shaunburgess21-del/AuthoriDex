@@ -25,6 +25,50 @@ interface CelebrityImage {
   currentUserDirection?: 'up' | 'down' | null;
 }
 
+type CurateImageVoteResponse = Partial<CelebrityImage> & {
+  alreadyVoted?: boolean;
+  swapped?: boolean;
+};
+
+function applyCurateVoteToImages(
+  currentImages: CelebrityImage[] | undefined,
+  imageId: string,
+  voteData: CurateImageVoteResponse,
+): CelebrityImage[] | undefined {
+  if (!currentImages) return currentImages;
+
+  const previousSelectedId = currentImages.find((img) => img.currentUserDirection === "up")?.id ?? null;
+
+  return currentImages.map((img) => {
+    if (img.id === imageId) {
+      const defaultVotesUp = previousSelectedId === imageId ? img.votesUp : img.votesUp + (voteData.alreadyVoted ? 0 : 1);
+      return {
+        ...img,
+        personId: voteData.personId ?? img.personId,
+        imageUrl: voteData.imageUrl ?? img.imageUrl,
+        source: voteData.source ?? img.source,
+        isPrimary: typeof voteData.isPrimary === "boolean" ? voteData.isPrimary : img.isPrimary,
+        addedAt: voteData.addedAt ?? img.addedAt,
+        votesUp: typeof voteData.votesUp === "number" ? voteData.votesUp : defaultVotesUp,
+        votesDown: typeof voteData.votesDown === "number" ? voteData.votesDown : img.votesDown,
+        currentUserDirection: "up",
+      };
+    }
+
+    if (img.id === previousSelectedId && previousSelectedId !== imageId) {
+      return {
+        ...img,
+        votesUp: voteData.swapped ? Math.max(img.votesUp - 1, 0) : img.votesUp,
+        currentUserDirection: null,
+      };
+    }
+
+    return img.currentUserDirection === "up"
+      ? { ...img, currentUserDirection: null }
+      : img;
+  });
+}
+
 interface CurateViewResultsOverlayProps {
   person: CuratePerson;
   onClose: () => void;
@@ -46,15 +90,18 @@ export function CurateViewResultsOverlay({
   const [pendingVoteImageId, setPendingVoteImageId] = useState<string | null>(null);
   const { toast } = useToast();
   const [, setLocation] = useLocation();
+  const imageQueryKey = useMemo(() => ['/api/people', person.id, 'images'] as const, [person.id]);
 
   const { data: images = [], isLoading } = useQuery<CelebrityImage[]>({
-    queryKey: ['/api/people', person.id, 'images'],
+    queryKey: imageQueryKey,
   });
 
   const sortedImages = [...images].sort((a, b) => b.votesUp - a.votesUp);
   const totalVotes = images.reduce((sum, img) => sum + img.votesUp, 0);
   const currentUserImageId = images.find((img) => img.currentUserDirection === 'up')?.id ?? null;
   const activeVotedImageId = pendingVoteImageId ?? currentUserImageId;
+  const activeVoteButtonClassName = "border border-[#00C853]/50 bg-[#00C853]/10 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20";
+  const inactiveVoteButtonClassName = "border border-border bg-muted/40 text-foreground dark:border-white/40 dark:bg-white/5 dark:text-white hover:border-cyan-500/80 hover:bg-cyan-500/25 hover:text-cyan-600 dark:hover:border-cyan-500/50 dark:hover:bg-cyan-500/20 dark:hover:text-cyan-400";
 
   const winningAvatar = useMemo(() => {
     if (sortedImages.length > 0 && sortedImages[0].votesUp > 0) return sortedImages[0].imageUrl;
@@ -69,14 +116,17 @@ export function CurateViewResultsOverlay({
     onMutate: ({ imageId }) => {
       setPendingVoteImageId(imageId);
     },
-    onSuccess: async (data: { alreadyVoted?: boolean }) => {
-      await queryClient.invalidateQueries({ queryKey: ['/api/people', person.id, 'images'] });
+    onSuccess: (data: CurateImageVoteResponse, variables: { imageId: string }) => {
+      queryClient.setQueryData<CelebrityImage[]>(imageQueryKey, (currentImages) =>
+        applyCurateVoteToImages(currentImages, variables.imageId, data)
+      );
       toast({
         title: data?.alreadyVoted ? "Vote saved!" : "Vote recorded!",
         description: data?.alreadyVoted
           ? "This look is already your saved choice."
           : "Your vote has been counted.",
       });
+      void queryClient.invalidateQueries({ queryKey: imageQueryKey });
     },
     onError: (error: Error) => {
       if (isUnauthorizedApiError(error)) {
@@ -243,10 +293,10 @@ export function CurateViewResultsOverlay({
                     
                     <Button
                       size="sm"
-                      variant={isCurrentUserVote || isLeading ? "default" : "outline"}
+                      variant="outline"
                       onClick={(e) => handleVote(image.id, e)}
                       disabled={voteMutation.isPending}
-                      className={isCurrentUserVote || isLeading ? "bg-cyan-500 hover:bg-cyan-600" : "border-cyan-500/60 dark:border-cyan-500/50 text-cyan-600 dark:text-cyan-400"}
+                      className={isCurrentUserVote ? activeVoteButtonClassName : inactiveVoteButtonClassName}
                       data-testid={`button-vote-image-${image.id}`}
                     >
                       <ThumbsUp className="h-3.5 w-3.5 mr-1" />
@@ -299,12 +349,13 @@ export function CurateViewResultsOverlay({
               <span className="text-white font-medium">{expandedImage.votesUp.toLocaleString('en-US')} votes</span>
               <Button
                 size="sm"
+                variant="outline"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleVote(expandedImage.id, e);
                 }}
                 disabled={voteMutation.isPending}
-                className="bg-cyan-500 hover:bg-cyan-600"
+                className={activeVotedImageId === expandedImage.id ? activeVoteButtonClassName : inactiveVoteButtonClassName}
                 data-testid="button-vote-lightbox"
               >
                 <ThumbsUp className="h-3.5 w-3.5 mr-1" />

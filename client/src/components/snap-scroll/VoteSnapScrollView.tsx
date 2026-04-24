@@ -54,6 +54,17 @@ const SNAP_TO_VOTE_LIST_TYPE: Record<SnapSectionType, VoteListNavType> = {
 };
 
 const DRAG_THRESHOLD = 40;
+const COMMENT_TAP_THRESHOLD = 12;
+
+function isInteractiveTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+
+  return Boolean(
+    target.closest(
+      'button, a, input, textarea, select, summary, [role="button"], [data-interactive="true"], [contenteditable="true"]',
+    ),
+  );
+}
 
 export function VoteSnapScrollView({
   open,
@@ -67,6 +78,8 @@ export function VoteSnapScrollView({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
   const dragStartY = useRef<number | null>(null);
+  const commentTapStartRef = useRef<{ itemId: string; x: number; y: number } | null>(null);
+  const commentTapMovedRef = useRef(false);
 
   const categories = useMemo(() => {
     const cats = new Set<string>();
@@ -173,6 +186,49 @@ export function VoteSnapScrollView({
     }
   }, []);
 
+  const handleCommentTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>, itemId: string, isExpanded: boolean) => {
+    if (isExpanded || isInteractiveTarget(e.target)) {
+      commentTapStartRef.current = null;
+      commentTapMovedRef.current = false;
+      return;
+    }
+
+    commentTapStartRef.current = {
+      itemId,
+      x: e.touches[0].clientX,
+      y: e.touches[0].clientY,
+    };
+    commentTapMovedRef.current = false;
+  }, []);
+
+  const handleCommentTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (!commentTapStartRef.current) return;
+
+    const deltaX = e.touches[0].clientX - commentTapStartRef.current.x;
+    const deltaY = e.touches[0].clientY - commentTapStartRef.current.y;
+    if (Math.abs(deltaX) > COMMENT_TAP_THRESHOLD || Math.abs(deltaY) > COMMENT_TAP_THRESHOLD) {
+      commentTapMovedRef.current = true;
+    }
+  }, []);
+
+  const handleCommentTouchEnd = useCallback((e: React.TouchEvent<HTMLDivElement>, itemId: string, isExpanded: boolean) => {
+    const tapStart = commentTapStartRef.current;
+    commentTapStartRef.current = null;
+
+    if (!tapStart || tapStart.itemId !== itemId || isExpanded || commentTapMovedRef.current || isInteractiveTarget(e.target)) {
+      commentTapMovedRef.current = false;
+      return;
+    }
+
+    commentTapMovedRef.current = false;
+    setExpandedItemId(itemId);
+  }, []);
+
+  const handleCommentTouchCancel = useCallback(() => {
+    commentTapStartRef.current = null;
+    commentTapMovedRef.current = false;
+  }, []);
+
   const activeItems = categoryItems.get(activeCategory) || [];
   const commentEntityType = SECTION_COMMENT_TYPE[sectionType];
 
@@ -260,6 +316,10 @@ export function VoteSnapScrollView({
                       <div
                         className="flex-1 min-h-0 overflow-y-auto max-w-lg mx-auto w-full"
                         style={isExpanded ? { overscrollBehavior: "contain" } : undefined}
+                        onTouchStart={(e) => handleCommentTouchStart(e, item.id, isExpanded)}
+                        onTouchMove={handleCommentTouchMove}
+                        onTouchEnd={(e) => handleCommentTouchEnd(e, item.id, isExpanded)}
+                        onTouchCancel={handleCommentTouchCancel}
                       >
                         <CardComments
                           entityType={commentEntityType}

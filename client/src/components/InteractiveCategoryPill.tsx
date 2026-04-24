@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Link } from "wouter";
 import { Filter, Trophy, Users, ExternalLink, Maximize2 } from "lucide-react";
 import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
@@ -154,6 +154,7 @@ export function InteractiveCategoryPill({
   "data-testid": testId,
 }: InteractiveCategoryPillProps) {
   const [open, setOpen] = useState(false);
+  const pendingBrowseFullScreenRef = useRef(false);
   const isMobile = useIsMobile();
   const style = getCategoryStyle(category);
   const sizeClass = SIZE_CLASSES[size];
@@ -187,27 +188,41 @@ export function InteractiveCategoryPill({
 
   const browseFullScreenHandler = onBrowseFullScreen
     ? () => {
+        pendingBrowseFullScreenRef.current = true;
         setOpen(false);
-        onBrowseFullScreen();
       }
     : undefined;
+
+  const handleMobileOpenChange = useCallback((nextOpen: boolean) => {
+    if (!nextOpen && pendingBrowseFullScreenRef.current) {
+      setOpen(false);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          pendingBrowseFullScreenRef.current = false;
+          onBrowseFullScreen?.();
+        });
+      });
+      return;
+    }
+
+    if (!nextOpen) {
+      // Vaul overlay unmounts during close animation; the browser re-targets the
+      // pointer release to whatever element is underneath, firing a ghost click on
+      // the card. Capture and swallow exactly that one event before it propagates.
+      document.addEventListener("click", (e) => e.stopPropagation(), {
+        capture: true,
+        once: true,
+      });
+    }
+
+    setOpen(nextOpen);
+  }, [onBrowseFullScreen]);
 
   if (isMobile) {
     return (
       <Drawer
         open={open}
-        onOpenChange={(v) => {
-          if (!v) {
-            // vaul overlay unmounts during close animation; the browser re-targets the
-            // pointer release to whatever element is underneath, firing a ghost click on
-            // the card. Capture and swallow exactly that one event before it propagates.
-            document.addEventListener("click", (e) => e.stopPropagation(), {
-              capture: true,
-              once: true,
-            });
-          }
-          setOpen(v);
-        }}
+        onOpenChange={handleMobileOpenChange}
       >
         <DrawerTrigger asChild>{pillButton}</DrawerTrigger>
         <DrawerContent>
