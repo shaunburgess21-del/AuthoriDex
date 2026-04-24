@@ -20,7 +20,6 @@ import {
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { CardComments, useCommentCount } from "@/components/comments/CardComments";
-import { CommentsBottomSheet } from "@/components/snap-scroll/CommentsBottomSheet";
 import { apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedApiError, signInToVoteToastOptions } from "@/lib/signInToVoteToast";
 import { formatDate } from "@/lib/formatDate";
@@ -38,7 +37,6 @@ import {
   BarChart3,
   Info,
   X,
-  ChevronRight,
 } from "lucide-react";
 
 function parseOpinionPollVoteError(err: unknown): string {
@@ -78,7 +76,6 @@ export default function OpinionPollDetailPage() {
   const [pendingOption, setPendingOption] = useState<{ id: string; name: string } | null>(null);
   const [headerImgError, setHeaderImgError] = useState(false);
   const [expandedImage, setExpandedImage] = useState<{ url: string; alt: string } | null>(null);
-  const [commentsSheetOpen, setCommentsSheetOpen] = useState(false);
 
   const { data: poll, isLoading } = useQuery<any>({
     queryKey: ["/api/opinion-polls", slug],
@@ -207,7 +204,7 @@ export default function OpinionPollDetailPage() {
         </div>
       </header>
 
-      <div className="max-w-3xl mx-auto px-4 py-6">
+      <div className="max-w-3xl mx-auto px-4 pt-6 pb-24 md:pb-6">
         <div className="mb-6" data-testid="section-poll-header">
           <div className="flex items-center gap-2 flex-wrap mb-3">
             <CategoryPill category={poll.category} />
@@ -569,46 +566,26 @@ export default function OpinionPollDetailPage() {
           </Card>
         )}
 
-        <button
-          type="button"
-          onClick={() => setCommentsSheetOpen(true)}
-          className="w-full flex items-center justify-between rounded-xl border border-border/50 bg-card p-4 mb-6 md:hidden"
-        >
-          <div className="flex items-center gap-2">
-            <MessageSquare className="h-4 w-4 text-cyan-700 dark:text-cyan-500" />
-            <span className="text-sm font-semibold">Discussion</span>
-            <span className="text-xs text-muted-foreground">({opCommentCount})</span>
-          </div>
-          <ChevronRight className="h-4 w-4 text-muted-foreground" />
-        </button>
+        <div className="md:hidden mb-6">
+          <CardComments
+            entityType="opinion-poll"
+            slug={slug || ""}
+            variant="inline"
+            maxHeight="none"
+            placeholder="Share your thoughts on this topic..."
+            onShare={handleShare}
+          />
+        </div>
 
         <div className="hidden md:block">
-          <CardComments entityType="opinion-poll" slug={slug || ""} placeholder="Share your thoughts on this topic..." />
-        </div>
-
-        <div className="text-center pb-8">
-          <Button variant="outline" onClick={() => goBack(setLocation, "/vote")} data-testid="button-back-bottom">
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Vote
-          </Button>
+          <CardComments
+            entityType="opinion-poll"
+            slug={slug || ""}
+            placeholder="Share your thoughts on this topic..."
+            onShare={handleShare}
+          />
         </div>
       </div>
-
-      <button
-        type="button"
-        onClick={() => setCommentsSheetOpen(true)}
-        className="fixed bottom-24 right-4 z-40 md:hidden flex items-center gap-1.5 rounded-full bg-cyan-600 text-white px-4 py-2.5 shadow-lg"
-      >
-        <MessageSquare className="h-4 w-4" />
-        <span className="text-xs font-semibold">{opCommentCount}</span>
-      </button>
-
-      <CommentsBottomSheet
-        open={commentsSheetOpen}
-        onOpenChange={setCommentsSheetOpen}
-        entityType="opinion-poll"
-        slug={slug || ""}
-      />
 
       {expandedImage && (
         <div
