@@ -1,6 +1,8 @@
+import type { KeyboardEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Send, Loader2, Maximize2, Minimize2, X } from "lucide-react";
+import { Loader2, Maximize2, Minimize2, X } from "lucide-react";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
+import { Button } from "@/components/ui/button";
 
 const COMPOSER_MAX_HEIGHT_PX = 160;
 
@@ -38,6 +40,7 @@ export function CommentComposer({
   variant = "card",
 }: CommentComposerProps) {
   const [composerMode, setComposerMode] = useState<ComposerMode>("auto");
+  const [isFocused, setIsFocused] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fullscreenInputRef = useRef<HTMLTextAreaElement>(null);
   const composerContainerRef = useRef<HTMLDivElement>(null);
@@ -46,6 +49,9 @@ export function CommentComposer({
   const isManualComposer = composerMode === "manual";
   const isFullscreenComposer = composerMode === "fullscreen";
   const inlineExpanded = variant === "inline" && isFullscreenComposer;
+
+  const showButtons = isFocused || value.length > 0;
+  const submitDisabled = disabled || !value.trim() || isPending;
 
   const resizeAutoComposer = useCallback((textarea: HTMLTextAreaElement) => {
     textarea.style.height = "auto";
@@ -77,19 +83,22 @@ export function CommentComposer({
     }
   }, [composerMode]);
 
-  // Mirror the old CardComments post-success behaviour: when isPending falls
-  // from true to false and the value has been cleared (the hook clears on
-  // success), collapse the composer back to auto mode. Failed posts retain
-  // their content so this branch is skipped.
+  // Post-success behaviour: when isPending falls true -> false and the body
+  // has been cleared (the hook clears on success, not on error), reset the
+  // composer to its full rest state per the C2 state diagram:
+  // mode -> auto, blur whichever input had focus, fullscreen exits via the
+  // mode reset which unmounts the overlay.
   useEffect(() => {
     if (wasPendingRef.current && !isPending && !value) {
       setComposerMode("auto");
+      inputRef.current?.blur();
+      fullscreenInputRef.current?.blur();
     }
     wasPendingRef.current = isPending;
   }, [isPending, value]);
 
-  // Mirror the old CardComments startReply imperative path: when a reply
-  // target is set, switch to manual mode and focus the inline textarea.
+  // When a reply target is set, switch to manual mode and focus the inline
+  // textarea (mirrors the old CardComments startReply imperative path).
   useEffect(() => {
     if (!replyTo) return;
     setComposerMode("manual");
@@ -114,7 +123,73 @@ export function CommentComposer({
     });
   }, [parentExpanded, supportsFullscreen]);
 
-  const submitDisabled = disabled || !value.trim() || isPending;
+  // Cancel = abandon draft. Clears value, dismisses any reply intent, exits
+  // fullscreen if active, blurs the focused textarea. Buttons fade out via
+  // showButtons because both isFocused and value end up falsy.
+  const handleCancel = useCallback(() => {
+    onChange("");
+    onCancelReply();
+    setComposerMode("auto");
+    inputRef.current?.blur();
+    fullscreenInputRef.current?.blur();
+  }, [onChange, onCancelReply]);
+
+  // Keyboard semantics (Q10 Option B):
+  // - Enter alone: insert newline (default browser behaviour, no preventDefault)
+  // - Cmd/Ctrl + Enter: submit
+  // - Escape: cancel (clear + cancel reply + exit fullscreen + blur)
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent<HTMLTextAreaElement>) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+        e.preventDefault();
+        onSubmit();
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        handleCancel();
+      }
+    },
+    [onSubmit, handleCancel],
+  );
+
+  const buttonRowClass = `mt-2 flex items-center justify-end gap-2 motion-safe:transition-opacity motion-safe:duration-150 motion-safe:ease-out ${
+    showButtons ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+  }`;
+
+  const postButtonClass =
+    "inline-flex items-center justify-center gap-2 min-h-9 rounded-md px-4 text-sm font-medium" +
+    " bg-[#3C83F6] text-white hover:bg-[#3C83F6]/90 active:bg-[#3C83F6]/80" +
+    " disabled:opacity-50 disabled:pointer-events-none" +
+    " focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3C83F6]/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background" +
+    " transition-colors";
+
+  const renderActionRow = (idSuffix: "" | "-fullscreen") => (
+    <div className={buttonRowClass} aria-hidden={!showButtons}>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={handleCancel}
+        className="min-h-9"
+        tabIndex={showButtons ? 0 : -1}
+        data-testid={`button-cancel-comment${idSuffix}`}
+      >
+        Cancel
+      </Button>
+      <button
+        type="button"
+        disabled={submitDisabled}
+        onClick={onSubmit}
+        tabIndex={showButtons ? 0 : -1}
+        className={postButtonClass}
+        data-testid={`button-submit-comment${idSuffix}`}
+      >
+        {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+        {isPending ? "Posting…" : "Post"}
+      </button>
+    </div>
+  );
 
   return (
     <>
@@ -145,53 +220,41 @@ export function CommentComposer({
               fallbackClassName="text-[10px]"
             />
           </div>
-          <div className={`flex-1 min-w-0 relative${inlineExpanded ? " flex flex-col" : ""}`}>
-            <textarea
-              ref={inputRef}
-              placeholder={replyTo ? `Reply to @${replyTo.username}...` : placeholder}
-              value={value}
-              onChange={(e) => {
-                onChange(e.target.value);
-                if (composerMode === "auto") {
-                  resizeAutoComposer(e.currentTarget);
-                }
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  onSubmit();
-                }
-              }}
-              className={`block w-full bg-muted/30 border border-border/30 rounded-xl px-3 py-2 pr-16 text-base resize-none placeholder:text-muted-foreground/50 focus:outline-none focus:ring-0 focus:border-border/30${isManualComposer ? " h-40 overflow-y-auto" : ""}${inlineExpanded ? " flex-1 min-h-0" : ""}`}
-              rows={1}
-              data-testid="input-comment"
-            />
-            <div className="absolute right-2 bottom-1.5 flex items-center gap-1">
+          <div className={`flex-1 min-w-0${inlineExpanded ? " flex flex-col" : ""}`}>
+            <div className={`relative${inlineExpanded ? " flex-1 min-h-0 flex flex-col" : ""}`}>
+              <textarea
+                ref={inputRef}
+                placeholder={replyTo ? `Reply to @${replyTo.username}...` : placeholder}
+                value={value}
+                onChange={(e) => {
+                  onChange(e.target.value);
+                  if (composerMode === "auto") {
+                    resizeAutoComposer(e.currentTarget);
+                  }
+                }}
+                onFocus={() => setIsFocused(true)}
+                onBlur={() => setIsFocused(false)}
+                onKeyDown={handleKeyDown}
+                className={`block w-full bg-muted/30 border border-border/30 rounded-xl px-3 py-2 ${supportsFullscreen ? "pr-12" : "pr-3"} text-base resize-none placeholder:text-muted-foreground/50 focus:outline-none focus:ring-0 focus:border-border/30${isManualComposer ? " h-40 overflow-y-auto" : ""}${inlineExpanded ? " flex-1 min-h-0" : ""}`}
+                rows={1}
+                data-testid="input-comment"
+              />
               {supportsFullscreen && (
-                <button
-                  onClick={handleComposerToggle}
-                  onPointerUp={(event) => event.currentTarget.blur()}
-                  className="flex h-8 w-8 items-center justify-center text-slate-300 hover:text-slate-100 transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                  type="button"
-                  aria-label={composerMode === "auto" ? "Expand comment input" : "Collapse comment input"}
-                  aria-pressed={composerMode !== "auto"}
-                >
-                  {composerMode === "auto" ? <Maximize2 className="h-5 w-5" /> : <Minimize2 className="h-5 w-5" />}
-                </button>
+                <div className="absolute right-2 bottom-1.5 flex items-center">
+                  <button
+                    onClick={handleComposerToggle}
+                    onPointerUp={(event) => event.currentTarget.blur()}
+                    className="flex h-8 w-8 items-center justify-center text-slate-300 hover:text-slate-100 transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                    type="button"
+                    aria-label={composerMode === "auto" ? "Expand comment input" : "Collapse comment input"}
+                    aria-pressed={composerMode !== "auto"}
+                  >
+                    {composerMode === "auto" ? <Maximize2 className="h-5 w-5" /> : <Minimize2 className="h-5 w-5" />}
+                  </button>
+                </div>
               )}
-              <button
-                disabled={submitDisabled}
-                onClick={onSubmit}
-                className="flex h-8 w-8 items-center justify-center text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300 disabled:text-muted-foreground/30 transition-colors"
-                data-testid="button-submit-comment"
-              >
-                {isPending ? (
-                  <Loader2 className="h-6 w-6 animate-spin" />
-                ) : (
-                  <Send className="h-6 w-6" />
-                )}
-              </button>
             </div>
+            {renderActionRow("")}
           </div>
         </div>
       </div>
@@ -222,28 +285,14 @@ export function CommentComposer({
               placeholder={replyTo ? `Reply to @${replyTo.username}...` : placeholder}
               value={value}
               onChange={(e) => onChange(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  onSubmit();
-                }
-              }}
-              className="h-full w-full resize-none rounded-2xl border border-border/30 bg-muted/30 px-4 py-4 pr-14 text-base placeholder:text-muted-foreground/50 focus:outline-none focus:ring-0 focus:border-border/30"
+              onFocus={() => setIsFocused(true)}
+              onBlur={() => setIsFocused(false)}
+              onKeyDown={handleKeyDown}
+              className="h-full w-full resize-none rounded-2xl border border-border/30 bg-muted/30 px-4 py-4 text-base placeholder:text-muted-foreground/50 focus:outline-none focus:ring-0 focus:border-border/30"
               data-testid="input-comment-fullscreen"
             />
-            <button
-              disabled={submitDisabled}
-              onClick={onSubmit}
-              className="absolute bottom-3 right-3 flex h-10 w-10 items-center justify-center rounded-full bg-background/80 text-cyan-600 shadow-sm backdrop-blur dark:text-cyan-400 disabled:text-muted-foreground/30"
-              data-testid="button-submit-comment-fullscreen"
-            >
-              {isPending ? (
-                <Loader2 className="h-6 w-6 animate-spin" />
-              ) : (
-                <Send className="h-6 w-6" />
-              )}
-            </button>
           </div>
+          {renderActionRow("-fullscreen")}
         </div>
       )}
     </>
