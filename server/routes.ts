@@ -5300,8 +5300,9 @@ Only return the JSON object.`;
       
       // Check if profile exists
       const existing = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
-      
-      if (existing.length > 0) {
+      const created = existing.length === 0;
+
+      if (!created) {
         // Update existing profile (update avatar/name if changed)
         const updateData: Partial<Profile> = {
           lastActiveAt: new Date(),
@@ -5315,7 +5316,7 @@ Only return the JSON object.`;
         });
         const updated = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
 
-        return res.json(updated[0]);
+        return res.json({ profile: updated[0], created: false });
       }
       
       // Create new profile
@@ -5344,7 +5345,7 @@ Only return the JSON object.`;
         await tx.insert(creditLedger).values(initialGrantEntry).onConflictDoNothing();
       });
 
-      res.json(newProfile);
+      res.json({ profile: newProfile, created: true });
     } catch (error: any) {
       console.error("Error syncing profile:", error.message);
       res.status(500).json({ error: "Failed to sync profile" });
@@ -5402,6 +5403,48 @@ Only return the JSON object.`;
     } catch (error: any) {
       console.error("Error updating profile:", error.message);
       res.status(500).json({ error: "Failed to update profile" });
+    }
+  });
+
+  // Welcome flow: set username + record ToS acceptance in a single call.
+  // Idempotent — safe to call multiple times; tosAcceptedAt is set on every
+  // successful submit, but the route is only ever hit during /login/welcome.
+  app.patch("/api/profile/me/username", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.userId!;
+      const { username, tosAccepted } = req.body ?? {};
+
+      if (typeof username !== "string") {
+        return res.status(400).json({ error: "username is required" });
+      }
+      if (!/^[A-Za-z0-9_]{3,20}$/.test(username)) {
+        return res.status(400).json({ error: "invalid_format" });
+      }
+      if (tosAccepted !== true) {
+        return res.status(400).json({ error: "tos_required" });
+      }
+
+      const taken = await db.select({ id: profiles.id }).from(profiles)
+        .where(and(eq(profiles.username, username), sql`${profiles.id} != ${userId}`))
+        .limit(1);
+      if (taken.length > 0) {
+        return res.status(409).json({ error: "username_taken" });
+      }
+
+      const updated = await db
+        .update(profiles)
+        .set({ username, tosAcceptedAt: new Date() })
+        .where(eq(profiles.id, userId))
+        .returning();
+
+      if (updated.length === 0) {
+        return res.status(404).json({ error: "Profile not found" });
+      }
+
+      res.json(updated[0]);
+    } catch (error: any) {
+      console.error("Error setting username:", error.message);
+      res.status(500).json({ error: "Failed to set username" });
     }
   });
 

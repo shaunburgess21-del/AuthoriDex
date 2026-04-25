@@ -90,7 +90,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import { PersonAvatar } from "@/components/PersonAvatar";
@@ -242,7 +242,6 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
   isPending: boolean;
   editMarket?: any;
 }) {
-  const { toast } = useToast();
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
   const [openMarketType, setOpenMarketType] = useState<"binary" | "multi" | "updown">("binary");
@@ -291,9 +290,9 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
       }
       const data = await res.json();
       setSummary(data.summary);
-      toast({ title: "Summary drafted", description: "Review and edit before saving." });
+      toast("Summary drafted", { description: "Review and edit before saving." });
     } catch (err: any) {
-      toast({ title: "Generation failed", description: err.message, variant: "destructive" });
+      toast.error("Generation failed", { description: err.message });
     } finally {
       setIsGeneratingSummary(false);
     }
@@ -314,9 +313,9 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
       }
       const data = await res.json();
       setTeaser(data.teaser);
-      toast({ title: "Teaser drafted", description: "Review and edit before saving." });
+      toast("Teaser drafted", { description: "Review and edit before saving." });
     } catch (err: any) {
-      toast({ title: "Generation failed", description: err.message, variant: "destructive" });
+      toast.error("Generation failed", { description: err.message });
     } finally {
       setIsGeneratingTeaser(false);
     }
@@ -388,7 +387,7 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
           }
         }).catch((err) => {
           console.error("[AdminDashboard] Failed to fetch celebrity for market:", err);
-          toast({ title: "Could not load celebrity name", description: "Using ID fallback.", variant: "destructive" });
+          toast.error("Could not load celebrity name", { description: "Using ID fallback." });
           setSelectedMarketCelebName(editMarket.personId.slice(0, 8) + "...");
           setMarketCelebSearch(editMarket.personId.slice(0, 8) + "...");
         });
@@ -1122,7 +1121,6 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
 
 export default function AdminDashboard() {
   const [, setLocation] = useLocation();
-  const { toast } = useToast();
   const queryClient = useQueryClient();
   const { user, isAdmin, profileLoading, profile } = useAuth();
   const [activeSection, setActiveSectionRaw] = useState<AdminSection>(() => {
@@ -1526,16 +1524,13 @@ export default function AdminDashboard() {
     onSuccess: (data: any) => {
       const stats = data?.stats;
       const newsP50 = stats?.news?.p50;
-      toast({
-        title: "Percentile cache refreshed",
-        description: newsP50 != null
+      toast("Percentile cache refreshed", { description: newsP50 != null
           ? `New news p50: ${Number(newsP50).toFixed(2)} (p25 ${Number(stats?.news?.p25).toFixed(2)} / p75 ${Number(stats?.news?.p75).toFixed(2)})`
-          : "Source stats recomputed from latest snapshots.",
-      });
+          : "Source stats recomputed from latest snapshots." });
       refetchEngineHealth();
     },
     onError: (err: any) => {
-      toast({ title: "Refresh failed", description: err?.message || "Unknown error", variant: "destructive" });
+      toast.error("Refresh failed", { description: err?.message || "Unknown error" });
     },
   });
 
@@ -1567,10 +1562,10 @@ export default function AdminDashboard() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
       setCreateMarketOpen(false);
-      toast({ title: "Market Created", description: "Real-world market created successfully." });
+      toast("Market Created", { description: "Real-world market created successfully." });
     },
     onError: (err: Error) => {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast.error("Error", { description: err.message });
     },
   });
 
@@ -1590,10 +1585,10 @@ export default function AdminDashboard() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
       setEditMarketId(null);
-      toast({ title: "Market Updated", description: "Real-world market updated successfully." });
+      toast("Market Updated", { description: "Real-world market updated successfully." });
     },
     onError: (err: Error) => {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast.error("Error", { description: err.message });
     },
   });
 
@@ -1613,10 +1608,10 @@ export default function AdminDashboard() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
       setSettleMarketId(null);
-      toast({ title: "Market Settled", description: "Market has been resolved." });
+      toast("Market Settled", { description: "Market has been resolved." });
     },
     onError: (err: Error) => {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast.error("Error", { description: err.message });
     },
   });
 
@@ -1636,10 +1631,10 @@ export default function AdminDashboard() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
       setVoidMarketId(null);
-      toast({ title: "Market Voided", description: "Market has been voided." });
+      toast("Market Voided", { description: "Market has been voided." });
     },
     onError: (err: Error) => {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast.error("Error", { description: err.message });
     },
   });
 
@@ -1661,10 +1656,10 @@ export default function AdminDashboard() {
         next.delete(id);
         return next;
       });
-      toast({ title: "Market deleted", description: "This world market has been permanently removed." });
+      toast("Market deleted", { description: "This world market has been permanently removed." });
     },
     onError: (err: Error) => {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast.error("Error", { description: err.message });
     },
   });
 
@@ -1676,18 +1671,11 @@ export default function AdminDashboard() {
       return res.json();
     },
     onSuccess: (data: any) => {
-      toast({
-        title: "Data Refreshed",
-        description: `Processed ${data.processed} celebrities in ${data.duration}ms`,
-      });
+      toast("Data Refreshed", { description: `Processed ${data.processed} celebrities in ${data.duration}ms` });
       refetchStats();
     },
     onError: (error: any) => {
-      toast({
-        title: "Refresh Failed",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast.error("Refresh Failed", { description: error.message });
     },
   });
 
@@ -1698,18 +1686,11 @@ export default function AdminDashboard() {
       return res.json();
     },
     onSuccess: (data: any) => {
-      toast({
-        title: "Scoring Complete",
-        description: `Updated rankings for ${data.processed} celebrities`,
-      });
+      toast("Scoring Complete", { description: `Updated rankings for ${data.processed} celebrities` });
       refetchStats();
     },
     onError: (error: any) => {
-      toast({
-        title: "Scoring Failed",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast.error("Scoring Failed", { description: error.message });
     },
   });
 
@@ -1725,18 +1706,11 @@ export default function AdminDashboard() {
       return res.json();
     },
     onSuccess: (data: any) => {
-      toast({
-        title: "Approval Data Seeded",
-        description: `Seeded ${data.seeded} celebrities, skipped ${data.skipped}`,
-      });
+      toast("Approval Data Seeded", { description: `Seeded ${data.seeded} celebrities, skipped ${data.skipped}` });
       refetchStats();
     },
     onError: (error: any) => {
-      toast({
-        title: "Seeding Failed",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast.error("Seeding Failed", { description: error.message });
     },
   });
 
@@ -1747,17 +1721,10 @@ export default function AdminDashboard() {
       return res.json();
     },
     onSuccess: (data: any) => {
-      toast({
-        title: "Curate Images Synced",
-        description: `Synced ${data.totalSynced} image(s) across ${data.peopleProcessed} people (${data.totalPeopleScanned} scanned)`,
-      });
+      toast("Curate Images Synced", { description: `Synced ${data.totalSynced} image(s) across ${data.peopleProcessed} people (${data.totalPeopleScanned} scanned)` });
     },
     onError: (error: any) => {
-      toast({
-        title: "Sync Failed",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast.error("Sync Failed", { description: error.message });
     },
   });
 
@@ -1772,10 +1739,7 @@ export default function AdminDashboard() {
       return res.json();
     },
     onSuccess: () => {
-      toast({
-        title: "Credits Adjusted",
-        description: `Successfully adjusted credits for user`,
-      });
+      toast("Credits Adjusted", { description: `Successfully adjusted credits for user` });
       setShowCreditModal(false);
       setSelectedUser(null);
       setCreditAdjustment({ amount: 0, reason: "" });
@@ -1783,11 +1747,7 @@ export default function AdminDashboard() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
     },
     onError: (error: any) => {
-      toast({
-        title: "Adjustment Failed",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast.error("Adjustment Failed", { description: error.message });
     },
   });
 
@@ -1805,10 +1765,7 @@ export default function AdminDashboard() {
       return res.json();
     },
     onSuccess: () => {
-      toast({
-        title: "User Banned",
-        description: "User has been banned from the platform",
-      });
+      toast("User Banned", { description: "User has been banned from the platform" });
       setShowBanUserModal(false);
       setBanUserTarget(null);
       setBanUserReason("");
@@ -1816,11 +1773,7 @@ export default function AdminDashboard() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
     },
     onError: (error: any) => {
-      toast({
-        title: "Ban Failed",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast.error("Ban Failed", { description: error.message });
     },
   });
 
@@ -1838,10 +1791,7 @@ export default function AdminDashboard() {
       return res.json();
     },
     onSuccess: () => {
-      toast({
-        title: "User Deleted",
-        description: "User account and auth record were permanently removed",
-      });
+      toast("User Deleted", { description: "User account and auth record were permanently removed" });
       setShowDeleteUserModal(false);
       setDeleteUserTarget(null);
       setDeleteUserReason("");
@@ -1849,11 +1799,7 @@ export default function AdminDashboard() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
     },
     onError: (error: any) => {
-      toast({
-        title: "Delete Failed",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast.error("Delete Failed", { description: error.message });
     },
   });
 
@@ -1902,19 +1848,12 @@ export default function AdminDashboard() {
           setCelebrityGalleryUploading(true);
           const failures = await uploadCurateProfileImages(personId, galleryFiles);
           if (failures.length > 0) {
-            toast({
-              title: "Celebrity created",
-              description: `Image upload issues: ${failures.slice(0, 2).join(" · ")}${failures.length > 2 ? " …" : ""} Remove extras in Curate Profile if needed.`,
-              variant: "destructive",
-            });
+            toast.error("Celebrity created", { description: `Image upload issues: ${failures.slice(0, 2).join(" · ")}${failures.length > 2 ? " …" : ""} Remove extras in Curate Profile if needed.` });
           } else {
-            toast({
-              title: "Celebrity created",
-              description: `New celebrity added with ${galleryFiles.length} image(s) in Supabase.`,
-            });
+            toast("Celebrity created", { description: `New celebrity added with ${galleryFiles.length} image(s) in Supabase.` });
           }
         } else {
-          toast({ title: "Celebrity Created", description: "New celebrity added successfully" });
+          toast("Celebrity Created", { description: "New celebrity added successfully" });
         }
       } finally {
         setCelebrityGalleryUploading(false);
@@ -1929,7 +1868,7 @@ export default function AdminDashboard() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/vote/curate-profile"] });
     },
     onError: (error: any) => {
-      toast({ title: "Create Failed", description: error.message, variant: "destructive" });
+      toast.error("Create Failed", { description: error.message });
     },
   });
 
@@ -1958,7 +1897,7 @@ export default function AdminDashboard() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "Celebrity Updated", description: "Celebrity updated successfully" });
+      toast("Celebrity Updated", { description: "Celebrity updated successfully" });
       setShowCelebrityModal(false);
       setEditingCelebrity(null);
       setCelebrityForm({ ...EMPTY_CELEBRITY_FORM });
@@ -1970,7 +1909,7 @@ export default function AdminDashboard() {
       queryClient.invalidateQueries({ queryKey: ["/api/leaderboard"] });
     },
     onError: (error: any) => {
-      toast({ title: "Update Failed", description: error.message, variant: "destructive" });
+      toast.error("Update Failed", { description: error.message });
     },
   });
 
@@ -1981,13 +1920,13 @@ export default function AdminDashboard() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "Celebrity Deleted", description: "Celebrity removed successfully" });
+      toast("Celebrity Deleted", { description: "Celebrity removed successfully" });
       setShowDeleteConfirm(false);
       setDeleteTarget(null);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/celebrities"] });
     },
     onError: (error: any) => {
-      toast({ title: "Delete Failed", description: error.message, variant: "destructive" });
+      toast.error("Delete Failed", { description: error.message });
     },
   });
 
@@ -2002,7 +1941,7 @@ export default function AdminDashboard() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "Matchup Created", description: "New matchup added successfully" });
+      toast("Matchup Created", { description: "New matchup added successfully" });
       setShowMatchupModal(false);
       setEditingMatchup(null);
       setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", description: "", isActive: true, visibility: "live", featured: false, slug: "", seedVotesA: 0, seedVotesB: 0 });
@@ -2010,7 +1949,7 @@ export default function AdminDashboard() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/matchups"] });
     },
     onError: (error: any) => {
-      toast({ title: "Create Failed", description: error.message, variant: "destructive" });
+      toast.error("Create Failed", { description: error.message });
     },
   });
 
@@ -2024,7 +1963,7 @@ export default function AdminDashboard() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "Matchup Updated", description: "Matchup updated successfully" });
+      toast("Matchup Updated", { description: "Matchup updated successfully" });
       setShowMatchupModal(false);
       setEditingMatchup(null);
       setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", description: "", isActive: true, visibility: "live", featured: false, slug: "", seedVotesA: 0, seedVotesB: 0 });
@@ -2032,7 +1971,7 @@ export default function AdminDashboard() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/matchups"] });
     },
     onError: (error: any) => {
-      toast({ title: "Update Failed", description: error.message, variant: "destructive" });
+      toast.error("Update Failed", { description: error.message });
     },
   });
 
@@ -2043,13 +1982,13 @@ export default function AdminDashboard() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "Matchup Deleted", description: "Matchup removed successfully" });
+      toast("Matchup Deleted", { description: "Matchup removed successfully" });
       setShowDeleteConfirm(false);
       setDeleteTarget(null);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/matchups"] });
     },
     onError: (error: any) => {
-      toast({ title: "Delete Failed", description: error.message, variant: "destructive" });
+      toast.error("Delete Failed", { description: error.message });
     },
   });
 
@@ -2060,10 +1999,10 @@ export default function AdminDashboard() {
       return res.json();
     },
     onSuccess: (data: any) => {
-      toast({ title: "Generated Up/Down Markets", description: `Created ${data.created} markets for week ${data.weekNumber}` });
+      toast("Generated Up/Down Markets", { description: `Created ${data.created} markets for week ${data.weekNumber}` });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
     },
-    onError: () => toast({ title: "Error", description: "Failed to generate markets", variant: "destructive" }),
+    onError: () => toast.error("Error", { description: "Failed to generate markets" }),
   });
 
   const generateJackpotMutation = useMutation({
@@ -2073,10 +2012,10 @@ export default function AdminDashboard() {
       return res.json();
     },
     onSuccess: (data: any) => {
-      toast({ title: "Generated Jackpot Markets", description: `Created ${data.created} jackpot entries for week ${data.weekNumber}` });
+      toast("Generated Jackpot Markets", { description: `Created ${data.created} jackpot entries for week ${data.weekNumber}` });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
     },
-    onError: () => toast({ title: "Error", description: "Failed to generate jackpot markets", variant: "destructive" }),
+    onError: () => toast.error("Error", { description: "Failed to generate jackpot markets" }),
   });
 
   const generateGainerMutation = useMutation({
@@ -2089,10 +2028,10 @@ export default function AdminDashboard() {
       const parts = [];
       if (data.created > 0) parts.push(`${data.created} created`);
       if (data.updated > 0) parts.push(`${data.updated} updated`);
-      toast({ title: "Generated Category Races", description: parts.length > 0 ? `Week ${data.weekNumber}: ${parts.join(", ")}` : `Week ${data.weekNumber}: already up-to-date` });
+      toast("Generated Category Races", { description: parts.length > 0 ? `Week ${data.weekNumber}: ${parts.join(", ")}` : `Week ${data.weekNumber}: already up-to-date` });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
     },
-    onError: () => toast({ title: "Error", description: "Failed to generate Category Race markets", variant: "destructive" }),
+    onError: () => toast.error("Error", { description: "Failed to generate Category Race markets" }),
   });
 
   const bulkVisibilityMutation = useMutation({
@@ -2105,11 +2044,11 @@ export default function AdminDashboard() {
       return res.json();
     },
     onSuccess: (data: any) => {
-      toast({ title: "Updated", description: `${data.updated} markets updated` });
+      toast("Updated", { description: `${data.updated} markets updated` });
       setSelectedNativeIds(new Set());
       queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
     },
-    onError: () => toast({ title: "Error", description: "Failed to update visibility", variant: "destructive" }),
+    onError: () => toast.error("Error", { description: "Failed to update visibility" }),
   });
 
   const updateNativeMarketMutation = useMutation({
@@ -2124,7 +2063,7 @@ export default function AdminDashboard() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
     },
-    onError: () => toast({ title: "Error", description: "Failed to update market", variant: "destructive" }),
+    onError: () => toast.error("Error", { description: "Failed to update market" }),
   });
 
   const createH2hMutation = useMutation({
@@ -2140,13 +2079,13 @@ export default function AdminDashboard() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "Created", description: "Head-to-Head battle created" });
+      toast("Created", { description: "Head-to-Head battle created" });
       setH2hModalOpen(false);
       setH2hPersonAId(""); setH2hPersonBId("");
       setH2hPersonASearch(""); setH2hPersonBSearch("");
       queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
     },
-    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+    onError: (err: any) => toast.error("Error", { description: err.message }),
   });
 
   const createGainerMutation = useMutation({
@@ -2162,13 +2101,13 @@ export default function AdminDashboard() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "Created", description: "Category Race market created" });
+      toast("Created", { description: "Category Race market created" });
       setGainerModalOpen(false);
       setGainerPersonIds([]);
       setGainerPersonSearch("");
       queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
     },
-    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+    onError: (err: any) => toast.error("Error", { description: err.message }),
   });
 
   const deleteNativeMarketMutation = useMutation({
@@ -2178,10 +2117,10 @@ export default function AdminDashboard() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "Deleted", description: "Market removed" });
+      toast("Deleted", { description: "Market removed" });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
     },
-    onError: () => toast({ title: "Error", description: "Failed to delete", variant: "destructive" }),
+    onError: () => toast.error("Error", { description: "Failed to delete" }),
   });
 
   const settleNativeMarketMutation = useMutation({
@@ -2194,10 +2133,10 @@ export default function AdminDashboard() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "Settled", description: "Market resolved" });
+      toast("Settled", { description: "Market resolved" });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
     },
-    onError: () => toast({ title: "Error", description: "Failed to settle", variant: "destructive" }),
+    onError: () => toast.error("Error", { description: "Failed to settle" }),
   });
 
   const createPollMutation = useMutation({
@@ -2223,14 +2162,14 @@ export default function AdminDashboard() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "Poll Created", description: "New sentiment poll added successfully" });
+      toast("Poll Created", { description: "New sentiment poll added successfully" });
       setShowPollModal(false);
       setEditingPoll(null);
       resetPollForm();
       queryClient.invalidateQueries({ queryKey: ["/api/admin/trending-polls"] });
     },
     onError: (error: any) => {
-      toast({ title: "Create Failed", description: error.message, variant: "destructive" });
+      toast.error("Create Failed", { description: error.message });
     },
   });
 
@@ -2257,14 +2196,14 @@ export default function AdminDashboard() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "Poll Updated", description: "Sentiment poll updated successfully" });
+      toast("Poll Updated", { description: "Sentiment poll updated successfully" });
       setShowPollModal(false);
       setEditingPoll(null);
       resetPollForm();
       queryClient.invalidateQueries({ queryKey: ["/api/admin/trending-polls"] });
     },
     onError: (error: any) => {
-      toast({ title: "Update Failed", description: error.message, variant: "destructive" });
+      toast.error("Update Failed", { description: error.message });
     },
   });
 
@@ -2275,13 +2214,13 @@ export default function AdminDashboard() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "Poll Deleted", description: "Sentiment poll removed successfully" });
+      toast("Poll Deleted", { description: "Sentiment poll removed successfully" });
       setShowDeleteConfirm(false);
       setDeleteTarget(null);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/trending-polls"] });
     },
     onError: (error: any) => {
-      toast({ title: "Delete Failed", description: error.message, variant: "destructive" });
+      toast.error("Delete Failed", { description: error.message });
     },
   });
 
@@ -2300,10 +2239,10 @@ export default function AdminDashboard() {
       if (!res.ok) throw new Error(data.error || "Import failed");
       const { created, updated, skipped, warnings, errors } = data;
       const desc = `${created} created, ${updated} updated, ${skipped} skipped${warnings?.length ? `, ${warnings.length} warnings` : ''}${errors?.length ? `, ${errors.length} errors` : ''}`;
-      toast({ title: "CSV Import Complete", description: desc });
+      toast("CSV Import Complete", { description: desc });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/trending-polls"] });
     } catch (err: any) {
-      toast({ title: "Import Failed", description: err.message, variant: "destructive" });
+      toast.error("Import Failed", { description: err.message });
     } finally {
       setImportingPollsCsv(false);
     }
@@ -2325,14 +2264,14 @@ export default function AdminDashboard() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "Opinion Poll Created" });
+      toast("Opinion Poll Created");
       setShowOpinionPollModal(false);
       setEditingOpinionPoll(null);
       resetOpinionPollForm();
       queryClient.invalidateQueries({ queryKey: ["/api/admin/opinion-polls"] });
     },
     onError: (error: any) => {
-      toast({ title: "Create Failed", description: error.message, variant: "destructive" });
+      toast.error("Create Failed", { description: error.message });
     },
   });
 
@@ -2352,14 +2291,14 @@ export default function AdminDashboard() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "Opinion Poll Updated" });
+      toast("Opinion Poll Updated");
       setShowOpinionPollModal(false);
       setEditingOpinionPoll(null);
       resetOpinionPollForm();
       queryClient.invalidateQueries({ queryKey: ["/api/admin/opinion-polls"] });
     },
     onError: (error: any) => {
-      toast({ title: "Update Failed", description: error.message, variant: "destructive" });
+      toast.error("Update Failed", { description: error.message });
     },
   });
 
@@ -2370,13 +2309,13 @@ export default function AdminDashboard() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "Opinion Poll Deleted" });
+      toast("Opinion Poll Deleted");
       setShowDeleteConfirm(false);
       setDeleteTarget(null);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/opinion-polls"] });
     },
     onError: (error: any) => {
-      toast({ title: "Delete Failed", description: error.message, variant: "destructive" });
+      toast.error("Delete Failed", { description: error.message });
     },
   });
 
@@ -2390,11 +2329,11 @@ export default function AdminDashboard() {
         body: JSON.stringify(edits),
       });
       if (!res.ok) throw new Error("Failed to save");
-      toast({ title: "Saved", description: "Seed votes updated" });
+      toast("Saved", { description: "Seed votes updated" });
       setPollSeedEdits(prev => { const next = { ...prev }; delete next[pollId]; return next; });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/trending-polls"] });
     } catch {
-      toast({ title: "Save Failed", variant: "destructive" });
+      toast.error("Save Failed");
     } finally {
       setSavingRowIds(prev => { const next = new Set(prev); next.delete(pollId); return next; });
     }
@@ -2410,11 +2349,11 @@ export default function AdminDashboard() {
         body: JSON.stringify(edits),
       });
       if (!res.ok) throw new Error("Failed to save");
-      toast({ title: "Saved", description: "Seed votes updated" });
+      toast("Saved", { description: "Seed votes updated" });
       setMatchupSeedEdits(prev => { const next = { ...prev }; delete next[matchupId]; return next; });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/matchups"] });
     } catch {
-      toast({ title: "Save Failed", variant: "destructive" });
+      toast.error("Save Failed");
     } finally {
       setSavingRowIds(prev => { const next = new Set(prev); next.delete(matchupId); return next; });
     }
@@ -2430,11 +2369,11 @@ export default function AdminDashboard() {
         body: JSON.stringify({ options: edits.options.filter(o => o.name.trim()) }),
       });
       if (!res.ok) throw new Error("Failed to save");
-      toast({ title: "Saved", description: "Seed votes updated" });
+      toast("Saved", { description: "Seed votes updated" });
       setOpinionSeedEdits(prev => { const next = { ...prev }; delete next[pollId]; return next; });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/opinion-polls"] });
     } catch {
-      toast({ title: "Save Failed", variant: "destructive" });
+      toast.error("Save Failed");
     } finally {
       setSavingRowIds(prev => { const next = new Set(prev); next.delete(pollId); return next; });
     }
@@ -2448,13 +2387,13 @@ export default function AdminDashboard() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "Insight Deleted", description: "Insight removed successfully" });
+      toast("Insight Deleted", { description: "Insight removed successfully" });
       setShowDeleteConfirm(false);
       setDeleteTarget(null);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/moderation/insights"] });
     },
     onError: (error: any) => {
-      toast({ title: "Delete Failed", description: error.message, variant: "destructive" });
+      toast.error("Delete Failed", { description: error.message });
     },
   });
 
@@ -2465,13 +2404,13 @@ export default function AdminDashboard() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "Comment Deleted", description: "Comment removed successfully" });
+      toast("Comment Deleted", { description: "Comment removed successfully" });
       setShowDeleteConfirm(false);
       setDeleteTarget(null);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/moderation/comments"] });
     },
     onError: (error: any) => {
-      toast({ title: "Delete Failed", description: error.message, variant: "destructive" });
+      toast.error("Delete Failed", { description: error.message });
     },
   });
 
@@ -2486,20 +2425,13 @@ export default function AdminDashboard() {
       if (!res.ok) throw new Error("Failed to run diagnostics");
       const data = await res.json();
       setEntityDiagResults(data.results);
-      toast({
-        title: "Entity Diagnostics Complete",
-        description: `Analyzed ${data.total} celebrities`,
-      });
+      toast("Entity Diagnostics Complete", { description: `Analyzed ${data.total} celebrities` });
     } catch (error: any) {
-      toast({
-        title: "Diagnostics Failed",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast.error("Diagnostics Failed", { description: error.message });
     } finally {
       setEntityDiagLoading(false);
     }
-  }, [toast]);
+  }, []);
 
   const searchCelebrities = useCallback(async (query: string) => {
     if (!query || query.length < 2) {
@@ -2682,11 +2614,7 @@ export default function AdminDashboard() {
       })
       .catch((error) => {
         console.error("Failed to load seed approval breakdown", error);
-        toast({
-          title: "Seed votes unavailable",
-          description: "Could not load baseline seed votes. You can still edit standard fields.",
-          variant: "destructive",
-        });
+        toast.error("Seed votes unavailable", { description: "Could not load baseline seed votes. You can still edit standard fields." });
       })
       .finally(() => setSeedApprovalLoading(false));
   };
@@ -2840,7 +2768,7 @@ export default function AdminDashboard() {
         }
       }).catch((err) => {
         console.error("[AdminDashboard] Failed to fetch celebrity for poll:", err);
-        toast({ title: "Could not load celebrity name", description: "Using ID fallback.", variant: "destructive" });
+        toast.error("Could not load celebrity name", { description: "Using ID fallback." });
         setCelebritySearchInput(pid.slice(0, 8) + "...");
         setSelectedCelebrityName(pid.slice(0, 8) + "...");
       });
@@ -2878,9 +2806,9 @@ export default function AdminDashboard() {
       }
       const data = await res.json();
       setPollForm(prev => ({ ...prev, [field]: data.content }));
-      toast({ title: "Draft generated", description: "Review and edit before saving." });
+      toast("Draft generated", { description: "Review and edit before saving." });
     } catch (err: any) {
-      toast({ title: "Generation failed", description: err.message, variant: "destructive" });
+      toast.error("Generation failed", { description: err.message });
     } finally {
       setLoading(false);
     }
@@ -2903,9 +2831,9 @@ export default function AdminDashboard() {
       }
       const data = await res.json();
       setOpinionPollForm(prev => ({ ...prev, [field]: data.content }));
-      toast({ title: "Draft generated", description: "Review and edit before saving." });
+      toast("Draft generated", { description: "Review and edit before saving." });
     } catch (err: any) {
-      toast({ title: "Generation failed", description: err.message, variant: "destructive" });
+      toast.error("Generation failed", { description: err.message });
     } finally {
       setLoading(false);
     }
@@ -2926,9 +2854,9 @@ export default function AdminDashboard() {
       }
       const data = await res.json();
       setMatchupForm((prev) => ({ ...prev, description: data.content }));
-      toast({ title: "Draft generated", description: "Review and edit before saving." });
+      toast("Draft generated", { description: "Review and edit before saving." });
     } catch (err: any) {
-      toast({ title: "Generation failed", description: err.message, variant: "destructive" });
+      toast.error("Generation failed", { description: err.message });
     } finally {
       setIsGeneratingMatchupDescription(false);
     }
@@ -3653,9 +3581,9 @@ export default function AdminDashboard() {
                               const data = await resp.json();
                               queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
                               setRwSelectedIds(new Set());
-                              toast({ title: "Markets Published", description: `${data.updated} markets set to live.` });
+                              toast("Markets Published", { description: `${data.updated} markets set to live.` });
                             } catch {
-                              toast({ title: "Error", description: "Failed to publish markets.", variant: "destructive" });
+                              toast.error("Error", { description: "Failed to publish markets." });
                             } finally {
                               setRwBatchPublishing(false);
                             }
@@ -3681,9 +3609,9 @@ export default function AdminDashboard() {
                               const data = await resp.json();
                               queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
                               setRwSelectedIds(new Set());
-                              toast({ title: "Markets Archived", description: `${data.updated} markets archived.` });
+                              toast("Markets Archived", { description: `${data.updated} markets archived.` });
                             } catch {
-                              toast({ title: "Error", description: "Failed to archive markets.", variant: "destructive" });
+                              toast.error("Error", { description: "Failed to archive markets." });
                             } finally {
                               setRwBatchPublishing(false);
                             }
@@ -4702,7 +4630,7 @@ export default function AdminDashboard() {
                                       method: "PATCH",
                                       body: JSON.stringify({ status: "archived" }),
                                     }).then(() => {
-                                      toast({ title: "Poll Archived" });
+                                      toast("Poll Archived");
                                       queryClient.invalidateQueries({ queryKey: ["/api/admin/trending-polls"] });
                                     });
                                   }}

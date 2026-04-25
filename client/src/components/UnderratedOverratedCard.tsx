@@ -7,9 +7,9 @@ import { normalizeMarketCategory } from "@shared/constants";
 import { ArrowUp, ArrowDown, Minus, Users, Loader2, BarChart2, ChevronRight } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { isUnauthorizedApiError, signInToVoteToastOptions } from "@/lib/signInToVoteToast";
+import { isUnauthorizedApiError, signInToVoteToastOptions, signInToVoteTitle } from "@/lib/signInToVoteToast";
 import { navigateToLogin } from "@/lib/authReturn";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { Link, useLocation } from "wouter";
 
@@ -53,9 +53,7 @@ export function UnderratedOverratedCard({
   const [localVote, setLocalVote] = useState<VoteType | null>(
     person.userValueVote ?? null
   );
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
-  const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();  const [, setLocation] = useLocation();
   const { user } = useAuth();
 
   const totalVotes = (person.underratedCount ?? 0) + (person.overratedCount ?? 0) + (person.fairlyRatedCount ?? 0);
@@ -79,20 +77,16 @@ export function UnderratedOverratedCard({
     onError: (error: any) => {
       setLocalVote(person.userValueVote ?? null);
       if (isUnauthorizedApiError(error)) {
-        toast({ ...signInToVoteToastOptions(() => navigateToLogin(setLocation)) });
+        toast(signInToVoteTitle, signInToVoteToastOptions(() => navigateToLogin(setLocation)));
       } else {
-        toast({
-          title: "Vote failed",
-          description: error.message || "Something went wrong",
-          variant: "destructive",
-        });
+        toast.error("Vote failed", { description: error.message || "Something went wrong" });
       }
     },
   });
 
   const handleVote = (voteType: VoteType) => {
     if (!user) {
-      toast({ ...signInToVoteToastOptions(() => navigateToLogin(setLocation)) });
+      toast(signInToVoteTitle, signInToVoteToastOptions(() => navigateToLogin(setLocation)));
       return;
     }
     if (!localVote) {

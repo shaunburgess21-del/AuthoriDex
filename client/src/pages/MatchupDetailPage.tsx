@@ -3,7 +3,7 @@ import { handleImageError } from "@/lib/imageResolver";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useLocation, Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { sharePage } from "@/lib/share";
 import { UserMenu } from "@/components/UserMenu";
 import { useXpBurst } from "@/components/XpBurstProvider";
@@ -72,9 +72,7 @@ export default function MatchupDetailPage() {
       return slugParam;
     }
   }, [slugParam]);
-  const [, setLocation] = useLocation();
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
+  const [, setLocation] = useLocation();  const queryClient = useQueryClient();
   const { trigger: triggerXpBurst } = useXpBurst();
   const { user, isLoggedIn } = useAuth();
 
@@ -106,10 +104,10 @@ export default function MatchupDetailPage() {
       if (data?.xp?.xpAwarded) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }
-      toast({ title: "Vote Recorded", description: "Your vote has been counted." });
+      toast("Vote Recorded", { description: "Your vote has been counted." });
     },
     onError: () => {
-      toast({ title: "Error", description: "Failed to cast vote. Please sign in.", variant: "destructive" });
+      toast.error("Error", { description: "Failed to cast vote. Please sign in." });
     },
   });
 

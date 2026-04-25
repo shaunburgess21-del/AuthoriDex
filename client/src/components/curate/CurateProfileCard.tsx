@@ -7,9 +7,9 @@ import { PersonAvatar } from "@/components/PersonAvatar";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { isUnauthorizedApiError, signInToVoteToastOptions } from "@/lib/signInToVoteToast";
+import { isUnauthorizedApiError, signInToVoteToastOptions, signInToVoteTitle } from "@/lib/signInToVoteToast";
 import { navigateToLogin } from "@/lib/authReturn";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation } from "wouter";
 import { Check, ChevronRight, Camera, Eye, RefreshCw, User } from "lucide-react";
@@ -106,9 +106,7 @@ export function CurateProfileCard({
   const [showResults, setShowResults] = useState(false);
   const [isEditingVote, setIsEditingVote] = useState(false);
   const [isVotePending, setIsVotePending] = useState(false);
-  const [resultMessage, setResultMessage] = useState<"recorded" | "saved">("recorded");
-  const { toast } = useToast();
-  const [, setLocation] = useLocation();
+  const [resultMessage, setResultMessage] = useState<"recorded" | "saved">("recorded");  const [, setLocation] = useLocation();
   const { user } = useAuth();
   const imageQueryKey = useMemo(() => ["/api/people", person.id, "images"] as const, [person.id]);
 
@@ -152,7 +150,7 @@ export function CurateProfileCard({
     if (selectedPhoto || isVotePending) return;
 
     if (!user) {
-      toast({ ...signInToVoteToastOptions(() => navigateToLogin(setLocation)) });
+      toast(signInToVoteTitle, signInToVoteToastOptions(() => navigateToLogin(setLocation)));
       return;
     }
 
@@ -183,14 +181,10 @@ export function CurateProfileCard({
       setIsEditingVote(false);
       setResultMessage(persistedSelectedPhoto ? "saved" : "recorded");
       if (isUnauthorizedApiError(error)) {
-        toast({ ...signInToVoteToastOptions(() => navigateToLogin(setLocation)) });
+        toast(signInToVoteTitle, signInToVoteToastOptions(() => navigateToLogin(setLocation)));
       } else {
         const message = error instanceof Error ? error.message : "Failed to record vote";
-        toast({
-          title: "Error",
-          description: message,
-          variant: "destructive",
-        });
+        toast.error("Error", { description: message });
       }
     }
   };

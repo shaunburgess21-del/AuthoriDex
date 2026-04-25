@@ -56,7 +56,7 @@ import {
   type FilterCategory,
 } from "@shared/constants";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { ValueVotePerson } from "@/components/UnderratedOverratedCard";
 
@@ -609,11 +609,7 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
       return Number(b.fameIndex ?? 0) - Number(a.fameIndex ?? 0);
     }),
     [valueCelebrities, categoryFilter, searchQuery]
-  );
-
-  const { toast } = useToast();
-  
-  const valueVoteMutation = useMutation({
+  );  const valueVoteMutation = useMutation({
     mutationFn: async ({ personId, vote }: { personId: string; vote: 'underrated' | 'overrated' }) => {
       return apiRequest('POST', `/api/celebrity/${personId}/value-vote`, { vote });
     },
@@ -630,11 +626,7 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
         delete next[variables.personId];
         return next;
       });
-      toast({
-        title: "Vote failed",
-        description: error.message?.includes("401") ? "Please sign in to vote" : (error.message || "Failed to submit vote"),
-        variant: "destructive",
-      });
+      toast.error("Vote failed", { description: error.message?.includes("401") ? "Please sign in to vote" : (error.message || "Failed to submit vote") });
     },
   });
 
@@ -657,13 +649,9 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
         setInductionVotes((prev) => new Set(prev).add(id));
       },
       onError: (error: any) => {
-        toast({
-          title: "Vote failed",
-          description: error.message?.includes("401")
+        toast.error("Vote failed", { description: error.message?.includes("401")
             ? "Please sign in to vote"
-            : error.message || "Failed to submit vote",
-          variant: "destructive",
-        });
+            : error.message || "Failed to submit vote" });
       },
     });
   };

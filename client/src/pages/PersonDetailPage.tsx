@@ -50,7 +50,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { TrendingPerson } from "@shared/schema";
 import { normalizeMarketCategory } from "@shared/constants";
 import { useAuth } from "@/contexts/AuthContext";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { sharePage } from "@/lib/share";
 import { useFavorites } from "@/hooks/useFavorites";
 import { formatNumber, getApprovalColor } from "@/lib/formatNumber";
@@ -58,7 +58,7 @@ import { WhyTrendingCard } from "@/components/WhyTrendingCard";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { profileSectionGridClass } from "@/lib/profileSectionGridClass";
-import { isUnauthorizedApiError, signInToVoteToastOptions } from "@/lib/signInToVoteToast";
+import { isUnauthorizedApiError, signInToVoteToastOptions, signInToVoteTitle } from "@/lib/signInToVoteToast";
 import { navigateToLogin } from "@/lib/authReturn";
 import { parseVoteError } from "@/lib/voteErrors";
 import { ViewAllOverlayHeader } from "@/components/ViewAllOverlayHeader";
@@ -739,9 +739,7 @@ function CategoryRankPill({ category, rank, personName }: { category: string; ra
 
 export default function PersonDetailPage() {
   const { user, session } = useAuth();
-  const { trigger: triggerXpBurst } = useXpBurst();
-  const { toast } = useToast();
-  const [, params] = useRoute("/person/:id");
+  const { trigger: triggerXpBurst } = useXpBurst();  const [, params] = useRoute("/person/:id");
   const [location, setLocation] = useLocation();
   const [favoriteLoading, setFavoriteLoading] = useState(false);
   const { isFavorite } = useFavorites();
@@ -856,10 +854,7 @@ export default function PersonDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['/api/matchups'] });
       queryClient.invalidateQueries({ queryKey: ['/api/matchups/user-votes'] });
       const isChange = !!variables.previousVote;
-      toast({
-        title: isChange ? "Vote changed!" : "Vote recorded!",
-        description: isChange ? "Your matchup vote has been updated." : "Your matchup vote has been counted.",
-      });
+      toast(isChange ? "Vote changed!" : "Vote recorded!", { description: isChange ? "Your matchup vote has been updated." : "Your matchup vote has been counted." });
     },
     onError: (error: any, variables) => {
       setLocalMatchupVotes((prev) => {
@@ -872,14 +867,10 @@ export default function PersonDetailPage() {
         return next;
       });
       if (isUnauthorizedApiError(error)) {
-        toast({ ...signInToVoteToastOptions(() => navigateToLogin(setLocation)) });
+        toast(signInToVoteTitle, signInToVoteToastOptions(() => navigateToLogin(setLocation)));
       } else {
         const parsed = parseVoteError(error);
-        toast({
-          title: parsed.retryAfter ? "Slow down" : "Error",
-          description: parsed.message || "Failed to submit vote",
-          variant: "destructive",
-        });
+        toast.error(parsed.retryAfter ? "Slow down" : "Error", { description: parsed.message || "Failed to submit vote" });
       }
     },
   });
@@ -895,10 +886,7 @@ export default function PersonDetailPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/matchups'] });
       queryClient.invalidateQueries({ queryKey: ['/api/matchups/user-votes'] });
-      toast({
-        title: "Vote removed",
-        description: "Your matchup vote has been removed.",
-      });
+      toast("Vote removed", { description: "Your matchup vote has been removed." });
     },
     onError: (error: any, variables) => {
       setLocalMatchupVotes((prev) => {
@@ -911,21 +899,17 @@ export default function PersonDetailPage() {
         return next;
       });
       if (isUnauthorizedApiError(error)) {
-        toast({ ...signInToVoteToastOptions(() => navigateToLogin(setLocation)) });
+        toast(signInToVoteTitle, signInToVoteToastOptions(() => navigateToLogin(setLocation)));
       } else {
         const parsed = parseVoteError(error);
-        toast({
-          title: parsed.retryAfter ? "Slow down" : "Error",
-          description: parsed.message || "Failed to update vote",
-          variant: "destructive",
-        });
+        toast.error(parsed.retryAfter ? "Slow down" : "Error", { description: parsed.message || "Failed to update vote" });
       }
     },
   });
 
   const handleMatchupVote = (matchupId: string, option: "option_a" | "option_b" | "neutral") => {
     if (!user || !session?.access_token) {
-      toast({ ...signInToVoteToastOptions(() => navigateToLogin(setLocation)) });
+      toast(signInToVoteTitle, signInToVoteToastOptions(() => navigateToLogin(setLocation)));
       return;
     }
     const previousVote = matchupUserVotes[matchupId] || null;
@@ -934,7 +918,7 @@ export default function PersonDetailPage() {
 
   const handleMatchupRemoveVote = (matchupId: string) => {
     if (!user || !session?.access_token) {
-      toast({ ...signInToVoteToastOptions(() => navigateToLogin(setLocation)) });
+      toast(signInToVoteTitle, signInToVoteToastOptions(() => navigateToLogin(setLocation)));
       return;
     }
     const previousVote = matchupUserVotes[matchupId];
@@ -1052,11 +1036,7 @@ export default function PersonDetailPage() {
 
   const handleToggleFavorite = async () => {
     if (!user || !session?.access_token) {
-      toast({
-        title: "Sign in required",
-        description: "Please sign in to add favorites",
-        variant: "destructive",
-      });
+      toast.error("Sign in required", { description: "Please sign in to add favorites" });
       navigateToLogin(setLocation);
       return;
     }
@@ -1085,19 +1065,12 @@ export default function PersonDetailPage() {
 
       await queryClient.invalidateQueries({ queryKey: ["/api/me/favorites"] });
 
-      toast({
-        title: isFavorited ? "Removed from favorites" : "Added to favorites",
-        description: isFavorited
+      toast(isFavorited ? "Removed from favorites" : "Added to favorites", { description: isFavorited
           ? `${person.name} has been removed from your favorites`
-          : `${person.name} has been added to your favorites`,
-      });
+          : `${person.name} has been added to your favorites` });
     } catch (error) {
       console.error('Error toggling favorite:', error);
-      toast({
-        title: "Error",
-        description: "Failed to update favorite status",
-        variant: "destructive",
-      });
+      toast.error("Error", { description: "Failed to update favorite status" });
     } finally {
       setFavoriteLoading(false);
     }
@@ -1475,10 +1448,7 @@ export default function PersonDetailPage() {
                             <FeaturedPollCard
                               poll={poll}
                               onVote={(choice) => {
-                                toast({
-                                  title: "Vote Recorded",
-                                  description: `You voted "${choice}" on "${poll.headline}"`,
-                                });
+                                toast("Vote Recorded", { description: `You voted "${choice}" on "${poll.headline}"` });
                               }}
                               onFilterCategory={handleSentimentCategoryFilter}
                               categoryRaceMap={categoryRaceMap}
@@ -1503,10 +1473,7 @@ export default function PersonDetailPage() {
                     title={`All Sentiment Polls about ${person.name}`}
                     polls={featuredPollsForPerson}
                     onVote={(_pollId, _choice) => {
-                      toast({
-                        title: "Vote Recorded",
-                        description: "Your vote has been recorded.",
-                      });
+                      toast("Vote Recorded", { description: "Your vote has been recorded." });
                     }}
                     onFilterCategory={handleSentimentCategoryFilter}
                     categoryRaceMap={categoryRaceMap}

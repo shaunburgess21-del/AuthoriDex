@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { useAuth } from "@/contexts/AuthContext";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getSupabase } from "@/lib/supabase";
 import { Crown, Check, X, Loader2, Lock, TicketCheck, HelpCircle, Clock } from "lucide-react";
@@ -46,9 +46,7 @@ export function JackpotEntryModal({
   bettingCutoff,
   isCutoffPassed,
 }: JackpotEntryModalProps) {
-  const { session, loading, refreshProfile } = useAuth();
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
+  const { session, loading, refreshProfile } = useAuth();  const queryClient = useQueryClient();
   const { trigger: triggerXpBurst } = useXpBurst();
   const [scoreInput, setScoreInput] = useState("");
   const [availabilityStatus, setAvailabilityStatus] = useState<"idle" | "checking" | "available" | "taken">("idle");
@@ -181,11 +179,7 @@ export function JackpotEntryModal({
         queryClient.invalidateQueries({ queryKey: ["/api/native-markets", marketId, "jackpot-taken-numbers"] });
         return;
       }
-      toast({
-        title: "Entry failed",
-        description: error.message || "Could not place jackpot entry",
-        variant: "destructive",
-      });
+      toast.error("Entry failed", { description: error.message || "Could not place jackpot entry" });
     },
   });
 

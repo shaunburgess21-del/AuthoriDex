@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation } from "wouter";
 import { navigateToLogin } from "@/lib/authReturn";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { apiRequest } from "@/lib/queryClient";
 import { formatTimeAgo } from "@/lib/formatDate";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
@@ -76,7 +76,6 @@ export function CardComments({
 }: CardCommentsProps) {
   const { user, isLoggedIn, profile } = useAuth();
   const [, setLocation] = useLocation();
-  const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const [commentBody, setCommentBody] = useState("");
@@ -113,10 +112,10 @@ export function CardComments({
       if (entityType === "opinion-poll") {
         queryClient.invalidateQueries({ queryKey: [base, slug] });
       }
-      toast({ title: "Comment Posted" });
+      toast("Comment Posted");
     },
     onError: () => {
-      toast({ title: "Error", description: "Failed to post comment. Please sign in.", variant: "destructive" });
+      toast.error("Error", { description: "Failed to post comment. Please sign in." });
     },
   });
 
@@ -155,7 +154,7 @@ export function CardComments({
       if (context?.previousComments) {
         queryClient.setQueryData(queryKey, context.previousComments);
       }
-      toast({ title: "Error", description: "Failed to vote. Please sign in.", variant: "destructive" });
+      toast.error("Error", { description: "Failed to vote. Please sign in." });
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey });
@@ -168,11 +167,11 @@ export function CardComments({
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "Report submitted", description: "Thank you. An admin will review this comment." });
+      toast("Report submitted", { description: "Thank you. An admin will review this comment." });
       setDrawerComment(null);
     },
     onError: () => {
-      toast({ title: "Error", description: "Failed to report. Please sign in.", variant: "destructive" });
+      toast.error("Error", { description: "Failed to report. Please sign in." });
     },
   });
 

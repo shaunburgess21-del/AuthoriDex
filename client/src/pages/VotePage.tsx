@@ -69,8 +69,9 @@ import {
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
-import { isUnauthorizedApiError, signInToVoteToastOptions } from "@/lib/signInToVoteToast";
-import { useToast } from "@/hooks/use-toast";
+import { isUnauthorizedApiError, signInToVoteToastOptions, signInToVoteTitle } from "@/lib/signInToVoteToast";
+import { toast } from "sonner";
+import { CountdownDescription } from "@/components/CountdownDescription";
 import { useLocation, Link } from "wouter";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import {
@@ -485,7 +486,6 @@ function CurateProfileCard({
   const [showShimmer, setShowShimmer] = useState(false);
   const [showResults, setShowResults] = useState(false);
   const timeoutRef2 = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { toast } = useToast();
   const [, setLocation] = useLocation();
   const imageQueryKey = useMemo(() => ['/api/people', poll.personId, 'images'] as const, [poll.personId]);
 
@@ -521,15 +521,10 @@ function CurateProfileCard({
     },
     onError: (error: Error) => {
       if (isUnauthorizedApiError(error)) {
-        toast({ ...signInToVoteToastOptions(() => navigateToLogin(setLocation)) });
+        toast(signInToVoteTitle, signInToVoteToastOptions(() => navigateToLogin(setLocation)));
       } else {
         const parsed = parseVoteError(error);
-        toast({
-          title: "Couldn't record vote",
-          description: parsed.message,
-          variant: "destructive",
-          countdown: parsed.retryAfter,
-        });
+        toast.error("Couldn't record vote", { description: parsed.retryAfter ? <CountdownDescription seconds={parsed.retryAfter} text={parsed.message} /> : parsed.message });
       }
     },
   });
@@ -1204,7 +1199,6 @@ function clearOverlayScroll(name: string) {
 
 export default function VotePage() {
   const [, setLocation] = useLocation();
-  const { toast } = useToast();
   const { user } = useAuth();
   const voteOnboardingRef = useRef<OnboardingDrawerHandle>(null);
   const { favorites, favoriteIds, isAuthenticated } = useFavorites();
@@ -1303,15 +1297,10 @@ export default function VotePage() {
         return next;
       });
       if (isUnauthorizedApiError(err)) {
-        toast({ ...signInToVoteToastOptions(() => navigateToLogin(setLocation, { voteUi: voteLoginSnapshotRef.current })) });
+        toast(signInToVoteTitle, signInToVoteToastOptions(() => navigateToLogin(setLocation, { voteUi: voteLoginSnapshotRef.current })));
       } else {
         const parsed = parseVoteError(err);
-        toast({
-          title: "Couldn't record vote",
-          description: parsed.message,
-          variant: "destructive",
-          countdown: parsed.retryAfter,
-        });
+        toast.error("Couldn't record vote", { description: parsed.retryAfter ? <CountdownDescription seconds={parsed.retryAfter} text={parsed.message} /> : parsed.message });
       }
     },
   });
@@ -1538,10 +1527,7 @@ export default function VotePage() {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }
       const isChange = !!variables.previousVote;
-      toast({
-        title: isChange ? "Vote changed!" : "Vote recorded!",
-        description: isChange ? "Your Matchup vote has been updated." : "Your Matchup vote has been counted.",
-      });
+      toast(isChange ? "Vote changed!" : "Vote recorded!", { description: isChange ? "Your Matchup vote has been updated." : "Your Matchup vote has been counted." });
     },
     onError: (error: any, variables) => {
       if (variables.previousVote) {
@@ -1554,18 +1540,13 @@ export default function VotePage() {
         });
       }
       if (isUnauthorizedApiError(error)) {
-        toast({ ...signInToVoteToastOptions(() => navigateToLogin(setLocation, { voteUi: voteLoginSnapshotRef.current })) });
+        toast(signInToVoteTitle, signInToVoteToastOptions(() => navigateToLogin(setLocation, { voteUi: voteLoginSnapshotRef.current })));
       } else {
         const parsed = parseVoteError(error);
         if (parsed.retryAfter) {
           setRateLimitedUntil(Date.now() + parsed.retryAfter * 1000);
         }
-        toast({
-          title: "Couldn't record vote",
-          description: parsed.message,
-          variant: "destructive",
-          countdown: parsed.retryAfter,
-        });
+        toast.error("Couldn't record vote", { description: parsed.retryAfter ? <CountdownDescription seconds={parsed.retryAfter} text={parsed.message} /> : parsed.message });
       }
     },
   });
@@ -1578,26 +1559,18 @@ export default function VotePage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/matchups'] });
       queryClient.invalidateQueries({ queryKey: ['/api/matchups/user-votes'] });
-      toast({
-        title: "Vote removed",
-        description: "Your Matchup vote has been removed.",
-      });
+      toast("Vote removed", { description: "Your Matchup vote has been removed." });
     },
     onError: (error: any, variables) => {
       setLocalMatchupVotes((prev: Record<string, string>) => ({ ...prev, [variables.matchupId]: variables.previousVote }));
       if (isUnauthorizedApiError(error)) {
-        toast({ ...signInToVoteToastOptions(() => navigateToLogin(setLocation, { voteUi: voteLoginSnapshotRef.current })) });
+        toast(signInToVoteTitle, signInToVoteToastOptions(() => navigateToLogin(setLocation, { voteUi: voteLoginSnapshotRef.current })));
       } else {
         const parsed = parseVoteError(error);
         if (parsed.retryAfter) {
           setRateLimitedUntil(Date.now() + parsed.retryAfter * 1000);
         }
-        toast({
-          title: "Couldn't record vote",
-          description: parsed.message,
-          variant: "destructive",
-          countdown: parsed.retryAfter,
-        });
+        toast.error("Couldn't record vote", { description: parsed.retryAfter ? <CountdownDescription seconds={parsed.retryAfter} text={parsed.message} /> : parsed.message });
       }
     },
   });
@@ -1993,7 +1966,7 @@ export default function VotePage() {
 
   const handleToggleVote = (candidateId: string) => {
     if (!user) {
-      toast({ ...signInToVoteToastOptions(() => navigateToLogin(setLocation, { voteUi: voteLoginSnapshotRef.current })) });
+      toast(signInToVoteTitle, signInToVoteToastOptions(() => navigateToLogin(setLocation, { voteUi: voteLoginSnapshotRef.current })));
       return;
     }
     if (votedIds.has(candidateId)) return;
@@ -2020,15 +1993,10 @@ export default function VotePage() {
     onError: (error: any) => {
       queryClient.invalidateQueries({ queryKey: ['/api/trending-polls'] });
       if (isUnauthorizedApiError(error)) {
-        toast({ ...signInToVoteToastOptions(() => navigateToLogin(setLocation, { voteUi: voteLoginSnapshotRef.current })) });
+        toast(signInToVoteTitle, signInToVoteToastOptions(() => navigateToLogin(setLocation, { voteUi: voteLoginSnapshotRef.current })));
       } else {
         const parsed = parseVoteError(error);
-        toast({
-          title: "Couldn't record vote",
-          description: parsed.message,
-          variant: "destructive",
-          countdown: parsed.retryAfter,
-        });
+        toast.error("Couldn't record vote", { description: parsed.retryAfter ? <CountdownDescription seconds={parsed.retryAfter} text={parsed.message} /> : parsed.message });
       }
     },
   });
@@ -2038,7 +2006,7 @@ export default function VotePage() {
     choice: 'support' | 'neutral' | 'oppose',
   ): Promise<void> => {
     if (!user) {
-      toast({ ...signInToVoteToastOptions(() => navigateToLogin(setLocation, { voteUi: voteLoginSnapshotRef.current })) });
+      toast(signInToVoteTitle, signInToVoteToastOptions(() => navigateToLogin(setLocation, { voteUi: voteLoginSnapshotRef.current })));
       throw new Error("Not authenticated");
     }
     const topic = dbPolls.find((t: any) => t.id === topicId);
@@ -2050,7 +2018,7 @@ export default function VotePage() {
 
   const openSuggestModal = (open: () => void) => {
     if (!user) {
-      toast({ title: "Sign in required", description: "Please sign in to suggest content.", variant: "destructive" });
+      toast.error("Sign in required", { description: "Please sign in to suggest content." });
       return;
     }
     open();
@@ -2105,16 +2073,9 @@ export default function VotePage() {
       setPollSubjectImagePreview(null);
       setPollDuration("none");
       setPollCustomDate("");
-      toast({
-        title: "Poll suggested!",
-        description: "We'll review it shortly. You earned 5 XP!",
-      });
+      toast("Poll suggested!", { description: "We'll review it shortly. You earned 5 XP!" });
     } catch (err: any) {
-      toast({
-        title: "Submission failed",
-        description: err?.message ?? "Something went wrong. Please try again.",
-        variant: "destructive",
-      });
+      toast.error("Submission failed", { description: err?.message ?? "Something went wrong. Please try again." });
     } finally {
       setIsSuggestSubmitting(false);
     }
@@ -2169,16 +2130,9 @@ export default function VotePage() {
       setMatchupContenderB({ type: null, name: "" });
       setMatchupCategory("");
       setMatchupSuggestOpen(false);
-      toast({
-        title: "Matchup suggested!",
-        description: "We'll review it shortly. You earned 5 XP!",
-      });
+      toast("Matchup suggested!", { description: "We'll review it shortly. You earned 5 XP!" });
     } catch (err: any) {
-      toast({
-        title: "Submission failed",
-        description: err?.message ?? "Something went wrong. Please try again.",
-        variant: "destructive",
-      });
+      toast.error("Submission failed", { description: err?.message ?? "Something went wrong. Please try again." });
     } finally {
       setIsSuggestSubmitting(false);
     }
@@ -2205,16 +2159,9 @@ export default function VotePage() {
       setSuggestCategory("");
       setSuggestReason("");
       setInductionSuggestOpen(false);
-      toast({
-        title: "Candidate suggested!",
-        description: "We'll review it shortly. You earned 5 XP!",
-      });
+      toast("Candidate suggested!", { description: "We'll review it shortly. You earned 5 XP!" });
     } catch (err: any) {
-      toast({
-        title: "Submission failed",
-        description: err?.message ?? "Something went wrong. Please try again.",
-        variant: "destructive",
-      });
+      toast.error("Submission failed", { description: err?.message ?? "Something went wrong. Please try again." });
     } finally {
       setIsSuggestSubmitting(false);
     }
@@ -2256,16 +2203,9 @@ export default function VotePage() {
       setCurateImageFile(null);
       setCurateImageSource("");
       setCurateSuggestOpen(false);
-      toast({
-        title: "Image suggested!",
-        description: "We'll review it shortly. You earned 5 XP!",
-      });
+      toast("Image suggested!", { description: "We'll review it shortly. You earned 5 XP!" });
     } catch (err: any) {
-      toast({
-        title: "Submission failed",
-        description: err?.message ?? "Something went wrong. Please try again.",
-        variant: "destructive",
-      });
+      toast.error("Submission failed", { description: err?.message ?? "Something went wrong. Please try again." });
     } finally {
       setIsSuggestSubmitting(false);
     }
@@ -2274,11 +2214,7 @@ export default function VotePage() {
   const handleOpinionSuggestSubmit = async () => {
     const filledOptions = opinionSuggestOptions.filter((o) => o.name.trim());
     if (filledOptions.length < OPINION_POLL_MIN_OPTIONS) {
-      toast({
-        title: "Not enough options",
-        description: `Please provide at least ${OPINION_POLL_MIN_OPTIONS} options.`,
-        variant: "destructive",
-      });
+      toast.error("Not enough options", { description: `Please provide at least ${OPINION_POLL_MIN_OPTIONS} options.` });
       return;
     }
     setIsSuggestSubmitting(true);
@@ -2332,16 +2268,9 @@ export default function VotePage() {
       setOpinionSuggestDuration("none");
       setOpinionSuggestCustomDate("");
       setOpinionSuggestOpen(false);
-      toast({
-        title: "Poll suggested!",
-        description: "We'll review it shortly. You earned 5 XP!",
-      });
+      toast("Poll suggested!", { description: "We'll review it shortly. You earned 5 XP!" });
     } catch (err: any) {
-      toast({
-        title: "Submission failed",
-        description: err?.message ?? "Something went wrong. Please try again.",
-        variant: "destructive",
-      });
+      toast.error("Submission failed", { description: err?.message ?? "Something went wrong. Please try again." });
     } finally {
       setIsSuggestSubmitting(false);
     }

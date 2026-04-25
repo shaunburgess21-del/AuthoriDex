@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 export type PrivacyItemType =
   | "matchup"
@@ -49,7 +49,6 @@ export function voteTypeToPrivacyType(voteType: string): PrivacyItemType | null 
  */
 export function useItemVisibility() {
   const queryClient = useQueryClient();
-  const { toast } = useToast();
 
   const mutation = useMutation<
     { hidden: boolean },
@@ -127,10 +126,8 @@ export function useItemVisibility() {
       if (context?.previousPredictions !== undefined) {
         queryClient.setQueryData(PREDICTIONS_KEY, context.previousPredictions);
       }
-      toast({
-        title: "Couldn't update visibility",
+      toast.error("Couldn't update visibility", {
         description: "Please try again in a moment.",
-        variant: "destructive",
       });
     },
 

@@ -9,9 +9,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { isUnauthorizedApiError, signInToVoteToastOptions } from "@/lib/signInToVoteToast";
+import { isUnauthorizedApiError, signInToVoteToastOptions, signInToVoteTitle } from "@/lib/signInToVoteToast";
 import { navigateToLogin } from "@/lib/authReturn";
 
 export interface InductionCandidate {
@@ -155,9 +155,7 @@ export function InductionLeaderboardSlice({
   votedCandidates = new Set(),
   onToggleVote,
 }: InductionLeaderboardSliceProps) {
-  const { user } = useAuth();
-  const { toast } = useToast();
-  const [, setLocation] = useLocation();
+  const { user } = useAuth();  const [, setLocation] = useLocation();
 
   const { data: inductionData } = useQuery<any>({
     queryKey: ['/api/vote/induction'],
@@ -196,13 +194,9 @@ export function InductionLeaderboardSlice({
         return next;
       });
       if (isUnauthorizedApiError(err)) {
-        toast({ ...signInToVoteToastOptions(() => navigateToLogin(setLocation)) });
+        toast(signInToVoteTitle, signInToVoteToastOptions(() => navigateToLogin(setLocation)));
       } else {
-        toast({
-          title: "Vote failed",
-          description: err instanceof Error ? err.message : "Something went wrong",
-          variant: "destructive",
-        });
+        toast.error("Vote failed", { description: err instanceof Error ? err.message : "Something went wrong" });
       }
     },
   });
@@ -224,7 +218,7 @@ export function InductionLeaderboardSlice({
 
   const handleVote = onToggleVote || ((id: string) => {
     if (!user) {
-      toast({ ...signInToVoteToastOptions(() => navigateToLogin(setLocation)) });
+      toast(signInToVoteTitle, signInToVoteToastOptions(() => navigateToLogin(setLocation)));
       return;
     }
     if (localVotedIds.has(id)) return;

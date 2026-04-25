@@ -2,9 +2,9 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { apiRequest } from "@/lib/queryClient";
-import { isUnauthorizedApiError, signInToVoteToastOptions } from "@/lib/signInToVoteToast";
+import { isUnauthorizedApiError, signInToVoteToastOptions, signInToVoteTitle } from "@/lib/signInToVoteToast";
 import { navigateToLogin } from "@/lib/authReturn";
 import { goBack } from "@/lib/goBack";
 import { UserMenu } from "@/components/UserMenu";
@@ -67,9 +67,7 @@ const FILTER_CATEGORIES = CATEGORIES_WITH_FILTERS
   .map(c => ({ value: c.id, label: c.label }));
 
 export default function InductionQueuePage() {
-  const [, setLocation] = useLocation();
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
+  const [, setLocation] = useLocation();  const queryClient = useQueryClient();
   const { user, isLoggedIn } = useAuth();
   const { trigger: triggerXpBurst } = useXpBurst();
   const raceMap = useCategoryRaceMap();
@@ -121,16 +119,16 @@ export default function InductionQueuePage() {
         return next;
       });
       if (isUnauthorizedApiError(err)) {
-        toast({ ...signInToVoteToastOptions(() => navigateToLogin(setLocation)) });
+        toast(signInToVoteTitle, signInToVoteToastOptions(() => navigateToLogin(setLocation)));
       } else {
-        toast({ title: "Vote failed", description: err.message || "Something went wrong", variant: "destructive" });
+        toast.error("Vote failed", { description: err.message || "Something went wrong" });
       }
     },
   });
 
   const handleVote = (id: string) => {
     if (!user) {
-      toast({ ...signInToVoteToastOptions(() => navigateToLogin(setLocation)) });
+      toast(signInToVoteTitle, signInToVoteToastOptions(() => navigateToLogin(setLocation)));
       return;
     }
     if (votedIds.has(id)) return;

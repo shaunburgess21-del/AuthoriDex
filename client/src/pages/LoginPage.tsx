@@ -1,3 +1,11 @@
+/**
+ * VoxDex sign-in / sign-up entry point.
+ * - Signin: email + password, with an "email code instead" fallback link.
+ * - Signup: email + password (required, ≥6 chars). Verification happens at /login/verify.
+ * - Google OAuth uses the existing snapshot/return mechanism in `authReturn.ts`.
+ * The `emailAuthInProgressRef` blocks the OAuth-return effect from racing any
+ * email-flow submit while we navigate to the verify page.
+ */
 import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { getSupabase } from "@/lib/supabase";
@@ -9,24 +17,31 @@ import {
   clearStaleAuthReturnSnapshotOnDirectVisit,
   markAuthNavIntent,
 } from "@/lib/authReturn";
+import { setPending } from "@/lib/pendingAuth";
+import { mapAuthError } from "@/lib/authErrors";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { Mail, Chrome } from "lucide-react";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
 
 export default function LoginPage() {
   const [, setLocation] = useLocation();
-  const { toast } = useToast();
   const { user, loading: authLoading } = useAuth();
   const params = new URLSearchParams(window.location.search);
   const [isLogin, setIsLogin] = useState(params.get("mode") !== "signup");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(params.get("email") ?? "");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  /** Prevents OAuth redirect effect from consuming snapshot while email sign-in handler runs. */
+  const [otpSending, setOtpSending] = useState(false);
+  const [fieldError, setFieldError] = useState<{
+    field: "email" | "password" | "form";
+    message: string;
+    code?: string;
+  } | null>(null);
+  /** Prevents OAuth redirect effect from consuming snapshot while any email-flow submit is in flight. */
   const emailAuthInProgressRef = useRef(false);
 
   // On direct /login visit (bookmark, refresh, external link) drop any stale snapshot so
@@ -46,46 +61,138 @@ export default function LoginPage() {
     redirectAfterLogin(setLocation);
   }, [user, authLoading, setLocation]);
 
+  // Keep mode in sync with the querystring (mainly for the Edit-email return from /login/verify).
+  useEffect(() => {
+    const handler = () => {
+      const next = new URLSearchParams(window.location.search);
+      setIsLogin(next.get("mode") !== "signup");
+      const qsEmail = next.get("email");
+      if (qsEmail) setEmail(qsEmail);
+    };
+    window.addEventListener("popstate", handler);
+    return () => window.removeEventListener("popstate", handler);
+  }, []);
+
+  const sendOtp = async (targetEmail: string): Promise<boolean> => {
+    setOtpSending(true);
+    emailAuthInProgressRef.current = true;
+    try {
+      const supabase = await getSupabase();
+      const { error } = await supabase.auth.signInWithOtp({
+        email: targetEmail,
+        options: { shouldCreateUser: true },
+      });
+      if (error) throw error;
+      setPending(targetEmail, "otp");
+      toast("Check your email", {
+        description: `We sent a 6-digit code to ${targetEmail}.`,
+      });
+      setLocation("/login/verify");
+      return true;
+    } catch (err) {
+      const mapped = mapAuthError(err);
+      toast.error(mapped.message, { description: mapped.suggestion });
+      return false;
+    } finally {
+      setOtpSending(false);
+      emailAuthInProgressRef.current = false;
+    }
+  };
+
+  const handleEmailCodeFallback = async () => {
+    if (!email) {
+      setFieldError({ field: "email", message: "Enter your email above first." });
+      return;
+    }
+    setFieldError(null);
+    await sendOtp(email);
+  };
+
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFieldError(null);
     setLoading(true);
+    emailAuthInProgressRef.current = true;
 
     try {
       const supabase = await getSupabase();
 
       if (isLogin) {
-        emailAuthInProgressRef.current = true;
         const { error } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
 
-        if (error) throw error;
+        if (error) {
+          const mapped = mapAuthError(error);
 
-        toast({
-          title: "Welcome back!",
-          description: "You've successfully signed in.",
-        });
+          // email_not_confirmed → silently resend a signup OTP and continue to /login/verify.
+          if (mapped.code === "email_not_confirmed") {
+            try {
+              await supabase.auth.resend({ type: "signup", email });
+              setPending(email, "password_signup");
+              toast("Verify your email to continue", {
+                description: "We just sent you a fresh 6-digit code.",
+              });
+              setLocation("/login/verify");
+              return;
+            } catch (resendErr) {
+              const m = mapAuthError(resendErr);
+              toast.error(m.message, { description: m.suggestion });
+              return;
+            }
+          }
+
+          // invalid_credentials → inline error with email-code link suggestion.
+          if (mapped.code === "invalid_credentials") {
+            setFieldError({
+              field: "password",
+              message: mapped.message,
+              code: mapped.code,
+            });
+            return;
+          }
+
+          throw error;
+        }
+
+        toast.success("Welcome back!", { description: "You've successfully signed in." });
         redirectAfterLogin(setLocation);
       } else {
-        const { error } = await supabase.auth.signUp({
+        // Signup path — password required.
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
         });
 
-        if (error) throw error;
+        if (error) {
+          const mapped = mapAuthError(error);
+          if (mapped.code === "user_already_registered") {
+            setFieldError({
+              field: "form",
+              message: mapped.message,
+              code: mapped.code,
+            });
+            return;
+          }
+          throw error;
+        }
 
-        toast({
-          title: "Account created!",
-          description: "Please check your email to verify your account.",
-        });
+        // Supabase will return user + null session when email confirmation is on.
+        // Either way, we route to the verify page; AuthContext will pick up the session
+        // when the user submits the OTP.
+        if (data?.user || data?.session) {
+          setPending(email, "password_signup");
+          toast("Account created", {
+            description: `We sent a 6-digit code to ${email}.`,
+          });
+          setLocation("/login/verify");
+          return;
+        }
       }
-    } catch (error: any) {
-      toast({
-        title: "Authentication failed",
-        description: error.message || "An error occurred during authentication.",
-        variant: "destructive",
-      });
+    } catch (error: unknown) {
+      const mapped = mapAuthError(error);
+      toast.error(mapped.message, { description: mapped.suggestion });
     } finally {
       emailAuthInProgressRef.current = false;
       setLoading(false);
@@ -112,14 +219,13 @@ export default function LoginPage() {
       });
 
       if (error) throw error;
-    } catch (error: any) {
-      toast({
-        title: "Google sign-in failed",
-        description: error.message || "An error occurred during Google sign-in.",
-        variant: "destructive",
-      });
+    } catch (error: unknown) {
+      const mapped = mapAuthError(error);
+      toast.error("Google sign-in failed", { description: mapped.message });
     }
   };
+
+  const submitDisabled = loading || otpSending;
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-background">
@@ -134,11 +240,11 @@ export default function LoginPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>{isLogin ? "Welcome Back" : "Create Account"}</CardTitle>
+            <CardTitle>{isLogin ? "Welcome back" : "Create your account"}</CardTitle>
             <CardDescription>
               {isLogin
-                ? "Sign in to access your profile and save votes"
-                : "Join VoxDex to track your favorite celebrities"}
+                ? "Sign in to vote, predict, and track your favorites."
+                : "Join VoxDex in less than a minute."}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -146,6 +252,7 @@ export default function LoginPage() {
               variant="outline"
               className="w-full gap-2"
               onClick={handleGoogleAuth}
+              disabled={submitDisabled}
               data-testid="button-google-signin"
             >
               <Chrome className="h-5 w-5" />
@@ -161,18 +268,27 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <form onSubmit={handleEmailAuth} className="space-y-4">
+            <form onSubmit={handleEmailAuth} className="space-y-4" noValidate>
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
                 <Input
                   id="email"
                   type="email"
+                  autoComplete="email"
                   placeholder="you@example.com"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    if (fieldError?.field === "email") setFieldError(null);
+                  }}
                   required
                   data-testid="input-email"
                 />
+                {fieldError?.field === "email" ? (
+                  <p role="alert" className="text-sm text-destructive">
+                    {fieldError.message}
+                  </p>
+                ) : null}
               </div>
 
               <div className="space-y-2">
@@ -180,30 +296,85 @@ export default function LoginPage() {
                 <Input
                   id="password"
                   type="password"
+                  autoComplete={isLogin ? "current-password" : "new-password"}
                   placeholder="••••••••"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (fieldError?.field === "password") setFieldError(null);
+                  }}
                   required
-                  minLength={6}
+                  minLength={8}
                   data-testid="input-password"
                 />
+                {fieldError?.field === "password" ? (
+                  <p role="alert" className="text-sm text-destructive">
+                    {fieldError.message}{" "}
+                    {fieldError.code === "invalid_credentials" ? (
+                      <button
+                        type="button"
+                        onClick={handleEmailCodeFallback}
+                        className="underline underline-offset-2 hover:text-foreground"
+                        data-testid="link-inline-email-code"
+                      >
+                        Use an email code instead.
+                      </button>
+                    ) : null}
+                  </p>
+                ) : isLogin ? (
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={handleEmailCodeFallback}
+                      disabled={otpSending}
+                      className="text-xs text-muted-foreground hover:text-foreground hover:underline"
+                      data-testid="button-use-email-code"
+                    >
+                      Sign in with email code instead
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">At least 6 characters.</p>
+                )}
               </div>
+
+              {fieldError?.field === "form" ? (
+                <p role="alert" className="text-sm text-destructive">
+                  {fieldError.message}{" "}
+                  {fieldError.code === "user_already_registered" ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsLogin(true);
+                        setFieldError(null);
+                      }}
+                      className="underline underline-offset-2 hover:text-foreground"
+                      data-testid="link-signin-instead"
+                    >
+                      Sign in instead.
+                    </button>
+                  ) : null}
+                </p>
+              ) : null}
 
               <Button
                 type="submit"
                 className="w-full gap-2"
-                disabled={loading}
+                disabled={submitDisabled}
                 data-testid="button-email-submit"
               >
                 <Mail className="h-4 w-4" />
-                {loading ? "Please wait..." : isLogin ? "Sign In" : "Sign Up"}
+                {loading ? "Please wait..." : isLogin ? "Sign in" : "Create account"}
               </Button>
             </form>
 
             <div className="text-center text-sm">
               <button
                 type="button"
-                onClick={() => setIsLogin(!isLogin)}
+                onClick={() => {
+                  setIsLogin(!isLogin);
+                  setFieldError(null);
+                }}
                 className="text-primary hover:underline"
                 data-testid="button-toggle-mode"
               >

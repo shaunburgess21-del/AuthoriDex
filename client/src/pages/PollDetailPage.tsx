@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useLocation, Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { sharePage } from "@/lib/share";
 import { UserMenu } from "@/components/UserMenu";
 import { useXpBurst } from "@/components/XpBurstProvider";
@@ -78,9 +78,7 @@ export default function PollDetailPage() {
     }
   }, [slugParam]);
   const [, setLocation] = useLocation();
-  const { user, isLoggedIn } = useAuth();
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
+  const { user, isLoggedIn } = useAuth();  const queryClient = useQueryClient();
   const { trigger: triggerXpBurst } = useXpBurst();
 
   const pollCommentCount = useCommentCount("poll", slug || "");
@@ -114,16 +112,16 @@ export default function PollDetailPage() {
       if (data?.xp?.xpAwarded) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }
-      toast({ title: "Vote Recorded", description: "Your vote has been counted." });
+      toast("Vote Recorded", { description: "Your vote has been counted." });
     },
     onError: () => {
-      toast({ title: "Error", description: "Failed to cast vote. Please sign in.", variant: "destructive" });
+      toast.error("Error", { description: "Failed to cast vote. Please sign in." });
     },
   });
 
   const handleVote = (choice: string) => {
     if (!isLoggedIn) {
-      toast({ title: "Sign in Required", description: "Please sign in to vote.", variant: "destructive" });
+      toast.error("Sign in Required", { description: "Please sign in to vote." });
       return;
     }
     voteMutation.mutate(choice);

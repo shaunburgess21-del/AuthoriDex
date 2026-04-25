@@ -1,4 +1,4 @@
-import { toast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 export async function sharePage(title: string) {
   const url = window.location.href;
@@ -16,9 +16,8 @@ export async function sharePage(title: string) {
 
   try {
     await navigator.clipboard.writeText(url);
-    const { dismiss } = toast({ title: "Link copied!" });
-    setTimeout(() => dismiss(), 2500);
+    toast.success("Link copied!", { duration: 2500 });
   } catch {
-    toast({ title: "Could not copy link", variant: "destructive" });
+    toast.error("Could not copy link");
   }
 }

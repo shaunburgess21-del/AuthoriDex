@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { Plus, Check, X, Search, Trash2, Edit2 } from "lucide-react";
 
 interface InductionCandidate {
@@ -24,9 +24,7 @@ interface InductionCandidate {
 
 const CATEGORIES = ["Tech", "Music", "Creator", "Sports", "Business", "Politics"];
 
-export function AdminInductionQueue() {
-  const { toast } = useToast();
-  const [searchQuery, setSearchQuery] = useState("");
+export function AdminInductionQueue() {  const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [editCandidate, setEditCandidate] = useState<InductionCandidate | null>(null);
@@ -50,9 +48,9 @@ export function AdminInductionQueue() {
       queryClient.invalidateQueries({ queryKey: ['/api/vote/induction'] });
       setShowCreateDialog(false);
       resetForm();
-      toast({ title: "Candidate Created" });
+      toast("Candidate Created");
     },
-    onError: () => toast({ title: "Failed to create candidate", variant: "destructive" }),
+    onError: () => toast.error("Failed to create candidate"),
   });
 
   const updateMutation = useMutation({
@@ -62,9 +60,9 @@ export function AdminInductionQueue() {
       queryClient.invalidateQueries({ queryKey: ['/api/vote/induction'] });
       setEditCandidate(null);
       resetForm();
-      toast({ title: "Candidate Updated" });
+      toast("Candidate Updated");
     },
-    onError: () => toast({ title: "Failed to update candidate", variant: "destructive" }),
+    onError: () => toast.error("Failed to update candidate"),
   });
 
   const approveMutation = useMutation({
@@ -73,9 +71,9 @@ export function AdminInductionQueue() {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/induction'] });
       queryClient.invalidateQueries({ queryKey: ['/api/vote/induction'] });
       queryClient.invalidateQueries({ queryKey: ['/api/leaderboard'] });
-      toast({ title: "Candidate Approved", description: "Added to leaderboard with all native modules." });
+      toast("Candidate Approved", { description: "Added to leaderboard with all native modules." });
     },
-    onError: () => toast({ title: "Failed to approve candidate", variant: "destructive" }),
+    onError: () => toast.error("Failed to approve candidate"),
   });
 
   const rejectMutation = useMutation({
@@ -83,9 +81,9 @@ export function AdminInductionQueue() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/induction'] });
       queryClient.invalidateQueries({ queryKey: ['/api/vote/induction'] });
-      toast({ title: "Candidate Deactivated" });
+      toast("Candidate Deactivated");
     },
-    onError: () => toast({ title: "Failed to deactivate candidate", variant: "destructive" }),
+    onError: () => toast.error("Failed to deactivate candidate"),
   });
 
   const deleteMutation = useMutation({
@@ -93,9 +91,9 @@ export function AdminInductionQueue() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/induction'] });
       queryClient.invalidateQueries({ queryKey: ['/api/vote/induction'] });
-      toast({ title: "Candidate Deleted" });
+      toast("Candidate Deleted");
     },
-    onError: () => toast({ title: "Failed to delete candidate", variant: "destructive" }),
+    onError: () => toast.error("Failed to delete candidate"),
   });
 
   const resetForm = () => setFormData({ displayName: "", category: "Tech", imageSlug: "", wikiSlug: "", seedVotes: 0 });
