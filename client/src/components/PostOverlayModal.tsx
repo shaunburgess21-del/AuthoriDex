@@ -26,7 +26,9 @@ interface CommunityInsight {
   id: string;
   personId: string;
   userId: string;
-  username: string;
+  username: string | null;
+  fullName: string | null;
+  avatarUrl: string | null;
   content: string;
   sentimentVote?: number | null;
   createdAt: string;
@@ -393,6 +395,7 @@ export function PostOverlayModal({ insight, isOpen, onClose, userVote, onVote }:
           <div className="flex items-start gap-4">
             <UserProfileAvatar
               displayName={insight.username}
+              avatarUrl={insight.avatarUrl}
               className="h-12 w-12 flex-shrink-0"
               fallbackClassName="text-base"
             />

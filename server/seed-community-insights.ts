@@ -18,13 +18,15 @@ export async function seedCommunityInsights() {
       return;
     }
 
-    // Mock user IDs (simulating different Supabase users)
+    // Mock user IDs (simulating different Supabase users). These IDs do not
+    // exist in the profiles table, so the live LEFT JOIN on the GET endpoint
+    // will render them as "[deleted user]" — acceptable for dev fixture data.
     const mockUsers = [
-      { id: "user-001", username: "techfan2024" },
-      { id: "user-002", username: "marketwatcher" },
-      { id: "user-003", username: "innovationlover" },
-      { id: "user-004", username: "skeptic_mike" },
-      { id: "user-005", username: "futurist99" },
+      { id: "user-001" },
+      { id: "user-002" },
+      { id: "user-003" },
+      { id: "user-004" },
+      { id: "user-005" },
     ];
 
     // Delete existing insights for Elon Musk (for clean re-seeding)
@@ -39,31 +41,26 @@ export async function seedCommunityInsights() {
       {
         content: "His work with SpaceX is genuinely revolutionary. Making space travel reusable has changed the entire industry's economics. Regardless of opinions on other ventures, the engineering achievements here are undeniable.",
         userId: mockUsers[0].id,
-        username: mockUsers[0].username,
         sentimentVote: 9, // Very positive - almost perfect score
       },
       {
         content: "The Tesla Cybertruck design is polarizing, but you can't deny the innovation in electric vehicle tech. The 4680 battery cells and structural battery pack are engineering marvels that will influence the entire EV industry.",
         userId: mockUsers[1].id,
-        username: mockUsers[1].username,
         sentimentVote: 7, // Positive
       },
       {
         content: "While I admire the ambition, some of the timelines promised vs. delivered tell a different story. Full Self-Driving has been \"next year\" for almost a decade now. Important to separate the vision from current reality.",
         userId: mockUsers[3].id,
-        username: mockUsers[3].username,
         sentimentVote: 4, // Slightly negative - skeptic
       },
       {
         content: "Neuralink could be transformative for people with paralysis and neurological conditions. The brain-computer interface progress is exciting, though we need to watch the ethics carefully as it develops.",
         userId: mockUsers[4].id,
-        username: mockUsers[4].username,
         sentimentVote: 8, // Positive - optimistic about future
       },
       {
         content: "Love him or hate him, the man moves fast and takes big swings. Not all of them work out, but that's kind of the point with innovation. The Starship development pace is insane compared to traditional aerospace.",
         userId: mockUsers[2].id,
-        username: mockUsers[2].username,
         sentimentVote: 6, // Neutral-positive
       },
     ];
@@ -75,7 +72,6 @@ export async function seedCommunityInsights() {
         .values({
           personId: elonMusk.id,
           userId: insight.userId,
-          username: insight.username,
           content: insight.content,
           sentimentVote: insight.sentimentVote,
         })

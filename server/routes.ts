@@ -2420,35 +2420,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/community-insights/:personId", async (req, res) => {
     try {
       const { personId } = req.params;
-      
-      // Get all insights for this person with vote counts
+
+      // Author info is resolved live via LEFT JOIN profiles. Missing/deleted
+      // profiles fall through formatCommentAuthor() to "[deleted user]".
       const insights = await db
         .select({
           id: communityInsights.id,
           personId: communityInsights.personId,
           userId: communityInsights.userId,
-          username: communityInsights.username,
           content: communityInsights.content,
           sentimentVote: communityInsights.sentimentVote,
           createdAt: communityInsights.createdAt,
           upvotes: sql<number>`CAST(COUNT(CASE WHEN ${insightVotes.voteType} = 'up' THEN 1 END) AS INTEGER)`,
           downvotes: sql<number>`CAST(COUNT(CASE WHEN ${insightVotes.voteType} = 'down' THEN 1 END) AS INTEGER)`,
+          ...commentAuthorSelect,
         })
         .from(communityInsights)
         .leftJoin(insightVotes, eq(insightVotes.insightId, communityInsights.id))
+        .leftJoin(profiles, eq(profiles.id, communityInsights.userId))
         .where(eq(communityInsights.personId, personId))
         .groupBy(
           communityInsights.id,
           communityInsights.personId,
           communityInsights.userId,
-          communityInsights.username,
           communityInsights.content,
           communityInsights.sentimentVote,
-          communityInsights.createdAt
+          communityInsights.createdAt,
+          profiles.id,
+          profiles.username,
+          profiles.fullName,
+          profiles.avatarUrl,
         )
         .orderBy(desc(sql`CAST(COUNT(CASE WHEN ${insightVotes.voteType} = 'up' THEN 1 END) AS INTEGER) - CAST(COUNT(CASE WHEN ${insightVotes.voteType} = 'down' THEN 1 END) AS INTEGER)`));
 
-      res.json(insights);
+      res.json(insights.map(({ authorId, authorUsername, authorFullName, authorAvatarUrl, ...insight }) => ({
+        ...insight,
+        ...formatCommentAuthor({ authorId, authorUsername, authorFullName, authorAvatarUrl }),
+      })));
     } catch (error) {
       console.error("Error fetching community insights:", error);
       res.status(500).json({ error: "Failed to fetch community insights" });
@@ -2458,8 +2466,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create a new community insight (protected route)
   app.post("/api/community-insights", requireAuth, async (req: AuthRequest, res) => {
     try {
+      // Defense in depth: client must not supply author identity. We resolve it
+      // server-side from the authenticated profile and attach it to the response.
+      if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "username")) {
+        return res.status(400).json({ error: "Username is resolved from the authenticated profile" });
+      }
+
       const { personId, content, sentimentVote } = req.body;
-      
+
       if (!personId || !content) {
         return res.status(400).json({ error: "Missing required fields: personId, content" });
       }
@@ -2476,15 +2490,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      const [userProfile] = await db.select({ username: profiles.username }).from(profiles).where(eq(profiles.id, req.userId!)).limit(1);
-      const username = userProfile?.username || req.userId!.substring(0, 8);
-      
       const [newInsight] = await db
         .insert(communityInsights)
         .values({
           personId,
           userId: req.userId!,
-          username,
           content,
           sentimentVote: sentimentVote || null,
         })
@@ -2499,7 +2509,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
       } catch (e) { console.error("XP award failed:", e); }
 
-      res.json({ ...newInsight, xp: xpResult ?? null });
+      const [profile] = await db
+        .select(commentAuthorSelect)
+        .from(profiles)
+        .where(eq(profiles.id, req.userId!))
+        .limit(1);
+
+      res.json({
+        ...newInsight,
+        ...formatCommentAuthor(profile ?? {
+          authorId: null,
+          authorUsername: null,
+          authorFullName: null,
+          authorAvatarUrl: null,
+        }),
+        upvotes: 0,
+        downvotes: 0,
+        xp: xpResult ?? null,
+      });
     } catch (error: any) {
       console.error("Error creating community insight:", error);
       res.status(400).json({ error: "Failed to create insight" });

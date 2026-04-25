@@ -64,7 +64,9 @@ interface CommunityInsight {
   id: string;
   personId: string;
   userId: string;
-  username: string;
+  username: string | null;
+  fullName: string | null;
+  avatarUrl: string | null;
   content: string;
   sentimentVote?: number | null;
   createdAt: string;
@@ -78,7 +80,7 @@ interface CommunityInsightsProps {
 }
 
 export function CommunityInsights({ personId, personName }: CommunityInsightsProps) {
-  const { user } = useAuth();  const { trigger: triggerXpBurst } = useXpBurst();
+  const { user } = useAuth();  const { trigger: triggerXpBurst } = useXpBurst();
   const [showForm, setShowForm] = useState(false);
   const [newInsight, setNewInsight] = useState("");
   const [userVotes, setUserVotes] = useState<Record<string, string>>({});
@@ -139,7 +141,6 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
         credentials: "include",
         body: JSON.stringify({
           personId,
-          username: user.email?.split('@')[0] || user.id.substring(0, 8),
           content,
         }),
       });
@@ -394,6 +395,7 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
                   <div className="flex items-center gap-3">
                     <UserProfileAvatar
                       displayName={insight.username}
+                      avatarUrl={insight.avatarUrl}
                       size="sm"
                       className="flex-shrink-0"
                     />

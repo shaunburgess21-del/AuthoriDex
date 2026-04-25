@@ -285,8 +285,7 @@ export const communityInsights = pgTable("community_insights", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   // FK added in migration 0013 (NOT VALID → needs VALIDATE after orphan cleanup)
   personId: varchar("person_id").notNull().references(() => trackedPeople.id, { onDelete: "cascade" }),
-  userId: varchar("user_id").notNull(), // Supabase auth user ID
-  username: text("username").notNull(), // Cached for quick display
+  userId: varchar("user_id").notNull(), // Supabase auth user ID — author info resolved live via LEFT JOIN profiles
   content: text("content").notNull(),
   sentimentVote: integer("sentiment_vote"), // Optional 1-10 rating from Cast Your Vote widget
   createdAt: timestamp("created_at").notNull().defaultNow(),
