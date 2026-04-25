@@ -1,7 +1,8 @@
 /**
  * /login/welcome — one-time onboarding for first-time authenticated users.
  * Pre-fills the auto-generated username from `/api/profile/sync`, lets the
- * user adjust it (with debounced availability checks), and gates submit on
+ * user adjust it (with debounced availability checks), shows their seeded
+ * generative avatar with a "Change avatar" affordance, and gates submit on
  * Terms + Privacy acceptance. On success calls PATCH /api/profile/me/username
  * (which also writes `tos_accepted_at`) and redirects to `/`.
  *
@@ -11,6 +12,14 @@
  *
  * The `initialUsernameRef` lets us treat the seeded auto-generated username
  * as "available" without firing a wasteful availability check on mount.
+ *
+ * Avatar flow:
+ *   New users land here with an auto-generated `avatarSeed` from
+ *   /api/profile/sync. They can either keep it (do nothing) or open the
+ *   AvatarPicker modal to choose another. Picker save commits immediately
+ *   (uploads PNG to Supabase Storage + PATCH /api/profile/avatar), mirroring
+ *   the Settings page flow — so the avatar is persisted independently of
+ *   the username/ToS submit and survives page reloads mid-onboarding.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
@@ -23,6 +32,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
+import { AvatarPicker } from "@/components/avatar/AvatarPicker";
+import { GenerativeAvatar } from "@/components/avatar/GenerativeAvatar";
+import { uploadGeneratedAvatar } from "@/lib/avatar/upload";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { ApiError, apiRequest } from "@/lib/queryClient";
@@ -48,6 +60,7 @@ export default function WelcomePage() {
   const [submitting, setSubmitting] = useState(false);
   const [availability, setAvailability] = useState<Availability>({ status: "idle" });
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const initializedRef = useRef(false);
   const initialUsernameRef = useRef<string>("");
@@ -134,6 +147,34 @@ export default function WelcomePage() {
     return availability.status === "ok";
   }, [submitting, tosAccepted, username, availability.status]);
 
+  // Mirrors SettingsPage's avatar save: render seed → upload PNG →
+  // PATCH /api/profile/avatar → refresh profile so the new avatar
+  // shows everywhere (including this card). The picker handles its
+  // own loading state; we just need to throw on error so it stays
+  // open with feedback rather than closing as if successful.
+  const handleSaveAvatar = useCallback(
+    async (seed: string) => {
+      if (!user) return;
+      try {
+        const userId = profile?.id || user.id;
+        const { url } = await uploadGeneratedAvatar(userId, seed);
+        await apiRequest("PATCH", "/api/profile/avatar", {
+          seed,
+          avatarUrl: url,
+        });
+        await refreshProfile();
+        toast.success("Avatar updated", { description: "Looking sharp." });
+      } catch (err) {
+        console.error("[WelcomePage] Avatar save failed:", err);
+        toast.error("Could not save avatar", {
+          description: err instanceof Error ? err.message : "Please try again.",
+        });
+        throw err;
+      }
+    },
+    [user, profile?.id, refreshProfile],
+  );
+
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
@@ -192,6 +233,35 @@ export default function WelcomePage() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-5" noValidate>
+              {/* Avatar preview + Change-avatar affordance.
+                  Shown above the username field on purpose: the
+                  username is the user's "name" and the avatar is
+                  their "face" — pairing them visually previews how
+                  their identity will read across the product. */}
+              <div className="flex items-center gap-4">
+                <div className="h-16 w-16 overflow-hidden rounded-full border bg-muted flex-shrink-0">
+                  {profile?.avatarSeed ? (
+                    <GenerativeAvatar seed={profile.avatarSeed} alt="Your avatar" />
+                  ) : null}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium leading-tight">Your avatar</p>
+                  <p className="text-xs text-muted-foreground leading-snug">
+                    We auto-generated one — keep it or pick something else.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPickerOpen(true)}
+                  data-testid="button-welcome-change-avatar"
+                  disabled={!user}
+                >
+                  Change
+                </Button>
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="welcome-username">Username</Label>
                 <div className="relative">
@@ -270,6 +340,20 @@ export default function WelcomePage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Mounted at the page root so the dialog escapes the card's
+          stacking context. Only renders an interactive picker when
+          we have a user id to attach the upload to. */}
+      {user ? (
+        <AvatarPicker
+          open={pickerOpen}
+          onOpenChange={setPickerOpen}
+          userId={profile?.id || user.id}
+          username={profile?.username}
+          currentSeed={profile?.avatarSeed}
+          onSave={handleSaveAvatar}
+        />
+      ) : null}
     </div>
   );
 }

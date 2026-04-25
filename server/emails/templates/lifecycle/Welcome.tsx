@@ -11,11 +11,19 @@
  * both the celebrity leaderboard and the world-events markets.
  *
  * Props:
- *   firstName — optional; personalises the greeting if known.
- *               Falls back to a generic "You're in." greeting.
- *   baseUrl   — app base URL for CTA links. Defaults to
- *               https://voxdex.com for prod-safe defaults; caller
- *               should pass the per-env URL when actually sending.
+ *   firstName     — optional; personalises the greeting if known.
+ *                   Falls back to a generic "You're in." greeting.
+ *   baseUrl       — app base URL for CTA links. Defaults to
+ *                   https://voxdex.com for prod-safe defaults;
+ *                   caller should pass the per-env URL when actually
+ *                   sending.
+ *   creditAmount  — actual starting credits granted to this user.
+ *                   Defaults to DEFAULT_CREDIT_AMOUNT for previews;
+ *                   senders MUST pass the real value so the email
+ *                   matches the user's on-screen balance. Keeping
+ *                   this dynamic also future-proofs the template
+ *                   against grant-amount changes (no template edit
+ *                   needed if we bump the grant later).
  */
 
 import * as React from "react";
@@ -26,21 +34,39 @@ import { colors, radius, spacing, typography } from "../theme";
 interface WelcomeEmailProps {
   firstName?: string;
   baseUrl?: string;
+  creditAmount?: number;
 }
 
 const DEFAULT_BASE_URL = "https://voxdex.com";
 
-export const WELCOME_SUBJECT = "Welcome to VoxDex — you've got 10,000 credits";
+// Used only as a fallback in previews / dev. Real sends pass the
+// user's actual `predictCredits` from the DB.
+const DEFAULT_CREDIT_AMOUNT = 10000;
+
+const formatCredits = (n: number) => n.toLocaleString("en-US");
+
+/**
+ * Build the subject line for a given credit amount. Kept as a
+ * function (not a constant) because the number is dynamic per send.
+ */
+export function welcomeSubject(creditAmount: number): string {
+  return `Welcome to VoxDex — you've got ${formatCredits(creditAmount)} credits`;
+}
+
+/** Back-compat constant for any caller that already imports this. */
+export const WELCOME_SUBJECT = welcomeSubject(DEFAULT_CREDIT_AMOUNT);
 
 export function WelcomeEmail({
   firstName,
   baseUrl = DEFAULT_BASE_URL,
+  creditAmount = DEFAULT_CREDIT_AMOUNT,
 }: WelcomeEmailProps) {
   const greeting = firstName ? `You're in, ${firstName}.` : "You're in.";
+  const creditsLabel = `${formatCredits(creditAmount)} credits`;
 
   return (
     <Layout
-      preview="You're in. 10,000 credits are waiting — go back your first prediction."
+      preview={`You're in. ${creditsLabel} are waiting — go back your first prediction.`}
       footerContext="You're receiving this because you just created a VoxDex account."
     >
       <Heading style={typography.h1}>{greeting}</Heading>
@@ -52,10 +78,10 @@ export function WelcomeEmail({
       </Text>
 
       {/* Credits callout — mirrors the VerifyEmail codeBox pattern
-          so users get a visual anchor on the 10,000 number. */}
+          so users get a visual anchor on the credit balance. */}
       <Section style={creditsBoxStyle}>
         <Text style={creditsLabelStyle}>Your starting balance</Text>
-        <Text style={creditsAmountStyle}>10,000 credits</Text>
+        <Text style={creditsAmountStyle}>{creditsLabel}</Text>
         <Text style={{ ...typography.small, margin: 0 }}>
           Use them to make predictions, enter weekly markets, and
           build your track record.
