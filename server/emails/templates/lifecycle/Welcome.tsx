@@ -125,16 +125,15 @@ export function WelcomeEmail({
 
       <Section style={dividerStyle} />
 
-      {/* Founder sign-off. Intentionally personal — reinforces the
-          "built by two people" positioning early. */}
+      {/* Sign-off. Currently using the collective "VoxDex Team" voice
+          while we test reception during early onboarding rounds; the
+          previous variant was a personal "Andrew & Shaun, Co-founders"
+          founder sign-off and may return based on test feedback. */}
       <Text style={{ ...typography.body, margin: 0 }}>
         See you inside,
       </Text>
       <Text style={{ ...typography.body, margin: 0 }}>
-        — Andrew &amp; Shaun
-      </Text>
-      <Text style={{ ...typography.caption, marginTop: spacing.tight }}>
-        Co-founders, VoxDex
+        — The VoxDex Team
       </Text>
     </Layout>
   );
