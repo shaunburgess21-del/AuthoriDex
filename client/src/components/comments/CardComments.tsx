@@ -433,19 +433,19 @@ export function CardComments({
                 handlePost();
               }
             }}
-            className={`block w-full bg-muted/30 border border-border/30 rounded-xl px-3 py-2 pr-16 text-base resize-none placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-cyan-500/30${isManualComposer ? " h-40 overflow-y-auto" : ""}${inlineExpanded ? " flex-1 min-h-0" : ""}`}
+            className={`block w-full bg-muted/30 border border-border/30 rounded-xl px-3 py-2 pr-16 text-base resize-none placeholder:text-muted-foreground/50 focus:outline-none focus:ring-0 focus:border-border/30${isManualComposer ? " h-40 overflow-y-auto" : ""}${inlineExpanded ? " flex-1 min-h-0" : ""}`}
             rows={1}
             data-testid="input-comment"
           />
           <div className="absolute right-2 bottom-1.5 flex items-center gap-1">
             <button
               onClick={handleComposerToggle}
-              className="p-1 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+              className="flex h-8 w-8 items-center justify-center text-slate-300 hover:text-slate-100 transition-colors"
               type="button"
               aria-label={composerMode === "auto" ? "Expand comment input" : "Collapse comment input"}
               aria-pressed={composerMode !== "auto"}
             >
-              {composerMode === "auto" ? <Maximize2 className="h-3.5 w-3.5" /> : <Minimize2 className="h-3.5 w-3.5" />}
+              {composerMode === "auto" ? <Maximize2 className="h-6 w-6" /> : <Minimize2 className="h-6 w-6" />}
             </button>
             <button
               disabled={!commentBody.trim() || commentMutation.isPending}
@@ -537,7 +537,7 @@ export function CardComments({
                   handlePost();
                 }
               }}
-              className="h-full w-full resize-none rounded-2xl border border-border/30 bg-muted/30 px-4 py-4 pr-14 text-base placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-cyan-500/30"
+              className="h-full w-full resize-none rounded-2xl border border-border/30 bg-muted/30 px-4 py-4 pr-14 text-base placeholder:text-muted-foreground/50 focus:outline-none focus:ring-0 focus:border-border/30"
               data-testid="input-comment-fullscreen"
             />
             <button
