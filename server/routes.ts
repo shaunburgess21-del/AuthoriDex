@@ -5264,7 +5264,19 @@ Only return the JSON object.`;
   });
 
   // ==================== PROFILE ENDPOINTS ====================
-  
+
+  // Single source of truth for the signup credit grant. Referenced by:
+  //   - profiles.predictCredits on insert (the on-screen balance)
+  //   - creditLedger initial_grant entry (amount + balanceAfter)
+  //   - the welcome email (server passes profile.predictCredits at send
+  //     time, so it auto-tracks any change here without template edits)
+  // NOTE on backfill: the ledger entry uses idempotencyKey
+  // `initial_grant_${userId}` and onConflictDoNothing(), which means
+  // bumping this constant only affects NEW accounts. Existing users
+  // who already received a previous-amount grant won't be silently
+  // topped up — that's intentional and the safe default.
+  const SIGNUP_CREDIT_GRANT = 10000;
+
   // Sync profile after Supabase auth - creates profile if doesn't exist
   app.post("/api/profile/sync", requireAuth, async (req: AuthRequest, res) => {
     try {
@@ -5273,9 +5285,9 @@ Only return the JSON object.`;
       const initialGrantEntry = {
         userId,
         txnType: 'initial_grant' as const,
-        amount: 1000,
+        amount: SIGNUP_CREDIT_GRANT,
         walletType: 'VIRTUAL' as const,
-        balanceAfter: 1000,
+        balanceAfter: SIGNUP_CREDIT_GRANT,
         source: 'signup',
         idempotencyKey: `initial_grant_${userId}`,
         metadata: { reason: 'New account signup bonus' },
@@ -5338,7 +5350,7 @@ Only return the JSON object.`;
         role: "user",
         rank: "Citizen",
         xpPoints: 0,
-        predictCredits: 1000,
+        predictCredits: SIGNUP_CREDIT_GRANT,
         currentStreak: 0,
         totalVotes: 0,
         totalPredictions: 0,
