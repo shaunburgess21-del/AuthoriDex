@@ -16,6 +16,16 @@ const navItems: NavItem[] = [
 export function BottomNav() {
   const [location] = useLocation();
 
+  // Auth flow pages own the full mobile viewport (centered card layout, no
+  // app-shell padding) so the fixed nav covers their bottom content — most
+  // visibly the "Back to Home" button on /login. Industry convention is to
+  // hide bottom nav on auth routes anyway (X, Reddit, Polymarket, banking
+  // apps) since the destinations don't make full sense pre-auth and the
+  // user already has explicit "Back to Home" affordances inside the cards.
+  if (location === "/login" || location.startsWith("/login/")) {
+    return null;
+  }
+
   return (
     <nav 
       className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background/95 backdrop-blur-xl md:hidden"

@@ -235,7 +235,7 @@ export default function LoginPage() {
             <VoxDexLogo size={48} />
             <span className="font-serif font-bold text-3xl">VoxDex</span>
           </div>
-          <p className="text-muted-foreground">Track fame, vote sentiment, discover trends</p>
+          <p className="text-muted-foreground">The live trend index for people and events shaping the world.</p>
         </div>
 
         <Card>
@@ -244,7 +244,7 @@ export default function LoginPage() {
             <CardDescription>
               {isLogin
                 ? "Sign in to vote, predict, and track your favorites."
-                : "Join VoxDex in less than a minute."}
+                : "Make predictions, vote on what matters, build your track record."}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -327,14 +327,14 @@ export default function LoginPage() {
                       type="button"
                       onClick={handleEmailCodeFallback}
                       disabled={otpSending}
-                      className="text-xs text-muted-foreground hover:text-foreground hover:underline"
+                      className="text-xs text-primary underline underline-offset-2 hover:opacity-80 disabled:opacity-60"
                       data-testid="button-use-email-code"
                     >
                       Sign in with email code instead
                     </button>
                   </div>
                 ) : (
-                  <p className="text-xs text-muted-foreground">At least 6 characters.</p>
+                  <p className="text-xs text-muted-foreground">At least 8 characters.</p>
                 )}
               </div>
 

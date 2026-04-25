@@ -8,6 +8,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { BottomNav } from "@/components/BottomNav";
+import { PWAUpdatePrompt } from "@/components/PWAUpdatePrompt";
 import { ScrollToTop } from "@/components/ScrollToTop";
 import { XpBurstProvider } from "@/components/XpBurstProvider";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -164,7 +165,14 @@ function App() {
           <AuthProvider>
             <TooltipProvider>
               <ScrollToTop />
-              <Toaster richColors closeButton position="top-center" />
+              {/* duration: Sonner default is 4000ms which felt too brief
+                  for our success/info toasts (users on slow reads were
+                  missing the message entirely). 6000ms keeps it on
+                  screen long enough to read but not so long that it
+                  feels stuck. closeButton lets impatient users dismiss
+                  early. */}
+              <Toaster richColors closeButton position="top-center" duration={6000} />
+              <PWAUpdatePrompt />
               <NewUserGate />
               <XpBurstProvider>
                 {/* Watcher is inside XpBurstProvider so useXpCelebration can fire daily-login bursts via useXpBurst. */}
