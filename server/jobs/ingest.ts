@@ -547,9 +547,14 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
         aggregatorStats = aggResult.stats;
 
         const ps = aggResult.stats.providers;
-        sourceStatuses.mediastack = ps.mediastack.succeeded
-          ? (ps.mediastack.peopleWithData > 0 ? "OK" : "DEGRADED")
-          : (ps.mediastack.attempted ? "FAILED" : "SKIPPED");
+        // THROTTLED: budget hard-stop forced cache-only mode and the cache had
+        // no fresh entries. Distinct from DEGRADED — this is a self-imposed
+        // throttle (budget protection), not an upstream failure.
+        sourceStatuses.mediastack = ps.mediastack.budgetThrottled && ps.mediastack.peopleWithData === 0
+          ? "THROTTLED"
+          : ps.mediastack.succeeded
+            ? (ps.mediastack.peopleWithData > 0 ? "OK" : "DEGRADED")
+            : (ps.mediastack.attempted ? "FAILED" : "SKIPPED");
         sourceStatuses.gdelt = ps.gdelt.succeeded
           ? (ps.gdelt.peopleWithData > 0 ? "OK" : "DEGRADED")
           : "FAILED";

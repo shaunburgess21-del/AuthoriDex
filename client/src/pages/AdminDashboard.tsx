@@ -140,8 +140,15 @@ const SOURCE_LABELS = {
 function sourceStatusColor(status: string | null | undefined): string {
   if (status === "OK" || status === "OK_FALLBACK") return "text-green-500";
   if (status === "DEGRADED") return "text-yellow-500";
+  if (status === "THROTTLED") return "text-blue-500";
   if (!status || status === "SKIPPED") return "text-muted-foreground";
   return "text-red-500";
+}
+
+function sourceStatusTooltip(provider: string, status: string | null | undefined): string {
+  const base = `${provider}: ${status ?? "—"}`;
+  if (status === "THROTTLED") return `${base} (cache-only mode — Mediastack budget hard-stop active)`;
+  return base;
 }
 
 function RelatedCelebritiesField({
@@ -5721,10 +5728,10 @@ export default function AdminDashboard() {
                                 <span className="font-medium">{run.snapshotsWritten || 0} snap</span>
                                 {run.sourceStatuses && (
                                   <div className="flex items-center gap-1">
-                                    <span title={`Wikipedia: ${run.sourceStatuses.wiki ?? "—"}`} className={cn("text-[10px]", sourceStatusColor(run.sourceStatuses.wiki))}>W</span>
-                                    <span title={`Mediastack: ${run.sourceStatuses.mediastack ?? "—"}`} className={cn("text-[10px]", sourceStatusColor(run.sourceStatuses.mediastack))}>M</span>
-                                    <span title={`GDELT: ${run.sourceStatuses.gdelt ?? "—"}`} className={cn("text-[10px]", sourceStatusColor(run.sourceStatuses.gdelt))}>G</span>
-                                    <span title={`Serper: ${run.sourceStatuses.serper ?? "—"}`} className={cn("text-[10px]", sourceStatusColor(run.sourceStatuses.serper))}>S</span>
+                                    <span title={sourceStatusTooltip("Wikipedia", run.sourceStatuses.wiki)} className={cn("text-[10px]", sourceStatusColor(run.sourceStatuses.wiki))}>W</span>
+                                    <span title={sourceStatusTooltip("Mediastack", run.sourceStatuses.mediastack)} className={cn("text-[10px]", sourceStatusColor(run.sourceStatuses.mediastack))}>M</span>
+                                    <span title={sourceStatusTooltip("GDELT", run.sourceStatuses.gdelt)} className={cn("text-[10px]", sourceStatusColor(run.sourceStatuses.gdelt))}>G</span>
+                                    <span title={sourceStatusTooltip("Serper", run.sourceStatuses.serper)} className={cn("text-[10px]", sourceStatusColor(run.sourceStatuses.serper))}>S</span>
                                   </div>
                                 )}
                                 {run.status === "locked_out" && <Badge variant="outline" className="text-[10px] text-yellow-500 py-0">locked</Badge>}

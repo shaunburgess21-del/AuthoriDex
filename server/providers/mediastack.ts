@@ -38,6 +38,19 @@ export interface MediastackBatchStats {
   fetched: number;
   cached: number;
   failed: number;
+  /**
+   * Count of people who got nothing because the batch ran in cache-only mode
+   * and had no fresh cache entry. NOT a real failure — distinct from `failed`,
+   * which is reserved for actual API errors. Driven primarily by budget
+   * throttling at cycle-end.
+   */
+  cacheOnlyEmpty: number;
+  /**
+   * True when the batch ran in cache-only mode because the budget hard-stop
+   * fired. Lets downstream code distinguish "throttled by us" from "external
+   * API failure" when reporting source health.
+   */
+  budgetThrottled: boolean;
   apiCallsMade: number;
   durationMs: number;
   successCount: number;
@@ -275,29 +288,95 @@ export async function getDailyCallCount(date?: string): Promise<number> {
   return 0;
 }
 
-export async function getMonthlyCallEstimate(): Promise<{ dailyCalls: number[]; totalThisMonth: number; projectedMonthly: number }> {
-  const now = new Date();
-  const dailyCalls: number[] = [];
-  let total = 0;
+// Mediastack billing cycle: hardcoded to renew on day 20 of each month
+// (cycle e.g. 20 Apr -> 19 May). Previous calendar-month projection extrapolated
+// a noisy 7-day average across the whole month, which over-projected by ~5x
+// during cache-warmup at cycle start and tripped the budget hard-stop too early.
+const BILLING_CYCLE_START_DAY = 20;
 
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(now);
-    d.setDate(d.getDate() - i);
-    const count = await getDailyCallCount(formatDate(d));
-    dailyCalls.push(count);
-    total += count;
+function getCurrentCycleStart(now: Date = new Date()): Date {
+  const cycleStart = new Date(now.getFullYear(), now.getMonth(), BILLING_CYCLE_START_DAY);
+  cycleStart.setHours(0, 0, 0, 0);
+  if (now < cycleStart) {
+    cycleStart.setMonth(cycleStart.getMonth() - 1);
+  }
+  return cycleStart;
+}
+
+function getNextCycleStart(cycleStart: Date): Date {
+  const next = new Date(cycleStart);
+  next.setMonth(next.getMonth() + 1);
+  return next;
+}
+
+export interface MediastackCycleUsage {
+  cycleStartDate: string;
+  cycleEndDate: string;
+  cycleLengthDays: number;
+  daysIntoCycle: number;
+  daysRemainingInCycle: number;
+  usedThisCycle: number;
+  paceCallsPerDay: number;
+  projectedCycle: number;
+  dailyHistory: Array<{ date: string; calls: number }>;
+}
+
+export async function getCycleUsage(now: Date = new Date()): Promise<MediastackCycleUsage> {
+  const cycleStart = getCurrentCycleStart(now);
+  const nextCycleStart = getNextCycleStart(cycleStart);
+  const cycleLengthDays = Math.round((nextCycleStart.getTime() - cycleStart.getTime()) / 86_400_000);
+
+  const msSinceStart = now.getTime() - cycleStart.getTime();
+  const daysIntoCycle = Math.max(1, Math.floor(msSinceStart / 86_400_000) + 1);
+  const daysRemainingInCycle = Math.max(0, cycleLengthDays - daysIntoCycle);
+
+  const dailyHistory: Array<{ date: string; calls: number }> = [];
+  let usedThisCycle = 0;
+  for (let i = 0; i < daysIntoCycle; i++) {
+    const d = new Date(cycleStart);
+    d.setDate(d.getDate() + i);
+    if (d > now) break;
+    const dateStr = formatDate(d);
+    const calls = await getDailyCallCount(dateStr);
+    usedThisCycle += calls;
+    dailyHistory.push({ date: dateStr, calls });
   }
 
-  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-  // Use last-7-day average for projection; do not use dayOfMonth as denominator
-  // (on day 1 it would treat 7-day total as "daily" and over-project e.g. 116k)
-  const avgDailyCalls = total / 7;
-  const projectedMonthly = Math.round(avgDailyCalls * daysInMonth);
+  const paceCallsPerDay = usedThisCycle / Math.max(1, daysIntoCycle);
+  const projectedCycle = Math.round(usedThisCycle + paceCallsPerDay * daysRemainingInCycle);
+
+  const cycleEndInclusive = new Date(nextCycleStart);
+  cycleEndInclusive.setDate(cycleEndInclusive.getDate() - 1);
 
   return {
+    cycleStartDate: formatDate(cycleStart),
+    cycleEndDate: formatDate(cycleEndInclusive),
+    cycleLengthDays,
+    daysIntoCycle,
+    daysRemainingInCycle,
+    usedThisCycle,
+    paceCallsPerDay: Math.round(paceCallsPerDay),
+    projectedCycle,
+    dailyHistory,
+  };
+}
+
+/**
+ * Legacy shim: kept so any existing imports continue to compile, now driven
+ * by billing-cycle math instead of calendar-month math. Prefer
+ * {@link getCycleUsage} for new call sites.
+ *
+ * `dailyCalls` is the most-recent 7 days, today-first (legacy ordering).
+ * `totalThisMonth` is now the running cycle total despite the name.
+ */
+export async function getMonthlyCallEstimate(): Promise<{ dailyCalls: number[]; totalThisMonth: number; projectedMonthly: number }> {
+  const usage = await getCycleUsage();
+  const dailyCalls = [...usage.dailyHistory].reverse().slice(0, 7).map(d => d.calls);
+  while (dailyCalls.length < 7) dailyCalls.push(0);
+  return {
     dailyCalls,
-    totalThisMonth: total,
-    projectedMonthly,
+    totalThisMonth: usage.usedThisCycle,
+    projectedMonthly: usage.projectedCycle,
   };
 }
 
@@ -433,19 +512,21 @@ export async function fetchMediastackBatch(
   people: Array<{ id: string; name: string; newsQueryWidened?: string | null }>,
   concurrency: number = 3,
   delayMs: number = 400,
-  options?: { cacheOnly?: boolean; widenCandidateIds?: Set<string> }
+  options?: { cacheOnly?: boolean; widenCandidateIds?: Set<string>; budgetThrottled?: boolean }
 ): Promise<{ data: Map<string, MediastackNewsData>; stats: MediastackBatchStats; isRefresh: boolean; widenedCount: number; widenDiagnostics: WidenDiagnostic[] }> {
   const results = new Map<string, MediastackNewsData>();
   const startTime = Date.now();
   let fetched = 0;
   let cached = 0;
   let failed = 0;
+  let cacheOnlyEmpty = 0;
   let apiCallsMade = 0;
   let widenedCount = 0;
   let widenFiredCount = 0;
   let widenCooldownSkipped = 0;
   const widenDiagnostics: WidenDiagnostic[] = [];
   const cacheOnly = options?.cacheOnly ?? false;
+  const budgetThrottled = options?.budgetThrottled ?? false;
   const widenCandidateIds = options?.widenCandidateIds;
   const WIDEN_THRESHOLD = 3;
   const limit = pLimit(concurrency);
@@ -454,7 +535,7 @@ export async function fetchMediastackBatch(
     console.log(`[Mediastack] No API key configured, skipping batch`);
     return {
       data: results,
-      stats: { total: people.length, fetched: 0, cached: 0, failed: people.length, apiCallsMade: 0, durationMs: 0, successCount: 0, nonZeroCount: 0, successCoveragePct: 0, nonZeroCoveragePct: 0, top25NonZeroCount: 0, top25Total: Math.min(25, people.length), top25NonZeroCoveragePct: 0 },
+      stats: { total: people.length, fetched: 0, cached: 0, failed: people.length, cacheOnlyEmpty: 0, budgetThrottled: false, apiCallsMade: 0, durationMs: 0, successCount: 0, nonZeroCount: 0, successCoveragePct: 0, nonZeroCoveragePct: 0, top25NonZeroCount: 0, top25Total: Math.min(25, people.length), top25NonZeroCoveragePct: 0 },
       isRefresh: false,
       widenedCount: 0,
       widenDiagnostics: [],
@@ -486,7 +567,7 @@ export async function fetchMediastackBatch(
       }
 
       if (cacheOnly) {
-        failed++;
+        cacheOnlyEmpty++;
         return;
       }
 
@@ -597,6 +678,8 @@ export async function fetchMediastackBatch(
     fetched,
     cached,
     failed,
+    cacheOnlyEmpty,
+    budgetThrottled,
     apiCallsMade: getApiCallsThisRun(),
     durationMs,
     successCount,
@@ -613,7 +696,11 @@ export async function fetchMediastackBatch(
 
   const widenSuffix = widenedCount > 0 ? ` + ${widenedCount} widened` : "";
   const cooldownSuffix = widenCooldownSkipped > 0 ? ` (${widenCooldownSkipped} cooldown-skipped)` : "";
-  console.log(`[Mediastack] Batch complete: ${fetched} fresh + ${cached} cached + ${failed} failed${widenSuffix}${cooldownSuffix} = ${results.size}/${people.length} in ${(durationMs / 1000).toFixed(1)}s (${stats.apiCallsMade} API calls, success=${stats.successCoveragePct.toFixed(0)}%, nonZero=${stats.nonZeroCoveragePct.toFixed(0)}%)`);
+  const cacheOnlyEmptySuffix = cacheOnlyEmpty > 0
+    ? ` + ${cacheOnlyEmpty} cache-only-empty${budgetThrottled ? " (budget hard stop)" : ""}`
+    : "";
+  const failedSuffix = failed > 0 ? ` + ${failed} failed` : "";
+  console.log(`[Mediastack] Batch complete: ${fetched} fresh + ${cached} cached${cacheOnlyEmptySuffix}${failedSuffix}${widenSuffix}${cooldownSuffix} = ${results.size}/${people.length} in ${(durationMs / 1000).toFixed(1)}s (${stats.apiCallsMade} API calls, success=${stats.successCoveragePct.toFixed(0)}%, nonZero=${stats.nonZeroCoveragePct.toFixed(0)}%)`);
 
   return { data: results, stats, isRefresh: !cacheOnly && fetched > 0, widenedCount, widenDiagnostics };
 }
@@ -623,20 +710,25 @@ export function isMediastackConfigured(): boolean {
 }
 
 const LAST_FETCH_KEY = "system:mediastack:last_fetch_at";
-// Default refresh cadence: 120 minutes. Keep default at 2h to stay well under
-// the 50k/month budget (~360 refreshes/month × ~100 people ≈ 36k calls).
-// Set MEDIASTACK_REFRESH_INTERVAL_MINUTES=60 to halve latency on breaking
-// news — but verify the monthly budget headroom first. The existing hard-stop
-// budget check at 95% will throttle automatically if usage exceeds safe bounds.
+// Default refresh cadence: 180 minutes (3h) to stay inside the 50k/month plan
+// at the current ~159-people roster. Math: 159 people × (24/3) refreshes/day ×
+// ~30 days ≈ 38k calls/cycle (~76% of 50k). At 120min it would be ~57k/cycle
+// which exceeds the plan limit and trips the budget hard-stop weeks early.
+// Drop to MEDIASTACK_REFRESH_INTERVAL_MINUTES=120 only after upgrading to a
+// higher tier. The cycle-aware budget check below will throttle automatically
+// if projected usage approaches the BUDGET_HARD_STOP_PCT ceiling.
 const MEDIASTACK_REFRESH_INTERVAL_MINUTES = (() => {
-  const raw = parseInt(process.env.MEDIASTACK_REFRESH_INTERVAL_MINUTES ?? "120", 10);
-  if (!Number.isFinite(raw) || raw < 30 || raw > 360) return 120;
+  const raw = parseInt(process.env.MEDIASTACK_REFRESH_INTERVAL_MINUTES ?? "180", 10);
+  if (!Number.isFinite(raw) || raw < 30 || raw > 360) return 180;
   return raw;
 })();
 const MEDIASTACK_REFRESH_INTERVAL_MS = MEDIASTACK_REFRESH_INTERVAL_MINUTES * 60 * 1000;
 const MEDIASTACK_MONTHLY_LIMIT = 50_000;
 const BUDGET_WARN_PCT = 85;
-const BUDGET_HARD_STOP_PCT = 95;
+// Slightly lower than 95 now that the projection is honest (cycle-aware rather
+// than calendar-month). 92% leaves a real safety buffer for the last few days
+// of a cycle while still avoiding premature cutoffs.
+const BUDGET_HARD_STOP_PCT = 92;
 
 export async function getLastMediastackFetchAt(): Promise<Date | null> {
   try {
@@ -677,14 +769,23 @@ export async function shouldRefreshMediastack(): Promise<{ shouldRefresh: boolea
 
   if (cadenceDue) {
     try {
-      const budget = await getMonthlyCallEstimate();
-      const usagePct = (budget.projectedMonthly / MEDIASTACK_MONTHLY_LIMIT) * 100;
-      if (usagePct >= BUDGET_HARD_STOP_PCT) {
-        console.warn(`[Mediastack] Budget hard stop: projected ${budget.projectedMonthly} calls/month (${usagePct.toFixed(0)}% of ${MEDIASTACK_MONTHLY_LIMIT} limit) — skipping refresh`);
+      const usage = await getCycleUsage();
+      const projectedPct = (usage.projectedCycle / MEDIASTACK_MONTHLY_LIMIT) * 100;
+      const usedPct = (usage.usedThisCycle / MEDIASTACK_MONTHLY_LIMIT) * 100;
+      if (projectedPct >= BUDGET_HARD_STOP_PCT) {
+        console.warn(
+          `[Mediastack] Budget hard stop: cycle ${usage.cycleStartDate}→${usage.cycleEndDate}, ` +
+          `used ${usage.usedThisCycle}/${MEDIASTACK_MONTHLY_LIMIT} (${usedPct.toFixed(0)}%), ` +
+          `pace ${usage.paceCallsPerDay}/day, projected ${usage.projectedCycle} (${projectedPct.toFixed(0)}%) — skipping refresh`,
+        );
         return { shouldRefresh: false, lastFetchAt: lastFetch, ageMs, budgetThrottled: true };
       }
-      if (usagePct >= BUDGET_WARN_PCT) {
-        console.warn(`[Mediastack] Budget warning: projected ${budget.projectedMonthly} calls/month (${usagePct.toFixed(0)}% of ${MEDIASTACK_MONTHLY_LIMIT} limit)`);
+      if (projectedPct >= BUDGET_WARN_PCT) {
+        console.warn(
+          `[Mediastack] Budget warning: cycle used ${usage.usedThisCycle}/${MEDIASTACK_MONTHLY_LIMIT} ` +
+          `(${usedPct.toFixed(0)}%), pace ${usage.paceCallsPerDay}/day, projected ${usage.projectedCycle} ` +
+          `(${projectedPct.toFixed(0)}% of limit, ${usage.daysRemainingInCycle}d remaining)`,
+        );
       }
     } catch (err) {
       console.warn("[Mediastack] Budget check failed, proceeding with refresh:", err);
@@ -700,21 +801,36 @@ export async function shouldRefreshMediastack(): Promise<{ shouldRefresh: boolea
 }
 
 export async function getMediastackBudgetSummary() {
-  const estimate = await getMonthlyCallEstimate();
+  const usage = await getCycleUsage();
   const now = new Date();
-  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-  const dayOfMonth = now.getDate();
-  const usagePct = Math.round((estimate.projectedMonthly / MEDIASTACK_MONTHLY_LIMIT) * 100);
+  const projectedPct = Math.round((usage.projectedCycle / MEDIASTACK_MONTHLY_LIMIT) * 100);
+  const usedPct = Math.round((usage.usedThisCycle / MEDIASTACK_MONTHLY_LIMIT) * 100);
+  const dailyHistory7d = [...usage.dailyHistory].reverse().slice(0, 7).map(d => d.calls);
+  while (dailyHistory7d.length < 7) dailyHistory7d.push(0);
+  const callsToday = dailyHistory7d[0] ?? 0;
+  const totalLast7d = dailyHistory7d.reduce((s, n) => s + n, 0);
+
   return {
-    callsToday: estimate.dailyCalls[0] ?? 0,
-    dailyHistory7d: estimate.dailyCalls,
-    totalLast7d: estimate.totalThisMonth,
-    projectedMonthly: estimate.projectedMonthly,
+    cycleStartDate: usage.cycleStartDate,
+    cycleEndDate: usage.cycleEndDate,
+    cycleLengthDays: usage.cycleLengthDays,
+    daysIntoCycle: usage.daysIntoCycle,
+    daysRemainingInCycle: usage.daysRemainingInCycle,
+    usedThisCycle: usage.usedThisCycle,
+    usedPct,
+    paceCallsPerDay: usage.paceCallsPerDay,
+    projectedCycle: usage.projectedCycle,
+    cycleLimit: MEDIASTACK_MONTHLY_LIMIT,
+    usagePct: projectedPct,
+    callsToday,
+    dailyHistory7d,
+    status: projectedPct >= BUDGET_HARD_STOP_PCT ? "hard_stop" : projectedPct >= BUDGET_WARN_PCT ? "warning" : "ok",
+    // Legacy aliases — retained for one release; new callers should use the cycle* fields above.
+    totalLast7d,
+    projectedMonthly: usage.projectedCycle,
     monthlyLimit: MEDIASTACK_MONTHLY_LIMIT,
-    usagePct,
-    dayOfMonth,
-    daysInMonth,
-    status: usagePct >= BUDGET_HARD_STOP_PCT ? "hard_stop" : usagePct >= BUDGET_WARN_PCT ? "warning" : "ok",
+    dayOfMonth: now.getDate(),
+    daysInMonth: new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate(),
   };
 }
 
