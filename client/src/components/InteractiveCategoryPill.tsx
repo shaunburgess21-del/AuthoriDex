@@ -23,6 +23,57 @@ const SIZE_CLASSES = {
   sm: "px-1 py-0.5 text-[9px] leading-none font-medium",
 } as const;
 
+const BROWSE_INTENT_TOKEN_MS = 1000;
+const PASSIVE_DISMISS_SUPPRESSION_MS = 300;
+let browseIntentExpiresAt = 0;
+let browseIntentTimeout: number | null = null;
+let passiveDismissSuppressedUntil = 0;
+let passiveDismissTimeout: number | null = null;
+
+function clearCategoryPillBrowseIntent() {
+  browseIntentExpiresAt = 0;
+  if (browseIntentTimeout !== null) {
+    window.clearTimeout(browseIntentTimeout);
+    browseIntentTimeout = null;
+  }
+}
+
+function hasCategoryPillBrowseIntent(): boolean {
+  if (Date.now() <= browseIntentExpiresAt) return true;
+  clearCategoryPillBrowseIntent();
+  return false;
+}
+
+function markCategoryPillBrowseIntent() {
+  browseIntentExpiresAt = Date.now() + BROWSE_INTENT_TOKEN_MS;
+  if (browseIntentTimeout !== null) {
+    window.clearTimeout(browseIntentTimeout);
+  }
+  browseIntentTimeout = window.setTimeout(clearCategoryPillBrowseIntent, BROWSE_INTENT_TOKEN_MS);
+}
+
+export function consumeCategoryPillBrowseIntent(): boolean {
+  const hasIntent = hasCategoryPillBrowseIntent();
+  clearCategoryPillBrowseIntent();
+  return hasIntent;
+}
+
+export function isCategoryPillDrawerDismissSuppressed(): boolean {
+  return Date.now() < passiveDismissSuppressedUntil;
+}
+
+function markCategoryPillPassiveDismiss() {
+  clearCategoryPillBrowseIntent();
+  passiveDismissSuppressedUntil = Date.now() + PASSIVE_DISMISS_SUPPRESSION_MS;
+  if (passiveDismissTimeout !== null) {
+    window.clearTimeout(passiveDismissTimeout);
+  }
+  passiveDismissTimeout = window.setTimeout(() => {
+    passiveDismissSuppressedUntil = 0;
+    passiveDismissTimeout = null;
+  }, PASSIVE_DISMISS_SUPPRESSION_MS);
+}
+
 interface InteractiveCategoryPillProps {
   category: string;
   onFilter: () => void;
@@ -49,6 +100,7 @@ function MenuItems({
   onDetailNavigate,
   onFilter,
   onBrowseFullScreen,
+  onBrowseIntentStart,
   CloseWrapper,
 }: {
   label: string;
@@ -60,6 +112,7 @@ function MenuItems({
   onDetailNavigate?: () => void;
   onFilter: () => void;
   onBrowseFullScreen?: () => void;
+  onBrowseIntentStart?: () => void;
   CloseWrapper: React.ComponentType<{ children: React.ReactNode; asChild?: boolean }>;
 }) {
   const showLeaderboard = !leaderboardCategories || leaderboardCategories.has(normalizeMarketCategory(category));
@@ -119,6 +172,8 @@ function MenuItems({
           <button
             type="button"
             className="flex items-center gap-2.5 w-full px-3 py-2.5 text-sm text-left rounded-md hover:bg-muted/60 transition-colors text-foreground"
+            onPointerDown={onBrowseIntentStart}
+            onTouchStart={onBrowseIntentStart}
             onClick={onBrowseFullScreen}
           >
             <Maximize2 className="h-4 w-4 opacity-60 shrink-0" />
@@ -188,10 +243,22 @@ export function InteractiveCategoryPill({
 
   const browseFullScreenHandler = onBrowseFullScreen
     ? () => {
+        if (!hasCategoryPillBrowseIntent()) {
+          markCategoryPillPassiveDismiss();
+          setOpen(false);
+          return;
+        }
         pendingBrowseFullScreenRef.current = true;
         setOpen(false);
       }
     : undefined;
+
+  const handlePassiveOverlayDismiss = useCallback((event: React.SyntheticEvent) => {
+    markCategoryPillPassiveDismiss();
+    event.preventDefault();
+    event.stopPropagation();
+    setOpen(false);
+  }, []);
 
   const handleMobileOpenChange = useCallback((nextOpen: boolean) => {
     if (!nextOpen && pendingBrowseFullScreenRef.current) {
@@ -207,12 +274,9 @@ export function InteractiveCategoryPill({
 
     if (!nextOpen) {
       // Vaul overlay unmounts during close animation; the browser re-targets the
-      // pointer release to whatever element is underneath, firing a ghost click on
-      // the card. Capture and swallow exactly that one event before it propagates.
-      document.addEventListener("click", (e) => e.stopPropagation(), {
-        capture: true,
-        once: true,
-      });
+      // pointer release to whatever element is underneath. Suppress passive closes
+      // at the Snap opener too, because mobile browsers can retarget after unmount.
+      markCategoryPillPassiveDismiss();
     }
 
     setOpen(nextOpen);
@@ -225,12 +289,21 @@ export function InteractiveCategoryPill({
         onOpenChange={handleMobileOpenChange}
       >
         <DrawerTrigger asChild>{pillButton}</DrawerTrigger>
-        <DrawerContent>
+        <DrawerContent
+          overlayProps={{
+            onPointerDown: handlePassiveOverlayDismiss,
+            onPointerUp: handlePassiveOverlayDismiss,
+            onTouchEnd: handlePassiveOverlayDismiss,
+            onMouseUp: handlePassiveOverlayDismiss,
+            onClick: handlePassiveOverlayDismiss,
+          }}
+        >
           <div className="px-2 pb-4">
             <DrawerTitle className="sr-only">{label} actions</DrawerTitle>
             <MenuItems
               {...menuProps}
               onDetailNavigate={detailNavHandler}
+              onBrowseIntentStart={markCategoryPillBrowseIntent}
               onBrowseFullScreen={browseFullScreenHandler}
               onFilter={() => {
                 onFilter();
@@ -251,6 +324,7 @@ export function InteractiveCategoryPill({
         <MenuItems
           {...menuProps}
           onDetailNavigate={detailNavHandler}
+          onBrowseIntentStart={markCategoryPillBrowseIntent}
           onBrowseFullScreen={browseFullScreenHandler}
           onFilter={() => {
             onFilter();

@@ -5,7 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { CardGridSkeleton } from "@/components/ui/card-skeletons";
 import { Badge } from "@/components/ui/badge";
-import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
+import {
+  consumeCategoryPillBrowseIntent,
+  InteractiveCategoryPill,
+  isCategoryPillDrawerDismissSuppressed,
+} from "@/components/InteractiveCategoryPill";
 import { AvatarHeightHeadline } from "@/components/AvatarHeightHeadline";
 import { useCategoryRaceMap } from "@/hooks/useCategoryRaceMap";
 import { useLeaderboardCategories } from "@/hooks/useLeaderboardCategories";
@@ -1182,6 +1186,8 @@ function FilterChip({
 }
 
 const OVERLAY_SCROLL_PREFIX = "overlay_scroll_";
+type SnapOpenSource = "card-tap" | "browse-button";
+
 function saveOverlayScroll(name: string, scrollTop: number) {
   sessionStorage.setItem(OVERLAY_SCROLL_PREFIX + name, String(Math.round(scrollTop)));
 }
@@ -1749,8 +1755,13 @@ export default function VotePage() {
     [displayOpinionPolls],
   );
 
-  const openSnapScroll = useCallback((section: SnapSectionType, itemId?: string) => {
+  const openSnapScroll = useCallback((section: SnapSectionType, itemId?: string, source: SnapOpenSource = "card-tap") => {
     if (!isMobile) return;
+    if (source === "browse-button") {
+      if (!consumeCategoryPillBrowseIntent()) return;
+    } else if (isCategoryPillDrawerDismissSuppressed()) {
+      return;
+    }
     savedSnapWindowScrollRef.current = window.scrollY;
     setSnapScrollSection(section);
     setSnapScrollInitialId(itemId);
@@ -1792,7 +1803,7 @@ export default function VotePage() {
       node = node.parentElement;
     }
     e.stopPropagation();
-    openSnapScroll(section, itemId);
+    openSnapScroll(section, itemId, "card-tap");
   }, [isMobile, openSnapScroll]);
 
   useEffect(() => {
@@ -2522,7 +2533,7 @@ export default function VotePage() {
                     categoryRaceMap={raceMap}
                     leaderboardCategories={leaderboardCats}
                     onNavigateToPollDetail={topic.slug ? () => goSentimentDetail(topic.slug) : undefined}
-                    onBrowseFullScreen={isMobile ? () => openSnapScroll("sentiment", topic.id) : undefined}
+                    onBrowseFullScreen={isMobile ? () => openSnapScroll("sentiment", topic.id, "browse-button") : undefined}
                   />
                 </div>
               ))}
@@ -2627,7 +2638,7 @@ export default function VotePage() {
                     categoryRaceMap={raceMap}
                     leaderboardCategories={leaderboardCats}
                     onNavigateToDetail={matchup.slug ? () => goMatchupDetail(matchup.slug!) : undefined}
-                    onBrowseFullScreen={isMobile ? () => openSnapScroll("matchups", matchup.id) : undefined}
+                    onBrowseFullScreen={isMobile ? () => openSnapScroll("matchups", matchup.id, "browse-button") : undefined}
                   />
                 </div>
               ))}
@@ -2739,7 +2750,7 @@ export default function VotePage() {
                     categoryRaceMap={raceMap}
                     leaderboardCategories={leaderboardCats}
                     onNavigateToDetail={poll.slug ? () => goOpinionDetail(poll.slug) : undefined}
-                    onBrowseFullScreen={isMobile ? () => openSnapScroll("opinion", poll.id) : undefined}
+                    onBrowseFullScreen={isMobile ? () => openSnapScroll("opinion", poll.id, "browse-button") : undefined}
                   />
                 </div>
               ))}
@@ -3615,7 +3626,7 @@ export default function VotePage() {
                     categoryRaceMap={raceMap}
                     leaderboardCategories={leaderboardCats}
                     onNavigateToPollDetail={topic.slug ? () => goSentimentDetail(topic.slug) : undefined}
-                    onBrowseFullScreen={isMobile ? () => openSnapScroll("sentiment", topic.id) : undefined}
+                    onBrowseFullScreen={isMobile ? () => openSnapScroll("sentiment", topic.id, "browse-button") : undefined}
                   />
                 ))}
               </div>
@@ -3677,7 +3688,7 @@ export default function VotePage() {
                     categoryRaceMap={raceMap}
                     leaderboardCategories={leaderboardCats}
                     onNavigateToDetail={matchup.slug ? () => goMatchupDetail(matchup.slug!) : undefined}
-                    onBrowseFullScreen={isMobile ? () => openSnapScroll("matchups", matchup.id) : undefined}
+                    onBrowseFullScreen={isMobile ? () => openSnapScroll("matchups", matchup.id, "browse-button") : undefined}
                   />
                 ))}
               </div>
@@ -3748,7 +3759,7 @@ export default function VotePage() {
                     categoryRaceMap={raceMap}
                     leaderboardCategories={leaderboardCats}
                     onNavigateToDetail={poll.slug ? () => goOpinionDetail(poll.slug) : undefined}
-                    onBrowseFullScreen={isMobile ? () => openSnapScroll("opinion", poll.id) : undefined}
+                    onBrowseFullScreen={isMobile ? () => openSnapScroll("opinion", poll.id, "browse-button") : undefined}
                   />
                 ))}
               </div>
