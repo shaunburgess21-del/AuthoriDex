@@ -17,6 +17,8 @@ interface Comment {
   parentId: string | null;
   userId: string;
   username: string;
+  fullName: string | null;
+  avatarUrl: string | null;
   content: string;
   createdAt: string;
   upvotes: number;
@@ -106,7 +108,6 @@ export function ThreadedComments({ insightId, isOpen, onToggle, commentCount = 0
         body: JSON.stringify({
           insightId,
           parentId: parentId || null,
-          username: user.email?.split('@')[0] || user.id.substring(0, 8),
           content,
         }),
       });

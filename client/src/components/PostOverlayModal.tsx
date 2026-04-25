@@ -15,6 +15,8 @@ interface Comment {
   parentId: string | null;
   userId: string;
   username: string;
+  fullName: string | null;
+  avatarUrl: string | null;
   content: string;
   createdAt: string;
   upvotes: number;
@@ -109,7 +111,6 @@ export function PostOverlayModal({ insight, isOpen, onClose, userVote, onVote }:
         body: JSON.stringify({
           insightId: insight?.id,
           parentId: parentId || null,
-          username: user.email?.split('@')[0] || user.id.substring(0, 8),
           content,
         }),
       });

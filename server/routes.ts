@@ -68,6 +68,30 @@ const VIEW_DEDUPE_WINDOW_MS = 10 * 60 * 1000;
 const VIEW_IP_RATE_LIMIT = 30;
 const COMMENT_MAX_LENGTH = 5000;
 type CommentVoteState = "up" | "down" | null;
+type CommentAuthorJoin = {
+  authorId: string | null;
+  authorUsername: string | null;
+  authorFullName: string | null;
+  authorAvatarUrl: string | null;
+};
+const DELETED_COMMENT_AUTHOR_USERNAME = "[deleted user]";
+const commentAuthorSelect = {
+  authorId: profiles.id,
+  authorUsername: profiles.username,
+  authorFullName: profiles.fullName,
+  authorAvatarUrl: profiles.avatarUrl,
+};
+function formatCommentAuthor(author: CommentAuthorJoin) {
+  if (!author.authorId) {
+    return { username: DELETED_COMMENT_AUTHOR_USERNAME, fullName: null, avatarUrl: null };
+  }
+
+  return {
+    username: author.authorUsername,
+    fullName: author.authorFullName,
+    avatarUrl: author.authorAvatarUrl,
+  };
+}
 const BOT_UA_PATTERNS = /bot|crawl|spider|slurp|wget|curl|fetch|headless|phantom|puppet|selenium|lighthouse|preview|embed|scrape/i;
 const PREFETCH_HEADERS = ['purpose', 'sec-purpose', 'x-purpose'];
 const SESSION_COOKIE_NAME = 'fdx_sid';
@@ -3665,14 +3689,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ===== INSIGHT COMMENTS API =====
   
   // Get all comments for an insight (with nested structure)
-  app.get("/api/insight-comments/:insightId", async (req, res) => {
+  app.get("/api/insight-comments/:insightId", optionalAuth, async (req: AuthRequest, res) => {
     try {
       const { insightId } = req.params;
       
       // Fetch all comments for this insight
       const comments = await db
-        .select()
+        .select({
+          id: insightComments.id,
+          insightId: insightComments.insightId,
+          parentId: insightComments.parentId,
+          userId: insightComments.userId,
+          content: insightComments.content,
+          createdAt: insightComments.createdAt,
+          ...commentAuthorSelect,
+        })
         .from(insightComments)
+        .leftJoin(profiles, eq(insightComments.userId, profiles.id))
         .where(eq(insightComments.insightId, insightId))
         .orderBy(desc(insightComments.createdAt));
 
@@ -3717,11 +3750,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      const userVoteMap = new Map<string, CommentVoteState>();
+      if (req.userId && commentIds.length > 0) {
+        const userVotes = await db
+          .select({
+            commentId: commentVotes.commentId,
+            voteType: commentVotes.voteType,
+          })
+          .from(commentVotes)
+          .where(and(
+            eq(commentVotes.userId, req.userId),
+            inArray(commentVotes.commentId, commentIds),
+          ));
+
+        for (const vote of userVotes) {
+          userVoteMap.set(vote.commentId, vote.voteType as CommentVoteState);
+        }
+      }
+
       // Add vote counts to comments
-      const commentsWithVotes = comments.map(comment => ({
+      const commentsWithVotes = comments.map(({ authorId, authorUsername, authorFullName, authorAvatarUrl, ...comment }) => ({
         ...comment,
+        ...formatCommentAuthor({ authorId, authorUsername, authorFullName, authorAvatarUrl }),
         upvotes: voteCounts[comment.id]?.upvotes || 0,
         downvotes: voteCounts[comment.id]?.downvotes || 0,
+        userVote: userVoteMap.get(comment.id) ?? null,
       }));
 
       res.json(commentsWithVotes);
@@ -3739,12 +3792,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Comment body shape:
       // - insightId: UUID/string identifier of the insight being commented on
       // - parentId: optional — if provided, this is a reply
-      // - username: optional — server falls back to a prefix of userId
       // - content: non-empty, capped at COMMENT_MAX_LENGTH
+      if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "username")) {
+        return sendBadRequest(res, "Username is resolved from the authenticated profile");
+      }
       const insightCommentSchema = z.object({
         insightId: z.string().min(1).max(128),
         parentId: z.string().min(1).max(128).optional().nullable(),
-        username: z.string().max(64).optional(),
         content: z.string().min(1).max(COMMENT_MAX_LENGTH),
       });
       let parsed: z.infer<typeof insightCommentSchema>;
@@ -3754,7 +3808,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (err instanceof ZodError) return sendZodError(res, err);
         return sendBadRequest(res, "Invalid comment body");
       }
-      const { insightId, parentId, username, content } = parsed;
+      const { insightId, parentId, content } = parsed;
 
       const [newComment] = await db
         .insert(insightComments)
@@ -3762,7 +3816,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           insightId,
           parentId: parentId || null,
           userId,
-          username: username || userId.substring(0, 8),
           content,
         })
         .returning();
@@ -3796,8 +3849,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } catch (e) { console.error("XP award failed:", e); }
       }
 
+      const [profile] = await db
+        .select(commentAuthorSelect)
+        .from(profiles)
+        .where(eq(profiles.id, userId))
+        .limit(1);
+
       res.status(201).json({
         ...newComment,
+        ...formatCommentAuthor(profile ?? {
+          authorId: null,
+          authorUsername: null,
+          authorFullName: null,
+          authorAvatarUrl: null,
+        }),
         upvotes: 0,
         downvotes: 0,
         xp: xpResult ?? null,
@@ -4877,7 +4942,19 @@ Only return the JSON object.`;
       if (!matchup) {
         return res.status(404).json({ error: "Matchup not found" });
       }
-      const comments = await db.select().from(matchupComments)
+      const comments = await db.select({
+        id: matchupComments.id,
+        matchupId: matchupComments.matchupId,
+        userId: matchupComments.userId,
+        body: matchupComments.body,
+        parentId: matchupComments.parentId,
+        upvotes: matchupComments.upvotes,
+        downvotes: matchupComments.downvotes,
+        createdAt: matchupComments.createdAt,
+        updatedAt: matchupComments.updatedAt,
+        ...commentAuthorSelect,
+      }).from(matchupComments)
+        .leftJoin(profiles, eq(matchupComments.userId, profiles.id))
         .where(eq(matchupComments.matchupId, matchup.id))
         .orderBy(desc(matchupComments.createdAt));
 
@@ -4896,8 +4973,9 @@ Only return the JSON object.`;
         }
       }
 
-      res.json(comments.map((comment) => ({
+      res.json(comments.map(({ authorId, authorUsername, authorFullName, authorAvatarUrl, ...comment }) => ({
         ...comment,
+        ...formatCommentAuthor({ authorId, authorUsername, authorFullName, authorAvatarUrl }),
         userVote: userVoteMap.get(comment.id) ?? null,
       })));
     } catch (error: any) {
@@ -4913,6 +4991,9 @@ Only return the JSON object.`;
       if (!req.userId) {
         return res.status(401).json({ error: "Must be signed in to comment" });
       }
+      if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "username")) {
+        return res.status(400).json({ error: "Username is resolved from the authenticated profile" });
+      }
       if (!body || !body.trim()) {
         return res.status(400).json({ error: "Comment body is required" });
       }
@@ -4923,15 +5004,25 @@ Only return the JSON object.`;
       if (!matchup) {
         return res.status(404).json({ error: "Matchup not found" });
       }
-      const [profile] = await db.select().from(profiles).where(eq(profiles.id, req.userId!));
       const [comment] = await db.insert(matchupComments).values({
         matchupId: matchup.id,
         userId: req.userId,
-        username: profile?.username || null,
-        avatarUrl: profile?.avatarUrl || null,
         body: body.trim(),
       }).returning();
-      res.json(comment);
+      const [profile] = await db
+        .select(commentAuthorSelect)
+        .from(profiles)
+        .where(eq(profiles.id, req.userId!))
+        .limit(1);
+      res.json({
+        ...comment,
+        ...formatCommentAuthor(profile ?? {
+          authorId: null,
+          authorUsername: null,
+          authorFullName: null,
+          authorAvatarUrl: null,
+        }),
+      });
     } catch (error: any) {
       console.error("Error posting matchup comment:", error.message);
       res.status(500).json({ error: "Failed to post comment" });
@@ -4952,11 +5043,13 @@ Only return the JSON object.`;
       if (!voteType || (voteType !== 'up' && voteType !== 'down')) {
         return res.status(400).json({ error: "Invalid vote type" });
       }
+      let nextVote: CommentVoteState = voteType;
       await db.transaction(async (tx) => {
         const [existing] = await tx.select().from(matchupCommentVotes)
           .where(and(eq(matchupCommentVotes.userId, userId), eq(matchupCommentVotes.commentId, commentId)));
         if (existing) {
           if (existing.voteType === voteType) {
+            nextVote = null;
             await tx.delete(matchupCommentVotes).where(eq(matchupCommentVotes.id, existing.id));
             if (voteType === 'up') {
               await tx.update(matchupComments).set({ upvotes: sql`GREATEST(upvotes - 1, 0)` }).where(eq(matchupComments.id, commentId));
@@ -4964,6 +5057,7 @@ Only return the JSON object.`;
               await tx.update(matchupComments).set({ downvotes: sql`GREATEST(downvotes - 1, 0)` }).where(eq(matchupComments.id, commentId));
             }
           } else {
+            nextVote = voteType;
             await tx.update(matchupCommentVotes).set({ voteType }).where(eq(matchupCommentVotes.id, existing.id));
             if (voteType === 'up') {
               await tx.update(matchupComments).set({ upvotes: sql`upvotes + 1`, downvotes: sql`GREATEST(downvotes - 1, 0)` }).where(eq(matchupComments.id, commentId));
@@ -4972,6 +5066,7 @@ Only return the JSON object.`;
             }
           }
         } else {
+          nextVote = voteType;
           await tx.insert(matchupCommentVotes).values({ commentId, userId, voteType });
           if (voteType === 'up') {
             await tx.update(matchupComments).set({ upvotes: sql`upvotes + 1` }).where(eq(matchupComments.id, commentId));
@@ -4981,7 +5076,12 @@ Only return the JSON object.`;
         }
       });
       const [updated] = await db.select().from(matchupComments).where(eq(matchupComments.id, commentId));
-      res.json(updated);
+      res.json({
+        commentId,
+        voteType: nextVote,
+        upvotes: updated?.upvotes || 0,
+        downvotes: updated?.downvotes || 0,
+      });
     } catch (error: any) {
       console.error("Error voting on matchup comment:", error.message);
       res.status(500).json({ error: "Failed to vote on comment" });
@@ -9776,9 +9876,16 @@ Only return the JSON object.`;
         userId: insightComments.userId,
         content: insightComments.content,
         createdAt: insightComments.createdAt,
-      }).from(insightComments).orderBy(desc(insightComments.createdAt)).limit(100);
+        ...commentAuthorSelect,
+      }).from(insightComments)
+        .leftJoin(profiles, eq(insightComments.userId, profiles.id))
+        .orderBy(desc(insightComments.createdAt))
+        .limit(100);
       
-      res.json(comments);
+      res.json(comments.map(({ authorId, authorUsername, authorFullName, authorAvatarUrl, ...comment }) => ({
+        ...comment,
+        ...formatCommentAuthor({ authorId, authorUsername, authorFullName, authorAvatarUrl }),
+      })));
     } catch (error: any) {
       console.error("Error fetching comments for moderation:", error.message);
       res.status(500).json({ error: "Failed to fetch comments" });
@@ -10381,8 +10488,20 @@ Target length: about 90-150 words.`;
       }
 
       const comments = await db
-        .select()
+        .select({
+          id: trendingPollComments.id,
+          pollId: trendingPollComments.pollId,
+          userId: trendingPollComments.userId,
+          body: trendingPollComments.body,
+          parentId: trendingPollComments.parentId,
+          upvotes: trendingPollComments.upvotes,
+          downvotes: trendingPollComments.downvotes,
+          createdAt: trendingPollComments.createdAt,
+          updatedAt: trendingPollComments.updatedAt,
+          ...commentAuthorSelect,
+        })
         .from(trendingPollComments)
+        .leftJoin(profiles, eq(trendingPollComments.userId, profiles.id))
         .where(eq(trendingPollComments.pollId, poll.id))
         .orderBy(desc(trendingPollComments.createdAt))
         .limit(100);
@@ -10402,8 +10521,9 @@ Target length: about 90-150 words.`;
         }
       }
 
-      res.json(comments.map((comment) => ({
+      res.json(comments.map(({ authorId, authorUsername, authorFullName, authorAvatarUrl, ...comment }) => ({
         ...comment,
+        ...formatCommentAuthor({ authorId, authorUsername, authorFullName, authorAvatarUrl }),
         userVote: userVoteMap.get(comment.id) ?? null,
       })));
     } catch (error: any) {
@@ -10417,6 +10537,10 @@ Target length: about 90-150 words.`;
       const authReq = req as AuthRequest;
       const { slug } = req.params;
       const { body, parentId } = req.body;
+
+      if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "username")) {
+        return res.status(400).json({ error: "Username is resolved from the authenticated profile" });
+      }
 
       if (!body || typeof body !== "string" || body.trim().length === 0) {
         return res.status(400).json({ error: "Comment body is required" });
@@ -10435,25 +10559,31 @@ Target length: about 90-150 words.`;
         return res.status(404).json({ error: "Poll not found" });
       }
 
-      const [profile] = await db
-        .select({ username: profiles.username, avatarUrl: profiles.avatarUrl })
-        .from(profiles)
-        .where(eq(profiles.id, authReq.userId!))
-        .limit(1);
-
       const [created] = await db
         .insert(trendingPollComments)
         .values({
           pollId: poll.id,
           userId: authReq.userId!,
-          username: profile?.username || null,
-          avatarUrl: profile?.avatarUrl || null,
           body: body.trim(),
           parentId: parentId || null,
         })
         .returning();
 
-      res.json(created);
+      const [profile] = await db
+        .select(commentAuthorSelect)
+        .from(profiles)
+        .where(eq(profiles.id, authReq.userId!))
+        .limit(1);
+
+      res.json({
+        ...created,
+        ...formatCommentAuthor(profile ?? {
+          authorId: null,
+          authorUsername: null,
+          authorFullName: null,
+          authorAvatarUrl: null,
+        }),
+      });
     } catch (error: any) {
       console.error("Error creating poll comment:", error.message);
       res.status(500).json({ error: "Failed to add comment" });
@@ -11384,8 +11514,20 @@ Target length: about 90-150 words.`;
         : desc(opinionPollComments.upvotes);
 
       const comments = await db
-        .select()
+        .select({
+          id: opinionPollComments.id,
+          pollId: opinionPollComments.pollId,
+          userId: opinionPollComments.userId,
+          body: opinionPollComments.body,
+          parentId: opinionPollComments.parentId,
+          upvotes: opinionPollComments.upvotes,
+          downvotes: opinionPollComments.downvotes,
+          createdAt: opinionPollComments.createdAt,
+          updatedAt: opinionPollComments.updatedAt,
+          ...commentAuthorSelect,
+        })
         .from(opinionPollComments)
+        .leftJoin(profiles, eq(opinionPollComments.userId, profiles.id))
         .where(eq(opinionPollComments.pollId, poll.id))
         .orderBy(orderClause);
 
@@ -11404,8 +11546,9 @@ Target length: about 90-150 words.`;
         }
       }
 
-      res.json(comments.map((comment) => ({
+      res.json(comments.map(({ authorId, authorUsername, authorFullName, authorAvatarUrl, ...comment }) => ({
         ...comment,
+        ...formatCommentAuthor({ authorId, authorUsername, authorFullName, authorAvatarUrl }),
         userVote: userVoteMap.get(comment.id) ?? null,
       })));
     } catch (error: any) {
@@ -11419,6 +11562,10 @@ Target length: about 90-150 words.`;
       const { slug } = req.params;
       const userId = req.userId!;
       const { body, parentId } = req.body;
+
+      if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "username")) {
+        return res.status(400).json({ error: "Username is resolved from the authenticated profile" });
+      }
 
       if (!body?.trim()) {
         return res.status(400).json({ error: "Comment body is required" });
@@ -11435,24 +11582,28 @@ Target length: about 90-150 words.`;
 
       if (!poll) return res.status(404).json({ error: "Poll not found" });
 
-      let username = "Anonymous";
-      let avatarUrl = null;
-      const [profile] = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
-      if (profile) {
-        username = profile.fullName || profile.username || "Anonymous";
-        avatarUrl = profile.avatarUrl || null;
-      }
-
       const [created] = await db.insert(opinionPollComments).values({
         pollId: poll.id,
         userId,
-        username,
-        avatarUrl,
         body: body.trim(),
         parentId: parentId || null,
       }).returning();
 
-      res.json(created);
+      const [profile] = await db
+        .select(commentAuthorSelect)
+        .from(profiles)
+        .where(eq(profiles.id, userId))
+        .limit(1);
+
+      res.json({
+        ...created,
+        ...formatCommentAuthor(profile ?? {
+          authorId: null,
+          authorUsername: null,
+          authorFullName: null,
+          authorAvatarUrl: null,
+        }),
+      });
     } catch (error: any) {
       console.error("Error posting opinion poll comment:", error.message);
       res.status(500).json({ error: "Failed to post comment" });
@@ -12172,11 +12323,27 @@ Target length: about 90-150 words.`;
       }));
 
       const comments = await db
-        .select()
+        .select({
+          id: openMarketComments.id,
+          marketId: openMarketComments.marketId,
+          userId: openMarketComments.userId,
+          body: openMarketComments.body,
+          parentId: openMarketComments.parentId,
+          upvotes: openMarketComments.upvotes,
+          downvotes: openMarketComments.downvotes,
+          createdAt: openMarketComments.createdAt,
+          updatedAt: openMarketComments.updatedAt,
+          ...commentAuthorSelect,
+        })
         .from(openMarketComments)
+        .leftJoin(profiles, eq(openMarketComments.userId, profiles.id))
         .where(eq(openMarketComments.marketId, market.id))
         .orderBy(desc(openMarketComments.createdAt))
         .limit(50);
+      const commentsWithAuthors = comments.map(({ authorId, authorUsername, authorFullName, authorAvatarUrl, ...comment }) => ({
+        ...comment,
+        ...formatCommentAuthor({ authorId, authorUsername, authorFullName, authorAvatarUrl }),
+      }));
 
       const [participantResult] = await db
         .select({
@@ -12204,7 +12371,7 @@ Target length: about 90-150 words.`;
       res.json({
         ...market,
         entries: entriesWithCounts,
-        comments,
+        comments: commentsWithAuthors,
         totalParticipants: Number(participantResult?.uniqueParticipants || 0),
         linkedPersonName,
         linkedPersonAvatar,
@@ -13052,6 +13219,10 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       const { slug } = req.params;
       const { body, parentId } = req.body;
 
+      if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "username")) {
+        return res.status(400).json({ error: "Username is resolved from the authenticated profile" });
+      }
+
       if (!body || typeof body !== "string" || body.trim().length === 0) {
         return res.status(400).json({ error: "Comment body is required" });
       }
@@ -13071,25 +13242,31 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         return res.status(404).json({ error: "Market not found" });
       }
 
-      const [profile] = await db
-        .select({ username: profiles.username, avatarUrl: profiles.avatarUrl })
-        .from(profiles)
-        .where(eq(profiles.id, authReq.userId!))
-        .limit(1);
-
       const [created] = await db
         .insert(openMarketComments)
         .values({
           marketId: market.id,
           userId: authReq.userId!,
-          username: profile?.username || null,
-          avatarUrl: profile?.avatarUrl || null,
           body: body.trim(),
           parentId: parentId || null,
         })
         .returning();
 
-      res.json(created);
+      const [profile] = await db
+        .select(commentAuthorSelect)
+        .from(profiles)
+        .where(eq(profiles.id, authReq.userId!))
+        .limit(1);
+
+      res.json({
+        ...created,
+        ...formatCommentAuthor(profile ?? {
+          authorId: null,
+          authorUsername: null,
+          authorFullName: null,
+          authorAvatarUrl: null,
+        }),
+      });
     } catch (error) {
       console.error("[Open Markets] Comment error:", error);
       res.status(500).json({ error: "Failed to add comment" });
@@ -13116,8 +13293,20 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       }
 
       const comments = await db
-        .select()
+        .select({
+          id: openMarketComments.id,
+          marketId: openMarketComments.marketId,
+          userId: openMarketComments.userId,
+          body: openMarketComments.body,
+          parentId: openMarketComments.parentId,
+          upvotes: openMarketComments.upvotes,
+          downvotes: openMarketComments.downvotes,
+          createdAt: openMarketComments.createdAt,
+          updatedAt: openMarketComments.updatedAt,
+          ...commentAuthorSelect,
+        })
         .from(openMarketComments)
+        .leftJoin(profiles, eq(openMarketComments.userId, profiles.id))
         .where(eq(openMarketComments.marketId, market.id))
         .orderBy(desc(openMarketComments.createdAt))
         .limit(50);
@@ -13137,8 +13326,9 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         }
       }
 
-      res.json(comments.map((comment) => ({
+      res.json(comments.map(({ authorId, authorUsername, authorFullName, authorAvatarUrl, ...comment }) => ({
         ...comment,
+        ...formatCommentAuthor({ authorId, authorUsername, authorFullName, authorAvatarUrl }),
         userVote: userVoteMap.get(comment.id) ?? null,
       })));
     } catch (error) {
@@ -13159,11 +13349,13 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       if (!voteType || (voteType !== "up" && voteType !== "down")) {
         return res.status(400).json({ error: "Invalid vote type" });
       }
+      let nextVote: CommentVoteState = voteType;
       await db.transaction(async (tx) => {
         const [existing] = await tx.select().from(openMarketCommentVotes)
           .where(and(eq(openMarketCommentVotes.userId, userId), eq(openMarketCommentVotes.commentId, commentId)));
         if (existing) {
           if (existing.voteType === voteType) {
+            nextVote = null;
             await tx.delete(openMarketCommentVotes).where(eq(openMarketCommentVotes.id, existing.id));
             if (voteType === "up") {
               await tx.update(openMarketComments).set({ upvotes: sql`GREATEST(upvotes - 1, 0)` }).where(eq(openMarketComments.id, commentId));
@@ -13171,6 +13363,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
               await tx.update(openMarketComments).set({ downvotes: sql`GREATEST(downvotes - 1, 0)` }).where(eq(openMarketComments.id, commentId));
             }
           } else {
+            nextVote = voteType;
             await tx.update(openMarketCommentVotes).set({ voteType }).where(eq(openMarketCommentVotes.id, existing.id));
             if (voteType === "up") {
               await tx.update(openMarketComments).set({ upvotes: sql`upvotes + 1`, downvotes: sql`GREATEST(downvotes - 1, 0)` }).where(eq(openMarketComments.id, commentId));
@@ -13179,6 +13372,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
             }
           }
         } else {
+          nextVote = voteType;
           await tx.insert(openMarketCommentVotes).values({ commentId, userId, voteType });
           if (voteType === "up") {
             await tx.update(openMarketComments).set({ upvotes: sql`upvotes + 1` }).where(eq(openMarketComments.id, commentId));
@@ -13188,7 +13382,12 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         }
       });
       const [updated] = await db.select().from(openMarketComments).where(eq(openMarketComments.id, commentId));
-      res.json(updated);
+      res.json({
+        commentId,
+        voteType: nextVote,
+        upvotes: updated?.upvotes || 0,
+        downvotes: updated?.downvotes || 0,
+      });
     } catch (error: any) {
       console.error("Error voting on open-market comment:", error.message);
       res.status(500).json({ error: "Failed to vote on comment" });

@@ -325,7 +325,6 @@ export const insightComments = pgTable("insight_comments", {
   insightId: varchar("insight_id").notNull().references(() => communityInsights.id, { onDelete: "cascade" }),
   parentId: varchar("parent_id"), // null for top-level comments, references parent comment for replies
   userId: varchar("user_id").notNull(), // Supabase auth user ID
-  username: text("username").notNull(),
   content: text("content").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
@@ -661,8 +660,6 @@ export const trendingPollComments = pgTable("trending_poll_comments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   pollId: varchar("poll_id").notNull().references(() => trendingPolls.id, { onDelete: "cascade" }),
   userId: varchar("user_id").notNull(),
-  username: text("username"),
-  avatarUrl: text("avatar_url"),
   body: text("body").notNull(),
   parentId: varchar("parent_id"),
   upvotes: integer("upvotes").notNull().default(0),
@@ -705,8 +702,6 @@ export const matchupComments = pgTable("matchup_comments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   matchupId: varchar("matchup_id").notNull().references(() => matchups.id, { onDelete: "cascade" }),
   userId: varchar("user_id").notNull(),
-  username: text("username"),
-  avatarUrl: text("avatar_url"),
   body: text("body").notNull(),
   parentId: varchar("parent_id"),
   upvotes: integer("upvotes").notNull().default(0),
@@ -1071,8 +1066,6 @@ export const openMarketComments = pgTable("open_market_comments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   marketId: varchar("market_id").notNull().references(() => predictionMarkets.id, { onDelete: "cascade" }),
   userId: varchar("user_id").notNull(),
-  username: text("username"),
-  avatarUrl: text("avatar_url"),
   body: text("body").notNull(),
   parentId: varchar("parent_id"),
   upvotes: integer("upvotes").notNull().default(0),
@@ -1406,8 +1399,6 @@ export const opinionPollComments = pgTable("opinion_poll_comments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   pollId: varchar("poll_id").notNull().references(() => opinionPolls.id, { onDelete: "cascade" }),
   userId: varchar("user_id").notNull(),
-  username: text("username"),
-  avatarUrl: text("avatar_url"),
   body: text("body").notNull(),
   parentId: varchar("parent_id"),
   upvotes: integer("upvotes").notNull().default(0),
