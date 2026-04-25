@@ -7,7 +7,7 @@ import { ThumbsUp, ThumbsDown, MessageCircle, ChevronDown, ChevronUp, Send, Load
 import { formatDistanceToNow } from "date-fns";
 import { queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/contexts/AuthContext";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useXpBurst } from "./XpBurstProvider";
 import { voteToApprovalPercent } from "@/lib/utils";
 
@@ -46,9 +46,7 @@ function getRatingColor(vote: number | null | undefined): string {
 }
 
 export function ThreadedComments({ insightId, isOpen, onToggle, commentCount = 0, userSentimentVote }: ThreadedCommentsProps) {
-  const { user } = useAuth();
-  const { toast } = useToast();
-  const { trigger: triggerXpBurst } = useXpBurst();
+  const { user } = useAuth();  const { trigger: triggerXpBurst } = useXpBurst();
   const [newComment, setNewComment] = useState("");
   const [replyingTo, setReplyingTo] = useState<{ id: string; username: string } | null>(null);
   const [replyContent, setReplyContent] = useState("");
@@ -126,17 +124,10 @@ export function ThreadedComments({ insightId, isOpen, onToggle, commentCount = 0
       if (data?.xp?.xpAwarded) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }
-      toast({
-        title: "Comment posted",
-        description: "Your comment has been added.",
-      });
+      toast("Comment posted", { description: "Your comment has been added." });
     },
     onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to post comment",
-        variant: "destructive",
-      });
+      toast.error("Error", { description: error.message || "Failed to post comment" });
     },
   });
 
@@ -184,21 +175,13 @@ export function ThreadedComments({ insightId, isOpen, onToggle, commentCount = 0
       }
     },
     onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to vote",
-        variant: "destructive",
-      });
+      toast.error("Error", { description: error.message || "Failed to vote" });
     },
   });
 
   const handleVote = (commentId: string, voteType: "up" | "down") => {
     if (!user) {
-      toast({
-        title: "Login Required",
-        description: "Please log in to vote on comments",
-        variant: "destructive",
-      });
+      toast.error("Login Required", { description: "Please log in to vote on comments" });
       return;
     }
     voteMutation.mutate({ commentId, voteType });

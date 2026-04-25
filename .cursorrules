@@ -8,7 +8,7 @@ VoxDex is a live influence index and prediction platform. It ranks 100 public fi
 - Backend: Node.js, Express, TypeScript
 - Database: PostgreSQL via Supabase (Drizzle ORM)
 - Hosting: Railway (backend), Vercel (frontend)
-- Auth: Passport.js (local strategy)
+- Auth: Supabase (email + password, OTP fallback, Google OAuth)
 
 ## Folder Structure
 - `client/` — React frontend

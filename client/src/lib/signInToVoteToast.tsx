@@ -1,4 +1,10 @@
-import { ToastAction } from "@/components/ui/toast";
+/**
+ * Helpers for the "Sign in to vote" prompt that fires on 401s and on
+ * unauthenticated vote attempts. Returns Sonner-shaped options for use as
+ * the second argument to `toast(title, options)`.
+ *
+ * Usage: `toast("Sign in to vote", signInToVoteToastOptions(onSignIn))`.
+ */
 
 export function isUnauthorizedApiError(error: unknown): boolean {
   if (!(error instanceof Error) || !error.message) return false;
@@ -8,14 +14,14 @@ export function isUnauthorizedApiError(error: unknown): boolean {
   return false;
 }
 
+export const signInToVoteTitle = "Sign in to vote";
+
 export function signInToVoteToastOptions(onSignIn: () => void) {
   return {
-    title: "Sign in to vote",
     description: "Create a free account to record your vote on VoxDex.",
-    action: (
-      <ToastAction altText="Sign in" onClick={onSignIn}>
-        Sign in
-      </ToastAction>
-    ),
+    action: {
+      label: "Sign in",
+      onClick: onSignIn,
+    },
   };
 }

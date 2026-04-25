@@ -9,19 +9,18 @@ import { useLocation } from "wouter";
 import { navigateToLogin } from "@/lib/authReturn";
 import { useAuth } from "@/contexts/AuthContext";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Badge } from "@/components/ui/badge";
 import { UploadImageInput } from "@/components/ui/upload-image-input";
 import { AvatarPicker } from "@/components/avatar/AvatarPicker";
 import { uploadGeneratedAvatar } from "@/lib/avatar/upload";
+import { PasswordCard } from "./PasswordCard";
 
 export default function SettingsPage() {
   const { user, profile, profileLoading, refreshProfile, signOut } = useAuth();
   const [, setLocation] = useLocation();
-  const { toast } = useToast();
-  
   const [username, setUsername] = useState(profile?.username || "");
   const [fullName, setFullName] = useState(profile?.fullName || "");
   const [avatarUrl, setAvatarUrl] = useState(profile?.avatarUrl || "");
@@ -49,17 +48,10 @@ export default function SettingsPage() {
       // refreshProfile fetches /api/profile/me directly; no need to also invalidate
       await refreshProfile();
       setHasLocalChanges(false);
-      toast({
-        title: "Profile updated",
-        description: "Your changes have been saved.",
-      });
+      toast("Profile updated", { description: "Your changes have been saved." });
     },
     onError: () => {
-      toast({
-        title: "Update failed",
-        description: "There was an error saving your changes.",
-        variant: "destructive",
-      });
+      toast.error("Update failed", { description: "There was an error saving your changes." });
     },
   });
 
@@ -93,28 +85,17 @@ export default function SettingsPage() {
       setAvatarUrl(url);
       await refreshProfile();
 
-      toast({
-        title: "Avatar updated",
-        description: "Looking sharp.",
-      });
+      toast("Avatar updated", { description: "Looking sharp." });
     } catch (err) {
       console.error("[SettingsPage] Avatar save failed:", err);
-      toast({
-        title: "Could not save avatar",
-        description: err instanceof Error ? err.message : "Please try again.",
-        variant: "destructive",
-      });
+      toast.error("Could not save avatar", { description: err instanceof Error ? err.message : "Please try again." });
       throw err;
     }
   };
 
   const handleDeleteAccount = async () => {
     if (confirm("Are you sure you want to delete your account? This action cannot be undone.")) {
-      toast({
-        title: "Account deletion",
-        description: "Account deletion is not yet implemented.",
-        variant: "destructive",
-      });
+      toast.error("Account deletion", { description: "Account deletion is not yet implemented." });
     }
   };
 
@@ -272,6 +253,8 @@ export default function SettingsPage() {
             </div>
           </div>
         </Card>
+
+        <PasswordCard />
 
         <Card className="p-6">
           <div className="flex items-center gap-2 mb-6">

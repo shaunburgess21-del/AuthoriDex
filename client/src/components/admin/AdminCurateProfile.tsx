@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import {
   Search, Image, ArrowUpDown, X, Plus, Trash2, Loader2, ThumbsUp, Crown, Edit, ZoomIn,
 } from "lucide-react";
@@ -35,9 +35,7 @@ interface CelebrityImageData {
   addedAt: string;
 }
 
-export function AdminCurateProfile() {
-  const { toast } = useToast();
-  const [searchQuery, setSearchQuery] = useState("");
+export function AdminCurateProfile() {  const [searchQuery, setSearchQuery] = useState("");
   const [visibilityFilter, setVisibilityFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [editingCard, setEditingCard] = useState<CurateCard | null>(null);
@@ -82,10 +80,10 @@ export function AdminCurateProfile() {
       queryClient.invalidateQueries({ queryKey: ['/api/leaderboard'] });
       queryClient.invalidateQueries({ queryKey: ['/api/tracked-people'] });
       queryClient.invalidateQueries({ queryKey: ['/api/person'] });
-      toast({ title: "Seed votes updated & avatar synced" });
+      toast("Seed votes updated & avatar synced");
     },
     onError: () => {
-      toast({ title: "Error", description: "Failed to update votes", variant: "destructive" });
+      toast.error("Error", { description: "Failed to update votes" });
     },
   });
 
@@ -95,10 +93,10 @@ export function AdminCurateProfile() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/vote/curate-profile', editingCard?.id, 'images'] });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/vote/curate-profile'] });
-      toast({ title: "Image deleted" });
+      toast("Image deleted");
     },
     onError: () => {
-      toast({ title: "Error", description: "Failed to delete image", variant: "destructive" });
+      toast.error("Error", { description: "Failed to delete image" });
     },
   });
 
@@ -125,14 +123,14 @@ export function AdminCurateProfile() {
       }
       queryClient.invalidateQueries({ queryKey: ['/api/admin/vote/curate-profile', editingCard.id, 'images'] });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/vote/curate-profile'] });
-      toast({ title: "Image uploaded" });
+      toast("Image uploaded");
     } catch (err: any) {
-      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+      toast.error("Upload failed", { description: err.message });
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
-  }, [editingCard, toast]);
+  }, [editingCard]);
 
   const cards = data?.data || [];
   const filteredCards = cards.filter(c => {
@@ -430,7 +428,7 @@ export function AdminCurateProfile() {
                                 onClick={() => {
                                   const val = parseInt(seedVoteInputs[img.id] ?? String(img.votesUp), 10);
                                   if (isNaN(val) || val < 0) {
-                                    toast({ title: "Invalid number", variant: "destructive" });
+                                    toast.error("Invalid number");
                                     return;
                                   }
                                   seedVoteMutation.mutate({ imageId: img.id, votesUp: val });

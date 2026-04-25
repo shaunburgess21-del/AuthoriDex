@@ -7,7 +7,7 @@ import { ArrowLeft, Users, Loader2 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { parseVoteError } from "@/lib/voteErrors";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 interface AnimatedSentimentVotingWidgetProps {
   personId: string;
@@ -220,7 +220,6 @@ export function AnimatedSentimentVotingWidget({
 }: AnimatedSentimentVotingWidgetProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [currentValue, setCurrentValue] = useState<number | null>(null);
   const [hasInteracted, setHasInteracted] = useState(false);
@@ -306,12 +305,10 @@ export function AnimatedSentimentVotingWidget({
       } catch (error: any) {
         console.error("Error saving approval rating:", error);
         const parsed = parseVoteError(error);
-        toast({
-          title: parsed.retryAfter ? "Slow down" : "Couldn't save your vote",
+        toast.error(parsed.retryAfter ? "Slow down" : "Couldn't save your vote", {
           description: parsed.message && parsed.message.length < 160
             ? parsed.message
             : "Please check your connection and try again.",
-          variant: "destructive",
         });
         return;
       }

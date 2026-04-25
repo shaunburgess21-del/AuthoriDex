@@ -15,7 +15,7 @@ import { formatSignedPercent, formatSignedPoints } from "@/lib/predict-display";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation, Link } from "wouter";
 import { navigateToLogin } from "@/lib/authReturn";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { apiRequest } from "@/lib/queryClient";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { getCanonicalNativeCycle } from "@/lib/nativeMarketLifecycle";
@@ -475,9 +475,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
   const hasAnyMarkets = weeklyMarket || h2hBattles.length > 0 || gainerMarkets.length > 0 || openMarketsForPerson.length > 0 || jackpotMarket;
 
   const { user, profile, refreshProfile } = useAuth();
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
-  const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();  const [, setLocation] = useLocation();
   const [pendingSelection, setPendingSelection] = useState<StakeSelection | null>(null);
   const [stakeModalOpen, setStakeModalOpen] = useState(false);
   const walletCredits = profile?.predictCredits ?? 0;
@@ -548,7 +546,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       return res.json();
     },
     onSuccess: async (_data, variables) => {
-      toast({ title: "Prediction placed!", description: "Your weekly up/down prediction has been recorded." });
+      toast("Prediction placed!", { description: "Your weekly up/down prediction has been recorded." });
       setStakeModalOpen(false);
       setPendingSelection(null);
 
@@ -601,7 +599,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       ]);
     },
     onError: () => {
-      toast({ title: "Failed to place prediction", variant: "destructive" });
+      toast.error("Failed to place prediction");
     },
   });
 
@@ -611,10 +609,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       return res.json();
     },
     onSuccess: async (_data, variables) => {
-      toast({
-        title: "Prediction placed!",
-        description: variables.marketType === "h2h" ? "Your head-to-head prediction has been recorded." : "Your prediction has been recorded.",
-      });
+      toast("Prediction placed!", { description: variables.marketType === "h2h" ? "Your head-to-head prediction has been recorded." : "Your prediction has been recorded." });
       setStakeModalOpen(false);
       setPendingSelection(null);
       await Promise.all([
@@ -625,7 +620,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       ]);
     },
     onError: () => {
-      toast({ title: "Failed to place prediction", variant: "destructive" });
+      toast.error("Failed to place prediction");
     },
   });
 
@@ -634,13 +629,13 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       return;
     }
     if (!user) {
-      toast({ title: "Sign in required", description: "Sign in to place predictions." });
+      toast("Sign in required", { description: "Sign in to place predictions." });
       navigateToLogin(setLocation);
       return;
     }
     const entryId = choice === "up" ? market.upEntryId : market.downEntryId;
     if (!entryId) {
-      toast({ title: "Market unavailable", description: "This market is missing required entries. Please try another market.", variant: "destructive" });
+      toast.error("Market unavailable", { description: "This market is missing required entries. Please try another market." });
       return;
     }
     setPendingSelection({
@@ -666,13 +661,13 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       return;
     }
     if (!user) {
-      toast({ title: "Sign in required", description: "Sign in to place predictions." });
+      toast("Sign in required", { description: "Sign in to place predictions." });
       navigateToLogin(setLocation);
       return;
     }
     const entryId = person === 1 ? market.person1EntryId : market.person2EntryId;
     if (!entryId) {
-      toast({ title: "Market unavailable", description: "This market is missing required entries. Please try another market.", variant: "destructive" });
+      toast.error("Market unavailable", { description: "This market is missing required entries. Please try another market." });
       return;
     }
     const picked = person === 1 ? market.person1 : market.person2;
@@ -702,12 +697,12 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       return;
     }
     if (!user) {
-      toast({ title: "Sign in required", description: "Sign in to place predictions." });
+      toast("Sign in required", { description: "Sign in to place predictions." });
       navigateToLogin(setLocation);
       return;
     }
     if (!candidate.entryId) {
-      toast({ title: "Market unavailable", description: "This market is missing required entries. Please try another market.", variant: "destructive" });
+      toast.error("Market unavailable", { description: "This market is missing required entries. Please try another market." });
       return;
     }
     const categoryLabel = getMarketCategoryLabel(market.category);
@@ -761,7 +756,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
     if (pendingSelection.type === "updown") {
       const entryId = pendingSelection.choice.toUpperCase().includes("UP") ? weeklyMarket?.upEntryId : weeklyMarket?.downEntryId;
       if (!entryId) {
-        toast({ title: "Market unavailable", description: "Missing entry. Please try again.", variant: "destructive" });
+        toast.error("Market unavailable", { description: "Missing entry. Please try again." });
         setStakeModalOpen(false);
         setPendingSelection(null);
         return;

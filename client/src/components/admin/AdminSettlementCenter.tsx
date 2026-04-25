@@ -25,7 +25,7 @@ import {
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { getSupabase } from "@/lib/supabase";
 import { formatTimeAgo } from "@/lib/formatDate";
 
@@ -127,9 +127,7 @@ function ResolutionDialog({
   market: PendingMarket;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-}) {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
+}) {  const queryClient = useQueryClient();
   const [selectedEntry, setSelectedEntry] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   const [showVoid, setShowVoid] = useState(false);
@@ -168,9 +166,9 @@ function ResolutionDialog({
     },
     onSuccess: (data) => {
       if (data?.alreadySettled) {
-        toast({ title: "Already Resolved", description: "This market was already settled — no action needed." });
+        toast("Already Resolved", { description: "This market was already settled — no action needed." });
       } else {
-        toast({ title: "Market Resolved", description: "Payouts distributed successfully" });
+        toast("Market Resolved", { description: "Payouts distributed successfully" });
       }
       queryClient.invalidateQueries({ queryKey: ["/api/admin/markets/pending"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/markets/resolved"] });
@@ -178,7 +176,7 @@ function ResolutionDialog({
       queryClient.invalidateQueries({ queryKey: ["/api/admin/ops-summary"] });
       onOpenChange(false);
     },
-    onError: (err: Error) => toast({ title: "Settlement Failed", description: err.message, variant: "destructive" }),
+    onError: (err: Error) => toast.error("Settlement Failed", { description: err.message }),
   });
 
   const voidMutation = useMutation({
@@ -193,14 +191,14 @@ function ResolutionDialog({
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "Market Voided", description: "All stakes refunded" });
+      toast("Market Voided", { description: "All stakes refunded" });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/markets/pending"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/markets/resolved"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/ops-summary"] });
       onOpenChange(false);
     },
-    onError: () => toast({ title: "Void Failed", description: "Could not void market", variant: "destructive" }),
+    onError: () => toast.error("Void Failed", { description: "Could not void market" }),
   });
 
   const selectedPreview = preview?.entries.find(e => e.entryId === selectedEntry);
@@ -452,10 +450,7 @@ export function AdminSettlementCenter() {
   const queryClient = useQueryClient();
   const [isVisible, setIsVisible] = useState(
     typeof document === "undefined" ? true : document.visibilityState !== "hidden",
-  );
-  const { toast } = useToast();
-
-  useEffect(() => {
+  );  useEffect(() => {
     const handleVisibilityChange = () => {
       setIsVisible(document.visibilityState !== "hidden");
     };
@@ -497,16 +492,13 @@ export function AdminSettlementCenter() {
       return res.json();
     },
     onSuccess: (result: { cleaned?: Array<unknown>; skipped?: Array<unknown> }) => {
-      toast({
-        title: "Cleanup complete",
-        description: `${result.cleaned?.length || 0} stale markets cleaned, ${result.skipped?.length || 0} skipped.`,
-      });
+      toast("Cleanup complete", { description: `${result.cleaned?.length || 0} stale markets cleaned, ${result.skipped?.length || 0} skipped.` });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/markets/pending"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/markets/resolved"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/ops-summary"] });
     },
     onError: (err: Error) => {
-      toast({ title: "Cleanup failed", description: err.message, variant: "destructive" });
+      toast.error("Cleanup failed", { description: err.message });
     },
   });
 

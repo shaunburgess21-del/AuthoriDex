@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from "sonner";
 import { Card } from '@/components/ui/card';
 
 interface SentimentVotingWidgetProps {
@@ -73,10 +73,7 @@ export function SentimentVotingWidget({
   const [showFeedback, setShowFeedback] = useState(false);
   const sliderRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
-  const tempValueRef = useRef<number | null>(null);
-  const { toast } = useToast();
-
-  // Check if user has already voted (stored in localStorage for now)
+  const tempValueRef = useRef<number | null>(null);  // Check if user has already voted (stored in localStorage for now)
   useEffect(() => {
     const storedVote = localStorage.getItem(`vote_${personId}`);
     if (storedVote) {
@@ -119,18 +116,11 @@ export function SentimentVotingWidget({
       setShowFeedback(true);
       setTimeout(() => setShowFeedback(false), 3000);
       
-      toast({
-        title: 'Vote Submitted',
-        description: `You rated ${personName} as ${SENTIMENT_LABELS[value - 1]}`,
-      });
+      toast('Vote Submitted', { description: `You rated ${personName} as ${SENTIMENT_LABELS[value - 1]}` });
       
       onVoteSubmitted?.(value);
     } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'Failed to submit vote. Please try again.',
-        variant: 'destructive',
-      });
+      toast.error('Error', { description: 'Failed to submit vote. Please try again.' });
     }
   };
 

@@ -842,6 +842,9 @@ export const profiles = pgTable("profiles", {
   winRate: real("win_rate").notNull().default(0),
   isAgent: boolean("is_agent").notNull().default(false),
   lastActiveAt: timestamp("last_active_at"),
+  // Set when the user accepts ToS + Privacy on /login/welcome. NULL means not
+  // yet captured — used by the welcome screen to decide whether to show.
+  tosAcceptedAt: timestamp("tos_accepted_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

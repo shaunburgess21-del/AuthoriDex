@@ -6,9 +6,9 @@ import { PersonAvatar } from "@/components/PersonAvatar";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { isUnauthorizedApiError, signInToVoteToastOptions } from "@/lib/signInToVoteToast";
+import { isUnauthorizedApiError, signInToVoteToastOptions, signInToVoteTitle } from "@/lib/signInToVoteToast";
 import { navigateToLogin } from "@/lib/authReturn";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useLocation } from "wouter";
 import { X, Crown, ThumbsUp, ChevronLeft, Maximize2, ZoomIn } from "lucide-react";
 import type { CuratePerson } from "./CurateProfileCard";
@@ -87,9 +87,7 @@ export function CurateViewResultsOverlay({
   leaderboardCategories,
 }: CurateViewResultsOverlayProps) {
   const [expandedImage, setExpandedImage] = useState<CelebrityImage | null>(null);
-  const [pendingVoteImageId, setPendingVoteImageId] = useState<string | null>(null);
-  const { toast } = useToast();
-  const [, setLocation] = useLocation();
+  const [pendingVoteImageId, setPendingVoteImageId] = useState<string | null>(null);  const [, setLocation] = useLocation();
   const imageQueryKey = useMemo(() => ['/api/people', person.id, 'images'] as const, [person.id]);
 
   const { data: images = [], isLoading } = useQuery<CelebrityImage[]>({
@@ -120,23 +118,16 @@ export function CurateViewResultsOverlay({
       queryClient.setQueryData<CelebrityImage[]>(imageQueryKey, (currentImages) =>
         applyCurateVoteToImages(currentImages, variables.imageId, data)
       );
-      toast({
-        title: data?.alreadyVoted ? "Vote saved!" : "Vote recorded!",
-        description: data?.alreadyVoted
+      toast(data?.alreadyVoted ? "Vote saved!" : "Vote recorded!", { description: data?.alreadyVoted
           ? "This look is already your saved choice."
-          : "Your vote has been counted.",
-      });
+          : "Your vote has been counted." });
       void queryClient.invalidateQueries({ queryKey: imageQueryKey });
     },
     onError: (error: Error) => {
       if (isUnauthorizedApiError(error)) {
-        toast({ ...signInToVoteToastOptions(() => navigateToLogin(setLocation)) });
+        toast(signInToVoteTitle, signInToVoteToastOptions(() => navigateToLogin(setLocation)));
       } else {
-        toast({
-          title: "Error",
-          description: error.message || "Failed to record vote",
-          variant: "destructive",
-        });
+        toast.error("Error", { description: error.message || "Failed to record vote" });
       }
     },
     onSettled: () => {

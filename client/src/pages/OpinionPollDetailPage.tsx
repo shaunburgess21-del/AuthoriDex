@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useLocation, Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { sharePage } from "@/lib/share";
 import { goBack } from "@/lib/goBack";
 import { UserMenu } from "@/components/UserMenu";
@@ -21,7 +21,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { CardComments, useCommentCount } from "@/components/comments/CardComments";
 import { apiRequest } from "@/lib/queryClient";
-import { isUnauthorizedApiError, signInToVoteToastOptions } from "@/lib/signInToVoteToast";
+import { isUnauthorizedApiError, signInToVoteToastOptions, signInToVoteTitle } from "@/lib/signInToVoteToast";
 import { formatDate } from "@/lib/formatDate";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { VoteDetailNavCluster } from "@/components/vote/VoteDetailNavCluster";
@@ -67,9 +67,7 @@ export default function OpinionPollDetailPage() {
     }
   }, [slugParam]);
   const [, setLocation] = useLocation();
-  const { user } = useAuth();
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
+  const { user } = useAuth();  const queryClient = useQueryClient();
   const opCommentCount = useCommentCount("opinion-poll", slug || "");
   const { showNav, historyDepth } = useDetailNavigation(slug || undefined, "opinion");
   const [changeDialogOpen, setChangeDialogOpen] = useState(false);
@@ -100,17 +98,13 @@ export default function OpinionPollDetailPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/opinion-polls", slug] });
       queryClient.invalidateQueries({ queryKey: ["/api/opinion-polls"] });
-      toast({ title: "Vote recorded" });
+      toast("Vote recorded");
     },
     onError: (error) => {
       if (isUnauthorizedApiError(error)) {
-        toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+        toast(signInToVoteTitle, signInToVoteToastOptions(() => setLocation("/login")));
       } else {
-        toast({
-          title: "Could not vote",
-          description: parseOpinionPollVoteError(error),
-          variant: "destructive",
-        });
+        toast.error("Could not vote", { description: parseOpinionPollVoteError(error) });
       }
     },
   });
@@ -123,17 +117,13 @@ export default function OpinionPollDetailPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/opinion-polls", slug] });
       queryClient.invalidateQueries({ queryKey: ["/api/opinion-polls"] });
-      toast({ title: "Vote removed" });
+      toast("Vote removed");
     },
     onError: (error) => {
       if (isUnauthorizedApiError(error)) {
-        toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+        toast(signInToVoteTitle, signInToVoteToastOptions(() => setLocation("/login")));
       } else {
-        toast({
-          title: "Could not remove vote",
-          description: parseOpinionPollVoteError(error),
-          variant: "destructive",
-        });
+        toast.error("Could not remove vote", { description: parseOpinionPollVoteError(error) });
       }
     },
   });
@@ -310,7 +300,7 @@ export default function OpinionPollDetailPage() {
                     type="button"
                     onClick={() => {
                       if (!user) {
-                        toast({ title: "Sign in required", description: "Please sign in to vote", variant: "destructive" });
+                        toast.error("Sign in required", { description: "Please sign in to vote" });
                         return;
                       }
                       voteMutation.mutate(option.id);
@@ -402,7 +392,7 @@ export default function OpinionPollDetailPage() {
                       className={`min-w-0 flex-1 text-left cursor-pointer rounded-r-md hover:ring-1 hover:ring-inset hover:ring-[#EFEFEF]/50 dark:hover:ring-white/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#EFEFEF]/40 dark:focus-visible:ring-white/30 border-0 bg-transparent p-0 ${voteMutation.isPending ? "opacity-60 cursor-not-allowed" : ""}`}
                       onClick={() => {
                         if (!user) {
-                          toast({ title: "Sign in required", description: "Please sign in to vote", variant: "destructive" });
+                          toast.error("Sign in required", { description: "Please sign in to vote" });
                           return;
                         }
                         setPendingOption({ id: option.id, name: option.name });
@@ -437,7 +427,7 @@ export default function OpinionPollDetailPage() {
                   type="button"
                   onClick={() => {
                     if (!user) {
-                      toast({ title: "Sign in required", description: "Please sign in to manage your vote", variant: "destructive" });
+                      toast.error("Sign in required", { description: "Please sign in to manage your vote" });
                       return;
                     }
                     removeVoteMutation.mutate();

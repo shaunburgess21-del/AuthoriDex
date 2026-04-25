@@ -10,12 +10,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { User, LogOut } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 export function UserAvatar() {
   const { user, profile, signOut } = useAuth();
   const [, setLocation] = useLocation();
-  const { toast } = useToast();
 
   if (!user) return null;
 
@@ -24,16 +23,13 @@ export function UserAvatar() {
   const handleSignOut = async () => {
     try {
       await signOut();
-      toast({
-        title: "Signed out",
+      toast.success("Signed out", {
         description: "You've been successfully signed out.",
       });
       setLocation("/");
     } catch (error) {
-      toast({
-        title: "Error",
+      toast.error("Error", {
         description: "Failed to sign out. Please try again.",
-        variant: "destructive",
       });
     }
   };

@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { RefreshCw, Search, ArrowUpDown } from "lucide-react";
 
 interface UOCard {
@@ -28,7 +28,6 @@ interface UOCard {
 }
 
 export function AdminUnderratedOverrated() {
-  const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
   const [visibilityFilter, setVisibilityFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
@@ -42,9 +41,9 @@ export function AdminUnderratedOverrated() {
     onSuccess: async (res) => {
       const result = await res.json();
       queryClient.invalidateQueries({ queryKey: ['/api/admin/vote/underrated'] });
-      toast({ title: "Sync Complete", description: `${result.created} new cards created. Total: ${result.total}` });
+      toast.success("Sync Complete", { description: `${result.created} new cards created. Total: ${result.total}` });
     },
-    onError: () => toast({ title: "Sync Failed", variant: "destructive" }),
+    onError: () => toast.error("Sync Failed"),
   });
 
   const visibilityMutation = useMutation({

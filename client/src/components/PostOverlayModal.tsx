@@ -7,8 +7,7 @@ import { ThumbsUp, ThumbsDown, MessageCircle, X, Send, Loader2, ChevronDown, Che
 import { formatDistanceToNow } from "date-fns";
 import { queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/contexts/AuthContext";
-import { useToast } from "@/hooks/use-toast";
-
+import { toast } from "sonner";
 interface Comment {
   id: string;
   insightId: string;
@@ -50,9 +49,7 @@ interface PostOverlayModalProps {
 }
 
 export function PostOverlayModal({ insight, isOpen, onClose, userVote, onVote }: PostOverlayModalProps) {
-  const { user } = useAuth();
-  const { toast } = useToast();
-  const [newComment, setNewComment] = useState("");
+  const { user } = useAuth();  const [newComment, setNewComment] = useState("");
   const [replyingTo, setReplyingTo] = useState<{ id: string; username: string } | null>(null);
   const [replyContent, setReplyContent] = useState("");
   const [userCommentVotes, setUserCommentVotes] = useState<Record<string, string>>({});
@@ -126,17 +123,10 @@ export function PostOverlayModal({ insight, isOpen, onClose, userVote, onVote }:
       setNewComment("");
       setReplyContent("");
       setReplyingTo(null);
-      toast({
-        title: "Comment posted",
-        description: "Your comment has been added.",
-      });
+      toast("Comment posted", { description: "Your comment has been added." });
     },
     onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to post comment",
-        variant: "destructive",
-      });
+      toast.error("Error", { description: error.message || "Failed to post comment" });
     },
   });
 
@@ -177,21 +167,13 @@ export function PostOverlayModal({ insight, isOpen, onClose, userVote, onVote }:
       queryClient.invalidateQueries({ queryKey: [`/api/insight-comments/${insight?.id}`] });
     },
     onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to vote",
-        variant: "destructive",
-      });
+      toast.error("Error", { description: error.message || "Failed to vote" });
     },
   });
 
   const handleCommentVote = (commentId: string, voteType: "up" | "down") => {
     if (!user) {
-      toast({
-        title: "Login Required",
-        description: "Please log in to vote on comments",
-        variant: "destructive",
-      });
+      toast.error("Login Required", { description: "Please log in to vote on comments" });
       return;
     }
     voteMutation.mutate({ commentId, voteType });

@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Share2, Flag, X } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 interface CommentActionDrawerProps {
   open: boolean;
@@ -26,7 +26,6 @@ export function CommentActionDrawer({
   commentId,
   entitySlug,
 }: CommentActionDrawerProps) {
-  const { toast } = useToast();
   const [showReportPicker, setShowReportPicker] = useState(false);
 
   useEffect(() => {
@@ -49,12 +48,12 @@ export function CommentActionDrawer({
     }
     try {
       await navigator.clipboard.writeText(url);
-      toast({ title: "Link copied!" });
+      toast.success("Link copied!");
     } catch {
-      toast({ title: "Could not copy link", variant: "destructive" });
+      toast.error("Could not copy link");
     }
     onClose();
-  }, [commentId, entitySlug, onClose, toast]);
+  }, [commentId, entitySlug, onClose]);
 
   const handleReport = useCallback((reason: string) => {
     onReport(reason);

@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useLocation, Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { sharePage } from "@/lib/share";
 import { UserMenu } from "@/components/UserMenu";
 import { useXpBurst } from "@/components/XpBurstProvider";
@@ -518,9 +518,7 @@ function UpDownOutcomes({
 export default function MarketDetailPage() {
   const params = useParams<{ slug: string }>();
   const [, setLocation] = useLocation();
-  const { user, isLoggedIn, refreshProfile } = useAuth();
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
+  const { user, isLoggedIn, refreshProfile } = useAuth();  const queryClient = useQueryClient();
   const { trigger: triggerXpBurst } = useXpBurst();
   const marketCommentCount = useCommentCount("open-market", params.slug || "");
 
@@ -589,7 +587,7 @@ export default function MarketDetailPage() {
       return res.json();
     },
     onSuccess: async (data: any) => {
-      toast({ title: "Prediction placed!", description: "Your prediction has been recorded." });
+      toast("Prediction placed!", { description: "Your prediction has been recorded." });
       if (data?.xp?.xpAwarded) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }
@@ -608,7 +606,7 @@ export default function MarketDetailPage() {
       setStakeAmount("");
     },
     onError: (err: Error) => {
-      toast({ title: "Failed to place prediction", description: err.message, variant: "destructive" });
+      toast.error("Failed to place prediction", { description: err.message });
     },
   });
 
@@ -641,10 +639,7 @@ export default function MarketDetailPage() {
       return data as { predictedScore: number };
     },
     onSuccess: async (data: any) => {
-      toast({
-        title: "Jackpot entry placed!",
-        description: `Your prediction ${data.predictedScore.toLocaleString("en-US")} has been recorded.`,
-      });
+      toast("Jackpot entry placed!", { description: `Your prediction ${data.predictedScore.toLocaleString("en-US")} has been recorded.` });
       if (data?.xp?.xpAwarded) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }
@@ -665,11 +660,7 @@ export default function MarketDetailPage() {
       } else {
         setJackpotSuggestions([]);
       }
-      toast({
-        title: "Failed to place jackpot entry",
-        description: error?.message || "Please try again.",
-        variant: "destructive",
-      });
+      toast.error("Failed to place jackpot entry", { description: error?.message || "Please try again." });
     },
   });
 
@@ -736,7 +727,7 @@ export default function MarketDetailPage() {
     if (!selectedEntry || !stakeAmount) return;
     const amount = Number(stakeAmount);
     if (isNaN(amount) || amount <= 0) {
-      toast({ title: "Invalid amount", description: "Enter a valid stake amount.", variant: "destructive" });
+      toast.error("Invalid amount", { description: "Enter a valid stake amount." });
       return;
     }
     betMutation.mutate({ entryId: selectedEntry, stakeAmount: amount, direction: selectedDirection });

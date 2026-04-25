@@ -23,7 +23,7 @@ import { useLocation } from "wouter";
 import { navigateToLogin } from "@/lib/authReturn";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { PLChart } from "@/components/predict/PLChart";
@@ -79,19 +79,17 @@ function normalizeResponse(data: unknown): { predictions: UserPrediction[]; stat
   return { predictions: resp.predictions ?? [], stats: resp.stats ?? null };
 }
 
-function useCopyToClipboard() {
-  const { toast } = useToast();
-  const [copiedId, setCopiedId] = useState<string | null>(null);
+function useCopyToClipboard() {  const [copiedId, setCopiedId] = useState<string | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const copy = async (text: string, label: string, id?: string) => {
     try {
       await navigator.clipboard.writeText(text);
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
       setCopiedId(id ?? "_stats");
-      toast({ title: label });
+      toast(label);
       timeoutRef.current = setTimeout(() => setCopiedId(null), 2000);
     } catch {
-      toast({ title: "Failed to copy to clipboard", variant: "destructive" });
+      toast.error("Failed to copy to clipboard");
     }
   };
   return { copiedId, copy };

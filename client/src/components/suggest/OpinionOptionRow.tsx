@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { PersonAvatar } from "@/components/PersonAvatar";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { usePeopleSearch, type SearchablePerson } from "@/hooks/usePeopleSearch";
 import { Search, X, ImageIcon, User } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -29,7 +29,6 @@ export function OpinionOptionRow({
   testIdPrefix: string;
   index: number;
 }) {
-  const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -75,11 +74,11 @@ export function OpinionOptionRow({
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 2 * 1024 * 1024) {
-      toast({ title: "File too large", description: "Image must be under 2 MB.", variant: "destructive" });
+      toast.error("File too large", { description: "Image must be under 2 MB." });
       return;
     }
     if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
-      toast({ title: "Invalid file type", description: "Only PNG, JPG, and WEBP files are allowed.", variant: "destructive" });
+      toast.error("Invalid file type", { description: "Only PNG, JPG, and WEBP files are allowed." });
       return;
     }
     const reader = new FileReader();

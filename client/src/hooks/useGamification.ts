@@ -1,7 +1,7 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRef, useEffect } from "react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useXpBurst } from "@/components/XpBurstProvider";
 
 export type Capability = 
@@ -171,7 +171,6 @@ export function usePermissions() {
 export function useXpCelebration(enabled: boolean = true) {
   const { data: stats } = useUserStats(enabled);
   const { data: ranks } = useRanks();
-  const { toast } = useToast();
   const { trigger: triggerXpBurst } = useXpBurst();
   const prevRef = useRef<{ xp: number; rank: string } | null>(null);
   const firedLoginBurstRef = useRef<string | null>(null);
@@ -205,15 +204,14 @@ export function useXpCelebration(enabled: boolean = true) {
       const prevTier = ranks.find(r => r.name === prev.rank)?.tier ?? 0;
       const currentTier = ranks.find(r => r.name === currentRank)?.tier ?? 0;
       if (currentTier > prevTier) {
-        toast({
-          title: `Rank Up: ${currentRank}!`,
+        toast.success(`Rank Up: ${currentRank}!`, {
           description: `You've reached the ${currentRank} rank. Keep going!`,
         });
       }
     }
 
     prevRef.current = { xp: currentXp, rank: currentRank };
-  }, [stats, ranks, toast, triggerXpBurst]);
+  }, [stats, ranks, triggerXpBurst]);
 }
 
 export function generateIdempotencyKey(action: string, targetId?: string): string {

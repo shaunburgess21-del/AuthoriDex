@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ArrowUp, ArrowDown, BarChart3, LogIn, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { navigateToLogin } from "@/lib/authReturn";
@@ -28,7 +28,6 @@ export function OverratedUnderratedWidget({
   compact = false 
 }: OverratedUnderratedWidgetProps) {
   const { user } = useAuth();
-  const { toast } = useToast();
   const [, setLocation] = useLocation();
   const { trigger: triggerXpBurst } = useXpBurst();
   const [localVote, setLocalVote] = useState<'underrated' | 'overrated' | null>(null);
@@ -55,10 +54,8 @@ export function OverratedUnderratedWidget({
     },
     onError: (error: any) => {
       setLocalVote(null);
-      toast({
-        title: "Vote failed",
+      toast.error("Vote failed", {
         description: error.message?.includes("401") ? "Please sign in to vote" : (error.message || "Failed to submit vote"),
-        variant: "destructive",
       });
     },
   });

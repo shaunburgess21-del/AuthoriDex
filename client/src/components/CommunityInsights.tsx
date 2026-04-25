@@ -8,7 +8,7 @@ import { ThumbsUp, ThumbsDown, MessageCircle, Plus, X, Loader2 } from "lucide-re
 import { formatDistanceToNow } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/contexts/AuthContext";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useXpBurst } from "./XpBurstProvider";
 import { PostOverlayModal } from "./PostOverlayModal";
 
@@ -78,9 +78,7 @@ interface CommunityInsightsProps {
 }
 
 export function CommunityInsights({ personId, personName }: CommunityInsightsProps) {
-  const { user } = useAuth();
-  const { toast } = useToast();
-  const { trigger: triggerXpBurst } = useXpBurst();
+  const { user } = useAuth();  const { trigger: triggerXpBurst } = useXpBurst();
   const [showForm, setShowForm] = useState(false);
   const [newInsight, setNewInsight] = useState("");
   const [userVotes, setUserVotes] = useState<Record<string, string>>({});
@@ -160,17 +158,10 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
       if (data?.xp?.xpAwarded) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }
-      toast({
-        title: "Success",
-        description: "Your insight has been posted!",
-      });
+      toast("Success", { description: "Your insight has been posted!" });
     },
     onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to post insight",
-        variant: "destructive",
-      });
+      toast.error("Error", { description: error.message || "Failed to post insight" });
     },
   });
 
@@ -215,21 +206,13 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
       }
     },
     onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to vote",
-        variant: "destructive",
-      });
+      toast.error("Error", { description: error.message || "Failed to vote" });
     },
   });
 
   const handleVote = (insightId: string, voteType: "up" | "down") => {
     if (!user) {
-      toast({
-        title: "Login Required",
-        description: "Please log in to vote on insights",
-        variant: "destructive",
-      });
+      toast.error("Login Required", { description: "Please log in to vote on insights" });
       return;
     }
 
@@ -238,11 +221,7 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
 
   const handleSubmit = () => {
     if (!newInsight.trim()) {
-      toast({
-        title: "Error",
-        description: "Please enter some content",
-        variant: "destructive",
-      });
+      toast.error("Error", { description: "Please enter some content" });
       return;
     }
 

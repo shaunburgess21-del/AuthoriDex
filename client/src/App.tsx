@@ -3,7 +3,7 @@ import { Switch, Route } from "wouter";
 import { MotionConfig } from "framer-motion";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { Toaster } from "@/components/ui/toaster";
+import { Toaster } from "sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -44,6 +44,10 @@ function lazyWithRetry<T extends ComponentType<any>>(
 const HomePage = lazyWithRetry(() => import("@/pages/HomePage"));
 const PersonDetailPage = lazyWithRetry(() => import("@/pages/PersonDetailPage"));
 const LoginPage = lazyWithRetry(() => import("@/pages/LoginPage"));
+const VerifyPage = lazyWithRetry(() => import("@/pages/auth/VerifyPage"));
+const WelcomePage = lazyWithRetry(() => import("@/pages/auth/WelcomePage"));
+const TermsPage = lazyWithRetry(() => import("@/pages/TermsPage"));
+const PrivacyPage = lazyWithRetry(() => import("@/pages/PrivacyPage"));
 const UserProfilePage = lazyWithRetry(() => import("@/pages/UserProfilePage"));
 const PredictPage = lazyWithRetry(() => import("@/pages/PredictPage"));
 const VotePage = lazyWithRetry(() => import("@/pages/VotePage"));
@@ -86,7 +90,11 @@ function Router() {
         <Route path="/" component={HomePage} />
         <Route path="/person/:id" component={PersonDetailPage} />
         <Route path="/celebrity/:id" component={PersonDetailPage} />
+        <Route path="/login/verify" component={VerifyPage} />
+        <Route path="/login/welcome" component={WelcomePage} />
         <Route path="/login" component={LoginPage} />
+        <Route path="/terms" component={TermsPage} />
+        <Route path="/privacy" component={PrivacyPage} />
         <Route path="/profile" component={UserProfilePage} />
         <Route path="/predict" component={PredictPage} />
         <Route path="/vote/value-rankings" component={ValueRankingsPage} />
@@ -130,7 +138,7 @@ function App() {
           <AuthProvider>
             <TooltipProvider>
               <ScrollToTop />
-              <Toaster />
+              <Toaster richColors closeButton position="top-center" />
               <XpBurstProvider>
                 {/* Watcher is inside XpBurstProvider so useXpCelebration can fire daily-login bursts via useXpBurst. */}
                 <XpCelebrationWatcher />

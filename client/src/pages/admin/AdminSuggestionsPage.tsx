@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { apiRequest } from "@/lib/queryClient";
 import { formatActivityAge } from "@/lib/formatDate";
 import { Card } from "@/components/ui/card";
@@ -157,9 +157,7 @@ function PayloadPreview({ type, payload }: { type: string; payload: Record<strin
 // ---------------------------------------------------------------------------
 // Single suggestion card — payload preview, expand-JSON toggle, approve/reject.
 // ---------------------------------------------------------------------------
-function SuggestionCard({ row, statusFilter, onApprove }: { row: SuggestionRow; statusFilter: StatusFilter; onApprove: (row: SuggestionRow) => void }) {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
+function SuggestionCard({ row, statusFilter, onApprove }: { row: SuggestionRow; statusFilter: StatusFilter; onApprove: (row: SuggestionRow) => void }) {  const queryClient = useQueryClient();
   const [expanded, setExpanded] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
@@ -172,17 +170,13 @@ function SuggestionCard({ row, statusFilter, onApprove }: { row: SuggestionRow; 
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "Suggestion rejected", description: "The submitter will see this on their profile." });
+      toast("Suggestion rejected", { description: "The submitter will see this on their profile." });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/suggestions"] });
       setRejecting(false);
       setRejectReason("");
     },
     onError: (err: any) => {
-      toast({
-        title: "Rejection failed",
-        description: err?.message ?? "Something went wrong.",
-        variant: "destructive",
-      });
+      toast.error("Rejection failed", { description: err?.message ?? "Something went wrong." });
     },
   });
 

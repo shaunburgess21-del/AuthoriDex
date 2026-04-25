@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 import { getAuthHeaders } from "@/lib/queryClient";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useRanks } from "@/hooks/useGamification";
 
 type RankRow = { tier: number; name: string; minXp: number; maxXp: number | null };
@@ -83,19 +83,17 @@ interface BetsResponse {
   hasMore: boolean;
 }
 
-function ShareLinkButton({ url, label }: { url: string; label: string }) {
-  const { toast } = useToast();
-  const [copied, setCopied] = useState(false);
+function ShareLinkButton({ url, label }: { url: string; label: string }) {  const [copied, setCopied] = useState(false);
 
   const handleCopy = async (e: React.MouseEvent) => {
     e.stopPropagation();
     try {
       await navigator.clipboard.writeText(url);
       setCopied(true);
-      toast({ title: label });
+      toast(label);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      toast({ title: "Failed to copy link", variant: "destructive" });
+      toast.error("Failed to copy link");
     }
   };
 

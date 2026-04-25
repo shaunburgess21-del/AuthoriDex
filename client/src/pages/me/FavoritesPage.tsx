@@ -5,7 +5,7 @@ import { useLocation } from "wouter";
 import { navigateToLogin } from "@/lib/authReturn";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFavorites } from "@/hooks/useFavorites";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -13,9 +13,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
 export default function FavoritesPage() {
   const { user, session } = useAuth();
-  const { favorites, isLoading, error } = useFavorites();
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
+  const { favorites, isLoading, error } = useFavorites();  const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
 
   const handleUnfavorite = async (e: React.MouseEvent, celebrityId: string, name: string) => {
@@ -28,9 +26,9 @@ export default function FavoritesPage() {
       });
       if (!res.ok) throw new Error(`Failed: ${res.status}`);
       await queryClient.invalidateQueries({ queryKey: ["/api/me/favorites"] });
-      toast({ title: "Removed from favorites", description: `${name} removed` });
+      toast("Removed from favorites", { description: `${name} removed` });
     } catch {
-      toast({ title: "Error", description: "Failed to remove favorite", variant: "destructive" });
+      toast.error("Error", { description: "Failed to remove favorite" });
     }
   };
 

@@ -6,7 +6,7 @@ import { LeaderboardRow, getExceptionalIndicator } from "@/components/Leaderboar
 import type { PercentileThresholds } from "@/components/LeaderboardRow";
 import { VotingModal } from "@/components/VotingModal";
 import { StakeModal, type StakeSelection } from "@/components/StakeModal";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { UserMenu } from "@/components/UserMenu";
 import { FilterDropdown } from "@/components/FilterDropdown";
 import { PersonAvatar } from "@/components/PersonAvatar";
@@ -529,8 +529,6 @@ export default function HomePage() {
   const [approvalShowResults, setApprovalShowResults] = useState(false);
   const [moversCollapsed, setMoversCollapsed] = useState(true);
   const welcomeOnboardingRef = useRef<OnboardingDrawerHandle>(null);
-
-  const { toast } = useToast();
   const [stakeModalOpen, setStakeModalOpen] = useState(false);
   const [pendingSelection, setPendingSelection] = useState<StakeSelection | null>(null);
   const [walletCredits, setWalletCredits] = useState(10000);
@@ -583,7 +581,7 @@ export default function HomePage() {
     }
     const market = updownMarkets.find(m => m.personId === personId);
     if (!market) {
-      toast({ title: "No active market", description: "No active prediction market for this person this week." });
+      toast("No active market", { description: "No active prediction market for this person this week." });
       return;
     }
     const crowdSentiment = direction === "up" ? market.upPoolPercent : (100 - market.upPoolPercent);
@@ -606,8 +604,8 @@ export default function HomePage() {
     setWalletCredits(prev => prev - amount);
     setStakeModalOpen(false);
     setPendingSelection(null);
-    toast({ title: "Prediction placed!", description: `You staked ${amount} credits.` });
-  }, [toast]);
+    toast("Prediction placed!", { description: `You staked ${amount} credits.` });
+  }, []);
   const [trendingNowCollapsed, setTrendingNowCollapsed] = useState(() => {
     try {
       const saved = localStorage.getItem('trending_now_collapsed');

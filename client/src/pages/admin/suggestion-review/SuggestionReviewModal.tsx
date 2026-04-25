@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { formatActivityAge } from "@/lib/formatDate";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -105,9 +105,7 @@ export function SuggestionReviewModal({
   onClose: () => void;
   suggestion: SuggestionRow | null;
   onApproved: () => void;
-}) {
-  const { toast } = useToast();
-  const [showRaw, setShowRaw] = useState(false);
+}) {  const [showRaw, setShowRaw] = useState(false);
   const payload = suggestion?.payload ?? {};
   const type = suggestion?.type ?? "";
 
@@ -253,12 +251,12 @@ export function SuggestionReviewModal({
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "Suggestion approved!", description: "Content is now live." });
+      toast("Suggestion approved!", { description: "Content is now live." });
       onApproved();
       onClose();
     },
     onError: (err: any) => {
-      toast({ title: "Approval failed", description: err?.message ?? "Something went wrong.", variant: "destructive" });
+      toast.error("Approval failed", { description: err?.message ?? "Something went wrong." });
     },
   });
 

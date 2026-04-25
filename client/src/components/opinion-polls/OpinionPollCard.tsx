@@ -14,8 +14,9 @@ import {
   AlertDialogDescription,
   AlertDialogCancel,
 } from "@/components/ui/alert-dialog";
-import { useToast } from "@/hooks/use-toast";
-import { isUnauthorizedApiError, signInToVoteToastOptions } from "@/lib/signInToVoteToast";
+import { toast } from "sonner";
+import { CountdownDescription } from "@/components/CountdownDescription";
+import { isUnauthorizedApiError, signInToVoteToastOptions, signInToVoteTitle } from "@/lib/signInToVoteToast";
 
 function parseOpinionPollCardError(err: unknown): { message: string; retryAfter?: number } {
   const retryAfter = (err as any)?.retryAfter as number | undefined;
@@ -74,9 +75,7 @@ export function OpinionPollCard({
   leaderboardCategories?: Set<string>;
   onNavigateToDetail?: () => void;
   onBrowseFullScreen?: () => void;
-}) {
-  const { toast } = useToast();
-  const [, setLocation] = useLocation();
+}) {  const [, setLocation] = useLocation();
   const [voted, setVoted] = useState<string | null>(poll.userVote || null);
   const [changeDialogOpen, setChangeDialogOpen] = useState(false);
   const [pendingOption, setPendingOption] = useState<{ id: string; name: string } | null>(null);
@@ -98,15 +97,10 @@ export function OpinionPollCard({
         setVoted(optionId);
       } catch (err) {
         if (isUnauthorizedApiError(err)) {
-          toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+          toast(signInToVoteTitle, signInToVoteToastOptions(() => setLocation("/login")));
         } else {
           const parsed = parseOpinionPollCardError(err);
-          toast({
-            title: "Could not record vote",
-            description: parsed.message,
-            variant: "destructive",
-            countdown: parsed.retryAfter,
-          });
+          toast.error("Could not record vote", { description: parsed.retryAfter ? <CountdownDescription seconds={parsed.retryAfter} text={parsed.message} /> : parsed.message });
         }
       }
     }
@@ -127,15 +121,10 @@ export function OpinionPollCard({
       setPendingOption(null);
     } catch (err) {
       if (isUnauthorizedApiError(err)) {
-        toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+        toast(signInToVoteTitle, signInToVoteToastOptions(() => setLocation("/login")));
       } else {
         const parsed = parseOpinionPollCardError(err);
-        toast({
-          title: "Could not change vote",
-          description: parsed.message,
-          variant: "destructive",
-          countdown: parsed.retryAfter,
-        });
+        toast.error("Could not change vote", { description: parsed.retryAfter ? <CountdownDescription seconds={parsed.retryAfter} text={parsed.message} /> : parsed.message });
       }
     }
   };
@@ -147,15 +136,10 @@ export function OpinionPollCard({
       setVoted(null);
     } catch (err) {
       if (isUnauthorizedApiError(err)) {
-        toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+        toast(signInToVoteTitle, signInToVoteToastOptions(() => setLocation("/login")));
       } else {
         const parsed = parseOpinionPollCardError(err);
-        toast({
-          title: "Could not remove vote",
-          description: parsed.message,
-          variant: "destructive",
-          countdown: parsed.retryAfter,
-        });
+        toast.error("Could not remove vote", { description: parsed.retryAfter ? <CountdownDescription seconds={parsed.retryAfter} text={parsed.message} /> : parsed.message });
       }
     }
   };
