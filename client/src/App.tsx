@@ -165,13 +165,11 @@ function App() {
           <AuthProvider>
             <TooltipProvider>
               <ScrollToTop />
-              {/* duration: Sonner default is 4000ms which felt too brief
-                  for our success/info toasts (users on slow reads were
-                  missing the message entirely). 6000ms keeps it on
-                  screen long enough to read but not so long that it
-                  feels stuck. closeButton lets impatient users dismiss
-                  early. */}
-              <Toaster richColors closeButton position="top-center" duration={6000} />
+              {/* duration: Sonner default 4000ms felt too brief on slow
+                  reads, 6000ms felt slightly stuck, 5000ms is the sweet
+                  spot per real-device QA. closeButton lets impatient
+                  users dismiss early. */}
+              <Toaster richColors closeButton position="top-center" duration={5000} />
               <PWAUpdatePrompt />
               <NewUserGate />
               <XpBurstProvider>

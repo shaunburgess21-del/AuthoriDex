@@ -886,20 +886,35 @@ textarea:-webkit-autofill:active {
   transition: background-color 600000s 0s, color 600000s 0s;
 }
 
-/* ===== SONNER TOAST THEME ===== */
-/* Re-skin Sonner's `richColors` palette to the VoxDex brand:
- *   - success → primary blue (default green felt off-brand for sign-in /
- *     general "it worked" notifications).
- *   - info    → primary blue too (consistent with success).
- *   - error   → leave Sonner's red — semantic, users expect it.
- *   - warning → leave Sonner's amber — semantic.
- * These selectors match Sonner's data attributes; they win over the
- * library defaults via [data-sonner-toaster] specificity. */
-[data-sonner-toaster][data-theme] {
-  --success-bg: hsl(var(--primary));
-  --success-text: hsl(var(--primary-foreground));
-  --success-border: hsl(var(--primary));
-  --info-bg: hsl(var(--primary));
-  --info-text: hsl(var(--primary-foreground));
-  --info-border: hsl(var(--primary));
+/* ===== SONNER TOAST THEME =====
+ * Re-skin Sonner's `richColors` success/info palette to brand blue while
+ * keeping the soft pastel feel Sonner uses by default — toasts should still
+ * read as notifications, not solid alert bars.
+ *
+ * Specificity note: Sonner sets per-theme defaults on
+ * `[data-sonner-toaster][data-theme="light"]` (specificity 0,2,0). A previous
+ * override at the same specificity lost the cascade because Sonner's CSS is
+ * injected by its module AFTER our index.css loads. Prefixing with `html`
+ * bumps us to (0,2,1) which reliably wins regardless of import order.
+ *
+ * The values mirror Sonner's own pastel structure (very-light bg / slightly
+ * darker border / saturated text) but pivoted to our brand hue 217. Errors
+ * stay red and warnings stay amber — those carry semantic meaning users
+ * expect from notification toasts. */
+html [data-sonner-toaster][data-theme="light"] {
+  --success-bg: hsl(217 91% 96%);
+  --success-border: hsl(217 91% 91%);
+  --success-text: hsl(217 91% 38%);
+  --info-bg: hsl(217 91% 96%);
+  --info-border: hsl(217 91% 91%);
+  --info-text: hsl(217 91% 38%);
+}
+
+html [data-sonner-toaster][data-theme="dark"] {
+  --success-bg: hsl(217 91% 8%);
+  --success-border: hsl(217 91% 16%);
+  --success-text: hsl(217 91% 70%);
+  --info-bg: hsl(217 91% 8%);
+  --info-border: hsl(217 91% 16%);
+  --info-text: hsl(217 91% 70%);
 }
