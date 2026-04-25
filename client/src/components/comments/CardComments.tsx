@@ -37,6 +37,7 @@ interface CardComment {
   parentId: string | null;
   upvotes: number;
   downvotes: number;
+  userVote?: "up" | "down" | null;
   createdAt: string;
 }
 
@@ -84,6 +85,7 @@ export function CardComments({
   const [drawerComment, setDrawerComment] = useState<CardComment | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fullscreenInputRef = useRef<HTMLTextAreaElement>(null);
+  const composerContainerRef = useRef<HTMLDivElement>(null);
 
   const base = API_BASE[entityType];
   const queryKey = [base, slug, "comments"];
@@ -91,8 +93,7 @@ export function CardComments({
   const { data: comments = [] } = useQuery<CardComment[]>({
     queryKey,
     queryFn: async () => {
-      const res = await fetch(`${base}/${slug}/comments`);
-      if (!res.ok) return [];
+      const res = await apiRequest("GET", `${base}/${slug}/comments`);
       return res.json();
     },
     enabled: !!slug,
@@ -272,6 +273,8 @@ export function CardComments({
 
   const renderComment = (comment: CardComment, isTopComment: boolean, isReply: boolean) => {
     const netVotes = (comment.upvotes || 0) - (comment.downvotes || 0);
+    const hasUpvoted = comment.userVote === "up";
+    const hasDownvoted = comment.userVote === "down";
     return (
       <div
         key={comment.id}
@@ -316,7 +319,11 @@ export function CardComments({
           <div className="flex items-center gap-4 mt-2">
             <button
               onClick={() => commentVoteMutation.mutate({ commentId: comment.id, voteType: "up" })}
-              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors"
+              className={`flex items-center gap-1 text-xs transition-colors ${
+                hasUpvoted
+                  ? "text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300"
+                  : "text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400"
+              }`}
               data-testid={`button-upvote-${comment.id}`}
             >
               <ThumbsUp className="h-3.5 w-3.5" />
@@ -324,7 +331,11 @@ export function CardComments({
             </button>
             <button
               onClick={() => commentVoteMutation.mutate({ commentId: comment.id, voteType: "down" })}
-              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
+              className={`flex items-center gap-1 text-xs transition-colors ${
+                hasDownvoted
+                  ? "text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300"
+                  : "text-muted-foreground hover:text-rose-600 dark:hover:text-rose-400"
+              }`}
               data-testid={`button-downvote-${comment.id}`}
             >
               <ThumbsDown className="h-3.5 w-3.5" />
@@ -385,12 +396,19 @@ export function CardComments({
   const handleComposerToggle = useCallback(() => {
     setComposerMode((mode) => {
       if (mode !== "auto") return "auto";
-      return parentExpanded ? "fullscreen" : "manual";
+      const nextMode = parentExpanded ? "fullscreen" : "manual";
+      if (nextMode === "manual") {
+        requestAnimationFrame(() => {
+          composerContainerRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+        });
+      }
+      return nextMode;
     });
   }, [parentExpanded]);
 
   const inputArea = isAuthenticated ? (
     <div
+      ref={composerContainerRef}
       className={`pt-3 border-t border-border/20${inlineExpanded ? " flex-1 flex flex-col" : ""}`}
       style={{ paddingBottom: "env(safe-area-inset-bottom, 4px)" }}
     >
@@ -440,12 +458,12 @@ export function CardComments({
           <div className="absolute right-2 bottom-1.5 flex items-center gap-1">
             <button
               onClick={handleComposerToggle}
-              className="flex h-8 w-8 items-center justify-center text-slate-300 hover:text-slate-100 transition-colors"
+              className="flex h-8 w-8 items-center justify-center text-slate-300 hover:text-slate-100 transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               type="button"
               aria-label={composerMode === "auto" ? "Expand comment input" : "Collapse comment input"}
               aria-pressed={composerMode !== "auto"}
             >
-              {composerMode === "auto" ? <Maximize2 className="h-6 w-6" /> : <Minimize2 className="h-6 w-6" />}
+              {composerMode === "auto" ? <Maximize2 className="h-5 w-5" /> : <Minimize2 className="h-5 w-5" />}
             </button>
             <button
               disabled={!commentBody.trim() || commentMutation.isPending}
