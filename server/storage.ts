@@ -2,6 +2,53 @@ import { type TrendingPerson, type CelebrityProfile, type InsertCelebrityProfile
 import { db } from "./db";
 import { eq, asc, sql } from "drizzle-orm";
 
+const PROFILE_METADATA_FALLBACK_VERSION = 2;
+
+const celebrityProfileBaseColumns = {
+  id: celebrityProfiles.id,
+  personId: celebrityProfiles.personId,
+  personName: celebrityProfiles.personName,
+  shortBio: celebrityProfiles.shortBio,
+  longBio: celebrityProfiles.longBio,
+  knownFor: celebrityProfiles.knownFor,
+  fromCountry: celebrityProfiles.fromCountry,
+  fromCountryCode: celebrityProfiles.fromCountryCode,
+  basedIn: celebrityProfiles.basedIn,
+  basedInCountryCode: celebrityProfiles.basedInCountryCode,
+  estimatedNetWorth: celebrityProfiles.estimatedNetWorth,
+  generatedAt: celebrityProfiles.generatedAt,
+};
+
+function isMissingProfileMetadataError(error: unknown): boolean {
+  const err = error as { code?: string; message?: string };
+  return err?.code === "42703" || /column .*?(prompt_version|source_hash|source_urls|confidence|as_of_date|validation_notes).*?does not exist/i.test(err?.message ?? "");
+}
+
+function withFallbackProfileMetadata(profile: typeof celebrityProfiles.$inferSelect | any): CelebrityProfile {
+  return {
+    ...profile,
+    promptVersion: profile.promptVersion ?? PROFILE_METADATA_FALLBACK_VERSION,
+    sourceHash: profile.sourceHash ?? null,
+    sourceUrls: profile.sourceUrls ?? null,
+    confidence: profile.confidence ?? null,
+    asOfDate: profile.asOfDate ?? null,
+    validationNotes: profile.validationNotes ?? null,
+  } as CelebrityProfile;
+}
+
+function stripProfileMetadata(profile: Partial<InsertCelebrityProfile>): Partial<InsertCelebrityProfile> {
+  const {
+    promptVersion: _promptVersion,
+    sourceHash: _sourceHash,
+    sourceUrls: _sourceUrls,
+    confidence: _confidence,
+    asOfDate: _asOfDate,
+    validationNotes: _validationNotes,
+    ...legacyProfile
+  } = profile as any;
+  return legacyProfile as Partial<InsertCelebrityProfile>;
+}
+
 export interface IStorage {
   getTrendingPeople(): Promise<TrendingPerson[]>;
   getTrendingPerson(id: string): Promise<TrendingPerson | undefined>;
@@ -99,29 +146,58 @@ export class MemStorage implements IStorage {
   }
 
   async getCelebrityProfile(personId: string): Promise<CelebrityProfile | undefined> {
-    const [profile] = await db
-      .select()
-      .from(celebrityProfiles)
-      .where(eq(celebrityProfiles.personId, personId))
-      .limit(1);
-    return profile;
+    try {
+      const [profile] = await db
+        .select()
+        .from(celebrityProfiles)
+        .where(eq(celebrityProfiles.personId, personId))
+        .limit(1);
+      return profile;
+    } catch (error) {
+      if (!isMissingProfileMetadataError(error)) throw error;
+      const [profile] = await db
+        .select(celebrityProfileBaseColumns)
+        .from(celebrityProfiles)
+        .where(eq(celebrityProfiles.personId, personId))
+        .limit(1);
+      return profile ? withFallbackProfileMetadata(profile) : undefined;
+    }
   }
 
   async setCelebrityProfile(profile: InsertCelebrityProfile): Promise<CelebrityProfile> {
-    const [created] = await db
-      .insert(celebrityProfiles)
-      .values(profile)
-      .returning();
-    return created;
+    try {
+      const [created] = await db
+        .insert(celebrityProfiles)
+        .values(profile)
+        .returning();
+      return created;
+    } catch (error) {
+      if (!isMissingProfileMetadataError(error)) throw error;
+      const [created] = await db
+        .insert(celebrityProfiles)
+        .values(stripProfileMetadata(profile) as InsertCelebrityProfile)
+        .returning(celebrityProfileBaseColumns);
+      return withFallbackProfileMetadata(created);
+    }
   }
 
   async updateCelebrityProfile(personId: string, profile: Partial<InsertCelebrityProfile>): Promise<CelebrityProfile | undefined> {
-    const [updated] = await db
-      .update(celebrityProfiles)
-      .set({ ...profile, generatedAt: new Date() })
-      .where(eq(celebrityProfiles.personId, personId))
-      .returning();
-    return updated;
+    try {
+      const [updated] = await db
+        .update(celebrityProfiles)
+        .set({ ...profile, generatedAt: new Date() })
+        .where(eq(celebrityProfiles.personId, personId))
+        .returning();
+      return updated;
+    } catch (error) {
+      if (!isMissingProfileMetadataError(error)) throw error;
+      const [updated] = await db
+        .update(celebrityProfiles)
+        .set({ ...stripProfileMetadata(profile), generatedAt: new Date() })
+        .where(eq(celebrityProfiles.personId, personId))
+        .returning(celebrityProfileBaseColumns);
+      return updated ? withFallbackProfileMetadata(updated) : undefined;
+    }
   }
 }
 
