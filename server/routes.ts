@@ -67,6 +67,7 @@ import { getAiModel, getChatCompletionTokenLimit } from "./config/ai-models";
 const VIEW_DEDUPE_WINDOW_MS = 10 * 60 * 1000;
 const VIEW_IP_RATE_LIMIT = 30;
 const COMMENT_MAX_LENGTH = 5000;
+type CommentVoteState = "up" | "down" | null;
 const BOT_UA_PATTERNS = /bot|crawl|spider|slurp|wget|curl|fetch|headless|phantom|puppet|selenium|lighthouse|preview|embed|scrape/i;
 const PREFETCH_HEADERS = ['purpose', 'sec-purpose', 'x-purpose'];
 const SESSION_COOKIE_NAME = 'fdx_sid';
@@ -4869,7 +4870,7 @@ Only return the JSON object.`;
   // MATCHUP COMMENTS
   // ============================================================================
 
-  app.get("/api/matchups/:slug/comments", async (req, res) => {
+  app.get("/api/matchups/:slug/comments", optionalAuth, async (req: AuthRequest, res) => {
     try {
       const { slug } = req.params;
       const matchup = await resolvePublicMatchupBySlugOrId(slug);
@@ -4879,7 +4880,26 @@ Only return the JSON object.`;
       const comments = await db.select().from(matchupComments)
         .where(eq(matchupComments.matchupId, matchup.id))
         .orderBy(desc(matchupComments.createdAt));
-      res.json(comments);
+
+      const userVoteMap = new Map<string, CommentVoteState>();
+      if (req.userId && comments.length > 0) {
+        const commentIds = comments.map((comment) => comment.id);
+        const userVotes = await db
+          .select({ commentId: matchupCommentVotes.commentId, voteType: matchupCommentVotes.voteType })
+          .from(matchupCommentVotes)
+          .where(and(
+            eq(matchupCommentVotes.userId, req.userId),
+            inArray(matchupCommentVotes.commentId, commentIds)
+          ));
+        for (const vote of userVotes) {
+          userVoteMap.set(vote.commentId, vote.voteType === "up" || vote.voteType === "down" ? vote.voteType : null);
+        }
+      }
+
+      res.json(comments.map((comment) => ({
+        ...comment,
+        userVote: userVoteMap.get(comment.id) ?? null,
+      })));
     } catch (error: any) {
       console.error("Error fetching matchup comments:", error.message);
       res.status(500).json({ error: "Failed to fetch comments" });
@@ -10346,7 +10366,7 @@ Target length: about 90-150 words.`;
   // PUBLIC: TRENDING POLL COMMENTS
   // ===========================================
 
-  app.get("/api/polls/:slug/comments", async (req, res) => {
+  app.get("/api/polls/:slug/comments", optionalAuth, async (req: AuthRequest, res) => {
     try {
       const { slug } = req.params;
 
@@ -10367,7 +10387,25 @@ Target length: about 90-150 words.`;
         .orderBy(desc(trendingPollComments.createdAt))
         .limit(100);
 
-      res.json(comments);
+      const userVoteMap = new Map<string, CommentVoteState>();
+      if (req.userId && comments.length > 0) {
+        const commentIds = comments.map((comment) => comment.id);
+        const userVotes = await db
+          .select({ commentId: trendingPollCommentVotes.commentId, voteType: trendingPollCommentVotes.voteType })
+          .from(trendingPollCommentVotes)
+          .where(and(
+            eq(trendingPollCommentVotes.userId, req.userId),
+            inArray(trendingPollCommentVotes.commentId, commentIds)
+          ));
+        for (const vote of userVotes) {
+          userVoteMap.set(vote.commentId, vote.voteType === "up" || vote.voteType === "down" ? vote.voteType : null);
+        }
+      }
+
+      res.json(comments.map((comment) => ({
+        ...comment,
+        userVote: userVoteMap.get(comment.id) ?? null,
+      })));
     } catch (error: any) {
       console.error("Error fetching poll comments:", error.message);
       res.status(500).json({ error: "Failed to fetch comments" });
@@ -11328,7 +11366,7 @@ Target length: about 90-150 words.`;
   });
 
   // Opinion Poll Comments
-  app.get("/api/opinion-polls/:slug/comments", async (req, res) => {
+  app.get("/api/opinion-polls/:slug/comments", optionalAuth, async (req: AuthRequest, res) => {
     try {
       const { slug } = req.params;
       const sort = (req.query.sort as string) || 'top';
@@ -11351,7 +11389,25 @@ Target length: about 90-150 words.`;
         .where(eq(opinionPollComments.pollId, poll.id))
         .orderBy(orderClause);
 
-      res.json(comments);
+      const userVoteMap = new Map<string, CommentVoteState>();
+      if (req.userId && comments.length > 0) {
+        const commentIds = comments.map((comment) => comment.id);
+        const userVotes = await db
+          .select({ commentId: opinionPollCommentVotes.commentId, voteType: opinionPollCommentVotes.voteType })
+          .from(opinionPollCommentVotes)
+          .where(and(
+            eq(opinionPollCommentVotes.userId, req.userId),
+            inArray(opinionPollCommentVotes.commentId, commentIds)
+          ));
+        for (const vote of userVotes) {
+          userVoteMap.set(vote.commentId, vote.voteType === "up" || vote.voteType === "down" ? vote.voteType : null);
+        }
+      }
+
+      res.json(comments.map((comment) => ({
+        ...comment,
+        userVote: userVoteMap.get(comment.id) ?? null,
+      })));
     } catch (error: any) {
       console.error("Error fetching opinion poll comments:", error.message);
       res.status(500).json({ error: "Failed to fetch comments" });
@@ -13040,7 +13096,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
     }
   });
 
-  app.get("/api/open-markets/:slug/comments", async (req, res) => {
+  app.get("/api/open-markets/:slug/comments", optionalAuth, async (req: AuthRequest, res) => {
     try {
       const { slug } = req.params;
 
@@ -13066,7 +13122,25 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         .orderBy(desc(openMarketComments.createdAt))
         .limit(50);
 
-      res.json(comments);
+      const userVoteMap = new Map<string, CommentVoteState>();
+      if (req.userId && comments.length > 0) {
+        const commentIds = comments.map((comment) => comment.id);
+        const userVotes = await db
+          .select({ commentId: openMarketCommentVotes.commentId, voteType: openMarketCommentVotes.voteType })
+          .from(openMarketCommentVotes)
+          .where(and(
+            eq(openMarketCommentVotes.userId, req.userId),
+            inArray(openMarketCommentVotes.commentId, commentIds)
+          ));
+        for (const vote of userVotes) {
+          userVoteMap.set(vote.commentId, vote.voteType === "up" || vote.voteType === "down" ? vote.voteType : null);
+        }
+      }
+
+      res.json(comments.map((comment) => ({
+        ...comment,
+        userVote: userVoteMap.get(comment.id) ?? null,
+      })));
     } catch (error) {
       console.error("[Open Markets] Comments list error:", error);
       res.status(500).json({ error: "Failed to fetch comments" });
