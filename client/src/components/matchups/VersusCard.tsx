@@ -333,7 +333,11 @@ export function VersusCard({
                   onClick={toggleHelpHidden}
                   aria-label={helpHidden ? "Show matchup help text" : "Hide matchup help text"}
                   title={helpHidden ? "Show matchup help text" : "Hide matchup help text"}
-                  className="inline-flex h-5 w-5 items-center justify-center rounded-full text-cyan-600/70 transition-colors hover:bg-cyan-500/10 hover:text-cyan-600 dark:text-cyan-400/70 dark:hover:text-cyan-400"
+                  className={`inline-flex h-5 w-5 items-center justify-center rounded-full transition-colors ${
+                    helpHidden
+                      ? "text-slate-500 hover:bg-slate-500/10 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-400"
+                      : "text-cyan-600/70 hover:bg-cyan-500/10 hover:text-cyan-600 dark:text-cyan-400/70 dark:hover:text-cyan-400"
+                  }`}
                   data-testid={`button-toggle-matchup-help-${matchup.id}`}
                 >
                   {helpHidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
