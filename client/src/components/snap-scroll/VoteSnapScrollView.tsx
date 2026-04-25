@@ -78,10 +78,12 @@ export function VoteSnapScrollView({
 }: VoteSnapScrollViewProps) {
   const [, setLocation] = useLocation();
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const commentScrollRef = useRef<HTMLDivElement | null>(null);
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
   const dragStartY = useRef<number | null>(null);
   const commentTapStartRef = useRef<{ itemId: string; x: number; y: number } | null>(null);
   const commentSwipeStartRef = useRef<{ itemId: string; x: number; y: number; time: number } | null>(null);
+  const commentSwipeConsumedRef = useRef(false);
   const commentTapMovedRef = useRef(false);
 
   const categories = useMemo(() => {
@@ -142,6 +144,31 @@ export function VoteSnapScrollView({
     return () => clearTimeout(timer);
   }, [open, initialItemId, initialCategoryIdx, categories, categoryItems]);
 
+  useEffect(() => {
+    const el = commentScrollRef.current;
+    if (!el) return;
+
+    const handleNativeTouchMove = (e: TouchEvent) => {
+      const swipeStart = commentSwipeStartRef.current;
+      if (!swipeStart || e.touches.length === 0) return;
+      if (el.scrollTop > COMMENT_SWIPE_TOP_THRESHOLD) return;
+
+      const deltaY = e.touches[0].clientY - swipeStart.y;
+      const deltaX = e.touches[0].clientX - swipeStart.x;
+      const elapsed = Math.max(e.timeStamp - swipeStart.time, 1);
+      const velocity = deltaY / elapsed;
+
+      if (deltaY > 0 && Math.abs(deltaY) >= Math.abs(deltaX) && (deltaY >= DRAG_THRESHOLD || velocity >= COMMENT_SWIPE_VELOCITY_THRESHOLD)) {
+        commentSwipeConsumedRef.current = true;
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+
+    el.addEventListener("touchmove", handleNativeTouchMove, { passive: false });
+    return () => el.removeEventListener("touchmove", handleNativeTouchMove);
+  }, [expandedItemId, activeCategory]);
+
   const handleCategorySelect = useCallback((cat: string) => {
     const idx = categories.indexOf(cat);
     if (idx >= 0) {
@@ -193,12 +220,14 @@ export function VoteSnapScrollView({
     if (isInteractiveTarget(e.target)) {
       commentTapStartRef.current = null;
       commentSwipeStartRef.current = null;
+      commentSwipeConsumedRef.current = false;
       commentTapMovedRef.current = false;
       return;
     }
 
     if (isExpanded) {
       commentTapStartRef.current = null;
+      commentSwipeConsumedRef.current = false;
       commentTapMovedRef.current = false;
       commentSwipeStartRef.current = e.currentTarget.scrollTop <= COMMENT_SWIPE_TOP_THRESHOLD
         ? {
@@ -235,7 +264,9 @@ export function VoteSnapScrollView({
 
   const handleCommentTouchEnd = useCallback((e: React.TouchEvent<HTMLDivElement>, itemId: string, isExpanded: boolean) => {
     const swipeStart = commentSwipeStartRef.current;
+    const swipeConsumed = commentSwipeConsumedRef.current;
     commentSwipeStartRef.current = null;
+    commentSwipeConsumedRef.current = false;
 
     if (swipeStart) {
       if (swipeStart.itemId !== itemId || !isExpanded || isInteractiveTarget(e.target)) {
@@ -247,7 +278,9 @@ export function VoteSnapScrollView({
       const elapsed = Math.max(e.timeStamp - swipeStart.time, 1);
       const velocity = deltaY / elapsed;
 
-      if (deltaY > 0 && Math.abs(deltaY) >= Math.abs(deltaX) && (deltaY >= DRAG_THRESHOLD || velocity >= COMMENT_SWIPE_VELOCITY_THRESHOLD)) {
+      if (swipeConsumed || (deltaY > 0 && Math.abs(deltaY) >= Math.abs(deltaX) && (deltaY >= DRAG_THRESHOLD || velocity >= COMMENT_SWIPE_VELOCITY_THRESHOLD))) {
+        e.preventDefault();
+        e.stopPropagation();
         setExpandedItemId(null);
       }
       return;
@@ -268,6 +301,7 @@ export function VoteSnapScrollView({
   const handleCommentTouchCancel = useCallback(() => {
     commentTapStartRef.current = null;
     commentSwipeStartRef.current = null;
+    commentSwipeConsumedRef.current = false;
     commentTapMovedRef.current = false;
   }, []);
 
@@ -356,6 +390,7 @@ export function VoteSnapScrollView({
 
                       {/* Comments section */}
                       <div
+                        ref={isExpanded ? commentScrollRef : undefined}
                         className="flex-1 min-h-0 overflow-y-auto max-w-lg mx-auto w-full"
                         style={isExpanded ? { overscrollBehavior: "contain" } : undefined}
                         onTouchStart={(e) => handleCommentTouchStart(e, item.id, isExpanded)}
