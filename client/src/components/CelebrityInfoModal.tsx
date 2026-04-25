@@ -17,6 +17,8 @@ interface CelebrityProfile {
   basedIn: string;
   basedInCountryCode: string;
   estimatedNetWorth: string;
+  asOfDate?: string | null;
+  sourceUrls?: string[] | null;
   generatedAt: string;
 }
 
@@ -180,7 +182,23 @@ export function CelebrityInfoModal({ personId, personName }: CelebrityInfoModalP
             <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground pt-2 border-t border-border/50">
               <div className="flex items-center gap-1.5">
                 <Sparkles className="h-3 w-3" />
-                <span>AI-generated content. May not be 100% accurate.</span>
+                <span>
+                  AI-generated content. May not be 100% accurate.
+                  {profile.asOfDate ? ` As of ${profile.asOfDate}.` : ""}
+                  {profile.sourceUrls?.[0] ? (
+                    <>
+                      {" "}
+                      <a
+                        href={profile.sourceUrls[0]}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline underline-offset-2 hover:text-foreground"
+                      >
+                        Source
+                      </a>
+                    </>
+                  ) : null}
+                </span>
               </div>
               <div className="flex items-center gap-1 shrink-0">
                 <Clock className="h-3 w-3" />

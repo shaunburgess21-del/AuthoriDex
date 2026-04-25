@@ -1,5 +1,5 @@
 /**
- * GPT-5.4 powered decision engine for World Markets (community markets).
+ * Default-AI-model powered decision engine for World Markets (community markets).
  * Uses the OpenAI Responses API with web search to assess real-world
  * prediction markets where internal trend signals are not relevant.
  */
@@ -14,6 +14,7 @@ import type {
 import { productionRNG, type RNG } from "./prng";
 import { log } from "../log";
 import { WORLD_MARKET_BOOST_ENABLED, WORLD_MARKET_ACTIVITY_MULTIPLIER } from "./constants";
+import { getAiModel } from "../config/ai-models";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
@@ -194,7 +195,7 @@ export async function computeWorldMarketPrediction(
 
     const response = await openai.responses.create(
       {
-        model: "gpt-5.4",
+        model: getAiModel("worldMarkets"),
         tools: [{ type: "web_search" as any }],
         max_output_tokens: 1000,
         instructions: systemPrompt,

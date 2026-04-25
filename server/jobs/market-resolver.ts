@@ -5,6 +5,7 @@ import { log } from "../log";
 import { calculateSettlementPayouts } from "./settlement-utils";
 import { scoreResolvedMarket } from "../agents/performanceUpdater";
 import { PLATFORM_FEE } from "../config/constants";
+import { getAiModel, getChatCompletionTokenLimit } from "../config/ai-models";
 import { gamificationService } from "../services/gamification";
 import OpenAI from "openai";
 import { fetchTrendingNewsContext } from "../providers/serper";
@@ -68,7 +69,7 @@ export interface SettlementMeta {
  * already populated.
  *
  * Volume is low (markets resolve ~weekly; dozens per week at launch), so a
- * single `gpt-4.1` call per market is acceptable without extra caching.
+ * single default model call per market is acceptable without extra caching.
  */
 export async function generateResolutionSummary(marketId: string): Promise<void> {
   try {
@@ -168,13 +169,14 @@ Rules:
 - Return ONLY the sentence — no quotes, no JSON, no explanation.`;
 
     const openai = new OpenAI({ apiKey });
+    const model = getAiModel("marketResolver");
     const response = await openai.chat.completions.create({
-      model: "gpt-4.1",
+      model,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
-      max_tokens: 120,
+      ...getChatCompletionTokenLimit(model, 120),
       temperature: 0.4,
     });
 
