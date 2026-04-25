@@ -124,11 +124,40 @@ export function CardComments({
       const res = await apiRequest("POST", `${base}/comments/${commentId}/vote`, { voteType });
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey });
+    onMutate: async ({ commentId, voteType }) => {
+      await queryClient.cancelQueries({ queryKey });
+      const previousComments = queryClient.getQueryData<CardComment[]>(queryKey);
+
+      queryClient.setQueryData<CardComment[]>(queryKey, (currentComments) => {
+        if (!currentComments) return currentComments;
+
+        return currentComments.map((comment) => {
+          if (comment.id !== commentId) return comment;
+
+          const previousVote = comment.userVote ?? null;
+          const nextVote = previousVote === voteType ? null : voteType;
+          let upvotes = comment.upvotes || 0;
+          let downvotes = comment.downvotes || 0;
+
+          if (previousVote === "up") upvotes = Math.max(upvotes - 1, 0);
+          if (previousVote === "down") downvotes = Math.max(downvotes - 1, 0);
+          if (nextVote === "up") upvotes += 1;
+          if (nextVote === "down") downvotes += 1;
+
+          return { ...comment, userVote: nextVote, upvotes, downvotes };
+        });
+      });
+
+      return { previousComments };
     },
-    onError: () => {
+    onError: (_error, _variables, context) => {
+      if (context?.previousComments) {
+        queryClient.setQueryData(queryKey, context.previousComments);
+      }
       toast({ title: "Error", description: "Failed to vote. Please sign in.", variant: "destructive" });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey });
     },
   });
 
@@ -588,9 +617,12 @@ export function useCommentCount(entityType: CommentEntityType, slug: string): nu
   const { data: comments = [] } = useQuery<CardComment[]>({
     queryKey: [base, slug, "comments"],
     queryFn: async () => {
-      const res = await fetch(`${base}/${slug}/comments`);
-      if (!res.ok) return [];
-      return res.json();
+      try {
+        const res = await apiRequest("GET", `${base}/${slug}/comments`);
+        return res.json();
+      } catch {
+        return [];
+      }
     },
     enabled: !!slug,
   });
