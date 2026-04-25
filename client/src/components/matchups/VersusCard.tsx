@@ -1,11 +1,55 @@
-import type { MouseEvent } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 import { Link } from "wouter";
-import { Users, Swords } from "lucide-react";
+import { Eye, EyeOff, Users } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
 import { handleImageError } from "@/lib/imageResolver";
 import { normalizeMarketCategory } from "@shared/constants";
+
+const MATCHUP_HELP_HIDDEN_KEY = "authoridex_matchup_help_hidden";
+const MATCHUP_HELP_EVENT = "authoridex-matchup-help-hidden-changed";
+
+function readMatchupHelpHidden(): boolean {
+  if (typeof window === "undefined") return false;
+
+  try {
+    return window.localStorage.getItem(MATCHUP_HELP_HIDDEN_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function useMatchupHelpHidden() {
+  const [helpHidden, setHelpHidden] = useState(readMatchupHelpHidden);
+
+  useEffect(() => {
+    const syncFromStorage = () => setHelpHidden(readMatchupHelpHidden());
+
+    window.addEventListener(MATCHUP_HELP_EVENT, syncFromStorage);
+    window.addEventListener("storage", syncFromStorage);
+
+    return () => {
+      window.removeEventListener(MATCHUP_HELP_EVENT, syncFromStorage);
+      window.removeEventListener("storage", syncFromStorage);
+    };
+  }, []);
+
+  function toggleHelpHidden() {
+    const next = !helpHidden;
+    setHelpHidden(next);
+
+    try {
+      window.localStorage.setItem(MATCHUP_HELP_HIDDEN_KEY, next ? "1" : "0");
+    } catch {
+      /* Preference persistence is optional in private browsing. */
+    }
+
+    window.dispatchEvent(new CustomEvent(MATCHUP_HELP_EVENT));
+  }
+
+  return { helpHidden, toggleHelpHidden };
+}
 
 /** Matchup row shape for VersusCard (Vote page + profile Vote tab). */
 export interface VersusCardMatchup {
@@ -58,6 +102,7 @@ export function VersusCard({
   const votedA = userVote === "option_a";
   const votedB = userVote === "option_b";
   const votedNeutral = userVote === "neutral";
+  const { helpHidden, toggleHelpHidden } = useMatchupHelpHidden();
 
   return (
     <div className="relative group h-full">
@@ -283,8 +328,19 @@ export function VersusCard({
               </div>
             ) : (
               <div className="flex items-center justify-center gap-2 text-xs text-slate-500/70 mt-2">
-                <Swords className="h-3.5 w-3.5 text-cyan-600/70 dark:text-cyan-400/70" />
-                <span className="font-medium">Tap an image or VS to pick your side</span>
+                <button
+                  type="button"
+                  onClick={toggleHelpHidden}
+                  aria-label={helpHidden ? "Show matchup help text" : "Hide matchup help text"}
+                  title={helpHidden ? "Show matchup help text" : "Hide matchup help text"}
+                  className="inline-flex h-5 w-5 items-center justify-center rounded-full text-cyan-600/70 transition-colors hover:bg-cyan-500/10 hover:text-cyan-600 dark:text-cyan-400/70 dark:hover:text-cyan-400"
+                  data-testid={`button-toggle-matchup-help-${matchup.id}`}
+                >
+                  {helpHidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                </button>
+                {!helpHidden && (
+                  <span className="font-medium">Tap an image to vote or VS to remain Neutral</span>
+                )}
               </div>
             )}
           </div>
