@@ -167,7 +167,14 @@
       "idx": 23,
       "version": "7",
       "when": 1777495800000,
-      "tag": "0023_normalize_user_info_on_community_insights",
+      "tag": "0023_profiles_tos_accepted_at_backfill",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1777582200000,
+      "tag": "0024_normalize_user_info_on_community_insights",
       "breakpoints": true
     }
   ]

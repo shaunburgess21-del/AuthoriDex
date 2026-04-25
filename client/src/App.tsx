@@ -1,5 +1,5 @@
-import { lazy, Suspense, type ComponentType } from "react";
-import { Switch, Route } from "wouter";
+import { lazy, Suspense, useEffect, type ComponentType } from "react";
+import { Switch, Route, useLocation } from "wouter";
 import { MotionConfig } from "framer-motion";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -130,6 +130,32 @@ function XpCelebrationWatcher() {
   return null;
 }
 
+/**
+ * Force first-time users (no `tosAcceptedAt`) through /login/welcome before
+ * they can land anywhere else. Catches the Google-OAuth signup path, which
+ * skips the email verify screen entirely and would otherwise drop the user
+ * straight on the home page without a username choice / ToS acceptance.
+ *
+ * Excludes /login/* (so the email signup flow can stay in place), /terms and
+ * /privacy (so the welcome page's links don't force-redirect the user back
+ * to itself when they tap them in a new tab and end up navigated here).
+ */
+function NewUserGate() {
+  const { user, profile, profileLoading, loading } = useAuth();
+  const [location, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (loading || profileLoading) return;
+    if (!user || !profile) return;
+    if (profile.tosAcceptedAt) return;
+    if (location.startsWith("/login")) return;
+    if (location === "/terms" || location === "/privacy") return;
+    setLocation("/login/welcome", { replace: true });
+  }, [loading, profileLoading, user, profile, location, setLocation]);
+
+  return null;
+}
+
 function App() {
   return (
     <ErrorBoundary>
@@ -139,6 +165,7 @@ function App() {
             <TooltipProvider>
               <ScrollToTop />
               <Toaster richColors closeButton position="top-center" />
+              <NewUserGate />
               <XpBurstProvider>
                 {/* Watcher is inside XpBurstProvider so useXpCelebration can fire daily-login bursts via useXpBurst. */}
                 <XpCelebrationWatcher />

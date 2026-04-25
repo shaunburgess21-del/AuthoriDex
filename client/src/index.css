@@ -854,3 +854,21 @@
 *::-webkit-scrollbar-track { background: transparent; }
 *::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 9999px; }
 *::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.3); }
+
+/* ===== SONNER TOAST THEME ===== */
+/* Re-skin Sonner's `richColors` palette to the VoxDex brand:
+ *   - success → primary blue (default green felt off-brand for sign-in /
+ *     general "it worked" notifications).
+ *   - info    → primary blue too (consistent with success).
+ *   - error   → leave Sonner's red — semantic, users expect it.
+ *   - warning → leave Sonner's amber — semantic.
+ * These selectors match Sonner's data attributes; they win over the
+ * library defaults via [data-sonner-toaster] specificity. */
+[data-sonner-toaster][data-theme] {
+  --success-bg: hsl(var(--primary));
+  --success-text: hsl(var(--primary-foreground));
+  --success-border: hsl(var(--primary));
+  --info-bg: hsl(var(--primary));
+  --info-text: hsl(var(--primary-foreground));
+  --info-border: hsl(var(--primary));
+}

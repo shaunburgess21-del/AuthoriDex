@@ -61,6 +61,12 @@ import { CANONICAL_MARKET_CATEGORIES, getMarketCategoryLabel, normalizeMarketCat
 import { resolvePublicMatchupBySlugOrId } from "./utils/matchup-resolve";
 import { registerCronRoutes, registerPublicRoutes, registerGamificationRoutes, registerFavoritesRoutes } from "./route-modules";
 import { handleAuthHook } from "./emails/routes/auth-hook";
+import { sendEmail } from "./emails/send";
+import { WelcomeEmail, welcomeSubject } from "./emails/templates/lifecycle/Welcome";
+// React is needed (not TSX) to construct the welcome email element via
+// React.createElement, since routes.ts is a .ts file and can't use JSX.
+// Mirrors how server/emails/routes/auth-hook.ts builds VerifyEmail.
+import * as React from "react";
 import { h2hModelProbability } from "@shared/h2hModel";
 import { getAiModel, getChatCompletionTokenLimit } from "./config/ai-models";
 
@@ -5285,7 +5291,19 @@ Only return the JSON object.`;
   });
 
   // ==================== PROFILE ENDPOINTS ====================
-  
+
+  // Single source of truth for the signup credit grant. Referenced by:
+  //   - profiles.predictCredits on insert (the on-screen balance)
+  //   - creditLedger initial_grant entry (amount + balanceAfter)
+  //   - the welcome email (server passes profile.predictCredits at send
+  //     time, so it auto-tracks any change here without template edits)
+  // NOTE on backfill: the ledger entry uses idempotencyKey
+  // `initial_grant_${userId}` and onConflictDoNothing(), which means
+  // bumping this constant only affects NEW accounts. Existing users
+  // who already received a previous-amount grant won't be silently
+  // topped up — that's intentional and the safe default.
+  const SIGNUP_CREDIT_GRANT = 10000;
+
   // Sync profile after Supabase auth - creates profile if doesn't exist
   app.post("/api/profile/sync", requireAuth, async (req: AuthRequest, res) => {
     try {
@@ -5294,9 +5312,9 @@ Only return the JSON object.`;
       const initialGrantEntry = {
         userId,
         txnType: 'initial_grant' as const,
-        amount: 1000,
+        amount: SIGNUP_CREDIT_GRANT,
         walletType: 'VIRTUAL' as const,
-        balanceAfter: 1000,
+        balanceAfter: SIGNUP_CREDIT_GRANT,
         source: 'signup',
         idempotencyKey: `initial_grant_${userId}`,
         metadata: { reason: 'New account signup bonus' },
@@ -5359,7 +5377,7 @@ Only return the JSON object.`;
         role: "user",
         rank: "Citizen",
         xpPoints: 0,
-        predictCredits: 1000,
+        predictCredits: SIGNUP_CREDIT_GRANT,
         currentStreak: 0,
         totalVotes: 0,
         totalPredictions: 0,
@@ -5458,14 +5476,78 @@ Only return the JSON object.`;
         return res.status(409).json({ error: "username_taken" });
       }
 
+      // Read the existing row first so we can:
+      //   1. Detect first-time ToS acceptance (welcome email trigger).
+      //   2. Preserve the original tosAcceptedAt timestamp on retries —
+      //      important if the user (or a buggy client) ever resubmits
+      //      this endpoint, we don't want to silently move the
+      //      acceptance date forward.
+      //   3. Get the predictCredits + display name needed to render an
+      //      accurate welcome email (matches the on-screen balance).
+      const existingRows = await db
+        .select()
+        .from(profiles)
+        .where(eq(profiles.id, userId))
+        .limit(1);
+      if (existingRows.length === 0) {
+        return res.status(404).json({ error: "Profile not found" });
+      }
+      const existing = existingRows[0];
+      const isFirstAcceptance = !existing.tosAcceptedAt;
+
       const updated = await db
         .update(profiles)
-        .set({ username, tosAcceptedAt: new Date() })
+        .set({
+          username,
+          // Only stamp on first acceptance — preserves the original
+          // ToS-accepted timestamp on any subsequent calls.
+          ...(isFirstAcceptance ? { tosAcceptedAt: new Date() } : {}),
+        })
         .where(eq(profiles.id, userId))
         .returning();
 
       if (updated.length === 0) {
         return res.status(404).json({ error: "Profile not found" });
+      }
+
+      // First-time acceptance → fire the welcome email.
+      // Fire-and-forget on purpose: a slow Resend response shouldn't
+      // hold up the user's onboarding redirect. The idempotencyKey
+      // prevents accidental duplicate sends if this handler is ever
+      // hit twice for the same user (network retry, double-click).
+      if (isFirstAcceptance && req.userEmail) {
+        const firstName =
+          existing.fullName?.trim().split(/\s+/)[0] || updated[0].username || undefined;
+        const creditAmount = updated[0].predictCredits ?? 0;
+        const baseUrl =
+          process.env.PUBLIC_APP_URL ||
+          process.env.APP_URL ||
+          `${req.protocol}://${req.get("host")}`;
+
+        void (async () => {
+          try {
+            await sendEmail({
+              to: req.userEmail!,
+              subject: welcomeSubject(creditAmount),
+              category: "lifecycle",
+              template: React.createElement(WelcomeEmail, {
+                firstName,
+                baseUrl,
+                creditAmount,
+              }),
+              idempotencyKey: `welcome:${userId}`,
+              tags: [
+                { name: "category", value: "lifecycle" },
+                { name: "template", value: "welcome" },
+              ],
+            });
+          } catch (err) {
+            console.error(
+              `[welcome-email] Send failed for user=${userId}:`,
+              err instanceof Error ? err.message : err,
+            );
+          }
+        })();
       }
 
       res.json(updated[0]);

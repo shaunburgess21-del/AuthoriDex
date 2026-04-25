@@ -191,10 +191,15 @@ export default function VerifyPage() {
   );
 
   const handleChange = (next: string) => {
-    setCode(next);
+    // Sanitize aggressively so paste-from-email "Just works". Email clients
+    // often render the code with a middle space ("687 441") for readability;
+    // when the user copies the displayed value the space comes along and would
+    // otherwise produce a 7-character string that fails verification.
+    const sanitized = next.replace(/\D/g, "").slice(0, CODE_LENGTH);
+    setCode(sanitized);
     if (error) setError(null);
-    if (next.length === CODE_LENGTH && !verifying && !verifiedRef.current) {
-      void verify(next);
+    if (sanitized.length === CODE_LENGTH && !verifying && !verifiedRef.current) {
+      void verify(sanitized);
     }
   };
 
