@@ -24,7 +24,7 @@ async function main() {
 
   const result = await sendEmail({
     to: RECIPIENT,
-    subject: `Your VoxDex code: ${SAMPLE_CODE.slice(0, 3)} ${SAMPLE_CODE.slice(3)}`,
+    subject: `Your VoxDex code: ${SAMPLE_CODE}`,
     category: "auth",
     template: React.createElement(VerifyEmail, { code: SAMPLE_CODE }),
     tags: [{ name: "type", value: "verify-email-test" }],

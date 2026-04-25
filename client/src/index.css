@@ -855,20 +855,66 @@
 *::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 9999px; }
 *::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.3); }
 
-/* ===== SONNER TOAST THEME ===== */
-/* Re-skin Sonner's `richColors` palette to the VoxDex brand:
- *   - success → primary blue (default green felt off-brand for sign-in /
- *     general "it worked" notifications).
- *   - info    → primary blue too (consistent with success).
- *   - error   → leave Sonner's red — semantic, users expect it.
- *   - warning → leave Sonner's amber — semantic.
- * These selectors match Sonner's data attributes; they win over the
- * library defaults via [data-sonner-toaster] specificity. */
-[data-sonner-toaster][data-theme] {
-  --success-bg: hsl(var(--primary));
-  --success-text: hsl(var(--primary-foreground));
-  --success-border: hsl(var(--primary));
-  --info-bg: hsl(var(--primary));
-  --info-text: hsl(var(--primary-foreground));
-  --info-border: hsl(var(--primary));
+/* ===== INPUT AUTOFILL OVERRIDE =====
+ * Chrome / Edge / Safari paint a yellow-or-white background onto any
+ * input they autofill from saved credentials. In our dark theme this
+ * looks like a light-mode field has been spliced into the form (and
+ * stays that way until the user blurs and refocuses). It also makes
+ * the value text near-invisible because foreground color is dark.
+ *
+ * Standard fix: paint a 1000px inset box-shadow in the input's
+ * intended background color (visually overriding the autofill paint),
+ * and tell the browser to render the value text in our foreground
+ * color via -webkit-text-fill-color. The 600000s color/background
+ * transitions are a well-known trick to delay the browser's own
+ * autofill animation effectively forever, so the dark color "sticks"
+ * even on subsequent focus/blur cycles.
+ *
+ * Matches `bg-background` (which is what shadcn's Input uses), so
+ * autofilled fields are visually indistinguishable from typed ones. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active,
+textarea:-webkit-autofill,
+textarea:-webkit-autofill:hover,
+textarea:-webkit-autofill:focus,
+textarea:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px hsl(var(--background)) inset !important;
+  -webkit-text-fill-color: hsl(var(--foreground)) !important;
+  caret-color: hsl(var(--foreground));
+  transition: background-color 600000s 0s, color 600000s 0s;
+}
+
+/* ===== SONNER TOAST THEME =====
+ * Re-skin Sonner's `richColors` success/info palette to brand blue while
+ * keeping the soft pastel feel Sonner uses by default — toasts should still
+ * read as notifications, not solid alert bars.
+ *
+ * Specificity note: Sonner sets per-theme defaults on
+ * `[data-sonner-toaster][data-theme="light"]` (specificity 0,2,0). A previous
+ * override at the same specificity lost the cascade because Sonner's CSS is
+ * injected by its module AFTER our index.css loads. Prefixing with `html`
+ * bumps us to (0,2,1) which reliably wins regardless of import order.
+ *
+ * The values mirror Sonner's own pastel structure (very-light bg / slightly
+ * darker border / saturated text) but pivoted to our brand hue 217. Errors
+ * stay red and warnings stay amber — those carry semantic meaning users
+ * expect from notification toasts. */
+html [data-sonner-toaster][data-theme="light"] {
+  --success-bg: hsl(217 91% 96%);
+  --success-border: hsl(217 91% 91%);
+  --success-text: hsl(217 91% 38%);
+  --info-bg: hsl(217 91% 96%);
+  --info-border: hsl(217 91% 91%);
+  --info-text: hsl(217 91% 38%);
+}
+
+html [data-sonner-toaster][data-theme="dark"] {
+  --success-bg: hsl(217 91% 8%);
+  --success-border: hsl(217 91% 16%);
+  --success-text: hsl(217 91% 70%);
+  --info-bg: hsl(217 91% 8%);
+  --info-border: hsl(217 91% 16%);
+  --info-text: hsl(217 91% 70%);
 }

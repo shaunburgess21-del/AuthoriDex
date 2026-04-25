@@ -10,8 +10,13 @@
  * iOS/Android's auto-fill-from-notifications experience.
  *
  * Props:
- *   code — the 6 digits, unformatted (e.g. "428913"). We'll
- *          format with a middle space for readability.
+ *   code — the 6 digits, unformatted (e.g. "428913"). Rendered
+ *          raw with letter-spacing for visual separation; we
+ *          deliberately do NOT insert a literal space so that
+ *          users who copy the code from the email get a clean
+ *          6-digit string that pastes cleanly into the OTP input
+ *          on every email client (Outlook, Gmail, Apple Mail all
+ *          handle highlight-copy of styled text differently).
  */
 
 import * as React from "react";
@@ -25,17 +30,9 @@ interface VerifyEmailProps {
 }
 
 export function VerifyEmail({ code }: VerifyEmailProps) {
-// Format "428913" -> "428 913" for readability.
-  // Uses a regular space (not non-breaking); whiteSpace:nowrap on
-  // the code style below prevents line breaks at the space.
-  // If an unexpected length comes in, fall back to the raw value
-  // so the email is never broken by upstream bugs.
-  const formattedCode =
-    code.length === 6 ? `${code.slice(0, 3)} ${code.slice(3)}` : code;
-
   return (
     <Layout
-      preview={`Your VoxDex code: ${formattedCode}`}
+      preview={`Your VoxDex code: ${code}`}
       footerContext="You're receiving this because someone tried to sign in to VoxDex with this email."
     >
       <Heading style={typography.h1}>Verify your email</Heading>
@@ -45,7 +42,7 @@ export function VerifyEmail({ code }: VerifyEmailProps) {
       </Text>
 
       <Section style={codeBoxStyle}>
-        <Text style={codeStyle}>{formattedCode}</Text>
+        <Text style={codeStyle}>{code}</Text>
       </Section>
 
       <Text style={typography.small}>

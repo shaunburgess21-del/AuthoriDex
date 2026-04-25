@@ -125,8 +125,8 @@ export async function handleAuthHook(
       case "magiclink": {
         const subject =
           email_action_type === "signup"
-            ? `Your VoxDex code: ${formatCode(token)}`
-            : `Your VoxDex sign-in code: ${formatCode(token)}`;
+            ? `Your VoxDex code: ${token}`
+            : `Your VoxDex sign-in code: ${token}`;
 
         const result = await sendEmail({
           to: user.email,
@@ -150,7 +150,7 @@ export async function handleAuthHook(
         // TODO: dedicated PasswordResetEmail template.
         const result = await sendEmail({
           to: user.email,
-          subject: `Your VoxDex password reset code: ${formatCode(token)}`,
+          subject: `Your VoxDex password reset code: ${token}`,
           category: "auth",
           template: React.createElement(VerifyEmail, { code: token }),
           idempotencyKey: `auth:recovery:${token_hash}`,
@@ -205,10 +205,4 @@ export async function handleAuthHook(
       error: { message: "Email send failed", detail: message },
     });
   }
-}
-
-// ---- Helpers --------------------------------------------------------------
-
-function formatCode(code: string): string {
-  return code.length === 6 ? `${code.slice(0, 3)} ${code.slice(3)}` : code;
 }
