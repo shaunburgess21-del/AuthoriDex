@@ -6,6 +6,51 @@ const WIKI_API_BASE = "https://wikimedia.org/api/rest_v1/metrics/pageviews/per-a
 const MEDIAWIKI_API = "https://en.wikipedia.org/w/api.php";
 const USER_AGENT = "VoxDex/1.0 (https://voxdex.com; contact@voxdex.com)";
 
+// Network resilience: previously a single hung Wikipedia request would block
+// the entire sequential ingest batch (heartbeat keeps the lock alive, run
+// became a 57-min zombie writing 0 snapshots). Bound every outbound call.
+const WIKI_REQUEST_TIMEOUT_MS = 15_000;
+const WIKI_MAX_RETRIES = 2;
+const WIKI_RETRY_BACKOFF_MS = [500, 1500];
+
+async function fetchWithTimeout(
+  url: string,
+  init?: RequestInit,
+  timeoutMs: number = WIKI_REQUEST_TIMEOUT_MS,
+): Promise<Response> {
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt <= WIKI_MAX_RETRIES; attempt++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(url, { ...init, signal: controller.signal });
+      const shouldRetry =
+        attempt < WIKI_MAX_RETRIES &&
+        response.status !== 404 &&
+        (response.status === 429 || response.status >= 500);
+      if (shouldRetry) {
+        const backoff = WIKI_RETRY_BACKOFF_MS[attempt] ?? 2000;
+        console.warn(`[Wiki] HTTP ${response.status} on attempt ${attempt + 1}, retrying in ${backoff}ms`);
+        await new Promise(r => setTimeout(r, backoff));
+        continue;
+      }
+      return response;
+    } catch (err) {
+      lastError = err;
+      if (attempt >= WIKI_MAX_RETRIES) throw err;
+      const isAbort = (err as { name?: string })?.name === "AbortError";
+      const backoff = WIKI_RETRY_BACKOFF_MS[attempt] ?? 2000;
+      console.warn(
+        `[Wiki] Fetch ${isAbort ? "timed out" : "errored"} on attempt ${attempt + 1}: ${(err as Error).message}, retrying in ${backoff}ms`,
+      );
+      await new Promise(r => setTimeout(r, backoff));
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+  throw lastError ?? new Error("[Wiki] fetch failed after retries");
+}
+
 export interface WikiPageviewData {
   article: string;
   pageviews24h: number;
@@ -77,7 +122,7 @@ async function setCachedResponse(
 async function resolveWikiRedirect(slug: string): Promise<string | null> {
   try {
     const url = `${MEDIAWIKI_API}?action=query&titles=${encodeURIComponent(slug)}&redirects&format=json`;
-    const res = await fetch(url, {
+    const res = await fetchWithTimeout(url, {
       headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
     });
     if (!res.ok) return null;
@@ -101,7 +146,7 @@ async function fetchPageviewsRaw(
   range: { start: string; end: string },
 ): Promise<{ views: number }[] | null> {
   const url = `${WIKI_API_BASE}/en.wikipedia/all-access/all-agents/${encodeURIComponent(slug)}/daily/${range.start}/${range.end}`;
-  const response = await fetch(url, {
+  const response = await fetchWithTimeout(url, {
     headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
   });
   if (!response.ok) {
@@ -202,7 +247,7 @@ export async function fetchWikiPageviews(
 async function findRedirectsTo(canonicalSlug: string): Promise<string | null> {
   try {
     const url = `${MEDIAWIKI_API}?action=query&list=backlinks&bltitle=${encodeURIComponent(canonicalSlug)}&blfilterredir=redirects&bllimit=10&format=json`;
-    const res = await fetch(url, {
+    const res = await fetchWithTimeout(url, {
       headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
     });
     if (!res.ok) return null;

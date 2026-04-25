@@ -104,6 +104,18 @@ export interface AggregatorProviderSummary {
    * the dedup union. Watch this drop to 0 as the 2h Mediastack cache cycles.
    */
   legacyCacheEntries?: number;
+  /**
+   * Mediastack-only: people who got nothing because the batch ran in cache-only
+   * mode and the cache was empty. Distinct from `succeeded=false`/`error` —
+   * this is a self-imposed throttle, not an external failure.
+   */
+  cacheOnlyEmpty?: number;
+  /**
+   * Mediastack-only: true when the batch was forced into cache-only mode by
+   * the budget hard-stop. Lets the ingest layer report a `THROTTLED` source
+   * status instead of a misleading `DEGRADED`.
+   */
+  budgetThrottled?: boolean;
 }
 
 export interface AggregatorStats {
@@ -259,6 +271,7 @@ export async function fetchMultiSourceNewsBatch(
         {
           cacheOnly: mediastackCacheOnly,
           widenCandidateIds: mediastackCacheOnly ? undefined : options.mediastackWidenCandidateIds,
+          budgetThrottled: mediastackCadence?.budgetThrottled ?? false,
         },
       )
     : Promise.resolve(null);
@@ -309,6 +322,8 @@ export async function fetchMultiSourceNewsBatch(
     // cycles through.
     providerSummary.mediastack.legacyCacheEntries = Array.from(mediastackMap.values())
       .filter(v => v.articles === undefined).length;
+    providerSummary.mediastack.cacheOnlyEmpty = mediastackBatchStats.cacheOnlyEmpty;
+    providerSummary.mediastack.budgetThrottled = mediastackBatchStats.budgetThrottled;
   } else if (mediastackSettled.status === "rejected") {
     providerSummary.mediastack.error = String(mediastackSettled.reason);
     console.warn("[News Aggregator] Mediastack batch failed:", mediastackSettled.reason);
