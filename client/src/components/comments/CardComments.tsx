@@ -319,7 +319,8 @@ export function CardComments({
           <div className="flex items-center gap-4 mt-2">
             <button
               onClick={() => commentVoteMutation.mutate({ commentId: comment.id, voteType: "up" })}
-              className={`flex items-center gap-1 text-xs transition-colors ${
+              onPointerUp={(event) => event.currentTarget.blur()}
+              className={`flex items-center gap-1 text-xs transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
                 hasUpvoted
                   ? "text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300"
                   : "text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400"
@@ -331,7 +332,8 @@ export function CardComments({
             </button>
             <button
               onClick={() => commentVoteMutation.mutate({ commentId: comment.id, voteType: "down" })}
-              className={`flex items-center gap-1 text-xs transition-colors ${
+              onPointerUp={(event) => event.currentTarget.blur()}
+              className={`flex items-center gap-1 text-xs transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
                 hasDownvoted
                   ? "text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300"
                   : "text-muted-foreground hover:text-rose-600 dark:hover:text-rose-400"
@@ -400,6 +402,9 @@ export function CardComments({
       if (nextMode === "manual") {
         requestAnimationFrame(() => {
           composerContainerRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+          window.setTimeout(() => {
+            window.scrollBy({ top: 80, behavior: "smooth" });
+          }, 300);
         });
       }
       return nextMode;
@@ -458,6 +463,7 @@ export function CardComments({
           <div className="absolute right-2 bottom-1.5 flex items-center gap-1">
             <button
               onClick={handleComposerToggle}
+              onPointerUp={(event) => event.currentTarget.blur()}
               className="flex h-8 w-8 items-center justify-center text-slate-300 hover:text-slate-100 transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               type="button"
               aria-label={composerMode === "auto" ? "Expand comment input" : "Collapse comment input"}
