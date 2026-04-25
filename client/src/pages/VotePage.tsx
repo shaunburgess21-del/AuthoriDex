@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { CardGridSkeleton } from "@/components/ui/card-skeletons";
 import { Badge } from "@/components/ui/badge";
-import { InteractiveCategoryPill, isCategoryPillDrawerDismissSuppressed } from "@/components/InteractiveCategoryPill";
+import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
 import { AvatarHeightHeadline } from "@/components/AvatarHeightHeadline";
 import { useCategoryRaceMap } from "@/hooks/useCategoryRaceMap";
 import { useLeaderboardCategories } from "@/hooks/useLeaderboardCategories";
@@ -1780,11 +1780,6 @@ export default function VotePage() {
 
   const handleCardEmptyTap = useCallback((e: React.MouseEvent, section: SnapSectionType, itemId: string) => {
     if (!isMobile) return;
-    if (isCategoryPillDrawerDismissSuppressed()) {
-      e.preventDefault();
-      e.stopPropagation();
-      return;
-    }
     const target = e.target as HTMLElement;
     const wrapper = e.currentTarget as HTMLElement;
     // Walk up from target but stop at the wrapper — excludes interactive descendants

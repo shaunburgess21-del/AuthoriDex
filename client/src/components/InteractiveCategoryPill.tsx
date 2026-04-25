@@ -23,47 +23,6 @@ const SIZE_CLASSES = {
   sm: "px-1 py-0.5 text-[9px] leading-none font-medium",
 } as const;
 
-const DRAWER_DISMISS_SUPPRESSION_MS = 250;
-const DISMISS_EVENT_OPTIONS: AddEventListenerOptions = { capture: true, passive: false };
-let drawerDismissSuppressedUntil = 0;
-let cleanupDismissSuppression: (() => void) | null = null;
-let drawerDismissSuppressionTimeout: number | null = null;
-
-export function isCategoryPillDrawerDismissSuppressed(): boolean {
-  return Date.now() < drawerDismissSuppressedUntil;
-}
-
-function suppressCategoryPillDrawerDismissEvents() {
-  drawerDismissSuppressedUntil = Date.now() + DRAWER_DISMISS_SUPPRESSION_MS;
-  if (drawerDismissSuppressionTimeout !== null) {
-    window.clearTimeout(drawerDismissSuppressionTimeout);
-  }
-  if (cleanupDismissSuppression) {
-    drawerDismissSuppressionTimeout = window.setTimeout(cleanupDismissSuppression, DRAWER_DISMISS_SUPPRESSION_MS);
-    return;
-  }
-
-  const stopDismissEvent = (event: Event) => {
-    if (!isCategoryPillDrawerDismissSuppressed()) return;
-    event.preventDefault();
-    event.stopPropagation();
-  };
-
-  const stopSuppression = () => {
-    document.removeEventListener("pointerdown", stopDismissEvent, DISMISS_EVENT_OPTIONS);
-    document.removeEventListener("touchend", stopDismissEvent, DISMISS_EVENT_OPTIONS);
-    document.removeEventListener("click", stopDismissEvent, DISMISS_EVENT_OPTIONS);
-    cleanupDismissSuppression = null;
-    drawerDismissSuppressionTimeout = null;
-  };
-
-  cleanupDismissSuppression = stopSuppression;
-  document.addEventListener("pointerdown", stopDismissEvent, DISMISS_EVENT_OPTIONS);
-  document.addEventListener("touchend", stopDismissEvent, DISMISS_EVENT_OPTIONS);
-  document.addEventListener("click", stopDismissEvent, DISMISS_EVENT_OPTIONS);
-  drawerDismissSuppressionTimeout = window.setTimeout(stopSuppression, DRAWER_DISMISS_SUPPRESSION_MS);
-}
-
 interface InteractiveCategoryPillProps {
   category: string;
   onFilter: () => void;
@@ -248,9 +207,12 @@ export function InteractiveCategoryPill({
 
     if (!nextOpen) {
       // Vaul overlay unmounts during close animation; the browser re-targets the
-      // pointer release to whatever element is underneath, firing ghost touch/click
-      // events on the card. Suppress that short close window before it reaches Snap.
-      suppressCategoryPillDrawerDismissEvents();
+      // pointer release to whatever element is underneath, firing a ghost click on
+      // the card. Capture and swallow exactly that one event before it propagates.
+      document.addEventListener("click", (e) => e.stopPropagation(), {
+        capture: true,
+        once: true,
+      });
     }
 
     setOpen(nextOpen);
