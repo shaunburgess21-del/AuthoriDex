@@ -21,6 +21,7 @@
     "apply:handle-verdicts": "tsx --env-file=.env server/scripts/apply-handle-verdicts.ts",
     "db:ensure-induction-cols": "tsx --env-file=.env server/scripts/ensure-induction-candidate-columns.ts",
     "db:ensure": "tsx --env-file=.env server/scripts/run-ensure-schema.ts",
+    "eval:profiles": "tsx --env-file=.env server/scripts/evaluate-profile-models.ts",
     "validate:induction-post-import": "tsx --env-file=.env server/scripts/validate-induction-post-import.ts"
   },
   "dependencies": {

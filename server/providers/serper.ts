@@ -679,6 +679,7 @@ export async function fetchWebSearchContext(name: string): Promise<WebSearchCont
   }
 
   try {
+    const currentYear = new Date().getFullYear();
     // Search for recent news about the person
     const newsResponse = await serperFetch("https://google.serper.dev/news", {
       method: "POST",
@@ -703,7 +704,7 @@ export async function fetchWebSearchContext(name: string): Promise<WebSearchCont
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        q: `${name} current role position 2025`,
+        q: `"${name}" current role position ${currentYear} official biography`,
         num: 5,
         gl: "us",
         hl: "en",
@@ -840,7 +841,7 @@ export async function fetchNetWorthContext(name: string): Promise<NetWorthContex
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        q: `${name} net worth ${currentYear}`,
+        q: `"${name}" net worth ${currentYear} Forbes Bloomberg Celebrity Net Worth`,
         num: 8,
         gl: "us",
         hl: "en",

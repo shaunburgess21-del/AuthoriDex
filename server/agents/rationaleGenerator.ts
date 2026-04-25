@@ -6,6 +6,7 @@
 import OpenAI from "openai";
 import { getRecentMemory } from "./memoryManager";
 import type { AgentConfigData, MarketWithEntries, PredictionDecision } from "./types";
+import { getAiModel, getChatCompletionTokenLimit } from "../config/ai-models";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
@@ -36,9 +37,10 @@ Be direct. Use personality. Don't sound like an AI. Do not start with "I think".
 My pick: ${chosenEntry?.label ?? "Unknown"} (confidence: ${confidencePct}%)
 Write the rationale.`;
 
+    const model = getAiModel("agentRationale");
     const response = await openai.chat.completions.create({
-      model: "gpt-4o",
-      max_tokens: 80,
+      model,
+      ...getChatCompletionTokenLimit(model, 80),
       temperature: 0.85,
       messages: [
         { role: "system", content: systemPrompt },

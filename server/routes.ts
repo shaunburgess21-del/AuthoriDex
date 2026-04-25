@@ -25,7 +25,8 @@ import { classifyImageVoteAction } from "./utils/image-vote-transition";
 import { optimizeImage } from "./utils/image-optimize";
 import geoip from "geoip-lite";
 import { getTrendContext, getTrendContextBatch, formatRelativeTime, type TrendContext } from "./services/trend-context";
-import { fetchWebSearchContext, fetchTrendingNewsContext, fetchNetWorthContext, probeSerperSearchLive, refreshSerperCacheForPerson, getSerperDegradedState, getSerperRunStats } from "./providers/serper";
+import { fetchTrendingNewsContext, probeSerperSearchLive, refreshSerperCacheForPerson, getSerperDegradedState, getSerperRunStats } from "./providers/serper";
+import { generateProfilePreview, getOrGenerateCelebrityProfile } from "./services/profile-generator";
 import { getSourceStats, refreshSourceStats } from "./scoring/sourceStats";
 import {
   normalizeSourceValue,
@@ -61,6 +62,7 @@ import { resolvePublicMatchupBySlugOrId } from "./utils/matchup-resolve";
 import { registerCronRoutes, registerPublicRoutes, registerGamificationRoutes, registerFavoritesRoutes } from "./route-modules";
 import { handleAuthHook } from "./emails/routes/auth-hook";
 import { h2hModelProbability } from "@shared/h2hModel";
+import { getAiModel, getChatCompletionTokenLimit } from "./config/ai-models";
 
 const VIEW_DEDUPE_WINDOW_MS = 10 * 60 * 1000;
 const VIEW_IP_RATE_LIMIT = 30;
@@ -3917,165 +3919,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get AI-generated celebrity profile with 7-day caching and web search grounding
+  // Get AI-generated celebrity profile with source-grounded caching and validation
   app.get("/api/celebrity-profile/:personId", async (req, res) => {
     try {
       const { personId } = req.params;
       const forceRefresh = req.query.refresh === 'true';
-      const CACHE_DURATION_DAYS = 7; // Reduced from 30 to 7 days
-      
-      // Check cache first (unless force refresh)
-      const cached = await storage.getCelebrityProfile(personId);
-      if (cached && !forceRefresh) {
-        // Check if cache is still fresh (within 7 days)
-        const cacheAge = Date.now() - new Date(cached.generatedAt).getTime();
-        const cacheDuration = CACHE_DURATION_DAYS * 24 * 60 * 60 * 1000;
-        
-        if (cacheAge < cacheDuration) {
-          return res.json(cached);
-        }
-        // Cache is stale, will regenerate below
-      }
-      
-      // Get person name from storage
+      const model = typeof req.query.model === "string" ? req.query.model : undefined;
+
       const person = await storage.getTrendingPerson(personId);
       if (!person) {
         return res.status(404).json({ error: "Person not found" });
       }
-      
-      // Fetch web search context for grounding (current news/info about the person)
-      console.log(`[Profile] Fetching web search context for ${person.name}...`);
-      const [webContext, netWorthContext] = await Promise.all([
-        fetchWebSearchContext(person.name),
-        fetchNetWorthContext(person.name),
-      ]);
-      
-      // Initialize OpenAI (supports Replit AI integrations or direct OpenAI key)
-      const openai = new OpenAI({
-        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
-      });
-      
-      // Build context from web search
-      let webContextSection = "";
-      if (webContext && (webContext.headlines.length > 0 || webContext.snippets.length > 0)) {
-        webContextSection = `
-CURRENT WEB SEARCH RESULTS (use this for up-to-date information):
-Recent Headlines:
-${webContext.headlines.slice(0, 5).map(h => `- ${h}`).join('\n')}
 
-Recent Information Snippets:
-${webContext.snippets.slice(0, 5).map(s => `- ${s}`).join('\n')}
-
-`;
-      }
-      
-      // Build net worth context section
-      let netWorthSection = "";
-      if (netWorthContext && netWorthContext.sources.length > 0) {
-        netWorthSection = `
-NET WORTH SEARCH RESULTS (use the MOST RECENT authoritative source for accurate net worth):
-${netWorthContext.sources.map(s => `- "${s.title}": ${s.snippet}`).join('\n')}
-
-IMPORTANT: Prefer Forbes, Bloomberg, or Celebrity Net Worth sources for net worth estimates. Use the most recent figure available.
-${netWorthContext.estimate ? `Quick extract found: ${netWorthContext.estimate} (verify against sources above)` : ''}
-
-`;
-      }
-      
-      // Generate comprehensive profile using AI with web grounding
-      const currentYear = new Date().getFullYear();
-      const currentDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
-      const prompt = `You are a celebrity data expert. Generate accurate, factual information about ${person.name}.
-
-${webContextSection}${netWorthSection}CRITICAL INSTRUCTIONS:
-1. Today is ${currentDate}. Use your most current knowledge.
-2. This person's data will be cached for 7 days, so accuracy is essential.
-3. If this person is a politician, CEO, or public figure, state their CURRENT title/position as of ${currentYear}.
-4. POLITICAL FIGURES - USE CURRENT FACTS:
-   - Donald Trump: Inaugurated as 47th U.S. President on January 20, 2025 (second term)
-   - JD Vance: Current U.S. Vice President (since January 20, 2025)
-   - Joe Biden: Former President (term ended January 20, 2025)
-   - Kamala Harris: Former Vice President (term ended January 20, 2025)
-   - Karoline Leavitt: 36th White House Press Secretary (since January 2025, youngest ever at 27)
-   - David Sacks: White House Special Advisor for AI and Crypto (appointed January 2025, "AI and Crypto Czar")
-5. For politicians: If they are currently serving in office, this MUST be stated clearly with their current title.
-6. For business leaders: State their current company and role.
-7. If someone was recently elected or appointed to a new role, mention this prominently.
-8. IMPORTANT: DO NOT mention net worth, wealth, or financial figures in shortBio or longBio. Net worth goes ONLY in the estimatedNetWorth field.
-
-NET WORTH REFERENCE DATA (January 2026 - use these as anchors for estimation):
-- Elon Musk: ~$700 billion (first to cross $700B, owns Tesla, SpaceX at $800B valuation, xAI)
-- Jeff Bezos: ~$240 billion
-- Mark Zuckerberg: ~$230 billion
-- Larry Ellison: ~$220 billion
-- Bernard Arnault: ~$200 billion
-- Bill Gates: ~$160 billion
-- Warren Buffett: ~$145 billion
-- Larry Page: ~$165 billion
-- Sergey Brin: ~$155 billion
-- Jensen Huang: ~$130 billion (NVIDIA CEO)
-- Shayne Coplan: ~$1 billion (Polymarket founder, youngest self-made billionaire Oct 2025)
-- Taylor Swift: ~$1.6 billion
-- Rihanna: ~$1.4 billion
-- Kim Kardashian: ~$1.7 billion
-- Kylie Jenner: ~$700 million
-- Drake: ~$300 million
-- LeBron James: ~$1.2 billion
-- Cristiano Ronaldo: ~$600 million
-Use these as reference points to estimate other individuals' net worth relative to their success/wealth tier.
-
-Return a JSON object with exactly these fields:
-{
-  "shortBio": "A concise 2-3 sentence summary emphasizing their CURRENT primary role and achievements. DO NOT mention net worth here. (150-200 characters)",
-  "longBio": "A comprehensive 4-6 sentence biography covering their current position, career highlights, and achievements. DO NOT mention net worth or wealth here. (400-600 characters)",
-  "knownFor": "Their primary areas of expertise or fame, comma-separated (e.g., 'Tech entrepreneurship, SpaceX, Tesla, X/Twitter')",
-  "fromCountry": "Their country of origin (full name, e.g., 'South Africa')",
-  "fromCountryCode": "ISO 3166-1 alpha-2 code (e.g., 'ZA')",
-  "basedIn": "Where they currently live or work (full name, e.g., 'United States')", 
-  "basedInCountryCode": "ISO 3166-1 alpha-2 code (e.g., 'US')",
-  "estimatedNetWorth": "Provide a rough estimate in format like '$700 billion' or '$450 million'. For billionaires, estimate to nearest $1-10B depending on wealth tier. For millionaires, estimate to nearest $50M. Use the reference data above as anchors. Never say 'not available' or 'unknown'."
-}
-
-Be factual, accurate, and emphasize their current status. Only return the JSON object, nothing else.`;
-
-      // Using gpt-4.1 for accurate and current knowledge with web grounding
-      const response = await openai.chat.completions.create({
-        model: "gpt-4.1",
-        messages: [{ role: "user", content: prompt }],
-        response_format: { type: "json_object" },
-        max_tokens: 1000,
-      });
-      
-      const content = response.choices[0]?.message?.content;
-      if (!content) {
-        throw new Error("No response from AI");
-      }
-      
-      const parsed = JSON.parse(content);
-      
-      const profileData: InsertCelebrityProfile = {
-        personId,
-        personName: person.name,
-        shortBio: parsed.shortBio || "No biography available",
-        longBio: parsed.longBio || null,
-        knownFor: parsed.knownFor || "Various achievements",
-        fromCountry: parsed.fromCountry || "Unknown",
-        fromCountryCode: parsed.fromCountryCode?.toUpperCase() || "XX",
-        basedIn: parsed.basedIn || "Unknown",
-        basedInCountryCode: parsed.basedInCountryCode?.toUpperCase() || "XX",
-        estimatedNetWorth: parsed.estimatedNetWorth || "Not available",
-        generatedAt: new Date(),
-      };
-      
-      // Cache the result (update if exists, insert if new)
-      let profile: CelebrityProfile;
-      if (cached) {
-        profile = await storage.updateCelebrityProfile(personId, profileData) as CelebrityProfile;
-      } else {
-        profile = await storage.setCelebrityProfile(profileData);
-      }
-      
-      console.log(`[Profile] Generated profile for ${person.name} using gpt-4.1 with web grounding`);
+      const result = await getOrGenerateCelebrityProfile(person, { forceRefresh, model });
+      console.log(`[Profile] ${result.cacheStatus} profile for ${person.name}`);
+      const profile = result.profile;
       res.json(profile);
     } catch (error: any) {
       console.error("Error generating celebrity profile:", error);
@@ -4083,151 +3941,40 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
     }
   });
 
-  // Admin endpoint to refresh all celebrity profiles with new model and web grounding
+  // Admin endpoint to refresh all celebrity profiles with source-grounded generation
   app.post("/api/admin/refresh-all-profiles", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      // Get all tracked people
       const people = await db.select().from(trackedPeople);
       console.log(`[Admin] Starting profile refresh for ${people.length} celebrities...`);
-      
-      // Process in batches to avoid rate limits
+
       const BATCH_SIZE = 5;
       const DELAY_MS = 2000;
       let successCount = 0;
       let errorCount = 0;
-      
+
       for (let i = 0; i < people.length; i += BATCH_SIZE) {
         const batch = people.slice(i, i + BATCH_SIZE);
-        
+
         await Promise.all(batch.map(async (person) => {
           try {
-            // Fetch web search context and net worth in parallel
-            const [webContext, netWorthContext] = await Promise.all([
-              fetchWebSearchContext(person.name),
-              fetchNetWorthContext(person.name),
-            ]);
-            
-            // Initialize OpenAI (supports Replit AI integrations or direct OpenAI key)
-            const openai = new OpenAI({
-              apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
-            });
-            
-            // Build context from web search
-            let webContextSection = "";
-            if (webContext && (webContext.headlines.length > 0 || webContext.snippets.length > 0)) {
-              webContextSection = `
-CURRENT WEB SEARCH RESULTS (use this for up-to-date information):
-Recent Headlines:
-${webContext.headlines.slice(0, 5).map(h => `- ${h}`).join('\n')}
+            await getOrGenerateCelebrityProfile({
+              id: person.id,
+              name: person.name,
+              avatar: person.avatar ?? null,
+              bio: person.bio ?? null,
+              rank: person.displayOrder || 9999,
+              trendScore: 0,
+              fameIndex: 0,
+              fameIndexLive: null,
+              liveRank: null,
+              liveUpdatedAt: null,
+              liveDampen: null,
+              change24h: null,
+              change7d: null,
+              category: person.category,
+              profileViews10m: null,
+            }, { forceRefresh: true });
 
-Recent Information Snippets:
-${webContext.snippets.slice(0, 5).map(s => `- ${s}`).join('\n')}
-
-`;
-            }
-            
-            // Build net worth context section
-            let netWorthSection = "";
-            if (netWorthContext && netWorthContext.sources.length > 0) {
-              netWorthSection = `
-NET WORTH SEARCH RESULTS (use the MOST RECENT authoritative source for accurate net worth):
-${netWorthContext.sources.map(s => `- "${s.title}": ${s.snippet}`).join('\n')}
-
-IMPORTANT: Prefer Forbes, Bloomberg, or Celebrity Net Worth sources. Use the MOST RECENT figure available.
-${netWorthContext.estimate ? `Quick extract found: ${netWorthContext.estimate} (verify against sources above)` : ''}
-
-`;
-            }
-            
-            const currentYear = new Date().getFullYear();
-            const currentDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
-            const prompt = `You are a celebrity data expert. Generate accurate, factual information about ${person.name}.
-
-${webContextSection}${netWorthSection}CRITICAL INSTRUCTIONS:
-1. Today is ${currentDate}. Use your most current knowledge.
-2. This person's data will be cached for 7 days, so accuracy is essential.
-3. If this person is a politician, CEO, or public figure, state their CURRENT title/position as of ${currentYear}.
-4. POLITICAL FIGURES - USE CURRENT FACTS:
-   - Donald Trump: Inaugurated as 47th U.S. President on January 20, 2025 (second term)
-   - JD Vance: Current U.S. Vice President (since January 20, 2025)
-   - Joe Biden: Former President (term ended January 20, 2025)
-   - Kamala Harris: Former Vice President (term ended January 20, 2025)
-   - Karoline Leavitt: 36th White House Press Secretary (since January 2025, youngest ever at 27)
-   - David Sacks: White House Special Advisor for AI and Crypto (appointed January 2025, "AI and Crypto Czar")
-5. For politicians: If they are currently serving in office, this MUST be stated clearly with their current title.
-6. For business leaders: State their current company and role.
-7. If someone was recently elected or appointed to a new role, mention this prominently.
-8. IMPORTANT: DO NOT mention net worth, wealth, or financial figures in shortBio or longBio. Net worth goes ONLY in the estimatedNetWorth field.
-
-NET WORTH REFERENCE DATA (January 2026 - use these as anchors for estimation):
-- Elon Musk: ~$700 billion (first to cross $700B, owns Tesla, SpaceX at $800B valuation, xAI)
-- Jeff Bezos: ~$240 billion
-- Mark Zuckerberg: ~$230 billion
-- Larry Ellison: ~$220 billion
-- Bernard Arnault: ~$200 billion
-- Bill Gates: ~$160 billion
-- Warren Buffett: ~$145 billion
-- Larry Page: ~$165 billion
-- Sergey Brin: ~$155 billion
-- Jensen Huang: ~$130 billion (NVIDIA CEO)
-- Shayne Coplan: ~$1 billion (Polymarket founder, youngest self-made billionaire Oct 2025)
-- Taylor Swift: ~$1.6 billion
-- Rihanna: ~$1.4 billion
-- Kim Kardashian: ~$1.7 billion
-- Kylie Jenner: ~$700 million
-- Drake: ~$300 million
-- LeBron James: ~$1.2 billion
-- Cristiano Ronaldo: ~$600 million
-Use these as reference points to estimate other individuals' net worth relative to their success/wealth tier.
-
-Return a JSON object with exactly these fields:
-{
-  "shortBio": "A concise 2-3 sentence summary emphasizing their CURRENT primary role and achievements. DO NOT mention net worth here. (150-200 characters)",
-  "longBio": "A comprehensive 4-6 sentence biography covering their current position, career highlights, and achievements. DO NOT mention net worth or wealth here. (400-600 characters)",
-  "knownFor": "Their primary areas of expertise or fame, comma-separated",
-  "fromCountry": "Their country of origin (full name)",
-  "fromCountryCode": "ISO 3166-1 alpha-2 code",
-  "basedIn": "Where they currently live or work (full name)", 
-  "basedInCountryCode": "ISO 3166-1 alpha-2 code",
-  "estimatedNetWorth": "Provide a rough estimate in format like '$700 billion' or '$450 million'. For billionaires, estimate to nearest $1-10B depending on wealth tier. For millionaires, estimate to nearest $50M. Use the reference data above as anchors. Never say 'not available' or 'unknown'."
-}
-
-Be factual, accurate, and emphasize their current status. Only return the JSON object, nothing else.`;
-
-            const response = await openai.chat.completions.create({
-              model: "gpt-4.1",
-              messages: [{ role: "user", content: prompt }],
-              response_format: { type: "json_object" },
-              max_tokens: 1000,
-            });
-            
-            const content = response.choices[0]?.message?.content;
-            if (!content) throw new Error("No response from AI");
-            
-            const parsed = JSON.parse(content);
-            
-            const profileData: InsertCelebrityProfile = {
-              personId: person.id,
-              personName: person.name,
-              shortBio: parsed.shortBio || "No biography available",
-              longBio: parsed.longBio || null,
-              knownFor: parsed.knownFor || "Various achievements",
-              fromCountry: parsed.fromCountry || "Unknown",
-              fromCountryCode: parsed.fromCountryCode?.toUpperCase() || "XX",
-              basedIn: parsed.basedIn || "Unknown",
-              basedInCountryCode: parsed.basedInCountryCode?.toUpperCase() || "XX",
-              estimatedNetWorth: parsed.estimatedNetWorth || "Not available",
-              generatedAt: new Date(),
-            };
-            
-            // Check if profile exists
-            const existing = await storage.getCelebrityProfile(person.id);
-            if (existing) {
-              await storage.updateCelebrityProfile(person.id, profileData);
-            } else {
-              await storage.setCelebrityProfile(profileData);
-            }
-            
             successCount++;
             console.log(`[Admin] Refreshed profile for ${person.name} (${successCount}/${people.length})`);
           } catch (err: any) {
@@ -4235,14 +3982,12 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
             console.error(`[Admin] Failed to refresh profile for ${person.name}:`, err.message);
           }
         }));
-        
-        // Wait between batches to avoid rate limits
+
         if (i + BATCH_SIZE < people.length) {
           await new Promise(resolve => setTimeout(resolve, DELAY_MS));
         }
       }
-      
-      // Log admin action
+
       await db.insert(adminAuditLog).values({
         adminId: req.userId || 'unknown',
         actionType: 'refresh_all_profiles',
@@ -4592,14 +4337,15 @@ Return a JSON object with:
 
 Only return the JSON object.`;
 
+      const whyTrendingModel = getAiModel("whyTrending");
       const response = await openai.chat.completions.create({
-        model: "gpt-4.1",
+        model: whyTrendingModel,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
         ],
         response_format: { type: "json_object" },
-        max_tokens: 200,
+        ...getChatCompletionTokenLimit(whyTrendingModel, 200),
       });
       
       const content = response.choices[0]?.message?.content;
@@ -4620,7 +4366,7 @@ Only return the JSON object.`;
         cacheStatus: "REGENERATED" as string,
         staleAgeMinutes: 0,
         provenance: {
-          model: "gpt-4.1",
+          model: whyTrendingModel,
           promptVersion: WHY_TRENDING_PROMPT_VERSION,
           serperQuery: person.name,
           serperTbs: "qdr:w",
@@ -10313,7 +10059,7 @@ Target length: about 90-150 words.`;
       });
 
       const response = await openai.responses.create({
-        model: "gpt-5.4",
+        model: getAiModel("aiDrafts"),
         tools: [{ type: "web_search" as any }],
         instructions: systemPrompt,
         input: userPrompt,
@@ -10979,7 +10725,7 @@ Target length: about 90-150 words.`;
       });
 
       const response = await openai.responses.create({
-        model: "gpt-5.4",
+        model: getAiModel("aiDrafts"),
         tools: [{ type: "web_search" as any }],
         instructions: systemPrompt,
         input: userPrompt,
@@ -11954,7 +11700,7 @@ Target length: about 90-150 words.`;
       });
 
       const response = await openai.responses.create({
-        model: "gpt-5.4",
+        model: getAiModel("aiDrafts"),
         tools: [{ type: "web_search" as any }],
         instructions: systemPrompt,
         input: userPrompt,
@@ -13131,7 +12877,7 @@ Write 2-3 short paragraphs (separated by blank lines) that help users make an in
       });
 
       const response = await openai.responses.create({
-        model: "gpt-5.4",
+        model: getAiModel("worldMarkets"),
         tools: [{ type: "web_search" as any }],
         instructions: systemPrompt,
         input: userPrompt,
@@ -13215,7 +12961,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         const useWebSearch = attempt <= 2;
         const response = await openai.responses.create({
-          model: "gpt-5.4",
+          model: getAiModel("worldMarkets"),
           ...(useWebSearch ? { tools: [{ type: "web_search" as any }] } : {}),
           instructions: systemPrompt,
           input: userPrompt,

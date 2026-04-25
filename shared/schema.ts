@@ -371,6 +371,12 @@ export const celebrityProfiles = pgTable("celebrity_profiles", {
   basedIn: text("based_in").notNull(),
   basedInCountryCode: varchar("based_in_country_code", { length: 2 }).notNull(),
   estimatedNetWorth: text("estimated_net_worth").notNull(),
+  promptVersion: integer("prompt_version").notNull().default(1),
+  sourceHash: text("source_hash"),
+  sourceUrls: text("source_urls").array(),
+  confidence: real("confidence"),
+  asOfDate: text("as_of_date"),
+  validationNotes: text("validation_notes").array(),
   generatedAt: timestamp("generated_at").notNull().defaultNow(),
 });
 
