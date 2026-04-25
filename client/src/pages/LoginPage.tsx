@@ -304,7 +304,7 @@ export default function LoginPage() {
                     if (fieldError?.field === "password") setFieldError(null);
                   }}
                   required
-                  minLength={6}
+                  minLength={8}
                   data-testid="input-password"
                 />
                 {fieldError?.field === "password" ? (

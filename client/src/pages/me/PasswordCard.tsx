@@ -21,7 +21,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import { getSupabase } from "@/lib/supabase";
 import { mapAuthError } from "@/lib/authErrors";
 
-const MIN_LENGTH = 6;
+// Mirrors Supabase Auth → Email → Minimum password length (set to 8 in the
+// dashboard). Keep these in sync — if Supabase rejects a password our client
+// said was OK, the user sees a confusing generic error instead of our copy.
+const MIN_LENGTH = 8;
 
 export function PasswordCard() {
   const { user } = useAuth();
