@@ -1,10 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation } from "wouter";
 import { ArrowLeft, Users, Loader2 } from "lucide-react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { parseVoteError } from "@/lib/voteErrors";
 import { getRatingTileColor } from "@/lib/ratingColors";
@@ -223,6 +223,7 @@ export function AnimatedSentimentVotingWidget({
   const [hasInteracted, setHasInteracted] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [showingResults, setShowingResults] = useState(false);
+  const latestSubmitIdRef = useRef(0);
 
   const { data: approvalFromServer, isFetched: approvalFetched } = useQuery<{ rating: number | null }>({
     queryKey: ["/api/celebrity", personId, "approval-rating", user?.id ?? ""],
@@ -285,42 +286,40 @@ export function AnimatedSentimentVotingWidget({
     setHasInteracted(true);
   };
 
-  const handleVoteSubmit = async () => {
-    if (!currentValue) return;
+  const approvalRatingMutation = useMutation({
+    mutationFn: async ({ rating }: { rating: number }) => {
+      await apiRequest("POST", `/api/celebrity/${personId}/approval-rating`, { rating });
+    },
+    onMutate: ({ rating }) => {
+      const submitId = latestSubmitIdRef.current + 1;
+      latestSubmitIdRef.current = submitId;
+      const voteStorageKey = `sentiment-vote-${personId}`;
+      const previousSentimentVote = localStorage.getItem(voteStorageKey);
+      const previousEverVoted = localStorage.getItem("authoridex-has-ever-voted");
+      const snapshot = {
+        submitId,
+        previousCurrentValue: currentValue,
+        previousIsSubmitted: isSubmitted,
+        previousHasInteracted: hasInteracted,
+        previousSentimentVote,
+        previousEverVoted,
+      };
 
-    if (user) {
-      // For authenticated users, wait on the server to persist the vote BEFORE
-      // showing "vote submitted" and firing global events. The previous flow
-      // was fire-and-forget: we'd flip isSubmitted, broadcast events, and
-      // swallow errors — so a 500 / rate-limit / auth failure looked identical
-      // to success. On failure we now surface a toast, don't write the
-      // local-storage marker, and leave the user on the voting screen so they
-      // can retry.
-      try {
-        await apiRequest("POST", `/api/celebrity/${personId}/approval-rating`, {
-          rating: currentValue,
-        });
-      } catch (error: any) {
-        console.error("Error saving approval rating:", error);
-        const parsed = parseVoteError(error);
-        toast.error(parsed.retryAfter ? "Slow down" : "Couldn't save your vote", {
-          description: parsed.message && parsed.message.length < 160
-            ? parsed.message
-            : "Please check your connection and try again.",
-        });
-        return;
-      }
-
+      setCurrentValue(rating);
+      setHasInteracted(true);
+      setIsSubmitted(true);
       try { localStorage.setItem("authoridex-has-ever-voted", "1"); } catch { /* ignore */ }
-      try { localStorage.setItem(`sentiment-vote-${personId}`, currentValue.toString()); } catch { /* ignore */ }
+      try { localStorage.setItem(voteStorageKey, rating.toString()); } catch { /* ignore */ }
       window.dispatchEvent(new CustomEvent("authoridex-ever-voted"));
       window.dispatchEvent(
         new CustomEvent("sentiment-vote-updated", {
-          detail: { personId, value: currentValue },
+          detail: { personId, value: rating },
         })
       );
 
-      setIsSubmitted(true);
+      return snapshot;
+    },
+    onSuccess: async () => {
       await queryClient.invalidateQueries({
         queryKey: ["/api/celebrity", personId, "approval-rating"],
       });
@@ -328,6 +327,43 @@ export function AnimatedSentimentVotingWidget({
       await queryClient.invalidateQueries({
         queryKey: ["/api/celebrity", personId, "sentiment-stats"],
       });
+    },
+    onError: (error: any, _variables, context) => {
+      if (context?.submitId === latestSubmitIdRef.current) {
+        const voteStorageKey = `sentiment-vote-${personId}`;
+        setCurrentValue(context.previousCurrentValue);
+        setIsSubmitted(context.previousIsSubmitted);
+        setHasInteracted(context.previousHasInteracted);
+        try {
+          if (context.previousSentimentVote === null) localStorage.removeItem(voteStorageKey);
+          else localStorage.setItem(voteStorageKey, context.previousSentimentVote);
+          if (context.previousEverVoted === null) localStorage.removeItem("authoridex-has-ever-voted");
+          else localStorage.setItem("authoridex-has-ever-voted", context.previousEverVoted);
+        } catch {
+          /* ignore */
+        }
+        window.dispatchEvent(
+          new CustomEvent("sentiment-vote-updated", {
+            detail: { personId, value: context.previousCurrentValue },
+          })
+        );
+      }
+
+      console.error("Error saving approval rating:", error);
+      const parsed = parseVoteError(error);
+      toast.error(parsed.retryAfter ? "Slow down" : "Couldn't save your vote", {
+        description: parsed.message && parsed.message.length < 160
+          ? parsed.message
+          : "Please check your connection and try again.",
+      });
+    },
+  });
+
+  const handleVoteSubmit = async () => {
+    if (!currentValue) return;
+
+    if (user) {
+      approvalRatingMutation.mutate({ rating: currentValue });
     } else {
       // Anonymous vote — we keep the local-only flow (no server call).
       try { localStorage.setItem("authoridex-has-ever-voted", "1"); } catch { /* ignore */ }
