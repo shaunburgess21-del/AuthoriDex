@@ -26,6 +26,7 @@ interface TrendingPerson {
 
 interface CurateSectionProps {
   categoryFilter: FilterCategory;
+  searchQuery?: string;
   compact?: boolean;
   onFilterCategory?: (category: string) => void;
   categoryRaceMap?: Map<string, string>;
@@ -34,6 +35,7 @@ interface CurateSectionProps {
 
 export function CurateSection({ 
   categoryFilter,
+  searchQuery = "",
   compact = false,
   onFilterCategory,
   categoryRaceMap,
@@ -58,13 +60,18 @@ export function CurateSection({
   }, [allCelebritiesResponse]);
 
   const filteredCelebrities = useMemo(() => {
-    if (categoryFilter === "all") return allCelebrities;
-    if (categoryFilter === "trending") return [...allCelebrities].sort((a: any, b: any) => ((b.fameScore ?? b.score ?? 0) - (a.fameScore ?? a.score ?? 0)));
-    if (categoryFilter === "favorites") return allCelebrities;
+    const normalizedSearch = searchQuery.trim().toLowerCase();
+    const matchesSearch = (person: TrendingPerson) =>
+      !normalizedSearch || person.name.toLowerCase().includes(normalizedSearch);
+    if (categoryFilter === "all") return allCelebrities.filter(matchesSearch);
+    if (categoryFilter === "trending") return [...allCelebrities]
+      .filter(matchesSearch)
+      .sort((a: any, b: any) => ((b.fameScore ?? b.score ?? 0) - (a.fameScore ?? a.score ?? 0)));
+    if (categoryFilter === "favorites") return allCelebrities.filter(matchesSearch);
     return allCelebrities.filter(
-      person => normalizeMarketCategory(person.category) === categoryFilter
+      person => normalizeMarketCategory(person.category) === categoryFilter && matchesSearch(person)
     );
-  }, [allCelebrities, categoryFilter]);
+  }, [allCelebrities, categoryFilter, searchQuery]);
 
   const curatePersons: CuratePerson[] = useMemo(() => {
     return filteredCelebrities.map(person => ({

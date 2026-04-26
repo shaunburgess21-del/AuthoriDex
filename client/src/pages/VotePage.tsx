@@ -108,6 +108,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { UnifiedSectionHeader } from "@/components/UnifiedSectionHeader";
 import { WindowedDotIndicator } from "@/components/WindowedDotIndicator";
 import { ScrollMaskedChipRow } from "@/components/ScrollMaskedChipRow";
+import { CategoryRowWithSearch } from "@/components/CategoryRowWithSearch";
 import { VoteSnapScrollView, type SnapItem, type SnapSectionType } from "@/components/snap-scroll/VoteSnapScrollView";
 import {
   navigateToLogin,
@@ -1355,6 +1356,7 @@ export default function VotePage() {
   const [rulesModalOpen, setRulesModalOpen] = useState<string | null>(null);
   const [infoModalOpen, setInfoModalOpen] = useState<"governance" | null>(null);
   const [curateCategoryFilter, setCurateCategoryFilter] = useState<FilterCategory>("all");
+  const [curateSearchQuery, setCurateSearchQuery] = useState("");
   const [globalVoteSearchQuery, setGlobalVoteSearchQuery] = useState("");
   const [globalCategoryFilter, setGlobalCategoryFilter] = useState<FilterCategory>("all");
 
@@ -2434,7 +2436,12 @@ export default function VotePage() {
               </>
             }
           >
-            <ScrollMaskedChipRow>
+            <CategoryRowWithSearch
+              searchValue={topicsSearchQuery}
+              onSearchChange={setTopicsSearchQuery}
+              placeholder="Search topics..."
+              testId="filter-topics-search"
+            >
               {getFilterCategories(true).map((cat) => (
                 <FilterChip
                   key={cat}
@@ -2446,7 +2453,7 @@ export default function VotePage() {
                   onAuthRequired={handleAuthRequired}
                 />
               ))}
-            </ScrollMaskedChipRow>
+            </CategoryRowWithSearch>
           </UnifiedSectionHeader>
           
           {pollsLoading ? (
@@ -2533,7 +2540,12 @@ export default function VotePage() {
               </>
             }
           >
-            <ScrollMaskedChipRow>
+            <CategoryRowWithSearch
+              searchValue={matchupsSearchQuery}
+              onSearchChange={setMatchupsSearchQuery}
+              placeholder="Search matchups..."
+              testId="filter-matchups-search"
+            >
               {getFilterCategories(true).map((cat) => (
                 <FilterChip
                   key={cat}
@@ -2545,7 +2557,7 @@ export default function VotePage() {
                   onAuthRequired={handleAuthRequired}
                 />
               ))}
-            </ScrollMaskedChipRow>
+            </CategoryRowWithSearch>
           </UnifiedSectionHeader>
           
           {matchupsLoading ? (
@@ -2640,7 +2652,12 @@ export default function VotePage() {
               </>
             }
           >
-            <ScrollMaskedChipRow>
+            <CategoryRowWithSearch
+              searchValue={opinionPollsSearchQuery}
+              onSearchChange={setOpinionPollsSearchQuery}
+              placeholder="Search opinion polls..."
+              testId="filter-opinion-search"
+            >
               {getFilterCategories(true).map((cat) => (
                 <FilterChip
                   key={cat}
@@ -2652,7 +2669,7 @@ export default function VotePage() {
                   onAuthRequired={handleAuthRequired}
                 />
               ))}
-            </ScrollMaskedChipRow>
+            </CategoryRowWithSearch>
           </UnifiedSectionHeader>
 
           {opinionPollsLoading ? (
@@ -2733,7 +2750,12 @@ export default function VotePage() {
               </Tooltip>
             }
           >
-            <ScrollMaskedChipRow>
+            <CategoryRowWithSearch
+              searchValue={valuePerceptionSearchQuery}
+              onSearchChange={setValuePerceptionSearchQuery}
+              placeholder="Search celebrities..."
+              testId="filter-value-search"
+            >
               {getFilterCategories(true).map((cat) => (
                 <FilterChip
                   key={cat}
@@ -2745,7 +2767,7 @@ export default function VotePage() {
                   onAuthRequired={handleAuthRequired}
                 />
               ))}
-            </ScrollMaskedChipRow>
+            </CategoryRowWithSearch>
           </UnifiedSectionHeader>
           
           {valueLoading ? (
@@ -2866,7 +2888,12 @@ export default function VotePage() {
               </div>
             }
           >
-            <ScrollMaskedChipRow>
+            <CategoryRowWithSearch
+              searchValue={inductionSearchQuery}
+              onSearchChange={setInductionSearchQuery}
+              placeholder="Search candidates..."
+              testId="filter-induction-search"
+            >
               {getFilterCategories(false).map((cat) => (
                 <FilterChip
                   key={cat}
@@ -2878,7 +2905,7 @@ export default function VotePage() {
                   onAuthRequired={handleAuthRequired}
                 />
               ))}
-            </ScrollMaskedChipRow>
+            </CategoryRowWithSearch>
           </UnifiedSectionHeader>
 
           {inductionLoading ? (
@@ -2966,7 +2993,12 @@ export default function VotePage() {
               </>
             }
           >
-            <ScrollMaskedChipRow>
+            <CategoryRowWithSearch
+              searchValue={curateSearchQuery}
+              onSearchChange={setCurateSearchQuery}
+              placeholder="Search profiles..."
+              testId="filter-curate-search"
+            >
               {getFilterCategories(false).map((cat) => (
                 <FilterChip
                   key={cat}
@@ -2978,10 +3010,10 @@ export default function VotePage() {
                   onAuthRequired={handleAuthRequired}
                 />
               ))}
-            </ScrollMaskedChipRow>
+            </CategoryRowWithSearch>
           </UnifiedSectionHeader>
 
-          <CurateSection categoryFilter={curateCategoryFilter} onFilterCategory={handleCategoryPillFilter} categoryRaceMap={raceMap} leaderboardCategories={leaderboardCats} />
+          <CurateSection categoryFilter={curateCategoryFilter} searchQuery={curateSearchQuery} onFilterCategory={handleCategoryPillFilter} categoryRaceMap={raceMap} leaderboardCategories={leaderboardCats} />
         </section>
         )}
 

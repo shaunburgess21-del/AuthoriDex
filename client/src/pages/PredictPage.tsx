@@ -42,7 +42,7 @@ import {
 import { useFavorites } from "@/hooks/useFavorites";
 import { useDragScroll } from "@/hooks/use-drag-scroll";
 import { useScrollHint } from "@/hooks/use-scroll-hint";
-import { ScrollMaskedChipRow } from "@/components/ScrollMaskedChipRow";
+import { CategoryRowWithSearch } from "@/components/CategoryRowWithSearch";
 import { 
   ArrowLeft, 
   TrendingUp, 
@@ -529,8 +529,7 @@ function SectionFilterBar({
   testIdPrefix,
   user,
   onAuthRequired,
-  includeCustomTopic = false,
-  showSearch = true
+  includeCustomTopic = false
 }: {
   categoryFilter: CategoryFilter;
   onCategoryChange: (cat: CategoryFilter) => void;
@@ -541,7 +540,6 @@ function SectionFilterBar({
   user?: any;
   onAuthRequired?: () => void;
   includeCustomTopic?: boolean;
-  showSearch?: boolean;
 }) {
   const handleCategoryClick = (catId: CategoryFilter) => {
     if (catId === "favorites" && !user) {
@@ -554,8 +552,13 @@ function SectionFilterBar({
   const filters = getPredictCategoryFilters(includeCustomTopic);
 
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-      <ScrollMaskedChipRow className="pb-1 sm:pb-0">
+    <div>
+      <CategoryRowWithSearch
+        searchValue={searchQuery}
+        onSearchChange={onSearchChange}
+        placeholder={searchPlaceholder}
+        testId={`${testIdPrefix}-search`}
+      >
         {filters.map((cat) => {
           const IconComponent = CATEGORY_ICONS[cat.id];
           const isIconOnly = cat.id === "favorites";
@@ -580,19 +583,7 @@ function SectionFilterBar({
             </button>
           );
         })}
-      </ScrollMaskedChipRow>
-      {showSearch && (
-        <div className="relative sm:ml-auto">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder={searchPlaceholder}
-            value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
-            className="pl-10 h-8 w-full sm:w-48 bg-muted/40 dark:bg-slate-800/30 border-border/50 dark:border-slate-700/40"
-            data-testid={`${testIdPrefix}-search`}
-          />
-        </div>
-      )}
+      </CategoryRowWithSearch>
     </div>
   );
 }
@@ -2740,7 +2731,6 @@ export default function PredictPage() {
                 user={user}
                 onAuthRequired={() => navigateToLogin(setLocation)}
                 includeCustomTopic={true}
-                showSearch={false}
               />
             </UnifiedSectionHeader>
             {openMarketsError ? (
@@ -2971,7 +2961,6 @@ export default function PredictPage() {
                 testIdPrefix="updown"
                 user={user}
                 onAuthRequired={() => navigateToLogin(setLocation)}
-                showSearch={false}
               />
             </UnifiedSectionHeader>
             {updownError ? (
@@ -3053,7 +3042,6 @@ export default function PredictPage() {
                 testIdPrefix="h2h"
                 user={user}
                 onAuthRequired={() => navigateToLogin(setLocation)}
-                showSearch={false}
               />
             </UnifiedSectionHeader>
             {h2hError ? (
@@ -3143,7 +3131,6 @@ export default function PredictPage() {
                 testIdPrefix="gainer"
                 user={user}
                 onAuthRequired={() => navigateToLogin(setLocation)}
-                showSearch={false}
               />
             </UnifiedSectionHeader>
             {gainerError ? (
