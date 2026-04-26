@@ -932,3 +932,22 @@ html [data-sonner-toaster][data-sonner-theme="dark"] [data-rich-colors="true"][d
 html [data-sonner-toaster][data-sonner-theme="dark"] [data-rich-colors="true"][data-sonner-toast][data-type="info"] [data-title] {
   color: hsl(217 91% 70%);
 }
+
+/* Close button — Sonner styles `[data-close-button]` separately from the toast
+ * body using its own success/info palette CSS vars, so the X stays green even
+ * though the toast itself is re-skinned to blue above. Mirror the same blue
+ * palette onto the close button so the dismiss affordance matches the toast.
+ * The icon stroke is `currentColor`, so setting `color` recolors the X. */
+html [data-sonner-toaster][data-sonner-theme="light"] [data-rich-colors="true"][data-sonner-toast][data-type="success"] [data-close-button],
+html [data-sonner-toaster][data-sonner-theme="light"] [data-rich-colors="true"][data-sonner-toast][data-type="info"] [data-close-button] {
+  background: hsl(217 91% 96%);
+  border-color: hsl(217 91% 91%);
+  color: hsl(217 91% 38%);
+}
+
+html [data-sonner-toaster][data-sonner-theme="dark"] [data-rich-colors="true"][data-sonner-toast][data-type="success"] [data-close-button],
+html [data-sonner-toaster][data-sonner-theme="dark"] [data-rich-colors="true"][data-sonner-toast][data-type="info"] [data-close-button] {
+  background: hsl(217 91% 8%);
+  border-color: hsl(217 91% 16%);
+  color: hsl(217 91% 70%);
+}
