@@ -13,7 +13,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { computeTrendScore } from "../scoring/trendScore";
-import { DEFAULT_SOURCE_STATS, type SourceStats } from "../scoring/normalize";
+import { type SourceStats } from "../scoring/normalize";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -50,8 +50,6 @@ const sourceStats = {
   wiki: audit.percentiles.wiki,
   news: audit.percentiles.news,
   search: audit.percentiles.search,
-  instagram: DEFAULT_SOURCE_STATS.instagram,
-  youtube: DEFAULT_SOURCE_STATS.youtube,
 };
 
 interface DryRow {
