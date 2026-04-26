@@ -739,7 +739,8 @@ function CategoryRankPill({ category, rank, personName }: { category: string; ra
 
 export default function PersonDetailPage() {
   const { user, session } = useAuth();
-  const { trigger: triggerXpBurst } = useXpBurst();  const [, params] = useRoute("/person/:id");
+  const { trigger: triggerXpBurst } = useXpBurst();
+  const [, params] = useRoute("/person/:id");
   const [location, setLocation] = useLocation();
   const [favoriteLoading, setFavoriteLoading] = useState(false);
   const { isFavorite } = useFavorites();
@@ -1381,203 +1382,159 @@ export default function PersonDetailPage() {
             </section>
 
             {/* Matchups Section */}
-            <section className="mb-10">
-              <UnifiedSectionHeader
-                title="Matchups"
-                subtitle="Vote on A vs B"
-                icon={<Swords className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />}
-                accent="cyan"
-                testId="profile-section-matchups"
-              />
+            {(matchupsLoading || personMatchups.length > 0) && (
+              <section className="mb-10">
+                <UnifiedSectionHeader
+                  title="Matchups"
+                  subtitle="Vote on A vs B"
+                  icon={<Swords className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />}
+                  accent="cyan"
+                  testId="profile-section-matchups"
+                />
 
-              {matchupsLoading ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                  {[1, 2, 3].map((i) => (
-                    <Card key={i} className="bg-slate-800/30 animate-pulse" style={{ minHeight: "380px" }} />
-                  ))}
-                </div>
-              ) : personMatchups.length > 0 ? (
-                <CardSection desktopLimit={6} gap="gap-5" testIdPrefix="profile-matchups">
-                  {personMatchups.map((matchup) => (
-                    <VersusCard
-                      key={matchup.id}
-                      matchup={matchup}
-                      userVote={matchupUserVotes[matchup.id] || null}
-                      onVote={handleMatchupVote}
-                      onRemoveVote={handleMatchupRemoveVote}
-                      onFilterCategory={handleSentimentCategoryFilter}
-                      categoryRaceMap={categoryRaceMap}
-                      leaderboardCategories={leaderboardCats}
-                    />
-                  ))}
-                </CardSection>
-              ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  No matchups featuring {person.name} yet. Check back soon.
-                </div>
-              )}
-            </section>
+                {matchupsLoading ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                    {[1, 2, 3].map((i) => (
+                      <Card key={i} className="bg-slate-800/30 animate-pulse" style={{ minHeight: "380px" }} />
+                    ))}
+                  </div>
+                ) : (
+                  <CardSection desktopLimit={6} gap="gap-5" testIdPrefix="profile-matchups" centerShortRows>
+                    {personMatchups.map((matchup) => (
+                      <VersusCard
+                        key={matchup.id}
+                        matchup={matchup}
+                        userVote={matchupUserVotes[matchup.id] || null}
+                        onVote={handleMatchupVote}
+                        onRemoveVote={handleMatchupRemoveVote}
+                        onFilterCategory={handleSentimentCategoryFilter}
+                        categoryRaceMap={categoryRaceMap}
+                        leaderboardCategories={leaderboardCats}
+                      />
+                    ))}
+                  </CardSection>
+                )}
+              </section>
+            )}
 
             {/* Sentiment Polls Section */}
-            <section className="mb-10">
-              <UnifiedSectionHeader
-                title="Sentiment Polls"
-                subtitle="Weigh in on current events"
-                icon={<MessageSquare className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />}
-                accent="cyan"
-                testId="profile-section-sentiment"
-                actions={
-                  featuredPollsForPerson.length > 3 ? (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setShowAllPollsOverlay(true)}
-                      className="text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300"
-                      data-testid="button-view-all-polls"
-                    >
-                      View all
-                    </Button>
-                  ) : undefined
-                }
-              />
+            {(sentimentPollsLoading || featuredPollsForPerson.length > 0) && (
+              <section className="mb-10">
+                <UnifiedSectionHeader
+                  title="Sentiment Polls"
+                  subtitle="Weigh in on current events"
+                  icon={<MessageSquare className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />}
+                  accent="cyan"
+                  testId="profile-section-sentiment"
+                  actions={
+                    featuredPollsForPerson.length > 3 ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowAllPollsOverlay(true)}
+                        className="text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300"
+                        data-testid="button-view-all-polls"
+                      >
+                        View all
+                      </Button>
+                    ) : undefined
+                  }
+                />
 
-              {sentimentPollsLoading ? (
-                <div className="flex items-center justify-center py-6">
-                  <div className="h-8 w-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
-                </div>
-              ) : featuredPollsForPerson.length > 0 ? (
-                <>
-                  {(() => {
-                    const sentimentVisible = featuredPollsForPerson.slice(0, 3);
-                    const sg = profileSectionGridClass(sentimentVisible.length);
-                    return (
-                      <div className={sg.container}>
-                        {sentimentVisible.map((poll) => {
-                          const card = (
-                            <FeaturedPollCard
-                              poll={poll}
-                              onVote={(choice) => {
-                                toast("Vote Recorded", { description: `You voted "${choice}" on "${poll.headline}"` });
-                              }}
-                              onFilterCategory={handleSentimentCategoryFilter}
-                              categoryRaceMap={categoryRaceMap}
-                              leaderboardCategories={leaderboardCats}
-                            />
-                          );
-                          return sg.item ? (
-                            <div key={poll.id} className={sg.item}>
-                              {card}
-                            </div>
-                          ) : (
-                            <Fragment key={poll.id}>{card}</Fragment>
-                          );
-                        })}
-                      </div>
-                    );
-                  })()}
+                {sentimentPollsLoading ? (
+                  <div className="flex items-center justify-center py-6">
+                    <div className="h-8 w-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+                  </div>
+                ) : (
+                  <>
+                    {(() => {
+                      const sentimentVisible = featuredPollsForPerson.slice(0, 3);
+                      const sg = profileSectionGridClass(sentimentVisible.length);
+                      return (
+                        <div className={sg.container}>
+                          {sentimentVisible.map((poll) => {
+                            const card = (
+                              <FeaturedPollCard
+                                poll={poll}
+                                onVote={(choice) => {
+                                  toast("Vote Recorded", { description: `You voted "${choice}" on "${poll.headline}"` });
+                                }}
+                                onFilterCategory={handleSentimentCategoryFilter}
+                                categoryRaceMap={categoryRaceMap}
+                                leaderboardCategories={leaderboardCats}
+                              />
+                            );
+                            return sg.item ? (
+                              <div key={poll.id} className={sg.item}>
+                                {card}
+                              </div>
+                            ) : (
+                              <Fragment key={poll.id}>{card}</Fragment>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
 
-                  <ViewAllPollsOverlay
-                    open={showAllPollsOverlay}
-                    onClose={() => setShowAllPollsOverlay(false)}
-                    title={`All Sentiment Polls about ${person.name}`}
-                    polls={featuredPollsForPerson}
-                    onVote={(_pollId, _choice) => {
-                      toast("Vote Recorded", { description: "Your vote has been recorded." });
-                    }}
-                    onFilterCategory={handleSentimentCategoryFilter}
-                    categoryRaceMap={categoryRaceMap}
-                    leaderboardCategories={leaderboardCats}
-                  />
-                </>
-              ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  No sentiment polls about {person.name} yet.
-                </div>
-              )}
-            </section>
-
-            {/* Matchups Section */}
-            <section className="mb-10">
-              <UnifiedSectionHeader
-                title="Matchups"
-                subtitle="Vote on A vs B"
-                icon={<Swords className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />}
-                accent="cyan"
-                testId="profile-section-matchups"
-              />
-
-              {matchupsLoading ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                  {[1, 2, 3].map((i) => (
-                    <Card key={i} className="bg-slate-800/30 animate-pulse" style={{ minHeight: "380px" }} />
-                  ))}
-                </div>
-              ) : personMatchups.length > 0 ? (
-                <CardSection desktopLimit={6} gap="gap-5" testIdPrefix="profile-matchups" centerShortRows>
-                  {personMatchups.map((matchup) => (
-                    <VersusCard
-                      key={matchup.id}
-                      matchup={matchup}
-                      userVote={matchupUserVotes[matchup.id] || null}
-                      onVote={handleMatchupVote}
-                      onRemoveVote={handleMatchupRemoveVote}
+                    <ViewAllPollsOverlay
+                      open={showAllPollsOverlay}
+                      onClose={() => setShowAllPollsOverlay(false)}
+                      title={`All Sentiment Polls about ${person.name}`}
+                      polls={featuredPollsForPerson}
+                      onVote={(_pollId, _choice) => {
+                        toast("Vote Recorded", { description: "Your vote has been recorded." });
+                      }}
                       onFilterCategory={handleSentimentCategoryFilter}
                       categoryRaceMap={categoryRaceMap}
                       leaderboardCategories={leaderboardCats}
                     />
-                  ))}
-                </CardSection>
-              ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  No matchups featuring {person.name} yet. Check back soon.
-                </div>
-              )}
-            </section>
+                  </>
+                )}
+              </section>
+            )}
 
             {/* Opinion Polls Section */}
-            <section className="mb-10">
-              <UnifiedSectionHeader
-                title="Opinion Polls"
-                subtitle="Choose who leads the pack"
-                icon={<ListChecks className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />}
-                accent="cyan"
-                testId="profile-section-opinion"
-              />
+            {(opinionPollsLoading || personOpinionPolls.length > 0) && (
+              <section className="mb-10">
+                <UnifiedSectionHeader
+                  title="Opinion Polls"
+                  subtitle="Choose who leads the pack"
+                  icon={<ListChecks className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />}
+                  accent="cyan"
+                  testId="profile-section-opinion"
+                />
 
-              {opinionPollsLoading ? (
-                <div className="flex items-center justify-center py-6">
-                  <div className="h-8 w-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
-                </div>
-              ) : personOpinionPolls.length > 0 ? (
-                <CardSection desktopLimit={6} gap="gap-5" testIdPrefix="profile-opinion-polls" centerShortRows>
-                  {personOpinionPolls.map((poll) => (
-                    <OpinionPollCard
-                      key={poll.id}
-                      poll={poll}
-                      onVote={async (pollSlug, optionId) => {
-                        const res = await apiRequest("POST", `/api/opinion-polls/${pollSlug}/vote`, { optionId });
-                        const data = await res.json();
-                        queryClient.invalidateQueries({ queryKey: ["/api/opinion-polls"] });
-                        if (data?.xp?.xpAwarded) {
-                          triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
-                        }
-                      }}
-                      onRemoveVote={async (pollSlug) => {
-                        await apiRequest("POST", `/api/opinion-polls/${pollSlug}/vote`, { remove: true });
-                        queryClient.invalidateQueries({ queryKey: ["/api/opinion-polls"] });
-                      }}
-                      onFilterCategory={handleSentimentCategoryFilter}
-                      categoryRaceMap={categoryRaceMap}
-                      leaderboardCategories={leaderboardCats}
-                    />
-                  ))}
-                </CardSection>
-              ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  No opinion polls including {person.name} yet.
-                </div>
-              )}
-            </section>
+                {opinionPollsLoading ? (
+                  <div className="flex items-center justify-center py-6">
+                    <div className="h-8 w-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+                  </div>
+                ) : (
+                  <CardSection desktopLimit={6} gap="gap-5" testIdPrefix="profile-opinion-polls" centerShortRows>
+                    {personOpinionPolls.map((poll) => (
+                      <OpinionPollCard
+                        key={poll.id}
+                        poll={poll}
+                        onVote={async (pollSlug, optionId) => {
+                          const res = await apiRequest("POST", `/api/opinion-polls/${pollSlug}/vote`, { optionId });
+                          const data = await res.json();
+                          queryClient.invalidateQueries({ queryKey: ["/api/opinion-polls"] });
+                          if (data?.xp?.xpAwarded) {
+                            triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
+                          }
+                        }}
+                        onRemoveVote={async (pollSlug) => {
+                          await apiRequest("POST", `/api/opinion-polls/${pollSlug}/vote`, { remove: true });
+                          queryClient.invalidateQueries({ queryKey: ["/api/opinion-polls"] });
+                        }}
+                        onFilterCategory={handleSentimentCategoryFilter}
+                        categoryRaceMap={categoryRaceMap}
+                        leaderboardCategories={leaderboardCats}
+                      />
+                    ))}
+                  </CardSection>
+                )}
+              </section>
+            )}
 
             {/* Underrated / Overrated Section */}
             <section className="mb-10">
