@@ -296,11 +296,13 @@ export const communityInsights = pgTable("community_insights", {
   userId: varchar("user_id").notNull(), // Supabase auth user ID — author info resolved live via LEFT JOIN profiles
   content: text("content").notNull(),
   sentimentVote: integer("sentiment_vote"), // Optional 1-10 rating from Cast Your Vote widget
+  deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
 export const insertCommunityInsightSchema = createInsertSchema(communityInsights).omit({
   id: true,
+  deletedAt: true,
   createdAt: true,
 });
 
@@ -336,6 +338,7 @@ export const comments = pgTable("comments", {
   body: text("body").notNull(),
   upvotes: integer("upvotes").notNull().default(0),
   downvotes: integer("downvotes").notNull().default(0),
+  deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (table) => ({
@@ -349,6 +352,7 @@ export const insertCommentSchema = createInsertSchema(comments).omit({
   updatedAt: true,
   upvotes: true,
   downvotes: true,
+  deletedAt: true,
 });
 
 export type Comment = typeof comments.$inferSelect;

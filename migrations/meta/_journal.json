@@ -190,6 +190,13 @@
       "when": 1777755000000,
       "tag": "0026_drop_legacy_comment_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1777841400000,
+      "tag": "0027_soft_delete_comments_and_insights",
+      "breakpoints": true
     }
   ]
 }
