@@ -32,6 +32,9 @@ import { MyPredictionCard, type MyPredictionCardData } from "@/components/me/MyP
 import { DoughnutChart, type DoughnutSegment } from "@/components/charts/DoughnutChart";
 import { useItemVisibility } from "@/hooks/useItemVisibility";
 import { cn } from "@/lib/utils";
+import { ShareCardModal } from "@/components/share/ShareCardModal";
+import type { ShareCardData } from "@/components/share/ShareCard";
+import { inferPredictionDirection } from "@/pages/me/predictions-utils";
 
 type UserPrediction = MyPredictionCardData;
 
@@ -79,7 +82,8 @@ function normalizeResponse(data: unknown): { predictions: UserPrediction[]; stat
   return { predictions: resp.predictions ?? [], stats: resp.stats ?? null };
 }
 
-function useCopyToClipboard() {  const [copiedId, setCopiedId] = useState<string | null>(null);
+function useCopyToClipboard() {
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const copy = async (text: string, label: string, id?: string) => {
     try {
@@ -205,6 +209,12 @@ export default function PredictionsPage() {
   const [categoryFilter, setCategoryFilterState] = useState<string>(getInitialCategoryFilter);
   const [hiddenOnly, setHiddenOnlyState] = useState<boolean>(getInitialHiddenOnly);
   const { copiedId, copy } = useCopyToClipboard();
+  const [shareModal, setShareModal] = useState<{
+    data: ShareCardData;
+    fallbackText?: string;
+    shareUrl?: string;
+    filenameBase?: string;
+  } | null>(null);
 
   const writeQuery = (patch: Record<string, string | null>) => {
     if (typeof window === "undefined") return;
@@ -319,11 +329,53 @@ export default function PredictionsPage() {
 
   const handleShareWin = (p: UserPrediction) => {
     const pnl = p.payout - p.stakeAmount;
-    copy(
-      `I won +${pnl.toLocaleString()} credits on "${p.marketTitle}" on VoxDex!\n${window.location.origin}/markets/${p.marketSlug}`,
-      "Win shared to clipboard!",
-      p.betId,
-    );
+    const direction = inferPredictionDirection(p.entryLabel);
+    const mappedDirection: "up" | "down" | "other" =
+      direction === "up" ? "up" : direction === "down" ? "down" : "other";
+    const fallbackText = `I won +${pnl.toLocaleString()} credits on "${p.marketTitle}" on VoxDex!\n${window.location.origin}/markets/${p.marketSlug}`;
+    setShareModal({
+      data: {
+        variant: "win",
+        personName: p.personName,
+        personAvatar: p.personAvatar,
+        marketTitle: p.marketTitle,
+        direction: mappedDirection,
+        entryLabel: p.entryLabel,
+        stakeAmount: p.stakeAmount,
+        payout: p.payout,
+        baselineScore: p.baselineScore,
+        currentScore: p.currentScore,
+        category: p.marketCategory,
+      },
+      fallbackText,
+      shareUrl: p.marketSlug
+        ? `${window.location.origin}/markets/${p.marketSlug}`
+        : window.location.origin,
+      filenameBase: `voxdex-win-${p.betId.slice(0, 8)}`,
+    });
+  };
+
+  const handleSharePortfolio = (stats: PredictionStats) => {
+    const fallbackText = `My VoxDex predictions: ${stats.winRate}% win rate | ${
+      stats.netCredits >= 0 ? "+" : ""
+    }${stats.netCredits.toLocaleString()} net credits | ${stats.total} predictions\n${
+      window.location.origin
+    }/predict`;
+    setShareModal({
+      data: {
+        variant: "portfolio",
+        username: profile?.username || "voxdex",
+        rankName: profile?.rank || null,
+        winRate: stats.winRate,
+        netCredits: stats.netCredits,
+        totalPredictions: stats.total,
+        currentStreak: stats.currentStreak,
+        bestCategory: stats.bestCategory,
+      },
+      fallbackText,
+      shareUrl: `${window.location.origin}/predict`,
+      filenameBase: `voxdex-portfolio-${profile?.username || "me"}`,
+    });
   };
 
   return (
@@ -387,8 +439,7 @@ export default function PredictionsPage() {
             predictions={predictions}
             plChartData={plChartData}
             hiddenCount={hiddenCount}
-            copiedId={copiedId}
-            copy={copy}
+            onSharePortfolio={handleSharePortfolio}
             onJumpToPredictions={() => handleTabChange("predictions")}
             onJumpToOpen={() => handleTabChange("open")}
             onJumpToHidden={() => {
@@ -433,6 +484,17 @@ export default function PredictionsPage() {
           />
         )}
       </div>
+
+      <ShareCardModal
+        open={shareModal !== null}
+        onOpenChange={(next) => {
+          if (!next) setShareModal(null);
+        }}
+        data={shareModal?.data ?? null}
+        fallbackText={shareModal?.fallbackText}
+        shareUrl={shareModal?.shareUrl}
+        filenameBase={shareModal?.filenameBase}
+      />
     </div>
   );
 }
@@ -441,12 +503,10 @@ export default function PredictionsPage() {
 
 function PredictionHeadlineHero({
   stats,
-  copiedId,
-  copy,
+  onShare,
 }: {
   stats: PredictionStats;
-  copiedId: string | null;
-  copy: (text: string, label: string, id?: string) => Promise<void>;
+  onShare: (stats: PredictionStats) => void;
 }) {
   // Lead with the most brag-worthy stat. Once a user has enough resolved bets
   // to have a meaningful win rate, put it front and centre. Otherwise highlight
@@ -472,12 +532,6 @@ function PredictionHeadlineHero({
           : "text-foreground",
   );
 
-  const shareText = `My VoxDex predictions: ${stats.winRate}% win rate | ${
-    stats.netCredits >= 0 ? "+" : ""
-  }${stats.netCredits.toLocaleString()} net credits | ${stats.total} predictions\n${
-    window.location.origin
-  }/predict`;
-
   return (
     <Card className="relative overflow-hidden p-4 sm:p-5">
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-violet-500/15 via-blue-500/10 to-transparent" />
@@ -498,14 +552,10 @@ function PredictionHeadlineHero({
           variant="outline"
           size="sm"
           className="shrink-0 gap-1.5 text-xs"
-          onClick={() => copy(shareText, "Stats copied to clipboard!", "_stats")}
+          onClick={() => onShare(stats)}
           data-testid="button-hero-share-stats"
         >
-          {copiedId === "_stats" ? (
-            <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
-          ) : (
-            <Share2 className="h-3.5 w-3.5" />
-          )}
+          <Share2 className="h-3.5 w-3.5" />
           Share
         </Button>
       </div>
@@ -519,8 +569,7 @@ function OverviewTab({
   predictions,
   plChartData,
   hiddenCount,
-  copiedId,
-  copy,
+  onSharePortfolio,
   onJumpToPredictions,
   onJumpToOpen,
   onJumpToHidden,
@@ -530,8 +579,7 @@ function OverviewTab({
   predictions: UserPrediction[];
   plChartData: { createdAt: string; result: "won" | "lost" | "refunded" | "pending"; stakeAmount: number; payout: number }[];
   hiddenCount: number;
-  copiedId: string | null;
-  copy: (text: string, label: string, id?: string) => Promise<void>;
+  onSharePortfolio: (stats: PredictionStats) => void;
   onJumpToPredictions: () => void;
   onJumpToOpen: () => void;
   onJumpToHidden: () => void;
@@ -650,7 +698,7 @@ function OverviewTab({
 
   return (
     <div className="space-y-6">
-      <PredictionHeadlineHero stats={stats} copiedId={copiedId} copy={copy} />
+      <PredictionHeadlineHero stats={stats} onShare={onSharePortfolio} />
 
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
         <Card className="p-3 text-center space-y-1 border-white/5 bg-card/60 backdrop-blur-sm">
@@ -867,21 +915,10 @@ function OverviewTab({
           variant="outline"
           size="sm"
           className="gap-1.5 text-xs"
-          onClick={() =>
-            copy(
-              `My VoxDex predictions: ${stats.winRate}% win rate | ${
-                stats.netCredits >= 0 ? "+" : ""
-              }${stats.netCredits.toLocaleString()} net credits | ${stats.total} predictions\n${window.location.origin}/predict`,
-              "Stats copied to clipboard!",
-              "_stats",
-            )
-          }
+          onClick={() => onSharePortfolio(stats)}
+          data-testid="button-overview-share-stats"
         >
-          {copiedId === "_stats" ? (
-            <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
-          ) : (
-            <Share2 className="h-3.5 w-3.5" />
-          )}
+          <Share2 className="h-3.5 w-3.5" />
           Share Stats
         </Button>
       </div>

@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import {
   canCopyImageToClipboard,
   canUseNativeShare,
@@ -57,7 +57,6 @@ export function ShareCardModal({
   const [pendingAction, setPendingAction] = useState<null | "share" | "copy" | "download">(null);
   const [copied, setCopied] = useState(false);
   const [copiedText, setCopiedText] = useState(false);
-  const { toast } = useToast();
 
   // Reset state whenever the modal opens for a new data set. Avoids stale
   // "Copied" ticks after re-opening.
@@ -93,10 +92,8 @@ export function ShareCardModal({
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error("[ShareCardModal] generate failed", err);
-      toast({
-        title: "Couldn't create image",
+      toast.error("Couldn't create image", {
         description: "Try again, or use the Copy text button as a fallback.",
-        variant: "destructive",
       });
       return null;
     }
@@ -136,13 +133,11 @@ export function ShareCardModal({
     setPendingAction(null);
     if (ok) {
       setCopied(true);
-      toast({ title: "Image copied!", description: "Paste it into X, IG, Slack, anywhere." });
+      toast.success("Image copied!", { description: "Paste it into X, IG, Slack, anywhere." });
       setTimeout(() => setCopied(false), 2000);
     } else {
-      toast({
-        title: "Clipboard blocked",
+      toast.error("Clipboard blocked", {
         description: "Download the image instead — it works everywhere.",
-        variant: "destructive",
       });
     }
   };
@@ -154,7 +149,7 @@ export function ShareCardModal({
     setPendingAction(null);
     if (!blob) return;
     downloadBlob(blob, filename);
-    toast({ title: "Image downloaded", description: filename });
+    toast.success("Image downloaded", { description: filename });
   };
 
   const handleCopyText = async () => {
@@ -162,10 +157,10 @@ export function ShareCardModal({
     try {
       await navigator.clipboard.writeText(fallbackText);
       setCopiedText(true);
-      toast({ title: "Text copied to clipboard" });
+      toast.success("Text copied to clipboard");
       setTimeout(() => setCopiedText(false), 2000);
     } catch {
-      toast({ title: "Could not copy text", variant: "destructive" });
+      toast.error("Could not copy text");
     }
   };
 

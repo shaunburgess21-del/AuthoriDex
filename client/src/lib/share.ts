@@ -97,11 +97,10 @@ export async function shareImage(
       await navigator.clipboard.write([
         new window.ClipboardItem({ [blob.type || "image/png"]: blob }),
       ]);
-      const { dismiss } = toast({
-        title: "Image copied!",
+      toast.success("Image copied!", {
         description: "Paste it into X, Instagram, or anywhere else.",
+        duration: 3500,
       });
-      setTimeout(() => dismiss(), 3500);
       return { status: "copied", via: "clipboard" };
     } catch {
       // Fall through to step 3.
@@ -122,15 +121,14 @@ export async function shareImage(
     a.remove();
     // Give the browser a tick to grab the blob before releasing it.
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    const { dismiss } = toast({
-      title: "Image downloaded",
+    toast.success("Image downloaded", {
       description: "Find it in your downloads and share it wherever.",
+      duration: 3500,
     });
-    setTimeout(() => dismiss(), 3500);
     return { status: "downloaded", via: "download" };
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err));
-    toast({ title: "Couldn't share image", variant: "destructive" });
+    toast.error("Couldn't share image");
     return { status: "failed", error };
   }
 }
