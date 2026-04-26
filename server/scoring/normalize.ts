@@ -25,6 +25,13 @@ export const SCORE_VERSION = "v2";
 // Platform weights — FIXED, never redistributed dynamically.
 // NOTE (Jan 2026): X API removed from trend score engine due to cost
 // constraints. X weight redistributed to Wiki, News, and Search.
+// NOTE (Apr 2026): `velocity.search` zeroed out. The Serper-derived
+// `searchVolume` is a SERP-feature density score (organic count + KG +
+// sitelinks etc., capped at 100 — see `server/providers/serper.ts:209-215`),
+// not a search-interest signal. It barely moves when news breaks and was
+// dominating top-of-leaderboard ordering with the wrong signal. Search
+// weight redistributed to Wiki + News until a real momentum signal
+// (Serper news 24h/7d ratio or Google Trends) replaces it.
 export const PLATFORM_WEIGHTS = {
   mass: {
     wiki: 0.50,
@@ -32,9 +39,9 @@ export const PLATFORM_WEIGHTS = {
     youtube: 0.25,
   },
   velocity: {
-    wiki: 0.30,
-    news: 0.35,
-    search: 0.35,
+    wiki: 0.40,
+    news: 0.60,
+    search: 0,
   },
 };
 
