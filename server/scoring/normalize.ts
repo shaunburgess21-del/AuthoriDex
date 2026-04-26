@@ -176,8 +176,17 @@ export function logTransform(value: number): number {
 
 /**
  * Compute percentile rank of a value given source statistics.
- * Returns 0-1 where 1 = highest percentile. Uses linear interpolation
- * between percentile thresholds.
+ * Returns 0-1 where 1 = highest percentile. Uses piecewise linear
+ * interpolation in log-space between percentile thresholds.
+ *
+ * Apr 2026: upper tail re-spread. Previously the band p90 → effectiveMax
+ * (effectiveMax ≈ p99 estimate) consumed the full 0.90 → 1.00 rank
+ * headroom, so anything above the estimated p99 was capped at rank 1.
+ * For tight distributions like `news` (p90=17, p99Est=27, max=330) this
+ * meant news=27 and news=255 were indistinguishable. We now reserve a
+ * dedicated p99 → empirical-max band (rank 0.95 → 1.00) so true
+ * outliers (Trump's 255 articles, McIlroy's KG-rich SERP) are clearly
+ * separated from the p90-cluster.
  */
 export function computePercentileRank(logValue: number, stats: SourceStats): number {
   if (stats.count === 0 || stats.max === stats.min) return 0.5;
@@ -188,10 +197,13 @@ export function computePercentileRank(logValue: number, stats: SourceStats): num
   const logP75 = logTransform(stats.p75);
   const logP90 = logTransform(stats.p90);
   const p99Est = stats.p90 + 2 * (stats.p90 - stats.p75);
-  const logEffectiveMax = logTransform(Math.min(stats.max, p99Est > stats.p90 ? p99Est : stats.max));
+  // Anchor the very top of the rank curve at the empirical max so genuine
+  // extreme values still climb toward 1.0 instead of saturating at p99Est.
+  const logP99 = logTransform(Math.max(stats.p90, p99Est));
+  const logMax = logTransform(Math.max(stats.max, Math.max(stats.p90, p99Est)));
 
   if (logValue <= logMin) return 0;
-  if (logValue >= logEffectiveMax) return 1;
+  if (logValue >= logMax) return 1;
 
   if (logValue <= logP25) {
     return 0 + 0.25 * ((logValue - logMin) / (logP25 - logMin || 1));
@@ -200,20 +212,31 @@ export function computePercentileRank(logValue: number, stats: SourceStats): num
   } else if (logValue <= logP75) {
     return 0.50 + 0.25 * ((logValue - logP50) / (logP75 - logP50 || 1));
   } else if (logValue <= logP90) {
-    return 0.75 + 0.15 * ((logValue - logP75) / (logP90 - logP75 || 1));
+    // p75 → p90 band: 0.75 → 0.85 (10 rank points; was 15)
+    return 0.75 + 0.10 * ((logValue - logP75) / (logP90 - logP75 || 1));
+  } else if (logValue <= logP99) {
+    // p90 → p99-estimate band: 0.85 → 0.95 (10 rank points; was 0.90 → 1.00)
+    return 0.85 + 0.10 * ((logValue - logP90) / (logP99 - logP90 || 1));
   } else {
-    return 0.90 + 0.10 * ((logValue - logP90) / (logEffectiveMax - logP90 || 1));
+    // p99-estimate → empirical-max band: 0.95 → 1.00 (new — gives genuine
+    // outliers headroom above the p99 cluster instead of capping at rank 1
+    // the moment they clear p99Est).
+    return 0.95 + 0.05 * ((logValue - logP99) / (logMax - logP99 || 1));
   }
 }
 
 /**
- * Winsorize (p99 cap) raw values so a single extreme outlier doesn't define
- * the max and compress everyone else's normalized scores.
+ * Winsorize raw values so a corrupt/extreme outlier doesn't define the
+ * upper bound. Apr 2026: cap at the empirical `stats.max` instead of the
+ * (much tighter) p99 estimate. The previous p99-cap collapsed legitimate
+ * top-tier signals — e.g. Trump's news=255 → 27 — into the same rank
+ * band as p99 values, defeating the purpose of having them. The rank
+ * function (`computePercentileRank`) reserves its own band for the
+ * p99 → max range so real differentiation is preserved.
  */
 export function winsorize(rawValue: number, stats: SourceStats): number {
-  const p99Estimate = stats.p90 + 2 * (stats.p90 - stats.p75);
-  if (p99Estimate <= stats.p90) return rawValue;
-  return Math.min(rawValue, p99Estimate);
+  if (!Number.isFinite(stats.max) || stats.max <= 0) return rawValue;
+  return Math.min(rawValue, stats.max);
 }
 
 /**
