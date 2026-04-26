@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FilterDropdown } from "@/components/FilterDropdown";
+import { ScrollMaskedChipRow } from "@/components/ScrollMaskedChipRow";
 import { Search, Star, Flame, LayoutGrid, Cpu, Landmark, Briefcase, Trophy, Music2, Gamepad2, Video, UtensilsCrossed, Heart, Sparkles } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -94,7 +95,7 @@ export function OverlayFilterBar({
 
       {/* Desktop: pills + search */}
       <div className="hidden md:flex items-center gap-3">
-        <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide flex-1 min-w-0">
+        <ScrollMaskedChipRow className="flex-1 min-w-0">
           {categories.map((cat) => {
             const isFavorites = cat.value.toLowerCase() === "favorites";
             const IconComponent = DEFAULT_ICONS[cat.value] || DEFAULT_ICONS[cat.value.toLowerCase()] || LayoutGrid;
@@ -102,6 +103,7 @@ export function OverlayFilterBar({
 
             return (
               <button
+                type="button"
                 key={cat.value}
                 onClick={() => {
                   if (isFavorites && !user && onAuthRequired) {
@@ -110,7 +112,7 @@ export function OverlayFilterBar({
                   }
                   onChange(cat.value);
                 }}
-                className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
+                className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
                   isActive ? activeClasses : inactiveClasses
                 }`}
                 data-testid={`${testIdPrefix}-pill-${cat.value.toLowerCase()}`}
@@ -125,7 +127,7 @@ export function OverlayFilterBar({
               </button>
             );
           })}
-        </div>
+        </ScrollMaskedChipRow>
         <div className="relative w-[184px] flex-none">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
