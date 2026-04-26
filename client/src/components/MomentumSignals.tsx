@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Search, Newspaper, BookOpen, Sparkles, AlertTriangle, Clock, ExternalLink, Info, ArrowUp, ArrowDown } from "lucide-react";
+import { Flame, Newspaper, BookOpen, Sparkles, AlertTriangle, Clock, ExternalLink, Info, ArrowUp, ArrowDown } from "lucide-react";
 import { SiX, SiYoutube, SiInstagram, SiTiktok, SiSpotify } from "react-icons/si";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
 import { cn } from "@/lib/utils";
@@ -14,7 +14,13 @@ interface MomentumData {
   activeSources: string[];
   staleFlags: Record<string, boolean>;
   signals: {
-    search: {
+    /**
+     * @deprecated Apr 2026 — PR3. The Serper SERP-shape composite no
+     * longer feeds scoring (velocity weight = 0) and the dedicated
+     * "Search Interest" card is replaced by News Momentum below. Field
+     * is still emitted by the API so older mobile clients don't break.
+     */
+    search?: {
       volume: number;
       deltaPct: number;
       level?: MomentumLevel;
@@ -38,10 +44,23 @@ interface MomentumData {
       wiki_falling?: boolean;
       wiki_rising?: boolean;
     };
+    /**
+     * News-momentum velocity slot (Apr 2026 — PR2 Fix X). Surfaces the
+     * 24h-vs-7d acceleration ratio that replaced the defunct search
+     * signal in the velocity score.
+     */
+    momentum: {
+      score: number;          // 0..100 sub-score (mirrors velocityComponents.momentum)
+      ratio: number;          // 24h / max(7d-avg, 1), capped at 10×
+      averageDaily7d: number; // trailing 7d daily news baseline
+      articleCount24h: number; // today's count, same as signals.news.count
+      deltaPct: number;       // 24h change in *score* vs prior tick
+      level: MomentumLevel;
+    };
     drivers: {
       status: "active" | "stable";
-      breakdown: { search: number; news: number; wiki: number } | null;
-      breakdownPct: { search: number; news: number; wiki: number } | null;
+      breakdown: { search: number; news: number; wiki: number; momentum?: number } | null;
+      breakdownPct: { search: number; news: number; wiki: number; momentum?: number } | null;
       activeSources: number;
       quietSources: string[];
       isExact?: boolean;
@@ -64,11 +83,14 @@ function formatNum(n: number): string {
 
 // Fallback thresholds used only when the server response doesn't carry `level`
 // (e.g. older cached responses or the first load before stats warm up).
-function fallbackLevel(source: "search" | "news" | "wiki", value: number): MomentumLevel {
+function fallbackLevel(source: "momentum" | "news" | "wiki", value: number): MomentumLevel {
   if (!Number.isFinite(value) || value <= 0) return "none";
-  if (source === "search") {
-    if (value < 20) return "low";
-    if (value < 60) return "medium";
+  if (source === "momentum") {
+    // Kept in sync with computeMomentumLevel in server/routes.ts.
+    // Score is the 0..100 momentum velocity sub-score (log-scaled
+    // 24h-vs-7d-avg news ratio) — see normalize.ts:normalizeNewsMomentum.
+    if (value <= 30) return "low";
+    if (value <= 60) return "medium";
     return "high";
   }
   if (source === "news") {
@@ -85,6 +107,9 @@ function fallbackLevel(source: "search" | "news" | "wiki", value: number): Momen
 
 const LEVEL_SCALE_COPY =
   "Level compares this person to everyone we track over the last 14 days — Low = bottom 25%, Medium = middle 50%, High = top 25%.";
+
+const MOMENTUM_LEVEL_COPY =
+  "Level reflects how today's news volume compares to this person's own 7-day baseline — Low = steady or cooling, Medium = mild acceleration, High = clear breakout (3×+ their normal week).";
 
 // Each level gets a distinct dot SHAPE on top of its colour so the indicator is
 // still unambiguous for users who can't rely on red/amber/green alone:
@@ -323,15 +348,14 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
       : `${Math.round(ageMinutes / 60)}h ago`;
 
   const sourceLabels = activeSources.map(s =>
-    s === "wiki" ? "Wikipedia" : s === "news" ? "News" : s === "search" ? "Search" : s
+    s === "wiki" ? "Wikipedia" : s === "news" ? "News" : s
   );
 
-  const searchLevel: MomentumLevel = signals.search.level ?? fallbackLevel("search", signals.search.volume);
   const newsLevel: MomentumLevel = signals.news.level ?? fallbackLevel("news", signals.news.count);
   const wikiLevel: MomentumLevel = signals.wiki.level ?? fallbackLevel("wiki", signals.wiki.views);
+  const momentumLevel: MomentumLevel = signals.momentum?.level
+    ?? fallbackLevel("momentum", signals.momentum?.score ?? 0);
 
-  const searchTrend: TrendWord =
-    signals.search.deltaPct > 5 ? "rising" : signals.search.deltaPct < -5 ? "falling" : "steady";
   const newsTrend: TrendWord =
     signals.news.deltaPct > 5 ? "rising" : signals.news.deltaPct < -5 ? "falling" : "steady";
   const wikiTrend: TrendWord =
@@ -340,6 +364,9 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
         : signals.wiki.deltaPct > 5 ? "rising"
           : signals.wiki.deltaPct < -5 ? "falling"
             : "steady";
+  const momentumTrend: TrendWord = signals.momentum
+    ? (signals.momentum.deltaPct > 5 ? "rising" : signals.momentum.deltaPct < -5 ? "falling" : "steady")
+    : "steady";
 
   return (
     <div id="momentum-signals" className="mt-8 space-y-5" data-testid="section-momentum-signals">
@@ -368,27 +395,6 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <SignalCard
-          testId="card-search-interest"
-          icon={<Search className="h-3.5 w-3.5 text-muted-foreground" />}
-          iconWrapClass="bg-muted"
-          title="Search Interest"
-          level={searchLevel}
-          value={`${signals.search.volume}`}
-          unit="/ 100"
-          deltaPct={signals.search.deltaPct}
-          trendWord={searchTrend}
-          tooltip={
-            <TouchTooltip
-              side="top"
-              contentClassName="max-w-[240px] text-xs normal-case tracking-normal"
-              content={`How actively people are searching for this person on Google right now, scored from 0 to 100. ${LEVEL_SCALE_COPY}`}
-            >
-              <Info className="h-3 w-3 text-muted-foreground/50 cursor-help" data-testid="icon-search-tooltip" />
-            </TouchTooltip>
-          }
-        />
-
-        <SignalCard
           testId="card-news-activity"
           icon={<Newspaper className="h-3.5 w-3.5 text-muted-foreground" />}
           iconWrapClass="bg-muted"
@@ -411,6 +417,36 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
             signals.news.count === 0 && signals.news.recentPeak && signals.news.recentPeakAge ? (
               <p className="text-[10px] text-muted-foreground/60 pt-0.5" data-testid="text-news-recent-peak">
                 {signals.news.recentPeak} articles found {signals.news.recentPeakAge}
+              </p>
+            ) : null
+          }
+        />
+
+        <SignalCard
+          testId="card-news-momentum"
+          icon={<Flame className="h-3.5 w-3.5 text-orange-500 dark:text-orange-400" />}
+          iconWrapClass="bg-orange-500/15 dark:bg-orange-500/10"
+          title="News Momentum"
+          level={momentumLevel}
+          value={signals.momentum && signals.momentum.ratio > 0
+            ? `${signals.momentum.ratio.toFixed(1)}×`
+            : "—"}
+          unit={signals.momentum && signals.momentum.ratio > 0 ? "vs 7-day baseline" : "no recent news"}
+          deltaPct={signals.momentum?.deltaPct ?? 0}
+          trendWord={momentumTrend}
+          tooltip={
+            <TouchTooltip
+              side="top"
+              contentClassName="max-w-[260px] text-xs normal-case tracking-normal"
+              content={`How today's news volume compares to this person's own 7-day daily average. 1× means a typical day, 3×+ means a clear breakout. ${MOMENTUM_LEVEL_COPY}`}
+            >
+              <Info className="h-3 w-3 text-muted-foreground/50 cursor-help" data-testid="icon-momentum-tooltip" />
+            </TouchTooltip>
+          }
+          footer={
+            signals.momentum && signals.momentum.averageDaily7d > 0 ? (
+              <p className="text-[10px] text-muted-foreground/60 pt-0.5" data-testid="text-momentum-baseline">
+                7-day avg: {signals.momentum.averageDaily7d.toFixed(1)} {signals.momentum.averageDaily7d === 1 ? "article/day" : "articles/day"}
               </p>
             ) : null
           }
@@ -451,8 +487,8 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
 
         <MomentumTakeCard
           sources={[
-            { name: "Search", level: searchLevel, delta: signals.search.deltaPct },
             { name: "News", level: newsLevel, delta: signals.news.deltaPct },
+            { name: "Momentum", level: momentumLevel, delta: signals.momentum?.deltaPct ?? 0 },
             { name: "Wikipedia", level: wikiLevel, delta: signals.wiki.deltaPct },
           ]}
         />
@@ -543,7 +579,7 @@ const STATE_STYLES: Record<MomentumState, {
 };
 
 interface SourceSnapshot {
-  name: "Search" | "News" | "Wikipedia";
+  name: "News" | "Momentum" | "Wikipedia";
   level: MomentumLevel;
   delta: number;
 }
@@ -586,10 +622,23 @@ function classifyMomentumState(sources: SourceSnapshot[]): MomentumState {
 
 const LEVEL_RANK: Record<MomentumLevel, number> = { none: 0, low: 1, medium: 2, high: 3 };
 
-// "Wikipedia" is a proper noun so it stays capitalised mid-sentence; the
-// other two read naturally in lowercase ("search ticking up 12%").
+// "Wikipedia" is a proper noun so it stays capitalised mid-sentence;
+// "news" reads naturally in lowercase. "Momentum" is treated as a label
+// rather than a noun ("news momentum surging" reads better than
+// "momentum surging") — see momentumPhrase below for context-specific
+// rendering.
 function nameInSentence(name: SourceSnapshot["name"]): string {
-  return name === "Wikipedia" ? "Wikipedia" : name.toLowerCase();
+  if (name === "Wikipedia") return "Wikipedia";
+  if (name === "Momentum") return "news momentum";
+  return "news";
+}
+
+// Sentence-start version of the source name (capitalised). "Momentum"
+// renders as "News momentum" so it reads naturally as a sentence
+// subject ("News momentum surging 47% in the last 24h.").
+function nameAtSentenceStart(name: SourceSnapshot["name"]): string {
+  if (name === "Momentum") return "News momentum";
+  return name;
 }
 
 function composeTake(sources: SourceSnapshot[], state: MomentumState): string {
@@ -606,24 +655,26 @@ function composeTake(sources: SourceSnapshot[], state: MomentumState): string {
       const surge = high.slice().sort((a, b) => b.delta - a.delta)[0];
       const soften = high.slice().sort((a, b) => a.delta - b.delta)[0];
 
+      // Use sentence-start labels here so "News momentum" stays
+      // capitalised when it's the leading clause of the base phrase.
+      const labels = highNames.map(nameAtSentenceStart);
       let base: string;
-      if (highNames.length === 3) base = "Peak attention across every source";
-      else if (highNames.length === 2) base = `Strong ${highNames[0]} and ${highNames[1]} attention`;
-      else base = `Peak ${highNames[0]} attention`;
+      if (labels.length === 3) base = "Peak attention across every signal";
+      else if (labels.length === 2) base = `Strong ${labels[0]} and ${labels[1]}`;
+      else base = `Peak ${labels[0]}`;
 
       // Within the peak, surface the most dramatic 24h story. A surge in a
       // High source wins over softening because it's the more interesting
       // narrative when a person is already at peak levels. If a non-High
-      // source is moving strongly against the peak (e.g. news +900% but
-      // search -48%), append that divergence too — it signals media-driven
-      // vs organic attention.
+      // source is moving strongly against the peak, append that
+      // divergence too — it signals e.g. wiki-driven vs media-driven.
       if (surge && surge.delta >= 15) {
         const opposing = nonHigh.slice().sort((a, b) => a.delta - b.delta)[0];
         if (opposing && opposing.delta <= -15) {
           const pct = Math.abs(Math.round(opposing.delta));
-          return `${base} — ${surge.name} surging ${Math.round(surge.delta)}%, though ${nameInSentence(opposing.name)} down ${pct}%.`;
+          return `${base} — ${nameAtSentenceStart(surge.name)} surging ${Math.round(surge.delta)}%, though ${nameInSentence(opposing.name)} down ${pct}%.`;
         }
-        return `${base} — ${surge.name} surging ${Math.round(surge.delta)}%.`;
+        return `${base} — ${nameAtSentenceStart(surge.name)} surging ${Math.round(surge.delta)}%.`;
       }
       if (soften && soften.delta <= -15) {
         const opposing = nonHigh.slice().sort((a, b) => b.delta - a.delta)[0];
@@ -636,7 +687,7 @@ function composeTake(sources: SourceSnapshot[], state: MomentumState): string {
     }
     case "rising": {
       if (biggestMover && biggestMover.delta >= 15) {
-        return `${biggestMover.name} surging — up ${Math.round(biggestMover.delta)}% in the last 24h.`;
+        return `${nameAtSentenceStart(biggestMover.name)} surging — up ${Math.round(biggestMover.delta)}% in the last 24h.`;
       }
       return "Signals ticking up across the board.";
     }
@@ -646,7 +697,7 @@ function composeTake(sources: SourceSnapshot[], state: MomentumState): string {
       if (biggestRise && biggestFall && biggestRise !== biggestFall) {
         const rPct = Math.round(biggestRise.delta);
         const fPct = Math.abs(Math.round(biggestFall.delta));
-        return `${biggestRise.name} surging ${rPct}% while ${nameInSentence(biggestFall.name)} down ${fPct}%.`;
+        return `${nameAtSentenceStart(biggestRise.name)} surging ${rPct}% while ${nameInSentence(biggestFall.name)} down ${fPct}%.`;
       }
       return "Signals moving in opposite directions.";
     }
@@ -654,18 +705,18 @@ function composeTake(sources: SourceSnapshot[], state: MomentumState): string {
       if (biggestMover && biggestMover.delta <= -20) {
         const pct = Math.abs(Math.round(biggestMover.delta));
         // If another source is still at High level, the interest isn't
-        // really "cooling" — the news cycle is just normalising while
+        // really "cooling" — one channel is just normalising while
         // underlying attention stays elevated. Surface that.
         const stillHigh = sources.find(s => s.level === "high" && s !== biggestMover);
         if (stillHigh) {
-          return `${biggestMover.name} down ${pct}% — ${nameInSentence(stillHigh.name)} interest still high.`;
+          return `${nameAtSentenceStart(biggestMover.name)} down ${pct}% — ${nameInSentence(stillHigh.name)} still elevated.`;
         }
-        return `${biggestMover.name} down ${pct}% — interest cooling.`;
+        return `${nameAtSentenceStart(biggestMover.name)} down ${pct}% — interest cooling.`;
       }
       return "Attention easing across multiple signals.";
     }
     case "quiet": {
-      return "Quiet across news, search, and Wikipedia today.";
+      return "Quiet across news, momentum, and Wikipedia today.";
     }
     case "steady":
     default: {
@@ -675,6 +726,12 @@ function composeTake(sources: SourceSnapshot[], state: MomentumState): string {
         return `Steady overall — ${nameInSentence(biggestMover.name)} ${dir} ${pct}%.`;
       }
       if (strongest && strongest.level === "high") {
+        // "news momentum attention" reads awkwardly because momentum is
+        // already a derivative measure — drop the "attention" suffix
+        // for that case so the sentence parses cleanly.
+        if (strongest.name === "Momentum") {
+          return "Sustained news momentum — no major shifts today.";
+        }
         return `Sustained ${nameInSentence(strongest.name)} attention — no major shifts today.`;
       }
       if (strongest && strongest.level === "medium") {

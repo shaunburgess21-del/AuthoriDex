@@ -1218,47 +1218,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
               const searchWeighted = currentVC.search * currentVC.weights.search;
               const newsWeighted = currentVC.news * currentVC.weights.news;
               const wikiWeighted = currentVC.wiki * currentVC.weights.wiki;
-              // Momentum slot (Apr 2026 — PR2 Fix X). Older snapshots
-              // pre-Fix X persisted no `momentum` field; coalesce to 0 so
-              // attribution doesn't NaN out on historical rows during the
-              // 24h transition window.
+              // Momentum slot (Apr 2026 — PR2 Fix X). The current tick
+              // always has `momentum` post-Fix-X. The previous tick may
+              // pre-date Fix X (during the first 24h after deploy) — in
+              // that case `prevVC.weights.momentum` is undefined. We
+              // detect that and *exclude momentum from the delta math
+              // entirely* rather than treating prev as 0, which would
+              // otherwise make momentum=full-current-weight dominate the
+              // breakdown for the entire transition window and label
+              // every top-mover as "News momentum surging" (PR3 fix).
+              const prevHasMomentum = typeof prevVC.weights?.momentum === "number";
               const momentumWeighted = (currentVC.momentum ?? 0) * (currentVC.weights.momentum ?? 0);
 
               const searchDelta = Math.abs(searchWeighted - (prevVC.search * prevVC.weights.search));
               const newsDelta = Math.abs(newsWeighted - (prevVC.news * prevVC.weights.news));
               const wikiDelta = Math.abs(wikiWeighted - (prevVC.wiki * prevVC.weights.wiki));
-              const momentumDelta = Math.abs(
-                momentumWeighted - ((prevVC.momentum ?? 0) * (prevVC.weights.momentum ?? 0))
-              );
+              const momentumDelta = prevHasMomentum
+                ? Math.abs(
+                    momentumWeighted - ((prevVC.momentum ?? 0) * (prevVC.weights.momentum ?? 0))
+                  )
+                : 0;
               const totalDelta = searchDelta + newsDelta + wikiDelta + momentumDelta;
 
               if (totalDelta > 0) {
-                sources = [
-                  { key: "search", pct: Math.round((searchDelta / totalDelta) * 100), status: "active" as string },
+                const built: Array<{ key: string; pct: number; status: string }> = [
                   { key: "news", pct: Math.round((newsDelta / totalDelta) * 100), status: "active" as string },
                   { key: "wiki", pct: Math.round((wikiDelta / totalDelta) * 100), status: "active" as string },
-                  { key: "momentum", pct: Math.round((momentumDelta / totalDelta) * 100), status: "active" as string },
-                ].filter(s => s.pct > 0).sort((a, b) => b.pct - a.pct);
+                ];
+                // `search` is intentionally omitted from the active-source
+                // attribution: weight is 0, so it contributes nothing
+                // meaningful even when searchDelta ≠ 0 (it'd be 0% anyway).
+                // It's still listed below as a quiet source for backward
+                // compat with admin tooling that expects all 4 keys.
+                if (prevHasMomentum) {
+                  built.push({ key: "momentum", pct: Math.round((momentumDelta / totalDelta) * 100), status: "active" as string });
+                }
+                sources = built.filter(s => s.pct > 0).sort((a, b) => b.pct - a.pct);
               }
             }
 
             if (sources.length === 0) {
-              const searchChange = Math.abs((curr.searchVolume ?? 0) - (prev?.searchVolume ?? 0));
               const newsChange = Math.abs((curr.newsCount ?? 0) - (prev?.newsCount ?? 0));
               const wikiChange = Math.abs((curr.wikiPageviews ?? 0) - (prev?.wikiPageviews ?? 0));
-              const searchContrib = searchChange * PLATFORM_WEIGHTS.velocity.search;
               const newsContrib = newsChange * PLATFORM_WEIGHTS.velocity.news;
               const wikiContrib = wikiChange * PLATFORM_WEIGHTS.velocity.wiki;
-              // Momentum can't be approximated from raw column changes
-              // (it'd require rederiving the 24h/7d ratio per snapshot).
-              // Attribution falls back to wiki/news/search only here —
-              // the exact path above already covers the momentum slice
-              // when both ticks have new-shape velocityComponents.
-              const totalContrib = searchContrib + newsContrib + wikiContrib;
+              // `search` excluded from the fallback (weight is 0, contribution
+              // is always 0). Momentum can't be approximated from raw column
+              // changes either — it requires the 24h/7d ratio rederiv —
+              // so attribution falls back to wiki/news only. The exact
+              // path above covers the momentum slice when both ticks have
+              // post-Fix-X velocityComponents.
+              const totalContrib = newsContrib + wikiContrib;
 
               if (totalContrib > 0) {
                 sources = [
-                  { key: "search", absContrib: searchContrib },
                   { key: "news", absContrib: newsContrib },
                   { key: "wiki", absContrib: wikiContrib },
                 ].filter((c: any) => c.absContrib > 0)
@@ -2113,6 +2126,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return "high";
   };
 
+  // News-momentum level helper (Apr 2026 — PR3). The momentum sub-score is
+  // already a 0..100 self-normalized value (see normalizeNewsMomentum), so
+  // levels map to fixed bands on that scale rather than rolling percentiles:
+  //   none = no signal (no news in the 24h window or no 7d baseline)
+  //   low  = score ≤ 30  (steady-state or cooling: ratio ~0.0–1.1)
+  //   med  = score ≤ 60  (mild acceleration: ratio ~1.1–3.0)
+  //   high = score >  60  (clear breakout: ratio > 3.0)
+  // Bands chosen to match the log curve documented in normalize.ts:
+  //   ratio=1.0 → ~28.9 (low/med boundary at 30)
+  //   ratio=3.0 → ~57.8 (med/high boundary at 60)
+  const computeMomentumLevel = (score: number): MomentumLevel => {
+    if (!Number.isFinite(score) || score <= 0) return "none";
+    if (score <= 30) return "low";
+    if (score <= 60) return "medium";
+    return "high";
+  };
+
   app.get("/api/people/:id/momentum", async (req, res) => {
     try {
       const { id } = req.params;
@@ -2202,10 +2232,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // fresh (the `diag.fresh.*` flag flips to false for fallback-sourced
       // data even when a valid value lands in the snapshot column). Using
       // the snapshot columns keeps the header in sync with the cards.
+      // "search" deliberately omitted (Apr 2026 — PR3): the SERP-shape
+      // composite no longer feeds scoring and its UI card is replaced by
+      // News Momentum, so listing it as a source would mislead users.
       const activeSources: string[] = [];
       if ((latest.wikiPageviews ?? 0) > 0) activeSources.push("wiki");
       if ((latest.newsCount ?? 0) > 0) activeSources.push("news");
-      if ((latest.searchVolume ?? 0) > 0) activeSources.push("search");
 
       const staleFlags: Record<string, boolean> = {};
       if (dataDelayed) staleFlags.dataDelayed = true;
@@ -2298,12 +2330,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
             driversMethod = "exact_velocity_components";
             driversIsExact = true;
 
+            // PR3 fix: detect "prev tick pre-dates Fix X" (no momentum
+            // weight). When prev is on the legacy {search,news,wiki}
+            // shape, treating prev.momentum as 0 inflates the momentum
+            // delta to the full current weight, causing the dominant
+            // driver classifier to label every entity as "News momentum
+            // surging" for the entire 24h transition window after deploy.
+            // Skip the momentum slice entirely in that case.
+            const prevHasMomentum = typeof prevVC.weights?.momentum === "number";
+
             const searchWeighted = currentVC.search * currentVC.weights.search;
             const newsWeighted = currentVC.news * currentVC.weights.news;
             const wikiWeighted = currentVC.wiki * currentVC.weights.wiki;
-            // Momentum slot — coalesce missing fields to 0 so the
-            // exact path keeps working for the 24h transition window
-            // when the previous tick may pre-date Fix X.
             const momentumWeighted = (currentVC.momentum ?? 0) * (currentVC.weights.momentum ?? 0);
             const totalWeighted = searchWeighted + newsWeighted + wikiWeighted + momentumWeighted;
 
@@ -2337,16 +2375,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const searchDelta = Math.abs(searchWeighted - (prevVC.search * prevVC.weights.search));
             const newsDelta = Math.abs(newsWeighted - (prevVC.news * prevVC.weights.news));
             const wikiDelta = Math.abs(wikiWeighted - (prevVC.wiki * prevVC.weights.wiki));
-            const momentumDelta = Math.abs(
-              momentumWeighted - ((prevVC.momentum ?? 0) * (prevVC.weights.momentum ?? 0))
-            );
+            const momentumDelta = prevHasMomentum
+              ? Math.abs(
+                  momentumWeighted - ((prevVC.momentum ?? 0) * (prevVC.weights.momentum ?? 0))
+                )
+              : 0;
             const totalDelta = searchDelta + newsDelta + wikiDelta + momentumDelta;
 
             if (searchDelta / Math.max(searchWeighted, 1) < 0.05) quietSources.push("Search");
             if (newsDelta / Math.max(newsWeighted, 1) < 0.05) quietSources.push("News");
             if (wikiDelta / Math.max(wikiWeighted, 1) < 0.03) quietSources.push("Wikipedia");
-            if (momentumDelta / Math.max(momentumWeighted, 1) < 0.05) quietSources.push("Momentum");
-            driverSourceCount = 4 - quietSources.length;
+            if (prevHasMomentum && momentumDelta / Math.max(momentumWeighted, 1) < 0.05) quietSources.push("Momentum");
+            // 4 known sources when prev has momentum, 3 otherwise (during
+            // the transition window momentum can't be classified as
+            // active OR quiet because we lack a baseline).
+            driverSourceCount = (prevHasMomentum ? 4 : 3) - quietSources.length;
 
             const MIN_DRIVER_DELTA = 0.5;
             if (totalDelta > MIN_DRIVER_DELTA && hasSignificantMovement && driverSourceCount > 0) {
@@ -2354,34 +2397,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 search: Math.round((searchDelta / totalDelta) * 100),
                 news: Math.round((newsDelta / totalDelta) * 100),
                 wiki: Math.round((wikiDelta / totalDelta) * 100),
-                momentum: Math.round((momentumDelta / totalDelta) * 100),
+                ...(prevHasMomentum
+                  ? { momentum: Math.round((momentumDelta / totalDelta) * 100) }
+                  : {}),
               };
               driversStatus = "active";
             }
           } else {
             driversMethod = "estimate_signal_change";
 
-            const searchChange = Math.abs(latest.searchVolume - snap24hAgo.searchVolume);
             const newsChange = Math.abs(latest.newsCount - snap24hAgo.newsCount);
             const wikiChange = Math.abs((latest.wikiPageviews ?? 0) - (snap24hAgo.wikiPageviews ?? 0));
 
-            const searchContrib = searchChange * PLATFORM_WEIGHTS.velocity.search;
+            // `search` excluded from the fallback (weight is 0, contribution
+            // always 0). Aligns with the Hot Movers fallback at line ~1245.
             const newsContrib = newsChange * PLATFORM_WEIGHTS.velocity.news;
             const wikiContrib = wikiChange * PLATFORM_WEIGHTS.velocity.wiki;
-            const totalContrib = searchContrib + newsContrib + wikiContrib;
+            const totalContrib = newsContrib + wikiContrib;
 
-            const searchBase = Math.max(snap24hAgo.searchVolume, 1);
             const newsBase = Math.max(snap24hAgo.newsCount, 1);
             const wikiBase = Math.max(snap24hAgo.wikiPageviews ?? 1, 1);
-            if (searchChange / searchBase < 0.05) quietSources.push("Search");
             if (newsChange / newsBase < 0.05) quietSources.push("News");
             if (wikiChange / wikiBase < 0.03) quietSources.push("Wikipedia");
-            driverSourceCount = 3 - quietSources.length;
+            driverSourceCount = 2 - quietSources.length;
 
             const MIN_DRIVER_CONTRIB = 0.5;
             if (totalContrib > MIN_DRIVER_CONTRIB && hasSignificantMovement && driverSourceCount > 0) {
               driverBreakdown = {
-                search: Math.round((searchContrib / totalContrib) * 100),
+                search: 0,
                 news: Math.round((newsContrib / totalContrib) * 100),
                 wiki: Math.round((wikiContrib / totalContrib) * 100),
               };
@@ -2414,6 +2457,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const searchLevel = computeLevel("search", latest.searchVolume ?? 0, momentumStats?.search);
       const wikiLevel = computeLevel("wiki", latest.wikiPageviews ?? 0, momentumStats?.wiki);
+
+      // ── News-Momentum slice (Apr 2026 — PR3) ─────────────────────────────
+      // The momentum velocity sub-score (0..100) is the canonical reading,
+      // persisted on every post-Fix-X snapshot under
+      // `diagnostics.velocityComponents.momentum`. The raw 24h-vs-7d ratio
+      // is reconstructed from the persisted raw counts so the UI can show
+      // a humans-readable "today is N× this person's typical week".
+      // For pre-Fix-X snapshots (transition window), the velocityComponents
+      // shape is the legacy {search,news,wiki} triple — `momentum` is
+      // missing and we fall through to a 0 score so the card renders as
+      // "Quiet" rather than spurious-high.
+      const persistedMomentumScore = Number(diag?.velocityComponents?.momentum ?? 0);
+      const persistedNews7dAvg = Number(diag?.raw?.news7d ?? 0);
+      const news24h = Number(latest.newsCount ?? 0);
+      // Mirror the production formula exactly so the displayed ratio always
+      // matches the score the engine used. Floor at 1 to dodge the
+      // tiny-baseline divide-by-near-zero (matches MOMENTUM_AVG_FLOOR).
+      const momentumDenom = Math.max(persistedNews7dAvg, 1);
+      const momentumRatio = persistedNews7dAvg > 0 && news24h > 0
+        ? Math.min(news24h / momentumDenom, 10) // cap matches MOMENTUM_RATIO_CAP
+        : 0;
+
+      // 24h delta vs the prior tick's persisted momentum score. The
+      // 24h-prior diagnostics may pre-date Fix X and lack
+      // `velocityComponents.momentum`; in that case we report deltaPct=0
+      // (no measurable change) rather than fabricating a baseline of 0
+      // — see the Hot Movers / Why Trending fix in this same PR.
+      const prevDiag = snap24hAgo?.diagnostics as Record<string, any> | null;
+      const prevMomentumScoreRaw = prevDiag?.velocityComponents?.momentum;
+      const prevMomentumScore = typeof prevMomentumScoreRaw === "number" ? prevMomentumScoreRaw : null;
+      const rawMomentumDeltaPct = prevMomentumScore !== null && prevMomentumScore > 0
+        ? Math.round(((persistedMomentumScore - prevMomentumScore) / prevMomentumScore) * 100)
+        : 0;
+      const momentumDeltaPct = Math.abs(rawMomentumDeltaPct) <= DELTA_DEAD_ZONE_PCT ? 0 : rawMomentumDeltaPct;
+
+      const momentumLevel = computeMomentumLevel(persistedMomentumScore);
 
       res.json({
         asOf: latest.timestamp.toISOString(),
@@ -2473,6 +2552,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
             level: wikiLevel,
             ...(wikiFalling === true && { wiki_falling: true }),
             ...(wikiRising === true && { wiki_rising: true }),
+          },
+          momentum: {
+            // 0..100 sub-score; mirrors `diagnostics.velocityComponents.momentum`.
+            score: Math.round(persistedMomentumScore * 10) / 10,
+            // Raw 24h/7d ratio (clamped at 10×). 0 means no signal —
+            // either no news in the 24h window or no 7d baseline.
+            ratio: Math.round(momentumRatio * 100) / 100,
+            // Trailing 7-day daily-average news count (the baseline).
+            averageDaily7d: Math.round(persistedNews7dAvg * 10) / 10,
+            // Today's 24h count (same value the News Activity card shows).
+            articleCount24h: news24h,
+            // 24h change in the *score* (not the ratio) vs the prior tick.
+            deltaPct: momentumDeltaPct,
+            level: momentumLevel,
           },
           drivers: {
             status: driversStatus,
