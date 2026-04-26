@@ -6,7 +6,12 @@ import { toast } from "sonner";
 interface CommentActionDrawerProps {
   open: boolean;
   onClose: () => void;
-  onReport: (reason: string) => void;
+  /**
+   * Omit to hide the Report button entirely. Surfaces without a server-side
+   * report endpoint (e.g. CommunityInsights) pass `undefined` and the drawer
+   * degrades to Share-only.
+   */
+  onReport?: (reason: string) => void;
   commentId: string | null;
   entitySlug: string;
 }
@@ -56,7 +61,7 @@ export function CommentActionDrawer({
   }, [commentId, entitySlug, onClose]);
 
   const handleReport = useCallback((reason: string) => {
-    onReport(reason);
+    onReport?.(reason);
   }, [onReport]);
 
   if (!open) return null;
@@ -81,13 +86,15 @@ export function CommentActionDrawer({
               <Share2 className="h-5 w-5 text-muted-foreground" />
               <span className="text-sm font-medium">Share</span>
             </button>
-            <button
-              onClick={() => setShowReportPicker(true)}
-              className="flex items-center gap-3 w-full px-4 py-3.5 rounded-xl hover:bg-muted/50 transition-colors"
-            >
-              <Flag className="h-5 w-5 text-muted-foreground" />
-              <span className="text-sm font-medium">Report</span>
-            </button>
+            {onReport && (
+              <button
+                onClick={() => setShowReportPicker(true)}
+                className="flex items-center gap-3 w-full px-4 py-3.5 rounded-xl hover:bg-muted/50 transition-colors"
+              >
+                <Flag className="h-5 w-5 text-muted-foreground" />
+                <span className="text-sm font-medium">Report</span>
+              </button>
+            )}
             <button
               onClick={onClose}
               className="flex items-center gap-3 w-full px-4 py-3.5 rounded-xl hover:bg-muted/50 transition-colors mt-1 border-t border-border/10 pt-3"
