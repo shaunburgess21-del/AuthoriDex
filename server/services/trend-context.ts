@@ -85,28 +85,34 @@ function extractReasonTag(headlines: string[]): { tag: string; confidence: numbe
 function determinePrimaryDriver(
   wikiDelta: number,
   newsDelta: number,
-  searchDelta: number,
+  _searchDelta: number,
   _xVelocity: number = 0,
   hasHeadlines: boolean = false
 ): { primary: TrendDriver | null; secondary: TrendDriver | null; strength: number } {
+  // SEARCH was dropped from candidates Apr 2026 (PR3 of trend-engine tuning).
+  // Its source — Serper SERP-shape — never measured search volume; it
+  // measured presence of SERP features (knowledge panels, related searches,
+  // PAA boxes) which are slow-changing structural signals, not interest
+  // velocity. Letting it win primary driver produced "Search spiking"
+  // badges on the Hot Movers / Trending feed that didn't correspond to
+  // any real change in the score (search weight is now 0 in scoring too).
   const drivers: Array<{ type: TrendDriver; value: number }> = [
     { type: "WIKI", value: wikiDelta },
     { type: "NEWS", value: newsDelta },
-    { type: "SEARCH", value: searchDelta },
   ];
-  
+
   drivers.sort((a, b) => b.value - a.value);
-  
+
   const THRESHOLD = 0.02;
-  
+
   let primary = drivers[0].value > THRESHOLD ? drivers[0] : null;
-  
+
   if (!primary && hasHeadlines) {
     primary = { type: "NEWS", value: 0.1 };
   }
-  
+
   const secondary = drivers[1].value > THRESHOLD && primary ? drivers[1] : null;
-  
+
   return {
     primary: primary?.type || null,
     secondary: secondary?.type || null,
@@ -198,8 +204,12 @@ export async function getTrendContext(personId: string): Promise<TrendContext> {
     reasonTagResult = extractReasonTag(headlines);
   }
   
-  const isHeated = (newsDelta > 0.3 && searchDelta > 0.3);
-  
+  // Apr 2026 (PR3): isHeated was previously gated on `searchDelta > 0.3`,
+  // but the Serper SERP-shape signal often returned 0 for legitimately
+  // hot people, dragging this flag false. Re-anchor on news + wiki —
+  // a person with both surging is unambiguously heated.
+  const isHeated = (newsDelta > 0.3 && wikiDelta > 0.3);
+
   return {
     primaryDriver: primary,
     secondaryDriver: secondary,
@@ -324,7 +334,7 @@ export async function getTrendContextBatch(personIds: string[]): Promise<Map<str
     const newsDelta = snapshot?.newsDelta || 0;
     const searchDelta = snapshot?.searchDelta || 0;
     const hasHeadlines = headlines.length > 0;
-    
+
     const { primary, secondary, strength } = determinePrimaryDriver(
       wikiDelta,
       newsDelta,
@@ -332,13 +342,14 @@ export async function getTrendContextBatch(personIds: string[]): Promise<Map<str
       0,
       hasHeadlines
     );
-    
+
     let reasonTagResult = { tag: getDriverLabel(primary), confidence: 0 };
     if ((primary === "NEWS" || hasHeadlines) && headlines.length > 0) {
       reasonTagResult = extractReasonTag(headlines);
     }
-    
-    const isHeated = (newsDelta > 0.3 && searchDelta > 0.3);
+
+    // See note in getTrendContext above — search dropped from heated gate.
+    const isHeated = (newsDelta > 0.3 && wikiDelta > 0.3);
     
     const wikiKey = `wiki:pageviews:${person.wikiSlug}`;
     const serperKey = `serper:search:${person.name.toLowerCase().replace(/ /g, "_")}`;
