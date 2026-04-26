@@ -74,6 +74,12 @@ const VIEW_DEDUPE_WINDOW_MS = 10 * 60 * 1000;
 const VIEW_IP_RATE_LIMIT = 30;
 const COMMENT_MAX_LENGTH = 5000;
 type CommentVoteState = "up" | "down" | null;
+type ParentVoteLabel =
+  | { type: "trending_poll"; choice: string }
+  | { type: "matchup"; choice: string; optionName: string }
+  | { type: "opinion_poll"; optionName: string }
+  | { type: "approval_rating"; rating: number }
+  | null;
 type CommentAuthorJoin = {
   authorId: string | null;
   authorUsername: string | null;
@@ -104,6 +110,10 @@ const commentVoteTypeSchema = z.enum(["up", "down"]);
 
 function isCommentVoteState(value: unknown): value is Exclude<CommentVoteState, null> {
   return value === "up" || value === "down";
+}
+
+function uniqueStrings(values: Array<string | null | undefined>): string[] {
+  return Array.from(new Set(values.filter((value): value is string => Boolean(value))));
 }
 
 function reportEntityTypeForCommentParent(parentType: CommentParentType): string {
@@ -167,6 +177,148 @@ async function resolveUnifiedCommentParent(input: {
   return market?.id ?? null;
 }
 
+async function getCommentParentVoteLabelMap(input: {
+  parentType: CommentParentType;
+  parentId: string;
+  comments: Array<{ id: string; userId: string; deletedAt: Date | null }>;
+}): Promise<Map<string, ParentVoteLabel>> {
+  const liveComments = input.comments.filter(comment => !comment.deletedAt);
+  const userIds = uniqueStrings(liveComments.map(comment => comment.userId));
+  const labelByCommentId = new Map<string, ParentVoteLabel>();
+  if (liveComments.length === 0 || userIds.length === 0) return labelByCommentId;
+
+  const applyLabelsByUserId = (labelByUserId: Map<string, ParentVoteLabel>) => {
+    for (const comment of liveComments) {
+      labelByCommentId.set(comment.id, labelByUserId.get(comment.userId) ?? null);
+    }
+  };
+
+  if (input.parentType === "trending_poll") {
+    const parentVotes = await db
+      .select({
+        userId: trendingPollVotes.userId,
+        choice: trendingPollVotes.choice,
+      })
+      .from(trendingPollVotes)
+      .where(and(
+        eq(trendingPollVotes.pollId, input.parentId),
+        inArray(trendingPollVotes.userId, userIds),
+      ));
+    applyLabelsByUserId(new Map(parentVotes.map(vote => [
+      vote.userId,
+      { type: "trending_poll", choice: vote.choice },
+    ])));
+    return labelByCommentId;
+  }
+
+  if (input.parentType === "matchup") {
+    const parentVotes = await db
+      .select({
+        userId: votes.userId,
+        choice: votes.value,
+        optionAName: matchups.optionAText,
+        optionBName: matchups.optionBText,
+      })
+      .from(votes)
+      .leftJoin(matchups, eq(matchups.id, votes.targetId))
+      .where(and(
+        eq(votes.voteType, "face_off"),
+        eq(votes.targetType, "face_off"),
+        eq(votes.targetId, input.parentId),
+        inArray(votes.userId, userIds),
+      ));
+    applyLabelsByUserId(new Map(parentVotes.map(vote => {
+      const optionName =
+        vote.choice === "option_a"
+          ? vote.optionAName
+          : vote.choice === "option_b"
+            ? vote.optionBName
+            : "neutral";
+      return [
+        vote.userId,
+        { type: "matchup", choice: vote.choice, optionName: optionName ?? "neutral" },
+      ];
+    })));
+    return labelByCommentId;
+  }
+
+  if (input.parentType === "opinion_poll") {
+    const parentVotes = await db
+      .select({
+        userId: opinionPollVotes.userId,
+        optionName: opinionPollOptions.name,
+      })
+      .from(opinionPollVotes)
+      .leftJoin(opinionPollOptions, eq(opinionPollOptions.id, opinionPollVotes.optionId))
+      .where(and(
+        eq(opinionPollVotes.pollId, input.parentId),
+        inArray(opinionPollVotes.userId, userIds),
+      ));
+    applyLabelsByUserId(new Map(parentVotes.map(vote => [
+      vote.userId,
+      vote.optionName ? { type: "opinion_poll", optionName: vote.optionName } : null,
+    ])));
+    return labelByCommentId;
+  }
+
+  if (input.parentType === "community_insight") {
+    const [insight] = await db
+      .select({ personId: communityInsights.personId })
+      .from(communityInsights)
+      .where(eq(communityInsights.id, input.parentId))
+      .limit(1);
+    if (!insight) return labelByCommentId;
+
+    const parentVotes = await db
+      .select({
+        userId: userVotes.userId,
+        rating: userVotes.rating,
+      })
+      .from(userVotes)
+      .where(and(
+        eq(userVotes.personId, insight.personId),
+        inArray(userVotes.userId, userIds),
+      ));
+    applyLabelsByUserId(new Map(parentVotes.map(vote => [
+      vote.userId,
+      { type: "approval_rating", rating: vote.rating },
+    ])));
+  }
+
+  return labelByCommentId;
+}
+
+async function getInsightParentVoteLabelMap(input: {
+  personId: string;
+  insights: Array<{ id: string; userId: string; deletedAt: Date | null }>;
+}): Promise<Map<string, ParentVoteLabel>> {
+  const liveInsights = input.insights.filter(insight => !insight.deletedAt);
+  const userIds = uniqueStrings(liveInsights.map(insight => insight.userId));
+  const labelByInsightId = new Map<string, ParentVoteLabel>();
+  if (liveInsights.length === 0 || userIds.length === 0) return labelByInsightId;
+
+  const parentVotes = await db
+    .select({
+      userId: userVotes.userId,
+      rating: userVotes.rating,
+    })
+    .from(userVotes)
+    .where(and(
+      eq(userVotes.personId, input.personId),
+      inArray(userVotes.userId, userIds),
+    ));
+  const labelByUserId = new Map(parentVotes.map(vote => [
+    vote.userId,
+    { type: "approval_rating", rating: vote.rating } satisfies ParentVoteLabel,
+  ]));
+
+  for (const insight of liveInsights) {
+    labelByInsightId.set(insight.id, labelByUserId.get(insight.userId) ?? null);
+  }
+
+  return labelByInsightId;
+}
+
 function toUnifiedCommentItem(row: {
   id: string;
   userId: string;
@@ -177,7 +329,7 @@ function toUnifiedCommentItem(row: {
   deletedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
-} & CommentAuthorJoin, userVote: CommentVoteState = null) {
+} & CommentAuthorJoin, userVote: CommentVoteState = null, parentVoteLabel: ParentVoteLabel = null) {
   const { authorId, authorUsername, authorAvatarUrl, ...comment } = row;
   const isDeleted = Boolean(comment.deletedAt);
   return {
@@ -187,6 +339,7 @@ function toUnifiedCommentItem(row: {
       ? { username: DELETED_COMMENT_AUTHOR_USERNAME, avatarUrl: null }
       : formatCommentAuthor({ authorId, authorUsername, authorAvatarUrl })),
     userVote,
+    parentVoteLabel: isDeleted ? null : parentVoteLabel,
   };
 }
 const BOT_UA_PATTERNS = /bot|crawl|spider|slurp|wget|curl|fetch|headless|phantom|puppet|selenium|lighthouse|preview|embed|scrape/i;
@@ -2557,6 +2710,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         )
         .orderBy(desc(sql`CAST(COUNT(CASE WHEN ${insightVotes.voteType} = 'up' THEN 1 END) AS INTEGER) - CAST(COUNT(CASE WHEN ${insightVotes.voteType} = 'down' THEN 1 END) AS INTEGER)`));
 
+      const parentVoteLabelMap = await getInsightParentVoteLabelMap({
+        personId,
+        insights,
+      });
+
       res.json(insights.map(({ authorId, authorUsername, authorAvatarUrl, ...insight }) => {
         const isDeleted = Boolean(insight.deletedAt);
         return {
@@ -2565,6 +2723,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ...(isDeleted
             ? { username: DELETED_COMMENT_AUTHOR_USERNAME, avatarUrl: null }
             : formatCommentAuthor({ authorId, authorUsername, authorAvatarUrl })),
+          parentVoteLabel: isDeleted ? null : parentVoteLabelMap.get(insight.id) ?? null,
         };
       }));
     } catch (error) {
@@ -3941,7 +4100,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      res.json(rows.map(row => toUnifiedCommentItem(row, userVoteMap.get(row.id) ?? null)));
+      const parentVoteLabelMap = await getCommentParentVoteLabelMap({
+        parentType: parsedParentType.data,
+        parentId: resolvedParentId,
+        comments: rows,
+      });
+
+      res.json(rows.map(row => toUnifiedCommentItem(
+        row,
+        userVoteMap.get(row.id) ?? null,
+        parentVoteLabelMap.get(row.id) ?? null,
+      )));
     } catch (error: any) {
       console.error("Error fetching comments:", error);
       res.status(500).json({ error: "Failed to fetch comments" });
