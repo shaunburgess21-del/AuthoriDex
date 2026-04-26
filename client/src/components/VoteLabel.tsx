@@ -33,8 +33,8 @@ export function VoteLabel({ label }: VoteLabelProps) {
 
     return (
       <span className="inline-flex items-baseline gap-1 text-xs font-medium shrink-0">
-        <span className="text-white">voted:</span>
-        <span className={optionClass}>{label.optionName.toLowerCase()}</span>
+        <span className="text-muted-foreground">voted:</span>
+        <span className={optionClass}>{label.optionName}</span>
       </span>
     );
   }
@@ -42,15 +42,16 @@ export function VoteLabel({ label }: VoteLabelProps) {
   if (label.type === "opinion_poll") {
     return (
       <span className="inline-flex items-baseline gap-1 text-xs font-medium shrink-0">
-        <span className="text-white">voted:</span>
-        <span className="text-cyan-600 dark:text-cyan-400">{label.optionName.toLowerCase()}</span>
+        <span className="text-muted-foreground">voted:</span>
+        <span className="text-cyan-600 dark:text-cyan-400">{label.optionName}</span>
       </span>
     );
   }
 
   return (
-    <span className="inline-flex items-baseline text-xs font-medium shrink-0">
-      <span style={{ color: getRatingTileColor(label.rating) }}>voted {label.rating}</span>
+    <span className="inline-flex items-baseline gap-1 text-xs font-medium shrink-0">
+      <span className="text-muted-foreground">voted</span>
+      <span style={{ color: getRatingTileColor(label.rating) }}>{label.rating}</span>
       <span className="text-muted-foreground">/5</span>
     </span>
   );
