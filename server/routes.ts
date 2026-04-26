@@ -124,7 +124,7 @@ async function resolveUnifiedCommentParent(input: {
   if (input.parentType === "community_insight") {
     if (!parentId) return null;
     const [insight] = await db
-      .select({ id: communityInsights.id })
+      .select({ id: communityInsights.id, deletedAt: communityInsights.deletedAt })
       .from(communityInsights)
       .where(eq(communityInsights.id, parentId))
       .limit(1);
@@ -174,13 +174,18 @@ function toUnifiedCommentItem(row: {
   parentCommentId: string | null;
   upvotes: number;
   downvotes: number;
+  deletedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 } & CommentAuthorJoin, userVote: CommentVoteState = null) {
   const { authorId, authorUsername, authorAvatarUrl, ...comment } = row;
+  const isDeleted = Boolean(comment.deletedAt);
   return {
     ...comment,
-    ...formatCommentAuthor({ authorId, authorUsername, authorAvatarUrl }),
+    body: isDeleted ? "" : comment.body,
+    ...(isDeleted
+      ? { username: DELETED_COMMENT_AUTHOR_USERNAME, avatarUrl: null }
+      : formatCommentAuthor({ authorId, authorUsername, authorAvatarUrl })),
     userVote,
   };
 }
@@ -2525,6 +2530,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           userId: communityInsights.userId,
           content: communityInsights.content,
           sentimentVote: communityInsights.sentimentVote,
+          deletedAt: communityInsights.deletedAt,
           createdAt: communityInsights.createdAt,
           upvotes: sql<number>`CAST(COUNT(CASE WHEN ${insightVotes.voteType} = 'up' THEN 1 END) AS INTEGER)`,
           downvotes: sql<number>`CAST(COUNT(CASE WHEN ${insightVotes.voteType} = 'down' THEN 1 END) AS INTEGER)`,
@@ -2540,6 +2546,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           communityInsights.userId,
           communityInsights.content,
           communityInsights.sentimentVote,
+          communityInsights.deletedAt,
           communityInsights.createdAt,
           profiles.id,
           profiles.username,
@@ -2547,10 +2554,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         )
         .orderBy(desc(sql`CAST(COUNT(CASE WHEN ${insightVotes.voteType} = 'up' THEN 1 END) AS INTEGER) - CAST(COUNT(CASE WHEN ${insightVotes.voteType} = 'down' THEN 1 END) AS INTEGER)`));
 
-      res.json(insights.map(({ authorId, authorUsername, authorAvatarUrl, ...insight }) => ({
-        ...insight,
-        ...formatCommentAuthor({ authorId, authorUsername, authorAvatarUrl }),
-      })));
+      res.json(insights.map(({ authorId, authorUsername, authorAvatarUrl, ...insight }) => {
+        const isDeleted = Boolean(insight.deletedAt);
+        return {
+          ...insight,
+          content: isDeleted ? "" : insight.content,
+          ...(isDeleted
+            ? { username: DELETED_COMMENT_AUTHOR_USERNAME, avatarUrl: null }
+            : formatCommentAuthor({ authorId, authorUsername, authorAvatarUrl })),
+        };
+      }));
     } catch (error) {
       console.error("Error fetching community insights:", error);
       res.status(500).json({ error: "Failed to fetch community insights" });
@@ -2611,6 +2624,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({
         ...newInsight,
+        deletedAt: newInsight.deletedAt,
         ...formatCommentAuthor(profile ?? {
           authorId: null,
           authorUsername: null,
@@ -2623,6 +2637,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Error creating community insight:", error);
       res.status(400).json({ error: "Failed to create insight" });
+    }
+  });
+
+  // Soft-delete a community insight owned by the authenticated user.
+  app.delete("/api/community-insights/:id", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const userId = req.userId!;
+
+      const [insight] = await db
+        .select({
+          id: communityInsights.id,
+          userId: communityInsights.userId,
+          deletedAt: communityInsights.deletedAt,
+        })
+        .from(communityInsights)
+        .where(eq(communityInsights.id, id))
+        .limit(1);
+      if (!insight) return res.status(404).json({ error: "Insight not found" });
+      if (insight.userId !== userId) return res.status(403).json({ error: "Forbidden" });
+      if (insight.deletedAt) return res.json({ success: true, deletedAt: insight.deletedAt });
+
+      const deletedAt = new Date();
+      const [updated] = await db
+        .update(communityInsights)
+        .set({ deletedAt })
+        .where(and(
+          eq(communityInsights.id, id),
+          eq(communityInsights.userId, userId),
+        ))
+        .returning({ deletedAt: communityInsights.deletedAt });
+
+      res.json({ success: true, deletedAt: updated?.deletedAt ?? deletedAt });
+    } catch (error: any) {
+      console.error("Error deleting community insight:", error);
+      res.status(500).json({ error: "Failed to delete insight" });
     }
   });
 
@@ -2640,6 +2690,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const userId = req.userId!; // Verified user ID from auth middleware
+
+      const [insight] = await db
+        .select({
+          id: communityInsights.id,
+          deletedAt: communityInsights.deletedAt,
+        })
+        .from(communityInsights)
+        .where(eq(communityInsights.id, id))
+        .limit(1);
+      if (!insight) return res.status(404).json({ error: "Insight not found" });
+      if (insight.deletedAt) return res.status(410).json({ error: "Insight has been deleted" });
 
       // Check if user already voted on this insight
       const existingVote = await db
@@ -2698,7 +2759,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Get all insights for this person
       const personInsights = await db
-        .select({ id: communityInsights.id })
+        .select({ id: communityInsights.id, deletedAt: communityInsights.deletedAt })
         .from(communityInsights)
         .where(eq(communityInsights.personId, personId));
 
@@ -3843,6 +3904,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           parentCommentId: unifiedComments.parentCommentId,
           upvotes: unifiedComments.upvotes,
           downvotes: unifiedComments.downvotes,
+          deletedAt: unifiedComments.deletedAt,
           createdAt: unifiedComments.createdAt,
           updatedAt: unifiedComments.updatedAt,
           ...commentAuthorSelect,
@@ -3910,6 +3972,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .select({
             parentType: unifiedComments.parentType,
             parentId: unifiedComments.parentId,
+            deletedAt: unifiedComments.deletedAt,
           })
           .from(unifiedComments)
           .where(eq(unifiedComments.id, parsed.parentCommentId))
@@ -3938,7 +4001,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let shouldAwardXp = parsed.parentType === "community_insight" && trimmedContent.length >= 20;
       if (shouldAwardXp) {
         const [insight] = await db
-          .select({ userId: communityInsights.userId })
+          .select({ userId: communityInsights.userId, deletedAt: communityInsights.deletedAt })
           .from(communityInsights)
           .where(eq(communityInsights.id, resolvedParentId))
           .limit(1);
@@ -3972,6 +4035,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           parentCommentId: newComment.parentCommentId,
           upvotes: newComment.upvotes,
           downvotes: newComment.downvotes,
+          deletedAt: newComment.deletedAt,
           createdAt: newComment.createdAt,
           updatedAt: newComment.updatedAt,
           ...(profile ?? {
@@ -3985,6 +4049,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Error creating comment:", error);
       res.status(500).json({ error: "Failed to create comment" });
+    }
+  });
+
+  // Soft-delete a comment owned by the authenticated user.
+  app.delete("/api/comments/:id", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const userId = req.userId!;
+
+      const [comment] = await db
+        .select({
+          id: unifiedComments.id,
+          userId: unifiedComments.userId,
+          deletedAt: unifiedComments.deletedAt,
+        })
+        .from(unifiedComments)
+        .where(eq(unifiedComments.id, id))
+        .limit(1);
+      if (!comment) return res.status(404).json({ error: "Comment not found" });
+      if (comment.userId !== userId) return res.status(403).json({ error: "Forbidden" });
+      if (comment.deletedAt) return res.json({ success: true, deletedAt: comment.deletedAt });
+
+      const deletedAt = new Date();
+      const [updated] = await db
+        .update(unifiedComments)
+        .set({ deletedAt })
+        .where(and(
+          eq(unifiedComments.id, id),
+          eq(unifiedComments.userId, userId),
+        ))
+        .returning({ deletedAt: unifiedComments.deletedAt });
+
+      res.json({ success: true, deletedAt: updated?.deletedAt ?? deletedAt });
+    } catch (error: any) {
+      console.error("Error deleting comment:", error);
+      res.status(500).json({ error: "Failed to delete comment" });
     }
   });
 
@@ -4006,11 +4106,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           parentType: unifiedComments.parentType,
           upvotes: unifiedComments.upvotes,
           downvotes: unifiedComments.downvotes,
+          deletedAt: unifiedComments.deletedAt,
         })
         .from(unifiedComments)
         .where(eq(unifiedComments.id, id))
         .limit(1);
       if (!comment) return res.status(404).json({ error: "Comment not found" });
+      if (comment.deletedAt) return res.status(410).json({ error: "Comment has been deleted" });
 
       const userId = req.userId!;
       const voteType = parsedVoteType.data;
@@ -4083,6 +4185,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .select({
           upvotes: unifiedComments.upvotes,
           downvotes: unifiedComments.downvotes,
+          deletedAt: unifiedComments.deletedAt,
         })
         .from(unifiedComments)
         .where(eq(unifiedComments.id, id))
@@ -4118,7 +4221,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const [comment] = await db
-        .select({ parentType: unifiedComments.parentType })
+        .select({ parentType: unifiedComments.parentType, deletedAt: unifiedComments.deletedAt })
         .from(unifiedComments)
         .where(eq(unifiedComments.id, id))
         .limit(1);
