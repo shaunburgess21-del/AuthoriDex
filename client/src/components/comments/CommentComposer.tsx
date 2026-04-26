@@ -22,6 +22,14 @@ export interface CommentComposerProps {
   supportsFullscreen?: boolean;
   parentExpanded?: boolean;
   variant?: "card" | "inline";
+  testIds?: {
+    input?: string;
+    inputFullscreen?: string;
+    submit?: string;
+    submitFullscreen?: string;
+    cancel?: string;
+    cancelFullscreen?: string;
+  };
 }
 
 export function CommentComposer({
@@ -38,6 +46,7 @@ export function CommentComposer({
   supportsFullscreen = true,
   parentExpanded = false,
   variant = "card",
+  testIds,
 }: CommentComposerProps) {
   const [composerMode, setComposerMode] = useState<ComposerMode>("auto");
   const [isFocused, setIsFocused] = useState(false);
@@ -164,32 +173,35 @@ export function CommentComposer({
     " focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3C83F6]/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background" +
     " transition-colors";
 
-  const renderActionRow = (idSuffix: "" | "-fullscreen") => (
-    <div className={buttonRowClass} aria-hidden={!showButtons}>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={handleCancel}
-        className="min-h-9"
-        tabIndex={showButtons ? 0 : -1}
-        data-testid={`button-cancel-comment${idSuffix}`}
-      >
-        Cancel
-      </Button>
-      <button
-        type="button"
-        disabled={submitDisabled}
-        onClick={onSubmit}
-        tabIndex={showButtons ? 0 : -1}
-        className={postButtonClass}
-        data-testid={`button-submit-comment${idSuffix}`}
-      >
-        {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-        {isPending ? "Posting…" : "Post"}
-      </button>
-    </div>
-  );
+  const renderActionRow = (idSuffix: "" | "-fullscreen") => {
+    const isFullscreen = idSuffix === "-fullscreen";
+    return (
+      <div className={buttonRowClass} aria-hidden={!showButtons}>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={handleCancel}
+          className="min-h-9"
+          tabIndex={showButtons ? 0 : -1}
+          data-testid={(isFullscreen ? testIds?.cancelFullscreen : testIds?.cancel) ?? `button-cancel-comment${idSuffix}`}
+        >
+          Cancel
+        </Button>
+        <button
+          type="button"
+          disabled={submitDisabled}
+          onClick={onSubmit}
+          tabIndex={showButtons ? 0 : -1}
+          className={postButtonClass}
+          data-testid={(isFullscreen ? testIds?.submitFullscreen : testIds?.submit) ?? `button-submit-comment${idSuffix}`}
+        >
+          {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+          {isPending ? "Posting…" : "Post"}
+        </button>
+      </div>
+    );
+  };
 
   return (
     <>
@@ -237,7 +249,7 @@ export function CommentComposer({
                 onKeyDown={handleKeyDown}
                 className={`block w-full bg-muted/30 border border-border/30 rounded-xl px-3 py-2 ${supportsFullscreen ? "pr-12" : "pr-3"} text-base resize-none placeholder:text-muted-foreground/50 focus:outline-none focus:ring-0 focus:border-border/30${isManualComposer ? " h-40 overflow-y-auto" : ""}${inlineExpanded ? " flex-1 min-h-0" : ""}`}
                 rows={1}
-                data-testid="input-comment"
+                data-testid={testIds?.input ?? "input-comment"}
               />
               {supportsFullscreen && (
                 <div className="absolute right-2 bottom-1.5 flex items-center">
@@ -289,7 +301,7 @@ export function CommentComposer({
               onBlur={() => setIsFocused(false)}
               onKeyDown={handleKeyDown}
               className="h-full w-full resize-none rounded-2xl border border-border/30 bg-muted/30 px-4 py-4 text-base placeholder:text-muted-foreground/50 focus:outline-none focus:ring-0 focus:border-border/30"
-              data-testid="input-comment-fullscreen"
+              data-testid={testIds?.inputFullscreen ?? "input-comment-fullscreen"}
             />
           </div>
           {renderActionRow("-fullscreen")}

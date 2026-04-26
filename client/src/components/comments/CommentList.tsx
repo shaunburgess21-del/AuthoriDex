@@ -12,6 +12,12 @@ export interface CommentListProps {
   onVote: (input: { commentId: string; voteType: VoteType }) => void;
   onReply?: (comment: CommentItem) => void;
   onOpenActions: (comment: CommentItem) => void;
+  getRowTestIds?: (comment: CommentItem) => {
+    root?: string;
+    upvote?: string;
+    downvote?: string;
+    reply?: string;
+  };
 }
 
 export function CommentList({
@@ -24,6 +30,7 @@ export function CommentList({
   onVote,
   onReply,
   onOpenActions,
+  getRowTestIds,
 }: CommentListProps) {
   if (threaded.length === 0) {
     return (
@@ -54,6 +61,7 @@ export function CommentList({
                 onVote={(voteType) => onVote({ commentId: parent.id, voteType })}
                 onReply={onReply ? () => onReply(parent) : undefined}
                 onOpenActions={() => onOpenActions(parent)}
+                testIds={getRowTestIds?.(parent)}
               />
               {showReplies && threadReplies.length > 0 && (
                 <div className="pb-2">
@@ -66,6 +74,7 @@ export function CommentList({
                       showReplyButton={false}
                       onVote={(voteType) => onVote({ commentId: r.id, voteType })}
                       onOpenActions={() => onOpenActions(r)}
+                      testIds={getRowTestIds?.(r)}
                     />
                   ))}
                 </div>

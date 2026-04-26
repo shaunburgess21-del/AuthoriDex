@@ -12,6 +12,12 @@ export interface CommentRowProps {
   onVote: (voteType: VoteType) => void;
   onReply?: () => void;
   onOpenActions: () => void;
+  testIds?: {
+    root?: string;
+    upvote?: string;
+    downvote?: string;
+    reply?: string;
+  };
 }
 
 export function CommentRow({
@@ -22,6 +28,7 @@ export function CommentRow({
   onVote,
   onReply,
   onOpenActions,
+  testIds,
 }: CommentRowProps) {
   const netVotes = (comment.upvotes || 0) - (comment.downvotes || 0);
   const hasUpvoted = comment.userVote === "up";
@@ -33,7 +40,7 @@ export function CommentRow({
       className={`flex gap-3 py-3 ${isReply ? "ml-8 pl-3 border-l-2 border-border/20" : ""} ${
         isTopComment ? "bg-cyan-500/8 dark:bg-cyan-500/5 px-3 rounded-lg border border-cyan-500/20" : ""
       }`}
-      data-testid={`comment-${comment.id}`}
+      data-testid={testIds?.root ?? `comment-${comment.id}`}
     >
       <UserProfileAvatar
         displayName={comment.username || ""}
@@ -76,7 +83,7 @@ export function CommentRow({
                 ? "text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300"
                 : "text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400"
             }`}
-            data-testid={`button-upvote-${comment.id}`}
+            data-testid={testIds?.upvote ?? `button-upvote-${comment.id}`}
           >
             <ThumbsUp className="h-3.5 w-3.5" />
             {(comment.upvotes || 0) > 0 && <span>{comment.upvotes}</span>}
@@ -89,7 +96,7 @@ export function CommentRow({
                 ? "text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300"
                 : "text-muted-foreground hover:text-rose-600 dark:hover:text-rose-400"
             }`}
-            data-testid={`button-downvote-${comment.id}`}
+            data-testid={testIds?.downvote ?? `button-downvote-${comment.id}`}
           >
             <ThumbsDown className="h-3.5 w-3.5" />
             {(comment.downvotes || 0) > 0 && <span>{comment.downvotes}</span>}
@@ -98,7 +105,7 @@ export function CommentRow({
             <button
               onClick={onReply}
               className="flex items-center gap-1 text-xs text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors"
-              data-testid={`button-reply-${comment.id}`}
+              data-testid={testIds?.reply ?? `button-reply-${comment.id}`}
             >
               <Reply className="h-3.5 w-3.5" />
               Reply
