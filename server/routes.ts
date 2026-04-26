@@ -4,7 +4,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { getBaselineDiagnostics } from "./utils/baseline";
 import { db } from "./db";
-import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, matchups, votes, xpActions, xpLedger, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, openMarketComments, openMarketCommentVotes, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, trendingPollComments, trendingPollCommentVotes, matchupComments, matchupCommentVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, opinionPollComments, opinionPollCommentVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
+import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, comments as unifiedComments, commentVotes, matchups, votes, xpActions, xpLedger, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, openMarketComments, openMarketCommentVotes, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, trendingPollComments, trendingPollCommentVotes, matchupComments, matchupCommentVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, opinionPollComments, opinionPollCommentVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
 import { validateSuggestionPayload, SUGGESTION_TYPES } from "@shared/suggestionSchemas";
 import { normaliseSocialHandles } from "@shared/handleNormalise";
 import { eq, desc, and, gt, sql, count, gte, lte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull } from "drizzle-orm";
@@ -96,6 +96,95 @@ function formatCommentAuthor(author: CommentAuthorJoin) {
     username: author.authorUsername,
     fullName: author.authorFullName,
     avatarUrl: author.authorAvatarUrl,
+  };
+}
+
+const COMMENT_PARENT_TYPES = ["community_insight", "matchup", "trending_poll", "opinion_poll", "open_market"] as const;
+type CommentParentType = typeof COMMENT_PARENT_TYPES[number];
+
+const commentParentTypeSchema = z.enum(COMMENT_PARENT_TYPES);
+const commentVoteTypeSchema = z.enum(["up", "down"]);
+
+function isCommentVoteState(value: unknown): value is Exclude<CommentVoteState, null> {
+  return value === "up" || value === "down";
+}
+
+function reportEntityTypeForCommentParent(parentType: CommentParentType): string {
+  if (parentType === "trending_poll") return "poll";
+  if (parentType === "opinion_poll") return "opinion-poll";
+  if (parentType === "open_market") return "open-market";
+  return parentType;
+}
+
+async function resolveUnifiedCommentParent(input: {
+  parentType: CommentParentType;
+  parentId?: string | null;
+  parentSlug?: string | null;
+}): Promise<string | null> {
+  const parentId = input.parentId?.trim();
+  const parentSlug = input.parentSlug?.trim();
+
+  if (input.parentType === "community_insight") {
+    if (!parentId) return null;
+    const [insight] = await db
+      .select({ id: communityInsights.id })
+      .from(communityInsights)
+      .where(eq(communityInsights.id, parentId))
+      .limit(1);
+    return insight?.id ?? null;
+  }
+
+  if (!parentSlug) return null;
+
+  if (input.parentType === "matchup") {
+    const matchup = await resolvePublicMatchupBySlugOrId(parentSlug);
+    return matchup?.id ?? null;
+  }
+
+  if (input.parentType === "trending_poll") {
+    const [poll] = await db
+      .select({ id: trendingPolls.id })
+      .from(trendingPolls)
+      .where(eq(trendingPolls.slug, parentSlug))
+      .limit(1);
+    return poll?.id ?? null;
+  }
+
+  if (input.parentType === "opinion_poll") {
+    const [poll] = await db
+      .select({ id: opinionPolls.id })
+      .from(opinionPolls)
+      .where(eq(opinionPolls.slug, parentSlug))
+      .limit(1);
+    return poll?.id ?? null;
+  }
+
+  const [market] = await db
+    .select({ id: predictionMarkets.id })
+    .from(predictionMarkets)
+    .where(and(
+      eq(predictionMarkets.slug, parentSlug),
+      eq(predictionMarkets.marketType, "community"),
+    ))
+    .limit(1);
+  return market?.id ?? null;
+}
+
+function toUnifiedCommentItem(row: {
+  id: string;
+  userId: string;
+  body: string;
+  parentCommentId: string | null;
+  upvotes: number;
+  downvotes: number;
+  createdAt: Date;
+  updatedAt: Date;
+} & CommentAuthorJoin, userVote: CommentVoteState = null) {
+  const { authorId, authorUsername, authorFullName, authorAvatarUrl, ...comment } = row;
+  return {
+    ...comment,
+    ...formatCommentAuthor({ authorId, authorUsername, authorFullName, authorAvatarUrl }),
+    userVote,
   };
 }
 const BOT_UA_PATTERNS = /bot|crawl|spider|slurp|wget|curl|fetch|headless|phantom|puppet|selenium|lighthouse|preview|embed|scrape/i;
@@ -3722,7 +3811,353 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // ===== INSIGHT COMMENTS API =====
+  // ===== UNIFIED COMMENTS API =====
+
+  app.get("/api/comments", optionalAuth, async (req: AuthRequest, res) => {
+    try {
+      const parsedParentType = commentParentTypeSchema.safeParse(req.query.parentType);
+      if (!parsedParentType.success) return sendBadRequest(res, "Invalid parentType");
+
+      const parentId = typeof req.query.parentId === "string" ? req.query.parentId : undefined;
+      const parentSlug = typeof req.query.parentSlug === "string" ? req.query.parentSlug : undefined;
+      const resolvedParentId = await resolveUnifiedCommentParent({
+        parentType: parsedParentType.data,
+        parentId,
+        parentSlug,
+      });
+      if (!resolvedParentId) return res.status(404).json({ error: "Comment parent not found" });
+
+      const sort = req.query.sort === "newest" ? "newest" : "top";
+      const limitRaw = Number(req.query.limit ?? 20);
+      const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(Math.floor(limitRaw), 100)) : 20;
+      const cursor = typeof req.query.cursor === "string" ? req.query.cursor : null;
+      const cursorDate = cursor ? new Date(cursor) : null;
+
+      const filters = [
+        eq(unifiedComments.parentType, parsedParentType.data),
+        eq(unifiedComments.parentId, resolvedParentId),
+      ];
+      if (sort === "newest" && cursorDate && !Number.isNaN(cursorDate.getTime())) {
+        filters.push(lt(unifiedComments.createdAt, cursorDate));
+      }
+
+      const rows = await db
+        .select({
+          id: unifiedComments.id,
+          userId: unifiedComments.userId,
+          body: unifiedComments.body,
+          parentCommentId: unifiedComments.parentCommentId,
+          upvotes: unifiedComments.upvotes,
+          downvotes: unifiedComments.downvotes,
+          createdAt: unifiedComments.createdAt,
+          updatedAt: unifiedComments.updatedAt,
+          ...commentAuthorSelect,
+        })
+        .from(unifiedComments)
+        .leftJoin(profiles, eq(unifiedComments.userId, profiles.id))
+        .where(and(...filters))
+        .orderBy(
+          sort === "newest"
+            ? desc(unifiedComments.createdAt)
+            : desc(sql`${unifiedComments.upvotes} - ${unifiedComments.downvotes}`),
+          desc(unifiedComments.createdAt),
+        )
+        .limit(limit);
+
+      const userVoteMap = new Map<string, CommentVoteState>();
+      if (req.userId && rows.length > 0) {
+        const votesForUser = await db
+          .select({ commentId: commentVotes.commentId, voteType: commentVotes.voteType })
+          .from(commentVotes)
+          .where(and(
+            inArray(commentVotes.commentId, rows.map(row => row.id)),
+            eq(commentVotes.userId, req.userId),
+          ));
+
+        for (const vote of votesForUser) {
+          userVoteMap.set(vote.commentId, vote.voteType as CommentVoteState);
+        }
+      }
+
+      res.json(rows.map(row => toUnifiedCommentItem(row, userVoteMap.get(row.id) ?? null)));
+    } catch (error: any) {
+      console.error("Error fetching comments:", error);
+      res.status(500).json({ error: "Failed to fetch comments" });
+    }
+  });
+
+  app.post("/api/comments", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "username")) {
+        return sendBadRequest(res, "Username is resolved from the authenticated profile");
+      }
+
+      const createCommentSchema = z.object({
+        parentType: commentParentTypeSchema,
+        parentId: z.string().min(1).max(128).optional().nullable(),
+        parentSlug: z.string().min(1).max(256).optional().nullable(),
+        parentCommentId: z.string().min(1).max(128).optional().nullable(),
+        body: z.string().min(1).max(COMMENT_MAX_LENGTH),
+      });
+
+      let parsed: z.infer<typeof createCommentSchema>;
+      try {
+        parsed = createCommentSchema.parse(req.body ?? {});
+      } catch (err) {
+        if (err instanceof ZodError) return sendZodError(res, err);
+        return sendBadRequest(res, "Invalid comment body");
+      }
+
+      const resolvedParentId = await resolveUnifiedCommentParent(parsed);
+      if (!resolvedParentId) return res.status(404).json({ error: "Comment parent not found" });
+
+      if (parsed.parentCommentId) {
+        const [parentComment] = await db
+          .select({
+            parentType: unifiedComments.parentType,
+            parentId: unifiedComments.parentId,
+          })
+          .from(unifiedComments)
+          .where(eq(unifiedComments.id, parsed.parentCommentId))
+          .limit(1);
+        if (!parentComment || parentComment.parentType !== parsed.parentType || parentComment.parentId !== resolvedParentId) {
+          return sendBadRequest(res, "Parent comment does not belong to this thread");
+        }
+      }
+
+      const userId = req.userId!;
+      const [newComment] = await db
+        .insert(unifiedComments)
+        .values({
+          parentType: parsed.parentType,
+          parentId: resolvedParentId,
+          parentCommentId: parsed.parentCommentId || null,
+          userId,
+          body: parsed.body,
+        })
+        .returning();
+
+      // post_comment XP gates ported from the legacy insight comment handler:
+      // min 20 trimmed chars, no XP on own insight, action key post_comment,
+      // and idempotency key comment_${commentId}_${userId}.
+      const trimmedContent = parsed.body.trim();
+      let shouldAwardXp = parsed.parentType === "community_insight" && trimmedContent.length >= 20;
+      if (shouldAwardXp) {
+        const [insight] = await db
+          .select({ userId: communityInsights.userId })
+          .from(communityInsights)
+          .where(eq(communityInsights.id, resolvedParentId))
+          .limit(1);
+        if (insight && insight.userId === userId) {
+          shouldAwardXp = false;
+        }
+      }
+
+      let xpResult;
+      if (shouldAwardXp) {
+        try {
+          xpResult = await gamificationService.awardXp(
+            userId, 'post_comment',
+            `comment_${newComment.id}_${userId}`,
+            { commentId: newComment.id, insightId: resolvedParentId }
+          );
+        } catch (e) { console.error("XP award failed:", e); }
+      }
+
+      const [profile] = await db
+        .select(commentAuthorSelect)
+        .from(profiles)
+        .where(eq(profiles.id, userId))
+        .limit(1);
+
+      res.status(201).json({
+        ...toUnifiedCommentItem({
+          id: newComment.id,
+          userId: newComment.userId,
+          body: newComment.body,
+          parentCommentId: newComment.parentCommentId,
+          upvotes: newComment.upvotes,
+          downvotes: newComment.downvotes,
+          createdAt: newComment.createdAt,
+          updatedAt: newComment.updatedAt,
+          ...(profile ?? {
+            authorId: null,
+            authorUsername: null,
+            authorFullName: null,
+            authorAvatarUrl: null,
+          }),
+        }),
+        xp: xpResult ?? null,
+      });
+    } catch (error: any) {
+      console.error("Error creating comment:", error);
+      res.status(500).json({ error: "Failed to create comment" });
+    }
+  });
+
+  app.post("/api/comments/:id/vote", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      if (!checkVoteRateLimit(req.userId!)) {
+        return res.status(429).json({ error: "Too many votes. Please slow down." });
+      }
+
+      const { id } = req.params;
+      const parsedVoteType = commentVoteTypeSchema.safeParse(req.body?.voteType);
+      if (!parsedVoteType.success) {
+        return res.status(400).json({ error: "voteType must be 'up' or 'down'" });
+      }
+
+      const [comment] = await db
+        .select({
+          id: unifiedComments.id,
+          parentType: unifiedComments.parentType,
+          upvotes: unifiedComments.upvotes,
+          downvotes: unifiedComments.downvotes,
+        })
+        .from(unifiedComments)
+        .where(eq(unifiedComments.id, id))
+        .limit(1);
+      if (!comment) return res.status(404).json({ error: "Comment not found" });
+
+      const userId = req.userId!;
+      const voteType = parsedVoteType.data;
+      let nextVote: CommentVoteState = voteType;
+      let isNewVote = false;
+
+      await db.transaction(async (tx) => {
+        const existingVote = await tx
+          .select()
+          .from(commentVotes)
+          .where(and(
+            eq(commentVotes.commentId, id),
+            eq(commentVotes.userId, userId)
+          ))
+          .limit(1);
+
+        if (existingVote.length > 0) {
+          const previousVoteType = existingVote[0].voteType;
+          if (previousVoteType === voteType) {
+            nextVote = null;
+            await tx
+              .delete(commentVotes)
+              .where(and(
+                eq(commentVotes.commentId, id),
+                eq(commentVotes.userId, userId)
+              ));
+            await tx
+              .update(unifiedComments)
+              .set({
+                upvotes: sql`${unifiedComments.upvotes} + ${voteType === "up" ? -1 : 0}`,
+                downvotes: sql`${unifiedComments.downvotes} + ${voteType === "down" ? -1 : 0}`,
+              })
+              .where(eq(unifiedComments.id, id));
+          } else {
+            await tx
+              .update(commentVotes)
+              .set({ voteType })
+              .where(and(
+                eq(commentVotes.commentId, id),
+                eq(commentVotes.userId, userId)
+              ));
+            await tx
+              .update(unifiedComments)
+              .set({
+                upvotes: sql`${unifiedComments.upvotes} + ${voteType === "up" ? 1 : -1}`,
+                downvotes: sql`${unifiedComments.downvotes} + ${voteType === "down" ? 1 : -1}`,
+              })
+              .where(eq(unifiedComments.id, id));
+          }
+        } else {
+          isNewVote = true;
+          await tx
+            .insert(commentVotes)
+            .values({
+              commentId: id,
+              userId,
+              voteType,
+            });
+          await tx
+            .update(unifiedComments)
+            .set({
+              upvotes: sql`${unifiedComments.upvotes} + ${voteType === "up" ? 1 : 0}`,
+              downvotes: sql`${unifiedComments.downvotes} + ${voteType === "down" ? 1 : 0}`,
+            })
+            .where(eq(unifiedComments.id, id));
+        }
+      });
+
+      const [updated] = await db
+        .select({
+          upvotes: unifiedComments.upvotes,
+          downvotes: unifiedComments.downvotes,
+        })
+        .from(unifiedComments)
+        .where(eq(unifiedComments.id, id))
+        .limit(1);
+
+      let xpResult;
+      if (isNewVote && comment.parentType === "community_insight") {
+        const actionKey = voteType === 'up' ? 'upvote_insight' : 'downvote_insight';
+        try {
+          xpResult = await gamificationService.awardXp(
+            userId, actionKey,
+            `comment_vote_${id}_${userId}`,
+            { commentId: id, voteType }
+          );
+        } catch (e) { console.error("XP award failed:", e); }
+      }
+
+      res.json({
+        success: true,
+        vote: nextVote,
+        userVote: nextVote,
+        upvotes: updated?.upvotes ?? comment.upvotes,
+        downvotes: updated?.downvotes ?? comment.downvotes,
+        xp: xpResult ?? null,
+      });
+    } catch (error: any) {
+      console.error("Error voting on comment:", error);
+      res.status(500).json({ error: "Failed to vote" });
+    }
+  });
+
+  app.post("/api/comments/:id/report", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const [comment] = await db
+        .select({ parentType: unifiedComments.parentType })
+        .from(unifiedComments)
+        .where(eq(unifiedComments.id, id))
+        .limit(1);
+      if (!comment) return res.status(404).json({ error: "Comment not found" });
+
+      const reason = typeof req.body?.reason === "string" ? req.body.reason.trim() : "";
+      const [existing] = await db.select().from(commentReports)
+        .where(and(eq(commentReports.commentId, id), eq(commentReports.reporterId, req.userId!)))
+        .limit(1);
+      if (existing) {
+        return res.json({ message: "Already reported" });
+      }
+
+      await db.insert(commentReports).values({
+        commentId: id,
+        entityType: reportEntityTypeForCommentParent(comment.parentType as CommentParentType),
+        reporterId: req.userId!,
+        reason: reason || null,
+      });
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error reporting comment:", error);
+      res.status(500).json({ error: "Failed to report comment" });
+    }
+  });
+
+  // =============================================================
+  // LEGACY COMMENT ENDPOINTS — REMOVED IN C3
+  // Insight reply endpoints are retained temporarily while clients move to
+  // /api/comments. Do not add new callers to these routes.
+  // =============================================================
   
   // Get all comments for an insight (with nested structure)
   app.get("/api/insight-comments/:insightId", optionalAuth, async (req: AuthRequest, res) => {
@@ -4967,9 +5402,11 @@ Only return the JSON object.`;
     }
   });
 
-  // ============================================================================
-  // MATCHUP COMMENTS
-  // ============================================================================
+  // =============================================================
+  // LEGACY COMMENT ENDPOINTS — REMOVED IN C3
+  // Matchup comment endpoints are retained temporarily while clients move to
+  // /api/comments. Do not add new callers to these routes.
+  // =============================================================
 
   app.get("/api/matchups/:slug/comments", optionalAuth, async (req: AuthRequest, res) => {
     try {
@@ -5156,15 +5593,6 @@ Only return the JSON object.`;
 
   app.post("/api/matchups/comments/:commentId/report", requireAuth, (req, res) =>
     handleCommentReport(req as AuthRequest, res, "matchup"));
-
-  app.post("/api/polls/comments/:commentId/report", requireAuth, (req, res) =>
-    handleCommentReport(req as AuthRequest, res, "poll"));
-
-  app.post("/api/opinion-polls/comments/:commentId/report", requireAuth, (req, res) =>
-    handleCommentReport(req as AuthRequest, res, "opinion-poll"));
-
-  app.post("/api/open-markets/comments/:commentId/report", requireAuth, (req, res) =>
-    handleCommentReport(req as AuthRequest, res, "open-market"));
 
   app.get("/api/admin/moderation/comment-reports", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
@@ -8289,6 +8717,8 @@ Only return the JSON object.`;
 
       await db.transaction(async (tx) => {
         await tx.delete(commentReports).where(eq(commentReports.reporterId, userId));
+        await tx.delete(commentVotes).where(eq(commentVotes.userId, userId));
+        await tx.delete(unifiedComments).where(eq(unifiedComments.userId, userId));
         await tx.delete(trendingPollCommentVotes).where(eq(trendingPollCommentVotes.userId, userId));
         await tx.delete(trendingPollComments).where(eq(trendingPollComments.userId, userId));
         await tx.delete(trendingPollVotes).where(eq(trendingPollVotes.userId, userId));
@@ -8300,7 +8730,6 @@ Only return the JSON object.`;
         await tx.delete(opinionPollComments).where(eq(opinionPollComments.userId, userId));
         await tx.delete(opinionPollVotes).where(eq(opinionPollVotes.userId, userId));
         await tx.delete(insightVotes).where(eq(insightVotes.userId, userId));
-        await tx.delete(commentVotes).where(eq(commentVotes.userId, userId));
         await tx.delete(insightComments).where(eq(insightComments.userId, userId));
         await tx.delete(communityInsights).where(eq(communityInsights.userId, userId));
         await tx.delete(marketBets).where(eq(marketBets.userId, userId));
@@ -9995,9 +10424,12 @@ Only return the JSON object.`;
         return res.status(404).json({ error: "Insight not found" });
       }
       
-      // Delete associated votes and comments first
+      // Delete associated votes and unified replies first
       await db.delete(insightVotes).where(eq(insightVotes.insightId, id));
-      await db.delete(insightComments).where(eq(insightComments.insightId, id));
+      await db.delete(unifiedComments).where(and(
+        eq(unifiedComments.parentType, "community_insight"),
+        eq(unifiedComments.parentId, id),
+      ));
       await db.delete(communityInsights).where(eq(communityInsights.id, id));
       
       // Audit log
@@ -10022,19 +10454,23 @@ Only return the JSON object.`;
   app.get("/api/admin/moderation/comments", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const comments = await db.select({
-        id: insightComments.id,
-        insightId: insightComments.insightId,
-        userId: insightComments.userId,
-        content: insightComments.content,
-        createdAt: insightComments.createdAt,
+        id: unifiedComments.id,
+        parentType: unifiedComments.parentType,
+        parentId: unifiedComments.parentId,
+        parentCommentId: unifiedComments.parentCommentId,
+        userId: unifiedComments.userId,
+        body: unifiedComments.body,
+        createdAt: unifiedComments.createdAt,
         ...commentAuthorSelect,
-      }).from(insightComments)
-        .leftJoin(profiles, eq(insightComments.userId, profiles.id))
-        .orderBy(desc(insightComments.createdAt))
+      }).from(unifiedComments)
+        .leftJoin(profiles, eq(unifiedComments.userId, profiles.id))
+        .orderBy(desc(unifiedComments.createdAt))
         .limit(100);
       
       res.json(comments.map(({ authorId, authorUsername, authorFullName, authorAvatarUrl, ...comment }) => ({
         ...comment,
+        insightId: comment.parentType === "community_insight" ? comment.parentId : null,
+        content: comment.body,
         ...formatCommentAuthor({ authorId, authorUsername, authorFullName, authorAvatarUrl }),
       })));
     } catch (error: any) {
@@ -10050,21 +10486,21 @@ Only return the JSON object.`;
       const { reason } = req.body;
       const adminId = req.userId!;
       
-      const [existing] = await db.select().from(insightComments).where(eq(insightComments.id, id));
+      const [existing] = await db.select().from(unifiedComments).where(eq(unifiedComments.id, id));
       if (!existing) {
         return res.status(404).json({ error: "Comment not found" });
       }
       
       // Delete associated votes first
       await db.delete(commentVotes).where(eq(commentVotes.commentId, id));
-      await db.delete(insightComments).where(eq(insightComments.id, id));
+      await db.delete(unifiedComments).where(eq(unifiedComments.id, id));
       
       // Audit log
       await db.insert(adminAuditLog).values({
         adminId,
         adminEmail: null,
         actionType: 'delete_comment',
-        targetTable: 'insight_comments',
+        targetTable: 'comments',
         targetId: id,
         previousData: existing,
         metadata: { reason },
@@ -10620,9 +11056,11 @@ Target length: about 90-150 words.`;
     }
   });
 
-  // ===========================================
-  // PUBLIC: TRENDING POLL COMMENTS
-  // ===========================================
+  // =============================================================
+  // LEGACY COMMENT ENDPOINTS — REMOVED IN C3
+  // Trending poll comment endpoints are retained temporarily while clients move
+  // to /api/comments. Do not add new callers to these routes.
+  // =============================================================
 
   app.get("/api/polls/:slug/comments", optionalAuth, async (req: AuthRequest, res) => {
     try {
@@ -10799,6 +11237,9 @@ Target length: about 90-150 words.`;
       res.status(500).json({ error: "Failed to vote on comment" });
     }
   });
+
+  app.post("/api/polls/comments/:commentId/report", requireAuth, (req, res) =>
+    handleCommentReport(req as AuthRequest, res, "poll"));
 
   // ===========================================
   // ADMIN: TRENDING POLLS CRUD
@@ -11646,7 +12087,11 @@ Target length: about 90-150 words.`;
     }
   });
 
-  // Opinion Poll Comments
+  // =============================================================
+  // LEGACY COMMENT ENDPOINTS — REMOVED IN C3
+  // Opinion poll comment endpoints are retained temporarily while clients move
+  // to /api/comments. Do not add new callers to these routes.
+  // =============================================================
   app.get("/api/opinion-polls/:slug/comments", optionalAuth, async (req: AuthRequest, res) => {
     try {
       const { slug } = req.params;
@@ -11808,6 +12253,9 @@ Target length: about 90-150 words.`;
       res.status(500).json({ error: "Failed to vote on comment" });
     }
   });
+
+  app.post("/api/opinion-polls/comments/:commentId/report", requireAuth, (req, res) =>
+    handleCommentReport(req as AuthRequest, res, "opinion-poll"));
 
   // ===========================================
   // ADMIN: OPINION POLLS CRUD
@@ -12473,29 +12921,6 @@ Target length: about 90-150 words.`;
         betCount: betCountMap.get(e.id) || 0,
       }));
 
-      const comments = await db
-        .select({
-          id: openMarketComments.id,
-          marketId: openMarketComments.marketId,
-          userId: openMarketComments.userId,
-          body: openMarketComments.body,
-          parentId: openMarketComments.parentId,
-          upvotes: openMarketComments.upvotes,
-          downvotes: openMarketComments.downvotes,
-          createdAt: openMarketComments.createdAt,
-          updatedAt: openMarketComments.updatedAt,
-          ...commentAuthorSelect,
-        })
-        .from(openMarketComments)
-        .leftJoin(profiles, eq(openMarketComments.userId, profiles.id))
-        .where(eq(openMarketComments.marketId, market.id))
-        .orderBy(desc(openMarketComments.createdAt))
-        .limit(50);
-      const commentsWithAuthors = comments.map(({ authorId, authorUsername, authorFullName, authorAvatarUrl, ...comment }) => ({
-        ...comment,
-        ...formatCommentAuthor({ authorId, authorUsername, authorFullName, authorAvatarUrl }),
-      }));
-
       const [participantResult] = await db
         .select({
           uniqueParticipants: sql<number>`COUNT(DISTINCT ${marketBets.userId})`,
@@ -12522,7 +12947,8 @@ Target length: about 90-150 words.`;
       res.json({
         ...market,
         entries: entriesWithCounts,
-        comments: commentsWithAuthors,
+        // Deprecated in C2: client comment surfaces now fetch /api/comments explicitly.
+        comments: [],
         totalParticipants: Number(participantResult?.uniqueParticipants || 0),
         linkedPersonName,
         linkedPersonAvatar,
@@ -13364,6 +13790,11 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
     }
   });
 
+  // =============================================================
+  // LEGACY COMMENT ENDPOINTS — REMOVED IN C3
+  // Open market comment endpoints are retained temporarily while clients move
+  // to /api/comments. Do not add new callers to these routes.
+  // =============================================================
   app.post("/api/open-markets/:slug/comments", requireAuth, async (req, res) => {
     try {
       const authReq = req as AuthRequest;
@@ -13544,6 +13975,9 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       res.status(500).json({ error: "Failed to vote on comment" });
     }
   });
+
+  app.post("/api/open-markets/comments/:commentId/report", requireAuth, (req, res) =>
+    handleCommentReport(req as AuthRequest, res, "open-market"));
 
   const MIN_BET_STAKE = 5;
 

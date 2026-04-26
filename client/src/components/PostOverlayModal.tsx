@@ -18,17 +18,17 @@ import { toast } from "sonner";
 
 interface InsightCommentResponse {
   id: string;
-  insightId: string;
-  parentId: string | null;
+  parentCommentId: string | null;
   userId: string;
   username: string | null;
   fullName: string | null;
   avatarUrl: string | null;
-  content: string;
+  body: string;
   createdAt: string;
   upvotes: number;
   downvotes: number;
   userVote?: VoteType | null;
+  xp?: unknown;
 }
 
 interface CommunityInsight {
@@ -57,21 +57,21 @@ function flattenInsightComments(comments: InsightCommentResponse[]): InsightComm
   const byId = new Map(comments.map((comment) => [comment.id, comment]));
 
   return comments.map((comment) => {
-    if (!comment.parentId) return comment;
+    if (!comment.parentCommentId) return comment;
 
-    let flattenedParentId = comment.parentId;
+    let flattenedParentId = comment.parentCommentId;
     let parent = byId.get(flattenedParentId);
     const visited = new Set<string>([comment.id]);
 
-    while (parent?.parentId && !visited.has(parent.id)) {
+    while (parent?.parentCommentId && !visited.has(parent.id)) {
       visited.add(parent.id);
-      flattenedParentId = parent.parentId;
+      flattenedParentId = parent.parentCommentId;
       parent = byId.get(flattenedParentId);
     }
 
     return {
       ...comment,
-      parentId: flattenedParentId,
+      parentCommentId: flattenedParentId,
     };
   });
 }
@@ -83,8 +83,8 @@ function toCommentItem(comment: InsightCommentResponse): CommentItem {
     username: comment.username,
     fullName: comment.fullName,
     avatarUrl: comment.avatarUrl,
-    body: comment.content,
-    parentId: comment.parentId,
+    body: comment.body,
+    parentId: comment.parentCommentId,
     upvotes: comment.upvotes ?? 0,
     downvotes: comment.downvotes ?? 0,
     userVote: comment.userVote ?? null,
@@ -102,24 +102,28 @@ function useInsightCommentsAdapter({
   onXp: (data: unknown) => void;
 }): CommentAdapter {
   return useMemo<CommentAdapter>(() => ({
-    queryKey: [`/api/insight-comments/${insightId}`] as const,
+    queryKey: ["/api/comments", "community_insight", insightId] as const,
     fetchList: async () => {
-      const res = await apiRequest("GET", `/api/insight-comments/${insightId}`);
+      // Server defaults to top sort; useCommentThread re-sorts this 100-row
+      // page in-memory when the UI switches sort modes.
+      const res = await apiRequest("GET", `/api/comments?parentType=community_insight&parentId=${encodeURIComponent(insightId)}&limit=100`);
       const raw = (await res.json()) as InsightCommentResponse[];
       return flattenInsightComments(raw).map(toCommentItem);
     },
     postComment: async ({ body, parentId }) => {
-      const res = await apiRequest("POST", "/api/insight-comments", {
-        insightId,
-        content: body,
-        parentId,
+      const res = await apiRequest("POST", "/api/comments", {
+        parentType: "community_insight",
+        parentId: insightId,
+        parentCommentId: parentId,
+        body,
       });
-      return res.json();
+      const raw = (await res.json()) as InsightCommentResponse;
+      return { ...toCommentItem(raw), xp: raw.xp };
     },
     voteComment: async ({ commentId, voteType }) => {
       const res = await apiRequest(
         "POST",
-        `/api/insight-comments/${commentId}/vote`,
+        `/api/comments/${commentId}/vote`,
         { voteType },
       );
       return res.json();

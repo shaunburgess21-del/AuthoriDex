@@ -21,6 +21,24 @@ const API_BASE: Record<CommentEntityType, string> = {
   "open-market": "/api/open-markets",
 };
 
+const COMMENT_PARENT_TYPE: Record<CommentEntityType, "matchup" | "trending_poll" | "opinion_poll" | "open_market"> = {
+  matchup: "matchup",
+  poll: "trending_poll",
+  "opinion-poll": "opinion_poll",
+  "open-market": "open_market",
+};
+
+type UnifiedCommentResponse = Omit<CommentItem, "parentId"> & {
+  parentCommentId: string | null;
+};
+
+function toCommentItem(comment: UnifiedCommentResponse): CommentItem {
+  return {
+    ...comment,
+    parentId: comment.parentCommentId,
+  };
+}
+
 interface CardCommentsProps {
   entityType: CommentEntityType;
   slug: string;
@@ -47,25 +65,34 @@ export function CardComments({
   const [drawerComment, setDrawerComment] = useState<CommentItem | null>(null);
 
   const base = API_BASE[entityType];
+  const parentType = COMMENT_PARENT_TYPE[entityType];
 
   const adapter = useMemo<CommentAdapter>(() => {
-    const queryKey = [base, slug, "comments"] as const;
+    const queryKey = ["/api/comments", parentType, slug] as const;
     return {
       queryKey,
       fetchList: async () => {
-        const res = await apiRequest("GET", `${base}/${slug}/comments`);
-        return res.json();
+        // Server defaults to top sort; useCommentThread re-sorts this 100-row
+        // page in-memory when the UI switches sort modes.
+        const res = await apiRequest("GET", `/api/comments?parentType=${parentType}&parentSlug=${encodeURIComponent(slug)}&limit=100`);
+        const raw = (await res.json()) as UnifiedCommentResponse[];
+        return raw.map(toCommentItem);
       },
       postComment: async ({ body, parentId }) => {
-        const res = await apiRequest("POST", `${base}/${slug}/comments`, { body, parentId: parentId || null });
-        return res.json();
+        const res = await apiRequest("POST", "/api/comments", {
+          parentType,
+          parentSlug: slug,
+          parentCommentId: parentId || null,
+          body,
+        });
+        return toCommentItem((await res.json()) as UnifiedCommentResponse);
       },
       voteComment: async ({ commentId, voteType }) => {
-        const res = await apiRequest("POST", `${base}/comments/${commentId}/vote`, { voteType });
+        const res = await apiRequest("POST", `/api/comments/${commentId}/vote`, { voteType });
         return res.json();
       },
       reportComment: async ({ commentId, reason }) => {
-        const res = await apiRequest("POST", `${base}/comments/${commentId}/report`, { reason });
+        const res = await apiRequest("POST", `/api/comments/${commentId}/report`, { reason });
         return res.json();
       },
       onPostSuccess: () => {
@@ -77,7 +104,7 @@ export function CardComments({
       supportsReplies: true,
       invalidateOnMutate: entityType === "opinion-poll" ? [[base, slug]] : undefined,
     };
-  }, [base, slug, entityType]);
+  }, [base, slug, entityType, parentType]);
 
   const thread = useCommentThread(adapter);
 
@@ -192,12 +219,12 @@ function SignInToComment({ onLogin }: { onLogin: () => void }) {
 }
 
 export function useCommentCount(entityType: CommentEntityType, slug: string): number {
-  const base = API_BASE[entityType];
+  const parentType = COMMENT_PARENT_TYPE[entityType];
   const { data: comments = [] } = useQuery<CommentItem[]>({
-    queryKey: [base, slug, "comments"],
+    queryKey: ["/api/comments", parentType, slug, "count"],
     queryFn: async () => {
       try {
-        const res = await apiRequest("GET", `${base}/${slug}/comments`);
+        const res = await apiRequest("GET", `/api/comments?parentType=${parentType}&parentSlug=${encodeURIComponent(slug)}&limit=100`);
         return res.json();
       } catch {
         return [];
