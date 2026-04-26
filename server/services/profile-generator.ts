@@ -6,12 +6,12 @@ import { storage } from "../storage";
 import { fetchNetWorthContext, fetchWebSearchContext, type NetWorthContext, type WebSearchContext } from "../providers/serper";
 import { getAiModel, getChatCompletionTokenLimit } from "../config/ai-models";
 
-export const PROFILE_PROMPT_VERSION = 2;
+export const PROFILE_PROMPT_VERSION = 3;
 
 const HIGH_RISK_CATEGORY_RE = /politic|business|tech|technology|finance|world leader|government/i;
 const ROLE_CHANGE_RE = /\b(defeated|lost election|no longer|former|replaced by|succeeded by|ousted|resigned|stepped down|appointed|elected|inaugurated|became|named|will become|set to become)\b/i;
 const CURRENT_ROLE_RE = /\b(currently|serves as|is the|is an|is a|became|current)\b/i;
-const MONEY_RE = /\$[\d,.]+(?:\s*(?:-|to)\s*\$?[\d,.]+)?\s*(?:billion|million|trillion)\b/i;
+const MONEY_RE = /\$[\d,.]+(?:\s*(?:-|to)\s*\$?[\d,.]+)?\s*(?:billion|million|trillion|thousand|[KMBT])\b/i;
 const NET_WORTH_CONTEXT_RE = /\b(net worth|fortune|wealth|worth an estimated|estimated worth)\b/i;
 
 const monthIndex: Record<string, number> = {
@@ -30,7 +30,6 @@ const monthIndex: Record<string, number> = {
 };
 
 const generatedProfileSchema = z.object({
-  shortBio: z.string().min(40).max(700),
   longBio: z.string().min(120).max(1600),
   knownFor: z.string().min(3).max(500),
   fromCountry: z.string().min(2).max(80),
@@ -236,14 +235,20 @@ async function generateValidatedProfile(
 }
 
 function buildSystemPrompt(): string {
-  return `You generate source-grounded public-figure profile data for a consumer app.
+  return `You write natural, encyclopedia-style profile copy for a public-figure trends and entertainment app.
 
-Rules:
-- Use the supplied source snippets as the authority for current roles, offices, CEO titles, and net worth.
-- Do not rely on memory when sources conflict with memory.
-- Do not describe a future-dated appointment or role as already true unless a source says it has already happened.
-- If sources say a person lost, resigned, was replaced, or is former, reflect that accurately.
-- Do not include net worth or wealth figures in bios. Net worth belongs only in estimatedNetWorth.
+Voice and style:
+- Write in third-person, present-tense, neutral biographical prose, like a Wikipedia lead paragraph.
+- Use direct factual statements. Phrases like "He is the current president of the United States.", "She is the CEO of...", "He plays for..." are good.
+- NEVER reference where the information came from. Do not write "sources say", "according to sources", "recent sources identify", "source material describes", "reports indicate", "news outlets identify", or any similar meta-attribution. The reader must never see your sources mentioned in the text.
+- Do not hedge needlessly. If the supplied snippets agree on a current role, state it confidently and directly.
+- Aim for a smooth, readable flow. Vary sentence structure, avoid choppy fragments, and avoid over-cautious qualifiers.
+
+Grounding rules:
+- Treat the supplied snippets and web-search notes as the authority for current roles, offices, titles, residence, and net worth. They override prior memory when they conflict.
+- Do not describe a future-dated appointment as already true unless a snippet says it has already taken effect.
+- If snippets indicate someone lost, resigned, was replaced, or is former, reflect that accurately.
+- Do not include net worth or wealth figures in longBio. Net worth belongs only in estimatedNetWorth.
 - Return only valid JSON.`;
 }
 
@@ -282,14 +287,13 @@ ${openAiWebSection}
 ${validationSection}
 Output exactly this JSON shape:
 {
-  "shortBio": "2-3 concise sentences focused on current status; no net worth; target under 350 characters",
   "longBio": "4-6 factual sentences covering current status, career highlights, and achievements; no net worth; target under 900 characters",
   "knownFor": "Comma-separated areas of fame; target under 250 characters",
   "fromCountry": "Country of origin",
   "fromCountryCode": "ISO 3166-1 alpha-2",
   "basedIn": "Current country where they live or primarily work",
   "basedInCountryCode": "ISO 3166-1 alpha-2",
-  "estimatedNetWorth": "Use a value directly supported by NET WORTH SOURCES. If no reliable net-worth source appears, use \"Not available\". If sources provide a range, preserve the range.",
+  "estimatedNetWorth": "Approximate ballpark in the form '$X billion', '$X million', or '$X thousand' (e.g. '$2.6 billion', '$250 million', '$500 thousand'). Match the magnitude to the actual figure - never round a sub-million amount up to '$1 million'. If sources show a range, you may write the range (e.g. '$800-$840 billion'). Use the most recent figure you can find in NET WORTH SOURCES or the OPENAI WEB SEARCH AUGMENTATION notes - prefer Forbes/Bloomberg, otherwise any reputable outlet (Reuters, CNBC, Fortune, Business Insider, Investopedia, Celebrity Net Worth, Wikipedia, etc.). Use \"Not available\" only when no source provides any estimate at all.",
   "confidence": 0.0
 }`;
 }
@@ -315,19 +319,19 @@ async function fetchOpenAiProfileWebContext(person: TrendingPerson, context: Pro
   const response = await openai.responses.create({
     model,
     tools: [{ type: "web_search" as any }],
-    instructions: `You are gathering source notes for a public-figure profile. Today is ${currentDate}. Be factual and source-oriented. Do not write the final profile.`,
-    input: `Find current, source-backed facts for ${person.name}.
+    instructions: `You are a research assistant gathering current facts about a public figure for an encyclopedia-style profile. Today is ${currentDate}. Return clean, declarative facts, not commentary about sources. Do not write the final bio.`,
+    input: `Find current facts for ${person.name}.
 
-Return concise notes covering:
-1. Current role/status and any recent role changes.
+Return concise bullet notes covering:
+1. Current role, title, or status, and any recent change.
 2. Whether any role is future-dated, with effective date if applicable.
-3. Current residence/work country if a reliable source is available.
-4. Net worth only if a reliable source such as Forbes, Bloomberg, or Celebrity Net Worth supports it.
+3. Country of residence or where they primarily work.
+4. A current net-worth estimate or range from a reputable outlet (Forbes, Bloomberg, Celebrity Net Worth, Reuters, CNBC, Fortune, Business Insider, Investopedia, Wikipedia, etc.). A ballpark is fine.
 
-Existing source snippets to check against:
+Existing snippets to cross-check:
 ${context.snippetsText.slice(0, 4000)}
 
-If sources conflict, say so. Include source names or URLs in the notes.`,
+If sources disagree, briefly note it. Cite source names or URLs in these notes only - they will not appear in the final bio.`,
     max_output_tokens: 700,
   } as any);
 
@@ -370,7 +374,7 @@ function extractResponseSources(response: any): Array<{ title: string; url: stri
 
 function validateGeneratedProfile(person: TrendingPerson, profile: GeneratedProfile, context: ProfileContext): string[] {
   const notes: string[] = [];
-  const bioText = `${profile.shortBio}\n${profile.longBio}`;
+  const bioText = profile.longBio;
 
   if (MONEY_RE.test(bioText)) {
     notes.push("Bio text includes net-worth or wealth figures; remove financial figures from bios.");
@@ -411,11 +415,9 @@ function validateGeneratedProfile(person: TrendingPerson, profile: GeneratedProf
 function applyValidationFallbacks(person: TrendingPerson, profile: GeneratedProfile, context: ProfileContext, validationNotes: string[]): GeneratedProfile {
   const next = { ...profile };
   if (validationNotes.some((note) => note.includes("Bio text includes net-worth"))) {
-    next.shortBio = stripMoney(next.shortBio);
     next.longBio = stripMoney(next.longBio);
   }
   if (validationNotes.some((note) => note.includes("Secretary of War"))) {
-    next.shortBio = applySecretaryOfWarCorrection(next.shortBio);
     next.longBio = applySecretaryOfWarCorrection(next.longBio);
     next.knownFor = applySecretaryOfWarCorrection(next.knownFor);
   }
@@ -439,7 +441,7 @@ function toProfileData(
   return {
     personId: person.id,
     personName: person.name,
-    shortBio: parsed.shortBio,
+    shortBio: deriveShortBio(parsed.longBio),
     longBio: parsed.longBio,
     knownFor: parsed.knownFor,
     fromCountry: parsed.fromCountry,
@@ -455,6 +457,36 @@ function toProfileData(
     asOfDate: new Date().toISOString().slice(0, 10),
     validationNotes,
   } as InsertCelebrityProfile;
+}
+
+// Derive a 1-2 sentence short bio from the model's longBio so the legacy
+// shortBio DB column stays populated without spending tokens on a separate
+// generation pass. The shortBio field is still part of the DB schema (and
+// referenced by an orphaned modal component) but is no longer rendered in
+// the live UI.
+//
+// Strategy: if the bio is already short, return it. Otherwise scan backwards
+// from ~280 chars for the last sentence terminator and cut there. Scanning
+// backwards naturally handles abbreviations like "Donald J." or "U.S." -
+// they're internal periods, not the last sentence break in the window, so
+// we don't accidentally truncate at them.
+function deriveShortBio(longBio: string): string {
+  const trimmed = longBio.trim();
+  if (!trimmed) return "";
+  if (trimmed.length <= 250) return trimmed;
+
+  const window = trimmed.slice(0, 280);
+  let lastEnder = -1;
+  for (const punct of [". ", "! ", "? "]) {
+    const idx = window.lastIndexOf(punct);
+    if (idx > lastEnder) lastEnder = idx;
+  }
+
+  if (lastEnder >= 60) {
+    return trimmed.slice(0, lastEnder + 1).trim();
+  }
+
+  return `${trimmed.slice(0, 247).trimEnd()}...`;
 }
 
 function extractNetWorthFromContext(context: NetWorthContext | null): string | null {
@@ -475,16 +507,21 @@ function extractNetWorthFromOpenAiWeb(context: OpenAiWebContext | null): string 
 
 function isNetWorthSourceBacked(value: string, context: ProfileContext): boolean {
   if (isNotAvailable(value)) return true;
-  const normalizedValue = normalizeMoney(value);
-  if (!normalizedValue) return false;
-  if (context.extractedNetWorth && normalizeMoney(context.extractedNetWorth) === normalizedValue) return true;
-  if (context.openAiWebContext?.text && isLikelyNetWorthSource(context.openAiWebContext.text) && context.openAiWebContext.text.toLowerCase().includes(normalizedValue.toLowerCase())) {
+  if (!normalizeMoney(value)) return false;
+
+  // Any reputable snippet that already yielded a money figure near net-worth language counts as backing.
+  if (context.extractedNetWorth) return true;
+
+  // OpenAI web search augmentation that mentions net worth/wealth/fortune is acceptable backing -
+  // its own citation list is captured in sourceUrls.
+  if (context.openAiWebContext?.text && isLikelyNetWorthSource(context.openAiWebContext.text)) {
     return true;
   }
-  const compactValue = normalizedValue.replace(/\s+/g, " ").toLowerCase();
+
+  // Otherwise require at least one reputable net-worth source snippet.
   return (context.netWorthContext?.sources ?? []).some((source) => {
-    const text = `${source.title} ${source.snippet}`.replace(/\s+/g, " ").toLowerCase();
-    return isTrustedNetWorthSource(source.link) && isLikelyNetWorthSource(text) && text.includes(compactValue);
+    const text = `${source.title} ${source.snippet}`;
+    return isTrustedNetWorthSource(source.link) && isLikelyNetWorthSource(text);
   });
 }
 
@@ -496,12 +533,38 @@ function isLikelyNetWorthSource(text: string): boolean {
   return NET_WORTH_CONTEXT_RE.test(text);
 }
 
+// Reputable financial / news outlets that commonly publish net-worth estimates.
+// Broader than the original Forbes/Bloomberg/CelebrityNetWorth list so we surface
+// a ballpark figure for almost everyone instead of falling back to "Not available".
+const TRUSTED_NET_WORTH_HOSTS = [
+  "forbes.com",
+  "bloomberg.com",
+  "celebritynetworth.com",
+  "reuters.com",
+  "apnews.com",
+  "cnbc.com",
+  "wsj.com",
+  "ft.com",
+  "businessinsider.com",
+  "fortune.com",
+  "marketwatch.com",
+  "investopedia.com",
+  "money.com",
+  "nytimes.com",
+  "axios.com",
+  "yahoo.com",
+  "moneyweek.com",
+  "wikipedia.org",
+  "time.com",
+  "cnn.com",
+  "bbc.com",
+  "theguardian.com",
+];
+
 function isTrustedNetWorthSource(url: string): boolean {
   try {
     const host = new URL(url).hostname.replace(/^www\./, "").toLowerCase();
-    return host === "forbes.com" || host.endsWith(".forbes.com")
-      || host === "bloomberg.com" || host.endsWith(".bloomberg.com")
-      || host === "celebritynetworth.com" || host.endsWith(".celebritynetworth.com");
+    return TRUSTED_NET_WORTH_HOSTS.some((trusted) => host === trusted || host.endsWith(`.${trusted}`));
   } catch {
     return false;
   }
@@ -512,13 +575,23 @@ function isUnsupportedBillionDollarNetWorth(person: TrendingPerson, value: strin
   if (isNotAvailable(value)) return false;
 
   const personName = person.name.toLowerCase();
-  return !(context.netWorthContext?.sources ?? []).some((source) => {
+
+  // Accept the figure if any reputable Serper snippet mentions both the person and billion/billionaire/richest
+  // language. We no longer require the literal dollar string in one snippet - that was dropping almost every
+  // real billionaire because Serper's snippet is rarely the exact figure the model converged on.
+  const reputableMention = (context.netWorthContext?.sources ?? []).some((source) => {
     const text = `${source.title} ${source.snippet}`.toLowerCase();
     return isTrustedNetWorthSource(source.link)
       && text.includes(personName)
-      && /\bbillionaire|billionaires|real-time billionaires|richest\b/i.test(text)
-      && text.includes(normalizeMoney(value).toLowerCase());
+      && /\bbillion(aire)?s?\b|\brichest\b|\breal-time billionaires\b/i.test(text);
   });
+
+  // Or if the OpenAI web-search augmentation itself mentions the person plus billion language.
+  const openAiMention = !!context.openAiWebContext?.text
+    && /\bbillion(aire)?s?\b/i.test(context.openAiWebContext.text)
+    && context.openAiWebContext.text.toLowerCase().includes(personName);
+
+  return !(reputableMention || openAiMention);
 }
 
 function extractNetWorthMoney(text: string): RegExpMatchArray | null {
