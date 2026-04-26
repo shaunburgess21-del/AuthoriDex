@@ -891,43 +891,44 @@ textarea:-webkit-autofill:active {
  * keeping the soft pastel feel Sonner uses by default — toasts should still
  * read as notifications, not solid alert bars.
  *
- * Why direct selectors instead of CSS variables on the wrapper:
- * Sonner with `richColors` paints `[data-sonner-toast][data-type='success']`
- * and `[data-rich-colors='true'][data-type='success']` directly with its own
- * background/color/border declarations on the toast element itself — the
- * per-toaster `--success-*` vars are a fallback path. To definitively win
- * the cascade we target the toast element with the same selector Sonner
- * uses, prefixed with `html` to bump specificity above Sonner's (0,2,0)
- * defaults regardless of stylesheet import order.
+ * Selector shape — verified against Sonner's bundled `dist/styles.css` and
+ * `dist/index.mjs`:
+ *
+ *   - The theme is set on the wrapper as `data-sonner-theme="light|dark"`
+ *     (NOT `data-theme`).
+ *   - `data-rich-colors`, `data-sonner-toast`, and `data-type` are ALL on
+ *     the same toast element. Sonner paints the success/info background
+ *     via:  `[data-rich-colors='true'][data-sonner-toast][data-type='success']`.
+ *
+ * To definitively win the cascade we mirror that exact shape on the toast
+ * and scope to the wrapper for theme-awareness. The leading `html` bumps
+ * specificity above Sonner's (0,3,0) per-state rules regardless of CSS
+ * import order.
  *
  * The values mirror Sonner's own pastel structure (very-light bg / slightly
  * darker border / saturated text) but pivoted to our brand hue 217. Errors
  * stay red and warnings stay amber — those carry semantic meaning users
  * expect from notification toasts. */
-html [data-sonner-toaster][data-theme="light"][data-rich-colors="true"] [data-sonner-toast][data-type="success"],
-html [data-sonner-toaster][data-theme="light"][data-rich-colors="true"] [data-sonner-toast][data-type="info"] {
+html [data-sonner-toaster][data-sonner-theme="light"] [data-rich-colors="true"][data-sonner-toast][data-type="success"],
+html [data-sonner-toaster][data-sonner-theme="light"] [data-rich-colors="true"][data-sonner-toast][data-type="info"] {
   background: hsl(217 91% 96%);
   border-color: hsl(217 91% 91%);
   color: hsl(217 91% 38%);
 }
 
-html [data-sonner-toaster][data-theme="light"][data-rich-colors="true"] [data-sonner-toast][data-type="success"] [data-title],
-html [data-sonner-toaster][data-theme="light"][data-rich-colors="true"] [data-sonner-toast][data-type="success"] [data-description],
-html [data-sonner-toaster][data-theme="light"][data-rich-colors="true"] [data-sonner-toast][data-type="info"] [data-title],
-html [data-sonner-toaster][data-theme="light"][data-rich-colors="true"] [data-sonner-toast][data-type="info"] [data-description] {
+html [data-sonner-toaster][data-sonner-theme="light"] [data-rich-colors="true"][data-sonner-toast][data-type="success"] [data-title],
+html [data-sonner-toaster][data-sonner-theme="light"] [data-rich-colors="true"][data-sonner-toast][data-type="info"] [data-title] {
   color: hsl(217 91% 38%);
 }
 
-html [data-sonner-toaster][data-theme="dark"][data-rich-colors="true"] [data-sonner-toast][data-type="success"],
-html [data-sonner-toaster][data-theme="dark"][data-rich-colors="true"] [data-sonner-toast][data-type="info"] {
+html [data-sonner-toaster][data-sonner-theme="dark"] [data-rich-colors="true"][data-sonner-toast][data-type="success"],
+html [data-sonner-toaster][data-sonner-theme="dark"] [data-rich-colors="true"][data-sonner-toast][data-type="info"] {
   background: hsl(217 91% 8%);
   border-color: hsl(217 91% 16%);
   color: hsl(217 91% 70%);
 }
 
-html [data-sonner-toaster][data-theme="dark"][data-rich-colors="true"] [data-sonner-toast][data-type="success"] [data-title],
-html [data-sonner-toaster][data-theme="dark"][data-rich-colors="true"] [data-sonner-toast][data-type="success"] [data-description],
-html [data-sonner-toaster][data-theme="dark"][data-rich-colors="true"] [data-sonner-toast][data-type="info"] [data-title],
-html [data-sonner-toaster][data-theme="dark"][data-rich-colors="true"] [data-sonner-toast][data-type="info"] [data-description] {
+html [data-sonner-toaster][data-sonner-theme="dark"] [data-rich-colors="true"][data-sonner-toast][data-type="success"] [data-title],
+html [data-sonner-toaster][data-sonner-theme="dark"] [data-rich-colors="true"][data-sonner-toast][data-type="info"] [data-title] {
   color: hsl(217 91% 70%);
 }

@@ -178,6 +178,20 @@ export function useXpCelebration(enabled: boolean = true) {
   useEffect(() => {
     if (!stats) return;
 
+    const currentXp = stats.xpPoints;
+    const currentRank = stats.rank?.name ?? 'Citizen';
+    const currentUserId = stats.userId;
+
+    // Detect user-identity change BEFORE running the burst-dedupe block so
+    // we can reset the per-user dedupe key — otherwise user B might miss
+    // their daily burst if user A's key happened to match (e.g. both
+    // received "+30:daily_login" in the same browser session).
+    const userChanged =
+      prevRef.current !== null && prevRef.current.userId !== currentUserId;
+    if (userChanged) {
+      firedLoginBurstRef.current = null;
+    }
+
     // Daily-login + streak-bonus: fire a burst the first time we see an xp
     // payload for this page-session. The server only returns xp once per UTC
     // day (idempotent); we additionally de-dupe against re-renders by keying
@@ -190,14 +204,10 @@ export function useXpCelebration(enabled: boolean = true) {
       }
     }
 
-    const currentXp = stats.xpPoints;
-    const currentRank = stats.rank?.name ?? 'Citizen';
-    const currentUserId = stats.userId;
-
     // Initial baseline OR user identity changed (sign-in, sign-out, account
     // switch). Either case must rebaseline silently — rank-up toasts should
     // only ever fire when the *same* user crosses a tier mid-session.
-    if (prevRef.current === null || prevRef.current.userId !== currentUserId) {
+    if (prevRef.current === null || userChanged) {
       prevRef.current = { xp: currentXp, rank: currentRank, userId: currentUserId };
       return;
     }
