@@ -20,7 +20,7 @@ VoxDex is a fame/popularity trend tracking app. It tracks public figures' trendi
 | Frontend | (Verify framework — React/Next.js) | Vercel |
 | Backend / Trend Score Engine | (Verify language/framework) | Railway |
 | Database | PostgreSQL | Supabase |
-| AI Summaries | OpenAI API (model: `gpt-4o`) | — |
+| AI Summaries | OpenAI API (model: `gpt-5.4`) | — |
 | Auth | Supabase Auth (verify) | — |
 | Repo | GitHub (shared between Andrew & Shaun) | — |
 | Dev Environment | Cursor Pro + Claude Code | Local |
@@ -33,7 +33,7 @@ VoxDex is a fame/popularity trend tracking app. It tracks public figures' trendi
 [Vercel Frontend] <--API--> [Railway Backend]
                                   |
                                   ├── Trend Score Engine (scheduled ingestion runs)
-                                  ├── AI Summary Generation (OpenAI gpt-4o)
+                                  ├── AI Summary Generation (OpenAI gpt-5.4)
                                   └── Supabase PostgreSQL (profiles, scores, polls, etc.)
 ```
 
@@ -41,7 +41,7 @@ VoxDex is a fame/popularity trend tracking app. It tracks public figures' trendi
 - **Ingestion Runs:** Backend runs scheduled jobs to pull data from sources, compute trend scores, and store results in Supabase.
 - **Trend Scores:** Calculated via the trend score engine on Railway. Freshness/health endpoints exist for monitoring.
 - **Polling:** Two types — Opinion Polls and Sentiment Polls. Large bank of pre-built polling content.
-- **AI Summaries:** Generated via OpenAI gpt-4o for public figure profiles.
+- **AI Summaries:** Generated via OpenAI gpt-5.4 for public figure profiles (About bios, Why Trending summaries, etc.).
 
 ---
 
@@ -96,7 +96,7 @@ VoxDex is a fame/popularity trend tracking app. It tracks public figures' trendi
 ## Conventions & Decisions
 
 - **Git workflow:** Andrew and Shaun collaborate via shared GitHub repo
-- **AI model:** OpenAI `gpt-4o` (upgraded from `gpt-4o-mini`)
+- **AI model:** OpenAI `gpt-5.4` (default via `AI_DEFAULT_MODEL`; per-scope env overrides available — see `server/config/ai-models.ts`)
 - **Security:** Pre-commit hook prevents accidental secret commits
 - **MCP integrations:** Exploring Railway, Vercel, and GitHub MCPs in Cursor
 - (Add architectural decisions, naming conventions, patterns as they're established)
