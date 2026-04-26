@@ -759,6 +759,15 @@ export default function PersonDetailPage() {
   const [curateCompleted, setCurateCompleted] = useState(false);
   const [expandedProfileImage, setExpandedProfileImage] = useState<string | null>(null);
 
+  // Always land at the top when navigating to a celebrity profile.
+  // Wouter rehydrates cached page state on second-visit which can leave
+  // the scroll position mid-page; the global ScrollToTop only fires on
+  // path *changes*, so we own the reset locally keyed off the route param.
+  useEffect(() => {
+    if (!params?.id) return;
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [params?.id]);
+
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
     const url = new URL(window.location.href);

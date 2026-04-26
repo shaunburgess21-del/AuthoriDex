@@ -21,7 +21,7 @@ export const RULES_CONTENT: Record<string, RulesEntry> = {
       { icon: <Hash className="h-4 w-4 text-amber-500" />, title: "Your Number is Yours", description: "Every number can only be claimed by one person — first come, first served. Enter early in the week while the best numbers are still available." },
       { icon: <Crown className="h-4 w-4 text-amber-500" />, title: "100 Credits Per Entry", description: "Each prediction costs 100 credits. You can enter multiple times with different numbers to improve your chances." },
       { icon: <Clock className="h-4 w-4 text-amber-500" />, title: "Entries Close Friday 23:59 UTC", description: "You have until Friday at 23:59 UTC to enter. After that, the jackpot is locked and no more entries are accepted." },
-      { icon: <Trophy className="h-4 w-4 text-amber-500" />, title: "Closest Guess Wins", description: "When the market closes on Sunday, whoever predicted the closest score wins the entire pool (minus 5% platform fee). If two players are equally close, they split it equally." },
+      { icon: <Trophy className="h-4 w-4 text-amber-500" />, title: "Closest Guess Wins", description: "When the market closes on Sunday, whoever predicted the closest score wins the entire pool. If two players are equally close, they split it equally." },
     ]
   },
   updown: {

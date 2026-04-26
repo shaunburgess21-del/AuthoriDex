@@ -172,7 +172,7 @@ export function useXpCelebration(enabled: boolean = true) {
   const { data: stats } = useUserStats(enabled);
   const { data: ranks } = useRanks();
   const { trigger: triggerXpBurst } = useXpBurst();
-  const prevRef = useRef<{ xp: number; rank: string } | null>(null);
+  const prevRef = useRef<{ xp: number; rank: string; userId: string } | null>(null);
   const firedLoginBurstRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -192,9 +192,13 @@ export function useXpCelebration(enabled: boolean = true) {
 
     const currentXp = stats.xpPoints;
     const currentRank = stats.rank?.name ?? 'Citizen';
+    const currentUserId = stats.userId;
 
-    if (prevRef.current === null) {
-      prevRef.current = { xp: currentXp, rank: currentRank };
+    // Initial baseline OR user identity changed (sign-in, sign-out, account
+    // switch). Either case must rebaseline silently — rank-up toasts should
+    // only ever fire when the *same* user crosses a tier mid-session.
+    if (prevRef.current === null || prevRef.current.userId !== currentUserId) {
+      prevRef.current = { xp: currentXp, rank: currentRank, userId: currentUserId };
       return;
     }
 
@@ -210,7 +214,7 @@ export function useXpCelebration(enabled: boolean = true) {
       }
     }
 
-    prevRef.current = { xp: currentXp, rank: currentRank };
+    prevRef.current = { xp: currentXp, rank: currentRank, userId: currentUserId };
   }, [stats, ranks, triggerXpBurst]);
 }
 

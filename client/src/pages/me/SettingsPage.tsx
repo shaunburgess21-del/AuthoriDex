@@ -220,16 +220,16 @@ export default function SettingsPage() {
           </div>
           
           <div className="flex items-center gap-4 mb-6">
-            {/* Polymarket-style avatar control: a small camera+ pill
-                in the bottom-right corner that's visible on all
-                viewports (so mobile users can tap it) and animates
-                slightly on hover. Clicking opens a popover with the
-                two ways to change the avatar. */}
+            {/* Polymarket-style avatar control: a centered scrim with a
+                Camera icon fills the avatar circle on hover (desktop)
+                and stays faintly visible on touch devices for
+                discoverability. Clicking opens a popover with the two
+                ways to change the avatar. */}
             <Popover open={avatarMenuOpen} onOpenChange={setAvatarMenuOpen}>
               <PopoverTrigger asChild>
                 <button
                   type="button"
-                  className="group relative h-20 w-20 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  className="group relative h-20 w-20 shrink-0 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   aria-label="Change profile photo"
                   disabled={avatarUploading}
                   data-testid="button-open-avatar-menu"
@@ -241,13 +241,13 @@ export default function SettingsPage() {
                     fallbackClassName="text-2xl"
                   />
                   <span
-                    className="pointer-events-none absolute -bottom-0.5 -right-0.5 flex h-7 w-7 items-center justify-center rounded-full border-2 border-background bg-foreground text-background shadow-sm transition-transform group-hover:scale-110"
+                    className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-full bg-black/55 opacity-30 transition-opacity duration-150 md:opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100"
                     aria-hidden
                   >
                     {avatarUploading ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <Loader2 className="h-6 w-6 animate-spin text-white" />
                     ) : (
-                      <Camera className="h-3.5 w-3.5" />
+                      <Camera className="h-6 w-6 text-white" />
                     )}
                   </span>
                 </button>
@@ -279,9 +279,9 @@ export default function SettingsPage() {
                 </button>
               </PopoverContent>
             </Popover>
-            <div>
-              <p className="font-medium">{displayName}</p>
-              <p className="text-sm text-muted-foreground">{user.email}</p>
+            <div className="min-w-0 flex-1">
+              <p className="font-medium truncate">{displayName}</p>
+              <p className="text-xs text-muted-foreground break-all">{user.email}</p>
             </div>
           </div>
 

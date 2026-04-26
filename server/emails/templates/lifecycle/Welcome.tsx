@@ -6,7 +6,7 @@
  * the tone for the product and nudges them into the core loop
  * (predictions + votes).
  *
- * Voice: trend-first. VoxDex is a live trend index, not a fame
+ * Voice: trend-first. VoxDex is a global trend index, not a fame
  * ranker. Framing: "people and events shaping the world" covers
  * both the celebrity leaderboard and the world-events markets.
  *
@@ -80,7 +80,7 @@ export function WelcomeEmail({
       <Heading style={typography.h1}>Welcome to VoxDex.</Heading>
 
       <Text style={typography.body}>
-        VoxDex is a live trend index for the people and events shaping
+        VoxDex is a global trend index for the people and events shaping
         the world — powered by real-time signals, public votes, and
         prediction markets.
       </Text>
@@ -113,7 +113,7 @@ export function WelcomeEmail({
       </Text>
 
       <Text style={{ ...typography.small, margin: `0 0 ${spacing.snug}` }}>
-        <a href={`${baseUrl}/leaderboard`} style={linkStyle}>
+        <a href={`${baseUrl}/`} style={linkStyle}>
           Browse the leaderboard
         </a>
         {" — see who's moving right now"}

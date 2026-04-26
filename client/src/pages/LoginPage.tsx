@@ -21,6 +21,7 @@ import { setPending } from "@/lib/pendingAuth";
 import { mapAuthError } from "@/lib/authErrors";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
@@ -235,7 +236,7 @@ export default function LoginPage() {
             <VoxDexLogo size={48} />
             <span className="font-serif font-bold text-3xl">VoxDex</span>
           </div>
-          <p className="text-muted-foreground">The live trend index for people and events shaping the world.</p>
+          <p className="text-muted-foreground">The global trend index for people and events shaping the world.</p>
         </div>
 
         <Card>
@@ -293,9 +294,8 @@ export default function LoginPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="password">Password</Label>
-                <Input
+                <PasswordInput
                   id="password"
-                  type="password"
                   autoComplete={isLogin ? "current-password" : "new-password"}
                   placeholder="••••••••"
                   value={password}

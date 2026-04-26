@@ -622,8 +622,10 @@ export default function HomePage() {
   const [pulseCollapsed, setPulseCollapsed] = useState(() => {
     try {
       const saved = localStorage.getItem('voxdex_pulse_collapsed');
-      return saved !== null ? saved === 'true' : false;
-    } catch { return false; }
+      // Default-collapsed for new users so all home cards open uniformly.
+      // Returning users with a saved preference keep their last state.
+      return saved !== null ? saved === 'true' : true;
+    } catch { return true; }
   });
 
   const handlePulseToggle = () => {

@@ -252,7 +252,7 @@ export const PREDICT_RULES_STEPS: Record<string, RulesStepConfig> = {
       {
         icon: <Clock />,
         headline: "Entries Close Friday",
-        body: "All entries lock at Friday 23:59 UTC. The closest guess at Sunday close wins the pool minus 5% platform fee.",
+        body: "All entries lock at Friday 23:59 UTC. The closest guess at Sunday close wins the pool.",
       },
     ],
   },

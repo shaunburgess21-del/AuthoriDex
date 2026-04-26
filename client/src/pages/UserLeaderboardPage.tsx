@@ -461,12 +461,14 @@ export default function UserLeaderboardPage() {
         {/* Filter row */}
         <div className="sticky top-16 z-40 bg-background/90 backdrop-blur-xl py-3 mb-6 border-b border-border/40">
           <div className="flex flex-col sm:flex-row gap-3">
-          {/* Period tabs */}
-          <div className="flex items-center gap-1 p-1 rounded-lg bg-muted/50 border border-border/50">
+          {/* Period tabs — distribute evenly across the row on mobile so
+              all four labels (incl. "All Time") fit without horizontal
+              scroll; revert to natural sizing from sm: up. */}
+          <div className="flex items-center gap-1 p-1 rounded-lg bg-muted/50 border border-border/50 w-full sm:w-auto">
             {(["today", "week", "month", "all"] as Period[]).map((p) => (
               <button
                 key={p}
-                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
+                className={`flex-1 sm:flex-none px-2.5 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${
                   period === p
                     ? "bg-background text-foreground shadow-sm border border-border/60"
                     : "text-muted-foreground hover:text-foreground"

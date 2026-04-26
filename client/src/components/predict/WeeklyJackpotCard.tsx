@@ -225,10 +225,10 @@ export function WeeklyJackpotCard({
           </div>
           
           <div
-            className={`flex w-full gap-2 ${
+            className={`flex w-full gap-3 ${
               compact
                 ? "flex-row items-center justify-between border-t border-amber-500/20 pt-3"
-                : "flex-col max-lg:items-stretch lg:items-end"
+                : "flex-col items-start lg:w-auto lg:items-end"
             }`}
           >
             {marketStatus !== "RESOLVED" &&
@@ -249,7 +249,7 @@ export function WeeklyJackpotCard({
                   </div>
                 </div>
               ) : (
-                <div className="flex w-full flex-row flex-wrap items-baseline gap-x-3 gap-y-1 lg:flex-col lg:items-end lg:gap-2">
+                <div className="flex w-full flex-col items-start gap-1 lg:items-end lg:gap-2">
                   <p className="shrink-0 text-xs text-muted-foreground lg:text-right">{timerLabel}</p>
                   <div className="flex gap-2 lg:justify-end">
                     {[

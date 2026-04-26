@@ -14,8 +14,8 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PasswordInput } from "@/components/ui/password-input";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { getSupabase } from "@/lib/supabase";
@@ -87,9 +87,8 @@ export function PasswordCard() {
       <form onSubmit={handleSubmit} className="space-y-4" noValidate>
         <div className="space-y-2">
           <Label htmlFor="new-password">{title}</Label>
-          <Input
+          <PasswordInput
             id="new-password"
-            type="password"
             autoComplete="new-password"
             value={newPassword}
             onChange={(e) => {
@@ -104,9 +103,8 @@ export function PasswordCard() {
 
         <div className="space-y-2">
           <Label htmlFor="confirm-password">Confirm password</Label>
-          <Input
+          <PasswordInput
             id="confirm-password"
-            type="password"
             autoComplete="new-password"
             value={confirmPassword}
             onChange={(e) => {

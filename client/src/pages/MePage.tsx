@@ -24,8 +24,8 @@ function RankBadge({ rank }: { rank: string }) {
   const Icon = config.icon;
 
   return (
-    <Badge variant="outline" className={`${config.color}`}>
-      <Icon className="h-3 w-3 mr-1" />
+    <Badge variant="outline" className={`${config.color} px-2.5 py-0.5 gap-1`}>
+      <Icon className="h-3 w-3" />
       {rank}
     </Badge>
   );
@@ -110,7 +110,7 @@ export default function MePage() {
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="font-semibold text-lg truncate">{displayName}</p>
                     {isAdmin && (
-                      <Badge variant="outline" className="bg-red-500/25 dark:bg-red-500/20 text-red-500 dark:text-red-300 border-red-500/40 dark:border-red-500/30">
+                      <Badge variant="outline" className="bg-red-500/25 dark:bg-red-500/20 text-red-500 dark:text-red-300 border-red-500/40 dark:border-red-500/30 px-2.5 py-0.5">
                         Admin
                       </Badge>
                     )}
@@ -118,7 +118,7 @@ export default function MePage() {
                   <p className="text-sm text-muted-foreground">@{profile?.username || "user"}</p>
                   <div className="flex items-center gap-2 mt-2 flex-wrap">
                     <RankBadge rank={profile?.rank || "Citizen"} />
-                    <Badge variant="outline" className="text-amber-600 dark:text-amber-400">
+                    <Badge variant="outline" className="text-amber-600 dark:text-amber-400 px-2.5 py-0.5">
                       {(profile?.xpPoints || 0).toLocaleString('en-US')} XP
                     </Badge>
                   </div>
