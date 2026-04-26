@@ -36,7 +36,6 @@ async function main() {
     subject: WELCOME_SUBJECT,
     category: "lifecycle",
     template: React.createElement(WelcomeEmail, {
-      firstName: "Andrew",
       baseUrl: TEST_BASE_URL,
     }),
     tags: [{ name: "type", value: "welcome-email-test" }],

@@ -101,9 +101,12 @@ export function Layout({
               </Link>
             </Text>
 
-            <Text style={footerAddressStyle}>
-              [VoxDex mailing address — to be added before launch]
-            </Text>
+            {/* Mailing address line removed pre-launch — required by
+                CAN-SPAM in the US for marketing sends but optional for
+                pure transactional flows. We'll add it back here when
+                we have the registered VoxDex business address ready;
+                until then we don't want the placeholder text leaking
+                into real sends. */}
           </Section>
         </Container>
       </Body>
@@ -173,10 +176,4 @@ const footerLinksStyle: React.CSSProperties = {
 const footerLinkStyle: React.CSSProperties = {
   color: colors.textSecondary,
   textDecoration: "underline",
-};
-
-const footerAddressStyle: React.CSSProperties = {
-  ...typography.caption,
-  color: colors.textTertiary,
-  margin: 0,
 };

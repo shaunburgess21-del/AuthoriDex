@@ -158,21 +158,26 @@ function UserMenuContent({
           </p>
         </div>
         
+        {/* Create Account is the primary CTA — most prediction-market
+            and social products lead with sign-up because the LTV of a
+            new account dwarfs the cost of nudging an existing user
+            past one extra click. Sign In stays available right below
+            in the secondary outline treatment. */}
         <div className="space-y-2">
-          <Button 
+          <Button
             className="w-full bg-gradient-to-r from-blue-600 to-blue-500"
-            onClick={onSignIn}
-            data-testid="button-sign-in"
-          >
-            Sign In
-          </Button>
-          <Button 
-            variant="outline" 
-            className="w-full"
             onClick={onCreateAccount}
             data-testid="button-create-account"
           >
             Create Account
+          </Button>
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={onSignIn}
+            data-testid="button-sign-in"
+          >
+            Sign In
           </Button>
         </div>
 
@@ -205,7 +210,7 @@ function UserMenuContent({
     );
   }
 
-  const displayName = profile?.fullName || profile?.username || "User";
+  const displayName = profile?.username || "User";
   const showStreakBadge = (profile?.currentStreak || 0) > 1;
 
   return (
@@ -416,7 +421,7 @@ export function UserMenu() {
     setLocation("/");
   };
 
-  const avatarDisplayName = profile?.fullName || profile?.username || "User";
+  const avatarDisplayName = profile?.username || "User";
 
   const triggerButton = (
     <button

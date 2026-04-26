@@ -21,7 +21,6 @@ interface InsightCommentResponse {
   parentCommentId: string | null;
   userId: string;
   username: string | null;
-  fullName: string | null;
   avatarUrl: string | null;
   body: string;
   createdAt: string;
@@ -36,7 +35,6 @@ interface CommunityInsight {
   personId: string;
   userId: string;
   username: string | null;
-  fullName: string | null;
   avatarUrl: string | null;
   content: string;
   sentimentVote?: number | null;
@@ -81,7 +79,6 @@ function toCommentItem(comment: InsightCommentResponse): CommentItem {
     id: comment.id,
     userId: comment.userId,
     username: comment.username,
-    fullName: comment.fullName,
     avatarUrl: comment.avatarUrl,
     body: comment.body,
     parentId: comment.parentCommentId,

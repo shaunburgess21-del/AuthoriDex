@@ -69,7 +69,6 @@ interface CommunityInsight {
   personId: string;
   userId: string;
   username: string | null;
-  fullName: string | null;
   avatarUrl: string | null;
   content: string;
   sentimentVote?: number | null;
@@ -113,7 +112,6 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
         id: i.id,
         userId: i.userId,
         username: i.username,
-        fullName: i.fullName,
         avatarUrl: i.avatarUrl,
         body: i.content,
         parentId: null,

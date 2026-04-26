@@ -301,7 +301,6 @@ export async function seedAgents(): Promise<{
           await tx.insert(profiles).values({
             id: userId,
             username: seed.username,
-            fullName: seed.displayName,
             avatarUrl: null,
             isPublic: true,
             role: "user",

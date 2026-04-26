@@ -6,7 +6,6 @@ export interface CommentItem {
   id: string;
   userId: string;
   username: string | null;
-  fullName: string | null;
   avatarUrl: string | null;
   body: string;
   parentId: string | null;

@@ -42,7 +42,6 @@ export interface TrafficStats {
 export interface UserProfile {
   id: string;
   username: string | null;
-  fullName: string | null;
   role: string;
   rank: string;
   xpPoints: number;
