@@ -909,6 +909,15 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     }>();
     const lastNonZeroNewsMap = new Map<string, { newsCount: number; newsDelta: number; timestamp: Date }>();
     const lastNonZeroSearchMap = new Map<string, { searchVolume: number; searchDelta: number; timestamp: Date }>();
+    // Personal trailing-24h high-water-mark for news and search. Anchors the
+    // asymmetric 24h linear decay floor that smooths out the news/search
+    // sawtooth caused by provider cache cycling, transient outages, and stale-
+    // cache fallbacks. Spikes propagate immediately (raw value wins when above
+    // the floor); drops are bounded by linear decay from the most recent high.
+    // Wikipedia is intentionally NOT covered — its single-day cadence is
+    // inherently smooth, so a floor would just delay legitimate downturns.
+    const personalNewsHigh24hMap = new Map<string, { value: number; timestamp: Date }>();
+    const personalSearchHigh24hMap = new Map<string, { value: number; timestamp: Date }>();
     const snapshot24hMap = new Map<string, { trendScore: number; fameIndex: number | null; timestamp?: Date; basisHours?: number }>();
     // 7d baseline: matches the 24h logic — picks the snapshot closest to exactly
     // 7 days ago within a +/-18h tolerance window. Previously this just kept the
@@ -961,6 +970,36 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
             searchDelta: snap.searchDelta ?? 0,
             timestamp: new Date(snap.timestamp),
           });
+        }
+      }
+
+      // Personal trailing-24h high-water-mark for the asymmetric decay-floor.
+      // Only consider snapshots within the last 24h so the floor decays out of
+      // the window naturally; ties prefer the most recent timestamp so the
+      // decay clock starts from the latest occurrence of that high.
+      const snapAgeMs = now.getTime() - snapTime;
+      if (snapAgeMs <= 24 * 60 * 60 * 1000) {
+        const newsValue = snap.newsCount ?? 0;
+        if (newsValue > 0) {
+          const existing = personalNewsHigh24hMap.get(snap.personId);
+          if (!existing || newsValue > existing.value ||
+              (newsValue === existing.value && new Date(snap.timestamp) > existing.timestamp)) {
+            personalNewsHigh24hMap.set(snap.personId, {
+              value: newsValue,
+              timestamp: new Date(snap.timestamp),
+            });
+          }
+        }
+        const searchValue = snap.searchVolume ?? 0;
+        if (searchValue > 0) {
+          const existing = personalSearchHigh24hMap.get(snap.personId);
+          if (!existing || searchValue > existing.value ||
+              (searchValue === existing.value && new Date(snap.timestamp) > existing.timestamp)) {
+            personalSearchHigh24hMap.set(snap.personId, {
+              value: searchValue,
+              timestamp: new Date(snap.timestamp),
+            });
+          }
         }
       }
       
@@ -1039,7 +1078,8 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     const PERSONAL_BASELINE_MIN_OBSERVATIONS = 14;
 
     console.log(`[Ingest] Bootstrap maps: ${lastNonZeroNewsMap.size} people with non-zero news history, ${lastNonZeroSearchMap.size} with non-zero search history`);
-    
+    console.log(`[Ingest] 24h decay-floor anchors: ${personalNewsHigh24hMap.size} news highs, ${personalSearchHigh24hMap.size} search highs (within 24h window)`);
+
     console.log(`[Ingest] Found ${mostRecentMap.size} recent snapshots (EMA), ${snapshot24hMap.size} 24h snapshots, ${snapshot7dMap.size} 7d snapshots`);
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1267,6 +1307,11 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     let searchApiUsedFallback = 0;
     let newsEmaHeldCount = 0;
     let searchEmaHeldCount = 0;
+    // Asymmetric 24h decay-floor counters (news / search). Track how often the
+    // floor anchors a value above the raw fetch — high counts here indicate
+    // upstream provider instability that the floor is actively masking.
+    let newsFloorAppliedCount = 0;
+    let searchFloorAppliedCount = 0;
     const searchDeltaValues: number[] = [];
     let searchDeltaStaleCount = 0;
     const newsFailed = newsData.size === 0;
@@ -1580,6 +1625,70 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           }
         }
 
+        // ════════════════════════════════════════════════════════════════════
+        // ASYMMETRIC 24h DECAY-FLOOR (news + search)
+        // ════════════════════════════════════════════════════════════════════
+        // Anchors news/search to a linearly-decayed trailing-24h high-water-mark.
+        // Spikes propagate immediately (raw > floor wins). Drops are bounded:
+        // if the raw fetch is below the floor (single bad cache cycle, transient
+        // provider outage, or stale-cache fallback serving low counts), the
+        // floor holds the score until the personal high has aged out of the 24h
+        // window. Decay is linear: floor = personalHigh * max(0, 1 - hoursSinceHigh / 24).
+        // Wikipedia is intentionally excluded — its single-day cadence makes a
+        // floor counterproductive (would just delay legitimate downturns).
+        // Sits AFTER the EMA-hold guards so it can stack on top: EMA-hold
+        // catches single-tick artifacts vs. prev, the floor catches multi-hour
+        // troughs vs. the trailing-24h high.
+        let newsFloorApplied = false;
+        let newsFloorDetail: Record<string, any> | null = null;
+        const newsHigh = personalNewsHigh24hMap.get(person.id);
+        if (newsHigh && newsHigh.value > 0) {
+          const hoursSinceHigh = (now.getTime() - newsHigh.timestamp.getTime()) / (1000 * 60 * 60);
+          const decayFactor = Math.max(0, 1 - hoursSinceHigh / 24);
+          const floor = Math.round(newsHigh.value * decayFactor);
+          if (floor > newsCount) {
+            newsFloorDetail = {
+              rawAfterEma: newsCount,
+              floorValue: floor,
+              personalHigh24h: newsHigh.value,
+              hoursSinceHigh: Math.round(hoursSinceHigh * 10) / 10,
+              decayFactor: Math.round(decayFactor * 1000) / 1000,
+              stackedOverEma: newsEmaHeld,
+              stackedOverFallback: newsUsedFallback,
+            };
+            newsCount = floor;
+            // Preserve previously-recorded delta — synthesizing a delta from a
+            // floor-derived value would create a misleading spike/drop signal.
+            newsDelta = mostRecent?.newsDelta ?? newsDelta;
+            newsFloorApplied = true;
+            newsFloorAppliedCount++;
+          }
+        }
+
+        let searchFloorApplied = false;
+        let searchFloorDetail: Record<string, any> | null = null;
+        const searchHigh = personalSearchHigh24hMap.get(person.id);
+        if (searchHigh && searchHigh.value > 0) {
+          const hoursSinceHigh = (now.getTime() - searchHigh.timestamp.getTime()) / (1000 * 60 * 60);
+          const decayFactor = Math.max(0, 1 - hoursSinceHigh / 24);
+          const floor = Math.round(searchHigh.value * decayFactor);
+          if (floor > searchVolume) {
+            searchFloorDetail = {
+              rawAfterEma: searchVolume,
+              floorValue: floor,
+              personalHigh24h: searchHigh.value,
+              hoursSinceHigh: Math.round(hoursSinceHigh * 10) / 10,
+              decayFactor: Math.round(decayFactor * 1000) / 1000,
+              stackedOverEma: searchEmaHeld,
+              stackedOverFallback: searchUsedFallback,
+            };
+            searchVolume = floor;
+            searchDelta = mostRecent?.searchDelta ?? searchDelta;
+            searchFloorApplied = true;
+            searchFloorAppliedCount++;
+          }
+        }
+
         // Get current source health states for weight renormalization
         const currentHealthSnapshot = getCurrentHealthSnapshot();
         
@@ -1601,8 +1710,8 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           prevNewsCount: newsUsedFallback ? newsCount : (prevNewsCount),
           prevSearchVolume: searchUsedFallback ? searchVolume : (prevSearchVolume),
           // Flag whether current data is fresh (for recovery detection)
-          newsIsFresh: !newsUsedFallback && (news?.articleCount24h ?? 0) > 0,
-          searchIsFresh: !searchUsedFallback && (serper?.searchVolume ?? 0) > 0,
+          newsIsFresh: !newsUsedFallback && !newsFloorApplied && (news?.articleCount24h ?? 0) > 0,
+          searchIsFresh: !searchUsedFallback && !searchFloorApplied && (serper?.searchVolume ?? 0) > 0,
           // Baseline medians for spike detection (p50 is more robust than mean).
           // Personal-p50 preferred when we have enough history; falls back to
           // population p50 for brand-new celebs with sparse data. This makes
@@ -1665,8 +1774,8 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           },
           fresh: {
             wiki: !!wiki,
-            news: !newsUsedFallback && !newsEmaHeld && (news?.articleCount24h ?? 0) > 0,
-            search: !searchUsedFallback && !searchEmaHeld && (serper?.searchVolume ?? 0) > 0,
+            news: !newsUsedFallback && !newsEmaHeld && !newsFloorApplied && (news?.articleCount24h ?? 0) > 0,
+            search: !searchUsedFallback && !searchEmaHeld && !searchFloorApplied && (serper?.searchVolume ?? 0) > 0,
             newsSource: hasPerPersonFallback ? "serper_news" : newsSource,
             newsIsRefresh: (newsSource === "mediastack" || newsSource === "union")
               ? (mediastackCadence?.shouldRefresh ?? true)
@@ -1684,11 +1793,15 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
             } : {}),
             newsEmaHeld,
             searchEmaHeld,
+            newsFloorApplied,
+            searchFloorApplied,
             stickyZeroGuard,
             newsGovernorFactor,
             searchGovernorFactor,
             ...(newsEmaHeld ? { newsRawCount: news?.articleCount24h ?? 0, newsHoldDetail: newsHoldDiag } : {}),
             ...(searchEmaHeld ? { searchRawVolume: serper?.searchVolume ?? 0, searchHoldDetail: searchHoldDiag } : {}),
+            ...(newsFloorApplied ? { newsFloorDetail } : {}),
+            ...(searchFloorApplied ? { searchFloorDetail } : {}),
             ...(searchDeltaStale ? { searchDeltaStale: true, snapshotAgeHours: Math.round(snapshotAgeHours * 10) / 10 } : {}),
           },
           change: {
@@ -1964,6 +2077,9 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     if (newsEmaHeldCount > 0 || searchEmaHeldCount > 0) {
       console.log(`[EMA Hold] News held: ${newsEmaHeldCount}/${people.length}, Search held: ${searchEmaHeldCount}/${people.length} (provider healthy, individual artifact suppressed)`);
     }
+    if (newsFloorAppliedCount > 0 || searchFloorAppliedCount > 0) {
+      console.log(`[24h Decay-Floor] News floor: ${newsFloorAppliedCount}/${people.length}, Search floor: ${searchFloorAppliedCount}/${people.length} (anchored above raw fetch via personal trailing-24h high)`);
+    }
 
     // Search delta instrumentation
     if (searchDeltaValues.length > 0) {
@@ -2041,6 +2157,10 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
         emaHeld: {
           news: newsEmaHeldCount,
           search: searchEmaHeldCount,
+        },
+        floorHeld24h: {
+          news: newsFloorAppliedCount,
+          search: searchFloorAppliedCount,
         },
         perPerson: {
           triggered: perPersonFallbackStats.triggered,

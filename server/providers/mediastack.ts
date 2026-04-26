@@ -394,7 +394,8 @@ export async function fetchMediastackNews(
   const cacheKey = keywordsOverride
     ? `mediastack:news:${personName.replace(/\s+/g, "_").toLowerCase()}:widened`
     : `mediastack:news:${personName.replace(/\s+/g, "_").toLowerCase()}`;
-  const CACHE_TTL_HOURS = 2;
+  // TTL pinned to refresh cadence — see MEDIASTACK_CACHE_TTL_HOURS comment below.
+  const CACHE_TTL_HOURS = MEDIASTACK_CACHE_TTL_HOURS;
 
   try {
     const cached = await getCachedResponse(cacheKey);
@@ -616,7 +617,7 @@ export async function fetchMediastackBatch(
             };
             results.set(person.id, chosen);
 
-            await setCachedResponse(primaryCacheKey, "mediastack", JSON.stringify(chosen), 2);
+            await setCachedResponse(primaryCacheKey, "mediastack", JSON.stringify(chosen), MEDIASTACK_CACHE_TTL_HOURS);
 
             await setWidenCooldown(person.id);
             widenedCount++;
@@ -723,6 +724,16 @@ const MEDIASTACK_REFRESH_INTERVAL_MINUTES = (() => {
   return raw;
 })();
 const MEDIASTACK_REFRESH_INTERVAL_MS = MEDIASTACK_REFRESH_INTERVAL_MINUTES * 60 * 1000;
+
+// Cache TTL is intentionally pinned to the refresh interval (minus a 5-minute
+// safety margin so the cache always expires fractionally BEFORE the next
+// refresh becomes due). Previously TTL was hardcoded at 2h while the refresh
+// interval defaults to 3h, leaving a ~1h window each cycle where the cache
+// was dead and `cacheOnly=true` ticks returned empty results — driving the
+// hourly news-count sawtooth (and, downstream, the trend-score sawtooth).
+// Pinning it to the refresh cadence closes that gap: every cache-only tick
+// hits a warm cache, and every refresh tick hits an expired cache → live fetch.
+const MEDIASTACK_CACHE_TTL_HOURS = Math.max(1, MEDIASTACK_REFRESH_INTERVAL_MINUTES - 5) / 60;
 
 /**
  * Canonical refresh cadence (minutes) used by the Mediastack provider.
