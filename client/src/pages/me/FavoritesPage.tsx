@@ -1,31 +1,56 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { ArrowLeft, Star, Heart, TrendingUp, Minus, Eye, LineChart } from "lucide-react";
+import {
+  ArrowLeft,
+  Star,
+  Heart,
+  TrendingUp,
+  Minus,
+  Eye,
+  LineChart,
+} from "lucide-react";
 import { useLocation } from "wouter";
 import { navigateToLogin } from "@/lib/authReturn";
 import { useAuth } from "@/contexts/AuthContext";
-import { useFavorites } from "@/hooks/useFavorites";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { useFavoritesDashboard } from "@/hooks/useFavoritesDashboard";
+import { WatchlistHeroCard } from "@/components/me/WatchlistHeroCard";
+import { WatchlistAlertsStrip } from "@/components/me/WatchlistAlertsStrip";
+import { WatchlistMarketsCard } from "@/components/me/WatchlistMarketsCard";
+import { WatchlistPollsCard } from "@/components/me/WatchlistPollsCard";
 
 export default function FavoritesPage() {
   const { user, session } = useAuth();
-  const { favorites, isLoading, error } = useFavorites();  const queryClient = useQueryClient();
+  const { data, isLoading, error, refetch } = useFavoritesDashboard();
+  const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
 
-  const handleUnfavorite = async (e: React.MouseEvent, celebrityId: string, name: string) => {
+  const { favorites, biggestMover, newMarkets, newPolls, alerts } = data;
+
+  const handleUnfavorite = async (
+    e: React.MouseEvent,
+    celebrityId: string,
+    name: string,
+  ) => {
     e.stopPropagation();
     if (!session?.access_token) return;
     try {
       const res = await fetch(`/api/me/favorites/${celebrityId}`, {
         method: "DELETE",
-        headers: { "Authorization": `Bearer ${session.access_token}` },
+        headers: { Authorization: `Bearer ${session.access_token}` },
       });
       if (!res.ok) throw new Error(`Failed: ${res.status}`);
-      await queryClient.invalidateQueries({ queryKey: ["/api/me/favorites"] });
+      // Invalidate both the legacy favorites feed (used by UserMenu,
+      // HomePage, etc.) and the dashboard aggregator so the removal is
+      // reflected everywhere without a full page reload.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["/api/me/favorites"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/me/favorites/dashboard"] }),
+      ]);
       toast("Removed from favorites", { description: `${name} removed` });
     } catch {
       toast.error("Error", { description: "Failed to remove favorite" });
@@ -37,8 +62,14 @@ export default function FavoritesPage() {
       <div className="min-h-screen flex items-center justify-center">
         <Card className="p-8 text-center max-w-md">
           <Star className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-          <h2 className="text-xl font-semibold mb-2">Sign in to view your favorites</h2>
-          <Button onClick={() => navigateToLogin(setLocation)} className="mt-4" data-testid="button-sign-in">
+          <h2 className="text-xl font-semibold mb-2">
+            Sign in to view your watchlist
+          </h2>
+          <Button
+            onClick={() => navigateToLogin(setLocation)}
+            className="mt-4"
+            data-testid="button-sign-in"
+          >
             Sign In
           </Button>
         </Card>
@@ -46,12 +77,14 @@ export default function FavoritesPage() {
     );
   }
 
+  const hasFavorites = favorites.length > 0;
+
   return (
     <div className="min-h-screen pb-20 md:pb-0">
       <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">
         <div className="container mx-auto px-4 h-14 flex items-center gap-4">
-          <Button 
-            variant="ghost" 
+          <Button
+            variant="ghost"
             size="icon"
             onClick={() => {
               if (window.history.length > 1) {
@@ -65,117 +98,176 @@ export default function FavoritesPage() {
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
-            <h1 className="font-semibold">My Favorites</h1>
-            <p className="text-xs text-muted-foreground">Celebrities you're tracking</p>
+            <h1 className="font-semibold">My Watchlist</h1>
+            <p className="text-xs text-muted-foreground">
+              What's changed with the people you track
+            </p>
           </div>
         </div>
       </header>
 
-      <div className="container mx-auto px-4 py-6 max-w-2xl">
+      <div className="container mx-auto px-4 py-6 max-w-3xl">
         {isLoading ? (
           <div className="space-y-4">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <Skeleton key={i} className="h-20 w-full" />
-            ))}
+            <Skeleton className="h-28 w-full" />
+            <Skeleton className="h-20 w-full" />
+            <div className="grid gap-4 md:grid-cols-2">
+              <Skeleton className="h-48 w-full" />
+              <Skeleton className="h-48 w-full" />
+            </div>
           </div>
         ) : error ? (
           <Card className="p-8 text-center">
             <Star className="h-12 w-12 mx-auto mb-4 text-destructive" />
-            <h2 className="text-lg font-semibold mb-2">Couldn&apos;t load favorites</h2>
+            <h2 className="text-lg font-semibold mb-2">
+              Couldn&apos;t load watchlist
+            </h2>
             <p className="text-muted-foreground mb-4">
               Please try again in a moment.
             </p>
-            <Button onClick={() => queryClient.invalidateQueries({ queryKey: ["/api/me/favorites"] })}>
-              Retry
-            </Button>
+            <Button onClick={() => refetch()}>Retry</Button>
           </Card>
-        ) : favorites && Array.isArray(favorites) && favorites.length > 0 ? (
-          <div className="space-y-3">
-            {favorites.map((fav: any) => (
-              <Card 
-                key={fav.id} 
-                className="p-4 hover-elevate cursor-pointer" 
-                onClick={() => setLocation(`/person/${fav.celebrityId}`)}
-                data-testid={`favorite-item-${fav.id}`}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Avatar className="h-12 w-12">
-                      {fav.imageUrl ? (
-                        <AvatarImage src={fav.imageUrl} alt={fav.name} />
-                      ) : (
-                        <AvatarFallback>{fav.name?.slice(0, 2).toUpperCase()}</AvatarFallback>
-                      )}
-                    </Avatar>
-                    <div>
-                      <p className="font-medium">{fav.name}</p>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="text-xs">{fav.category}</Badge>
-                        <span className="text-xs text-muted-foreground">#{fav.rank}</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="text-right">
-                      <div className="flex items-center gap-1">
-                        {(fav.change ?? 0) > 0 ? (
-                          <TrendingUp className="h-4 w-4 text-green-600 dark:text-green-400" />
-                        ) : (fav.change ?? 0) < 0 ? (
-                          <TrendingUp className="h-4 w-4 text-red-600 dark:text-red-400 rotate-180" />
-                        ) : (
-                          <Minus className="h-4 w-4 text-muted-foreground" />
-                        )}
-                        <span className={`font-mono text-sm ${(fav.change ?? 0) > 0 ? "text-green-600 dark:text-green-400" : (fav.change ?? 0) < 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}>
-                          {(fav.change ?? 0) > 0 ? "+" : ""}{fav.change ?? 0}%
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                        onClick={(e) => { e.stopPropagation(); setLocation(`/person/${fav.celebrityId}`); }}
-                        title="View Profile"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400"
-                        onClick={(e) => { e.stopPropagation(); setLocation(`/predict`); }}
-                        title="Predict"
-                      >
-                        <LineChart className="h-4 w-4" />
-                      </Button>
-                      <Button 
-                        variant="ghost" 
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={(e) => handleUnfavorite(e, fav.celebrityId, fav.name)}
-                        data-testid={`button-unfavorite-${fav.id}`}
-                        title="Remove from favorites"
-                      >
-                        <Heart className="h-4 w-4 text-red-600 dark:text-red-400 fill-red-600 dark:fill-red-400" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
-        ) : (
-          <Card className="p-8 text-center">
+        ) : !hasFavorites ? (
+          <Card className="p-8 text-center" data-testid="watchlist-empty-state">
             <Star className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-            <h2 className="text-lg font-semibold mb-2">No favorites yet</h2>
+            <h2 className="text-lg font-semibold mb-2">Your watchlist is empty</h2>
             <p className="text-muted-foreground mb-4">
-              Add celebrities to your favorites to track their rankings.
+              Favorite people from the leaderboard to track rank changes,
+              catch new markets, and see when your predictions start
+              winning.
             </p>
-            <Button onClick={() => setLocation("/")} data-testid="button-browse-leaderboard">
+            <Button
+              onClick={() => setLocation("/")}
+              data-testid="button-browse-leaderboard"
+            >
               Browse Leaderboard
             </Button>
           </Card>
+        ) : (
+          <div className="space-y-6">
+            {/* Dashboard sections */}
+            <div className="space-y-4">
+              <WatchlistHeroCard mover={biggestMover} />
+              <WatchlistAlertsStrip alerts={alerts} />
+              <div className="grid gap-4 md:grid-cols-2">
+                <WatchlistMarketsCard markets={newMarkets} />
+                <WatchlistPollsCard polls={newPolls} />
+              </div>
+            </div>
+
+            {/* All favorites list */}
+            <section data-testid="watchlist-all-favorites">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h2 className="text-base font-semibold">All favorites</h2>
+                  <p className="text-xs text-muted-foreground">
+                    {favorites.length} {favorites.length === 1 ? "person" : "people"}{" "}
+                    you're tracking
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-3">
+                {favorites.map((fav) => (
+                  <Card
+                    key={fav.id}
+                    className="p-4 hover-elevate cursor-pointer"
+                    onClick={() => setLocation(`/person/${fav.celebrityId}`)}
+                    data-testid={`favorite-item-${fav.id}`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-12 w-12">
+                          {fav.imageUrl ? (
+                            <AvatarImage src={fav.imageUrl} alt={fav.name} />
+                          ) : (
+                            <AvatarFallback>
+                              {fav.name?.slice(0, 2).toUpperCase()}
+                            </AvatarFallback>
+                          )}
+                        </Avatar>
+                        <div>
+                          <p className="font-medium">{fav.name}</p>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="text-xs">
+                              {fav.category}
+                            </Badge>
+                            {typeof fav.rank === "number" && (
+                              <span className="text-xs text-muted-foreground">
+                                #{fav.rank}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                          <div className="flex items-center gap-1">
+                            {(fav.change ?? 0) > 0 ? (
+                              <TrendingUp className="h-4 w-4 text-green-600 dark:text-green-400" />
+                            ) : (fav.change ?? 0) < 0 ? (
+                              <TrendingUp className="h-4 w-4 text-red-600 dark:text-red-400 rotate-180" />
+                            ) : (
+                              <Minus className="h-4 w-4 text-muted-foreground" />
+                            )}
+                            <span
+                              className={`font-mono text-sm ${
+                                (fav.change ?? 0) > 0
+                                  ? "text-green-600 dark:text-green-400"
+                                  : (fav.change ?? 0) < 0
+                                    ? "text-red-600 dark:text-red-400"
+                                    : "text-muted-foreground"
+                              }`}
+                            >
+                              {(fav.change ?? 0) > 0 ? "+" : ""}
+                              {fav.change ?? 0}%
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setLocation(`/person/${fav.celebrityId}`);
+                            }}
+                            title="View Profile"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setLocation(`/predict`);
+                            }}
+                            title="Predict"
+                          >
+                            <LineChart className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={(e) =>
+                              handleUnfavorite(e, fav.celebrityId, fav.name)
+                            }
+                            data-testid={`button-unfavorite-${fav.id}`}
+                            title="Remove from favorites"
+                          >
+                            <Heart className="h-4 w-4 text-red-600 dark:text-red-400 fill-red-600 dark:fill-red-400" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </section>
+          </div>
         )}
       </div>
     </div>
