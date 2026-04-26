@@ -1,5 +1,6 @@
 import { ThumbsUp, ThumbsDown, Reply, MoreVertical } from "lucide-react";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
+import { VoteLabel } from "@/components/VoteLabel";
 import { Badge } from "@/components/ui/badge";
 import { formatTimeAgo } from "@/lib/formatDate";
 import type { CommentItem, VoteType } from "./types";
@@ -63,6 +64,7 @@ export function CommentRow({
             <span className="text-xs text-muted-foreground shrink-0">
               {formatTimeAgo(comment.createdAt)}
             </span>
+            {!isDeleted && <VoteLabel label={comment.parentVoteLabel ?? null} />}
             {isTopComment && (
               <Badge variant="outline" className="text-[10px] border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 py-0">
                 Top Take

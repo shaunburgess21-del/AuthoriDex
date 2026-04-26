@@ -9,6 +9,7 @@ import {
 import { useLocation } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
+import { VoteLabel } from "@/components/VoteLabel";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest } from "@/lib/queryClient";
 import { navigateToLogin } from "@/lib/authReturn";
@@ -24,6 +25,7 @@ import { useCommentThread } from "./comments/useCommentThread";
 import type {
   CommentAdapter,
   CommentItem,
+  ParentVoteLabel,
   VoteType,
 } from "./comments/types";
 
@@ -77,6 +79,7 @@ interface CommunityInsight {
   createdAt: string;
   upvotes: number;
   downvotes: number;
+  parentVoteLabel?: ParentVoteLabel | null;
 }
 
 interface CommunityInsightsProps {
@@ -122,6 +125,7 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
         downvotes: i.downvotes ?? 0,
         userVote: null,
         deletedAt: i.deletedAt,
+        parentVoteLabel: i.parentVoteLabel ?? null,
         createdAt: i.createdAt,
       }));
     },
@@ -255,6 +259,7 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
       deletedAt: live.deletedAt ?? cached.deletedAt ?? null,
       upvotes: live.upvotes,
       downvotes: live.downvotes,
+      parentVoteLabel: live.parentVoteLabel ?? cached.parentVoteLabel ?? null,
     };
   }, [selectedInsightId, thread.comments]);
 
@@ -510,6 +515,7 @@ function InsightCard({
             >
               {formatTimeAgo(comment.createdAt)}
             </span>
+            {!isDeleted && <VoteLabel label={comment.parentVoteLabel ?? null} />}
             {sentimentVote && (
               <span
                 className="text-xs px-2 py-0.5 rounded-full backdrop-blur-sm border"

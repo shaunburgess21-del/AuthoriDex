@@ -220,6 +220,7 @@ export function useCommentThread(adapter: CommentAdapter): UseCommentThreadResul
               username: "[deleted user]",
               avatarUrl: null,
               userVote: null,
+              parentVoteLabel: null,
             }
             : comment
         ));
@@ -258,6 +259,7 @@ export function useCommentThread(adapter: CommentAdapter): UseCommentThreadResul
               username: "[deleted user]",
               avatarUrl: null,
               userVote: null,
+              parentVoteLabel: null,
             }
             : comment
         ));

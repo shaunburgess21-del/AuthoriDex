@@ -7,6 +7,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { navigateToLogin } from "@/lib/authReturn";
 import { formatTimeAgo } from "@/lib/formatDate";
 import { useAuth } from "@/contexts/AuthContext";
+import { VoteLabel } from "./VoteLabel";
 import { CommentActionDrawer } from "./comments/CommentActionDrawer";
 import { CommentComposer } from "./comments/CommentComposer";
 import { CommentList } from "./comments/CommentList";
@@ -14,7 +15,7 @@ import { CommentSortHeader } from "./comments/CommentSortHeader";
 import { useCommentThread } from "./comments/useCommentThread";
 import { DeleteContentDialog } from "./comments/DeleteContentDialog";
 import { useXpBurst } from "./XpBurstProvider";
-import type { CommentAdapter, CommentItem, VoteType } from "./comments/types";
+import type { CommentAdapter, CommentItem, ParentVoteLabel, VoteType } from "./comments/types";
 import { toast } from "sonner";
 
 interface InsightCommentResponse {
@@ -29,6 +30,7 @@ interface InsightCommentResponse {
   downvotes: number;
   userVote?: VoteType | null;
   deletedAt: string | null;
+  parentVoteLabel?: ParentVoteLabel | null;
   xp?: unknown;
 }
 
@@ -44,6 +46,7 @@ interface CommunityInsight {
   createdAt: string;
   upvotes: number;
   downvotes: number;
+  parentVoteLabel?: ParentVoteLabel | null;
 }
 
 function getSentimentColor(vote: number): string {
@@ -89,6 +92,7 @@ function toCommentItem(comment: InsightCommentResponse): CommentItem {
     downvotes: comment.downvotes ?? 0,
     userVote: comment.userVote ?? null,
     deletedAt: comment.deletedAt,
+    parentVoteLabel: comment.parentVoteLabel ?? null,
     createdAt: comment.createdAt,
   };
 }
@@ -286,6 +290,7 @@ function PostOverlayModalContent({
                   <span className="text-sm text-muted-foreground">
                     {formatTimeAgo(insight.createdAt)}
                   </span>
+                  {!isInsightDeleted && <VoteLabel label={insight.parentVoteLabel ?? null} />}
                 </div>
                 <button
                   onClick={() => setRootActionsOpen(true)}
