@@ -35,7 +35,7 @@ export default function MePage() {
   const { user, profile, profileLoading, isAdmin, signOut } = useAuth();
   const [, setLocation] = useLocation();
 
-  const displayName = profile?.fullName || profile?.username || user?.email?.split("@")[0] || "User";
+  const displayName = profile?.username || user?.email?.split("@")[0] || "User";
 
   return (
     <div className="min-h-screen pb-20 md:pb-0">

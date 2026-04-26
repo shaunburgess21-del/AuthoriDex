@@ -77,24 +77,21 @@ type CommentVoteState = "up" | "down" | null;
 type CommentAuthorJoin = {
   authorId: string | null;
   authorUsername: string | null;
-  authorFullName: string | null;
   authorAvatarUrl: string | null;
 };
 const DELETED_COMMENT_AUTHOR_USERNAME = "[deleted user]";
 const commentAuthorSelect = {
   authorId: profiles.id,
   authorUsername: profiles.username,
-  authorFullName: profiles.fullName,
   authorAvatarUrl: profiles.avatarUrl,
 };
 function formatCommentAuthor(author: CommentAuthorJoin) {
   if (!author.authorId) {
-    return { username: DELETED_COMMENT_AUTHOR_USERNAME, fullName: null, avatarUrl: null };
+    return { username: DELETED_COMMENT_AUTHOR_USERNAME, avatarUrl: null };
   }
 
   return {
     username: author.authorUsername,
-    fullName: author.authorFullName,
     avatarUrl: author.authorAvatarUrl,
   };
 }
@@ -2457,14 +2454,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           communityInsights.createdAt,
           profiles.id,
           profiles.username,
-          profiles.fullName,
           profiles.avatarUrl,
         )
         .orderBy(desc(sql`CAST(COUNT(CASE WHEN ${insightVotes.voteType} = 'up' THEN 1 END) AS INTEGER) - CAST(COUNT(CASE WHEN ${insightVotes.voteType} = 'down' THEN 1 END) AS INTEGER)`));
 
-      res.json(insights.map(({ authorId, authorUsername, authorFullName, authorAvatarUrl, ...insight }) => ({
+      res.json(insights.map(({ authorId, authorUsername, authorAvatarUrl, ...insight }) => ({
         ...insight,
-        ...formatCommentAuthor({ authorId, authorUsername, authorFullName, authorAvatarUrl }),
+        ...formatCommentAuthor({ authorId, authorUsername, authorAvatarUrl }),
       })));
     } catch (error) {
       console.error("Error fetching community insights:", error);
@@ -2529,7 +2525,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...formatCommentAuthor(profile ?? {
           authorId: null,
           authorUsername: null,
-          authorFullName: null,
           authorAvatarUrl: null,
         }),
         upvotes: 0,
@@ -3630,7 +3625,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .select({
           id: profiles.id,
           username: profiles.username,
-          fullName: profiles.fullName,
           avatarUrl: profiles.avatarUrl,
           isPublic: profiles.isPublic,
           rank: profiles.rank,
@@ -3670,7 +3664,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             rank: i + 1,
             userId: r.userId,
             username: shouldRevealIdentity ? (profile?.username || null) : null,
-            displayName: shouldRevealIdentity ? (profile?.fullName || profile?.username || 'Anonymous') : 'Private Predictor',
+            displayName: shouldRevealIdentity ? (profile?.username || 'Anonymous') : 'Private Predictor',
             avatarUrl: shouldRevealIdentity ? (profile?.avatarUrl || null) : null,
             isPublic,
             isAgent: profile?.isAgent ?? false,
@@ -3805,9 +3799,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Add vote counts to comments
-      const commentsWithVotes = comments.map(({ authorId, authorUsername, authorFullName, authorAvatarUrl, ...comment }) => ({
+      const commentsWithVotes = comments.map(({ authorId, authorUsername, authorAvatarUrl, ...comment }) => ({
         ...comment,
-        ...formatCommentAuthor({ authorId, authorUsername, authorFullName, authorAvatarUrl }),
+        ...formatCommentAuthor({ authorId, authorUsername, authorAvatarUrl }),
         upvotes: voteCounts[comment.id]?.upvotes || 0,
         downvotes: voteCounts[comment.id]?.downvotes || 0,
         userVote: userVoteMap.get(comment.id) ?? null,
@@ -3896,7 +3890,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...formatCommentAuthor(profile ?? {
           authorId: null,
           authorUsername: null,
-          authorFullName: null,
           authorAvatarUrl: null,
         }),
         upvotes: 0,
@@ -5009,9 +5002,9 @@ Only return the JSON object.`;
         }
       }
 
-      res.json(comments.map(({ authorId, authorUsername, authorFullName, authorAvatarUrl, ...comment }) => ({
+      res.json(comments.map(({ authorId, authorUsername, authorAvatarUrl, ...comment }) => ({
         ...comment,
-        ...formatCommentAuthor({ authorId, authorUsername, authorFullName, authorAvatarUrl }),
+        ...formatCommentAuthor({ authorId, authorUsername, authorAvatarUrl }),
         userVote: userVoteMap.get(comment.id) ?? null,
       })));
     } catch (error: any) {
@@ -5055,7 +5048,6 @@ Only return the JSON object.`;
         ...formatCommentAuthor(profile ?? {
           authorId: null,
           authorUsername: null,
-          authorFullName: null,
           authorAvatarUrl: null,
         }),
       });
@@ -5323,16 +5315,18 @@ Only return the JSON object.`;
         metadata: { reason: 'New account signup bonus' },
       };
       
-      // Try to get user details from Supabase Admin API, but don't block on failure
+      // Try to get user details from Supabase Admin API, but don't block on failure.
+      // We deliberately ignore `user_metadata.full_name` / `name` — the previous
+      // behaviour seeded our `fullName` column from Google OAuth's display name,
+      // but the column is now deprecated (username is the single source of truth)
+      // so there's nothing to seed.
       let email = jwtEmail;
-      let fullName: string | null = null;
       let avatarUrl: string | null = null;
       
       try {
         const result = await supabaseServer.auth.admin.getUserById(userId);
         if (result.data?.user) {
           email = result.data.user.email || email;
-          fullName = result.data.user.user_metadata?.full_name || result.data.user.user_metadata?.name || null;
           avatarUrl = result.data.user.user_metadata?.avatar_url || result.data.user.user_metadata?.picture || null;
         } else {
           console.warn(`[Profile] Admin API getUserById failed for ${userId}, falling back to JWT email: ${jwtEmail}`);
@@ -5351,11 +5345,10 @@ Only return the JSON object.`;
       const created = existing.length === 0;
 
       if (!created) {
-        // Update existing profile (update avatar/name if changed)
+        // Update existing profile (update avatar if changed)
         const updateData: Partial<Profile> = {
           lastActiveAt: new Date(),
         };
-        if (fullName && !existing[0].fullName) updateData.fullName = fullName;
         if (avatarUrl && !existing[0].avatarUrl) updateData.avatarUrl = avatarUrl;
         
         await db.transaction(async (tx) => {
@@ -5367,13 +5360,19 @@ Only return the JSON object.`;
         return res.json({ profile: updated[0], created: false });
       }
       
-      // Create new profile
-      const username = email ? email.split("@")[0].toLowerCase().replace(/[^a-z0-9]/g, "") + Math.floor(Math.random() * 1000) : `user${Date.now()}`;
-      
+      // Create new profile.
+      // Username intentionally left null at sync time — the user picks
+      // their own handle on /login/welcome. Auto-generating from email
+      // local part (the previous behaviour) leaked the address shape
+      // and produced unattractive defaults like `andrewdburgess0123`,
+      // which most users would just rename anyway. Postgres allows
+      // multiple NULLs in a UNIQUE column, so this is safe; the
+      // NewUserGate keeps un-onboarded users on /login/welcome until
+      // they submit a username, so a transient null is never visible
+      // to the rest of the app.
       const newProfile = {
         id: userId,
-        username,
-        fullName,
+        username: null,
         avatarUrl,
         avatarSeed: `${userId}:default:v1`,
         isPublic: true,
@@ -5418,11 +5417,16 @@ Only return the JSON object.`;
     }
   });
   
-  // Update current user's profile
+  // Update current user's profile.
+  // `fullName` is intentionally NOT accepted here anymore — it was
+  // merged into `username` (single source of truth for handle and
+  // display). Older clients that still send the field will simply
+  // have it ignored rather than rejected, so a stale tab in another
+  // browser won't blow up.
   app.patch("/api/profile/me", requireAuth, async (req: AuthRequest, res) => {
     try {
       const userId = req.userId!;
-      const { username, fullName, avatarUrl, isPublic } = req.body;
+      const { username, avatarUrl, isPublic } = req.body;
       
       // Build update object with only provided fields
       const updateData: Partial<Profile> = {};
@@ -5436,7 +5440,6 @@ Only return the JSON object.`;
         }
         updateData.username = username;
       }
-      if (fullName !== undefined) updateData.fullName = fullName;
       if (avatarUrl !== undefined) updateData.avatarUrl = avatarUrl;
       if (isPublic !== undefined) updateData.isPublic = isPublic;
       
@@ -5518,9 +5521,9 @@ Only return the JSON object.`;
       // hold up the user's onboarding redirect. The idempotencyKey
       // prevents accidental duplicate sends if this handler is ever
       // hit twice for the same user (network retry, double-click).
+      // Template no longer takes a firstName — see Welcome.tsx for
+      // why we dropped the personal greeting.
       if (isFirstAcceptance && req.userEmail) {
-        const firstName =
-          existing.fullName?.trim().split(/\s+/)[0] || updated[0].username || undefined;
         const creditAmount = updated[0].predictCredits ?? 0;
         const baseUrl =
           process.env.PUBLIC_APP_URL ||
@@ -5534,7 +5537,6 @@ Only return the JSON object.`;
               subject: welcomeSubject(creditAmount),
               category: "lifecycle",
               template: React.createElement(WelcomeEmail, {
-                firstName,
                 baseUrl,
                 creditAmount,
               }),
@@ -5566,8 +5568,18 @@ Only return the JSON object.`;
       const userId = req.userId!;
       const { seed, avatarUrl } = req.body ?? {};
 
-      if (typeof seed !== "string" || seed.trim().length === 0) {
-        return res.status(400).json({ error: "seed is required and must be a non-empty string" });
+      // `seed` accepts either a non-empty string (generative avatar) or
+      // explicit null (user uploaded a custom photo — no seed to track).
+      // Generative avatars and uploaded photos are mutually exclusive
+      // sources of truth, so we clear the column rather than leave a
+      // stale seed pointing at the previous look.
+      const seedIsValid =
+        seed === null ||
+        (typeof seed === "string" && seed.trim().length > 0);
+      if (!seedIsValid) {
+        return res.status(400).json({
+          error: "seed must be a non-empty string or null",
+        });
       }
       if (typeof avatarUrl !== "string" || avatarUrl.trim().length === 0) {
         return res.status(400).json({ error: "avatarUrl is required and must be a non-empty string" });
@@ -5698,7 +5710,6 @@ Only return the JSON object.`;
       // Return full public profile
       res.json({
         username: baseProfile.username,
-        fullName: baseProfile.fullName,
         avatarUrl: baseProfile.avatarUrl,
         rank: baseProfile.rank,
         xpPoints: baseProfile.xpPoints,
@@ -8133,7 +8144,7 @@ Only return the JSON object.`;
       let users;
       if (search) {
         users = await db.select().from(profiles)
-          .where(sql`${profiles.username} ILIKE ${'%' + search + '%'} OR ${profiles.fullName} ILIKE ${'%' + search + '%'}`)
+          .where(sql`${profiles.username} ILIKE ${'%' + search + '%'}`)
           .limit(100);
       } else {
         users = await db.select().from(profiles).limit(100);
@@ -8142,7 +8153,6 @@ Only return the JSON object.`;
       res.json(users.map(u => ({
         id: u.id,
         username: u.username,
-        fullName: u.fullName,
         role: u.role,
         rank: u.rank,
         xpPoints: u.xpPoints,
@@ -8325,7 +8335,6 @@ Only return the JSON object.`;
           previousData: {
             id: user.id,
             username: user.username,
-            fullName: user.fullName,
             role: user.role,
             rank: user.rank,
             predictCredits: user.predictCredits,
@@ -10033,9 +10042,9 @@ Only return the JSON object.`;
         .orderBy(desc(insightComments.createdAt))
         .limit(100);
       
-      res.json(comments.map(({ authorId, authorUsername, authorFullName, authorAvatarUrl, ...comment }) => ({
+      res.json(comments.map(({ authorId, authorUsername, authorAvatarUrl, ...comment }) => ({
         ...comment,
-        ...formatCommentAuthor({ authorId, authorUsername, authorFullName, authorAvatarUrl }),
+        ...formatCommentAuthor({ authorId, authorUsername, authorAvatarUrl }),
       })));
     } catch (error: any) {
       console.error("Error fetching comments for moderation:", error.message);
@@ -10672,9 +10681,9 @@ Target length: about 90-150 words.`;
         }
       }
 
-      res.json(comments.map(({ authorId, authorUsername, authorFullName, authorAvatarUrl, ...comment }) => ({
+      res.json(comments.map(({ authorId, authorUsername, authorAvatarUrl, ...comment }) => ({
         ...comment,
-        ...formatCommentAuthor({ authorId, authorUsername, authorFullName, authorAvatarUrl }),
+        ...formatCommentAuthor({ authorId, authorUsername, authorAvatarUrl }),
         userVote: userVoteMap.get(comment.id) ?? null,
       })));
     } catch (error: any) {
@@ -10731,7 +10740,6 @@ Target length: about 90-150 words.`;
         ...formatCommentAuthor(profile ?? {
           authorId: null,
           authorUsername: null,
-          authorFullName: null,
           authorAvatarUrl: null,
         }),
       });
@@ -11697,9 +11705,9 @@ Target length: about 90-150 words.`;
         }
       }
 
-      res.json(comments.map(({ authorId, authorUsername, authorFullName, authorAvatarUrl, ...comment }) => ({
+      res.json(comments.map(({ authorId, authorUsername, authorAvatarUrl, ...comment }) => ({
         ...comment,
-        ...formatCommentAuthor({ authorId, authorUsername, authorFullName, authorAvatarUrl }),
+        ...formatCommentAuthor({ authorId, authorUsername, authorAvatarUrl }),
         userVote: userVoteMap.get(comment.id) ?? null,
       })));
     } catch (error: any) {
@@ -11751,7 +11759,6 @@ Target length: about 90-150 words.`;
         ...formatCommentAuthor(profile ?? {
           authorId: null,
           authorUsername: null,
-          authorFullName: null,
           authorAvatarUrl: null,
         }),
       });
@@ -12244,7 +12251,6 @@ Target length: about 90-150 words.`;
           .select({
             id: profiles.id,
             username: profiles.username,
-            fullName: profiles.fullName,
             avatarUrl: profiles.avatarUrl,
             isAgent: profiles.isAgent,
           })
@@ -12258,7 +12264,7 @@ Target length: about 90-150 words.`;
 
     for (const bet of bets) {
       const profile = profileMap.get(bet.userId);
-      const displayName = profile?.fullName || profile?.username || "Anonymous";
+      const displayName = profile?.username || "Anonymous";
       const username = profile?.username || null;
       const avatarUrl = profile?.avatarUrl || null;
       const isAgent = profile?.isAgent ?? false;
@@ -12491,9 +12497,9 @@ Target length: about 90-150 words.`;
         .where(eq(openMarketComments.marketId, market.id))
         .orderBy(desc(openMarketComments.createdAt))
         .limit(50);
-      const commentsWithAuthors = comments.map(({ authorId, authorUsername, authorFullName, authorAvatarUrl, ...comment }) => ({
+      const commentsWithAuthors = comments.map(({ authorId, authorUsername, authorAvatarUrl, ...comment }) => ({
         ...comment,
-        ...formatCommentAuthor({ authorId, authorUsername, authorFullName, authorAvatarUrl }),
+        ...formatCommentAuthor({ authorId, authorUsername, authorAvatarUrl }),
       }));
 
       const [participantResult] = await db
@@ -13414,7 +13420,6 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         ...formatCommentAuthor(profile ?? {
           authorId: null,
           authorUsername: null,
-          authorFullName: null,
           authorAvatarUrl: null,
         }),
       });
@@ -13477,9 +13482,9 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         }
       }
 
-      res.json(comments.map(({ authorId, authorUsername, authorFullName, authorAvatarUrl, ...comment }) => ({
+      res.json(comments.map(({ authorId, authorUsername, authorAvatarUrl, ...comment }) => ({
         ...comment,
-        ...formatCommentAuthor({ authorId, authorUsername, authorFullName, authorAvatarUrl }),
+        ...formatCommentAuthor({ authorId, authorUsername, authorAvatarUrl }),
         userVote: userVoteMap.get(comment.id) ?? null,
       })));
     } catch (error) {
@@ -14271,11 +14276,11 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       const winnerIds = Array.isArray(notes.winnerUserId) ? notes.winnerUserId : notes.winnerUserId ? [notes.winnerUserId] : [];
       if (winnerIds.length > 0) {
         const winnerProfiles = await db
-          .select({ id: profiles.id, username: profiles.username, fullName: profiles.fullName })
+          .select({ id: profiles.id, username: profiles.username })
           .from(profiles)
           .where(inArray(profiles.id, winnerIds));
         const names = winnerProfiles
-          .map(p => p.username || p.fullName)
+          .map(p => p.username)
           .filter(Boolean);
         winnerUsername = names.length > 0 ? names.join(", ") : null;
       }
@@ -14593,7 +14598,6 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           .select({
             id: profiles.id,
             username: profiles.username,
-            fullName: profiles.fullName,
             avatarUrl: profiles.avatarUrl,
             isAgent: profiles.isAgent,
             isPublic: profiles.isPublic,
@@ -14652,7 +14656,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
             marketSlug: market.slug,
             marketType: market.marketType,
             username: profile?.username || null,
-            displayName: profile?.fullName || profile?.username || "Anonymous",
+            displayName: profile?.username || "Anonymous",
             avatarUrl: profile?.avatarUrl || null,
             isAgent: profile?.isAgent ?? false,
             isPublic: profile?.isPublic ?? false,
@@ -15817,7 +15821,6 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         profile: {
           id: profile.id,
           username: profile.username,
-          fullName: profile.fullName,
           email: authEmail,
           role: profile.role,
           rank: profile.rank,

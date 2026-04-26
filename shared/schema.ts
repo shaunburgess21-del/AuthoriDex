@@ -822,6 +822,11 @@ export type InsertCreditLedger = z.infer<typeof insertCreditLedgerSchema>;
 export const profiles = pgTable("profiles", {
   id: varchar("id").primaryKey(), // Supabase Auth user ID (not auto-generated)
   username: text("username").unique(),
+  // DEPRECATED: removed from API responses, types, and UI in the
+  // username/displayName merge commit. Column kept in the DB for one
+  // release as a rollback safety net; will be dropped in a follow-up
+  // migration (`migrations/0026_profiles_drop_full_name.sql`). Do not
+  // re-introduce reads or writes of this field.
   fullName: text("full_name"),
   avatarUrl: text("avatar_url"),
   avatarSeed: text("avatar_seed"),

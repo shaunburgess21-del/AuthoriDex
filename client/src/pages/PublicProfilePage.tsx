@@ -33,7 +33,6 @@ import { MyVoteCard, type MyVoteCardData } from "@/components/me/MyVoteCard";
 
 interface PublicProfile {
   username: string;
-  fullName?: string | null;
   avatarUrl?: string | null;
   rank?: string;
   xpPoints?: number;
@@ -83,7 +82,8 @@ interface BetsResponse {
   hasMore: boolean;
 }
 
-function ShareLinkButton({ url, label }: { url: string; label: string }) {  const [copied, setCopied] = useState(false);
+function ShareLinkButton({ url, label }: { url: string; label: string }) {
+  const [copied, setCopied] = useState(false);
 
   const handleCopy = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -383,7 +383,7 @@ export default function PublicProfilePage() {
     );
   }
 
-  const displayName = profile.agentProfile?.displayName || profile.fullName || profile.username || "User";
+  const displayName = profile.agentProfile?.displayName || profile.username || "User";
   const memberSince = profile.createdAt ? new Date(profile.createdAt).toLocaleDateString("en-US", {
     year: "numeric",
     month: "long"

@@ -49,7 +49,6 @@ interface CreditHistoryResponse {
   profile: {
     id: string;
     username: string | null;
-    fullName: string | null;
     email: string | null;
     role: string;
     rank: string;
@@ -135,7 +134,7 @@ export function AdminUserCreditHistory({
           <div className="space-y-5">
             <div className="space-y-2">
               <div className="flex items-center gap-2 flex-wrap">
-                <p className="text-lg font-bold" data-testid="text-user-display-name">{data.profile.username || data.profile.fullName || "Unknown"}</p>
+                <p className="text-lg font-bold" data-testid="text-user-display-name">{data.profile.username || "Unknown"}</p>
                 <Badge variant="outline" className="text-xs">{data.profile.role}</Badge>
                 <Badge variant="secondary" className="text-xs">{data.profile.rank}</Badge>
               </div>

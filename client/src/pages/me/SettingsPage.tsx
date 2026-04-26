@@ -1,10 +1,24 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { ArrowLeft, Settings, User, Bell, Shield, Eye, Loader2, Vote, TrendingUp, ChevronRight } from "lucide-react";
+import {
+  ArrowLeft,
+  Settings,
+  User,
+  Bell,
+  Shield,
+  Eye,
+  Loader2,
+  Vote,
+  TrendingUp,
+  ChevronRight,
+  Camera,
+  Sparkles,
+  Upload,
+} from "lucide-react";
 import { useLocation } from "wouter";
 import { navigateToLogin } from "@/lib/authReturn";
 import { useAuth } from "@/contexts/AuthContext";
@@ -13,20 +27,31 @@ import { toast } from "sonner";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Badge } from "@/components/ui/badge";
-import { UploadImageInput } from "@/components/ui/upload-image-input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { AvatarPicker } from "@/components/avatar/AvatarPicker";
-import { uploadGeneratedAvatar } from "@/lib/avatar/upload";
+import { uploadAvatarFile, uploadGeneratedAvatar } from "@/lib/avatar/upload";
 import { PasswordCard } from "./PasswordCard";
 
 export default function SettingsPage() {
   const { user, profile, profileLoading, refreshProfile, signOut } = useAuth();
   const [, setLocation] = useLocation();
   const [username, setUsername] = useState(profile?.username || "");
-  const [fullName, setFullName] = useState(profile?.fullName || "");
   const [avatarUrl, setAvatarUrl] = useState(profile?.avatarUrl || "");
   const [isPublic, setIsPublic] = useState(profile?.isPublic ?? true);
   const [hasLocalChanges, setHasLocalChanges] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+
+  // Hidden file input for the "Upload a photo" branch of the camera+
+  // popover. Kept on the page (not inside the popover content) so the
+  // input survives popover open/close cycles and we don't lose the
+  // selected file mid-flow.
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!profile || hasLocalChanges) {
@@ -34,13 +59,12 @@ export default function SettingsPage() {
     }
 
     setUsername(profile.username || "");
-    setFullName(profile.fullName || "");
     setAvatarUrl(profile.avatarUrl || "");
     setIsPublic(profile.isPublic);
   }, [profile, hasLocalChanges]);
 
   const updateProfileMutation = useMutation({
-    mutationFn: async (data: { username?: string; fullName?: string; avatarUrl?: string | null; isPublic?: boolean }) => {
+    mutationFn: async (data: { username?: string; isPublic?: boolean }) => {
       const response = await apiRequest("PATCH", "/api/profile/me", data);
       return response.json();
     },
@@ -56,18 +80,19 @@ export default function SettingsPage() {
   });
 
   const normalize = (v: string | null | undefined) => (v ?? "").trim();
+  // Avatar deliberately NOT included in the dirty-check anymore — picker
+  // and file upload both PATCH /api/profile/avatar themselves and refresh
+  // the profile, so by the time control returns the avatar is already
+  // persisted. Including it here would leave Save Changes glowing
+  // "Unsaved" forever after every avatar swap.
   const isDirty = profile
     ? normalize(username) !== normalize(profile.username) ||
-      normalize(fullName) !== normalize(profile.fullName) ||
-      normalize(avatarUrl) !== normalize(profile.avatarUrl) ||
       isPublic !== profile.isPublic
     : false;
 
   const handleSaveProfile = () => {
     updateProfileMutation.mutate({
       username,
-      fullName,
-      avatarUrl: avatarUrl.trim() || null,
       isPublic,
     });
   };
@@ -93,13 +118,51 @@ export default function SettingsPage() {
     }
   };
 
+  // Camera+ popover → "Upload a photo" branch. We stage the file out of
+  // the input element immediately (before any async work) so that quick
+  // re-uploads of a different file fire correctly: the input's
+  // `onChange` only fires when the *value* changes, and we reset it
+  // below so picking the same filename twice still works.
+  const handleAvatarFileSelected = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    setAvatarUploading(true);
+    try {
+      const userId = profile?.id || user!.id;
+      const { url } = await uploadAvatarFile(userId, file);
+
+      // Pass `seed: null` so the server clears the avatarSeed alongside
+      // the URL — uploaded photos and generated seeds are mutually
+      // exclusive sources of truth for a profile's avatar.
+      await apiRequest("PATCH", "/api/profile/avatar", {
+        seed: null,
+        avatarUrl: url,
+      });
+
+      setAvatarUrl(url);
+      await refreshProfile();
+      toast("Avatar updated", { description: "Looking sharp." });
+    } catch (err) {
+      console.error("[SettingsPage] Avatar upload failed:", err);
+      toast.error("Could not upload photo", {
+        description: err instanceof Error ? err.message : "Please try again.",
+      });
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
+
   const handleDeleteAccount = async () => {
     if (confirm("Are you sure you want to delete your account? This action cannot be undone.")) {
       toast.error("Account deletion", { description: "Account deletion is not yet implemented." });
     }
   };
 
-  const displayName = fullName || username || user?.email?.split("@")[0] || "User";
+  const displayName = username || user?.email?.split("@")[0] || "User";
 
   if (!user) {
     return (
@@ -157,52 +220,82 @@ export default function SettingsPage() {
           </div>
           
           <div className="flex items-center gap-4 mb-6">
-            <div className="relative">
-              <UserProfileAvatar
-                displayName={displayName}
-                avatarUrl={avatarUrl}
-                className="h-20 w-20"
-                fallbackClassName="text-2xl"
-              />
-            </div>
+            {/* Polymarket-style avatar control: a small camera+ pill
+                in the bottom-right corner that's visible on all
+                viewports (so mobile users can tap it) and animates
+                slightly on hover. Clicking opens a popover with the
+                two ways to change the avatar. */}
+            <Popover open={avatarMenuOpen} onOpenChange={setAvatarMenuOpen}>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  className="group relative h-20 w-20 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  aria-label="Change profile photo"
+                  disabled={avatarUploading}
+                  data-testid="button-open-avatar-menu"
+                >
+                  <UserProfileAvatar
+                    displayName={displayName}
+                    avatarUrl={avatarUrl}
+                    className="h-20 w-20"
+                    fallbackClassName="text-2xl"
+                  />
+                  <span
+                    className="pointer-events-none absolute -bottom-0.5 -right-0.5 flex h-7 w-7 items-center justify-center rounded-full border-2 border-background bg-foreground text-background shadow-sm transition-transform group-hover:scale-110"
+                    aria-hidden
+                  >
+                    {avatarUploading ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Camera className="h-3.5 w-3.5" />
+                    )}
+                  </span>
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="start" className="w-56 p-1">
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-left hover:bg-muted/60 transition-colors"
+                  onClick={() => {
+                    setAvatarMenuOpen(false);
+                    setPickerOpen(true);
+                  }}
+                  data-testid="button-pick-generative-avatar"
+                >
+                  <Sparkles className="h-4 w-4 text-violet-500" />
+                  <span>Pick a generative avatar</span>
+                </button>
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-left hover:bg-muted/60 transition-colors"
+                  onClick={() => {
+                    setAvatarMenuOpen(false);
+                    fileInputRef.current?.click();
+                  }}
+                  data-testid="button-upload-avatar-photo"
+                >
+                  <Upload className="h-4 w-4 text-blue-500" />
+                  <span>Upload a photo</span>
+                </button>
+              </PopoverContent>
+            </Popover>
             <div>
               <p className="font-medium">{displayName}</p>
               <p className="text-sm text-muted-foreground">{user.email}</p>
             </div>
           </div>
 
-          <div className="mb-4">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setPickerOpen(true)}
-              data-testid="button-open-avatar-picker"
-            >
-              Change avatar
-            </Button>
-          </div>
-
-          <div className="mb-6 space-y-2">
-            <Label>Profile Photo</Label>
-            <UploadImageInput
-              value={avatarUrl}
-              onChange={(url) => {
-                setHasLocalChanges(true);
-                setAvatarUrl(url);
-              }}
-              moduleName="avatars"
-              slugOrId={profile?.id || user.id}
-              disabled={updateProfileMutation.isPending}
-              placeholder="Paste an image URL or upload a photo"
-              hidePreview
-              buttonAriaLabel="Change profile photo"
-              buttonTestId="button-change-avatar"
-            />
-            <p className="text-xs text-muted-foreground">
-              Upload PNG, JPG, or WEBP up to 2MB. Save changes to apply it to your profile.
-            </p>
-          </div>
+          {/* Hidden file input — triggered programmatically from the
+              "Upload a photo" popover item. PNG/JPG/WEBP up to 2 MB
+              (validated client-side in uploadAvatarFile). */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            className="hidden"
+            onChange={handleAvatarFileSelected}
+            data-testid="input-avatar-file"
+          />
 
           <div className="space-y-4">
             <div className="space-y-2">
@@ -222,20 +315,6 @@ export default function SettingsPage() {
               </p>
             </div>
             
-            <div className="space-y-2">
-              <Label htmlFor="fullName">Display Name</Label>
-              <Input 
-                id="fullName" 
-                value={fullName}
-                onChange={(e) => {
-                  setHasLocalChanges(true);
-                  setFullName(e.target.value);
-                }}
-                placeholder="Your display name"
-                data-testid="input-fullname"
-              />
-            </div>
-
             <div className="flex items-center gap-3">
               <Button
                 onClick={handleSaveProfile}

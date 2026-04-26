@@ -6,7 +6,6 @@ import { getSupabase } from "@/lib/supabase";
 export interface UserProfile {
   id: string;
   username: string | null;
-  fullName: string | null;
   avatarUrl: string | null;
   avatarSeed?: string | null;
   isPublic: boolean;

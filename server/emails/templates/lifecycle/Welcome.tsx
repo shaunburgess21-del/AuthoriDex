@@ -10,9 +10,13 @@
  * ranker. Framing: "people and events shaping the world" covers
  * both the celebrity leaderboard and the world-events markets.
  *
+ * No personal greeting. Polymarket's onboarding emails open with
+ * the brand line ("Welcome to Polymarket") and skip "Hi <name>" —
+ * because it (a) avoids awkward fallbacks when only the email is
+ * known and (b) reads as transactional rather than marketing,
+ * which helps Gmail Primary placement.
+ *
  * Props:
- *   firstName     — optional; personalises the greeting if known.
- *                   Falls back to a generic "You're in." greeting.
  *   baseUrl       — app base URL for CTA links. Defaults to
  *                   https://voxdex.com for prod-safe defaults;
  *                   caller should pass the per-env URL when actually
@@ -32,7 +36,6 @@ import { Layout } from "../components/Layout";
 import { colors, radius, spacing, typography } from "../theme";
 
 interface WelcomeEmailProps {
-  firstName?: string;
   baseUrl?: string;
   creditAmount?: number;
 }
@@ -46,22 +49,27 @@ const DEFAULT_CREDIT_AMOUNT = 10000;
 const formatCredits = (n: number) => n.toLocaleString("en-US");
 
 /**
- * Build the subject line for a given credit amount. Kept as a
- * function (not a constant) because the number is dynamic per send.
+ * Build the subject line. Currently a fixed string — we used to
+ * include the credit amount ("...you've got 10,000 credits") but
+ * Gmail's tab classifier read the dollar-style number + reward
+ * framing as marketing and routed first-touch sends to Promotions.
+ * Stripping the number to plain "Welcome to VoxDex" is the first
+ * deliverability lever we're testing toward Primary placement.
+ *
+ * Kept as a function (not a constant) so callers can keep passing
+ * `creditAmount` without churn; the arg is intentionally ignored.
  */
-export function welcomeSubject(creditAmount: number): string {
-  return `Welcome to VoxDex — you've got ${formatCredits(creditAmount)} credits`;
+export function welcomeSubject(_creditAmount?: number): string {
+  return "Welcome to VoxDex";
 }
 
 /** Back-compat constant for any caller that already imports this. */
-export const WELCOME_SUBJECT = welcomeSubject(DEFAULT_CREDIT_AMOUNT);
+export const WELCOME_SUBJECT = welcomeSubject();
 
 export function WelcomeEmail({
-  firstName,
   baseUrl = DEFAULT_BASE_URL,
   creditAmount = DEFAULT_CREDIT_AMOUNT,
 }: WelcomeEmailProps) {
-  const greeting = firstName ? `You're in, ${firstName}.` : "You're in.";
   const creditsLabel = `${formatCredits(creditAmount)} credits`;
 
   return (
@@ -69,7 +77,7 @@ export function WelcomeEmail({
       preview={`You're in. ${creditsLabel} are waiting — go back your first prediction.`}
       footerContext="You're receiving this because you just created a VoxDex account."
     >
-      <Heading style={typography.h1}>{greeting}</Heading>
+      <Heading style={typography.h1}>Welcome to VoxDex.</Heading>
 
       <Text style={typography.body}>
         VoxDex is a live trend index for the people and events shaping

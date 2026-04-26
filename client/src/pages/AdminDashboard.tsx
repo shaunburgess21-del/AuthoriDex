@@ -5382,7 +5382,7 @@ export default function AdminDashboard() {
                           </div>
                           <div>
                             <p className="font-medium">
-                              {user.username || user.fullName || "Unknown"}
+                              {user.username || "Unknown"}
                             </p>
                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
                               <Badge variant="outline" className="text-xs">
@@ -6889,7 +6889,7 @@ export default function AdminDashboard() {
           <DialogHeader>
             <DialogTitle>Adjust Credits</DialogTitle>
             <DialogDescription>
-              Modify credits for {selectedUser?.username || selectedUser?.fullName || "user"}
+              Modify credits for {selectedUser?.username || "user"}
               <br />
               Current balance: {selectedUser?.predictCredits || 0} credits
             </DialogDescription>
@@ -6965,7 +6965,7 @@ export default function AdminDashboard() {
             <DialogDescription>
               Banned users keep their data but lose platform access until manually restored.
               <br />
-              Target: {banUserTarget?.username || banUserTarget?.fullName || "user"}
+              Target: {banUserTarget?.username || "user"}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -7034,7 +7034,7 @@ export default function AdminDashboard() {
             <DialogDescription>
               This permanently deletes the user from app data and Supabase auth.
               <br />
-              Target: {deleteUserTarget?.username || deleteUserTarget?.fullName || "user"}
+              Target: {deleteUserTarget?.username || "user"}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">

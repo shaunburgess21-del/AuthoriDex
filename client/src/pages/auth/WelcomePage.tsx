@@ -1,25 +1,31 @@
 /**
  * /login/welcome — one-time onboarding for first-time authenticated users.
- * Pre-fills the auto-generated username from `/api/profile/sync`, lets the
- * user adjust it (with debounced availability checks), shows their seeded
- * generative avatar with a "Change avatar" affordance, and gates submit on
- * Terms + Privacy acceptance. On success calls PATCH /api/profile/me/username
- * (which also writes `tos_accepted_at`) and redirects to `/`.
+ *
+ * The user types their own username (debounced availability check), the
+ * generative avatar seeded by /api/profile/sync is shown with a "Change"
+ * affordance, and submit is gated on Terms + Privacy acceptance. On
+ * success calls PATCH /api/profile/me/username (which also writes
+ * `tos_accepted_at`) and redirects to `/`.
+ *
+ * Username field starts BLANK by design — /api/profile/sync no longer
+ * auto-generates a default. The pre-fill effect below is retained as a
+ * defensive measure for any legacy account whose username was generated
+ * pre-change and that somehow still has `tosAcceptedAt` null; in that
+ * narrow case the existing handle is treated as "available" without
+ * firing a wasteful availability check.
  *
  * Bounce rules:
  *   - Unauthenticated visitors → /login
  *   - Returning users with `tosAcceptedAt` already set → /
  *
- * The `initialUsernameRef` lets us treat the seeded auto-generated username
- * as "available" without firing a wasteful availability check on mount.
- *
  * Avatar flow:
- *   New users land here with an auto-generated `avatarSeed` from
- *   /api/profile/sync. They can either keep it (do nothing) or open the
- *   AvatarPicker modal to choose another. Picker save commits immediately
- *   (uploads PNG to Supabase Storage + PATCH /api/profile/avatar), mirroring
- *   the Settings page flow — so the avatar is persisted independently of
- *   the username/ToS submit and survives page reloads mid-onboarding.
+ *   Sync writes a default `avatarSeed = "{userId}:default:v1"`. The user
+ *   either keeps it (Continue persists it via the same upload path the
+ *   picker uses) or opens AvatarPicker to choose another (picker save
+ *   commits immediately and short-circuits the auto-save on Continue).
+ *   Either way, by the time we leave this page `profile.avatarUrl` is
+ *   set, so the rest of the app shows the avatar instead of falling
+ *   back to initials.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
@@ -182,6 +188,37 @@ export default function WelcomePage() {
       setSubmitting(true);
       setSubmitError(null);
       try {
+        // Persist the seeded generative avatar if the user never opened
+        // the picker. Previous behaviour treated "Continue without
+        // Change" as a skip — `avatarUrl` stayed null and the rest of
+        // the app fell back to initials, even though the user clearly
+        // saw an attractive default on this screen and tacitly accepted
+        // it. Saving here makes the on-screen preview the actual avatar
+        // everywhere.
+        //
+        // Best-effort only: a failed upload should not block onboarding
+        // completion (the user can re-roll from Settings later). We
+        // surface a quiet toast and continue with the username submit.
+        const seed = profile?.avatarSeed;
+        const userIdForAvatar = profile?.id || user?.id;
+        if (!profile?.avatarUrl && seed && userIdForAvatar) {
+          try {
+            const { url } = await uploadGeneratedAvatar(userIdForAvatar, seed);
+            await apiRequest("PATCH", "/api/profile/avatar", {
+              seed,
+              avatarUrl: url,
+            });
+          } catch (avatarErr) {
+            console.warn(
+              "[WelcomePage] Auto-save default avatar failed; continuing:",
+              avatarErr,
+            );
+            toast.error("Couldn't save your avatar", {
+              description: "Don't worry — you can pick one in Settings any time.",
+            });
+          }
+        }
+
         await apiRequest("PATCH", "/api/profile/me/username", {
           username: username.trim(),
           tosAccepted: true,
@@ -206,7 +243,16 @@ export default function WelcomePage() {
         setSubmitting(false);
       }
     },
-    [canSubmit, username, refreshProfile, setLocation],
+    [
+      canSubmit,
+      username,
+      refreshProfile,
+      setLocation,
+      profile?.avatarUrl,
+      profile?.avatarSeed,
+      profile?.id,
+      user?.id,
+    ],
   );
 
   if (authLoading || !user) {
