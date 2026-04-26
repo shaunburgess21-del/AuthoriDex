@@ -15,19 +15,29 @@ import {
 } from "./utils";
 
 // ============================================================================
-// TREND SCORE — raw mass + velocity, no stabilization, no smoothing.
+// TREND SCORE — raw mass + velocity with cross-snapshot Fame Index EMA.
 // ============================================================================
-// One deterministic code path. What the raw signals say is what the score is.
-//   fameIndex = round( (massScore * 0.40 + velocityScore * 0.60) * 10000 )
-// Clamped to [0, 1,000,000]. Percentile normalization still runs so different
-// sources are comparable before the weighted sum, but nothing is smoothed,
-// rate-limited, tapered, dampened, or rank-adjusted after the math above.
+// Single deterministic code path:
+//   rawFameIndex = clamp( round( (massScore * 0.40 + velocityScore * 0.60) * 10000 ), 0, 1M )
+//   fameIndex    = clamp( round( 0.7 × rawFameIndex + 0.3 × previousFameIndex ), 0, 1M )
+//                  (when a recent previousFameIndex is supplied; otherwise
+//                  fameIndex === rawFameIndex)
 //
-// Stability fields (`wasStabilized`, `stabDetail`, `spikingSourceCount`,
-// `velocityAdjusted`, `diversityMultiplier`) are preserved in the return
-// type but hold constant values. They exist only to avoid a cascade of
-// downstream edits in storage / admin diagnostics. rawFameIndex === fameIndex
-// in every output.
+// The Apr 2026 cross-snapshot EMA caps any single-tick fameIndex swing to
+// ~70% of the raw delta. Step-up from baseline to spike: 70% on tick 1,
+// 91% on tick 2, ~98% on tick 4 — fast enough that breakouts still
+// register, but enough damping to eliminate the leftover ±150K
+// oscillation that upstream input smoothing (ingest.ts soft-hold) doesn't
+// catch (e.g. mass-side wiki-7d-avg refresh flips). Step-down has the
+// same shape, so a real news-cycle decline takes ~5 ticks to fully
+// propagate.
+//
+// `rawFameIndex` is preserved un-smoothed for admin diagnostics so the
+// pre-EMA composite is always inspectable. Other "stability" fields
+// (`wasStabilized`, `stabDetail`, `spikingSourceCount`, `velocityAdjusted`,
+// `diversityMultiplier`) are still legacy placeholders held for storage
+// compatibility — none of them re-enable the historical full
+// stabilization pipeline.
 
 export interface TrendInputs {
   wikiPageviews: number;
@@ -124,13 +134,25 @@ export interface TrendScoreResult {
   };
 }
 
+// ── CROSS-SNAPSHOT EMA CONSTANTS (Apr 2026 trend-engine tuning) ──────────────
+// Weight of the *current tick's* raw composite in the smoothed fameIndex.
+// 0.70 means breakouts hit 70% of their raw value on the first tick they
+// occur, ~91% by tick 2, ~98% by tick 4. Drops follow the same curve.
+const FAME_INDEX_EMA_ALPHA_CURRENT = 0.70;
+// Weight of the previous tick's *smoothed* fameIndex (i.e. the value
+// already persisted to trend_snapshots).
+const FAME_INDEX_EMA_ALPHA_PREVIOUS = 0.30;
+
 export function computeTrendScore(
   inputs: TrendInputs,
   previousScore?: number,
   previousScore7d?: number,
-  // Intentionally unused after simplification (was: previousFameIndex for EMA).
-  // Kept positionally so call sites don't need to change.
-  _previousFameIndex?: number,
+  // Most-recent persisted fameIndex (1-tick-ago snapshot). When supplied
+  // and non-zero we apply a cross-snapshot EMA so single-tick swings are
+  // capped. Callers should pass `undefined` when the previous tick is
+  // stale (>1 ingest cadence ago) so new entrants / post-gap recoveries
+  // aren't pinned to outdated values — see ingest.ts FAME_EMA_MAX_GAP_HOURS.
+  previousFameIndex?: number,
   sourceStats?: AllSourceStats,
   previousFameIndex24h?: number,
   previousFameIndex7d?: number,
@@ -197,11 +219,39 @@ export function computeTrendScore(
   );
 
   // ---- 3. Composite -------------------------------------------------------
-  // Single linear path. No damping, taper, diversity multiplier, EMA, rate
-  // limit, catch-up, recalibration, or smoothing modes.
+  // Linear mass + velocity composite, then a cross-snapshot EMA on the
+  // final fameIndex (Apr 2026 trend-engine tuning). Pre-EMA composite is
+  // preserved as `rawFameIndex` for admin diagnostics.
   const baseScore = (massScore * MASS_ALLOCATION) + (velocityScore * VELOCITY_ALLOCATION);
-  const fameIndex = clamp(Math.round(baseScore * 10000), 0, 1000000);
-  const trendScore = clamp(baseScore * 10000, 0, 1000000);
+  const rawFameIndex = clamp(Math.round(baseScore * 10000), 0, 1000000);
+  const rawTrendScore = clamp(baseScore * 10000, 0, 1000000);
+
+  // Apply cross-snapshot EMA only when we have a usable prior tick. Caller
+  // (ingest) is responsible for not passing a stale previousFameIndex.
+  const hasUsablePrev =
+    typeof previousFameIndex === "number" &&
+    Number.isFinite(previousFameIndex) &&
+    previousFameIndex > 0;
+
+  const fameIndex = hasUsablePrev
+    ? clamp(
+        Math.round(
+          rawFameIndex * FAME_INDEX_EMA_ALPHA_CURRENT +
+            previousFameIndex * FAME_INDEX_EMA_ALPHA_PREVIOUS,
+        ),
+        0,
+        1000000,
+      )
+    : rawFameIndex;
+
+  const trendScore = hasUsablePrev
+    ? clamp(
+        rawTrendScore * FAME_INDEX_EMA_ALPHA_CURRENT +
+          previousFameIndex * FAME_INDEX_EMA_ALPHA_PREVIOUS,
+        0,
+        1000000,
+      )
+    : rawTrendScore;
 
   // ---- 4. Confidence (cosmetic — unused in scoring) -----------------------
   const hasWiki = inputs.wikiDelta !== 0 || inputs.wikiPageviews > 0;
@@ -242,7 +292,14 @@ export function computeTrendScore(
   return {
     trendScore: Math.round(trendScore),
     fameIndex,
-    rawFameIndex: fameIndex,
+    rawFameIndex,
+    // `wasStabilized` previously meant "the legacy stabilization pipeline
+    // (rate-limit + asymmetric EMA + diversity multiplier + …) modified the
+    // raw composite this tick". That pipeline is gone. The cross-snapshot
+    // EMA is a single targeted layer with deterministic alpha, not a
+    // stabilization regime, so this flag stays false even when EMA fires —
+    // any divergence between fameIndex and rawFameIndex is the EMA, by
+    // definition.
     wasStabilized: false,
     stabDetail: null,
     spikingSourceCount: 0,

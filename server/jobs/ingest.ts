@@ -1803,19 +1803,28 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           searchStalenessFactor: Math.min(searchUsedFallback ? searchDecayFactor : 1.0, searchGovernorFactor),
         };
 
-        // Previous scores for 24h/7d change computation. The third positional
-        // argument (previousFameIndex) was used for EMA smoothing which is now
-        // removed — we pass `undefined` so the scorer doesn't rely on it. The
-        // 24h/7d fameIndex values are still threaded through for change_24h /
-        // change_7d.
+        // Previous scores for 24h/7d change computation + cross-snapshot EMA.
+        // The third positional argument (previousFameIndex) feeds the Apr
+        // 2026 cross-snapshot EMA on the final fameIndex (see trendScore.ts).
+        // We only pass the previous tick's fameIndex when it's recent enough
+        // — otherwise new entrants / people coming back from a gap would be
+        // pinned to a stale value. FAME_EMA_MAX_GAP_HOURS is set just above
+        // the typical 1h ingest cadence so single-tick gaps from deploys or
+        // backfills still smooth.
         const prev24h = snapshot24hMap.get(person.id);
         const prev7d = snapshot7dMap.get(person.id);
+
+        const FAME_EMA_MAX_GAP_HOURS = 3;
+        const fameEmaPrev =
+          mostRecent && snapshotAgeHours <= FAME_EMA_MAX_GAP_HOURS
+            ? mostRecent.fameIndex ?? undefined
+            : undefined;
 
         const scoreResult = computeTrendScore(
           inputs,
           prev24h?.trendScore,
           prev7d?.trendScore,
-          undefined,
+          fameEmaPrev,
           sourceStats,
           prev24h?.fameIndex ?? undefined,
           prev7d?.fameIndex ?? undefined,
