@@ -326,24 +326,6 @@ export const insertInsightVoteSchema = createInsertSchema(insightVotes).omit({
 export type InsightVote = typeof insightVotes.$inferSelect;
 export type InsertInsightVote = z.infer<typeof insertInsightVoteSchema>;
 
-// Insight Comments - threaded comments on community insights
-export const insightComments = pgTable("insight_comments", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  insightId: varchar("insight_id").notNull().references(() => communityInsights.id, { onDelete: "cascade" }),
-  parentId: varchar("parent_id"), // null for top-level comments, references parent comment for replies
-  userId: varchar("user_id").notNull(), // Supabase auth user ID
-  content: text("content").notNull(),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-});
-
-export const insertInsightCommentSchema = createInsertSchema(insightComments).omit({
-  id: true,
-  createdAt: true,
-});
-
-export type InsightComment = typeof insightComments.$inferSelect;
-export type InsertInsightComment = z.infer<typeof insertInsightCommentSchema>;
-
 // Unified Comments - discussion threads across content surfaces
 export const comments = pgTable("comments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -688,90 +670,6 @@ export const insertTrendingPollVoteSchema = createInsertSchema(trendingPollVotes
 export type TrendingPollVote = typeof trendingPollVotes.$inferSelect;
 export type InsertTrendingPollVote = z.infer<typeof insertTrendingPollVoteSchema>;
 
-// ============================================================================
-// TRENDING POLL COMMENTS — Discussion on poll detail pages
-// ============================================================================
-
-export const trendingPollComments = pgTable("trending_poll_comments", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  pollId: varchar("poll_id").notNull().references(() => trendingPolls.id, { onDelete: "cascade" }),
-  userId: varchar("user_id").notNull(),
-  body: text("body").notNull(),
-  parentId: varchar("parent_id"),
-  upvotes: integer("upvotes").notNull().default(0),
-  downvotes: integer("downvotes").notNull().default(0),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  updatedAt: timestamp("updated_at").notNull().defaultNow(),
-}, (table) => ({
-  pollIdx: index("trending_poll_comments_poll_idx").on(table.pollId),
-}));
-
-export const insertTrendingPollCommentSchema = createInsertSchema(trendingPollComments).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-  upvotes: true,
-  downvotes: true,
-});
-
-export type TrendingPollComment = typeof trendingPollComments.$inferSelect;
-export type InsertTrendingPollComment = z.infer<typeof insertTrendingPollCommentSchema>;
-
-export const trendingPollCommentVotes = pgTable("trending_poll_comment_votes", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  commentId: varchar("comment_id").notNull().references(() => trendingPollComments.id, { onDelete: "cascade" }),
-  userId: varchar("user_id").notNull(),
-  voteType: text("vote_type").notNull(),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-}, (table) => ({
-  uniqueUserComment: unique("tpc_votes_user_comment_unique").on(table.userId, table.commentId),
-  commentIdx: index("tpc_votes_comment_idx").on(table.commentId),
-}));
-
-export type TrendingPollCommentVote = typeof trendingPollCommentVotes.$inferSelect;
-
-// ============================================================================
-// MATCHUP COMMENTS — Discussion on matchup detail pages
-// ============================================================================
-
-export const matchupComments = pgTable("matchup_comments", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  matchupId: varchar("matchup_id").notNull().references(() => matchups.id, { onDelete: "cascade" }),
-  userId: varchar("user_id").notNull(),
-  body: text("body").notNull(),
-  parentId: varchar("parent_id"),
-  upvotes: integer("upvotes").notNull().default(0),
-  downvotes: integer("downvotes").notNull().default(0),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  updatedAt: timestamp("updated_at").notNull().defaultNow(),
-}, (table) => ({
-  matchupIdx: index("matchup_comments_matchup_idx").on(table.matchupId),
-}));
-
-export const insertMatchupCommentSchema = createInsertSchema(matchupComments).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-  upvotes: true,
-  downvotes: true,
-});
-
-export type MatchupComment = typeof matchupComments.$inferSelect;
-export type InsertMatchupComment = z.infer<typeof insertMatchupCommentSchema>;
-
-export const matchupCommentVotes = pgTable("matchup_comment_votes", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  commentId: varchar("comment_id").notNull().references(() => matchupComments.id, { onDelete: "cascade" }),
-  userId: varchar("user_id").notNull(),
-  voteType: text("vote_type").notNull(),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-}, (table) => ({
-  uniqueUserComment: unique("mc_votes_user_comment_unique").on(table.userId, table.commentId),
-  commentIdx: index("mc_votes_comment_idx").on(table.commentId),
-}));
-
-export type MatchupCommentVote = typeof matchupCommentVotes.$inferSelect;
-
 // Relations for new tables
 export const celebrityImagesRelations = relations(celebrityImages, ({ one }) => ({
   person: one(trackedPeople, {
@@ -1100,52 +998,6 @@ export const marketBetsRelations = relations(marketBets, ({ one }) => ({
   }),
 }));
 
-// Open Market Comments - Discussion on World Markets (marketType='community')
-export const openMarketComments = pgTable("open_market_comments", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  marketId: varchar("market_id").notNull().references(() => predictionMarkets.id, { onDelete: "cascade" }),
-  userId: varchar("user_id").notNull(),
-  body: text("body").notNull(),
-  parentId: varchar("parent_id"),
-  upvotes: integer("upvotes").notNull().default(0),
-  downvotes: integer("downvotes").notNull().default(0),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  updatedAt: timestamp("updated_at").notNull().defaultNow(),
-}, (table) => ({
-  marketIdx: index("open_market_comments_market_idx").on(table.marketId),
-}));
-
-export const insertOpenMarketCommentSchema = createInsertSchema(openMarketComments).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-  upvotes: true,
-  downvotes: true,
-});
-
-export type OpenMarketComment = typeof openMarketComments.$inferSelect;
-export type InsertOpenMarketComment = z.infer<typeof insertOpenMarketCommentSchema>;
-
-export const openMarketCommentVotes = pgTable("open_market_comment_votes", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  commentId: varchar("comment_id").notNull().references(() => openMarketComments.id, { onDelete: "cascade" }),
-  userId: varchar("user_id").notNull(),
-  voteType: text("vote_type").notNull(),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-}, (table) => ({
-  uniqueUserComment: unique("omc_votes_user_comment_unique").on(table.userId, table.commentId),
-  commentIdx: index("omc_votes_comment_idx").on(table.commentId),
-}));
-
-export type OpenMarketCommentVote = typeof openMarketCommentVotes.$inferSelect;
-
-export const openMarketCommentsRelations = relations(openMarketComments, ({ one }) => ({
-  market: one(predictionMarkets, {
-    fields: [openMarketComments.marketId],
-    references: [predictionMarkets.id],
-  }),
-}));
-
 // ============================================================================
 // ADMIN AUDIT LOG (Immutable)
 // ============================================================================
@@ -1434,44 +1286,6 @@ export const insertOpinionPollVoteSchema = createInsertSchema(opinionPollVotes).
 export type OpinionPollVote = typeof opinionPollVotes.$inferSelect;
 export type InsertOpinionPollVote = z.infer<typeof insertOpinionPollVoteSchema>;
 
-export const opinionPollComments = pgTable("opinion_poll_comments", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  pollId: varchar("poll_id").notNull().references(() => opinionPolls.id, { onDelete: "cascade" }),
-  userId: varchar("user_id").notNull(),
-  body: text("body").notNull(),
-  parentId: varchar("parent_id"),
-  upvotes: integer("upvotes").notNull().default(0),
-  downvotes: integer("downvotes").notNull().default(0),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  updatedAt: timestamp("updated_at").notNull().defaultNow(),
-}, (table) => ({
-  pollIdx: index("opinion_poll_comments_poll_idx").on(table.pollId),
-}));
-
-export const insertOpinionPollCommentSchema = createInsertSchema(opinionPollComments).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-  upvotes: true,
-  downvotes: true,
-});
-
-export type OpinionPollComment = typeof opinionPollComments.$inferSelect;
-export type InsertOpinionPollComment = z.infer<typeof insertOpinionPollCommentSchema>;
-
-export const opinionPollCommentVotes = pgTable("opinion_poll_comment_votes", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  commentId: varchar("comment_id").notNull().references(() => opinionPollComments.id, { onDelete: "cascade" }),
-  userId: varchar("user_id").notNull(),
-  voteType: text("vote_type").notNull(),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-}, (table) => ({
-  uniqueUserComment: unique("opc_votes_user_comment_unique").on(table.userId, table.commentId),
-  commentIdx: index("opc_votes_comment_idx").on(table.commentId),
-}));
-
-export type OpinionPollCommentVote = typeof opinionPollCommentVotes.$inferSelect;
-
 // ============================================================================
 // COMMENT REPORTS
 // ============================================================================
@@ -1479,7 +1293,7 @@ export type OpinionPollCommentVote = typeof opinionPollCommentVotes.$inferSelect
 export const commentReports = pgTable("comment_reports", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   // FK added in migration 0013 (NOT VALID → needs VALIDATE after orphan cleanup)
-  commentId: varchar("comment_id").notNull().references(() => insightComments.id, { onDelete: "cascade" }),
+  commentId: varchar("comment_id").notNull().references(() => comments.id, { onDelete: "cascade" }),
   entityType: text("entity_type").notNull(),
   reporterId: varchar("reporter_id").notNull(),
   reason: text("reason"),

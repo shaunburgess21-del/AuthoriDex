@@ -183,6 +183,13 @@
       "when": 1777668600000,
       "tag": "0025_unified_comments_backfill",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1777755000000,
+      "tag": "0026_drop_legacy_comment_tables",
+      "breakpoints": true
     }
   ]
 }
