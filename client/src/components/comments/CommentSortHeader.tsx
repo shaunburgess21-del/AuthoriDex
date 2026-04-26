@@ -3,6 +3,13 @@ import { MessageSquare, ArrowUpDown, Clock, ExternalLink, Share2 } from "lucide-
 export type CommentCountLabel = "Discussion" | "Comments" | "Insights" | "Replies";
 export type CommentSort = "top" | "newest";
 
+const COUNT_WORDS: Record<CommentCountLabel, [singular: string, plural: string]> = {
+  Discussion: ["discussion", "discussion"],
+  Comments: ["comment", "comments"],
+  Insights: ["insight", "insights"],
+  Replies: ["reply", "replies"],
+};
+
 export interface CommentSortHeaderProps {
   count: number;
   countLabel: CommentCountLabel;
@@ -22,11 +29,8 @@ export function CommentSortHeader({
   onDetail,
   onShare,
 }: CommentSortHeaderProps) {
-  const inlineCountWord = countLabel === "Comments"
-    ? (count === 1 ? "comment" : "comments")
-    : count === 1
-      ? countLabel.toLowerCase().replace(/s$/, "")
-      : countLabel.toLowerCase();
+  const [singularCountWord, pluralCountWord] = COUNT_WORDS[countLabel];
+  const inlineCountWord = count === 1 ? singularCountWord : pluralCountWord;
 
   return (
     <div className="flex items-center gap-2 mb-3 px-1">

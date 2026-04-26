@@ -1435,10 +1435,10 @@ export default function MarketDetailPage() {
             <button
               type="button"
               onClick={() => setCommentsSheetOpen(true)}
-              className="w-full flex items-center justify-between rounded-xl border border-border/50 bg-card p-4 mb-6 md:hidden"
+              className="w-full flex items-center justify-between rounded-xl border border-border/50 bg-card p-4 mb-6 md:hidden focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
               <div className="flex items-center gap-2">
-                <MessageSquare className="h-4 w-4 text-violet-700 dark:text-violet-500" />
+                <MessageSquare className="h-4 w-4 text-cyan-700 dark:text-cyan-500" />
                 <span className="text-sm font-semibold">Discussion</span>
                 <span className="text-xs text-muted-foreground">({marketCommentCount})</span>
               </div>
@@ -1459,7 +1459,7 @@ export default function MarketDetailPage() {
           <button
             type="button"
             onClick={() => setCommentsSheetOpen(true)}
-            className="fixed bottom-24 right-4 z-40 md:hidden flex items-center gap-1.5 rounded-full bg-violet-600 text-white px-4 py-2.5 shadow-lg"
+            className="fixed bottom-24 right-4 z-40 md:hidden flex items-center gap-1.5 rounded-full bg-violet-600 text-white px-4 py-2.5 shadow-lg focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
             <MessageSquare className="h-4 w-4" />
             <span className="text-xs font-semibold">{marketCommentCount}</span>

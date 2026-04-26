@@ -33,10 +33,14 @@ export function CommentsBottomSheet({
       <Drawer.Portal>
         <Drawer.Overlay className="fixed inset-0 z-[60] bg-black/40" />
         <Drawer.Content className="fixed inset-x-0 bottom-0 z-[60] flex flex-col rounded-t-2xl border-t border-border/50 bg-background max-h-[100dvh]">
-          <div className="mx-auto mt-3 mb-2 h-1.5 w-12 rounded-full bg-muted-foreground/30" />
+          <div className="mx-auto mt-3 mb-2 h-1.5 w-16 rounded-full bg-muted-foreground/60" />
           <div className="flex items-center justify-between px-4 pb-2">
-            <Drawer.Title className="text-sm font-semibold text-muted-foreground">Discussion</Drawer.Title>
-            <button type="button" onClick={() => onOpenChange(false)} className="p-1.5 rounded-lg hover:bg-muted/60 transition-colors">
+            <Drawer.Title className="text-sm font-semibold text-foreground">Discussion</Drawer.Title>
+            <button
+              type="button"
+              onClick={() => onOpenChange(false)}
+              className="p-1.5 rounded-lg hover:bg-muted/60 transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            >
               <X className="h-4 w-4 text-muted-foreground" />
             </button>
           </div>

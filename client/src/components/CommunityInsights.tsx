@@ -373,7 +373,7 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
 
           {!hasMore && totalCount > 0 && (
             <div className="flex justify-center py-6 text-muted-foreground text-sm">
-              You've seen all {totalCount} insights
+              You've seen all {totalCount} {totalCount === 1 ? "insight" : "insights"}
             </div>
           )}
         </div>
@@ -566,7 +566,7 @@ function InsightCard({
               e.stopPropagation();
               onOpenOverlay();
             }}
-            className="flex items-center gap-1.5 p-1.5 ml-auto rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all"
+            className="flex items-center gap-1.5 p-1.5 ml-auto rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             data-testid={`button-comments-${comment.id}`}
             aria-label="Open comments"
           >

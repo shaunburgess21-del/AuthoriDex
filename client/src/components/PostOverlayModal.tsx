@@ -1,9 +1,11 @@
 import { useCallback, useMemo, useState } from "react";
+import { useLocation } from "wouter";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 import { Button } from "@/components/ui/button";
 import { ThumbsUp, ThumbsDown, MessageCircle, X, Loader2 } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
 import { apiRequest } from "@/lib/queryClient";
+import { navigateToLogin } from "@/lib/authReturn";
+import { formatTimeAgo } from "@/lib/formatDate";
 import { useAuth } from "@/contexts/AuthContext";
 import { CommentActionDrawer } from "./comments/CommentActionDrawer";
 import { CommentComposer } from "./comments/CommentComposer";
@@ -167,6 +169,7 @@ function PostOverlayModalContent({
   onVote: (insightId: string, voteType: VoteType) => void;
 }) {
   const { user, profile } = useAuth();
+  const [, setLocation] = useLocation();
   const { trigger: triggerXpBurst } = useXpBurst();
   const [drawerComment, setDrawerComment] = useState<CommentItem | null>(null);
 
@@ -222,7 +225,7 @@ function PostOverlayModalContent({
             />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-semibold">{insight.username}</span>
+                <span className="font-semibold">{insight.username || "Anonymous"}</span>
                 {insight.sentimentVote && (
                   <span 
                     className="text-xs px-2 py-0.5 rounded-full backdrop-blur-sm border"
@@ -230,13 +233,14 @@ function PostOverlayModalContent({
                       backgroundColor: `${getSentimentColor(insight.sentimentVote)}15`,
                       color: getSentimentColor(insight.sentimentVote),
                       borderColor: `${getSentimentColor(insight.sentimentVote)}40`,
+                      boxShadow: `0 0 8px ${getSentimentColor(insight.sentimentVote)}20`,
                     }}
                   >
                     Voted {insight.sentimentVote}/10
                   </span>
                 )}
                 <span className="text-sm text-muted-foreground">
-                  {formatDistanceToNow(new Date(insight.createdAt), { addSuffix: true })}
+                  {formatTimeAgo(insight.createdAt)}
                 </span>
               </div>
               <p className="mt-3 text-base leading-relaxed break-words whitespace-pre-wrap">
@@ -325,14 +329,12 @@ function PostOverlayModalContent({
             )}
 
             {!user && (
-              <p className="text-sm text-muted-foreground mb-4">
-                Log in to add a reply.
-              </p>
+              <SignInToReply onLogin={() => navigateToLogin(setLocation)} />
             )}
 
             {thread.isLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-5 w-5 animate-spin mr-2" />
+              <div className="flex items-center justify-center gap-2 py-8">
+                <Loader2 className="h-5 w-5 animate-spin" />
                 <span className="text-muted-foreground">Loading replies...</span>
               </div>
             ) : (
@@ -361,6 +363,23 @@ function PostOverlayModalContent({
         commentId={drawerComment?.id || null}
         entitySlug={insight.personId}
       />
+    </div>
+  );
+}
+
+function SignInToReply({ onLogin }: { onLogin: () => void }) {
+  return (
+    <div className="text-center py-3 border-t border-border/20 mb-4">
+      <p className="text-sm text-muted-foreground">
+        <button
+          className="text-cyan-600 dark:text-cyan-400 underline hover:text-cyan-500 dark:hover:text-cyan-300 transition-colors"
+          onClick={onLogin}
+          data-testid="link-login-to-comment"
+        >
+          Sign in
+        </button>{" "}
+        to join the discussion
+      </p>
     </div>
   );
 }
