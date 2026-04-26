@@ -6,6 +6,7 @@ import {
   AllSourceStats,
   DEFAULT_SOURCE_STATS,
   normalizeSourceValue,
+  normalizeNewsMomentum,
 } from "./normalize";
 import {
   normalizeMass,
@@ -18,10 +19,17 @@ import {
 // TREND SCORE — raw mass + velocity with cross-snapshot Fame Index EMA.
 // ============================================================================
 // Single deterministic code path:
-//   rawFameIndex = clamp( round( (massScore * 0.40 + velocityScore * 0.60) * 10000 ), 0, 1M )
-//   fameIndex    = clamp( round( 0.7 × rawFameIndex + 0.3 × previousFameIndex ), 0, 1M )
-//                  (when a recent previousFameIndex is supplied; otherwise
-//                  fameIndex === rawFameIndex)
+//   massScore     = wikiMass * 0.50 + igMass * 0.25 + ytMass * 0.25
+//   velocityScore = wikiVel * 0.35 + newsVel * 0.45 + momentumVel * 0.20
+//                   (Fix X — Apr 2026 PR2: momentum slot added; news slot
+//                   trimmed from 0.60; wiki trimmed from 0.40; search
+//                   permanently zero. Momentum carries the news 24h-vs-7d
+//                   acceleration ratio.)
+//   rawFameIndex  = clamp( round( (massScore * 0.40 + velocityScore * 0.60) * 10000 ), 0, 1M )
+//   fameIndex     = clamp( round( 0.7 × rawFameIndex + 0.3 × previousFameIndex ), 0, 1M )
+//                   (Fix Z — Apr 2026 PR2: cross-snapshot EMA when a
+//                   recent previousFameIndex is supplied; otherwise
+//                   fameIndex === rawFameIndex.)
 //
 // The Apr 2026 cross-snapshot EMA caps any single-tick fameIndex swing to
 // ~70% of the raw delta. Step-up from baseline to spike: 70% on tick 1,
@@ -48,6 +56,14 @@ export interface TrendInputs {
 
   newsCount?: number;
   searchVolume?: number;
+
+  /**
+   * Trailing 7-day average daily news count for this entity. Combined with
+   * `newsCount` (which is the 24h count) to compute the news-momentum
+   * velocity slot (Apr 2026 — PR2 Fix X). When omitted, missing, or zero
+   * the momentum score is 0 — see `normalizeNewsMomentum`.
+   */
+  newsAverageDaily7d?: number;
 
   /** @deprecated Unused after simplification. Kept for caller compatibility. */
   prevNewsCount?: number;
@@ -130,7 +146,15 @@ export interface TrendScoreResult {
     search: number;
     news: number;
     wiki: number;
-    weights: { search: number; news: number; wiki: number };
+    /**
+     * News-acceleration velocity sub-score (0..100). Derived from the
+     * 24h-vs-7d news ratio — see `normalizeNewsMomentum`. Apr 2026 (PR2
+     * Fix X). Carried in the response shape so admin diagnostics
+     * (`Why Trending`, `Hot Movers` source attribution) can render the
+     * acceleration slice alongside stock (wiki) and volume (news count).
+     */
+    momentum: number;
+    weights: { search: number; news: number; wiki: number; momentum: number };
   };
 }
 
@@ -205,17 +229,29 @@ export function computeTrendScore(
   const newsNormalized = normalizeSourceValue(newsRaw, stats.news);
   const searchNormalized = normalizeSourceValue(searchRaw, stats.search);
 
+  // News-momentum velocity slot (Apr 2026 — PR2 Fix X). The
+  // `newsAverageDaily7d` input falls through from the multi-source news
+  // aggregator (union mode) or per-provider 7d count (tiered GDELT /
+  // Serper News). When unavailable (e.g. tiered Mediastack-only mode)
+  // momentumNormalized is 0 — see `normalizeNewsMomentum`.
+  const momentumNormalized = normalizeNewsMomentum(
+    newsRaw,
+    inputs.newsAverageDaily7d ?? 0,
+  );
+
   const wikiVelocityScore = inputs.activePlatforms.wiki
     ? wikiNormalized * 100
     : 0;
   const newsVelocityScore = newsNormalized * 100;
   const searchVelocityScore = searchNormalized * 100;
+  const momentumVelocityScore = momentumNormalized * 100;
 
   const velocityWeights = PLATFORM_WEIGHTS.velocity;
   const velocityScore = (
     (wikiVelocityScore * velocityWeights.wiki)
     + (newsVelocityScore * velocityWeights.news)
     + (searchVelocityScore * velocityWeights.search)
+    + (momentumVelocityScore * velocityWeights.momentum)
   );
 
   // ---- 3. Composite -------------------------------------------------------
@@ -316,10 +352,12 @@ export function computeTrendScore(
       search: Math.round(searchVelocityScore * 100) / 100,
       news: Math.round(newsVelocityScore * 100) / 100,
       wiki: Math.round(wikiVelocityScore * 100) / 100,
+      momentum: Math.round(momentumVelocityScore * 100) / 100,
       weights: {
         search: Math.round(velocityWeights.search * 1000) / 1000,
         news: Math.round(velocityWeights.news * 1000) / 1000,
         wiki: Math.round(velocityWeights.wiki * 1000) / 1000,
+        momentum: Math.round(velocityWeights.momentum * 1000) / 1000,
       },
     },
   };

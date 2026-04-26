@@ -6,6 +6,8 @@ import {
   computePercentileRank,
   winsorize,
   normalizeSourceValue,
+  normalizeNewsMomentum,
+  MOMENTUM_RATIO_CAP,
   PLATFORM_WEIGHTS,
   MASS_ALLOCATION,
   VELOCITY_ALLOCATION,
@@ -83,10 +85,92 @@ test("normalizeSourceValue returns 0..1 and is monotonic", () => {
   assert.ok(low < mid && mid < high);
 });
 
+// ─── News-momentum normalization (Apr 2026 — PR2 Fix X) ────────────────────
+test("normalizeNewsMomentum returns 0 when 24h or 7d-avg is missing/zero", () => {
+  // No current news → no momentum signal.
+  assert.equal(normalizeNewsMomentum(0, 5), 0);
+  assert.equal(normalizeNewsMomentum(-1, 5), 0);
+  // No 7d denominator → can't measure acceleration.
+  assert.equal(normalizeNewsMomentum(50, 0), 0);
+  assert.equal(normalizeNewsMomentum(50, -1), 0);
+});
+
+test("normalizeNewsMomentum is monotonic and clamped to [0, 1]", () => {
+  const cooling = normalizeNewsMomentum(2, 10); // 0.2× → cooling
+  const steady = normalizeNewsMomentum(10, 10); // 1.0× → steady-state
+  const accel = normalizeNewsMomentum(50, 10); // 5.0× → accelerating
+  const burst = normalizeNewsMomentum(100, 10); // 10× → cap
+  const extreme = normalizeNewsMomentum(1000, 10); // beyond cap
+
+  assert.ok(cooling >= 0 && cooling <= 1);
+  assert.ok(steady >= 0 && steady <= 1);
+  assert.ok(accel >= 0 && accel <= 1);
+  assert.ok(burst >= 0 && burst <= 1);
+  assert.ok(extreme >= 0 && extreme <= 1);
+  assert.ok(cooling < steady);
+  assert.ok(steady < accel);
+  assert.ok(accel < burst);
+  // Above the cap, score saturates at 1.0.
+  assert.ok(Math.abs(burst - 1.0) < 1e-9);
+  assert.ok(Math.abs(extreme - 1.0) < 1e-9);
+});
+
+test("normalizeNewsMomentum: steady-state (1×) lands in low-mid band", () => {
+  // ratio=1 → log1p(1)/log1p(10) ≈ 0.289. The momentum slot's design
+  // intent: a person with consistent news flow gets a small, non-zero
+  // contribution, so they're not penalized vs. someone with no news.
+  const score = normalizeNewsMomentum(20, 20);
+  assert.ok(
+    score > 0.25 && score < 0.35,
+    `expected ratio=1 → ~0.29, got ${score}`,
+  );
+});
+
+test("normalizeNewsMomentum: 5× breakout lands in upper band", () => {
+  // Trump-shaped breakout: 24h count is 5× the 7-day daily average.
+  // ratio=5 → log1p(5)/log1p(10) ≈ 0.747.
+  const score = normalizeNewsMomentum(50, 10);
+  assert.ok(
+    score > 0.70 && score < 0.80,
+    `expected ratio=5 → ~0.75, got ${score}`,
+  );
+});
+
+test("normalizeNewsMomentum: low-baseline floor prevents tiny-denominator spikes", () => {
+  // 7d daily average below MOMENTUM_AVG_FLOOR (=1) is floored to 1, so a
+  // single-article entity with one 24h article doesn't get treated as a
+  // "1× steady" — it's still at the lower end.
+  const tinyAvg = normalizeNewsMomentum(1, 0.01);
+  // Floor of 1 is applied → ratio = 1/1 = 1.0 → ~0.289.
+  assert.ok(
+    tinyAvg > 0.25 && tinyAvg < 0.35,
+    `tiny 7d-avg should be floored, got ${tinyAvg}`,
+  );
+});
+
+test("MOMENTUM_RATIO_CAP is the documented value", () => {
+  assert.equal(MOMENTUM_RATIO_CAP, 10,
+    "MOMENTUM_RATIO_CAP=10 is part of the public contract — Score Inspector docs and admin diagnostics depend on it");
+});
+
 // ─── Weight / allocation invariants (post-simplification) ──────────────────
 test("PLATFORM_WEIGHTS.velocity sums to 1.0", () => {
-  const { wiki, news, search } = PLATFORM_WEIGHTS.velocity;
-  assert.ok(Math.abs((wiki + news + search) - 1.0) < 1e-9);
+  // Apr 2026 (PR2 Fix X): added a `momentum` slot. `search` is retained
+  // at 0 weight for backward-compat with persisted diagnostics blobs.
+  const { wiki, news, search, momentum } = PLATFORM_WEIGHTS.velocity;
+  const total = wiki + news + search + momentum;
+  assert.ok(
+    Math.abs(total - 1.0) < 1e-9,
+    `velocity weights should sum to 1, got ${total} (wiki=${wiki}, news=${news}, search=${search}, momentum=${momentum})`,
+  );
+});
+
+test("PLATFORM_WEIGHTS.velocity.search is permanently zero (Fix A)", () => {
+  assert.equal(
+    PLATFORM_WEIGHTS.velocity.search,
+    0,
+    "search slot is retained at 0 weight; momentum slot replaces it",
+  );
 });
 
 test("MASS_ALLOCATION + VELOCITY_ALLOCATION equals 1.0", () => {

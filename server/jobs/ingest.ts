@@ -1758,6 +1758,15 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           // Raw values for normalization - use graceful degradation values
           newsCount: newsCount,
           searchVolume: searchVolume,
+          // News 7-day daily average — feeds the news-momentum velocity
+          // slot (Apr 2026 — PR2 Fix X). Source priority: union-mode
+          // aggregator already populates this for every person; tiered
+          // GDELT and tiered Serper News also populate; tiered Mediastack
+          // returns 0, in which case momentum score falls through to 0
+          // (no signal, uniform across affected entities). Held values
+          // (EMA / soft-hold) deliberately use raw provider 7d here —
+          // the smoothing applies to 24h count, not the 7d denominator.
+          newsAverageDaily7d: news?.averageDaily7d ?? 0,
           // Previous values for recovery detection (data returning after API failure)
           // Only pass previous values if current data is FRESH (not fallback)
           // This ensures recovery mode triggers when we get fresh data after using fallback
@@ -1838,6 +1847,10 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
             wiki: wiki?.pageviews24h ?? 0,
             wiki7d: wiki?.averageDaily7d ?? 0,
             news: news?.articleCount24h ?? 0,
+            // News 7d daily average — denominator for momentum velocity
+            // slot. 0 when the active news provider doesn't supply 7d
+            // data (tiered Mediastack-only). Apr 2026 — PR2 Fix X.
+            news7d: news?.averageDaily7d ?? 0,
             search: serper?.searchVolume ?? 0,
           },
           fresh: {

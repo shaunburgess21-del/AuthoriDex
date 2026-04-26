@@ -25,13 +25,20 @@ export const SCORE_VERSION = "v2";
 // Platform weights — FIXED, never redistributed dynamically.
 // NOTE (Jan 2026): X API removed from trend score engine due to cost
 // constraints. X weight redistributed to Wiki, News, and Search.
-// NOTE (Apr 2026): `velocity.search` zeroed out. The Serper-derived
+// NOTE (Apr 2026 — PR1): `velocity.search` zeroed out. The Serper-derived
 // `searchVolume` is a SERP-feature density score (organic count + KG +
 // sitelinks etc., capped at 100 — see `server/providers/serper.ts:209-215`),
 // not a search-interest signal. It barely moves when news breaks and was
-// dominating top-of-leaderboard ordering with the wrong signal. Search
-// weight redistributed to Wiki + News until a real momentum signal
-// (Serper news 24h/7d ratio or Google Trends) replaces it.
+// dominating top-of-leaderboard ordering with the wrong signal.
+// NOTE (Apr 2026 — PR2 / Fix X): `velocity.momentum` introduced. Carries
+// the news 24h-vs-7d acceleration signal (articleCount24h / averageDaily7d),
+// which the union-mode aggregator already produces for every person. Wiki
+// (stock of attention) trims 0.05, news count (volume) trims 0.15, and the
+// freed 0.20 lands on momentum (acceleration). The velocity composite now
+// reads as: stock × 0.35 + volume × 0.45 + acceleration × 0.20. The
+// `search` slot is retained at 0 weight for backward compatibility with
+// historical `diagnostics.velocityComponents` blobs persisted on
+// `trend_snapshots`.
 export const PLATFORM_WEIGHTS = {
   mass: {
     wiki: 0.50,
@@ -39,11 +46,62 @@ export const PLATFORM_WEIGHTS = {
     youtube: 0.25,
   },
   velocity: {
-    wiki: 0.40,
-    news: 0.60,
+    wiki: 0.35,
+    news: 0.45,
+    momentum: 0.20,
     search: 0,
   },
 };
+
+// ============================================================================
+// NEWS MOMENTUM NORMALIZATION (Apr 2026 — PR2 Fix X)
+// ============================================================================
+// `momentum` velocity slot reads from the news 24h-vs-7d ratio. The ratio
+// is *already* a self-normalizing acceleration metric (1.0 = steady state,
+// >1.0 = accelerating, <1.0 = cooling), so it doesn't need percentile
+// normalization the way raw counts do. Instead we cap it at MOMENTUM_RATIO_CAP
+// (a 10× burst is the most we'll reward) and apply log1p compression so
+// the curve is gentle in the steady-state band and assertive in the
+// breakout band:
+//
+//   ratio=0.0  → 0.000 (pure cooldown / no recent news)
+//   ratio=0.5  → 0.169 (cooling)
+//   ratio=1.0  → 0.289 (steady state)
+//   ratio=2.0  → 0.458 (accelerating)
+//   ratio=5.0  → 0.747 (clear breakout)
+//   ratio=10.0 → 1.000 (extreme burst, e.g. major breaking story)
+//
+// When the 7-day average is missing or zero (tiered-Mediastack-only mode,
+// no GDELT, no Serper News 7d), momentum cannot be measured and the score
+// is 0 — uniform across affected entities, so it doesn't differentiate
+// them but also doesn't penalize one vs another.
+export const MOMENTUM_RATIO_CAP = 10;
+const MOMENTUM_LOG_DENOM = Math.log1p(MOMENTUM_RATIO_CAP);
+
+/**
+ * Floor on the 7d-average denominator. Avoids divide-by-near-zero
+ * spikes for entities with sub-1-article-per-day baseline (where a
+ * single 24h breakout would otherwise produce ratios of 100+).
+ * Tuned to the production news distribution where p50 ≈ 1-2 articles/day.
+ */
+const MOMENTUM_AVG_FLOOR = 1;
+
+/**
+ * Compute the news-momentum velocity score from raw 24h count and 7d
+ * average. Returns 0..1. Returns 0 when the 7d average is unavailable
+ * or zero (signal not measurable), 0 when 24h is zero (no current news).
+ */
+export function normalizeNewsMomentum(
+  articleCount24h: number,
+  averageDaily7d: number,
+): number {
+  if (!Number.isFinite(articleCount24h) || articleCount24h <= 0) return 0;
+  if (!Number.isFinite(averageDaily7d) || averageDaily7d <= 0) return 0;
+  const denom = Math.max(averageDaily7d, MOMENTUM_AVG_FLOOR);
+  const ratio = Math.min(articleCount24h / denom, MOMENTUM_RATIO_CAP);
+  if (ratio <= 0) return 0;
+  return Math.log1p(ratio) / MOMENTUM_LOG_DENOM;
+}
 
 // Score composition: 40% mass, 60% velocity (velocity-heavy for "trending" feel).
 export const MASS_ALLOCATION = 0.40;

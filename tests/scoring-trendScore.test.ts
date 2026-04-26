@@ -78,13 +78,69 @@ test("computeTrendScore: change24h is computed when previousFameIndex24h is prov
   assert.equal(typeof out.change24h, "number");
 });
 
-test("computeTrendScore: velocityComponents.weights sum to ~1.0", () => {
+test("computeTrendScore: velocityComponents.weights sum to ~1.0 (incl. momentum slot)", () => {
+  // Apr 2026 (PR2 Fix X): momentum slot added with 0.20 weight; search
+  // remains in the response shape at 0 weight for backward-compat with
+  // historical `diagnostics.velocityComponents` blobs.
   const out = computeTrendScore(baseInputs());
-  const { search, news, wiki } = out.velocityComponents.weights;
-  const total = search + news + wiki;
+  const { search, news, wiki, momentum } = out.velocityComponents.weights;
+  const total = search + news + wiki + momentum;
   assert.ok(
     Math.abs(total - 1.0) < 1e-6,
-    `velocity weights should sum to 1, got ${total}`
+    `velocity weights should sum to 1, got ${total} (search=${search}, news=${news}, wiki=${wiki}, momentum=${momentum})`
+  );
+});
+
+test("computeTrendScore: momentum slot — newsCount=24h, missing avg7d → momentum=0", () => {
+  const out = computeTrendScore(baseInputs({ newsAverageDaily7d: 0 }));
+  assert.equal(out.velocityComponents.momentum, 0,
+    "no 7d denominator → momentum velocity sub-score should be 0");
+});
+
+test("computeTrendScore: momentum slot — high 24h vs low avg7d → high momentum sub-score", () => {
+  // Trump-shaped breakout: 24h count 5× the 7-day daily average.
+  // Expected: momentum velocity > 70 (a 5× ratio maps to ~0.747 normalized).
+  const out = computeTrendScore(baseInputs({
+    newsCount: 50,
+    newsAverageDaily7d: 10,
+  }));
+  assert.ok(
+    out.velocityComponents.momentum >= 70,
+    `5× breakout should yield momentum ≥ 70, got ${out.velocityComponents.momentum}`,
+  );
+});
+
+test("computeTrendScore: momentum slot — steady-state (24h ≈ avg7d) → mid-range", () => {
+  // Steady-state: 24h ≈ 7d daily average → ratio ≈ 1.0 → ~0.289 normalized.
+  const out = computeTrendScore(baseInputs({
+    newsCount: 12,
+    newsAverageDaily7d: 12,
+  }));
+  assert.ok(
+    out.velocityComponents.momentum > 20 && out.velocityComponents.momentum < 40,
+    `steady-state should yield momentum in [20, 40], got ${out.velocityComponents.momentum}`,
+  );
+});
+
+test("computeTrendScore: momentum slot — accelerating entity ranks higher than steady entity", () => {
+  // Same wiki/news count, but one is accelerating (5× ratio) and one is
+  // steady (1× ratio). The accelerating entity should score higher because
+  // the momentum slot carries 0.20 weight.
+  const steady = computeTrendScore(baseInputs({
+    newsCount: 50,
+    newsAverageDaily7d: 50,
+  }));
+  const accelerating = computeTrendScore(baseInputs({
+    newsCount: 50,
+    newsAverageDaily7d: 10,
+  }));
+  assert.ok(
+    accelerating.fameIndex > steady.fameIndex,
+    `accelerating (${accelerating.fameIndex}) should outrank steady (${steady.fameIndex})`,
+  );
+  assert.ok(
+    accelerating.velocityComponents.momentum > steady.velocityComponents.momentum,
+    "accelerating should have higher momentum velocity sub-score",
   );
 });
 
