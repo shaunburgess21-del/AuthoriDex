@@ -47,23 +47,32 @@ export function getApprovalColor(ratingOrPct: number): string {
  */
 export function formatNetWorth(value: string | number): string {
   if (typeof value === 'string') {
-    // If already formatted nicely (contains billion, million, $), return as-is
-    if (value.toLowerCase().includes('billion') || value.toLowerCase().includes('million')) {
-      return value;
-    }
-    // If it's a formatted currency like "$2.6 billion", return as-is
-    if (value.includes('$') && (value.includes('B') || value.includes('M') || value.includes('T'))) {
-      return value;
-    }
-    // Check if it's a "not available" type message
-    if (value.toLowerCase().includes('not available') || 
-        value.toLowerCase().includes('unavailable') ||
-        value.toLowerCase().includes('unknown') ||
-        value.toLowerCase().includes('n/a') ||
-        value.toLowerCase().includes('exact current figure')) {
+    const lower = value.toLowerCase();
+
+    if (lower.includes('not available') ||
+        lower.includes('unavailable') ||
+        lower.includes('unknown') ||
+        lower.includes('n/a') ||
+        lower.includes('exact current figure')) {
       return 'Not publicly disclosed';
     }
-    // Try to extract number from string
+
+    if (lower.includes('billion') || lower.includes('million')) {
+      return value;
+    }
+
+    if (lower.includes('thousand')) {
+      const numMatch = value.match(/[\d.]+/);
+      if (numMatch) {
+        const num = parseFloat(numMatch[0]) * 1_000;
+        if (!isNaN(num)) return formatNetWorthNumber(num);
+      }
+    }
+
+    if (value.includes('$') && /[BMTK]\b/i.test(value)) {
+      return value;
+    }
+
     const numMatch = value.replace(/[,$]/g, '').match(/[\d.]+/);
     if (numMatch) {
       const num = parseFloat(numMatch[0]);
@@ -71,10 +80,10 @@ export function formatNetWorth(value: string | number): string {
         return formatNetWorthNumber(num);
       }
     }
-    // Return cleaned version
+
     return value;
   }
-  
+
   return formatNetWorthNumber(value);
 }
 
