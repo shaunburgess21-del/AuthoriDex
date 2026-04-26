@@ -7,7 +7,7 @@ import { db } from "./db";
 import { trendSnapshots, trackedPeople, communityInsights, insightVotes, comments as unifiedComments, commentVotes, matchups, votes, xpActions, xpLedger, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, insertCommunityInsightSchema, insertInsightVoteSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
 import { validateSuggestionPayload, SUGGESTION_TYPES } from "@shared/suggestionSchemas";
 import { normaliseSocialHandles } from "@shared/handleNormalise";
-import { eq, desc, and, gt, sql, count, gte, lte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull } from "drizzle-orm";
+import { eq, desc, and, gt, sql, count, gte, lte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull, isNull } from "drizzle-orm";
 import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
 import { requireAuth, requireAdmin, optionalAuth, resolveAuthContextFromHeader, type AuthRequest } from "./auth-middleware";
@@ -2539,7 +2539,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .from(communityInsights)
         .leftJoin(insightVotes, eq(insightVotes.insightId, communityInsights.id))
         .leftJoin(profiles, eq(profiles.id, communityInsights.userId))
-        .where(eq(communityInsights.personId, personId))
+        .where(and(
+          eq(communityInsights.personId, personId),
+          isNull(communityInsights.deletedAt),
+        ))
         .groupBy(
           communityInsights.id,
           communityInsights.personId,
@@ -2761,7 +2764,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const personInsights = await db
         .select({ id: communityInsights.id, deletedAt: communityInsights.deletedAt })
         .from(communityInsights)
-        .where(eq(communityInsights.personId, personId));
+        .where(and(
+          eq(communityInsights.personId, personId),
+          isNull(communityInsights.deletedAt),
+        ));
 
       const insightIds = personInsights.map(i => i.id);
 

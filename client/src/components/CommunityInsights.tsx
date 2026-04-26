@@ -19,6 +19,7 @@ import { PostOverlayModal } from "./PostOverlayModal";
 import { CommentActionDrawer } from "./comments/CommentActionDrawer";
 import { CommentComposer } from "./comments/CommentComposer";
 import { CommentSortHeader } from "./comments/CommentSortHeader";
+import { DeleteContentDialog } from "./comments/DeleteContentDialog";
 import { useCommentThread } from "./comments/useCommentThread";
 import type {
   CommentAdapter,
@@ -72,6 +73,7 @@ interface CommunityInsight {
   avatarUrl: string | null;
   content: string;
   sentimentVote?: number | null;
+  deletedAt: string | null;
   createdAt: string;
   upvotes: number;
   downvotes: number;
@@ -95,6 +97,7 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
   const insightsCacheRef = useRef<Record<string, CommunityInsight>>({});
 
   const [drawerComment, setDrawerComment] = useState<CommentItem | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<CommentItem | null>(null);
   const [selectedInsightId, setSelectedInsightId] = useState<string | null>(null);
   const [expandedPosts, setExpandedPosts] = useState<Set<string>>(new Set());
   const [displayCount, setDisplayCount] = useState(PAGE_SIZE);
@@ -118,6 +121,7 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
         upvotes: i.upvotes ?? 0,
         downvotes: i.downvotes ?? 0,
         userVote: null,
+        deletedAt: i.deletedAt,
         createdAt: i.createdAt,
       }));
     },
@@ -143,6 +147,10 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
       );
       return res.json();
     },
+    deleteComment: async ({ commentId }) => {
+      const res = await apiRequest("DELETE", `/api/community-insights/${commentId}`);
+      return res.json();
+    },
     onPostSuccess: (data: unknown) => {
       const xp = (data as { xp?: { xpAwarded?: number; reason?: string } } | null)?.xp;
       toast("Success", { description: "Your insight has been posted!" });
@@ -155,6 +163,10 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
       if (xp?.xpAwarded) {
         triggerXpBurst(xp.xpAwarded, undefined, xp.reason);
       }
+    },
+    onDeleteSuccess: () => {
+      setDrawerComment(null);
+      setDeleteTarget(null);
     },
     supportsReplies: false,
   }), [personId, triggerXpBurst]);
@@ -237,6 +249,10 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
     if (!live) return cached;
     return {
       ...cached,
+      username: live.username,
+      avatarUrl: live.avatarUrl,
+      content: live.body,
+      deletedAt: live.deletedAt ?? cached.deletedAt ?? null,
       upvotes: live.upvotes,
       downvotes: live.downvotes,
     };
@@ -380,8 +396,29 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
       <CommentActionDrawer
         open={!!drawerComment}
         onClose={() => setDrawerComment(null)}
+        onDelete={
+          drawerComment && !drawerComment.deletedAt && drawerComment.userId === user?.id
+            ? () => {
+              setDeleteTarget(drawerComment);
+              setDrawerComment(null);
+            }
+            : undefined
+        }
         commentId={drawerComment?.id || null}
         entitySlug={personId}
+      />
+      <DeleteContentDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        description="Delete this insight? This cannot be undone."
+        isPending={thread.isDeletePending}
+        onConfirm={() => {
+          if (deleteTarget) {
+            thread.deleteComment({ commentId: deleteTarget.id });
+          }
+        }}
       />
 
       <PostOverlayModal
@@ -390,6 +427,8 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
         onClose={() => setSelectedInsightId(null)}
         userVote={selectedInsightUserVote}
         onVote={handleModalVote}
+        onDeleteInsight={(insightId) => thread.deleteComment({ commentId: insightId })}
+        isDeletingInsight={thread.isDeletePending}
       />
     </div>
   );
@@ -432,11 +471,14 @@ function InsightCard({
   const netVotes = upvotes - downvotes;
   const hasUpvoted = comment.userVote === "up";
   const hasDownvoted = comment.userVote === "down";
+  const isDeleted = Boolean(comment.deletedAt);
 
-  const sentimentVote = insight?.sentimentVote ?? null;
+  const sentimentVote = isDeleted ? null : insight?.sentimentVote ?? null;
   const rankAccentColor = getRankAccentColor(rank);
-  const isTopThree = rankAccentColor !== null;
-  const { preview, isTruncated } = truncateText(comment.body, 280);
+  const isTopThree = !isDeleted && rankAccentColor !== null;
+  const { preview, isTruncated } = isDeleted
+    ? { preview: "[deleted]", isTruncated: false }
+    : truncateText(comment.body, 280);
 
   return (
     <div
@@ -445,20 +487,22 @@ function InsightCard({
       style={isTopThree ? { borderLeftColor: rankAccentColor } : undefined}
       data-testid={`card-insight-${comment.id}`}
     >
-      <UserProfileAvatar
-        displayName={comment.username || ""}
-        avatarUrl={comment.avatarUrl}
-        size="sm"
-        className="shrink-0"
-      />
+      {!isDeleted && (
+        <UserProfileAvatar
+          displayName={comment.username || ""}
+          avatarUrl={comment.avatarUrl}
+          size="sm"
+          className="shrink-0"
+        />
+      )}
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 flex-wrap min-w-0">
             <span
-              className="text-sm font-semibold truncate"
+              className={`text-sm truncate ${isDeleted ? "italic text-muted-foreground" : "font-semibold"}`}
               data-testid={`text-username-${comment.id}`}
             >
-              {comment.username || "Anonymous"}
+              {isDeleted ? "[deleted user]" : comment.username || "Anonymous"}
             </span>
             <span
               className="text-xs text-muted-foreground shrink-0"
@@ -500,13 +544,13 @@ function InsightCard({
           </button>
         </div>
         <p
-          className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap"
+          className={`text-sm text-muted-foreground mt-1 whitespace-pre-wrap ${isDeleted ? "italic" : ""}`}
           data-testid={`text-content-${comment.id}`}
         >
-          {isExpanded ? comment.body : preview}
+          {isDeleted ? preview : isExpanded ? comment.body : preview}
           {isTruncated && !isExpanded && "..."}
         </p>
-        {isTruncated && (
+        {isTruncated && !isDeleted && (
           <button
             onClick={onToggleExpanded}
             className="text-xs text-primary hover:underline mt-1"
@@ -519,41 +563,47 @@ function InsightCard({
           {/* Vote-button JSX deliberately mirrors CommentRow.tsx (cyan
               optimistic pattern). C3-locked decision: honest duplication
               instead of extracting a CommentVoteButtons primitive. */}
-          <button
-            onClick={() => onVote("up")}
-            onPointerUp={(event) => event.currentTarget.blur()}
-            disabled={disabled}
-            className={`flex items-center gap-1 text-xs transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
-              hasUpvoted
-                ? "text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300"
-                : "text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400"
-            } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
-            data-testid={`button-upvote-${comment.id}`}
-          >
-            <ThumbsUp className="h-3.5 w-3.5" />
-            {upvotes > 0 && <span>{upvotes}</span>}
-          </button>
-          <button
-            onClick={() => onVote("down")}
-            onPointerUp={(event) => event.currentTarget.blur()}
-            disabled={disabled}
-            className={`flex items-center gap-1 text-xs transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
-              hasDownvoted
-                ? "text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300"
-                : "text-muted-foreground hover:text-rose-600 dark:hover:text-rose-400"
-            } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
-            data-testid={`button-downvote-${comment.id}`}
-          >
-            <ThumbsDown className="h-3.5 w-3.5" />
-            {downvotes > 0 && <span>{downvotes}</span>}
-          </button>
+          {!isDeleted && (
+            <>
+              <button
+                onClick={() => onVote("up")}
+                onPointerUp={(event) => event.currentTarget.blur()}
+                disabled={disabled}
+                className={`flex items-center gap-1 text-xs transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
+                  hasUpvoted
+                    ? "text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300"
+                    : "text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400"
+                } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
+                data-testid={`button-upvote-${comment.id}`}
+              >
+                <ThumbsUp className="h-3.5 w-3.5" />
+                {upvotes > 0 && <span>{upvotes}</span>}
+              </button>
+              <button
+                onClick={() => onVote("down")}
+                onPointerUp={(event) => event.currentTarget.blur()}
+                disabled={disabled}
+                className={`flex items-center gap-1 text-xs transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
+                  hasDownvoted
+                    ? "text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300"
+                    : "text-muted-foreground hover:text-rose-600 dark:hover:text-rose-400"
+                } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
+                data-testid={`button-downvote-${comment.id}`}
+              >
+                <ThumbsDown className="h-3.5 w-3.5" />
+                {downvotes > 0 && <span>{downvotes}</span>}
+              </button>
+            </>
+          )}
           {netVotes !== 0 && (
             <span
-              className={`text-xs font-mono ${
-                netVotes > 0
-                  ? "text-cyan-600 dark:text-cyan-400"
-                  : "text-rose-600 dark:text-rose-400"
-              }`}
+              className={isDeleted
+                ? "text-xs text-muted-foreground"
+                : `text-xs font-mono ${
+                  netVotes > 0
+                    ? "text-cyan-600 dark:text-cyan-400"
+                    : "text-rose-600 dark:text-rose-400"
+                }`}
               data-testid={`text-netvotes-${comment.id}`}
             >
               {netVotes > 0 ? `+${netVotes}` : netVotes}
