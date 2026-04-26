@@ -7,6 +7,7 @@ import { ArrowLeft, Users, Loader2 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { parseVoteError } from "@/lib/voteErrors";
+import { getRatingTileColor } from "@/lib/ratingColors";
 import { toast } from "sonner";
 
 interface AnimatedSentimentVotingWidgetProps {
@@ -19,20 +20,17 @@ interface AnimatedSentimentVotingWidgetProps {
 
 const ZONE_LABELS = ['Hate', 'Dislike', 'Neutral', 'Like', 'Love'];
 
-const SEGMENT_COLORS = [
-  { bg: '#FF0000', glow: '#FF0000' },
-  { bg: '#FF6D00', glow: '#FF6D00' },
-  { bg: '#FFC400', glow: '#FFC400' },
-  { bg: '#76FF03', glow: '#76FF03' },
-  { bg: '#00C853', glow: '#00C853' },
-];
+const SEGMENT_COLORS = [1, 2, 3, 4, 5].map((rating) => {
+  const color = getRatingTileColor(rating);
+  return { bg: color, glow: color };
+});
 
 const ZONE_COLORS = {
-  'Hate': '#FF0000',
-  'Dislike': '#FF6D00',
-  'Neutral': '#FFC400',
-  'Like': '#76FF03',
-  'Love': '#00C853',
+  'Hate': getRatingTileColor(1),
+  'Dislike': getRatingTileColor(2),
+  'Neutral': getRatingTileColor(3),
+  'Like': getRatingTileColor(4),
+  'Love': getRatingTileColor(5),
 };
 
 const getZoneLabel = (value: number) => {
