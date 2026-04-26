@@ -394,7 +394,8 @@ export async function fetchMediastackNews(
   const cacheKey = keywordsOverride
     ? `mediastack:news:${personName.replace(/\s+/g, "_").toLowerCase()}:widened`
     : `mediastack:news:${personName.replace(/\s+/g, "_").toLowerCase()}`;
-  const CACHE_TTL_HOURS = 2;
+  // TTL pinned to refresh cadence — see MEDIASTACK_CACHE_TTL_HOURS comment below.
+  const CACHE_TTL_HOURS = MEDIASTACK_CACHE_TTL_HOURS;
 
   try {
     const cached = await getCachedResponse(cacheKey);
@@ -616,7 +617,7 @@ export async function fetchMediastackBatch(
             };
             results.set(person.id, chosen);
 
-            await setCachedResponse(primaryCacheKey, "mediastack", JSON.stringify(chosen), 2);
+            await setCachedResponse(primaryCacheKey, "mediastack", JSON.stringify(chosen), MEDIASTACK_CACHE_TTL_HOURS);
 
             await setWidenCooldown(person.id);
             widenedCount++;
@@ -723,6 +724,19 @@ const MEDIASTACK_REFRESH_INTERVAL_MINUTES = (() => {
   return raw;
 })();
 const MEDIASTACK_REFRESH_INTERVAL_MS = MEDIASTACK_REFRESH_INTERVAL_MINUTES * 60 * 1000;
+
+// Cache TTL is pinned exactly to the refresh interval. Previously TTL was
+// hardcoded at 2h while the refresh interval defaults to 3h, leaving a ~1h
+// window each cycle where the cache was dead and `cacheOnly=true` ticks
+// returned empty results — driving the hourly news-count sawtooth (and,
+// downstream, the trend-score sawtooth). Pinning the two equal closes the
+// gap with no risk of a "cache outlives refresh" loop: at the exact boundary
+// the DB check `gt(expiresAt, now)` returns false (cache miss) AND `ageMs >=
+// REFRESH_INTERVAL_MS` is true (refresh due), so live fetch happens. A
+// previous iteration of this constant subtracted a 5-minute "safety margin"
+// — that was strictly worse, since it re-introduced a 5-min sub-window where
+// the cache was dead before refresh was due.
+const MEDIASTACK_CACHE_TTL_HOURS = MEDIASTACK_REFRESH_INTERVAL_MINUTES / 60;
 
 /**
  * Canonical refresh cadence (minutes) used by the Mediastack provider.
