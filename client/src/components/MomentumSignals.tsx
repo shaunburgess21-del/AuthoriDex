@@ -47,9 +47,11 @@ interface MomentumData {
     /**
      * News-momentum velocity slot (Apr 2026 — PR2 Fix X). Surfaces the
      * 24h-vs-7d acceleration ratio that replaced the defunct search
-     * signal in the velocity score.
+     * signal in the velocity score. Marked optional defensively: the
+     * current API always emits this field, but a stale React Query
+     * cache from a pre-PR3 page load could return without it.
      */
-    momentum: {
+    momentum?: {
       score: number;          // 0..100 sub-score (mirrors velocityComponents.momentum)
       ratio: number;          // 24h / max(7d-avg, 1), capped at 10×
       averageDaily7d: number; // trailing 7d daily news baseline
@@ -109,7 +111,7 @@ const LEVEL_SCALE_COPY =
   "Level compares this person to everyone we track over the last 14 days — Low = bottom 25%, Medium = middle 50%, High = top 25%.";
 
 const MOMENTUM_LEVEL_COPY =
-  "Level reflects how today's news volume compares to this person's own 7-day baseline — Low = steady or cooling, Medium = mild acceleration, High = clear breakout (3×+ their normal week).";
+  "Level reflects how today's news volume compares to this person's own 7-day daily average — Low = at or below typical, Medium = mild acceleration, High = clear breakout (3×+ their typical day).";
 
 // Each level gets a distinct dot SHAPE on top of its colour so the indicator is
 // still unambiguous for users who can't rely on red/amber/green alone:
@@ -368,6 +370,47 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
     ? (signals.momentum.deltaPct > 5 ? "rising" : signals.momentum.deltaPct < -5 ? "falling" : "steady")
     : "steady";
 
+  // Three-way display state for the News Momentum card. The engine assigns a
+  // positive score even when the 7-day baseline is empty (uses MOMENTUM_AVG_FLOOR=1
+  // internally) so brand-new tracked persons can still rank — but showing
+  // "5.0× vs 7-day baseline" in that case is misleading because there *is* no
+  // baseline yet. Detect that explicitly so the user sees a "warming up"
+  // state instead of either a fake ratio or "no recent news".
+  const momentumScore = signals.momentum?.score ?? 0;
+  const momentumRatio = signals.momentum?.ratio ?? 0;
+  const momentumAvg7d = signals.momentum?.averageDaily7d ?? 0;
+  const hasNewsToday = signals.news.count > 0;
+  const hasMomentumBaseline = momentumAvg7d > 0;
+  const showRatio = momentumRatio > 0 && hasMomentumBaseline;
+
+  // Cap is enforced at 10× server-side; flag it in the display so the user
+  // knows the real number is "10× or more" rather than "exactly 10×".
+  const ratioDisplay = showRatio
+    ? momentumRatio >= 10
+      ? "10×+"
+      : `${momentumRatio.toFixed(1)}×`
+    : "—";
+
+  const momentumUnit = showRatio
+    ? "vs 7-day average"
+    : !hasMomentumBaseline && (hasNewsToday || momentumScore > 0)
+      ? "establishing baseline"
+      : "no recent news";
+
+  const momentumFooter = showRatio
+    ? (
+        <p className="text-[10px] text-muted-foreground/60 pt-0.5" data-testid="text-momentum-baseline">
+          7-day avg: {momentumAvg7d.toFixed(1)} {momentumAvg7d === 1 ? "article/day" : "articles/day"}
+        </p>
+      )
+    : !hasMomentumBaseline && (hasNewsToday || momentumScore > 0)
+      ? (
+          <p className="text-[10px] text-muted-foreground/60 pt-0.5" data-testid="text-momentum-warmup">
+            Need 7 days of history to compare against
+          </p>
+        )
+      : null;
+
   return (
     <div id="momentum-signals" className="mt-8 space-y-5" data-testid="section-momentum-signals">
       <div className="flex flex-col gap-1">
@@ -428,10 +471,8 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
           iconWrapClass="bg-orange-500/15 dark:bg-orange-500/10"
           title="News Momentum"
           level={momentumLevel}
-          value={signals.momentum && signals.momentum.ratio > 0
-            ? `${signals.momentum.ratio.toFixed(1)}×`
-            : "—"}
-          unit={signals.momentum && signals.momentum.ratio > 0 ? "vs 7-day baseline" : "no recent news"}
+          value={ratioDisplay}
+          unit={momentumUnit}
           deltaPct={signals.momentum?.deltaPct ?? 0}
           trendWord={momentumTrend}
           tooltip={
@@ -443,13 +484,7 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
               <Info className="h-3 w-3 text-muted-foreground/50 cursor-help" data-testid="icon-momentum-tooltip" />
             </TouchTooltip>
           }
-          footer={
-            signals.momentum && signals.momentum.averageDaily7d > 0 ? (
-              <p className="text-[10px] text-muted-foreground/60 pt-0.5" data-testid="text-momentum-baseline">
-                7-day avg: {signals.momentum.averageDaily7d.toFixed(1)} {signals.momentum.averageDaily7d === 1 ? "article/day" : "articles/day"}
-              </p>
-            ) : null
-          }
+          footer={momentumFooter}
         />
 
         <SignalCard
