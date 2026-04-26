@@ -1709,9 +1709,14 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           // This ensures recovery mode triggers when we get fresh data after using fallback
           prevNewsCount: newsUsedFallback ? newsCount : (prevNewsCount),
           prevSearchVolume: searchUsedFallback ? searchVolume : (prevSearchVolume),
-          // Flag whether current data is fresh (for recovery detection)
-          newsIsFresh: !newsUsedFallback && !newsFloorApplied && (news?.articleCount24h ?? 0) > 0,
-          searchIsFresh: !searchUsedFallback && !searchFloorApplied && (serper?.searchVolume ?? 0) > 0,
+          // Flag whether the underlying provider returned fresh data this tick.
+          // Decoupled from `newsFloorApplied` on purpose: the floor is a smoothing
+          // layer over a (potentially still-fresh) raw fetch, not a freshness
+          // verdict. Lumping floor-applied snapshots in as "not fresh" would
+          // cause the per-person streak detector below to fire spurious Serper
+          // fallbacks for people whose raw signal is fine.
+          newsIsFresh: !newsUsedFallback && (news?.articleCount24h ?? 0) > 0,
+          searchIsFresh: !searchUsedFallback && (serper?.searchVolume ?? 0) > 0,
           // Baseline medians for spike detection (p50 is more robust than mean).
           // Personal-p50 preferred when we have enough history; falls back to
           // population p50 for brand-new celebs with sparse data. This makes
@@ -1774,8 +1779,14 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           },
           fresh: {
             wiki: !!wiki,
-            news: !newsUsedFallback && !newsEmaHeld && !newsFloorApplied && (news?.articleCount24h ?? 0) > 0,
-            search: !searchUsedFallback && !searchEmaHeld && !searchFloorApplied && (serper?.searchVolume ?? 0) > 0,
+            // `fresh.news` / `fresh.search` answer "did we get fresh underlying
+            // data this tick?", which is what the per-person streak detector
+            // (line ~1154) needs. The floor is a separate concern surfaced as
+            // `newsFloorApplied` / `searchFloorApplied` below. Conflating them
+            // would make streak detection fire for floor-anchored ticks where
+            // the raw signal is actually fine.
+            news: !newsUsedFallback && !newsEmaHeld && (news?.articleCount24h ?? 0) > 0,
+            search: !searchUsedFallback && !searchEmaHeld && (serper?.searchVolume ?? 0) > 0,
             newsSource: hasPerPersonFallback ? "serper_news" : newsSource,
             newsIsRefresh: (newsSource === "mediastack" || newsSource === "union")
               ? (mediastackCadence?.shouldRefresh ?? true)

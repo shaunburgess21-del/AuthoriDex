@@ -1950,8 +1950,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const staleFlags: Record<string, boolean> = {};
       if (dataDelayed) staleFlags.dataDelayed = true;
-      if (fresh.newsEmaHeld) staleFlags.newsHeld = true;
-      if (fresh.searchEmaHeld) staleFlags.searchHeld = true;
+      // `*Held` covers both the single-tick EMA-hold and the trailing-24h
+      // decay-floor — semantically both mean "the displayed value is not the
+      // raw fetch, it's been anchored to recent history".
+      if (fresh.newsEmaHeld || fresh.newsFloorApplied) staleFlags.newsHeld = true;
+      if (fresh.searchEmaHeld || fresh.searchFloorApplied) staleFlags.searchHeld = true;
 
       // 24h change for pills; small dead zone to avoid noisy ±1% flicker
       const DELTA_DEAD_ZONE_PCT = 2;

@@ -725,15 +725,18 @@ const MEDIASTACK_REFRESH_INTERVAL_MINUTES = (() => {
 })();
 const MEDIASTACK_REFRESH_INTERVAL_MS = MEDIASTACK_REFRESH_INTERVAL_MINUTES * 60 * 1000;
 
-// Cache TTL is intentionally pinned to the refresh interval (minus a 5-minute
-// safety margin so the cache always expires fractionally BEFORE the next
-// refresh becomes due). Previously TTL was hardcoded at 2h while the refresh
-// interval defaults to 3h, leaving a ~1h window each cycle where the cache
-// was dead and `cacheOnly=true` ticks returned empty results — driving the
-// hourly news-count sawtooth (and, downstream, the trend-score sawtooth).
-// Pinning it to the refresh cadence closes that gap: every cache-only tick
-// hits a warm cache, and every refresh tick hits an expired cache → live fetch.
-const MEDIASTACK_CACHE_TTL_HOURS = Math.max(1, MEDIASTACK_REFRESH_INTERVAL_MINUTES - 5) / 60;
+// Cache TTL is pinned exactly to the refresh interval. Previously TTL was
+// hardcoded at 2h while the refresh interval defaults to 3h, leaving a ~1h
+// window each cycle where the cache was dead and `cacheOnly=true` ticks
+// returned empty results — driving the hourly news-count sawtooth (and,
+// downstream, the trend-score sawtooth). Pinning the two equal closes the
+// gap with no risk of a "cache outlives refresh" loop: at the exact boundary
+// the DB check `gt(expiresAt, now)` returns false (cache miss) AND `ageMs >=
+// REFRESH_INTERVAL_MS` is true (refresh due), so live fetch happens. A
+// previous iteration of this constant subtracted a 5-minute "safety margin"
+// — that was strictly worse, since it re-introduced a 5-min sub-window where
+// the cache was dead before refresh was due.
+const MEDIASTACK_CACHE_TTL_HOURS = MEDIASTACK_REFRESH_INTERVAL_MINUTES / 60;
 
 /**
  * Canonical refresh cadence (minutes) used by the Mediastack provider.
