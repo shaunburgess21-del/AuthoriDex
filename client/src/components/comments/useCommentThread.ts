@@ -18,9 +18,11 @@ export interface UseCommentThreadResult {
   cancelReply: () => void;
   isPostPending: boolean;
   isVotePending: boolean;
+  isDeletePending: boolean;
   submit: () => void;
   vote: (input: { commentId: string; voteType: VoteType }) => void;
   report: (input: { commentId: string; reason: string }) => void;
+  deleteComment: (input: { commentId: string }) => void;
   resetComposer: () => void;
 }
 
@@ -189,6 +191,84 @@ export function useCommentThread(adapter: CommentAdapter): UseCommentThreadResul
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: (input: { commentId: string }) => {
+      if (!adapter.deleteComment) {
+        return Promise.reject(new Error("Deleting is not supported on this surface"));
+      }
+      return adapter.deleteComment(input);
+    },
+    onMutate: async ({ commentId }) => {
+      await queryClient.cancelQueries({ queryKey });
+      if (adapter.fetchUserVotes) {
+        await queryClient.cancelQueries({ queryKey: userVotesKey });
+      }
+      const previousComments = queryClient.getQueryData<CommentItem[]>(queryKey);
+      const previousVotes = adapter.fetchUserVotes
+        ? queryClient.getQueryData<Record<string, VoteType>>(userVotesKey)
+        : undefined;
+      const optimisticDeletedAt = new Date().toISOString();
+
+      queryClient.setQueryData<CommentItem[]>(queryKey, (current) => {
+        if (!current) return current;
+        return current.map((comment) => (
+          comment.id === commentId
+            ? {
+              ...comment,
+              deletedAt: optimisticDeletedAt,
+              body: "",
+              username: "[deleted user]",
+              avatarUrl: null,
+              userVote: null,
+            }
+            : comment
+        ));
+      });
+
+      if (adapter.fetchUserVotes) {
+        queryClient.setQueryData<Record<string, VoteType>>(userVotesKey, (current) => {
+          if (!current) return current;
+          const next = { ...current };
+          delete next[commentId];
+          return next;
+        });
+      }
+
+      return { previousComments, previousVotes };
+    },
+    onError: (_error, _variables, context) => {
+      const ctx = context as { previousComments?: CommentItem[]; previousVotes?: Record<string, VoteType> } | undefined;
+      if (ctx?.previousComments) {
+        queryClient.setQueryData(queryKey, ctx.previousComments);
+      }
+      if (adapter.fetchUserVotes && ctx?.previousVotes !== undefined) {
+        queryClient.setQueryData(userVotesKey, ctx.previousVotes);
+      }
+      toast.error("Error", { description: "Failed to delete. Please sign in." });
+    },
+    onSuccess: (data, vars) => {
+      queryClient.setQueryData<CommentItem[]>(queryKey, (current) => {
+        if (!current) return current;
+        return current.map((comment) => (
+          comment.id === vars.commentId
+            ? {
+              ...comment,
+              deletedAt: data.deletedAt,
+              body: "",
+              username: "[deleted user]",
+              avatarUrl: null,
+              userVote: null,
+            }
+            : comment
+        ));
+      });
+      adapter.onDeleteSuccess?.(data, vars);
+    },
+    onSettled: () => {
+      invalidateAll();
+    },
+  });
+
   const submit = useCallback(() => {
     if (!composerBody.trim()) return;
     postMutation.mutate({ body: composerBody.trim(), parentId: replyTo?.id ?? null });
@@ -218,9 +298,11 @@ export function useCommentThread(adapter: CommentAdapter): UseCommentThreadResul
     cancelReply,
     isPostPending: postMutation.isPending,
     isVotePending: voteMutation.isPending,
+    isDeletePending: deleteMutation.isPending,
     submit,
     vote: (input) => voteMutation.mutate(input),
     report: (input) => reportMutation.mutate(input),
+    deleteComment: (input) => deleteMutation.mutate(input),
     resetComposer,
   };
 }

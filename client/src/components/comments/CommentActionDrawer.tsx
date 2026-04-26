@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { Share2, Flag, X } from "lucide-react";
+import { Flag, Share2, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
 interface CommentActionDrawerProps {
@@ -12,6 +12,7 @@ interface CommentActionDrawerProps {
    * degrades to Share-only.
    */
   onReport?: (reason: string) => void;
+  onDelete?: () => void;
   commentId: string | null;
   entitySlug: string;
 }
@@ -28,6 +29,7 @@ export function CommentActionDrawer({
   open,
   onClose,
   onReport,
+  onDelete,
   commentId,
   entitySlug,
 }: CommentActionDrawerProps) {
@@ -64,6 +66,10 @@ export function CommentActionDrawer({
     onReport?.(reason);
   }, [onReport]);
 
+  const handleDelete = useCallback(() => {
+    onDelete?.();
+  }, [onDelete]);
+
   if (!open) return null;
 
   return createPortal(
@@ -93,6 +99,15 @@ export function CommentActionDrawer({
               >
                 <Flag className="h-5 w-5 text-muted-foreground" />
                 <span className="text-sm font-medium">Report</span>
+              </button>
+            )}
+            {onDelete && (
+              <button
+                onClick={handleDelete}
+                className="flex items-center gap-3 w-full px-4 py-3.5 rounded-xl hover:bg-destructive/10 transition-colors text-destructive"
+              >
+                <Trash2 className="h-5 w-5" />
+                <span className="text-sm font-medium">Delete</span>
               </button>
             )}
             <button

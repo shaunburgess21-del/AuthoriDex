@@ -12,6 +12,7 @@ import { CommentComposer } from "./comments/CommentComposer";
 import { CommentList } from "./comments/CommentList";
 import { CommentSortHeader } from "./comments/CommentSortHeader";
 import { useCommentThread } from "./comments/useCommentThread";
+import { DeleteContentDialog } from "./comments/DeleteContentDialog";
 import { useXpBurst } from "./XpBurstProvider";
 import type { CommentAdapter, CommentItem, VoteType } from "./comments/types";
 import { toast } from "sonner";
@@ -27,6 +28,7 @@ interface InsightCommentResponse {
   upvotes: number;
   downvotes: number;
   userVote?: VoteType | null;
+  deletedAt: string | null;
   xp?: unknown;
 }
 
@@ -85,6 +87,7 @@ function toCommentItem(comment: InsightCommentResponse): CommentItem {
     upvotes: comment.upvotes ?? 0,
     downvotes: comment.downvotes ?? 0,
     userVote: comment.userVote ?? null,
+    deletedAt: comment.deletedAt,
     createdAt: comment.createdAt,
   };
 }
@@ -93,10 +96,12 @@ function useInsightCommentsAdapter({
   insightId,
   personId,
   onXp,
+  onDeleteSuccess,
 }: {
   insightId: string;
   personId: string;
   onXp: (data: unknown) => void;
+  onDeleteSuccess: () => void;
 }): CommentAdapter {
   return useMemo<CommentAdapter>(() => ({
     queryKey: ["/api/comments", "community_insight", insightId] as const,
@@ -125,6 +130,10 @@ function useInsightCommentsAdapter({
       );
       return res.json();
     },
+    deleteComment: async ({ commentId }) => {
+      const res = await apiRequest("DELETE", `/api/comments/${commentId}`);
+      return res.json();
+    },
     onPostSuccess: (data) => {
       toast("Comment Posted");
       onXp(data);
@@ -132,9 +141,12 @@ function useInsightCommentsAdapter({
     onVoteSuccess: (data) => {
       onXp(data);
     },
+    onDeleteSuccess: () => {
+      onDeleteSuccess();
+    },
     supportsReplies: true,
     invalidateOnMutate: [[`/api/community-insights/${personId}`]],
-  }), [insightId, personId, onXp]);
+  }), [insightId, personId, onXp, onDeleteSuccess]);
 }
 
 interface PostOverlayModalProps {
@@ -173,6 +185,7 @@ function PostOverlayModalContent({
   const [, setLocation] = useLocation();
   const { trigger: triggerXpBurst } = useXpBurst();
   const [drawerComment, setDrawerComment] = useState<CommentItem | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<CommentItem | null>(null);
 
   const triggerXp = useCallback((data: unknown) => {
     const xp = (data as { xp?: { xpAwarded?: number; reason?: string } | null } | null)?.xp;
@@ -180,11 +193,16 @@ function PostOverlayModalContent({
       triggerXpBurst(xp.xpAwarded, undefined, xp.reason);
     }
   }, [triggerXpBurst]);
+  const handleDeleteSuccess = useCallback(() => {
+    setDrawerComment(null);
+    setDeleteTarget(null);
+  }, []);
 
   const adapter = useInsightCommentsAdapter({
     insightId: insight.id,
     personId: insight.personId,
     onXp: triggerXp,
+    onDeleteSuccess: handleDeleteSuccess,
   });
   const thread = useCommentThread(adapter);
 
@@ -361,8 +379,29 @@ function PostOverlayModalContent({
       <CommentActionDrawer
         open={!!drawerComment}
         onClose={() => setDrawerComment(null)}
+        onDelete={
+          drawerComment && !drawerComment.deletedAt && drawerComment.userId === user?.id
+            ? () => {
+              setDeleteTarget(drawerComment);
+              setDrawerComment(null);
+            }
+            : undefined
+        }
         commentId={drawerComment?.id || null}
         entitySlug={insight.personId}
+      />
+      <DeleteContentDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        description="Delete this comment? This cannot be undone."
+        isPending={thread.isDeletePending}
+        onConfirm={() => {
+          if (deleteTarget) {
+            thread.deleteComment({ commentId: deleteTarget.id });
+          }
+        }}
       />
     </div>
   );

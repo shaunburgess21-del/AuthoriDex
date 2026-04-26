@@ -10,6 +10,7 @@ import { CommentSortHeader } from "./CommentSortHeader";
 import { CommentList } from "./CommentList";
 import { CommentComposer } from "./CommentComposer";
 import { useCommentThread } from "./useCommentThread";
+import { DeleteContentDialog } from "./DeleteContentDialog";
 import type { CommentAdapter, CommentItem, CommentEntityType } from "./types";
 
 export type { CommentEntityType } from "./types";
@@ -63,6 +64,7 @@ export function CardComments({
   const { user, isLoggedIn, profile } = useAuth();
   const [, setLocation] = useLocation();
   const [drawerComment, setDrawerComment] = useState<CommentItem | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<CommentItem | null>(null);
 
   const base = API_BASE[entityType];
   const parentType = COMMENT_PARENT_TYPE[entityType];
@@ -91,6 +93,10 @@ export function CardComments({
         const res = await apiRequest("POST", `/api/comments/${commentId}/vote`, { voteType });
         return res.json();
       },
+      deleteComment: async ({ commentId }) => {
+        const res = await apiRequest("DELETE", `/api/comments/${commentId}`);
+        return res.json();
+      },
       reportComment: async ({ commentId, reason }) => {
         const res = await apiRequest("POST", `/api/comments/${commentId}/report`, { reason });
         return res.json();
@@ -100,6 +106,10 @@ export function CardComments({
       },
       onReportSuccess: () => {
         setDrawerComment(null);
+      },
+      onDeleteSuccess: () => {
+        setDrawerComment(null);
+        setDeleteTarget(null);
       },
       supportsReplies: true,
       invalidateOnMutate: entityType === "opinion-poll" ? [[base, slug]] : undefined,
@@ -189,13 +199,36 @@ export function CardComments({
       <CommentActionDrawer
         open={!!drawerComment}
         onClose={() => setDrawerComment(null)}
-        onReport={(reason) => {
-          if (drawerComment) {
-            thread.report({ commentId: drawerComment.id, reason });
-          }
-        }}
+        onReport={
+          drawerComment && !drawerComment.deletedAt
+            ? (reason) => {
+              thread.report({ commentId: drawerComment.id, reason });
+            }
+            : undefined
+        }
+        onDelete={
+          drawerComment && !drawerComment.deletedAt && drawerComment.userId === user?.id
+            ? () => {
+              setDeleteTarget(drawerComment);
+              setDrawerComment(null);
+            }
+            : undefined
+        }
         commentId={drawerComment?.id || null}
         entitySlug={slug}
+      />
+      <DeleteContentDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        description="Delete this comment? This cannot be undone."
+        isPending={thread.isDeletePending}
+        onConfirm={() => {
+          if (deleteTarget) {
+            thread.deleteComment({ commentId: deleteTarget.id });
+          }
+        }}
       />
     </>
   );

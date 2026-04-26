@@ -30,6 +30,7 @@ export function CommentRow({
   onOpenActions,
   testIds,
 }: CommentRowProps) {
+  const isDeleted = Boolean(comment.deletedAt);
   const netVotes = (comment.upvotes || 0) - (comment.downvotes || 0);
   const hasUpvoted = comment.userVote === "up";
   const hasDownvoted = comment.userVote === "down";
@@ -42,17 +43,22 @@ export function CommentRow({
       }`}
       data-testid={testIds?.root ?? `comment-${comment.id}`}
     >
-      <UserProfileAvatar
-        displayName={comment.username || ""}
-        avatarUrl={comment.avatarUrl}
-        size={isReply ? "xs" : "sm"}
-        className="shrink-0"
-      />
+      {!isDeleted && (
+        <UserProfileAvatar
+          displayName={comment.username || ""}
+          avatarUrl={comment.avatarUrl}
+          size={isReply ? "xs" : "sm"}
+          className="shrink-0"
+        />
+      )}
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 flex-wrap min-w-0">
-            <span className="text-sm font-semibold truncate" data-testid={`text-comment-user-${comment.id}`}>
-              {comment.username || "Anonymous"}
+            <span
+              className={`text-sm truncate ${isDeleted ? "italic text-muted-foreground" : "font-semibold"}`}
+              data-testid={`text-comment-user-${comment.id}`}
+            >
+              {isDeleted ? "[deleted user]" : comment.username || "Anonymous"}
             </span>
             <span className="text-xs text-muted-foreground shrink-0">
               {formatTimeAgo(comment.createdAt)}
@@ -71,47 +77,59 @@ export function CommentRow({
             <MoreVertical className="h-4 w-4" />
           </button>
         </div>
-        <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap" data-testid={`text-comment-body-${comment.id}`}>
-          {comment.body}
+        <p
+          className={`text-sm text-muted-foreground mt-1 whitespace-pre-wrap ${isDeleted ? "italic" : ""}`}
+          data-testid={`text-comment-body-${comment.id}`}
+        >
+          {isDeleted ? "[deleted]" : comment.body}
         </p>
         <div className="flex items-center gap-4 mt-2">
-          <button
-            onClick={() => onVote("up")}
-            onPointerUp={(event) => event.currentTarget.blur()}
-            className={`flex items-center gap-1 text-xs transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
-              hasUpvoted
-                ? "text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300"
-                : "text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400"
-            }`}
-            data-testid={testIds?.upvote ?? `button-upvote-${comment.id}`}
-          >
-            <ThumbsUp className="h-3.5 w-3.5" />
-            {(comment.upvotes || 0) > 0 && <span>{comment.upvotes}</span>}
-          </button>
-          <button
-            onClick={() => onVote("down")}
-            onPointerUp={(event) => event.currentTarget.blur()}
-            className={`flex items-center gap-1 text-xs transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
-              hasDownvoted
-                ? "text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300"
-                : "text-muted-foreground hover:text-rose-600 dark:hover:text-rose-400"
-            }`}
-            data-testid={testIds?.downvote ?? `button-downvote-${comment.id}`}
-          >
-            <ThumbsDown className="h-3.5 w-3.5" />
-            {(comment.downvotes || 0) > 0 && <span>{comment.downvotes}</span>}
-          </button>
-          {showReplyButton && onReply && (
-            <button
-              onClick={onReply}
-              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors"
-              data-testid={testIds?.reply ?? `button-reply-${comment.id}`}
-            >
-              <Reply className="h-3.5 w-3.5" />
-              Reply
-            </button>
+          {!isDeleted && (
+            <>
+              <button
+                onClick={() => onVote("up")}
+                onPointerUp={(event) => event.currentTarget.blur()}
+                className={`flex items-center gap-1 text-xs transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
+                  hasUpvoted
+                    ? "text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300"
+                    : "text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400"
+                }`}
+                data-testid={testIds?.upvote ?? `button-upvote-${comment.id}`}
+              >
+                <ThumbsUp className="h-3.5 w-3.5" />
+                {(comment.upvotes || 0) > 0 && <span>{comment.upvotes}</span>}
+              </button>
+              <button
+                onClick={() => onVote("down")}
+                onPointerUp={(event) => event.currentTarget.blur()}
+                className={`flex items-center gap-1 text-xs transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
+                  hasDownvoted
+                    ? "text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300"
+                    : "text-muted-foreground hover:text-rose-600 dark:hover:text-rose-400"
+                }`}
+                data-testid={testIds?.downvote ?? `button-downvote-${comment.id}`}
+              >
+                <ThumbsDown className="h-3.5 w-3.5" />
+                {(comment.downvotes || 0) > 0 && <span>{comment.downvotes}</span>}
+              </button>
+              {showReplyButton && onReply && (
+                <button
+                  onClick={onReply}
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors"
+                  data-testid={testIds?.reply ?? `button-reply-${comment.id}`}
+                >
+                  <Reply className="h-3.5 w-3.5" />
+                  Reply
+                </button>
+              )}
+            </>
           )}
-          {netVotes !== 0 && (
+          {isDeleted && netVotes !== 0 && (
+            <span className="text-xs text-muted-foreground">
+              {netVotes > 0 ? `+${netVotes}` : netVotes}
+            </span>
+          )}
+          {!isDeleted && netVotes !== 0 && (
             <span className={`text-xs font-mono ${netVotes > 0 ? "text-cyan-600 dark:text-cyan-400" : "text-rose-600 dark:text-rose-400"}`}>
               {netVotes > 0 ? `+${netVotes}` : netVotes}
             </span>

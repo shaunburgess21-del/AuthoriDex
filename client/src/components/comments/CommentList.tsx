@@ -57,7 +57,7 @@ export function CommentList({
                 comment={parent}
                 isReply={false}
                 isTopComment={isTopComment}
-                showReplyButton={!!onReply}
+                showReplyButton={!!onReply && !parent.deletedAt}
                 onVote={(voteType) => onVote({ commentId: parent.id, voteType })}
                 onReply={onReply ? () => onReply(parent) : undefined}
                 onOpenActions={() => onOpenActions(parent)}
