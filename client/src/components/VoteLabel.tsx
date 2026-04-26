@@ -51,8 +51,7 @@ export function VoteLabel({ label }: VoteLabelProps) {
   return (
     <span className="inline-flex items-baseline gap-1 text-xs font-medium shrink-0">
       <span className="text-muted-foreground">voted</span>
-      <span style={{ color: getRatingTileColor(label.rating) }}>{label.rating}</span>
-      <span className="text-muted-foreground">/5</span>
+      <span><span style={{ color: getRatingTileColor(label.rating) }}>{label.rating}</span><span className="text-muted-foreground">/5</span></span>
     </span>
   );
 }
