@@ -1,11 +1,19 @@
 import { sql } from "drizzle-orm";
-import { pgTable, pgEnum, text, varchar, integer, real, timestamp, unique, uniqueIndex, jsonb, serial, boolean, index, numeric, check } from "drizzle-orm/pg-core";
+import { pgTable, pgEnum, text, varchar, integer, real, timestamp, unique, uniqueIndex, jsonb, serial, boolean, index, numeric, check, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { relations } from "drizzle-orm";
 
 export const contentStatusEnum = pgEnum("content_status", ["draft", "live", "archived"]);
 export const marketOutcomeEnum = pgEnum("market_outcome", ["yes", "no"]);
+export const commentParentTypeEnum = pgEnum("comment_parent_type", [
+  "community_insight",
+  "matchup",
+  "trending_poll",
+  "opinion_poll",
+  "open_market",
+]);
+export const commentVoteTypeEnum = pgEnum("comment_vote_type", ["up", "down"]);
 
 // NOTE: Auth and live account state are handled via Supabase + profiles.
 // The legacy users table is kept only for migration-era compatibility and should not be used for runtime reads/writes.
@@ -336,15 +344,44 @@ export const insertInsightCommentSchema = createInsertSchema(insightComments).om
 export type InsightComment = typeof insightComments.$inferSelect;
 export type InsertInsightComment = z.infer<typeof insertInsightCommentSchema>;
 
-// Comment Votes - tracks upvotes/downvotes on comments
+// Unified Comments - discussion threads across content surfaces
+export const comments = pgTable("comments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  parentType: commentParentTypeEnum("parent_type").notNull(),
+  parentId: varchar("parent_id").notNull(),
+  parentCommentId: varchar("parent_comment_id").references((): AnyPgColumn => comments.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull(),
+  body: text("body").notNull(),
+  upvotes: integer("upvotes").notNull().default(0),
+  downvotes: integer("downvotes").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  parentIdx: index("comments_parent_idx").on(table.parentType, table.parentId),
+  parentCommentIdx: index("comments_parent_comment_idx").on(table.parentCommentId),
+}));
+
+export const insertCommentSchema = createInsertSchema(comments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  upvotes: true,
+  downvotes: true,
+});
+
+export type Comment = typeof comments.$inferSelect;
+export type InsertComment = z.infer<typeof insertCommentSchema>;
+
+// Comment Votes - tracks upvotes/downvotes on unified comments
 export const commentVotes = pgTable("comment_votes", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  commentId: varchar("comment_id").notNull().references(() => insightComments.id, { onDelete: "cascade" }),
+  commentId: varchar("comment_id").notNull().references(() => comments.id, { onDelete: "cascade" }),
   userId: varchar("user_id").notNull(), // Supabase auth user ID
-  voteType: text("vote_type").notNull(), // 'up' or 'down'
+  voteType: commentVoteTypeEnum("vote_type").notNull(),
   votedAt: timestamp("voted_at").notNull().defaultNow(),
 }, (table) => ({
-  uniqueUserComment: unique().on(table.userId, table.commentId),
+  uniqueUserComment: unique("comment_votes_user_comment_unique").on(table.userId, table.commentId),
+  commentIdx: index("comment_votes_comment_idx").on(table.commentId),
 }));
 
 export const insertCommentVoteSchema = createInsertSchema(commentVotes).omit({
