@@ -1307,6 +1307,12 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     let searchApiUsedFallback = 0;
     let newsEmaHeldCount = 0;
     let searchEmaHeldCount = 0;
+    // Soft-smoothing counter for moderate news drops (Apr 2026 trend-engine
+    // tuning). Counts how often the asymmetric EMA inside the Mediastack
+    // refresh window kicks in to dampen 40–85% drops that the hard-hold
+    // thresholds (`baselineHold`, `floorHold`) don't catch. Used to size
+    // post-deployment monitoring of the ~150K Fame Index oscillation.
+    let newsSoftHeldCount = 0;
     // Asymmetric 24h decay-floor counters (news / search). Track how often the
     // floor anchors a value above the raw fetch — high counts here indicate
     // upstream provider instability that the floor is actively masking.
@@ -1553,6 +1559,54 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
                 dropRatio: prevNewsCount > 0 ? +(rawNewsCount / prevNewsCount).toFixed(3) : 0,
                 stickyZeroGuard,
               };
+            } else {
+              // ── DETERMINISTIC MODERATE-DROP SMOOTHING (Apr 2026) ─────────
+              // Phase 2 trend-engine tuning. The hard-hold rules above only
+              // catch catastrophic single-tick drops (≤10% of baseline, or
+              // <15% of prev). Phase 1 audit showed ~80% of the leaderboard
+              // oscillating ±150K Fame Index daily, driven by *moderate*
+              // 40–85% news-count drops inside the 3h Mediastack refresh
+              // window — query-shape variance, dedup drift in union mode,
+              // GDELT/Serper recent-window flicker, etc.
+              //
+              // Apply an asymmetric EMA: smoothed = 0.7·prev + 0.3·raw.
+              // Step-downs are bounded to ~30% per refresh tick so a real
+              // news-cycle decline still propagates within ~5 ticks (~15h),
+              // but single-tick artifacts are absorbed. Spikes (raw ≥ prev)
+              // pass through unchanged because this branch only triggers
+              // when raw < prev * 0.6.
+              const moderateDropFromBaseline = hasBaseline &&
+                rawNewsCount < bp50! * 0.4 &&
+                prevNewsCount >= bp50! * 0.6 &&
+                rawNewsCount > 0;
+              const moderateDropFromPrev = !hasBaseline &&
+                prevNewsCount >= 12 &&
+                rawNewsCount < prevNewsCount * 0.6 &&
+                rawNewsCount > 0;
+
+              if (moderateDropFromBaseline || moderateDropFromPrev) {
+                const smoothed = Math.max(
+                  rawNewsCount,
+                  Math.round(prevNewsCount * 0.7 + rawNewsCount * 0.3),
+                );
+                const prevDelta = mostRecent?.newsDelta ?? 0;
+                const rawDelta = newsDelta;
+                newsCount = smoothed;
+                newsDelta = +(prevDelta * 0.7 + rawDelta * 0.3).toFixed(4);
+                newsSoftHeldCount++;
+                newsHoldDiag = {
+                  reason: moderateDropFromBaseline
+                    ? "moderate_baseline_drop_smoothed"
+                    : "moderate_prev_drop_smoothed",
+                  prevCount: prevNewsCount,
+                  currentCount: rawNewsCount,
+                  smoothedCount: smoothed,
+                  baselineP50: bp50 ?? null,
+                  dropRatio: prevNewsCount > 0 ? +(rawNewsCount / prevNewsCount).toFixed(3) : 0,
+                  smoothingAlpha: 0.7,
+                  stickyZeroGuard,
+                };
+              }
             }
           }
         }
@@ -2088,6 +2142,9 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     if (newsEmaHeldCount > 0 || searchEmaHeldCount > 0) {
       console.log(`[EMA Hold] News held: ${newsEmaHeldCount}/${people.length}, Search held: ${searchEmaHeldCount}/${people.length} (provider healthy, individual artifact suppressed)`);
     }
+    if (newsSoftHeldCount > 0) {
+      console.log(`[Soft Hold] News moderate-drop smoothed: ${newsSoftHeldCount}/${people.length} (asymmetric EMA, alpha=0.7 over prev — anti-oscillation guard)`);
+    }
     if (newsFloorAppliedCount > 0 || searchFloorAppliedCount > 0) {
       console.log(`[24h Decay-Floor] News floor: ${newsFloorAppliedCount}/${people.length}, Search floor: ${searchFloorAppliedCount}/${people.length} (anchored above raw fetch via personal trailing-24h high)`);
     }
@@ -2168,6 +2225,9 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
         emaHeld: {
           news: newsEmaHeldCount,
           search: searchEmaHeldCount,
+        },
+        softHeld: {
+          news: newsSoftHeldCount,
         },
         floorHeld24h: {
           news: newsFloorAppliedCount,
