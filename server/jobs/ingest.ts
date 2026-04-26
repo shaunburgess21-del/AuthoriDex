@@ -1758,6 +1758,15 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           // Raw values for normalization - use graceful degradation values
           newsCount: newsCount,
           searchVolume: searchVolume,
+          // News 7-day daily average — feeds the news-momentum velocity
+          // slot (Apr 2026 — PR2 Fix X). Source priority: union-mode
+          // aggregator already populates this for every person; tiered
+          // GDELT and tiered Serper News also populate; tiered Mediastack
+          // returns 0, in which case momentum score falls through to 0
+          // (no signal, uniform across affected entities). Held values
+          // (EMA / soft-hold) deliberately use raw provider 7d here —
+          // the smoothing applies to 24h count, not the 7d denominator.
+          newsAverageDaily7d: news?.averageDaily7d ?? 0,
           // Previous values for recovery detection (data returning after API failure)
           // Only pass previous values if current data is FRESH (not fallback)
           // This ensures recovery mode triggers when we get fresh data after using fallback
@@ -1803,19 +1812,28 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           searchStalenessFactor: Math.min(searchUsedFallback ? searchDecayFactor : 1.0, searchGovernorFactor),
         };
 
-        // Previous scores for 24h/7d change computation. The third positional
-        // argument (previousFameIndex) was used for EMA smoothing which is now
-        // removed — we pass `undefined` so the scorer doesn't rely on it. The
-        // 24h/7d fameIndex values are still threaded through for change_24h /
-        // change_7d.
+        // Previous scores for 24h/7d change computation + cross-snapshot EMA.
+        // The third positional argument (previousFameIndex) feeds the Apr
+        // 2026 cross-snapshot EMA on the final fameIndex (see trendScore.ts).
+        // We only pass the previous tick's fameIndex when it's recent enough
+        // — otherwise new entrants / people coming back from a gap would be
+        // pinned to a stale value. FAME_EMA_MAX_GAP_HOURS is set just above
+        // the typical 1h ingest cadence so single-tick gaps from deploys or
+        // backfills still smooth.
         const prev24h = snapshot24hMap.get(person.id);
         const prev7d = snapshot7dMap.get(person.id);
+
+        const FAME_EMA_MAX_GAP_HOURS = 3;
+        const fameEmaPrev =
+          mostRecent && snapshotAgeHours <= FAME_EMA_MAX_GAP_HOURS
+            ? mostRecent.fameIndex ?? undefined
+            : undefined;
 
         const scoreResult = computeTrendScore(
           inputs,
           prev24h?.trendScore,
           prev7d?.trendScore,
-          undefined,
+          fameEmaPrev,
           sourceStats,
           prev24h?.fameIndex ?? undefined,
           prev7d?.fameIndex ?? undefined,
@@ -1829,6 +1847,10 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
             wiki: wiki?.pageviews24h ?? 0,
             wiki7d: wiki?.averageDaily7d ?? 0,
             news: news?.articleCount24h ?? 0,
+            // News 7d daily average — denominator for momentum velocity
+            // slot. 0 when the active news provider doesn't supply 7d
+            // data (tiered Mediastack-only). Apr 2026 — PR2 Fix X.
+            news7d: news?.averageDaily7d ?? 0,
             search: serper?.searchVolume ?? 0,
           },
           fresh: {

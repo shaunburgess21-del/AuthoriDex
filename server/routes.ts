@@ -1218,17 +1218,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
               const searchWeighted = currentVC.search * currentVC.weights.search;
               const newsWeighted = currentVC.news * currentVC.weights.news;
               const wikiWeighted = currentVC.wiki * currentVC.weights.wiki;
+              // Momentum slot (Apr 2026 — PR2 Fix X). Older snapshots
+              // pre-Fix X persisted no `momentum` field; coalesce to 0 so
+              // attribution doesn't NaN out on historical rows during the
+              // 24h transition window.
+              const momentumWeighted = (currentVC.momentum ?? 0) * (currentVC.weights.momentum ?? 0);
 
               const searchDelta = Math.abs(searchWeighted - (prevVC.search * prevVC.weights.search));
               const newsDelta = Math.abs(newsWeighted - (prevVC.news * prevVC.weights.news));
               const wikiDelta = Math.abs(wikiWeighted - (prevVC.wiki * prevVC.weights.wiki));
-              const totalDelta = searchDelta + newsDelta + wikiDelta;
+              const momentumDelta = Math.abs(
+                momentumWeighted - ((prevVC.momentum ?? 0) * (prevVC.weights.momentum ?? 0))
+              );
+              const totalDelta = searchDelta + newsDelta + wikiDelta + momentumDelta;
 
               if (totalDelta > 0) {
                 sources = [
                   { key: "search", pct: Math.round((searchDelta / totalDelta) * 100), status: "active" as string },
                   { key: "news", pct: Math.round((newsDelta / totalDelta) * 100), status: "active" as string },
                   { key: "wiki", pct: Math.round((wikiDelta / totalDelta) * 100), status: "active" as string },
+                  { key: "momentum", pct: Math.round((momentumDelta / totalDelta) * 100), status: "active" as string },
                 ].filter(s => s.pct > 0).sort((a, b) => b.pct - a.pct);
               }
             }
@@ -1240,6 +1249,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
               const searchContrib = searchChange * PLATFORM_WEIGHTS.velocity.search;
               const newsContrib = newsChange * PLATFORM_WEIGHTS.velocity.news;
               const wikiContrib = wikiChange * PLATFORM_WEIGHTS.velocity.wiki;
+              // Momentum can't be approximated from raw column changes
+              // (it'd require rederiving the 24h/7d ratio per snapshot).
+              // Attribution falls back to wiki/news/search only here —
+              // the exact path above already covers the momentum slice
+              // when both ticks have new-shape velocityComponents.
               const totalContrib = searchContrib + newsContrib + wikiContrib;
 
               if (totalContrib > 0) {
@@ -1253,7 +1267,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               }
             }
 
-            const allKeys = ["search", "news", "wiki"];
+            const allKeys = ["search", "news", "wiki", "momentum"];
             const presentKeys = new Set(sources.map(s => s.key));
             const hasAnyData = (curr.searchVolume ?? 0) > 0 || (curr.newsCount ?? 0) > 0 || (curr.wikiPageviews ?? 0) > 0;
             for (const k of allKeys) {
@@ -1268,6 +1282,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 news: "News coverage up",
                 wiki: "Wiki views up",
                 search: "Search interest up",
+                momentum: "News momentum surging",
               };
               dominantDriver = driverLabels[top.key] ?? null;
             }
@@ -2260,9 +2275,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const change24hAbs = Math.abs(trending?.change24h ?? 0);
       const hasSignificantMovement = change24hAbs >= 2.0;
 
-      let driverBreakdown: { search: number; news: number; wiki: number } | null = null;
-      let breakdownPct: { search: number; news: number; wiki: number } | null = null;
-      let driverSourceCount = 3;
+      // Driver breakdown shape now carries an optional `momentum` slice
+      // (Apr 2026 — PR2 Fix X). Older snapshots without `velocityComponents.momentum`
+      // gracefully coalesce to 0 in the math below; the field is optional in
+      // the response so existing API consumers don't break.
+      let driverBreakdown: { search: number; news: number; wiki: number; momentum?: number } | null = null;
+      let breakdownPct: { search: number; news: number; wiki: number; momentum?: number } | null = null;
+      let driverSourceCount = 4;
       let quietSources: string[] = [];
       let driversStatus: "active" | "stable" = "stable";
       let driversIsExact = false;
@@ -2282,40 +2301,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const searchWeighted = currentVC.search * currentVC.weights.search;
             const newsWeighted = currentVC.news * currentVC.weights.news;
             const wikiWeighted = currentVC.wiki * currentVC.weights.wiki;
-            const totalWeighted = searchWeighted + newsWeighted + wikiWeighted;
+            // Momentum slot — coalesce missing fields to 0 so the
+            // exact path keeps working for the 24h transition window
+            // when the previous tick may pre-date Fix X.
+            const momentumWeighted = (currentVC.momentum ?? 0) * (currentVC.weights.momentum ?? 0);
+            const totalWeighted = searchWeighted + newsWeighted + wikiWeighted + momentumWeighted;
 
             if (totalWeighted > 0) {
               const rawSearch = (searchWeighted / totalWeighted) * 100;
               const rawNews = (newsWeighted / totalWeighted) * 100;
               const rawWiki = (wikiWeighted / totalWeighted) * 100;
+              const rawMomentum = (momentumWeighted / totalWeighted) * 100;
               let pSearch = Math.floor(rawSearch);
               let pNews = Math.floor(rawNews);
               let pWiki = Math.floor(rawWiki);
-              let remainder = 100 - (pSearch + pNews + pWiki);
+              let pMomentum = Math.floor(rawMomentum);
+              let remainder = 100 - (pSearch + pNews + pWiki + pMomentum);
               const remainders = [
                 { key: 'search', frac: rawSearch - pSearch },
                 { key: 'news', frac: rawNews - pNews },
                 { key: 'wiki', frac: rawWiki - pWiki },
+                { key: 'momentum', frac: rawMomentum - pMomentum },
               ].sort((a, b) => b.frac - a.frac);
               for (const r of remainders) {
                 if (remainder <= 0) break;
                 if (r.key === 'search') pSearch++;
                 else if (r.key === 'news') pNews++;
-                else pWiki++;
+                else if (r.key === 'wiki') pWiki++;
+                else pMomentum++;
                 remainder--;
               }
-              breakdownPct = { search: pSearch, news: pNews, wiki: pWiki };
+              breakdownPct = { search: pSearch, news: pNews, wiki: pWiki, momentum: pMomentum };
             }
 
             const searchDelta = Math.abs(searchWeighted - (prevVC.search * prevVC.weights.search));
             const newsDelta = Math.abs(newsWeighted - (prevVC.news * prevVC.weights.news));
             const wikiDelta = Math.abs(wikiWeighted - (prevVC.wiki * prevVC.weights.wiki));
-            const totalDelta = searchDelta + newsDelta + wikiDelta;
+            const momentumDelta = Math.abs(
+              momentumWeighted - ((prevVC.momentum ?? 0) * (prevVC.weights.momentum ?? 0))
+            );
+            const totalDelta = searchDelta + newsDelta + wikiDelta + momentumDelta;
 
             if (searchDelta / Math.max(searchWeighted, 1) < 0.05) quietSources.push("Search");
             if (newsDelta / Math.max(newsWeighted, 1) < 0.05) quietSources.push("News");
             if (wikiDelta / Math.max(wikiWeighted, 1) < 0.03) quietSources.push("Wikipedia");
-            driverSourceCount = 3 - quietSources.length;
+            if (momentumDelta / Math.max(momentumWeighted, 1) < 0.05) quietSources.push("Momentum");
+            driverSourceCount = 4 - quietSources.length;
 
             const MIN_DRIVER_DELTA = 0.5;
             if (totalDelta > MIN_DRIVER_DELTA && hasSignificantMovement && driverSourceCount > 0) {
@@ -2323,6 +2354,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 search: Math.round((searchDelta / totalDelta) * 100),
                 news: Math.round((newsDelta / totalDelta) * 100),
                 wiki: Math.round((wikiDelta / totalDelta) * 100),
+                momentum: Math.round((momentumDelta / totalDelta) * 100),
               };
               driversStatus = "active";
             }

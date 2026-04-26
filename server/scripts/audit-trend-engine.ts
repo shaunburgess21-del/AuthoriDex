@@ -113,6 +113,27 @@ async function main() {
     wiki7dByPerson.set(row.person_id, Number(row.avg7d) || 0);
   }
 
+  // 7d news daily-avg per person — denominator for the news-momentum
+  // velocity slot (Apr 2026 — PR2 Fix X). Derived as `AVG(news_count)`
+  // over the last 7 days of ingest snapshots so the dry-run script can
+  // simulate momentum even on snapshots that pre-date Fix X (where
+  // `diagnostics.raw.news7d` isn't persisted yet). ingest.ts uses the
+  // *live provider's* 7d count (GDELT/Serper News query with
+  // `tbs=qdr:w`), which is a different but correlated quantity — the
+  // momentum direction of travel will match in either case.
+  const news7dResult = await db.execute(sql`
+    SELECT person_id, AVG(news_count)::float AS avg7d
+    FROM trend_snapshots
+    WHERE timestamp >= ${sevenDaysAgo}
+      AND snapshot_origin = 'ingest'
+      AND news_count IS NOT NULL
+    GROUP BY person_id
+  `);
+  const news7dByPerson = new Map<string, number>();
+  for (const row of news7dResult.rows as Array<{ person_id: string; avg7d: number }>) {
+    news7dByPerson.set(row.person_id, Number(row.avg7d) || 0);
+  }
+
   // 24h fame oscillation per person (max - min from on-hour ingest snapshots in last 24h)
   const oneDayAgo = new Date();
   oneDayAgo.setDate(oneDayAgo.getDate() - 1);
@@ -143,7 +164,17 @@ async function main() {
     const wiki7dAvg = wiki7dByPerson.get(p.id) ?? 0;
     const osc = oscByPerson.get(p.id);
 
-    // Reproduce the score so we can see the per-source velocity components
+    // Reproduce the score so we can see the per-source velocity components.
+    // News 7d daily-avg priority:
+    //   1. Persisted `diagnostics.raw.news7d` (set by ingest.ts post-Fix X
+    //      — comes from the live news provider's 7d query).
+    //   2. SQL aggregate over the last 7 days of ingest snapshots
+    //      (fallback for pre-Fix X snapshots; correlated but not identical).
+    //   3. 0 (no signal — momentum slot becomes 0).
+    const diag = snap?.diagnostics as Record<string, any> | null;
+    const persistedNewsAvg7d = Number(diag?.raw?.news7d ?? 0);
+    const aggregateNewsAvg7d = news7dByPerson.get(p.id) ?? 0;
+    const newsAvg7d = persistedNewsAvg7d > 0 ? persistedNewsAvg7d : aggregateNewsAvg7d;
     let recomputed: ReturnType<typeof computeTrendScore> | null = null;
     if (snap && tracked) {
       recomputed = computeTrendScore(
@@ -155,6 +186,7 @@ async function main() {
           searchDelta: Number(snap.searchDelta ?? 0),
           newsCount: Number(snap.newsCount ?? 0),
           searchVolume: Number(snap.searchVolume ?? 0),
+          newsAverageDaily7d: newsAvg7d,
           activePlatforms: {
             wiki: !!tracked.wikiSlug,
             instagram: !!tracked.instagramHandle,
@@ -181,6 +213,7 @@ async function main() {
             wikiPageviews24h: Number(snap.wikiPageviews ?? 0),
             wikiPageviews7dAvg: wiki7dAvg,
             newsCount: Number(snap.newsCount ?? 0),
+            newsAverageDaily7d: newsAvg7d,
             searchVolume: Number(snap.searchVolume ?? 0),
             timestamp: snap.timestamp ? new Date(snap.timestamp).toISOString() : null,
             snapshotOrigin: snap.snapshotOrigin ?? null,
@@ -194,6 +227,7 @@ async function main() {
             wikiVelocity: recomputed.velocityComponents.wiki,
             newsVelocity: recomputed.velocityComponents.news,
             searchVelocity: recomputed.velocityComponents.search,
+            momentumVelocity: recomputed.velocityComponents.momentum,
             massContrib: Math.round(recomputed.massScore * MASS_ALLOCATION * 10000),
             wikiVelContrib: Math.round(
               recomputed.velocityComponents.wiki * PLATFORM_WEIGHTS.velocity.wiki * VELOCITY_ALLOCATION * 100,
@@ -203,6 +237,9 @@ async function main() {
             ),
             searchVelContrib: Math.round(
               recomputed.velocityComponents.search * PLATFORM_WEIGHTS.velocity.search * VELOCITY_ALLOCATION * 100,
+            ),
+            momentumVelContrib: Math.round(
+              recomputed.velocityComponents.momentum * PLATFORM_WEIGHTS.velocity.momentum * VELOCITY_ALLOCATION * 100,
             ),
           }
         : null,
@@ -243,22 +280,24 @@ async function main() {
   });
 
   // ---- 5. Dominant-driver categorization for top 50 -------------------------
-  const categories = { mass: 0, news: 0, search: 0, wiki: 0, mixed: 0 };
+  const categories = { mass: 0, news: 0, search: 0, wiki: 0, momentum: 0, mixed: 0 };
   for (const tp of out.topPeople as any[]) {
     if (!tp.recomputed) continue;
     const m = tp.recomputed.massContrib;
     const w = tp.recomputed.wikiVelContrib;
     const n = tp.recomputed.newsVelContrib;
     const s = tp.recomputed.searchVelContrib;
-    const total = m + w + n + s;
+    const mo = tp.recomputed.momentumVelContrib ?? 0;
+    const total = m + w + n + s + mo;
     if (total === 0) continue;
-    const dom = Math.max(m, w, n, s);
+    const dom = Math.max(m, w, n, s, mo);
     const domPct = dom / total;
     if (domPct < 0.45) categories.mixed++;
     else if (dom === m) categories.mass++;
     else if (dom === w) categories.wiki++;
     else if (dom === n) categories.news++;
     else if (dom === s) categories.search++;
+    else if (dom === mo) categories.momentum++;
   }
   out.dominantDriverCounts = categories;
 

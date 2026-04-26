@@ -6,6 +6,7 @@ import {
   AllSourceStats,
   DEFAULT_SOURCE_STATS,
   normalizeSourceValue,
+  normalizeNewsMomentum,
 } from "./normalize";
 import {
   normalizeMass,
@@ -15,19 +16,36 @@ import {
 } from "./utils";
 
 // ============================================================================
-// TREND SCORE — raw mass + velocity, no stabilization, no smoothing.
+// TREND SCORE — raw mass + velocity with cross-snapshot Fame Index EMA.
 // ============================================================================
-// One deterministic code path. What the raw signals say is what the score is.
-//   fameIndex = round( (massScore * 0.40 + velocityScore * 0.60) * 10000 )
-// Clamped to [0, 1,000,000]. Percentile normalization still runs so different
-// sources are comparable before the weighted sum, but nothing is smoothed,
-// rate-limited, tapered, dampened, or rank-adjusted after the math above.
+// Single deterministic code path:
+//   massScore     = wikiMass * 0.50 + igMass * 0.25 + ytMass * 0.25
+//   velocityScore = wikiVel * 0.35 + newsVel * 0.45 + momentumVel * 0.20
+//                   (Fix X — Apr 2026 PR2: momentum slot added; news slot
+//                   trimmed from 0.60; wiki trimmed from 0.40; search
+//                   permanently zero. Momentum carries the news 24h-vs-7d
+//                   acceleration ratio.)
+//   rawFameIndex  = clamp( round( (massScore * 0.40 + velocityScore * 0.60) * 10000 ), 0, 1M )
+//   fameIndex     = clamp( round( 0.7 × rawFameIndex + 0.3 × previousFameIndex ), 0, 1M )
+//                   (Fix Z — Apr 2026 PR2: cross-snapshot EMA when a
+//                   recent previousFameIndex is supplied; otherwise
+//                   fameIndex === rawFameIndex.)
 //
-// Stability fields (`wasStabilized`, `stabDetail`, `spikingSourceCount`,
-// `velocityAdjusted`, `diversityMultiplier`) are preserved in the return
-// type but hold constant values. They exist only to avoid a cascade of
-// downstream edits in storage / admin diagnostics. rawFameIndex === fameIndex
-// in every output.
+// The Apr 2026 cross-snapshot EMA caps any single-tick fameIndex swing to
+// ~70% of the raw delta. Step-up from baseline to spike: 70% on tick 1,
+// 91% on tick 2, ~98% on tick 4 — fast enough that breakouts still
+// register, but enough damping to eliminate the leftover ±150K
+// oscillation that upstream input smoothing (ingest.ts soft-hold) doesn't
+// catch (e.g. mass-side wiki-7d-avg refresh flips). Step-down has the
+// same shape, so a real news-cycle decline takes ~5 ticks to fully
+// propagate.
+//
+// `rawFameIndex` is preserved un-smoothed for admin diagnostics so the
+// pre-EMA composite is always inspectable. Other "stability" fields
+// (`wasStabilized`, `stabDetail`, `spikingSourceCount`, `velocityAdjusted`,
+// `diversityMultiplier`) are still legacy placeholders held for storage
+// compatibility — none of them re-enable the historical full
+// stabilization pipeline.
 
 export interface TrendInputs {
   wikiPageviews: number;
@@ -38,6 +56,14 @@ export interface TrendInputs {
 
   newsCount?: number;
   searchVolume?: number;
+
+  /**
+   * Trailing 7-day average daily news count for this entity. Combined with
+   * `newsCount` (which is the 24h count) to compute the news-momentum
+   * velocity slot (Apr 2026 — PR2 Fix X). When omitted, missing, or zero
+   * the momentum score is 0 — see `normalizeNewsMomentum`.
+   */
+  newsAverageDaily7d?: number;
 
   /** @deprecated Unused after simplification. Kept for caller compatibility. */
   prevNewsCount?: number;
@@ -120,17 +146,37 @@ export interface TrendScoreResult {
     search: number;
     news: number;
     wiki: number;
-    weights: { search: number; news: number; wiki: number };
+    /**
+     * News-acceleration velocity sub-score (0..100). Derived from the
+     * 24h-vs-7d news ratio — see `normalizeNewsMomentum`. Apr 2026 (PR2
+     * Fix X). Carried in the response shape so admin diagnostics
+     * (`Why Trending`, `Hot Movers` source attribution) can render the
+     * acceleration slice alongside stock (wiki) and volume (news count).
+     */
+    momentum: number;
+    weights: { search: number; news: number; wiki: number; momentum: number };
   };
 }
+
+// ── CROSS-SNAPSHOT EMA CONSTANTS (Apr 2026 trend-engine tuning) ──────────────
+// Weight of the *current tick's* raw composite in the smoothed fameIndex.
+// 0.70 means breakouts hit 70% of their raw value on the first tick they
+// occur, ~91% by tick 2, ~98% by tick 4. Drops follow the same curve.
+const FAME_INDEX_EMA_ALPHA_CURRENT = 0.70;
+// Weight of the previous tick's *smoothed* fameIndex (i.e. the value
+// already persisted to trend_snapshots).
+const FAME_INDEX_EMA_ALPHA_PREVIOUS = 0.30;
 
 export function computeTrendScore(
   inputs: TrendInputs,
   previousScore?: number,
   previousScore7d?: number,
-  // Intentionally unused after simplification (was: previousFameIndex for EMA).
-  // Kept positionally so call sites don't need to change.
-  _previousFameIndex?: number,
+  // Most-recent persisted fameIndex (1-tick-ago snapshot). When supplied
+  // and non-zero we apply a cross-snapshot EMA so single-tick swings are
+  // capped. Callers should pass `undefined` when the previous tick is
+  // stale (>1 ingest cadence ago) so new entrants / post-gap recoveries
+  // aren't pinned to outdated values — see ingest.ts FAME_EMA_MAX_GAP_HOURS.
+  previousFameIndex?: number,
   sourceStats?: AllSourceStats,
   previousFameIndex24h?: number,
   previousFameIndex7d?: number,
@@ -183,25 +229,65 @@ export function computeTrendScore(
   const newsNormalized = normalizeSourceValue(newsRaw, stats.news);
   const searchNormalized = normalizeSourceValue(searchRaw, stats.search);
 
+  // News-momentum velocity slot (Apr 2026 — PR2 Fix X). The
+  // `newsAverageDaily7d` input falls through from the multi-source news
+  // aggregator (union mode) or per-provider 7d count (tiered GDELT /
+  // Serper News). When unavailable (e.g. tiered Mediastack-only mode)
+  // momentumNormalized is 0 — see `normalizeNewsMomentum`.
+  const momentumNormalized = normalizeNewsMomentum(
+    newsRaw,
+    inputs.newsAverageDaily7d ?? 0,
+  );
+
   const wikiVelocityScore = inputs.activePlatforms.wiki
     ? wikiNormalized * 100
     : 0;
   const newsVelocityScore = newsNormalized * 100;
   const searchVelocityScore = searchNormalized * 100;
+  const momentumVelocityScore = momentumNormalized * 100;
 
   const velocityWeights = PLATFORM_WEIGHTS.velocity;
   const velocityScore = (
     (wikiVelocityScore * velocityWeights.wiki)
     + (newsVelocityScore * velocityWeights.news)
     + (searchVelocityScore * velocityWeights.search)
+    + (momentumVelocityScore * velocityWeights.momentum)
   );
 
   // ---- 3. Composite -------------------------------------------------------
-  // Single linear path. No damping, taper, diversity multiplier, EMA, rate
-  // limit, catch-up, recalibration, or smoothing modes.
+  // Linear mass + velocity composite, then a cross-snapshot EMA on the
+  // final fameIndex (Apr 2026 trend-engine tuning). Pre-EMA composite is
+  // preserved as `rawFameIndex` for admin diagnostics.
   const baseScore = (massScore * MASS_ALLOCATION) + (velocityScore * VELOCITY_ALLOCATION);
-  const fameIndex = clamp(Math.round(baseScore * 10000), 0, 1000000);
-  const trendScore = clamp(baseScore * 10000, 0, 1000000);
+  const rawFameIndex = clamp(Math.round(baseScore * 10000), 0, 1000000);
+  const rawTrendScore = clamp(baseScore * 10000, 0, 1000000);
+
+  // Apply cross-snapshot EMA only when we have a usable prior tick. Caller
+  // (ingest) is responsible for not passing a stale previousFameIndex.
+  const hasUsablePrev =
+    typeof previousFameIndex === "number" &&
+    Number.isFinite(previousFameIndex) &&
+    previousFameIndex > 0;
+
+  const fameIndex = hasUsablePrev
+    ? clamp(
+        Math.round(
+          rawFameIndex * FAME_INDEX_EMA_ALPHA_CURRENT +
+            previousFameIndex * FAME_INDEX_EMA_ALPHA_PREVIOUS,
+        ),
+        0,
+        1000000,
+      )
+    : rawFameIndex;
+
+  const trendScore = hasUsablePrev
+    ? clamp(
+        rawTrendScore * FAME_INDEX_EMA_ALPHA_CURRENT +
+          previousFameIndex * FAME_INDEX_EMA_ALPHA_PREVIOUS,
+        0,
+        1000000,
+      )
+    : rawTrendScore;
 
   // ---- 4. Confidence (cosmetic — unused in scoring) -----------------------
   const hasWiki = inputs.wikiDelta !== 0 || inputs.wikiPageviews > 0;
@@ -242,7 +328,14 @@ export function computeTrendScore(
   return {
     trendScore: Math.round(trendScore),
     fameIndex,
-    rawFameIndex: fameIndex,
+    rawFameIndex,
+    // `wasStabilized` previously meant "the legacy stabilization pipeline
+    // (rate-limit + asymmetric EMA + diversity multiplier + …) modified the
+    // raw composite this tick". That pipeline is gone. The cross-snapshot
+    // EMA is a single targeted layer with deterministic alpha, not a
+    // stabilization regime, so this flag stays false even when EMA fires —
+    // any divergence between fameIndex and rawFameIndex is the EMA, by
+    // definition.
     wasStabilized: false,
     stabDetail: null,
     spikingSourceCount: 0,
@@ -259,10 +352,12 @@ export function computeTrendScore(
       search: Math.round(searchVelocityScore * 100) / 100,
       news: Math.round(newsVelocityScore * 100) / 100,
       wiki: Math.round(wikiVelocityScore * 100) / 100,
+      momentum: Math.round(momentumVelocityScore * 100) / 100,
       weights: {
         search: Math.round(velocityWeights.search * 1000) / 1000,
         news: Math.round(velocityWeights.news * 1000) / 1000,
         wiki: Math.round(velocityWeights.wiki * 1000) / 1000,
+        momentum: Math.round(velocityWeights.momentum * 1000) / 1000,
       },
     },
   };
