@@ -723,6 +723,15 @@ const MEDIASTACK_REFRESH_INTERVAL_MINUTES = (() => {
   return raw;
 })();
 const MEDIASTACK_REFRESH_INTERVAL_MS = MEDIASTACK_REFRESH_INTERVAL_MINUTES * 60 * 1000;
+
+/**
+ * Canonical refresh cadence (minutes) used by the Mediastack provider.
+ * Exposed so admin endpoints can display the same value the runtime is
+ * actually using, instead of re-parsing the env var with their own fallback.
+ */
+export function getMediastackRefreshIntervalMinutes(): number {
+  return MEDIASTACK_REFRESH_INTERVAL_MINUTES;
+}
 const MEDIASTACK_MONTHLY_LIMIT = 50_000;
 const BUDGET_WARN_PCT = 85;
 // Slightly lower than 95 now that the projection is honest (cycle-aware rather

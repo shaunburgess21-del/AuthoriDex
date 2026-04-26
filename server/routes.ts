@@ -47,7 +47,7 @@ import {
 } from "./scoring/sourceHealth";
 import { getLastFullRefreshAt } from "./jobs/live-tick";
 import { getLastRunMeta } from "./jobs/ingest";
-import { getMediastackBudgetSummary, probeMediastackLive } from "./providers/mediastack";
+import { getMediastackBudgetSummary, getMediastackRefreshIntervalMinutes, probeMediastackLive } from "./providers/mediastack";
 import pLimit from "p-limit";
 import { buildOpeningScores } from "./native-markets/openingScores";
 import { generateWeeklyUpDown, generateWeeklyJackpot, generateWeeklyH2H, generateWeeklyGainer, getWeekContext, ensureWeeklyMarketsForCurrentWeek } from "./jobs/market-generator";
@@ -7466,11 +7466,7 @@ Only return the JSON object.`;
             const allowed = [5, 10, 15, 20, 30, 60];
             return allowed.includes(raw) ? raw : 60;
           })(),
-          mediastackRefreshIntervalMinutes: (() => {
-            const raw = parseInt(process.env.MEDIASTACK_REFRESH_INTERVAL_MINUTES ?? "120", 10);
-            if (Number.isNaN(raw) || raw < 30 || raw > 360) return 120;
-            return raw;
-          })(),
+          mediastackRefreshIntervalMinutes: getMediastackRefreshIntervalMinutes(),
           rollingWindowDaysBaseline: getRollingWindowDaysBaseline(),
           rollingWindowDaysNews: getRollingWindowDaysNews(),
           diagnosticsVerbose: (process.env.DIAGNOSTICS_VERBOSE ?? "true").trim().toLowerCase() !== "false",
