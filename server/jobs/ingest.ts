@@ -1045,10 +1045,39 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     // (vs. falling back to the population p50 for brand-new celebs).
     const newsBaselineCountMap = new Map<string, number>();
     const searchBaselineCountMap = new Map<string, number>();
+    // ── News-momentum 7-day average (Apr 2026 — PR4) ─────────────────────
+    // Replaces the unreliable provider `news.averageDaily7d` value as the
+    // denominator for the news-momentum velocity slot. The provider value
+    // is structurally broken in two ways:
+    //   • Mediastack (primary for top-tier people) hardcodes 0 — never
+    //     supplies 7d totals. Affected ~70% of leaderboard, including
+    //     Trump/Modi/Rihanna, who all surfaced as "establishing baseline"
+    //     in the UI even with months of tracked history.
+    //   • Serper News and GDELT both cap their 7d query at 100/250 raw
+    //     results respectively, yielding exactly `~35.71 articles/day`
+    //     for any person with enough coverage to hit the cap. This is
+    //     why John Ternus, Eion Musk, Javier Milei, and JD Vance all
+    //     showed identical "7-day avg: 35.7 articles/day" pre-PR4.
+    // Solution: average the persisted `news_count` field across the last
+    // 7 days of ingest snapshots — same data the audit script and
+    // dry-run already use, so all reading surfaces are now consistent.
+    const news7dHistoryAvgMap = new Map<string, number>();
+    const news7dHistorySamplesMap = new Map<string, number>();
     {
       const newsValues = new Map<string, number[]>();
       const searchValues = new Map<string, number[]>();
+      // Separate "all news_count values incl. zeros" map for the 7d
+      // average: zeros are real signal here (a quiet day for someone
+      // means their typical week is quieter), unlike the spike-detection
+      // baseline below which excludes zeros so single-tick API misses
+      // don't drag the personal-p50 to zero.
+      const newsAllValues = new Map<string, number[]>();
       for (const snap of historicalSnapshots) {
+        if (snap.newsCount !== null && snap.newsCount !== undefined) {
+          const all = newsAllValues.get(snap.personId) ?? [];
+          all.push(snap.newsCount);
+          newsAllValues.set(snap.personId, all);
+        }
         if ((snap.newsCount ?? 0) > 0) {
           const arr = newsValues.get(snap.personId) ?? [];
           arr.push(snap.newsCount!);
@@ -1070,6 +1099,11 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
         searchBaselineMap.set(pid, vals[Math.floor(vals.length / 2)]);
         searchBaselineCountMap.set(pid, vals.length);
       });
+      newsAllValues.forEach((vals, pid) => {
+        const sum = vals.reduce((a, b) => a + b, 0);
+        news7dHistoryAvgMap.set(pid, vals.length > 0 ? sum / vals.length : 0);
+        news7dHistorySamplesMap.set(pid, vals.length);
+      });
     }
 
     // Minimum non-zero historical observations required before we trust the
@@ -1078,6 +1112,20 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     const PERSONAL_BASELINE_MIN_OBSERVATIONS = 14;
 
     console.log(`[Ingest] Bootstrap maps: ${lastNonZeroNewsMap.size} people with non-zero news history, ${lastNonZeroSearchMap.size} with non-zero search history`);
+
+    // PR4 telemetry — how many people are using history-sourced vs
+    // provider-sourced news7d. Monitor for: a sudden drop in the history
+    // count would indicate a snapshot retention issue; a sudden spike in
+    // provider reliance after deploy would indicate the threshold isn't
+    // letting enough people through.
+    const news7dHistoryEligible = Array.from(news7dHistorySamplesMap.values()).filter(
+      (n) => n >= PERSONAL_BASELINE_MIN_OBSERVATIONS,
+    ).length;
+    console.log(
+      `[Ingest] news7d source: ${news7dHistoryEligible}/${news7dHistorySamplesMap.size} people qualify ` +
+      `for history-sourced 7d avg (≥${PERSONAL_BASELINE_MIN_OBSERVATIONS} samples); ` +
+      `remainder fall back to provider value`,
+    );
     console.log(`[Ingest] 24h decay-floor anchors: ${personalNewsHigh24hMap.size} news highs, ${personalSearchHigh24hMap.size} search highs (within 24h window)`);
 
     console.log(`[Ingest] Found ${mostRecentMap.size} recent snapshots (EMA), ${snapshot24hMap.size} 24h snapshots, ${snapshot7dMap.size} 7d snapshots`);
@@ -1759,14 +1807,24 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           newsCount: newsCount,
           searchVolume: searchVolume,
           // News 7-day daily average — feeds the news-momentum velocity
-          // slot (Apr 2026 — PR2 Fix X). Source priority: union-mode
-          // aggregator already populates this for every person; tiered
-          // GDELT and tiered Serper News also populate; tiered Mediastack
-          // returns 0, in which case momentum score falls through to 0
-          // (no signal, uniform across affected entities). Held values
-          // (EMA / soft-hold) deliberately use raw provider 7d here —
-          // the smoothing applies to 24h count, not the 7d denominator.
-          newsAverageDaily7d: news?.averageDaily7d ?? 0,
+          // slot. Source priority (Apr 2026 — PR4):
+          //   1. SQL aggregate over our own last-7-days `news_count`
+          //      snapshots (`news7dHistoryAvgMap`). Canonical because
+          //      it's independent of provider quirks (Mediastack=0,
+          //      Serper/GDELT capped at ~35.71/day) and reflects
+          //      actually-measured history.
+          //   2. Provider-supplied value (used only when we have
+          //      <PERSONAL_BASELINE_MIN_OBSERVATIONS samples — i.e. a
+          //      brand-new tracked person without enough history yet).
+          //   3. 0 (no signal — momentum slot becomes 0, card renders
+          //      as "establishing baseline").
+          // Held values (EMA / soft-hold) deliberately use the raw
+          // history here — the smoothing applies to 24h count, not the
+          // 7d denominator.
+          newsAverageDaily7d:
+            (news7dHistorySamplesMap.get(person.id) ?? 0) >= PERSONAL_BASELINE_MIN_OBSERVATIONS
+              ? (news7dHistoryAvgMap.get(person.id) ?? 0)
+              : (news?.averageDaily7d ?? 0),
           // Previous values for recovery detection (data returning after API failure)
           // Only pass previous values if current data is FRESH (not fallback)
           // This ensures recovery mode triggers when we get fresh data after using fallback
@@ -1848,9 +1906,21 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
             wiki7d: wiki?.averageDaily7d ?? 0,
             news: news?.articleCount24h ?? 0,
             // News 7d daily average — denominator for momentum velocity
-            // slot. 0 when the active news provider doesn't supply 7d
-            // data (tiered Mediastack-only). Apr 2026 — PR2 Fix X.
-            news7d: news?.averageDaily7d ?? 0,
+            // slot. Mirrors the source priority used for the score
+            // input above (Apr 2026 — PR4): historical SQL aggregate
+            // when we have enough samples, provider value otherwise.
+            // Persisting the same value the engine actually used keeps
+            // the API and audit script honest about which baseline
+            // shaped the score.
+            news7d:
+              (news7dHistorySamplesMap.get(person.id) ?? 0) >= PERSONAL_BASELINE_MIN_OBSERVATIONS
+                ? (news7dHistoryAvgMap.get(person.id) ?? 0)
+                : (news?.averageDaily7d ?? 0),
+            news7dSource:
+              (news7dHistorySamplesMap.get(person.id) ?? 0) >= PERSONAL_BASELINE_MIN_OBSERVATIONS
+                ? "history"
+                : "provider",
+            news7dSamples: news7dHistorySamplesMap.get(person.id) ?? 0,
             search: serper?.searchVolume ?? 0,
           },
           fresh: {

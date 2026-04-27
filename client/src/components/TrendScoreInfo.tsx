@@ -1,4 +1,4 @@
-import { Info, Flame, Newspaper, BookOpen } from "lucide-react";
+import { Info, Activity, Newspaper, BookOpen } from "lucide-react";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
 
 export function TrendScoreInfoContent() {
@@ -14,8 +14,8 @@ export function TrendScoreInfoContent() {
           <span><span className="font-medium">News coverage</span> — how often they appear in recent articles</span>
         </li>
         <li className="flex items-center gap-2 text-xs">
-          <Flame className="h-3.5 w-3.5 text-orange-500 shrink-0" />
-          <span><span className="font-medium">News momentum</span> — how today's coverage compares to their normal week</span>
+          <Activity className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <span><span className="font-medium">News momentum</span> — how today's coverage compares to their typical day</span>
         </li>
         <li className="flex items-center gap-2 text-xs">
           <BookOpen className="h-3.5 w-3.5 text-gray-400 shrink-0" />

@@ -1,5 +1,5 @@
 import { formatDelta } from "@/lib/formatNumber";
-import { Flame, ChevronDown, Info, TrendingUp, TrendingDown, Newspaper, Globe, ArrowRight, ArrowUpRight, ArrowDownRight, Clock } from "lucide-react";
+import { Flame, Activity, ChevronDown, Info, TrendingUp, TrendingDown, Newspaper, Globe, ArrowRight, ArrowUpRight, ArrowDownRight, Clock } from "lucide-react";
 import { PersonAvatar } from "./PersonAvatar";
 import { useTrendContextBatch, getDriverLabel, TrendDriver } from "@/hooks/useTrendContext";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -201,13 +201,15 @@ export function TrendingNowFeed({ onPersonClick, collapsed, onToggle }: Trending
                               // `search` was dropped from the icon map Apr 2026 (PR3 of
                               // trend-engine tuning) — it can no longer surface as a
                               // dominant driver since velocity weight is 0. `momentum`
-                              // takes its slot with the same flame iconography used on
-                              // the per-person Momentum Signals card so the surfaces
-                              // are visually consistent.
+                              // takes its slot with an Activity (pulse) icon to avoid
+                              // colliding with the Flame icon used for Surging/Breakout
+                              // hot-mover badges (see leaderboard-exceptional.ts) — same
+                              // icon as the per-person Momentum Signals card for
+                              // surface-to-surface visual consistency.
                               const driverIconMeta: Record<string, { icon: JSX.Element; color: string }> = {
                                 news: { icon: <Newspaper className="h-3 w-3" />, color: "text-amber-600 dark:text-amber-400" },
                                 wiki: { icon: <Globe className="h-3 w-3" />, color: "text-emerald-600 dark:text-emerald-400" },
-                                momentum: { icon: <Flame className="h-3 w-3" />, color: "text-orange-600 dark:text-orange-400" },
+                                momentum: { icon: <Activity className="h-3 w-3" />, color: "text-cyan-600 dark:text-cyan-400" },
                               };
                               const topActiveSource = sb?.sources?.find(s => s.status === "active");
                               const driverMeta = topActiveSource ? driverIconMeta[topActiveSource.key] : null;

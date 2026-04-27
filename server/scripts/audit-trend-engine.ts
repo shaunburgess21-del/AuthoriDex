@@ -114,13 +114,13 @@ async function main() {
   }
 
   // 7d news daily-avg per person — denominator for the news-momentum
-  // velocity slot (Apr 2026 — PR2 Fix X). Derived as `AVG(news_count)`
-  // over the last 7 days of ingest snapshots so the dry-run script can
-  // simulate momentum even on snapshots that pre-date Fix X (where
-  // `diagnostics.raw.news7d` isn't persisted yet). ingest.ts uses the
-  // *live provider's* 7d count (GDELT/Serper News query with
-  // `tbs=qdr:w`), which is a different but correlated quantity — the
-  // momentum direction of travel will match in either case.
+  // velocity slot (Apr 2026 — PR2 Fix X, refined PR4). Derived as
+  // `AVG(news_count)` over the last 7 days of ingest snapshots. Since
+  // PR4, ingest.ts uses this same aggregate as the canonical source for
+  // `diagnostics.raw.news7d`, so the audit and the live engine are
+  // computing the same number. (Pre-PR4, ingest used the provider's
+  // built-in 7d query, which was structurally broken — Mediastack=0,
+  // Serper/GDELT capped at ~35.71/day.)
   const news7dResult = await db.execute(sql`
     SELECT person_id, AVG(news_count)::float AS avg7d
     FROM trend_snapshots
@@ -166,10 +166,12 @@ async function main() {
 
     // Reproduce the score so we can see the per-source velocity components.
     // News 7d daily-avg priority:
-    //   1. Persisted `diagnostics.raw.news7d` (set by ingest.ts post-Fix X
-    //      — comes from the live news provider's 7d query).
+    //   1. Persisted `diagnostics.raw.news7d` (set by ingest.ts — post-PR4
+    //      this is itself the SQL aggregate from snapshot history when
+    //      ≥14 samples are available, falling back to the provider value
+    //      for brand-new tracked people).
     //   2. SQL aggregate over the last 7 days of ingest snapshots
-    //      (fallback for pre-Fix X snapshots; correlated but not identical).
+    //      (fallback for pre-PR4 snapshots and as a parity check).
     //   3. 0 (no signal — momentum slot becomes 0).
     const diag = snap?.diagnostics as Record<string, any> | null;
     const persistedNewsAvg7d = Number(diag?.raw?.news7d ?? 0);

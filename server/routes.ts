@@ -2458,7 +2458,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const searchLevel = computeLevel("search", latest.searchVolume ?? 0, momentumStats?.search);
       const wikiLevel = computeLevel("wiki", latest.wikiPageviews ?? 0, momentumStats?.wiki);
 
-      // ── News-Momentum slice (Apr 2026 — PR3) ─────────────────────────────
+      // ── News-Momentum slice (Apr 2026 — PR3 + PR4) ───────────────────────
       // The momentum velocity sub-score (0..100) is the canonical reading,
       // persisted on every post-Fix-X snapshot under
       // `diagnostics.velocityComponents.momentum`. The raw 24h-vs-7d ratio
@@ -2468,14 +2468,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // shape is the legacy {search,news,wiki} triple — `momentum` is
       // missing and we fall through to a 0 score so the card renders as
       // "Quiet" rather than spurious-high.
+      //
+      // PR4 (Apr 2026): The persisted `diag.raw.news7d` was structurally
+      // broken pre-deploy (Mediastack=0, Serper/GDELT capped at 35.71/day).
+      // Engine now uses SQL aggregate from snapshot history. As a safety
+      // net during the transition window — and to keep the displayed ratio
+      // in sync with audit / dry-run tooling — the API independently
+      // computes the same SQL aggregate and prefers it when available.
       const persistedMomentumScore = Number(diag?.velocityComponents?.momentum ?? 0);
       const persistedNews7dAvg = Number(diag?.raw?.news7d ?? 0);
       const news24h = Number(latest.newsCount ?? 0);
+
+      // Per-person 7-day news average from our own snapshot history. Same
+      // query the audit script uses (server/scripts/audit-trend-engine.ts).
+      // We require a minimum sample count before trusting the aggregate so
+      // brand-new tracked people (< 1 day of history) fall through to the
+      // persisted/provider value rather than being penalized by a noisy
+      // partial-week average.
+      let historyNews7dAvg = 0;
+      let historyNews7dSamples = 0;
+      try {
+        const sevenDaysAgoForNews = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+        const news7dRow = await db.execute(sql`
+          SELECT AVG(news_count)::float AS avg7d, COUNT(*)::int AS samples
+          FROM trend_snapshots
+          WHERE person_id = ${person.id}
+            AND timestamp >= ${sevenDaysAgoForNews}
+            AND snapshot_origin = 'ingest'
+            AND news_count IS NOT NULL
+        `);
+        const row = news7dRow.rows?.[0] as { avg7d?: number; samples?: number } | undefined;
+        historyNews7dAvg = Number(row?.avg7d ?? 0) || 0;
+        historyNews7dSamples = Number(row?.samples ?? 0) || 0;
+      } catch (e) {
+        // Non-fatal — fall through to the persisted value below.
+        console.warn(`[momentum API] news7d history query failed for ${person.id}: ${(e as Error).message}`);
+      }
+
+      const HISTORY_MIN_SAMPLES = 24; // ~1 day of hourly snapshots
+      const news7dAvgForDisplay = historyNews7dSamples >= HISTORY_MIN_SAMPLES
+        ? historyNews7dAvg
+        : persistedNews7dAvg;
+      const news7dAvgSource: "history" | "persisted" =
+        historyNews7dSamples >= HISTORY_MIN_SAMPLES ? "history" : "persisted";
+
       // Mirror the production formula exactly so the displayed ratio always
-      // matches the score the engine used. Floor at 1 to dodge the
-      // tiny-baseline divide-by-near-zero (matches MOMENTUM_AVG_FLOOR).
-      const momentumDenom = Math.max(persistedNews7dAvg, 1);
-      const momentumRatio = persistedNews7dAvg > 0 && news24h > 0
+      // matches the score the engine *would* use given the same denominator.
+      // Floor at 1 to dodge the tiny-baseline divide-by-near-zero (matches
+      // MOMENTUM_AVG_FLOOR in normalize.ts).
+      const momentumDenom = Math.max(news7dAvgForDisplay, 1);
+      const momentumRatio = news7dAvgForDisplay > 0 && news24h > 0
         ? Math.min(news24h / momentumDenom, 10) // cap matches MOMENTUM_RATIO_CAP
         : 0;
 
@@ -2483,7 +2525,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // 24h-prior diagnostics may pre-date Fix X and lack
       // `velocityComponents.momentum`; in that case we report deltaPct=0
       // (no measurable change) rather than fabricating a baseline of 0
-      // — see the Hot Movers / Why Trending fix in this same PR.
+      // — see the Hot Movers / Why Trending fix in PR3.
       const prevDiag = snap24hAgo?.diagnostics as Record<string, any> | null;
       const prevMomentumScoreRaw = prevDiag?.velocityComponents?.momentum;
       const prevMomentumScore = typeof prevMomentumScoreRaw === "number" ? prevMomentumScoreRaw : null;
@@ -2492,7 +2534,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         : 0;
       const momentumDeltaPct = Math.abs(rawMomentumDeltaPct) <= DELTA_DEAD_ZONE_PCT ? 0 : rawMomentumDeltaPct;
 
-      const momentumLevel = computeMomentumLevel(persistedMomentumScore);
+      // Recompute the level from the displayed ratio (rather than the
+      // persisted score) when we're using history-sourced 7d avg. This
+      // keeps the level pill and the displayed ratio internally
+      // consistent during the PR4 transition window — once next ingest
+      // tick lands, the persisted score will reflect the same baseline
+      // and the two will converge.
+      const recomputedMomentumScore = momentumRatio > 0
+        ? Math.round((Math.log(1 + momentumRatio) / Math.log(11)) * 100)
+        : 0;
+      const momentumScoreForDisplay = news7dAvgSource === "history"
+        ? recomputedMomentumScore
+        : persistedMomentumScore;
+      const momentumLevel = computeMomentumLevel(momentumScoreForDisplay);
 
       res.json({
         asOf: latest.timestamp.toISOString(),
@@ -2554,13 +2608,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ...(wikiRising === true && { wiki_rising: true }),
           },
           momentum: {
-            // 0..100 sub-score; mirrors `diagnostics.velocityComponents.momentum`.
-            score: Math.round(persistedMomentumScore * 10) / 10,
+            // 0..100 sub-score. PR4: when the displayed 7d-avg comes
+            // from snapshot history (rather than the persisted/provider
+            // value), the score is recomputed from the same baseline
+            // so level/ratio/score stay internally consistent. Once the
+            // next ingest tick lands, persisted = recomputed and we
+            // converge on the persisted value.
+            score: Math.round(momentumScoreForDisplay * 10) / 10,
             // Raw 24h/7d ratio (clamped at 10×). 0 means no signal —
             // either no news in the 24h window or no 7d baseline.
             ratio: Math.round(momentumRatio * 100) / 100,
             // Trailing 7-day daily-average news count (the baseline).
-            averageDaily7d: Math.round(persistedNews7dAvg * 10) / 10,
+            // Sourced from snapshot history when available (PR4),
+            // falling back to the persisted/provider value for
+            // brand-new tracked people.
+            averageDaily7d: Math.round(news7dAvgForDisplay * 10) / 10,
             // Today's 24h count (same value the News Activity card shows).
             articleCount24h: news24h,
             // 24h change in the *score* (not the ratio) vs the prior tick.

@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Flame, Newspaper, BookOpen, Sparkles, AlertTriangle, Clock, ExternalLink, Info, ArrowUp, ArrowDown } from "lucide-react";
+import { Activity, Newspaper, BookOpen, Sparkles, AlertTriangle, Clock, ExternalLink, Info, ArrowUp, ArrowDown } from "lucide-react";
 import { SiX, SiYoutube, SiInstagram, SiTiktok, SiSpotify } from "react-icons/si";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
 import { cn } from "@/lib/utils";
@@ -266,7 +266,10 @@ function SignalCard({
           level === "high" ? "bg-gradient-to-r from-transparent via-emerald-500/90 to-transparent"
             : level === "medium" ? "bg-gradient-to-r from-transparent via-amber-500/90 to-transparent"
               : level === "low" ? "bg-gradient-to-r from-transparent via-rose-500/90 to-transparent"
-                : "bg-transparent",
+                // "none" level renders a muted/silver gradient (matches Today's
+                // Take's "Steady" treatment) so quiet-state cards still feel
+                // intentional and complete instead of looking unfinished.
+                : "bg-gradient-to-r from-transparent via-muted-foreground/40 to-transparent",
         )}
       />
       <CardHeader className="pb-2 pt-3 px-4">
@@ -467,8 +470,8 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
 
         <SignalCard
           testId="card-news-momentum"
-          icon={<Flame className="h-3.5 w-3.5 text-orange-500 dark:text-orange-400" />}
-          iconWrapClass="bg-orange-500/15 dark:bg-orange-500/10"
+          icon={<Activity className="h-3.5 w-3.5 text-muted-foreground" />}
+          iconWrapClass="bg-muted"
           title="News Momentum"
           level={momentumLevel}
           value={ratioDisplay}
