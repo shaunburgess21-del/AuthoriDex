@@ -1982,7 +1982,7 @@ export default function VotePage() {
 
   const discourseVoteMutation = useMutation({
     mutationFn: async ({ slug, choice }: { slug: string; choice: string }) => {
-      const res = await apiRequest('POST', `/api/polls/${slug}/vote`, { choice });
+      const res = await apiRequest('POST', `/api/polls/${encodeURIComponent(slug)}/vote`, { choice });
       return res.json();
     },
     onSuccess: (data) => {
