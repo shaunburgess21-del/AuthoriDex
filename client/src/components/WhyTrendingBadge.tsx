@@ -68,8 +68,6 @@ export function WhyTrendingBadge({
     switch (context.primaryDriver) {
       case "NEWS":
         return "bg-blue-500/25 dark:bg-blue-500/20 text-blue-500 dark:text-blue-300 border-blue-500/40 dark:border-blue-500/30";
-      case "SEARCH":
-        return "bg-purple-500/25 dark:bg-purple-500/20 text-purple-500 dark:text-purple-300 border-purple-500/40 dark:border-purple-500/30";
       case "WIKI":
         return "bg-emerald-500/25 dark:bg-emerald-500/20 text-emerald-500 dark:text-emerald-300 border-emerald-500/40 dark:border-emerald-500/30";
       default:

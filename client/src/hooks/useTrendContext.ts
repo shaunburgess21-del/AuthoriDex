@@ -1,7 +1,12 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 
-export type TrendDriver = "NEWS" | "SEARCH" | "WIKI";
+// "SEARCH" was removed Apr 2026 (PR3 of trend-engine tuning). The server's
+// determinePrimaryDriver hasn't returned "SEARCH" since search weight in
+// scoring went to 0 — the SERP-shape signal didn't measure search interest
+// at all, only structural SERP features. Type narrowed here so the dead
+// case branches in consumers can be removed safely.
+export type TrendDriver = "NEWS" | "WIKI";
 
 export interface TrendContext {
   primaryDriver: TrendDriver | null;
@@ -64,7 +69,6 @@ export function useSystemFreshness() {
 export function getDriverLabel(driver: TrendDriver | null): string {
   switch (driver) {
     case "NEWS": return "News surge";
-    case "SEARCH": return "Search spiking";
     case "WIKI": return "Wiki views up";
     default: return "Steady";
   }

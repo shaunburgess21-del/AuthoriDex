@@ -29,7 +29,6 @@ interface TrendingNowFeedProps {
 function getDriverExplanation(driver: TrendDriver): string {
   switch (driver) {
     case "NEWS": return "Increased news coverage and media mentions";
-    case "SEARCH": return "Search interest surged significantly";
     case "WIKI": return "Wikipedia pageviews rising fast";
     default: return "";
   }

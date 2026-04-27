@@ -9,7 +9,7 @@ export interface WatchlistBiggestMover {
   category: string | null;
   rank: number | null;
   change24h: number;
-  driver: "NEWS" | "SEARCH" | "WIKI" | null;
+  driver: "NEWS" | "WIKI" | null;
   reasonTag: string | null;
 }
 

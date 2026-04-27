@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import {
   ArrowRight,
   Newspaper,
-  Search,
   BookOpen,
   TrendingUp,
   Minus,
@@ -25,8 +24,6 @@ function DriverIcon({ driver }: { driver: TrendDriver | null }) {
   switch (driver) {
     case "NEWS":
       return <Newspaper className="h-3.5 w-3.5" />;
-    case "SEARCH":
-      return <Search className="h-3.5 w-3.5" />;
     case "WIKI":
       return <BookOpen className="h-3.5 w-3.5" />;
     default:

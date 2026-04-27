@@ -2,7 +2,13 @@ import { db } from "../db";
 import { trendSnapshots, trackedPeople, apiCache } from "@shared/schema";
 import { eq, desc, and, sql, inArray } from "drizzle-orm";
 
-export type TrendDriver = "NEWS" | "SEARCH" | "WIKI";
+// "SEARCH" was removed Apr 2026 (PR3 of trend-engine tuning). The Serper
+// SERP-shape signal didn't measure search interest — it tracked structural
+// SERP features (knowledge panels, related searches, PAA boxes) which are
+// slow-changing and produced false-positive "Search spiking" badges.
+// determinePrimaryDriver below dropped it from candidates at the same time;
+// the type is narrowed here so consumers can drop their dead branches too.
+export type TrendDriver = "NEWS" | "WIKI";
 
 export interface TrendContext {
   primaryDriver: TrendDriver | null;
@@ -123,7 +129,6 @@ function determinePrimaryDriver(
 function getDriverLabel(driver: TrendDriver | null): string {
   switch (driver) {
     case "NEWS": return "News surge";
-    case "SEARCH": return "Search spiking";
     case "WIKI": return "Wiki views up";
     default: return "Steady";
   }
