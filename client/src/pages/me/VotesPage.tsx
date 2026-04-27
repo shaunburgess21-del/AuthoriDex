@@ -923,44 +923,53 @@ function JourneyTimeline({ allVotes }: { allVotes: UnifiedVote[] }) {
         </ol>
       </div>
 
-      {/* Mobile: vertical track with left border and full-row milestones */}
-      <ol className="md:hidden relative space-y-4 border-l-2 border-muted pl-5">
-        {milestones.map((m) => (
-          <li key={m.id} className="relative">
-            <div
-              className={cn(
-                "absolute -left-[29px] top-0 flex h-10 w-10 items-center justify-center rounded-full border-2 bg-background",
-                m.earned
-                  ? "border-cyan-500 bg-cyan-500/15 text-cyan-500 shadow-[0_0_12px_-2px_rgba(34,211,238,0.65)]"
-                  : "border-dashed border-muted-foreground/40 text-muted-foreground",
-              )}
-            >
-              {m.earned ? <Check className="h-4 w-4" /> : <Target className="h-4 w-4" />}
-            </div>
-            <div className="pl-8 pt-1">
-              <p className="text-sm font-medium leading-tight">{m.label}</p>
-              {m.earned ? (
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-cyan-600 dark:text-cyan-400">
-                  Earned
-                </p>
-              ) : (
-                <>
-                  {m.hint && (
-                    <p className="text-[10px] text-muted-foreground tabular-nums">{m.hint}</p>
+      {/* Mobile: vertical timeline. Line lives inside the circle column so it
+          stays perfectly centred on the icons and only renders between them. */}
+      <ol className="md:hidden">
+        {milestones.map((m, idx) => {
+          const isLast = idx === milestones.length - 1;
+          return (
+            <li key={m.id} className="flex gap-3">
+              <div className="flex flex-col items-center">
+                <div
+                  className={cn(
+                    "flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 bg-background",
+                    m.earned
+                      ? "border-cyan-500 bg-cyan-500/15 text-cyan-500 shadow-[0_0_12px_-2px_rgba(34,211,238,0.65)]"
+                      : "border-dashed border-muted-foreground/40 text-muted-foreground",
                   )}
-                  {m.progress !== undefined && m.progress > 0 && (
-                    <div className="mt-1.5 h-1 w-24 overflow-hidden rounded-full bg-muted/60">
-                      <div
-                        className="h-full bg-gradient-to-r from-cyan-500 to-blue-500"
-                        style={{ width: `${Math.round(m.progress * 100)}%` }}
-                      />
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          </li>
-        ))}
+                >
+                  {m.earned ? <Check className="h-4 w-4" /> : <Target className="h-4 w-4" />}
+                </div>
+                {!isLast && (
+                  <div className="my-1 w-0.5 flex-1 rounded-full bg-muted" aria-hidden />
+                )}
+              </div>
+              <div className={cn("flex-1 pt-2", isLast ? "pb-0" : "pb-4")}>
+                <p className="text-sm font-medium leading-tight">{m.label}</p>
+                {m.earned ? (
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-cyan-600 dark:text-cyan-400">
+                    Earned
+                  </p>
+                ) : (
+                  <>
+                    {m.hint && (
+                      <p className="text-[10px] text-muted-foreground tabular-nums">{m.hint}</p>
+                    )}
+                    {m.progress !== undefined && m.progress > 0 && (
+                      <div className="mt-1.5 h-1 w-24 overflow-hidden rounded-full bg-muted/60">
+                        <div
+                          className="h-full bg-gradient-to-r from-cyan-500 to-blue-500"
+                          style={{ width: `${Math.round(m.progress * 100)}%` }}
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </li>
+          );
+        })}
       </ol>
     </Card>
   );
