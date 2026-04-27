@@ -11689,11 +11689,15 @@ Target length: about 90-150 words.`;
         .orderBy(desc(opinionPolls.createdAt));
 
       const opPollIds = polls.map(p => p.id);
-      const relatedMap = await getRelatedPeopleForCards("opinion_poll", opPollIds);
+      if (opPollIds.length === 0) {
+        return res.json([]);
+      }
 
-      const result = await Promise.all(polls.map(async (poll) => {
-        const options = await db
+      const [relatedMap, optionRows, voteCounts, userVotes] = await Promise.all([
+        getRelatedPeopleForCards("opinion_poll", opPollIds),
+        db
           .select({
+            pollId: opinionPollOptions.pollId,
             id: opinionPollOptions.id,
             name: opinionPollOptions.name,
             imageUrl: opinionPollOptions.imageUrl,
@@ -11705,37 +11709,51 @@ Target length: about 90-150 words.`;
           })
           .from(opinionPollOptions)
           .leftJoin(trackedPeople, eq(opinionPollOptions.personId, trackedPeople.id))
-          .where(eq(opinionPollOptions.pollId, poll.id))
-          .orderBy(asc(opinionPollOptions.orderIndex));
-
-        const voteCounts = await db
+          .where(inArray(opinionPollOptions.pollId, opPollIds))
+          .orderBy(asc(opinionPollOptions.pollId), asc(opinionPollOptions.orderIndex)),
+        db
           .select({
+            pollId: opinionPollVotes.pollId,
             optionId: opinionPollVotes.optionId,
             cnt: count(),
           })
           .from(opinionPollVotes)
-          .where(eq(opinionPollVotes.pollId, poll.id))
-          .groupBy(opinionPollVotes.optionId);
+          .where(inArray(opinionPollVotes.pollId, opPollIds))
+          .groupBy(opinionPollVotes.pollId, opinionPollVotes.optionId),
+        userId
+          ? db
+            .select({
+              pollId: opinionPollVotes.pollId,
+              optionId: opinionPollVotes.optionId,
+            })
+            .from(opinionPollVotes)
+            .where(and(
+              eq(opinionPollVotes.userId, userId),
+              inArray(opinionPollVotes.pollId, opPollIds),
+            ))
+          : Promise.resolve([]),
+      ]);
 
-        const voteMap = new Map(voteCounts.map(v => [v.optionId, Number(v.cnt)]));
+      const optionsByPollId = new Map<string, typeof optionRows>();
+      for (const option of optionRows) {
+        const existing = optionsByPollId.get(option.pollId);
+        if (existing) existing.push(option);
+        else optionsByPollId.set(option.pollId, [option]);
+      }
 
+      const voteCountByOptionId = new Map(voteCounts.map(v => [v.optionId, Number(v.cnt)]));
+      const userVoteByPollId = new Map(userVotes.map(v => [v.pollId, v.optionId]));
+
+      const result = polls.map((poll) => {
+        const options = optionsByPollId.get(poll.id) || [];
         const optionsWithVotes = options.map(o => {
-          const realVotes = voteMap.get(o.id) || 0;
+          const realVotes = voteCountByOptionId.get(o.id) || 0;
           const seedVotes = o.seedCount || 0;
           const displayVotes = realVotes + seedVotes;
           return { ...o, displayVotes };
         });
         const totalDisplayVotes = optionsWithVotes.reduce((sum, o) => sum + o.displayVotes, 0);
-
-        let userVote: string | null = null;
-        if (userId) {
-          const [uv] = await db
-            .select({ optionId: opinionPollVotes.optionId })
-            .from(opinionPollVotes)
-            .where(and(eq(opinionPollVotes.pollId, poll.id), eq(opinionPollVotes.userId, userId)))
-            .limit(1);
-          if (uv) userVote = uv.optionId;
-        }
+        const userVote = userVoteByPollId.get(poll.id) || null;
 
         const pollImage = poll.imageUrl || opinionPollImageUrl(poll.slug);
 
@@ -11757,7 +11775,7 @@ Target length: about 90-150 words.`;
           relatedPersonIds: (relatedMap[poll.id] || []).map(rp => rp.id),
           relatedPeople: relatedMap[poll.id] || [],
         };
-      }));
+      });
 
       res.json(result);
     } catch (error: any) {
