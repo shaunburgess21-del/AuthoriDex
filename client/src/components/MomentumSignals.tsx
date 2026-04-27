@@ -89,10 +89,14 @@ function fallbackLevel(source: "momentum" | "news" | "wiki", value: number): Mom
   if (!Number.isFinite(value) || value <= 0) return "none";
   if (source === "momentum") {
     // Kept in sync with computeMomentumLevel in server/routes.ts.
-    // Score is the 0..100 momentum velocity sub-score (log-scaled
-    // 24h-vs-7d-avg news ratio) — see normalize.ts:normalizeNewsMomentum.
-    if (value <= 30) return "low";
-    if (value <= 60) return "medium";
+    // value is the displayed 24h/7d ratio (capped at 10× by the API,
+    // see MOMENTUM_RATIO_CAP in normalize.ts). Bands intentionally
+    // map onto user-facing language:
+    //   low    < 1.0  → below this person's typical day
+    //   medium < 2.0  → typical or modestly above
+    //   high  ≥ 2.0   → clearly elevated (≥ 2× typical)
+    if (value < 1.0) return "low";
+    if (value < 2.0) return "medium";
     return "high";
   }
   if (source === "news") {
@@ -111,7 +115,7 @@ const LEVEL_SCALE_COPY =
   "Level compares this person to everyone we track over the last 14 days — Low = bottom 25%, Medium = middle 50%, High = top 25%.";
 
 const MOMENTUM_LEVEL_COPY =
-  "Level reflects how today's news volume compares to this person's own 7-day daily average — Low = at or below typical, Medium = mild acceleration, High = clear breakout (3×+ their typical day).";
+  "Level reflects how today's news volume compares to this person's own 7-day daily average — Low = below typical, Medium = around or modestly above typical, High = at least 2× their typical day.";
 
 // Each level gets a distinct dot SHAPE on top of its colour so the indicator is
 // still unambiguous for users who can't rely on red/amber/green alone:
@@ -359,7 +363,7 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
   const newsLevel: MomentumLevel = signals.news.level ?? fallbackLevel("news", signals.news.count);
   const wikiLevel: MomentumLevel = signals.wiki.level ?? fallbackLevel("wiki", signals.wiki.views);
   const momentumLevel: MomentumLevel = signals.momentum?.level
-    ?? fallbackLevel("momentum", signals.momentum?.score ?? 0);
+    ?? fallbackLevel("momentum", signals.momentum?.ratio ?? 0);
 
   const newsTrend: TrendWord =
     signals.news.deltaPct > 5 ? "rising" : signals.news.deltaPct < -5 ? "falling" : "steady";
