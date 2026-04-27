@@ -19,6 +19,15 @@ interface HotMover {
   sourceBreakdown?: { sources: Array<{ key: string; pct: number; status?: string }>; activeSources: number; dominantDriver?: string | null } | null;
 }
 
+interface HotMoversMeta {
+  currentRunFinishedAt?: string | null;
+}
+
+interface HotMoversResponse {
+  data: HotMover[];
+  meta?: HotMoversMeta;
+}
+
 interface TrendingNowFeedProps {
   onPersonClick: (id: string) => void;
   collapsed: boolean;
@@ -45,18 +54,27 @@ function formatUpdatedAgo(timestamp: number | undefined): string {
 }
 
 export function TrendingNowFeed({ onPersonClick, collapsed, onToggle }: TrendingNowFeedProps) {
-  const { data: rawResponse, dataUpdatedAt } = useQuery<{ data: HotMover[]; meta?: any } | HotMover[]>({
+  const { data: rawResponse } = useQuery<HotMoversResponse | HotMover[]>({
     queryKey: ['/api/trending/hot-movers'],
     refetchInterval: 60_000,
   });
   const hotMovers: HotMover[] = rawResponse
     ? (Array.isArray(rawResponse) ? rawResponse : rawResponse.data ?? [])
     : [];
+  const meta: HotMoversMeta | undefined =
+    rawResponse && !Array.isArray(rawResponse) ? rawResponse.meta : undefined;
 
   const visibleIds = !collapsed ? hotMovers.map(p => p.id) : [];
   const { data: trendContexts } = useTrendContextBatch(visibleIds);
 
-  const updatedAgo = formatUpdatedAgo(dataUpdatedAt);
+  // Drive the freshness clock from the server's reported run-finished
+  // timestamp, not TanStack Query's dataUpdatedAt (which is the time of the
+  // last successful client refetch and would always read "just now" right
+  // after a refetch even though the server response is cached for up to
+  // 10 minutes and the underlying ingest runs roughly hourly).
+  const updatedAgo = formatUpdatedAgo(
+    meta?.currentRunFinishedAt ? Date.parse(meta.currentRunFinishedAt) : undefined
+  );
 
   const scrollToLeaderboard = () => {
     const el = document.getElementById("leaderboard");
