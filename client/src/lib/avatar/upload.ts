@@ -1,22 +1,27 @@
 /**
  * Avatar upload pipeline.
  *
- * Two entry points, both writing to the SAME Supabase Storage path
- * (`avatars/{userId}/avatar.png`) so the bucket only ever has one
- * source of truth for the user's avatar image:
+ * Two entry points, both ultimately writing into the user's slot in the
+ * `avatars` Supabase Storage bucket so there's only one source of truth
+ * for a user's avatar image:
  *
- *   - `uploadGeneratedAvatar` — for our generative avatars: renders
- *     a chosen seed to a PNG via the canvas helper, uploads, returns
- *     the public URL.
- *   - `uploadAvatarFile`      — for user-uploaded photos: validates
- *     a File (size + MIME type), uploads as-is, returns the public
- *     URL. Replaces the legacy "Profile Photo URL" field that lived
- *     in Settings; the new camera+ popover calls into this helper.
+ *   - `uploadGeneratedAvatar` — for our generative avatars: renders a
+ *     chosen seed to a PNG via the canvas helper and uploads directly
+ *     to Supabase Storage at `avatars/{userId}/avatar.png`.
+ *   - `uploadAvatarFile`      — for user-uploaded photos: posts the
+ *     File to the server, which uses sharp to convert it to an
+ *     optimized .webp (matching the admin image upload pipeline) and
+ *     writes it to `avatars/{userId}/avatar.webp`. Returns the public
+ *     URL.
  *
  * Both rely on `upsert: true`, so a new avatar always overwrites the
- * previous one — no orphaned files. The cache-busting `?v=${ts}`
- * suffix ensures the CDN doesn't serve a stale image after re-roll
- * or upload.
+ * previous one — no orphaned files within the same pipeline. When a
+ * user flips between pipelines (e.g. generated → uploaded photo), the
+ * server-side endpoint clears the legacy `avatar.png` path so the
+ * bucket stays tidy.
+ *
+ * The cache-busting `?v=${ts}` suffix ensures the CDN doesn't serve a
+ * stale image after re-roll or upload.
  *
  * The caller is responsible for then PATCHing the profile with
  * { avatarSeed?, avatarUrl } via the backend.
@@ -29,11 +34,14 @@ import { getSupabase } from '@/lib/supabase';
 import { renderAvatarToBlob } from './render';
 
 const BUCKET = 'avatars';
-const FILENAME = 'avatar.png';
+const GENERATED_FILENAME = 'avatar.png';
 
-// Mirror what the legacy UploadImageInput enforced (PNG/JPG/WEBP, ~2MB)
-// so behaviour for users coming from the old field is unchanged.
-const MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024;
+// User-uploaded photos are converted to WebP server-side, so we accept
+// a wider input pool and let the server do the heavy lifting. The cap
+// matches the admin image upload (5 MB) — anything larger is almost
+// certainly a phone photo straight out of the camera roll, and we'd
+// rather error than wait on a 20 MB upload.
+const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp'] as const;
 
 export interface UploadedAvatar {
@@ -62,7 +70,7 @@ export async function uploadGeneratedAvatar(
   if (!seed) throw new Error('uploadGeneratedAvatar: seed required');
 
   const supabase = await getSupabase();
-  const path = `${userId}/${FILENAME}`;
+  const path = `${userId}/${GENERATED_FILENAME}`;
   const blob = await renderAvatarToBlob(seed, 12); // 12x scale = 288x288 PNG
 
   const { error: uploadError } = await supabase.storage
@@ -92,15 +100,16 @@ export async function uploadGeneratedAvatar(
 /**
  * Upload a user-supplied image file as the user's avatar.
  *
- * Used by the Settings hover-camera popover ("Upload a photo") to
- * replace the legacy URL/file field. We rebrand the same Supabase
- * Storage path used by the generative avatar pipeline, so a user can
- * freely flip between generative and uploaded photos without leaving
- * orphaned files behind.
+ * POSTs the raw file to `/api/me/avatar/upload`, which uses sharp to
+ * convert it to an optimized .webp (matching the admin image pipeline)
+ * and writes the result to `avatars/{userId}/avatar.webp`. This makes
+ * the user-facing avatar (a) a fraction of the original size — typical
+ * phone photos drop from 1–3 MB JPEG to ~30–80 KB WebP — and (b)
+ * served as `image/webp` so a right-click save reflects the optimized
+ * file instead of the unprocessed original.
  *
  * Validates MIME type and size BEFORE uploading so we surface a clean
- * error early rather than letting the bucket reject and the user
- * misinterpret the resulting toast.
+ * error early rather than letting the request round-trip to the server.
  */
 export async function uploadAvatarFile(
   userId: string,
@@ -113,30 +122,40 @@ export async function uploadAvatarFile(
     throw new Error('Please upload a PNG, JPG, or WEBP image.');
   }
   if (file.size > MAX_FILE_SIZE_BYTES) {
-    throw new Error('Image is too large. Max 2 MB.');
+    throw new Error('Image is too large. Max 5 MB.');
   }
 
+  // Pull the access token off the active Supabase session — the server
+  // endpoint is gated by `requireAuth`, and we don't want the upload to
+  // silently 401 because no Authorization header was attached.
   const supabase = await getSupabase();
-  const path = `${userId}/${FILENAME}`;
-
-  const { error: uploadError } = await supabase.storage
-    .from(BUCKET)
-    .upload(path, file, {
-      contentType: file.type,
-      upsert: true,
-      cacheControl: '3600',
-    });
-
-  if (uploadError) {
-    throw new Error(`Avatar upload failed: ${uploadError.message}`);
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) {
+    throw new Error('You must be signed in to upload an avatar.');
   }
 
-  const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
-  if (!data?.publicUrl) {
-    throw new Error('Avatar upload succeeded but public URL resolution failed');
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const res = await fetch('/api/me/avatar/upload', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${session.access_token}` },
+    body: formData,
+    credentials: 'include',
+  });
+
+  if (!res.ok) {
+    let message = 'Avatar upload failed';
+    try {
+      const body = (await res.json()) as { error?: string };
+      if (body?.error) message = body.error;
+    } catch {
+      // Body wasn't JSON — fall back to a generic message rather than
+      // leaking the raw HTML/text we'd otherwise hand the user.
+    }
+    throw new Error(message);
   }
 
-  const url = `${data.publicUrl}?v=${Date.now()}`;
-
+  const { url, path } = (await res.json()) as { url: string; path: string };
   return { url, path };
 }

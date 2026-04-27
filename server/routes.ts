@@ -8544,6 +8544,94 @@ Only return the JSON object.`;
     }
   });
 
+  // User avatar upload — converts to optimized .webp via sharp and writes
+  // to the `avatars` bucket at `${userId}/avatar.webp`. Mirrors the admin
+  // upload pipeline so a user-supplied JPEG/PNG ends up at the same
+  // bandwidth/quality profile as a CMS image. The legacy generative
+  // pipeline writes `${userId}/avatar.png`; on a successful WebP upload
+  // we fire-and-forget delete that PNG so the bucket has only the
+  // currently-referenced avatar (the DB `avatarUrl` is the source of
+  // truth, but we keep storage tidy).
+  app.post(
+    "/api/me/avatar/upload",
+    requireAuth,
+    upload.single("file"),
+    async (req: AuthRequest, res) => {
+      try {
+        const file = req.file;
+        if (!file) {
+          return res.status(400).json({ error: "No file uploaded" });
+        }
+
+        const userId = req.userId!;
+
+        // Avatars render at most ~96px in the UI today (and 288 in the
+        // largest places like Settings), so a 512px WebP is more than
+        // enough headroom for retina displays while keeping the file
+        // tiny. Quality 85 is the sweet spot we use elsewhere for
+        // photographic content.
+        const optimized = await optimizeImage(file.buffer, {
+          maxWidth: 512,
+          quality: 85,
+          minQuality: 70,
+          minWidth: 256,
+        });
+
+        const bucketName = "avatars";
+        const filePath = `${userId}/avatar.webp`;
+
+        const { error: uploadError } = await supabaseServer.storage
+          .from(bucketName)
+          .upload(filePath, optimized.buffer, {
+            contentType: optimized.contentType,
+            upsert: true,
+            cacheControl: "3600",
+          });
+
+        if (uploadError) {
+          console.error("Avatar upload error:", uploadError);
+          return res.status(500).json({
+            error: `Failed to upload avatar: ${uploadError.message}`,
+          });
+        }
+
+        // Best-effort cleanup of the legacy PNG path written by the
+        // generative pipeline (`avatar.png`). If the user had a
+        // generated avatar before uploading a photo, we don't want a
+        // stale orphan sitting in the bucket. Failure is non-fatal:
+        // the new WebP is already live and the DB will point at it.
+        supabaseServer.storage
+          .from(bucketName)
+          .remove([`${userId}/avatar.png`])
+          .catch((err) => {
+            console.warn(
+              "[avatar-upload] legacy PNG cleanup failed (non-fatal):",
+              err?.message ?? err,
+            );
+          });
+
+        const { data: urlData } = supabaseServer.storage
+          .from(bucketName)
+          .getPublicUrl(filePath);
+
+        // Cache-bust the public URL so the new WebP is served
+        // immediately instead of any previously cached image at the
+        // same path.
+        const url = `${urlData.publicUrl}?v=${Date.now()}`;
+        res.json({ url, path: filePath });
+      } catch (error: any) {
+        console.error("Avatar upload error:", error);
+        if (
+          error.message?.includes("Only PNG") ||
+          error.message?.includes("Could not compress image below")
+        ) {
+          return res.status(400).json({ error: error.message });
+        }
+        res.status(500).json({ error: "Avatar upload failed" });
+      }
+    },
+  );
+
   // Get all users (for admin moderation)
   app.get("/api/admin/users", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
