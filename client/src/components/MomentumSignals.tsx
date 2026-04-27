@@ -375,44 +375,48 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
 
   // Three-way display state for the News Momentum card. The engine assigns a
   // positive score even when the 7-day baseline is empty (uses MOMENTUM_AVG_FLOOR=1
-  // internally) so brand-new tracked persons can still rank — but showing
-  // "5.0× vs 7-day baseline" in that case is misleading because there *is* no
-  // baseline yet. Detect that explicitly so the user sees a "warming up"
-  // state instead of either a fake ratio or "no recent news".
+  // internally) so brand-new tracked persons can still rank — but showing the
+  // absolute average in that case is misleading because there *is* no baseline
+  // yet. Detect that explicitly so the user sees a "warming up" state.
   const momentumScore = signals.momentum?.score ?? 0;
-  const momentumRatio = signals.momentum?.ratio ?? 0;
   const momentumAvg7d = signals.momentum?.averageDaily7d ?? 0;
   const hasNewsToday = signals.news.count > 0;
   const hasMomentumBaseline = momentumAvg7d > 0;
-  const showRatio = momentumRatio > 0 && hasMomentumBaseline;
+  // Show the baseline whenever we have one — including on quiet days where
+  // today's count is 0. "203.1 articles/day (7-day avg)" + a Low/Quiet level
+  // pill is more informative than a blank "no recent news" because it tells
+  // the reader this person *usually* gets a lot of coverage and today is
+  // genuinely below their normal.
+  const showBaseline = hasMomentumBaseline;
 
-  // Cap is enforced at 10× server-side; flag it in the display so the user
-  // knows the real number is "10× or more" rather than "exactly 10×".
-  const ratioDisplay = showRatio
-    ? momentumRatio >= 10
-      ? "10×+"
-      : `${momentumRatio.toFixed(1)}×`
+  // Promote the absolute 7-day daily average to the headline metric (Apr 27
+  // 2026 user feedback): the previous "1.3×" framing was technically correct
+  // but semantically opaque to non-analytical users. The Level pill + delta%
+  // already convey "above/below typical" qualitatively, so the absolute
+  // number gives readers a concrete weight-class without requiring them to
+  // mentally reconstruct the comparison from a multiplier.
+  const baselineUnit = momentumAvg7d === 1 ? "article/day" : "articles/day";
+  const momentumValue = showBaseline
+    ? momentumAvg7d.toFixed(1)
     : "—";
 
-  const momentumUnit = showRatio
-    ? "vs 7-day average"
+  const momentumUnit = showBaseline
+    ? `${baselineUnit} (7-day avg)`
     : !hasMomentumBaseline && (hasNewsToday || momentumScore > 0)
       ? "establishing baseline"
       : "no recent news";
 
-  const momentumFooter = showRatio
+  // Footer used to carry the "7-day avg: …" line that's now the headline.
+  // The only remaining footer state is the warm-up explainer for newly
+  // tracked people — keeps the card from looking unfinished while history
+  // accumulates.
+  const momentumFooter = !showBaseline && !hasMomentumBaseline && (hasNewsToday || momentumScore > 0)
     ? (
-        <p className="text-[10px] text-muted-foreground/60 pt-0.5" data-testid="text-momentum-baseline">
-          7-day avg: {momentumAvg7d.toFixed(1)} {momentumAvg7d === 1 ? "article/day" : "articles/day"}
+        <p className="text-[10px] text-muted-foreground/60 pt-0.5" data-testid="text-momentum-warmup">
+          Need 7 days of history to compare against
         </p>
       )
-    : !hasMomentumBaseline && (hasNewsToday || momentumScore > 0)
-      ? (
-          <p className="text-[10px] text-muted-foreground/60 pt-0.5" data-testid="text-momentum-warmup">
-            Need 7 days of history to compare against
-          </p>
-        )
-      : null;
+    : null;
 
   return (
     <div id="momentum-signals" className="mt-8 space-y-5" data-testid="section-momentum-signals">
@@ -474,7 +478,7 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
           iconWrapClass="bg-muted"
           title="News Momentum"
           level={momentumLevel}
-          value={ratioDisplay}
+          value={momentumValue}
           unit={momentumUnit}
           deltaPct={signals.momentum?.deltaPct ?? 0}
           trendWord={momentumTrend}
@@ -482,7 +486,7 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
             <TouchTooltip
               side="top"
               contentClassName="max-w-[260px] text-xs normal-case tracking-normal"
-              content={`How today's news volume compares to this person's own 7-day daily average. 1× means a typical day, 3×+ means a clear breakout. ${MOMENTUM_LEVEL_COPY}`}
+              content={`This person's typical daily news volume averaged over the last 7 days. ${MOMENTUM_LEVEL_COPY}`}
             >
               <Info className="h-3 w-3 text-muted-foreground/50 cursor-help" data-testid="icon-momentum-tooltip" />
             </TouchTooltip>
