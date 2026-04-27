@@ -26,6 +26,7 @@ import { useDragScroll } from "@/hooks/use-drag-scroll";
 import { useQuery, useQueries, useInfiniteQuery, keepPreviousData } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
+import { getMarketBaselineScore } from "@/lib/predict-market-baseline";
 import { TrendingPerson } from "@shared/schema";
 import { useIntersectionObserver } from "@/hooks/useIntersectionObserver";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
@@ -552,12 +553,14 @@ export default function HomePage() {
       const downStake = Number(downEntry?.totalStake || 0);
       const total = upStake + downStake || 1;
       const upPercent = Math.round((upStake / total) * 100);
+      const currentScore = Number(person.trendScore || 0);
+      const baselineScore = getMarketBaselineScore(m, currentScore) ?? currentScore;
       return {
         id: m.id,
         personId: m.personId || "",
         personName: person.name || m.title?.replace(/: Up or Down\?$/, "") || "Unknown",
-        currentScore: Number(person.trendScore || 0),
-        startScore: Number(person.trendScore || 0) - Math.floor(Number(person.trendScore || 0) * (Number(person.change7d || 0) / 100)),
+        currentScore,
+        startScore: baselineScore,
         upMultiplier: upStake > 0 ? +(total / upStake).toFixed(1) : 2.0,
         downMultiplier: downStake > 0 ? +(total / downStake).toFixed(1) : 2.0,
         upPoolPercent: upPercent || 50,

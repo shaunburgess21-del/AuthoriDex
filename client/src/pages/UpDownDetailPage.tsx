@@ -20,6 +20,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { normalizeMarketCategory } from "@shared/constants";
 import { apiRequest } from "@/lib/queryClient";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
+import { getMarketBaselineScore } from "@/lib/predict-market-baseline";
 import {
   ArrowLeft,
   TrendingUp,
@@ -98,10 +99,7 @@ export default function UpDownDetailPage() {
     const upMultiplier = upStake > 0 ? +(total / upStake).toFixed(1) : 2.0;
     const downMultiplier = downStake > 0 ? +(total / downStake).toFixed(1) : 2.0;
     const currentScore = Number(person.trendScore || person.fameIndex || 0);
-    const storedBaseline = market.metadata?.openingScore?.score;
-    const fallbackBaseline =
-      currentScore - Math.floor(currentScore * (Number(person.change7d || 0) / 100));
-    const baselineScore = storedBaseline ? Number(storedBaseline) : fallbackBaseline;
+    const baselineScore = getMarketBaselineScore(market, currentScore) ?? currentScore;
     const totalPool =
       upStake + downStake + Number(market.seedVolume || 0);
     const totalParticipants =

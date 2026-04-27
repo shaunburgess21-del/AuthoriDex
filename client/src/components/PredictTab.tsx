@@ -18,6 +18,7 @@ import { navigateToLogin } from "@/lib/authReturn";
 import { toast } from "sonner";
 import { apiRequest } from "@/lib/queryClient";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
+import { getMarketBaselineScore } from "@/lib/predict-market-baseline";
 import { getCanonicalNativeCycle } from "@/lib/nativeMarketLifecycle";
 import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { PredictCard } from "@/components/predict/PredictCard";
@@ -351,9 +352,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
     const upMultiplier = upStake > 0 ? +(total / upStake).toFixed(1) : 2.0;
     const downMultiplier = downStake > 0 ? +(total / downStake).toFixed(1) : 2.0;
     const cs = Number(person.trendScore || person.fameIndex || 0);
-    const storedBaseline = m.metadata?.openingScore?.score;
-    const fallbackBaseline = cs - Math.floor(cs * (Number(person.change7d || 0) / 100));
-    const baselineScore = storedBaseline ? Number(storedBaseline) : fallbackBaseline;
+    const baselineScore = getMarketBaselineScore(m, cs) ?? cs;
     return {
       id: m.id,
       personId: m.personId || "",
@@ -475,7 +474,8 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
   const hasAnyMarkets = weeklyMarket || h2hBattles.length > 0 || gainerMarkets.length > 0 || openMarketsForPerson.length > 0 || jackpotMarket;
 
   const { user, profile, refreshProfile } = useAuth();
-  const queryClient = useQueryClient();  const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();
+  const [, setLocation] = useLocation();
   const [pendingSelection, setPendingSelection] = useState<StakeSelection | null>(null);
   const [stakeModalOpen, setStakeModalOpen] = useState(false);
   const walletCredits = profile?.predictCredits ?? 0;

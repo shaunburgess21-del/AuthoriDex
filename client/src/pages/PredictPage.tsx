@@ -28,6 +28,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { getSupabase } from "@/lib/supabase";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
+import { getMarketBaselineScore } from "@/lib/predict-market-baseline";
 import { getCanonicalNativeCycle } from "@/lib/nativeMarketLifecycle";
 import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
 import { WeeklyUpDownActionButtons } from "@/components/predict/WeeklyUpDownActionButtons";
@@ -1329,7 +1330,8 @@ function CreatePredictionModal({
 }: {
   open: boolean;
   onClose: () => void;
-}) {  const { trigger: triggerXpBurst } = useXpBurst();
+}) {
+  const { trigger: triggerXpBurst } = useXpBurst();
   const [title, setTitle] = useState("");
   const [marketType, setMarketType] = useState<MarketTypeOption>("binary");
   const [category, setCategory] = useState<string>("tech");
@@ -1677,7 +1679,8 @@ function CreatePredictionModal({
 }
 
 export default function PredictPage() {
-  const [, setLocation] = useLocation();  const queryClient = useQueryClient();
+  const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();
   const { trigger: triggerXpBurst } = useXpBurst();
   const { user, profile, refreshProfile } = useAuth();
   const { favoriteIds } = useFavorites();
@@ -1911,9 +1914,7 @@ export default function PredictPage() {
         const upMultiplier = upStake > 0 ? +(total / upStake).toFixed(1) : 2.0;
         const downMultiplier = downStake > 0 ? +(total / downStake).toFixed(1) : 2.0;
         const currentScore = Number(person.trendScore || person.fameIndex || 0);
-        const storedBaseline = m.metadata?.openingScore?.score;
-        const fallbackBaseline = currentScore - Math.floor(currentScore * (Number(person.change7d || 0) / 100));
-        const baselineScore = storedBaseline ? Number(storedBaseline) : fallbackBaseline;
+        const baselineScore = getMarketBaselineScore(m, currentScore) ?? currentScore;
         return {
           id: m.id,
           personId: m.personId || "",
