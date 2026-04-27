@@ -109,7 +109,7 @@ export function MarketCycleHero({ marketState, constrainedWidth = false }: Marke
       data-testid="market-cycle-hero"
     >
       <div className="relative z-10 px-2 py-3 md:px-6 md:py-4">
-        <div className="flex min-w-0 flex-row flex-nowrap items-center justify-center gap-1 md:justify-between md:gap-4">
+        <div className="flex min-w-0 flex-row flex-nowrap items-center justify-center gap-3 md:justify-between md:gap-4">
           <p className="hidden shrink-0 text-gray-600 dark:text-gray-400 text-[10px] font-medium uppercase tracking-widest md:block">
             {label.desktop}
           </p>
