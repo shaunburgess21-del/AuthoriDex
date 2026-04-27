@@ -211,24 +211,35 @@ export default function MePage() {
             <Card className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-semibold">Predictor Stats</h3>
-                <Badge variant="outline" className="border-violet-500/40 dark:border-violet-500/30 text-violet-600 dark:text-violet-400">VIRTUAL</Badge>
+                <Badge variant="outline" className="px-3 border-violet-500/40 dark:border-violet-500/30 text-violet-600 dark:text-violet-400">VIRTUAL</Badge>
               </div>
               <div className="grid grid-cols-2 gap-3">
+                {/* Label is `flex-1` so it absorbs free space and
+                    ellipsifies first; value is `min-w-0 truncate` so a
+                    long number (e.g. "1,234,567") falls back to an
+                    ellipsis with a hover tooltip instead of being
+                    silently clipped at the pill edge. */}
                 <div className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/40 dark:border-violet-500/30 overflow-hidden">
-                  <div className="flex items-center gap-2 min-w-0">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
                     <Wallet className="h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400" />
                     <span className="text-sm text-muted-foreground truncate">Balance</span>
                   </div>
-                  <span className="font-mono font-bold text-lg tabular-nums shrink-0 text-violet-600 dark:text-violet-400">
+                  <span
+                    className="font-mono font-bold text-lg tabular-nums min-w-0 truncate text-violet-600 dark:text-violet-400"
+                    title={(profile?.predictCredits || 0).toLocaleString('en-US')}
+                  >
                     {(profile?.predictCredits || 0).toLocaleString('en-US')}
                   </span>
                 </div>
                 <div className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg bg-orange-500/15 dark:bg-orange-500/10 border border-orange-500/40 dark:border-orange-500/30 overflow-hidden">
-                  <div className="flex items-center gap-2 min-w-0">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
                     <Flame className="h-4 w-4 shrink-0 text-orange-600 dark:text-orange-400" />
                     <span className="text-sm text-muted-foreground truncate">Streak</span>
                   </div>
-                  <span className="font-mono font-bold text-lg tabular-nums shrink-0 text-orange-600 dark:text-orange-400">
+                  <span
+                    className="font-mono font-bold text-lg tabular-nums min-w-0 truncate text-orange-600 dark:text-orange-400"
+                    title={String(profile?.currentStreak || 0)}
+                  >
                     {profile?.currentStreak || 0}
                   </span>
                 </div>

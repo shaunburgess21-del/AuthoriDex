@@ -1,4 +1,4 @@
-import type { Express, Request } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import express from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
@@ -13,7 +13,7 @@ import { supabaseServer } from "./supabase";
 import { requireAuth, requireAdmin, optionalAuth, resolveAuthContextFromHeader, type AuthRequest } from "./auth-middleware";
 import OpenAI from "openai";
 import { createHash, randomUUID } from "crypto";
-import multer from "multer";
+import multer, { MulterError } from "multer";
 import path from "path";
 import { gamificationService } from "./services/gamification";
 import { dispatchApproval, markSuggestionApproved, markSuggestionRejected } from "./services/suggestionApproval";
@@ -8623,11 +8623,42 @@ Only return the JSON object.`;
   // we fire-and-forget delete that PNG so the bucket has only the
   // currently-referenced avatar (the DB `avatarUrl` is the source of
   // truth, but we keep storage tidy).
+  // Inline error handler for multer rejections on the avatar route.
+  // Multer raises errors *before* the route handler runs (so the
+  // route's try/catch never sees them), and the global error handler
+  // in server/index.ts maps anything without an explicit `status` to
+  // a 500 with the body `{ message: "Internal Server Error" }` —
+  // which strips the actual reason ("File too large" / "Only PNG…").
+  // This middleware intercepts those rejections first and surfaces a
+  // user-friendly 400 with the standard `{ error }` shape so the
+  // client toast can show what actually went wrong.
+  const handleAvatarUploadErrors = (
+    err: unknown,
+    _req: Request,
+    res: Response,
+    next: NextFunction,
+  ) => {
+    if (!err) {
+      return next();
+    }
+    if (err instanceof MulterError) {
+      if (err.code === "LIMIT_FILE_SIZE") {
+        return res.status(400).json({ error: "Image is too large. Max 5 MB." });
+      }
+      return res.status(400).json({ error: err.message });
+    }
+    if (err instanceof Error) {
+      return res.status(400).json({ error: err.message });
+    }
+    return res.status(400).json({ error: "Avatar upload rejected" });
+  };
+
   app.post(
     "/api/me/avatar/upload",
     requireAuth,
     upload.single("file"),
-    async (req: AuthRequest, res) => {
+    handleAvatarUploadErrors,
+    async (req: AuthRequest, res: Response) => {
       try {
         const file = req.file;
         if (!file) {
@@ -8644,8 +8675,6 @@ Only return the JSON object.`;
         const optimized = await optimizeImage(file.buffer, {
           maxWidth: 512,
           quality: 85,
-          minQuality: 70,
-          minWidth: 256,
         });
 
         const bucketName = "avatars";
@@ -8660,10 +8689,11 @@ Only return the JSON object.`;
           });
 
         if (uploadError) {
+          // Log the full storage error server-side, but don't echo
+          // Supabase internals back to the client — the user just
+          // needs to know the upload failed and to try again.
           console.error("Avatar upload error:", uploadError);
-          return res.status(500).json({
-            error: `Failed to upload avatar: ${uploadError.message}`,
-          });
+          return res.status(500).json({ error: "Avatar upload failed" });
         }
 
         // Best-effort cleanup of the legacy PNG path written by the
@@ -8690,13 +8720,14 @@ Only return the JSON object.`;
         // same path.
         const url = `${urlData.publicUrl}?v=${Date.now()}`;
         res.json({ url, path: filePath });
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error("Avatar upload error:", error);
+        const message = error instanceof Error ? error.message : "";
         if (
-          error.message?.includes("Only PNG") ||
-          error.message?.includes("Could not compress image below")
+          message.includes("Only PNG") ||
+          message.includes("Could not compress image below")
         ) {
-          return res.status(400).json({ error: error.message });
+          return res.status(400).json({ error: message });
         }
         res.status(500).json({ error: "Avatar upload failed" });
       }

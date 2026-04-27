@@ -16,9 +16,16 @@
  *
  * Both rely on `upsert: true`, so a new avatar always overwrites the
  * previous one — no orphaned files within the same pipeline. When a
- * user flips between pipelines (e.g. generated → uploaded photo), the
- * server-side endpoint clears the legacy `avatar.png` path so the
- * bucket stays tidy.
+ * user flips between pipelines we clean up the *other* path so the
+ * bucket stays tidy:
+ *
+ *   - generated → uploaded: the server endpoint deletes `avatar.png`
+ *     after the new `avatar.webp` is in place.
+ *   - uploaded  → generated: `uploadGeneratedAvatar` deletes
+ *     `avatar.webp` after the new `avatar.png` is in place.
+ *
+ * Cleanup is best-effort and non-fatal — the new avatar is the source
+ * of truth and the orphan, if any, just costs a few KB of storage.
  *
  * The cache-busting `?v=${ts}` suffix ensures the CDN doesn't serve a
  * stale image after re-roll or upload.
@@ -35,6 +42,7 @@ import { renderAvatarToBlob } from './render';
 
 const BUCKET = 'avatars';
 const GENERATED_FILENAME = 'avatar.png';
+const UPLOADED_FILENAME = 'avatar.webp';
 
 // User-uploaded photos are converted to WebP server-side, so we accept
 // a wider input pool and let the server do the heavy lifting. The cap
@@ -85,6 +93,21 @@ export async function uploadGeneratedAvatar(
     throw new Error(`Avatar upload failed: ${uploadError.message}`);
   }
 
+  // Best-effort cleanup of the legacy uploaded-photo path
+  // (`avatar.webp`). If the user previously uploaded a photo and now
+  // re-rolls a generative avatar, we don't want a stale orphan
+  // sitting in the bucket. Failure is non-fatal: the new PNG is
+  // already live and the DB will point at it.
+  void supabase.storage
+    .from(BUCKET)
+    .remove([`${userId}/${UPLOADED_FILENAME}`])
+    .catch((err) => {
+      console.warn(
+        '[uploadGeneratedAvatar] uploaded-photo cleanup failed (non-fatal):',
+        err?.message ?? err,
+      );
+    });
+
   const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
   if (!data?.publicUrl) {
     throw new Error('Avatar upload succeeded but public URL resolution failed');
@@ -102,20 +125,18 @@ export async function uploadGeneratedAvatar(
  *
  * POSTs the raw file to `/api/me/avatar/upload`, which uses sharp to
  * convert it to an optimized .webp (matching the admin image pipeline)
- * and writes the result to `avatars/{userId}/avatar.webp`. This makes
- * the user-facing avatar (a) a fraction of the original size — typical
- * phone photos drop from 1–3 MB JPEG to ~30–80 KB WebP — and (b)
- * served as `image/webp` so a right-click save reflects the optimized
- * file instead of the unprocessed original.
+ * and writes the result to `avatars/{userId}/avatar.webp` — where the
+ * user id is derived from the verified JWT on the server, not from
+ * anything the client sends. This makes the user-facing avatar (a) a
+ * fraction of the original size — typical phone photos drop from 1–3
+ * MB JPEG to ~30–80 KB WebP — and (b) served as `image/webp` so a
+ * right-click save reflects the optimized file instead of the
+ * unprocessed original.
  *
  * Validates MIME type and size BEFORE uploading so we surface a clean
  * error early rather than letting the request round-trip to the server.
  */
-export async function uploadAvatarFile(
-  userId: string,
-  file: File,
-): Promise<UploadedAvatarFile> {
-  if (!userId) throw new Error('uploadAvatarFile: userId required');
+export async function uploadAvatarFile(file: File): Promise<UploadedAvatarFile> {
   if (!file) throw new Error('uploadAvatarFile: file required');
 
   if (!ALLOWED_MIME_TYPES.includes(file.type as (typeof ALLOWED_MIME_TYPES)[number])) {
@@ -147,8 +168,13 @@ export async function uploadAvatarFile(
   if (!res.ok) {
     let message = 'Avatar upload failed';
     try {
-      const body = (await res.json()) as { error?: string };
-      if (body?.error) message = body.error;
+      // Our API uses `{ error }` for the avatar route, but the global
+      // Express error handler in server/index.ts (which catches anything
+      // a route doesn't handle) responds with `{ message }`. Read both
+      // shapes so users see the actual reason instead of a fallback.
+      const body = (await res.json()) as { error?: string; message?: string };
+      const reason = body?.error ?? body?.message;
+      if (reason) message = reason;
     } catch {
       // Body wasn't JSON — fall back to a generic message rather than
       // leaking the raw HTML/text we'd otherwise hand the user.

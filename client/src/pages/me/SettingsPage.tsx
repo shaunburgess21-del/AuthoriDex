@@ -132,8 +132,7 @@ export default function SettingsPage() {
 
     setAvatarUploading(true);
     try {
-      const userId = profile?.id || user!.id;
-      const { url } = await uploadAvatarFile(userId, file);
+      const { url } = await uploadAvatarFile(file);
 
       // Pass `seed: null` so the server clears the avatarSeed alongside
       // the URL — uploaded photos and generated seeds are mutually
@@ -286,7 +285,7 @@ export default function SettingsPage() {
           </div>
 
           {/* Hidden file input — triggered programmatically from the
-              "Upload a photo" popover item. PNG/JPG/WEBP up to 2 MB
+              "Upload a photo" popover item. PNG/JPG/WEBP up to 5 MB
               (validated client-side in uploadAvatarFile). */}
           <input
             ref={fileInputRef}
