@@ -2013,45 +2013,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      // Per-field baseline gating: only null change24h when the 24h baseline
+      // run is missing/degraded, and only null change7d when the 7d baseline
+      // is missing. Previously both were nulled together off the 24h flag,
+      // which blanked Weekly Gainers/Droppers whenever the 24h run dropped
+      // out, even if the 7d run was perfectly fine.
       const baselineMeta = await getBaselineDiagnostics(people.length);
-      const baselineDegraded = baselineMeta.baseline24hStatus !== "normal";
-
-      if (type === 'gainers') {
-        people = [...people].sort((a, b) => (b.change7d ?? 0) - (a.change7d ?? 0)).slice(0, 10);
-      } else if (type === 'droppers') {
-        people = [...people].sort((a, b) => (a.change7d ?? 0) - (b.change7d ?? 0)).slice(0, 10);
-      } else if (type === 'daily') {
-        const prevRanks = await getSnapshotRankMap();
-        const withRankChange = people.map(p => ({
-          ...p,
-          change24h: baselineDegraded ? null : p.change24h,
-          change7d: baselineDegraded ? null : p.change7d,
-          rankChange: prevRanks.has(p.id) ? (prevRanks.get(p.id)! - p.rank) : null,
-        }));
-        const byDelta = [...withRankChange].sort((a, b) => Math.abs(b.change24h ?? 0) - Math.abs(a.change24h ?? 0)).slice(0, 15);
-        const byRank = [...withRankChange].sort((a, b) => Math.abs(b.rankChange ?? 0) - Math.abs(a.rankChange ?? 0)).slice(0, 15);
-        const seen = new Set<string>();
-        const merged: typeof withRankChange = [];
-        for (const p of [...byDelta, ...byRank]) {
-          if (!seen.has(p.id)) {
-            seen.add(p.id);
-            merged.push(p);
-          }
-        }
-        merged.sort((a, b) => Math.abs(b.change24h ?? 0) - Math.abs(a.change24h ?? 0));
-        res.json(merged);
-        return;
-      }
+      const degraded24h = baselineMeta.baseline24hStatus !== "normal";
+      const degraded7d = baselineMeta.baseline7dStatus !== "normal";
 
       const prevRanks = await getSnapshotRankMap();
       const enriched = people.map(p => ({
         ...p,
-        change24h: baselineDegraded ? null : p.change24h,
-        change7d: baselineDegraded ? null : p.change7d,
+        change24h: degraded24h ? null : p.change24h,
+        change7d: degraded7d ? null : p.change7d,
         rankChange: prevRanks.has(p.id) ? (prevRanks.get(p.id)! - p.rank) : null,
       }));
 
-      res.json(enriched);
+      const TOP_N = 5;
+
+      if (type === 'gainers') {
+        // Strict sign filter: a "Weekly Gainer" must actually be up over 7d.
+        // If fewer than TOP_N qualify (e.g. uniformly-down week), the card
+        // simply renders fewer rows.
+        const gainers = enriched
+          .filter(p => typeof p.change7d === "number" && p.change7d > 0)
+          .sort((a, b) => (b.change7d as number) - (a.change7d as number))
+          .slice(0, TOP_N);
+        res.json(gainers);
+        return;
+      }
+
+      if (type === 'droppers') {
+        const droppers = enriched
+          .filter(p => typeof p.change7d === "number" && p.change7d < 0)
+          .sort((a, b) => (a.change7d as number) - (b.change7d as number))
+          .slice(0, TOP_N);
+        res.json(droppers);
+        return;
+      }
+
+      if (type === 'daily') {
+        // Pure |change24h| sort. The previous rank-change merge built a
+        // candidate pool from top-N |change24h| ∪ top-N |rankChange| and then
+        // re-sorted only by |change24h|, which made the rank branch a no-op
+        // for ordering. rankChange is still included on each row for any
+        // future "↑ N ranks" badge.
+        const daily = enriched
+          .filter(p => typeof p.change24h === "number")
+          .sort((a, b) =>
+            Math.abs(b.change24h as number) - Math.abs(a.change24h as number)
+          )
+          .slice(0, TOP_N);
+        res.json(daily);
+        return;
+      }
+
+      res.json(enriched.slice(0, TOP_N));
     } catch (error) {
       console.error("Error fetching movers:", error);
       res.status(500).json({ error: "Failed to fetch movers data" });

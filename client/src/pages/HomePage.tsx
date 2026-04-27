@@ -103,9 +103,14 @@ function MarketPulseCard({
         
         {!collapsed && (
           <div className="space-y-1.5 mt-4">
-            {people.slice(0, 5).map((person, idx) => {
-              const changeValue = type === "daily" ? person.change24h : person.change7d;
-              if (changeValue === undefined || changeValue === null || isNaN(changeValue)) return null;
+            {people
+              .filter((person) => {
+                const v = type === "daily" ? person.change24h : person.change7d;
+                return typeof v === "number" && !isNaN(v);
+              })
+              .slice(0, 5)
+              .map((person, idx) => {
+              const changeValue = (type === "daily" ? person.change24h : person.change7d) as number;
               const isPositive = changeValue >= 0;
               return (
                 <div
