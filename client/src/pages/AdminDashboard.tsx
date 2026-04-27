@@ -3007,7 +3007,7 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex min-h-screen bg-background overflow-x-hidden">
       {/* Sidebar */}
       <aside className="w-64 border-r border-border bg-card/50 p-4 hidden md:flex md:flex-col md:sticky md:top-0 md:h-screen md:overflow-y-auto">
         <div className="flex items-center gap-2 mb-8 px-2">
@@ -3075,6 +3075,7 @@ export default function AdminDashboard() {
               key={item.id}
               onClick={() => setActiveSection(item.id)}
               data-testid={`nav-mobile-${item.id}`}
+              aria-current={activeSection === item.id ? "page" : undefined}
               className={cn(
                 "flex shrink-0 min-w-[64px] flex-col items-center gap-1 rounded-lg px-2.5 py-1.5 text-[10px] font-medium transition-colors",
                 activeSection === item.id
@@ -3483,6 +3484,7 @@ export default function AdminDashboard() {
                           <Button
                             variant="ghost"
                             size="icon"
+                            className="h-11 w-11 sm:h-9 sm:w-9"
                             onClick={() => {
                               setScoreBreakdownCelebrity(celebrity.id);
                               setShowScoreBreakdown(true);
@@ -3496,6 +3498,7 @@ export default function AdminDashboard() {
                           <Button
                             variant="ghost"
                             size="icon"
+                            className="h-11 w-11 sm:h-9 sm:w-9"
                             onClick={() => openEditCelebrity(celebrity)}
                             aria-label="Edit"
                             data-testid={`button-edit-celebrity-${celebrity.id}`}
@@ -3505,7 +3508,7 @@ export default function AdminDashboard() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="text-destructive hover:text-destructive"
+                            className="h-11 w-11 sm:h-9 sm:w-9 text-destructive hover:text-destructive"
                             onClick={() => {
                               setDeleteTarget({ type: "celebrity", id: celebrity.id, name: celebrity.name });
                               setShowDeleteConfirm(true);
@@ -4341,7 +4344,7 @@ export default function AdminDashboard() {
         {/* Voting CMS Section */}
         {activeSection === "voting" && (
           <div className="space-y-6">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-2xl font-bold">Voting CMS</h2>
                 <p className="text-muted-foreground">Manage voting content</p>
@@ -5419,6 +5422,7 @@ export default function AdminDashboard() {
                           <Button
                             variant="outline"
                             size="sm"
+                            className="min-h-11 sm:min-h-8"
                             onClick={() => setCreditHistoryUserId(user.id)}
                             data-testid={`button-view-user-${user.id}`}
                           >
@@ -5428,6 +5432,7 @@ export default function AdminDashboard() {
                           <Button
                             variant="outline"
                             size="sm"
+                            className="min-h-11 sm:min-h-8"
                             onClick={() => {
                               setSelectedUser(user);
                               setShowCreditModal(true);
@@ -5440,7 +5445,7 @@ export default function AdminDashboard() {
                           <Button
                             variant="outline"
                             size="sm"
-                            className="text-destructive hover:text-destructive"
+                            className="min-h-11 sm:min-h-8 text-destructive hover:text-destructive"
                             onClick={() => openBanUserModal(user)}
                             disabled={user.isBanned || user.role === "admin" || banUserMutation.isPending}
                             data-testid={`button-ban-${user.id}`}
@@ -5451,7 +5456,7 @@ export default function AdminDashboard() {
                           <Button
                             variant="outline"
                             size="sm"
-                            className="text-destructive hover:text-destructive border-destructive/30"
+                            className="min-h-11 sm:min-h-8 text-destructive hover:text-destructive border-destructive/30"
                             onClick={() => openDeleteUserModal(user)}
                             data-testid={`button-delete-user-${user.id}`}
                           >
