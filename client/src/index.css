@@ -780,7 +780,7 @@
    * arbitrary values that contain commas (e.g. multi-stop box-shadow
    * with rgba()/hsl() commas), which would leave the tooltip un-styled. */
   .tooltip-surface {
-    background-color: hsl(var(--popover) / 0.95);
+    background-color: hsl(var(--popover) / 0.97);
     border: 1px solid rgba(0, 0, 0, 0.08);
     box-shadow:
       0 8px 30px -6px rgba(15, 23, 42, 0.22),
@@ -791,17 +791,16 @@
     animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
   }
 
+  /* Backdrop-blur is kept for the "premium frosted" cue but the body is
+   * pushed to ~94% opacity so colored content underneath (chart numbers,
+   * score badges, etc.) doesn't bleed through and hurt readability. The
+   * blur still smooths the few percent that does come through, giving
+   * the surface a soft tint instead of a sharp silhouette. */
   @supports ((backdrop-filter: blur(0)) or (-webkit-backdrop-filter: blur(0))) {
     .tooltip-surface {
-      background-color: hsl(var(--popover) / 0.72);
-      -webkit-backdrop-filter: blur(20px) saturate(160%);
-      backdrop-filter: blur(20px) saturate(160%);
-    }
-    /* Push dark-mode glass a touch more transparent so the backdrop blur
-     * is actually visible — without this, on near-uniform dark surfaces
-     * the blur effect is imperceptible. */
-    .dark .tooltip-surface {
-      background-color: hsl(var(--popover) / 0.62);
+      background-color: hsl(var(--popover) / 0.94);
+      -webkit-backdrop-filter: blur(16px) saturate(130%);
+      backdrop-filter: blur(16px) saturate(130%);
     }
   }
 
