@@ -217,40 +217,33 @@ function UserMenuContent({
     <div className="space-y-1">
       <div className="p-4 pb-3">
         <div className="flex items-start gap-3">
-          {profile?.username ? (
-            <Link
-              href={`/u/${profile.username}`}
-              onClick={() => onClose?.()}
-              className="shrink-0 rounded-full outline-none ring-offset-background transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              data-testid="link-my-profile-avatar"
-            >
-              <UserProfileAvatar
-                displayName={displayName}
-                avatarUrl={profile.avatarUrl}
-                className="h-12 w-12"
-              />
-            </Link>
-          ) : (
+          {/* Avatar + display name route to "My Account" because that's
+              the user's own dashboard — Public Profile is reachable
+              from there in one click. The @handle keeps the
+              social-style link to the public profile (canonical URL
+              for the user). */}
+          <Link
+            href="/me"
+            onClick={() => onClose?.()}
+            className="shrink-0 rounded-full outline-none ring-offset-background transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            data-testid="link-my-account-avatar"
+          >
             <UserProfileAvatar
               displayName={displayName}
               avatarUrl={profile?.avatarUrl}
-              className="h-12 w-12 shrink-0"
+              className="h-12 w-12"
             />
-          )}
+          </Link>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              {profile?.username ? (
-                <Link
-                  href={`/u/${profile.username}`}
-                  onClick={() => onClose?.()}
-                  className="font-semibold truncate hover:underline cursor-pointer"
-                  data-testid="link-my-profile"
-                >
-                  {displayName}
-                </Link>
-              ) : (
-                <h3 className="font-semibold truncate">{displayName}</h3>
-              )}
+              <Link
+                href="/me"
+                onClick={() => onClose?.()}
+                className="font-semibold truncate hover:underline cursor-pointer"
+                data-testid="link-my-account-name"
+              >
+                {displayName}
+              </Link>
               <Button
                 variant="ghost"
                 size="icon"
@@ -266,7 +259,7 @@ function UserMenuContent({
                 href={`/u/${profile.username}`}
                 onClick={() => onClose?.()}
                 className="block text-xs text-muted-foreground truncate hover:text-foreground hover:underline cursor-pointer"
-                data-testid="link-my-username"
+                data-testid="link-my-public-profile"
               >
                 @{profile.username}
               </Link>
