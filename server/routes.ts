@@ -483,27 +483,6 @@ async function getLatestCompletedRunId(): Promise<string | null> {
   }
 }
 
-// Returns the ISO timestamp of the most recently completed ingestion run.
-// Used by /api/trending/hot-movers to drive the "X min ago" freshness clock
-// in TrendingNowFeed — previously the UI used TanStack Query's dataUpdatedAt
-// (last client refetch time) which always read "just now" right after a fetch
-// regardless of how stale the underlying ingest data was.
-async function getLatestCompletedRunFinishedAt(): Promise<string | null> {
-  try {
-    const [row] = await db
-      .select({ finishedAt: ingestionRuns.finishedAt })
-      .from(ingestionRuns)
-      .where(eq(ingestionRuns.status, "completed"))
-      .orderBy(desc(ingestionRuns.finishedAt))
-      .limit(1);
-    if (!row?.finishedAt) return null;
-    const value = row.finishedAt as Date | string;
-    return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
-  } catch {
-    return null;
-  }
-}
-
 async function getSnapshotRankMap(): Promise<Map<string, number>> {
   const now = Date.now();
 
@@ -1056,10 +1035,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // is used by the TrendingNowFeed clock instead of the client refetch
       // time, so the "X min ago" label reflects real ingest age.
       const baselineMeta = await getBaselineDiagnostics(people.length);
-      const currentRunFinishedAt = await getLatestCompletedRunFinishedAt();
       const meta = {
         currentRunId: baselineMeta.currentRunId,
-        currentRunFinishedAt,
+        currentRunFinishedAt: baselineMeta.currentRunFinishedAt,
         baseline24hRunId: baselineMeta.baseline24hRunId,
         baseline24hAgeHours: baselineMeta.baseline24hAgeHours,
         baselineStatus: baselineMeta.baseline24hStatus,

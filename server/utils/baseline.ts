@@ -5,6 +5,10 @@ import { SCORE_VERSION } from "../scoring/normalize";
 
 export interface BaselineDiagnostics {
   currentRunId: string | null;
+  // ISO timestamp of the latest completed ingestion run. Exposed so callers
+  // can drive freshness UI ("X min ago") off real ingest age instead of
+  // client refetch time, without paying for a second roundtrip.
+  currentRunFinishedAt: string | null;
   baseline24hRunId: string | null;
   baseline24hAgeHours: number | null;
   baseline24hStatus: "normal" | "degraded";
@@ -24,7 +28,7 @@ export async function getBaselineDiagnostics(totalPeopleCount?: number): Promise
   const time7dAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
   const [latestRun] = await db
-    .select({ id: ingestionRuns.id })
+    .select({ id: ingestionRuns.id, finishedAt: ingestionRuns.finishedAt })
     .from(ingestionRuns)
     .where(eq(ingestionRuns.status, "completed"))
     .orderBy(desc(ingestionRuns.finishedAt))
@@ -70,6 +74,9 @@ export async function getBaselineDiagnostics(totalPeopleCount?: number): Promise
 
   return {
     currentRunId: latestRun?.id ?? null,
+    currentRunFinishedAt: latestRun?.finishedAt
+      ? new Date(latestRun.finishedAt).toISOString()
+      : null,
     baseline24hRunId: baselineRun24h?.id ?? null,
     baseline24hAgeHours: ageHours(baselineRun24h),
     baseline24hStatus: baselineRun24h ? "normal" : "degraded",
