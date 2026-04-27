@@ -67,7 +67,7 @@ export function WeeklyUpDownCard({
   return (
     <PredictCard
       testId={`card-weekly-${market.id}`}
-      className={`${isMarketClosed ? "opacity-75" : ""} ${pendingPosition && !isMarketClosed ? "ring-1 ring-violet-500/35 dark:ring-violet-400/25 md:ring-inset rounded-[12px] md:rounded-xl" : ""}`}
+      className={`!min-h-[360px] md:!min-h-0 ${isMarketClosed ? "opacity-75" : ""} ${pendingPosition && !isMarketClosed ? "ring-1 ring-violet-500/35 dark:ring-violet-400/25 md:ring-inset rounded-[12px] md:rounded-xl" : ""}`}
     >
       <div className="flex items-center justify-between mb-2 flex-wrap gap-1">
         <div className="flex items-center gap-1.5">
@@ -130,11 +130,11 @@ export function WeeklyUpDownCard({
           </div>
         </div>
 
-        <p className="text-[1.1375rem] md:text-xs text-muted-foreground mb-2 leading-[1.4]">
+        <p className="text-sm md:text-xs text-muted-foreground mb-2 leading-[1.4]">
           Will <span className="font-semibold text-foreground">{market.personName.split(" ")[0]}</span> close above or below the weekly baseline?
         </p>
 
-        <div className="flex items-center gap-1.5 text-sm md:text-[11px] text-muted-foreground mb-0 flex-wrap">
+        <div className="flex items-center gap-1.5 text-sm md:text-[11px] text-muted-foreground mb-0 max-md:mt-2 flex-wrap">
           <span>Baseline: <span className="font-mono text-foreground">{market.baselineScore.toLocaleString('en-US')}</span></span>
           <span className="text-muted-foreground/40">&middot;</span>
           <span>Delta: <span className={`font-mono ${delta >= 0 ? "text-green-500" : "text-red-500"}`}>{delta >= 0 ? "+" : ""}{delta.toLocaleString('en-US')}</span></span>
