@@ -1,6 +1,6 @@
 import * as React from "react"
 import { X } from "lucide-react"
-import { Tooltip, TooltipTrigger, TooltipContent } from "./tooltip"
+import { Tooltip, TooltipTrigger, TooltipContent, tooltipSurfaceClass } from "./tooltip"
 import { Popover, PopoverContent, PopoverTrigger } from "./popover"
 import { cn } from "@/lib/utils"
 
@@ -22,10 +22,26 @@ export function TouchTooltip({ children, content, side = "top", align = "center"
     setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0);
   }, []);
 
-  const mergedClass = cn(
+  // Tooltip path: width/typography overrides only — surface skin comes
+  // from TooltipContent itself.
+  const tooltipMergedClass = cn(
     "w-auto max-w-[260px] px-3 py-2 text-sm",
     contentClassName,
     className
+  );
+
+  // Popover path (touch fallback): apply the same premium tooltip surface
+  // to PopoverContent so mobile users see an identical visual instead of
+  // the default flat popover skin. We override `bg-popover` (Popover sets
+  // its own) by appending tooltipSurfaceClass *after* the base classes.
+  const popoverMergedClass = cn(
+    tooltipSurfaceClass,
+    // Reset the bits TooltipContent doesn't know about / that conflict
+    // with PopoverContent's defaults
+    "w-auto max-w-[260px]",
+    contentClassName,
+    className,
+    showCloseButton && "relative pr-8",
   );
 
   if (isTouchDevice) {
@@ -41,7 +57,7 @@ export function TouchTooltip({ children, content, side = "top", align = "center"
             {children}
           </button>
         </PopoverTrigger>
-        <PopoverContent side={side} align={align} className={cn(mergedClass, showCloseButton && "relative pr-8")}>
+        <PopoverContent side={side} align={align} className={popoverMergedClass}>
           {showCloseButton && (
             <button
               type="button"
@@ -65,7 +81,7 @@ export function TouchTooltip({ children, content, side = "top", align = "center"
           {children}
         </span>
       </TooltipTrigger>
-      <TooltipContent side={side} align={align} className={mergedClass}>
+      <TooltipContent side={side} align={align} className={tooltipMergedClass}>
         {content}
       </TooltipContent>
     </Tooltip>
