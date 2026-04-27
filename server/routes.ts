@@ -2126,20 +2126,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return "high";
   };
 
-  // News-momentum level helper (Apr 2026 — PR3). The momentum sub-score is
-  // already a 0..100 self-normalized value (see normalizeNewsMomentum), so
-  // levels map to fixed bands on that scale rather than rolling percentiles:
-  //   none = no signal (no news in the 24h window or no 7d baseline)
-  //   low  = score ≤ 30  (steady-state or cooling: ratio ~0.0–1.1)
-  //   med  = score ≤ 60  (mild acceleration: ratio ~1.1–3.0)
-  //   high = score >  60  (clear breakout: ratio > 3.0)
-  // Bands chosen to match the log curve documented in normalize.ts:
-  //   ratio=1.0 → ~28.9 (low/med boundary at 30)
-  //   ratio=3.0 → ~57.8 (med/high boundary at 60)
-  const computeMomentumLevel = (score: number): MomentumLevel => {
-    if (!Number.isFinite(score) || score <= 0) return "none";
-    if (score <= 30) return "low";
-    if (score <= 60) return "medium";
+  // News-momentum level helper. Keys off the literal 24h-vs-7d-average
+  // ratio (rather than the log-curved 0..100 score) so each pill maps
+  // onto a sentence the user can finish in their head:
+  //   none   = no comparable signal (no 24h news or no 7d baseline)
+  //   low    = ratio < 1.0           → today is below this person's typical day
+  //   medium = 1.0 ≤ ratio < 2.0     → at or modestly above typical
+  //   high   = ratio ≥ 2.0           → at least double their typical day
+  //
+  // Apr 2026 retune (was: low ≤ 30, med ≤ 60, high > 60 on the score):
+  //   1) The old "low" band swept up ratios ~1.0–1.04 — i.e. people having
+  //      a perfectly typical day showed as Low, contradicting the mental
+  //      model that Low means "below normal".
+  //   2) The "high" boundary at score 60 corresponded to ratio ≈ 3.3×,
+  //      which made the band feel unreachable: a person at 2.7× their
+  //      typical day (clearly elevated to any human reader) sat on Medium.
+  // Score is still computed and stored for ranking; only the user-facing
+  // pill changes here.
+  const computeMomentumLevel = (ratio: number): MomentumLevel => {
+    if (!Number.isFinite(ratio) || ratio <= 0) return "none";
+    if (ratio < 1.0) return "low";
+    if (ratio < 2.0) return "medium";
     return "high";
   };
 
@@ -2534,19 +2541,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         : 0;
       const momentumDeltaPct = Math.abs(rawMomentumDeltaPct) <= DELTA_DEAD_ZONE_PCT ? 0 : rawMomentumDeltaPct;
 
-      // Recompute the level from the displayed ratio (rather than the
-      // persisted score) when we're using history-sourced 7d avg. This
-      // keeps the level pill and the displayed ratio internally
-      // consistent during the PR4 transition window — once next ingest
-      // tick lands, the persisted score will reflect the same baseline
-      // and the two will converge.
+      // The displayed score still mirrors the engine score for ranking
+      // diagnostics. When the displayed 7d-avg comes from snapshot
+      // history (rather than the persisted/provider value), recompute
+      // the score from the same baseline so the score the API hands
+      // back matches the ratio it hands back. Once the next ingest
+      // tick lands, persisted = recomputed and we converge.
       const recomputedMomentumScore = momentumRatio > 0
         ? Math.round((Math.log(1 + momentumRatio) / Math.log(11)) * 100)
         : 0;
       const momentumScoreForDisplay = news7dAvgSource === "history"
         ? recomputedMomentumScore
         : persistedMomentumScore;
-      const momentumLevel = computeMomentumLevel(momentumScoreForDisplay);
+      // Level keys off the *ratio*, not the score — see
+      // computeMomentumLevel above for the rationale and band table.
+      const momentumLevel = computeMomentumLevel(momentumRatio);
 
       res.json({
         asOf: latest.timestamp.toISOString(),
