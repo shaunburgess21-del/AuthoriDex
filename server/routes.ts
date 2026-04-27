@@ -56,7 +56,7 @@ import { deriveNativeMarketLifecycle, getWeeklyBettingCutoff } from "./native-ma
 import { recomputeCelebrityMetrics } from "./services/celebrity-metrics-recompute";
 import { z, ZodError } from "zod";
 import { sendError, sendBadRequest, sendZodError } from "./utils/api-response";
-import { runPostInductionOnboarding } from "./services/induction-onboarding";
+import { approveInductionCandidate } from "./services/induction-service";
 import { CANONICAL_MARKET_CATEGORIES, getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
 import { resolvePublicMatchupBySlugOrId } from "./utils/matchup-resolve";
 import { registerCronRoutes, registerPublicRoutes, registerGamificationRoutes, registerFavoritesRoutes } from "./route-modules";
@@ -16616,80 +16616,11 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
   app.post("/api/admin/induction/:id/approve", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
-      const [candidate] = await db.select().from(inductionCandidates).where(eq(inductionCandidates.id, id)).limit(1);
-      if (!candidate) return res.status(404).json({ error: "Candidate not found" });
-
-      const existingPerson = await db
-        .select({
-          id: trackedPeople.id,
-          imageSlug: trackedPeople.imageSlug,
-          status: trackedPeople.status,
-        })
-        .from(trackedPeople)
-        .where(eq(trackedPeople.name, candidate.displayName))
-        .limit(1);
-
-      let personId: string;
-
-      if (existingPerson.length > 0) {
-        personId = existingPerson[0].id;
-        const backfillUpdates: Partial<{
-          imageSlug: string | null;
-          status: string;
-        }> = {};
-        if (!existingPerson[0].imageSlug && candidate.imageSlug) {
-          backfillUpdates.imageSlug = candidate.imageSlug;
-        }
-        if (existingPerson[0].status !== "main_leaderboard") {
-          backfillUpdates.status = "main_leaderboard";
-        }
-        if (Object.keys(backfillUpdates).length > 0) {
-          await db
-            .update(trackedPeople)
-            .set(backfillUpdates)
-            .where(eq(trackedPeople.id, personId));
-        }
-      } else {
-        const maxOrder = await db.select({ maxOrder: sql<number>`COALESCE(MAX(${trackedPeople.displayOrder}), 0)` }).from(trackedPeople);
-        const [newPerson] = await db.insert(trackedPeople).values({
-          name: candidate.displayName,
-          category: candidate.category,
-          imageSlug: candidate.imageSlug,
-          wikiSlug: candidate.wikiSlug,
-          xHandle: candidate.xHandle,
-          displayOrder: (maxOrder[0]?.maxOrder || 0) + 1,
-          status: 'main_leaderboard',
-        }).returning();
-        personId = newPerson.id;
-
-        await db.insert(trendingPeople).values({
-          id: personId,
-          name: candidate.displayName,
-          category: candidate.category,
-          rank: 0,
-          trendScore: 0,
-          fameIndex: 0,
-        }).onConflictDoNothing();
-      }
-
-      await db.insert(celebrityMetrics).values({
-        celebrityId: personId,
-        updatedAt: new Date(),
-      }).onConflictDoNothing();
-
-      await db.update(inductionCandidates).set({ isActive: false }).where(eq(inductionCandidates.id, id));
-
-      void runPostInductionOnboarding({
-        personId,
-        displayName: candidate.displayName,
-        category: candidate.category,
-        imageSlug: candidate.imageSlug,
-      });
-
-      res.json({ success: true, personId, message: "Candidate approved and added to leaderboard" });
+      const result = await approveInductionCandidate(id);
+      res.json({ success: true, personId: result.personId, message: result.message });
     } catch (error: any) {
       console.error("Error approving induction candidate:", error);
-      res.status(500).json({ error: "Failed to approve candidate" });
+      res.status(error.statusCode || 500).json({ error: error.statusCode === 404 ? error.message : "Failed to approve candidate" });
     }
   });
 

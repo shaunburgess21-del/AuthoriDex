@@ -117,12 +117,23 @@ import {
 } from "@/lib/authReturn";
 import { navigateWithVoteList } from "@/lib/voteListNavigation";
 import { parseVoteError } from "@/lib/voteErrors";
+import { getClientWeekDeadlines } from "@/hooks/useMarketCycle";
 import { usePeopleSearch, type SearchablePerson } from "@/hooks/usePeopleSearch";
 import { SuggestCategorySelect } from "@/components/suggest/SuggestCategorySelect";
 import { SuggestDurationPicker } from "@/components/suggest/SuggestDurationPicker";
 import { HybridSubjectCombobox, type SubjectSelection } from "@/components/suggest/HybridSubjectCombobox";
 import { OpinionOptionRow, type OpinionOptionInput } from "@/components/suggest/OpinionOptionRow";
 import { ContenderSelector, type ContenderSelection } from "@/components/suggest/ContenderSelector";
+
+function formatInductionCountdown(deadline: Date): string {
+  const diffMs = Math.max(0, deadline.getTime() - Date.now());
+  const totalMinutes = Math.floor(diffMs / (60 * 1000));
+  const days = Math.floor(totalMinutes / (24 * 60));
+  const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
+  const minutes = totalMinutes % 60;
+
+  return `${days}d ${hours}h ${minutes}m`;
+}
 
 const VOTE_ONBOARDING_STEPS: readonly OnboardingStep[] = [
   {
@@ -1222,7 +1233,7 @@ export default function VotePage() {
   const [matchupContenderB, setMatchupContenderB] = useState<ContenderSelection>({ type: null, name: '' });
   const [matchupCategory, setMatchupCategory] = useState("");
   const [isSuggestSubmitting, setIsSuggestSubmitting] = useState(false);
-  const [countdown, setCountdown] = useState("2d 14h 32m");
+  const [inductionCountdown, setInductionCountdown] = useState(() => formatInductionCountdown(getClientWeekDeadlines().sunday));
 
   const { data: userStats } = useUserStats(!!user);
   const xp = userStats?.xpPoints ?? 0;
@@ -1930,22 +1941,12 @@ export default function VotePage() {
   }, [valuePerceptionOverlayOpen]);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setCountdown(prev => {
-        const parts = prev.match(/(\d+)d (\d+)h (\d+)m/);
-        if (parts) {
-          let days = parseInt(parts[1]);
-          let hours = parseInt(parts[2]);
-          let mins = parseInt(parts[3]);
-          mins--;
-          if (mins < 0) { mins = 59; hours--; }
-          if (hours < 0) { hours = 23; days--; }
-          if (days < 0) return "0d 0h 0m";
-          return `${days}d ${hours}h ${mins}m`;
-        }
-        return prev;
-      });
-    }, 60000);
+    const updateInductionCountdown = () => {
+      setInductionCountdown(formatInductionCountdown(getClientWeekDeadlines().sunday));
+    };
+
+    updateInductionCountdown();
+    const interval = setInterval(updateInductionCountdown, 60 * 1000);
     return () => clearInterval(interval);
   }, []);
 
@@ -2879,7 +2880,7 @@ export default function VotePage() {
               <div className="flex flex-wrap items-center gap-2">
                 <div className="rounded-full px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 border bg-slate-800/50 border-slate-700/60">
                   <Clock className="h-3 w-3 text-cyan-600 dark:text-cyan-400" />
-                  <span className="text-slate-300">Ends in: {countdown}</span>
+                  <span className="text-slate-300">Ends in: {inductionCountdown}</span>
                 </div>
                 <div className="rounded-full px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 border bg-slate-800/50 border-slate-700/60">
                   <Star className="h-3 w-3 text-amber-600 dark:text-amber-400" />

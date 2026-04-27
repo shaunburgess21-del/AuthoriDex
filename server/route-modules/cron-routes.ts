@@ -108,6 +108,29 @@ export function registerCronRoutes(app: Express): void {
     }
   });
 
+  app.post("/api/cron/resolve-induction", verifyCronSecret, async (_req, res) => {
+    const startTime = Date.now();
+    try {
+      const { runWeeklyInductionCycle } = await import("../jobs/induction-cycle");
+      const result = await runWeeklyInductionCycle();
+      res.json({
+        success: true,
+        message: "Weekly induction resolution run completed",
+        result,
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error("[Cron] Induction resolution error:", error);
+      res.status(500).json({
+        success: false,
+        error: error.message,
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  });
+
   app.post("/api/cron/run-scoring", verifyCronSecret, async (_req, res) => {
     const startTime = Date.now();
     try {

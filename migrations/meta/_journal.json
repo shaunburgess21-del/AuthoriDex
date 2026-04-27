@@ -197,6 +197,13 @@
       "when": 1777841400000,
       "tag": "0027_soft_delete_comments_and_insights",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1777927800000,
+      "tag": "0028_induction_cycle_results",
+      "breakpoints": true
     }
   ]
 }

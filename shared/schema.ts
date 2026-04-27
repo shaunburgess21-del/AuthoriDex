@@ -549,6 +549,18 @@ export const inductionVotes = pgTable("induction_votes", {
   userCandidateUnique: unique("induction_votes_user_candidate_uniq").on(table.userId, table.candidateId),
 }));
 
+export const inductionCycleResults = pgTable("induction_cycle_results", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  weekCloseAt: timestamp("week_close_at").notNull().unique(),
+  status: text("status").notNull(),
+  candidateId: varchar("candidate_id").references(() => inductionCandidates.id, { onDelete: "set null" }),
+  personId: varchar("person_id").references(() => trackedPeople.id, { onDelete: "set null" }),
+  voteTotalAtClose: integer("vote_total_at_close"),
+  processedAt: timestamp("processed_at").notNull().defaultNow(),
+}, (table) => ({
+  weekCloseAtIdx: index("induction_cycle_results_week_close_at_idx").on(table.weekCloseAt),
+}));
+
 // Matchups - A vs B binary choice voting questions
 export const matchups = pgTable("face_offs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
