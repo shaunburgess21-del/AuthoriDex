@@ -72,7 +72,15 @@ export function getExceptionalIndicator(
       triggersHotMover: true,
     };
   }
-  if (rankChange != null && rankChange >= thresholds.rankChangeP90) {
+  // Surging (rank-only) — gated to non-negative delta to match the Hot
+  // Movers panel. A row whose score actually fell but whose rank rose
+  // because everyone else fell harder shouldn't get a yellow Flame next
+  // to a red minus sign.
+  if (
+    rankChange != null &&
+    rankChange >= thresholds.rankChangeP90 &&
+    (delta == null || delta >= 0)
+  ) {
     return {
       icon: Flame,
       color: "text-yellow-400",
@@ -88,6 +96,22 @@ export function getExceptionalIndicator(
       color: "text-sky-300",
       label: "Cooling",
       description: `${hasRankDrop ? "Fading momentum + rank drop" : "Fading momentum"}\n${metrics}`,
+      triggersHotMover: false,
+    };
+  }
+  // Cooling (rank-only) — symmetric counterpart to Surging-by-rank. Falls
+  // through from the Cooling delta branch when the absolute floor (delta
+  // <= -3) isn't met but the rank drop is still in the bottom percentile.
+  if (
+    rankChange != null &&
+    rankChange <= thresholds.negRankChangeP10 &&
+    (delta == null || delta <= 0)
+  ) {
+    return {
+      icon: TrendingDown,
+      color: "text-sky-300",
+      label: "Cooling",
+      description: `Driver: Rank drop\n${metrics}`,
       triggersHotMover: false,
     };
   }

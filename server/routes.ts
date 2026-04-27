@@ -425,6 +425,7 @@ type HotMoversResponse = {
   data: Array<Record<string, unknown>>;
   meta: {
     currentRunId: string | null;
+    currentRunFinishedAt: string | null;
     baseline24hRunId: string | null;
     baseline24hAgeHours: number | null;
     baselineStatus: string;
@@ -477,6 +478,27 @@ async function getLatestCompletedRunId(): Promise<string | null> {
       .orderBy(desc(ingestionRuns.finishedAt))
       .limit(1);
     return row?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// Returns the ISO timestamp of the most recently completed ingestion run.
+// Used by /api/trending/hot-movers to drive the "X min ago" freshness clock
+// in TrendingNowFeed — previously the UI used TanStack Query's dataUpdatedAt
+// (last client refetch time) which always read "just now" right after a fetch
+// regardless of how stale the underlying ingest data was.
+async function getLatestCompletedRunFinishedAt(): Promise<string | null> {
+  try {
+    const [row] = await db
+      .select({ finishedAt: ingestionRuns.finishedAt })
+      .from(ingestionRuns)
+      .where(eq(ingestionRuns.status, "completed"))
+      .orderBy(desc(ingestionRuns.finishedAt))
+      .limit(1);
+    if (!row?.finishedAt) return null;
+    const value = row.finishedAt as Date | string;
+    return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
   } catch {
     return null;
   }
@@ -1026,14 +1048,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (fallback && fallback.length > 0) {
           console.log(`[API] hot-movers using snapshot fallback (${fallback.length} people)`);
           people = fallback as any;
-        } else {
-          res.json([]);
-          return;
         }
       }
 
+      // Build meta once, up front, so the degraded short-circuit and the
+      // happy-path response share an identical shape. currentRunFinishedAt
+      // is used by the TrendingNowFeed clock instead of the client refetch
+      // time, so the "X min ago" label reflects real ingest age.
+      const baselineMeta = await getBaselineDiagnostics(people.length);
+      const currentRunFinishedAt = await getLatestCompletedRunFinishedAt();
+      const meta = {
+        currentRunId: baselineMeta.currentRunId,
+        currentRunFinishedAt,
+        baseline24hRunId: baselineMeta.baseline24hRunId,
+        baseline24hAgeHours: baselineMeta.baseline24hAgeHours,
+        baselineStatus: baselineMeta.baseline24hStatus,
+        coveragePct: baselineMeta.baseline24hCoveragePct,
+        scoreVersion: baselineMeta.scoreVersion,
+        smoothingMode: "off",
+        newsAggregationMode: getNewsAggregationMode(),
+      };
+
+      // Hide the card when we don't have data or a clean 24h baseline.
+      // Previously the handler kept classifying badges using raw change24h
+      // and then nulled the percentages on the response, leaving the UI
+      // showing "Surging" / "Breakout" labels with no numbers next to them.
+      // The empty-state copy in TrendingNowFeed renders correctly here.
+      if (people.length === 0 || baselineMeta.baseline24hStatus !== "normal") {
+        const empty: HotMoversResponse = { data: [], meta };
+        if (!debug) {
+          _cachedHotMovers = empty;
+          _hotMoversCachedAt = Date.now();
+          _hotMoversCachedRunId = baselineMeta.currentRunId;
+        }
+        res.json(empty);
+        return;
+      }
+
       const prevRanks = await getSnapshotRankMap();
-      const baselineStatus = prevRanks.size > 0 ? "normal" : "degraded";
 
       const enriched = people.map(p => ({
         ...p,
@@ -1080,7 +1132,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           badge = { label: "Breakout", color: "text-orange-400", description: `Big surge + big rank jump\n${metrics}` };
         } else if (delta != null && delta >= thresholds.deltaP90) {
           badge = { label: "Surging", color: "text-yellow-400", description: `Driver: Score spike\n${metrics}` };
-        } else if (rc != null && rc >= thresholds.rankChangeP90) {
+        } else if (
+          rc != null &&
+          rc >= thresholds.rankChangeP90 &&
+          // Hot Movers is a positive-vibes panel. The rank-only path can
+          // technically admit someone whose score actually fell but whose
+          // rank rose because everyone else fell harder. Block negative
+          // change24h rows so the |change24h| sort can't surface them
+          // ahead of legitimate small positive movers.
+          (delta == null || delta >= 0)
+        ) {
           badge = { label: "Surging", color: "text-yellow-400", description: `Driver: Rank jump\n${metrics}` };
         }
 
@@ -1104,7 +1165,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (debug) {
         const sorted = [...hotMovers];
         res.json({
-          baselineStatus,
+          baselineStatus: meta.baselineStatus,
           thresholds,
           smoothingMode: "off",
           newsAggregationMode: getNewsAggregationMode(),
@@ -1307,30 +1368,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      const baselineMeta = await getBaselineDiagnostics(people.length);
-      const baselineDegraded = baselineMeta.baseline24hStatus !== "normal";
-      const safeResult = baselineDegraded
-        ? result.map(p => ({ ...p, change24h: null, sourceBreakdown: null }))
-        : result.map(p => ({
-            ...p,
-            sourceBreakdown: sourceAttribution.get(p.id) ?? null,
-          }));
-      const responseWithMeta = {
+      const safeResult = result.map(p => ({
+        ...p,
+        sourceBreakdown: sourceAttribution.get(p.id) ?? null,
+      }));
+      const responseWithMeta: HotMoversResponse = {
         data: safeResult,
-        meta: {
-          currentRunId: baselineMeta.currentRunId,
-          baseline24hRunId: baselineMeta.baseline24hRunId,
-          baseline24hAgeHours: baselineMeta.baseline24hAgeHours,
-          baselineStatus: baselineMeta.baseline24hStatus,
-          coveragePct: baselineMeta.baseline24hCoveragePct,
-          scoreVersion: baselineMeta.scoreVersion,
-          smoothingMode: "off",
-          newsAggregationMode: getNewsAggregationMode(),
-        },
+        meta,
       };
       _cachedHotMovers = responseWithMeta;
       _hotMoversCachedAt = Date.now();
-      _hotMoversCachedRunId = await getLatestCompletedRunId();
+      _hotMoversCachedRunId = baselineMeta.currentRunId;
       res.json(responseWithMeta);
     } catch (error) {
       console.error("Error fetching hot movers:", error);
@@ -4086,7 +4134,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         total: safeLeaderboard.length,
         totalCount,
         data: safeLeaderboard,
-        thresholds: canonicalThresholds,
+        // When the 24h baseline is degraded the percentages on each row are
+        // already nulled above. Stripping thresholds here suppresses the
+        // Breakout / Surging / Cooling icons on the rows AND the legend in
+        // the header so users don't see "Surging" badges next to rows that
+        // have no visible 24h percentage.
+        thresholds: baselineDegraded ? null : canonicalThresholds,
         baselineStatus: baselineMeta.baseline24hStatus,
         meta: {
           currentRunId: baselineMeta.currentRunId,
