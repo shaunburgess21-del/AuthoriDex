@@ -3060,26 +3060,34 @@ export default function AdminDashboard() {
         </div>
       </aside>
 
-      {/* Mobile nav */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-border p-2 z-50">
-        <div className="flex justify-around">
+      {/* Mobile nav — horizontally scrollable so all 8 sections fit on a phone
+          without squishing labels into 2 lines. */}
+      <nav
+        className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card/95 backdrop-blur-xl"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+        aria-label="Admin section navigation"
+      >
+        <div
+          className="flex gap-1 overflow-x-auto px-2 py-1.5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+        >
           {sidebarItems.map((item) => (
             <button
               key={item.id}
               onClick={() => setActiveSection(item.id)}
+              data-testid={`nav-mobile-${item.id}`}
               className={cn(
-                "flex flex-col items-center gap-1 p-2 rounded-lg text-xs",
+                "flex shrink-0 min-w-[64px] flex-col items-center gap-1 rounded-lg px-2.5 py-1.5 text-[10px] font-medium transition-colors",
                 activeSection === item.id
-                  ? "text-violet-600 dark:text-violet-400"
-                  : "text-muted-foreground"
+                  ? "bg-violet-500/15 text-violet-600 dark:text-violet-400"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
               )}
             >
               <item.icon className="h-5 w-5" />
-              <span>{item.label}</span>
+              <span className="whitespace-nowrap">{item.label}</span>
             </button>
           ))}
         </div>
-      </div>
+      </nav>
 
       {/* Main content */}
       <main className="flex-1 p-6 pb-24 md:pb-6 overflow-auto">
@@ -3151,7 +3159,7 @@ export default function AdminDashboard() {
         {/* Overview Section */}
         {activeSection === "overview" && (
           <div className="space-y-6">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-2xl font-bold">Dashboard Overview</h2>
                 <p className="text-muted-foreground">Platform analytics and key metrics</p>
@@ -3358,21 +3366,26 @@ export default function AdminDashboard() {
                     {auditLogs.slice(0, 10).map((log) => (
                       <div
                         key={log.id}
-                        className="flex items-center justify-between p-3 rounded-lg border"
+                        className="flex flex-col gap-2 p-3 rounded-lg border sm:flex-row sm:items-center sm:justify-between sm:gap-3"
                         data-testid={`audit-log-${log.id}`}
                       >
-                        <div className="flex items-center gap-3">
-                          <Badge className={cn("text-xs", getActionBadgeColor(log.actionType))}>
+                        <div className="flex flex-col items-start gap-2 min-w-0 sm:flex-row sm:items-center sm:gap-3">
+                          <Badge
+                            className={cn(
+                              "text-[10px] leading-tight whitespace-normal break-all max-w-full",
+                              getActionBadgeColor(log.actionType),
+                            )}
+                          >
                             {log.actionType}
                           </Badge>
-                          <div>
-                            <p className="text-sm font-medium">{log.targetTable}</p>
-                            <p className="text-xs text-muted-foreground">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium break-all sm:break-normal">{log.targetTable}</p>
+                            <p className="text-xs text-muted-foreground break-all">
                               Admin: {log.adminEmail || log.adminId}
                             </p>
                           </div>
                         </div>
-                        <span className="text-xs text-muted-foreground">
+                        <span className="text-xs text-muted-foreground sm:whitespace-nowrap shrink-0">
                           {new Date(log.createdAt).toLocaleString()}
                         </span>
                       </div>
@@ -3392,7 +3405,7 @@ export default function AdminDashboard() {
         {/* Celebrities Section */}
         {activeSection === "celebrities" && (
           <div className="space-y-6">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-2xl font-bold">Celebrities</h2>
                 <p className="text-muted-foreground">Manage tracked celebrities and influencers</p>
@@ -3443,21 +3456,21 @@ export default function AdminDashboard() {
                     {filteredCelebrities.map((celebrity) => (
                       <div
                         key={celebrity.id}
-                        className="flex items-center justify-between p-3 rounded-lg border"
+                        className="flex flex-col gap-3 p-3 rounded-lg border sm:flex-row sm:items-center sm:justify-between"
                         data-testid={`celebrity-row-${celebrity.id}`}
                       >
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
                           <PersonAvatar
                             name={celebrity.name}
                             avatar={celebrity.avatar}
                             imageSlug={celebrity.imageSlug}
                             size="sm"
                           />
-                          <div>
-                            <p className="font-medium">{celebrity.name}</p>
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <div className="min-w-0 flex-1">
+                            <p className="font-medium truncate">{celebrity.name}</p>
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
                               <Badge variant="outline" className="text-xs">{celebrity.category}</Badge>
-                              <Badge 
+                              <Badge
                                 variant={celebrity.status === "main_leaderboard" ? "default" : "secondary"}
                                 className="text-xs"
                               >
@@ -3466,7 +3479,7 @@ export default function AdminDashboard() {
                             </div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 self-end shrink-0 sm:self-auto">
                           <Button
                             variant="ghost"
                             size="icon"
@@ -3535,7 +3548,7 @@ export default function AdminDashboard() {
         {/* Prediction CMS Section */}
         {activeSection === "predictions" && (
           <div className="space-y-6">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-2xl font-bold">Prediction CMS</h2>
                 <p className="text-muted-foreground">Manage prediction markets</p>
@@ -3547,23 +3560,28 @@ export default function AdminDashboard() {
             </div>
 
             <Tabs value={predictionSubTab} onValueChange={setPredictionSubTab} className="w-full">
-              <TabsList className="flex-wrap">
-                <TabsTrigger value="real-world" data-testid="tab-real-world-markets">
-                  World Markets {markets ? <span className="ml-1 text-xs opacity-60">({markets.filter(m => m.marketType === "community").length})</span> : null}
-                </TabsTrigger>
-                <TabsTrigger value="weekly-jackpot" data-testid="tab-weekly-jackpot">
-                  Weekly Jackpot {markets ? <span className="ml-1 text-xs opacity-60">({markets.filter(m => m.marketType === "jackpot").length})</span> : null}
-                </TabsTrigger>
-                <TabsTrigger value="weekly-updown" data-testid="tab-weekly-updown">
-                  Weekly Up/Down {markets ? <span className="ml-1 text-xs opacity-60">({markets.filter(m => m.marketType === "updown").length})</span> : null}
-                </TabsTrigger>
-                <TabsTrigger value="head-to-head" data-testid="tab-head-to-head">
-                  Head-to-Head Battles {markets ? <span className="ml-1 text-xs opacity-60">({markets.filter(m => m.marketType === "h2h").length})</span> : null}
-                </TabsTrigger>
-                <TabsTrigger value="top-gainer" data-testid="tab-top-gainer">
-                  Category Races {markets ? <span className="ml-1 text-xs opacity-60">({markets.filter(m => m.marketType === "gainer").length})</span> : null}
-                </TabsTrigger>
-              </TabsList>
+              {/* Horizontal scroll on mobile keeps tabs on one row.
+                  flex-wrap was overflowing the h-10 muted box and visually
+                  bleeding into the card heading below. */}
+              <div className="-mx-1 overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                <TabsList className="inline-flex w-max">
+                  <TabsTrigger value="real-world" data-testid="tab-real-world-markets">
+                    World Markets {markets ? <span className="ml-1 text-xs opacity-60">({markets.filter(m => m.marketType === "community").length})</span> : null}
+                  </TabsTrigger>
+                  <TabsTrigger value="weekly-jackpot" data-testid="tab-weekly-jackpot">
+                    Weekly Jackpot {markets ? <span className="ml-1 text-xs opacity-60">({markets.filter(m => m.marketType === "jackpot").length})</span> : null}
+                  </TabsTrigger>
+                  <TabsTrigger value="weekly-updown" data-testid="tab-weekly-updown">
+                    Weekly Up/Down {markets ? <span className="ml-1 text-xs opacity-60">({markets.filter(m => m.marketType === "updown").length})</span> : null}
+                  </TabsTrigger>
+                  <TabsTrigger value="head-to-head" data-testid="tab-head-to-head">
+                    Head-to-Head Battles {markets ? <span className="ml-1 text-xs opacity-60">({markets.filter(m => m.marketType === "h2h").length})</span> : null}
+                  </TabsTrigger>
+                  <TabsTrigger value="top-gainer" data-testid="tab-top-gainer">
+                    Category Races {markets ? <span className="ml-1 text-xs opacity-60">({markets.filter(m => m.marketType === "gainer").length})</span> : null}
+                  </TabsTrigger>
+                </TabsList>
+              </div>
 
               <TabsContent value="real-world" className="mt-4">
                 <Card>
@@ -4331,26 +4349,30 @@ export default function AdminDashboard() {
             </div>
 
             <Tabs value={votingSubTab} onValueChange={setVotingSubTab} className="w-full">
-              <TabsList className="flex-wrap">
-                <TabsTrigger value="polls" data-testid="tab-polls">
-                  Sentiment Polls {trendingPollsList ? <span className="ml-1 text-xs opacity-60">({trendingPollsList.length})</span> : null}
-                </TabsTrigger>
-                <TabsTrigger value="opinion-polls" data-testid="tab-opinion-polls">
-                  Opinion Polls {opinionPollsList ? <span className="ml-1 text-xs opacity-60">({opinionPollsList.length})</span> : null}
-                </TabsTrigger>
-                <TabsTrigger value="matchups" data-testid="tab-matchups">
-                  Matchups {matchups ? <span className="ml-1 text-xs opacity-60">({matchups.length})</span> : null}
-                </TabsTrigger>
-                <TabsTrigger value="underrated-overrated" data-testid="tab-underrated-overrated">
-                  Underrated / Overrated {underratedData?.data ? <span className="ml-1 text-xs opacity-60">({underratedData.data.length})</span> : null}
-                </TabsTrigger>
-                <TabsTrigger value="induction" data-testid="tab-induction">
-                  Induction Queue {inductionData?.data ? <span className="ml-1 text-xs opacity-60">({inductionData.data.length})</span> : null}
-                </TabsTrigger>
-                <TabsTrigger value="curate-profile" data-testid="tab-curate-profile">
-                  Curate Profile {curateData?.data ? <span className="ml-1 text-xs opacity-60">({curateData.data.length})</span> : null}
-                </TabsTrigger>
-              </TabsList>
+              {/* See note on Prediction CMS tabs above — same horizontal-scroll
+                  treatment for the same reason. */}
+              <div className="-mx-1 overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                <TabsList className="inline-flex w-max">
+                  <TabsTrigger value="polls" data-testid="tab-polls">
+                    Sentiment Polls {trendingPollsList ? <span className="ml-1 text-xs opacity-60">({trendingPollsList.length})</span> : null}
+                  </TabsTrigger>
+                  <TabsTrigger value="opinion-polls" data-testid="tab-opinion-polls">
+                    Opinion Polls {opinionPollsList ? <span className="ml-1 text-xs opacity-60">({opinionPollsList.length})</span> : null}
+                  </TabsTrigger>
+                  <TabsTrigger value="matchups" data-testid="tab-matchups">
+                    Matchups {matchups ? <span className="ml-1 text-xs opacity-60">({matchups.length})</span> : null}
+                  </TabsTrigger>
+                  <TabsTrigger value="underrated-overrated" data-testid="tab-underrated-overrated">
+                    Underrated / Overrated {underratedData?.data ? <span className="ml-1 text-xs opacity-60">({underratedData.data.length})</span> : null}
+                  </TabsTrigger>
+                  <TabsTrigger value="induction" data-testid="tab-induction">
+                    Induction Queue {inductionData?.data ? <span className="ml-1 text-xs opacity-60">({inductionData.data.length})</span> : null}
+                  </TabsTrigger>
+                  <TabsTrigger value="curate-profile" data-testid="tab-curate-profile">
+                    Curate Profile {curateData?.data ? <span className="ml-1 text-xs opacity-60">({curateData.data.length})</span> : null}
+                  </TabsTrigger>
+                </TabsList>
+              </div>
 
               <TabsContent value="polls" className="mt-4">
                 <Card>
@@ -5373,27 +5395,27 @@ export default function AdminDashboard() {
                     {users.map((user) => (
                       <div
                         key={user.id}
-                        className="flex items-center justify-between p-3 rounded-lg border"
+                        className="flex flex-col gap-3 p-3 rounded-lg border sm:flex-row sm:items-center sm:justify-between"
                         data-testid={`user-row-${user.id}`}
                       >
-                        <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="h-10 w-10 shrink-0 rounded-full bg-muted flex items-center justify-center">
                             <Users className="h-5 w-5 text-muted-foreground" />
                           </div>
-                          <div>
-                            <p className="font-medium">
+                          <div className="min-w-0 flex-1">
+                            <p className="font-medium truncate">
                               {user.username || "Unknown"}
                             </p>
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
                               <Badge variant="outline" className="text-xs">
                                 {user.role}
                               </Badge>
-                              <span>{user.xpPoints} XP</span>
-                              <span>{user.predictCredits} credits</span>
+                              <span className="whitespace-nowrap">{user.xpPoints} XP</span>
+                              <span className="whitespace-nowrap">{user.predictCredits} credits</span>
                             </div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap shrink-0 sm:flex-nowrap">
                           <Button
                             variant="outline"
                             size="sm"
