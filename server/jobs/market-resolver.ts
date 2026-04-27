@@ -4,7 +4,6 @@ import { eq, and, sql, inArray, lte, gte, desc, asc } from "drizzle-orm";
 import { log } from "../log";
 import { calculateSettlementPayouts } from "./settlement-utils";
 import { scoreResolvedMarket } from "../agents/performanceUpdater";
-import { PLATFORM_FEE } from "../config/constants";
 import { getAiModel, getChatCompletionTokenLimit } from "../config/ai-models";
 import { gamificationService } from "../services/gamification";
 import OpenAI from "openai";
@@ -803,8 +802,11 @@ async function resolveJackpot(market: any): Promise<"resolved" | "blocked"> {
     return "resolved";
   }
 
+  // Whole pool is paid out to winners — VoxDex doesn't take a rake on
+  // jackpots (entries are paid in free virtual credits, no real-money
+  // economics to fund). If a future product decision reintroduces a
+  // platform fee, derive `payoutPool` from `totalPool` here.
   const totalPool = allBets.reduce((sum, b) => sum + b.stakeAmount, 0);
-  const distributablePool = Math.floor(totalPool * (1 - PLATFORM_FEE));
 
   const allBetsWithScore = allBets.map(b => {
     const meta = b.betMetadata as Record<string, unknown> | null;
@@ -837,13 +839,14 @@ async function resolveJackpot(market: any): Promise<"resolved" | "blocked"> {
   const now = new Date();
 
   await db.transaction(async (tx) => {
-    const perWinnerShare = Math.floor(distributablePool / winners.length);
+    const perWinnerShare = Math.floor(totalPool / winners.length);
     let distributed = 0;
 
     for (let i = 0; i < winners.length; i++) {
       const w = winners[i];
       const isLast = i === winners.length - 1;
-      const share = isLast ? distributablePool - distributed : perWinnerShare;
+      // Last winner sweeps any rounding dust so payouts always sum to totalPool.
+      const share = isLast ? totalPool - distributed : perWinnerShare;
       distributed += share;
 
       await tx.update(marketBets)
@@ -898,7 +901,10 @@ async function resolveJackpot(market: any): Promise<"resolved" | "blocked"> {
         winnerUserId: winners.length === 1 ? winner.userId : winners.map(w => w.userId),
         margin: winner.diff,
         totalPool,
-        payout: distributablePool,
+        // Equal to totalPool now that the platform fee was removed
+        // (Apr 2026). Field retained so older readers / admin dashboards
+        // that key on `payout` keep working without conditional fallbacks.
+        payout: totalPool,
         totalEntries: allBets.length,
         tiedWinners: winners.length,
         closeSnapshotAt: closeSnap.capturedAt?.toISOString?.() ?? null,
@@ -922,7 +928,7 @@ async function resolveJackpot(market: any): Promise<"resolved" | "blocked"> {
   );
 
   const w = winners[0];
-  log(`[MarketResolver] jackpot ${market.id}: resolved. actual=${actualScore}, winner predicted ${w.predictedScore} (off by ${w.diff}), pool=${totalPool}, payout=${distributablePool}, entries=${allBets.length}, tied=${winners.length}`);
+  log(`[MarketResolver] jackpot ${market.id}: resolved. actual=${actualScore}, winner predicted ${w.predictedScore} (off by ${w.diff}), pool=${totalPool}, entries=${allBets.length}, tied=${winners.length}`);
   return "resolved";
 }
 
