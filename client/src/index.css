@@ -765,8 +765,15 @@
   /* ===== TOOLTIP / INFO POPOVER SURFACE =====
    * Shared visual skin for `<TooltipContent>` and the touch-mode Popover
    * fallback in `TouchTooltip`. Mirrors the `.pulse-card-*` vocabulary
-   * (frosted glass body, hairline border, layered drop shadow with a
-   * soft brand-blue ambient bloom, inset top-edge highlight).
+   * (frosted glass body, brand-blue hairline border, layered drop shadow
+   * with a brand-blue ambient bloom, inset top-edge highlight).
+   *
+   * NOTE on intensity: tooltips are ~10× smaller than `.pulse-card-*`
+   * surfaces so the same alpha values that read as a tasteful glow on a
+   * full card disappear entirely on a 260px tooltip. Values here are
+   * tuned ~2× stronger than pulse-card so the "premium" cue actually
+   * lands at tooltip scale. Still well within tasteful — bloom is short
+   * (32-44px feathered) so it haloes the tooltip rather than bleeding.
    *
    * Lives here as a real CSS class — not as Tailwind arbitrary values —
    * because Tailwind v3's content scanner silently drops bracketed
@@ -774,11 +781,11 @@
    * with rgba()/hsl() commas), which would leave the tooltip un-styled. */
   .tooltip-surface {
     background-color: hsl(var(--popover) / 0.95);
-    border: 1px solid rgba(0, 0, 0, 0.06);
+    border: 1px solid rgba(0, 0, 0, 0.08);
     box-shadow:
-      0 8px 28px -6px rgba(15, 23, 42, 0.18),
-      0 0 28px -10px hsl(217 91% 60% / 0.14),
-      inset 0 1px 0 0 rgba(255, 255, 255, 0.04);
+      0 8px 30px -6px rgba(15, 23, 42, 0.22),
+      0 0 32px -10px hsl(217 91% 60% / 0.22),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
     /* Easing baked in so tailwindcss-animate's `animate-in`/`animate-out`
      * pop with an easeOutExpo curve instead of the stock ease-out. */
     animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
@@ -786,24 +793,39 @@
 
   @supports ((backdrop-filter: blur(0)) or (-webkit-backdrop-filter: blur(0))) {
     .tooltip-surface {
-      background-color: hsl(var(--popover) / 0.75);
-      -webkit-backdrop-filter: blur(20px) saturate(150%);
-      backdrop-filter: blur(20px) saturate(150%);
+      background-color: hsl(var(--popover) / 0.72);
+      -webkit-backdrop-filter: blur(20px) saturate(160%);
+      backdrop-filter: blur(20px) saturate(160%);
+    }
+    /* Push dark-mode glass a touch more transparent so the backdrop blur
+     * is actually visible — without this, on near-uniform dark surfaces
+     * the blur effect is imperceptible. */
+    .dark .tooltip-surface {
+      background-color: hsl(var(--popover) / 0.62);
     }
   }
 
   .dark .tooltip-surface {
-    border-color: rgba(255, 255, 255, 0.08);
+    /* Visible blue-tinted hairline (vs. previous rgba white at 0.08
+     * which was indistinguishable from the existing --border token). */
+    border-color: rgba(96, 165, 250, 0.22);
     box-shadow:
-      0 12px 36px -8px rgba(0, 0, 0, 0.55),
-      0 0 36px -10px hsl(217 91% 60% / 0.20),
-      inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+      0 14px 40px -8px rgba(0, 0, 0, 0.65),
+      0 0 44px -8px hsl(217 91% 60% / 0.40),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
   }
 
   /* Drop-shadow for <TooltipArrow />. Same comma-in-arbitrary-value
    * problem applies, so it's authored as a real class. */
   .tooltip-arrow {
     filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.15));
+  }
+  .dark .tooltip-arrow {
+    /* Slightly stronger shadow + faint blue tint so the arrow keeps
+     * reading as part of the glowing surface, not a flat triangle. */
+    filter:
+      drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55))
+      drop-shadow(0 0 4px hsl(217 91% 60% / 0.30));
   }
 
   /* ===== VOTE CTA PULSE ===== */
