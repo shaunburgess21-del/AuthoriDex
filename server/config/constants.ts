@@ -1,3 +1,2 @@
-export const PLATFORM_FEE = 0.05;
 export const JACKPOT_TICKET_COST = 100;
 export const JACKPOT_MAX_PREDICTED_SCORE = 2_000_000;
