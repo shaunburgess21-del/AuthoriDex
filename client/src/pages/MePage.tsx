@@ -24,7 +24,7 @@ function RankBadge({ rank }: { rank: string }) {
   const Icon = config.icon;
 
   return (
-    <Badge variant="outline" className={`${config.color} py-1 gap-1`}>
+    <Badge variant="outline" className={`${config.color} px-3 py-1 gap-1.5`}>
       <Icon className="h-3 w-3" />
       {rank}
     </Badge>
@@ -110,7 +110,7 @@ export default function MePage() {
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="font-semibold text-lg truncate">{displayName}</p>
                     {isAdmin && (
-                      <Badge variant="outline" className="bg-red-500/25 dark:bg-red-500/20 text-red-500 dark:text-red-300 border-red-500/40 dark:border-red-500/30 py-1">
+                      <Badge variant="outline" className="bg-red-500/25 dark:bg-red-500/20 text-red-500 dark:text-red-300 border-red-500/40 dark:border-red-500/30 px-3 py-1">
                         Admin
                       </Badge>
                     )}
@@ -118,7 +118,7 @@ export default function MePage() {
                   <p className="text-sm text-muted-foreground">@{profile?.username || "user"}</p>
                   <div className="flex items-center gap-2 mt-2 flex-wrap">
                     <RankBadge rank={profile?.rank || "Citizen"} />
-                    <Badge variant="outline" className="text-amber-600 dark:text-amber-400 py-1">
+                    <Badge variant="outline" className="text-amber-600 dark:text-amber-400 px-3 py-1">
                       {(profile?.xpPoints || 0).toLocaleString('en-US')} XP
                     </Badge>
                   </div>
@@ -214,21 +214,21 @@ export default function MePage() {
                 <Badge variant="outline" className="border-violet-500/40 dark:border-violet-500/30 text-violet-600 dark:text-violet-400">VIRTUAL</Badge>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div className="flex items-center justify-between p-3 rounded-lg bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/40 dark:border-violet-500/30">
-                  <div className="flex items-center gap-2">
-                    <Wallet className="h-4 w-4 text-violet-600 dark:text-violet-400" />
-                    <span className="text-sm text-muted-foreground">Balance</span>
+                <div className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/40 dark:border-violet-500/30 overflow-hidden">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Wallet className="h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400" />
+                    <span className="text-sm text-muted-foreground truncate">Balance</span>
                   </div>
-                  <span className="font-mono font-bold text-lg text-violet-600 dark:text-violet-400">
+                  <span className="font-mono font-bold text-lg tabular-nums shrink-0 text-violet-600 dark:text-violet-400">
                     {(profile?.predictCredits || 0).toLocaleString('en-US')}
                   </span>
                 </div>
-                <div className="flex items-center justify-between p-3 rounded-lg bg-orange-500/15 dark:bg-orange-500/10 border border-orange-500/40 dark:border-orange-500/30">
-                  <div className="flex items-center gap-2">
-                    <Flame className="h-4 w-4 text-orange-600 dark:text-orange-400" />
-                    <span className="text-sm text-muted-foreground">Streak</span>
+                <div className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg bg-orange-500/15 dark:bg-orange-500/10 border border-orange-500/40 dark:border-orange-500/30 overflow-hidden">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Flame className="h-4 w-4 shrink-0 text-orange-600 dark:text-orange-400" />
+                    <span className="text-sm text-muted-foreground truncate">Streak</span>
                   </div>
-                  <span className="font-mono font-bold text-lg text-orange-600 dark:text-orange-400">
+                  <span className="font-mono font-bold text-lg tabular-nums shrink-0 text-orange-600 dark:text-orange-400">
                     {profile?.currentStreak || 0}
                   </span>
                 </div>
