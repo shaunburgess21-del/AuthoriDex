@@ -26,7 +26,7 @@ import { useDragScroll } from "@/hooks/use-drag-scroll";
 import { useQuery, useQueries, useInfiniteQuery, keepPreviousData } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
-import { getMarketBaselineScore } from "@/lib/predict-market-baseline";
+import { getMarketBaselineScore, type MarketBaselineSource } from "@/lib/predict-market-baseline";
 import { TrendingPerson } from "@shared/schema";
 import { useIntersectionObserver } from "@/hooks/useIntersectionObserver";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
@@ -111,43 +111,43 @@ function MarketPulseCard({
               })
               .slice(0, 5)
               .map((person, idx) => {
-              const changeValue = (type === "daily" ? person.change24h : person.change7d) as number;
-              const isPositive = changeValue >= 0;
-              return (
-                <div
-                  key={person.id}
-                  className="flex items-center gap-2.5 p-2 rounded-lg hover-elevate cursor-pointer bg-muted/40 dark:bg-slate-800/30 border border-border/50 dark:border-slate-700/30 transition-colors hover:border-foreground/20 dark:hover:border-slate-600/50"
-                  onClick={() => onPersonClick(person.id)}
-                  data-testid={`pulse-item-${person.id}`}
-                >
-                  <div className="relative flex items-center rounded-md overflow-hidden shrink-0">
-                    <div className="flex items-center justify-center min-w-[24px] self-stretch rounded-l-md bg-muted dark:bg-[#101318] border-r border-border dark:border-transparent">
-                      <span className="font-mono font-semibold text-muted-foreground dark:text-slate-400 text-[12px] tabular-nums">{idx + 1}</span>
-                    </div>
-                    <PersonAvatar
-                      name={person.name}
-                      avatar={person.avatar}
-                      imageSlug={(person as any).imageSlug}
-                      size="sm"
-                      className="h-10 w-10 shrink-0 rounded-none rounded-r-md"
-                    />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-xs truncate text-foreground dark:text-slate-200">{person.name}</p>
-                    <p className={`text-[10px] ${getCategoryTextColor(person.category ?? "")}`}>{person.category}</p>
-                  </div>
-                  <span 
-                    className={`px-2 py-0.5 rounded text-xs font-mono font-medium tabular-nums ${
-                      isPositive 
-                        ? "bg-green-500/20 dark:bg-green-500/15 text-green-600 dark:text-green-400" 
-                        : "bg-red-500/20 dark:bg-red-500/15 text-red-600 dark:text-red-400"
-                    }`}
+                const changeValue = (type === "daily" ? person.change24h : person.change7d) as number;
+                const isPositive = changeValue >= 0;
+                return (
+                  <div
+                    key={person.id}
+                    className="flex items-center gap-2.5 p-2 rounded-lg hover-elevate cursor-pointer bg-muted/40 dark:bg-slate-800/30 border border-border/50 dark:border-slate-700/30 transition-colors hover:border-foreground/20 dark:hover:border-slate-600/50"
+                    onClick={() => onPersonClick(person.id)}
+                    data-testid={`pulse-item-${person.id}`}
                   >
-                    {isPositive ? "+" : ""}{changeValue.toFixed(1)}%
-                  </span>
-                </div>
-              );
-            })}
+                    <div className="relative flex items-center rounded-md overflow-hidden shrink-0">
+                      <div className="flex items-center justify-center min-w-[24px] self-stretch rounded-l-md bg-muted dark:bg-[#101318] border-r border-border dark:border-transparent">
+                        <span className="font-mono font-semibold text-muted-foreground dark:text-slate-400 text-[12px] tabular-nums">{idx + 1}</span>
+                      </div>
+                      <PersonAvatar
+                        name={person.name}
+                        avatar={person.avatar}
+                        imageSlug={(person as any).imageSlug}
+                        size="sm"
+                        className="h-10 w-10 shrink-0 rounded-none rounded-r-md"
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-xs truncate text-foreground dark:text-slate-200">{person.name}</p>
+                      <p className={`text-[10px] ${getCategoryTextColor(person.category ?? "")}`}>{person.category}</p>
+                    </div>
+                    <span
+                      className={`px-2 py-0.5 rounded text-xs font-mono font-medium tabular-nums ${
+                        isPositive
+                          ? "bg-green-500/20 dark:bg-green-500/15 text-green-600 dark:text-green-400"
+                          : "bg-red-500/20 dark:bg-red-500/15 text-red-600 dark:text-red-400"
+                      }`}
+                    >
+                      {isPositive ? "+" : ""}{changeValue.toFixed(1)}%
+                    </span>
+                  </div>
+                );
+              })}
           </div>
         )}
       </div>
@@ -554,7 +554,7 @@ export default function HomePage() {
       const total = upStake + downStake || 1;
       const upPercent = Math.round((upStake / total) * 100);
       const currentScore = Number(person.trendScore || 0);
-      const baselineScore = getMarketBaselineScore(m, currentScore) ?? currentScore;
+      const baselineScore = getMarketBaselineScore(m as MarketBaselineSource, currentScore) ?? currentScore;
       return {
         id: m.id,
         personId: m.personId || "",
