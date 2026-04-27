@@ -762,6 +762,50 @@
     background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(59, 130, 246, 0.08) 100%);
   }
 
+  /* ===== TOOLTIP / INFO POPOVER SURFACE =====
+   * Shared visual skin for `<TooltipContent>` and the touch-mode Popover
+   * fallback in `TouchTooltip`. Mirrors the `.pulse-card-*` vocabulary
+   * (frosted glass body, hairline border, layered drop shadow with a
+   * soft brand-blue ambient bloom, inset top-edge highlight).
+   *
+   * Lives here as a real CSS class — not as Tailwind arbitrary values —
+   * because Tailwind v3's content scanner silently drops bracketed
+   * arbitrary values that contain commas (e.g. multi-stop box-shadow
+   * with rgba()/hsl() commas), which would leave the tooltip un-styled. */
+  .tooltip-surface {
+    background-color: hsl(var(--popover) / 0.95);
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    box-shadow:
+      0 8px 28px -6px rgba(15, 23, 42, 0.18),
+      0 0 28px -10px hsl(217 91% 60% / 0.14),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.04);
+    /* Easing baked in so tailwindcss-animate's `animate-in`/`animate-out`
+     * pop with an easeOutExpo curve instead of the stock ease-out. */
+    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  @supports ((backdrop-filter: blur(0)) or (-webkit-backdrop-filter: blur(0))) {
+    .tooltip-surface {
+      background-color: hsl(var(--popover) / 0.75);
+      -webkit-backdrop-filter: blur(20px) saturate(150%);
+      backdrop-filter: blur(20px) saturate(150%);
+    }
+  }
+
+  .dark .tooltip-surface {
+    border-color: rgba(255, 255, 255, 0.08);
+    box-shadow:
+      0 12px 36px -8px rgba(0, 0, 0, 0.55),
+      0 0 36px -10px hsl(217 91% 60% / 0.20),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+  }
+
+  /* Drop-shadow for <TooltipArrow />. Same comma-in-arbitrary-value
+   * problem applies, so it's authored as a real class. */
+  .tooltip-arrow {
+    filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.15));
+  }
+
   /* ===== VOTE CTA PULSE ===== */
   @keyframes vote-cta-pulse {
     0%, 100% {

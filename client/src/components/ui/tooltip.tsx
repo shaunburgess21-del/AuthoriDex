@@ -31,32 +31,28 @@ const TooltipTrigger = TooltipPrimitive.Trigger
 
 // "tooltip-surface" — the visual shell. Exported so TouchTooltip's mobile
 // fallback (a Popover) can wear the exact same skin without duplicating
-// the long classname.
+// the classnames.
+//
+// IMPORTANT: the actual visual treatment (frosted glass, hairline border,
+// layered shadow with brand-blue bloom, inset top highlight, custom
+// easing) lives in `.tooltip-surface` in client/src/index.css — NOT in
+// Tailwind arbitrary values. Tailwind v3's content scanner silently
+// drops bracketed values containing commas (rgba/hsl/cubic-bezier multi-
+// arg), so authoring those as a real CSS class is the only reliable
+// option. See the comment block in index.css for the full reasoning.
 export const tooltipSurfaceClass = cn(
-  // Layout
+  // Layout — these are simple Tailwind utilities (no commas) so they
+  // generate fine.
   "z-50 max-w-xs rounded-lg px-3 py-2 text-sm",
-  // Frosted glass surface — falls back to solid popover bg in browsers
-  // without backdrop-filter so it never reads transparent on top of busy
-  // content.
-  "bg-popover/95 supports-[backdrop-filter]:bg-popover/75",
-  "backdrop-blur-xl backdrop-saturate-150",
-  // Hairline border — light/dark aware
-  "border border-black/[0.06] dark:border-white/[0.08]",
-  // Layered shadow:
-  //   1. Drop shadow for elevation off the page
-  //   2. Soft brand-blue ambient bloom (matches pulse-card-voxdex glow weight)
-  //   3. Inset top highlight for a subtle "lit" edge
-  "shadow-[0_8px_28px_-6px_rgba(15,23,42,0.18),0_0_28px_-10px_hsl(217_91%_60%_/_0.14),inset_0_1px_0_0_rgba(255,255,255,0.04)]",
-  "dark:shadow-[0_12px_36px_-8px_rgba(0,0,0,0.55),0_0_36px_-10px_hsl(217_91%_60%_/_0.20),inset_0_1px_0_0_rgba(255,255,255,0.06)]",
-  // Typography
   "text-popover-foreground",
+  // Visual skin (defined in index.css)
+  "tooltip-surface",
   // Origin so the scale animation pivots from the trigger side, not center
   "origin-[--radix-tooltip-content-transform-origin]",
   // Entry/exit — driven by Radix data-state via tailwindcss-animate.
-  // Custom easing + slightly longer duration gives a "premium pop" feel
-  // vs. the stock 150ms ease-out.
-  "will-change-[transform,opacity]",
-  "duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]",
+  // Easing comes from .tooltip-surface's animation-timing-function.
+  "will-change-transform",
+  "duration-200",
   "animate-in fade-in-0 zoom-in-95",
   "data-[side=bottom]:slide-in-from-top-1.5 data-[side=top]:slide-in-from-bottom-1.5 data-[side=left]:slide-in-from-right-1.5 data-[side=right]:slide-in-from-left-1.5",
   "data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=closed]:duration-150",
@@ -93,7 +89,10 @@ const TooltipArrow = React.forwardRef<
     height={height}
     className={cn(
       "fill-popover/95 supports-[backdrop-filter]:fill-popover/75",
-      "drop-shadow-[0_1px_1px_rgba(0,0,0,0.15)]",
+      // drop-shadow lives in .tooltip-arrow (index.css) — Tailwind v3
+      // can't generate `drop-shadow-[...rgba(0,0,0,0.15)]` because the
+      // commas inside rgba() get the class dropped by the scanner.
+      "tooltip-arrow",
       className,
     )}
     {...props}
