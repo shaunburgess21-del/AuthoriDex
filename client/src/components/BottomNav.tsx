@@ -26,6 +26,13 @@ export function BottomNav() {
     return null;
   }
 
+  // Admin routes have their own section-switcher bar at the bottom on mobile.
+  // Showing the public Home/Vote/Predict nav here both blocks the admin nav
+  // (both fixed at z-50) and is meaningless inside the admin tooling.
+  if (location === "/admin" || location.startsWith("/admin/")) {
+    return null;
+  }
+
   return (
     <nav 
       className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background/95 backdrop-blur-xl md:hidden"
