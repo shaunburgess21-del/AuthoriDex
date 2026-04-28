@@ -155,7 +155,8 @@ export function InductionLeaderboardSlice({
   votedCandidates = new Set(),
   onToggleVote,
 }: InductionLeaderboardSliceProps) {
-  const { user } = useAuth();  const [, setLocation] = useLocation();
+  const { user } = useAuth();
+  const [, setLocation] = useLocation();
 
   const { data: inductionData } = useQuery<any>({
     queryKey: ['/api/vote/induction'],

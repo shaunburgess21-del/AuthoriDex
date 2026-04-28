@@ -24,3 +24,6 @@ tmp/
 .git-commit-msg.tmp
 audit-*-output.json
 dry-run-*-output.json
+
+# phantom-diff diagnostic captures
+phantom-capture-*.log
