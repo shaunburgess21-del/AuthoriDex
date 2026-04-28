@@ -1,6 +1,7 @@
 import { useState, useEffect, type MouseEvent } from "react";
 import { Link, useLocation } from "wouter";
-import { Users, ListChecks, CheckCircle2, X } from "lucide-react";
+import { Users, ListChecks, CheckCircle2, MessageSquare, X } from "lucide-react";
+import { Drawer } from "vaul";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
@@ -57,6 +58,124 @@ export interface OpinionPollCardPoll {
   }>;
 }
 
+type OpinionPollOption = NonNullable<OpinionPollCardPoll["options"]>[number];
+type OptionRowMode = "vote" | "result-selected" | "result-other";
+
+function OptionRow({
+  poll,
+  option,
+  orderLabel,
+  mode,
+  percent = 0,
+  isLeading = false,
+  onVote,
+  onChangeVote,
+  onExpandImage,
+  testIdPrefix,
+}: {
+  poll: OpinionPollCardPoll;
+  option: OpinionPollOption;
+  orderLabel: number;
+  mode: OptionRowMode;
+  percent?: number;
+  isLeading?: boolean;
+  onVote?: (e: MouseEvent) => void;
+  onChangeVote?: (e: MouseEvent) => void;
+  onExpandImage: (url: string, alt: string) => void;
+  testIdPrefix: string;
+}) {
+  const imageColumn = option.imageUrl ? (
+    <button
+      type="button"
+      aria-label="View larger image"
+      onClick={() => onExpandImage(option.imageUrl!, option.name)}
+      className="relative shrink-0 w-14 self-stretch min-h-[2.75rem] cursor-zoom-in border-0 p-0"
+    >
+      <img src={option.imageUrl} alt={option.name} className="absolute inset-0 h-full w-full object-cover" />
+    </button>
+  ) : (
+    <div className="relative flex shrink-0 w-14 items-center justify-center self-stretch min-h-[2.75rem] bg-cyan-500/15 dark:bg-cyan-500/10">
+      <span className="text-xs font-semibold text-cyan-600 dark:text-cyan-400">{orderLabel}</span>
+    </div>
+  );
+
+  if (mode === "vote") {
+    return (
+      <div
+        className="w-full flex items-stretch overflow-hidden rounded-lg border border-border/50 bg-muted/30 p-0 text-left transition-all duration-200 touch-manipulation [@media(hover:hover)_and_(pointer:fine)]:hover:border-[#EFEFEF]/50 [@media(hover:hover)_and_(pointer:fine)]:hover:bg-muted/50 dark:[@media(hover:hover)_and_(pointer:fine)]:hover:border-white/40 dark:[@media(hover:hover)_and_(pointer:fine)]:hover:bg-white/5 [@media(hover:hover)_and_(pointer:fine)]:hover:ring-1 [@media(hover:hover)_and_(pointer:fine)]:hover:ring-inset [@media(hover:hover)_and_(pointer:fine)]:hover:ring-[#EFEFEF]/40 dark:[@media(hover:hover)_and_(pointer:fine)]:hover:ring-white/25 active:border-[#EFEFEF]/40 active:bg-muted/45 dark:active:border-white/35 dark:active:bg-white/[0.07] active:ring-1 active:ring-inset active:ring-[#EFEFEF]/30 dark:active:ring-white/20"
+        data-testid={`${testIdPrefix}-${poll.id}-${option.id}`}
+      >
+        {imageColumn}
+        <button
+          type="button"
+          onClick={onVote}
+          className="flex min-w-0 flex-1 flex-col items-stretch py-1.5 pl-2.5 pr-2 text-left transition-transform active:scale-[0.99]"
+        >
+          <div className="flex items-center gap-1.5">
+            <span className="min-w-0 flex-1 truncate text-sm">{option.name}</span>
+            <span className="shrink-0 text-xs font-mono font-bold text-slate-600">%</span>
+          </div>
+          <div className="mt-1 h-1.5 rounded-full bg-slate-700/50" />
+          <p className="text-[10px] text-slate-600 mt-0.5">Votes</p>
+        </button>
+      </div>
+    );
+  }
+
+  const isSelected = mode === "result-selected";
+  const rowClass = `flex items-stretch overflow-hidden rounded-lg border transition-all duration-300 ${
+    isSelected
+      ? "border-[#EFEFEF]/45 bg-white/[0.06] dark:border-white/40 dark:bg-white/5"
+      : "border-border/30 bg-muted/20"
+  }`;
+  const contentColumn = (
+    <div className="flex-1 min-w-0 py-1.5 pl-2.5 pr-2">
+      <div className="flex items-center gap-1.5">
+        <span className={`min-w-0 flex-1 truncate text-sm ${isSelected ? "font-semibold" : ""}`}>{option.name}</span>
+        {isSelected && <CheckCircle2 className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400 shrink-0" />}
+        <span
+          className={`shrink-0 text-xs font-mono font-bold ${
+            isLeading ? "text-cyan-600 dark:text-cyan-400" : "text-muted-foreground"
+          }`}
+        >
+          {percent}%
+        </span>
+      </div>
+      <div className="mt-1 h-1.5 rounded-full bg-slate-700/50 overflow-hidden">
+        <div
+          className="h-full rounded-full bg-cyan-500 transition-all duration-700 ease-out"
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+      <p className="text-[10px] text-muted-foreground mt-0.5">
+        {(option.votes || 0).toLocaleString("en-US")} votes
+      </p>
+    </div>
+  );
+
+  if (isSelected) {
+    return (
+      <div className={rowClass} data-testid={`${testIdPrefix}-${poll.id}-${option.id}`}>
+        {imageColumn}
+        {contentColumn}
+      </div>
+    );
+  }
+
+  return (
+    <div className={`${rowClass} w-full`} data-testid={`${testIdPrefix}-${poll.id}-${option.id}`}>
+      {imageColumn}
+      <button
+        type="button"
+        className="min-w-0 flex-1 text-left cursor-pointer rounded-r-md touch-manipulation [@media(hover:hover)_and_(pointer:fine)]:hover:ring-1 [@media(hover:hover)_and_(pointer:fine)]:hover:ring-inset [@media(hover:hover)_and_(pointer:fine)]:hover:ring-[#EFEFEF]/50 dark:[@media(hover:hover)_and_(pointer:fine)]:hover:ring-white/35 active:ring-1 active:ring-inset active:ring-[#EFEFEF]/45 dark:active:ring-white/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#EFEFEF]/40 dark:focus-visible:ring-white/30 border-0 bg-transparent p-0"
+        onClick={onChangeVote}
+      >
+        {contentColumn}
+      </button>
+    </div>
+  );
+}
+
 export function OpinionPollCard({
   poll,
   onVote,
@@ -75,11 +194,13 @@ export function OpinionPollCard({
   leaderboardCategories?: Set<string>;
   onNavigateToDetail?: () => void;
   onBrowseFullScreen?: () => void;
-}) {  const [, setLocation] = useLocation();
+}) {
+  const [, setLocation] = useLocation();
   const [voted, setVoted] = useState<string | null>(poll.userVote || null);
   const [changeDialogOpen, setChangeDialogOpen] = useState(false);
   const [pendingOption, setPendingOption] = useState<{ id: string; name: string } | null>(null);
   const [expandedImage, setExpandedImage] = useState<{ url: string; alt: string } | null>(null);
+  const [optionsDrawerOpen, setOptionsDrawerOpen] = useState(false);
   const options = poll.options || [];
   const visibleOptions = options.slice(0, OPINION_POLL_PREVIEW_COUNT);
   const remainingCount = Math.max(0, options.length - OPINION_POLL_PREVIEW_COUNT);
@@ -148,6 +269,10 @@ export function OpinionPollCard({
   const totalVotes = poll.totalVotes || 0;
   const maxPercent = Math.max(
     ...visibleOptions.map((o) => (totalVotes > 0 ? Math.round(((o.votes ?? 0) / totalVotes) * 100) : 0)),
+    0
+  );
+  const drawerMaxPercent = Math.max(
+    ...options.map((o) => (totalVotes > 0 ? Math.round(((o.votes ?? 0) / totalVotes) * 100) : 0)),
     0
   );
 
@@ -238,60 +363,31 @@ export function OpinionPollCard({
             {visibleOptions.map((option, idx) => {
               const orderLabel = (option.orderIndex ?? idx) + 1;
               return (
-                <div
+                <OptionRow
                   key={option.id}
-                  className="w-full flex items-stretch overflow-hidden rounded-lg border border-border/50 bg-muted/30 p-0 text-left transition-all duration-200 touch-manipulation [@media(hover:hover)_and_(pointer:fine)]:hover:border-[#EFEFEF]/50 [@media(hover:hover)_and_(pointer:fine)]:hover:bg-muted/50 dark:[@media(hover:hover)_and_(pointer:fine)]:hover:border-white/40 dark:[@media(hover:hover)_and_(pointer:fine)]:hover:bg-white/5 [@media(hover:hover)_and_(pointer:fine)]:hover:ring-1 [@media(hover:hover)_and_(pointer:fine)]:hover:ring-inset [@media(hover:hover)_and_(pointer:fine)]:hover:ring-[#EFEFEF]/40 dark:[@media(hover:hover)_and_(pointer:fine)]:hover:ring-white/25 active:border-[#EFEFEF]/40 active:bg-muted/45 dark:active:border-white/35 dark:active:bg-white/[0.07] active:ring-1 active:ring-inset active:ring-[#EFEFEF]/30 dark:active:ring-white/20"
-                  data-testid={`opinion-poll-option-${poll.id}-${option.id}`}
-                >
-                  {option.imageUrl ? (
-                    <button
-                      type="button"
-                      aria-label="View larger image"
-                      onClick={() => setExpandedImage({ url: option.imageUrl!, alt: option.name })}
-                      className="relative shrink-0 w-14 self-stretch min-h-[2.75rem] cursor-zoom-in border-0 p-0"
-                    >
-                      <img src={option.imageUrl} alt={option.name} className="absolute inset-0 h-full w-full object-cover" />
-                    </button>
-                  ) : (
-                    <div className="relative flex shrink-0 w-14 items-center justify-center self-stretch min-h-[2.75rem] bg-cyan-500/15 dark:bg-cyan-500/10">
-                      <span className="text-xs font-semibold text-cyan-600 dark:text-cyan-400">{orderLabel}</span>
-                    </div>
-                  )}
-                  <button
-                    type="button"
-                    onClick={(e) => handleVote(option.id, e)}
-                    className="flex min-w-0 flex-1 flex-col items-stretch py-1.5 pl-2.5 pr-2 text-left transition-transform active:scale-[0.99]"
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <span className="min-w-0 flex-1 truncate text-sm">{option.name}</span>
-                      <span className="shrink-0 text-xs font-mono font-bold text-slate-600">%</span>
-                    </div>
-                    <div className="mt-1 h-1.5 rounded-full bg-slate-700/50" />
-                    <p className="text-[10px] text-slate-600 mt-0.5">Votes</p>
-                  </button>
-                </div>
+                  poll={poll}
+                  option={option}
+                  orderLabel={orderLabel}
+                  mode="vote"
+                  onVote={(e) => handleVote(option.id, e)}
+                  onExpandImage={(url, alt) => setExpandedImage({ url, alt })}
+                  testIdPrefix="opinion-poll-option"
+                />
               );
             })}
             {remainingCount > 0 && (
-              onNavigateToDetail ? (
-                <button type="button" onClick={onNavigateToDetail} className="w-full">
-                  <p
-                    className="text-xs text-cyan-600 dark:text-cyan-400 text-center cursor-pointer hover:underline mt-2.5"
-                    data-testid={`link-more-options-${poll.id}`}
-                  >
-                    +{remainingCount} more options
-                  </p>
-                </button>
-              ) : (
-                <Link href={`/vote/opinion-polls/${poll.slug}`}>
-                  <p
-                    className="text-xs text-cyan-600 dark:text-cyan-400 text-center cursor-pointer hover:underline mt-2.5"
-                    data-testid={`link-more-options-${poll.id}`}
-                  >
-                    +{remainingCount} more options
-                  </p>
-                </Link>
-              )
+              <button
+                type="button"
+                onClick={() => setOptionsDrawerOpen(true)}
+                className="w-full"
+              >
+                <p
+                  className="text-xs text-cyan-600 dark:text-cyan-400 text-center cursor-pointer hover:underline mt-2.5"
+                  data-testid={`link-more-options-${poll.id}`}
+                >
+                  +{remainingCount} more options
+                </p>
+              </button>
             )}
           </div>
         ) : (
@@ -301,87 +397,34 @@ export function OpinionPollCard({
               const percent = totalVotes > 0 ? Math.round(((option.votes ?? 0) / totalVotes) * 100) : 0;
               const isLeading = percent === maxPercent && percent > 0;
               const orderLabel = (option.orderIndex ?? idx) + 1;
-              const rowClass = `flex items-stretch overflow-hidden rounded-lg border transition-all duration-300 ${
-                isSelected
-                  ? "border-[#EFEFEF]/45 bg-white/[0.06] dark:border-white/40 dark:bg-white/5"
-                  : "border-border/30 bg-muted/20"
-              }`;
-              const imageColumn = option.imageUrl ? (
-                <button
-                  type="button"
-                  aria-label="View larger image"
-                  onClick={() => setExpandedImage({ url: option.imageUrl!, alt: option.name })}
-                  className="relative shrink-0 w-14 self-stretch min-h-[2.75rem] cursor-zoom-in border-0 p-0"
-                >
-                  <img src={option.imageUrl} alt={option.name} className="absolute inset-0 h-full w-full object-cover" />
-                </button>
-              ) : (
-                <div className="relative flex shrink-0 w-14 items-center justify-center self-stretch min-h-[2.75rem] bg-cyan-500/15 dark:bg-cyan-500/10">
-                  <span className="text-xs font-semibold text-cyan-600 dark:text-cyan-400">{orderLabel}</span>
-                </div>
-              );
-              const contentColumn = (
-                <div className="flex-1 min-w-0 py-1.5 pl-2.5 pr-2">
-                  <div className="flex items-center gap-1.5">
-                    <span className={`min-w-0 flex-1 truncate text-sm ${isSelected ? "font-semibold" : ""}`}>{option.name}</span>
-                    {isSelected && <CheckCircle2 className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400 shrink-0" />}
-                    <span
-                      className={`shrink-0 text-xs font-mono font-bold ${
-                        isLeading ? "text-cyan-600 dark:text-cyan-400" : "text-muted-foreground"
-                      }`}
-                    >
-                      {percent}%
-                    </span>
-                  </div>
-                  <div className="mt-1 h-1.5 rounded-full bg-slate-700/50 overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-cyan-500 transition-all duration-700 ease-out"
-                      style={{ width: `${percent}%` }}
-                    />
-                  </div>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">
-                    {(option.votes || 0).toLocaleString("en-US")} votes
-                  </p>
-                </div>
-              );
-              return isSelected ? (
-                <div key={option.id} className={rowClass} data-testid={`opinion-poll-result-${poll.id}-${option.id}`}>
-                  {imageColumn}
-                  {contentColumn}
-                </div>
-              ) : (
-                <div key={option.id} className={`${rowClass} w-full`} data-testid={`opinion-poll-result-${poll.id}-${option.id}`}>
-                  {imageColumn}
-                  <button
-                    type="button"
-                    className="min-w-0 flex-1 text-left cursor-pointer rounded-r-md touch-manipulation [@media(hover:hover)_and_(pointer:fine)]:hover:ring-1 [@media(hover:hover)_and_(pointer:fine)]:hover:ring-inset [@media(hover:hover)_and_(pointer:fine)]:hover:ring-[#EFEFEF]/50 dark:[@media(hover:hover)_and_(pointer:fine)]:hover:ring-white/35 active:ring-1 active:ring-inset active:ring-[#EFEFEF]/45 dark:active:ring-white/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#EFEFEF]/40 dark:focus-visible:ring-white/30 border-0 bg-transparent p-0"
-                    onClick={(e) => openChangeDialog(option, e)}
-                  >
-                    {contentColumn}
-                  </button>
-                </div>
+              return (
+                <OptionRow
+                  key={option.id}
+                  poll={poll}
+                  option={option}
+                  orderLabel={orderLabel}
+                  mode={isSelected ? "result-selected" : "result-other"}
+                  percent={percent}
+                  isLeading={isLeading}
+                  onChangeVote={(e) => openChangeDialog(option, e)}
+                  onExpandImage={(url, alt) => setExpandedImage({ url, alt })}
+                  testIdPrefix="opinion-poll-result"
+                />
               );
             })}
             {remainingCount > 0 && (
-              onNavigateToDetail ? (
-                <button type="button" onClick={onNavigateToDetail} className="w-full">
-                  <p
-                    className="text-xs text-cyan-600 dark:text-cyan-400 text-center cursor-pointer hover:underline mt-2.5"
-                    data-testid={`link-more-options-${poll.id}`}
-                  >
-                    +{remainingCount} more options
-                  </p>
-                </button>
-              ) : (
-                <Link href={`/vote/opinion-polls/${poll.slug}`}>
-                  <p
-                    className="text-xs text-cyan-600 dark:text-cyan-400 text-center cursor-pointer hover:underline mt-2.5"
-                    data-testid={`link-more-options-${poll.id}`}
-                  >
-                    +{remainingCount} more options
-                  </p>
-                </Link>
-              )
+              <button
+                type="button"
+                onClick={() => setOptionsDrawerOpen(true)}
+                className="w-full"
+              >
+                <p
+                  className="text-xs text-cyan-600 dark:text-cyan-400 text-center cursor-pointer hover:underline mt-2.5"
+                  data-testid={`link-more-options-${poll.id}`}
+                >
+                  +{remainingCount} more options
+                </p>
+              </button>
             )}
           </div>
         )}
@@ -446,6 +489,89 @@ export function OpinionPollCard({
           />
         </div>
       )}
+
+      <Drawer.Root
+        open={optionsDrawerOpen}
+        onOpenChange={setOptionsDrawerOpen}
+        snapPoints={[0.85]}
+      >
+        <Drawer.Portal>
+          <Drawer.Overlay className="fixed inset-0 z-[70] bg-black/40" />
+          <Drawer.Content
+            className="fixed inset-x-0 bottom-0 z-[70] flex flex-col rounded-t-2xl border-t border-border/50 bg-background max-h-[100dvh]"
+            data-interactive="true"
+            data-testid={`opinion-poll-options-drawer-${poll.id}`}
+          >
+            <div className="mx-auto mt-3 mb-2 h-1.5 w-16 rounded-full bg-muted-foreground/60" />
+            <div className="flex items-center justify-between px-4 pb-2">
+              <Drawer.Title className="text-sm font-semibold text-foreground">All options</Drawer.Title>
+              <button
+                type="button"
+                onClick={() => setOptionsDrawerOpen(false)}
+                className="p-1.5 rounded-lg hover:bg-muted/60 transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                aria-label="Close"
+              >
+                <X className="h-4 w-4 text-muted-foreground" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-4 pb-2 min-h-0 space-y-1.5">
+              {options.map((option, idx) => {
+                const orderLabel = (option.orderIndex ?? idx) + 1;
+                if (!hasVoted) {
+                  return (
+                    <OptionRow
+                      key={option.id}
+                      poll={poll}
+                      option={option}
+                      orderLabel={orderLabel}
+                      mode="vote"
+                      onVote={(e) => handleVote(option.id, e)}
+                      onExpandImage={(url, alt) => setExpandedImage({ url, alt })}
+                      testIdPrefix="opinion-poll-drawer-option"
+                    />
+                  );
+                }
+                const isSelected = voted === option.id;
+                const percent = totalVotes > 0 ? Math.round(((option.votes ?? 0) / totalVotes) * 100) : 0;
+                const isLeading = percent === drawerMaxPercent && percent > 0;
+                return (
+                  <OptionRow
+                    key={option.id}
+                    poll={poll}
+                    option={option}
+                    orderLabel={orderLabel}
+                    mode={isSelected ? "result-selected" : "result-other"}
+                    percent={percent}
+                    isLeading={isLeading}
+                    onChangeVote={(e) => openChangeDialog(option, e)}
+                    onExpandImage={(url, alt) => setExpandedImage({ url, alt })}
+                    testIdPrefix="opinion-poll-drawer-result"
+                  />
+                );
+              })}
+            </div>
+            <div className="border-t border-border/40 px-4 py-3">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={() => {
+                  setOptionsDrawerOpen(false);
+                  if (onNavigateToDetail) {
+                    onNavigateToDetail();
+                  } else {
+                    setLocation(`/vote/opinion-polls/${poll.slug}`);
+                  }
+                }}
+                data-testid={`button-drawer-discussion-${poll.id}`}
+              >
+                <MessageSquare className="h-4 w-4 mr-2" />
+                View discussion
+              </Button>
+            </div>
+          </Drawer.Content>
+        </Drawer.Portal>
+      </Drawer.Root>
     </div>
   );
 }
