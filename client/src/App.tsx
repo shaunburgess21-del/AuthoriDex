@@ -49,6 +49,7 @@ const VerifyPage = lazyWithRetry(() => import("@/pages/auth/VerifyPage"));
 const WelcomePage = lazyWithRetry(() => import("@/pages/auth/WelcomePage"));
 const TermsPage = lazyWithRetry(() => import("@/pages/TermsPage"));
 const PrivacyPage = lazyWithRetry(() => import("@/pages/PrivacyPage"));
+const TakedownPage = lazyWithRetry(() => import("@/pages/TakedownPage"));
 const UserProfilePage = lazyWithRetry(() => import("@/pages/UserProfilePage"));
 const PredictPage = lazyWithRetry(() => import("@/pages/PredictPage"));
 const VotePage = lazyWithRetry(() => import("@/pages/VotePage"));
@@ -96,6 +97,7 @@ function Router() {
         <Route path="/login" component={LoginPage} />
         <Route path="/terms" component={TermsPage} />
         <Route path="/privacy" component={PrivacyPage} />
+        <Route path="/takedown" component={TakedownPage} />
         <Route path="/profile" component={UserProfilePage} />
         <Route path="/predict" component={PredictPage} />
         <Route path="/vote/value-rankings" component={ValueRankingsPage} />
@@ -137,9 +139,9 @@ function XpCelebrationWatcher() {
  * skips the email verify screen entirely and would otherwise drop the user
  * straight on the home page without a username choice / ToS acceptance.
  *
- * Excludes /login/* (so the email signup flow can stay in place), /terms and
- * /privacy (so the welcome page's links don't force-redirect the user back
- * to itself when they tap them in a new tab and end up navigated here).
+ * Excludes /login/* (so the email signup flow can stay in place), /terms,
+ * /privacy, and /takedown (so legal links don't force-redirect the user back
+ * to welcome when they open policies mid-flow).
  */
 function NewUserGate() {
   const { user, profile, profileLoading, loading } = useAuth();
@@ -150,7 +152,8 @@ function NewUserGate() {
     if (!user || !profile) return;
     if (profile.tosAcceptedAt) return;
     if (location.startsWith("/login")) return;
-    if (location === "/terms" || location === "/privacy") return;
+    if (location === "/terms" || location === "/privacy" || location === "/takedown")
+      return;
     setLocation("/login/welcome", { replace: true });
   }, [loading, profileLoading, user, profile, location, setLocation]);
 

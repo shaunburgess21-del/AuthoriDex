@@ -366,6 +366,30 @@ export default function LoginPage() {
                 <Mail className="h-4 w-4" />
                 {loading ? "Please wait..." : isLogin ? "Sign in" : "Create account"}
               </Button>
+
+              {!isLogin ? (
+                <p className="mt-3 text-center text-xs text-muted-foreground leading-snug">
+                  By continuing, you agree to our{" "}
+                  <a
+                    href="/terms"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary underline underline-offset-2 hover:text-foreground"
+                  >
+                    Terms of Service
+                  </a>{" "}
+                  and{" "}
+                  <a
+                    href="/privacy"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary underline underline-offset-2 hover:text-foreground"
+                  >
+                    Privacy Policy
+                  </a>
+                  .
+                </p>
+              ) : null}
             </form>
 
             <div className="text-center text-sm">
