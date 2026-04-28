@@ -12,6 +12,7 @@ export function PredictCard({
   selected = false,
   inactive = false,
   inactiveMessage,
+  autoSize = false,
 }: {
   children: ReactNode;
   className?: string;
@@ -20,6 +21,7 @@ export function PredictCard({
   selected?: boolean;
   inactive?: boolean;
   inactiveMessage?: string;
+  autoSize?: boolean;
 }) {
   const cardContent = (
     <div
@@ -28,7 +30,7 @@ export function PredictCard({
       data-testid={testId}
     >
       <Card
-        className={`relative p-4 bg-card/95 backdrop-blur-sm transition-all h-full flex flex-col rounded-[12px] md:rounded-xl min-h-[390px] md:min-h-0 border-0 md:border md:border-transparent shadow-none md:shadow-sm ${
+        className={`relative p-4 bg-card/95 backdrop-blur-sm transition-all h-full flex flex-col rounded-[12px] md:rounded-xl ${autoSize ? "" : "min-h-[390px]"} md:min-h-0 border-0 md:border md:border-transparent shadow-none md:shadow-sm ${
           inactive
             ? "opacity-50 grayscale-[40%]"
             : `md:ring-inset md:ring-1 md:ring-transparent md:transition-[box-shadow,ring-color] md:group-hover:ring-[#EFEFEF]/50 md:group-hover:shadow-lg md:group-hover:shadow-[0_8px_32px_rgba(239,239,239,0.1)] ${selected ? "md:ring-[#EFEFEF]/50 shadow-lg shadow-[0_8px_32px_rgba(239,239,239,0.14)]" : ""}`

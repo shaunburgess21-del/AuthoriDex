@@ -67,6 +67,7 @@ export function WeeklyUpDownCard({
   return (
     <PredictCard
       testId={`card-weekly-${market.id}`}
+      autoSize
       className={`${isMarketClosed ? "opacity-75" : ""} ${pendingPosition && !isMarketClosed ? "ring-1 ring-violet-500/35 dark:ring-violet-400/25 md:ring-inset rounded-[12px] md:rounded-xl" : ""}`}
     >
       <div className="flex items-center justify-between mb-2 flex-wrap gap-1">
