@@ -37,6 +37,7 @@ import {
   Wallet,
   LayoutDashboard,
   Flame,
+  CreditCard,
 } from "lucide-react";
 
 function useMediaQuery(query: string) {
@@ -347,6 +348,20 @@ function UserMenuContent({
         >
           <Trophy className="h-4 w-4 text-amber-600 dark:text-amber-400" />
           <span className="flex-1 text-sm">Top Predictors</span>
+          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+        </button>
+        {/* Visually accented (violet matches the Credits pill above) so the
+            monetization CTA stands out from the muted activity links
+            without becoming the loudest thing in the menu. */}
+        <button
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-violet-500/10 dark:hover:bg-violet-500/15 transition-colors text-left"
+          onClick={() => handleNavClick("/pricing")}
+          data-testid="link-buy-credits"
+        >
+          <CreditCard className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+          <span className="flex-1 text-sm font-medium text-violet-700 dark:text-violet-300">
+            Buy Credits
+          </span>
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
         </button>
       </div>

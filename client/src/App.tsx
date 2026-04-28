@@ -8,6 +8,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { BottomNav } from "@/components/BottomNav";
+import { Footer } from "@/components/Footer";
 import { PWAUpdatePrompt } from "@/components/PWAUpdatePrompt";
 import { ScrollToTop } from "@/components/ScrollToTop";
 import { XpBurstProvider } from "@/components/XpBurstProvider";
@@ -50,6 +51,10 @@ const WelcomePage = lazyWithRetry(() => import("@/pages/auth/WelcomePage"));
 const TermsPage = lazyWithRetry(() => import("@/pages/TermsPage"));
 const PrivacyPage = lazyWithRetry(() => import("@/pages/PrivacyPage"));
 const TakedownPage = lazyWithRetry(() => import("@/pages/TakedownPage"));
+const RefundPolicyPage = lazyWithRetry(() => import("@/pages/RefundPolicyPage"));
+const PricingPage = lazyWithRetry(() => import("@/pages/PricingPage"));
+const CheckoutPage = lazyWithRetry(() => import("@/pages/CheckoutPage"));
+const ContactPage = lazyWithRetry(() => import("@/pages/ContactPage"));
 const UserProfilePage = lazyWithRetry(() => import("@/pages/UserProfilePage"));
 const PredictPage = lazyWithRetry(() => import("@/pages/PredictPage"));
 const VotePage = lazyWithRetry(() => import("@/pages/VotePage"));
@@ -98,6 +103,10 @@ function Router() {
         <Route path="/terms" component={TermsPage} />
         <Route path="/privacy" component={PrivacyPage} />
         <Route path="/takedown" component={TakedownPage} />
+        <Route path="/refund-policy" component={RefundPolicyPage} />
+        <Route path="/pricing" component={PricingPage} />
+        <Route path="/checkout/:packageId" component={CheckoutPage} />
+        <Route path="/contact" component={ContactPage} />
         <Route path="/profile" component={UserProfilePage} />
         <Route path="/predict" component={PredictPage} />
         <Route path="/vote/value-rankings" component={ValueRankingsPage} />
@@ -139,10 +148,20 @@ function XpCelebrationWatcher() {
  * skips the email verify screen entirely and would otherwise drop the user
  * straight on the home page without a username choice / ToS acceptance.
  *
- * Excludes /login/* (so the email signup flow can stay in place), /terms,
- * /privacy, and /takedown (so legal links don't force-redirect the user back
- * to welcome when they open policies mid-flow).
+ * Excludes /login/* (so the email signup flow can stay in place) and the
+ * legal / pricing reference pages — opening Terms, Privacy, Takedown,
+ * Refund Policy, or Pricing mid-onboarding shouldn't force-redirect the
+ * user back to welcome before they finish reading.
  */
+const NEW_USER_GATE_ALLOWLIST = new Set([
+  "/terms",
+  "/privacy",
+  "/takedown",
+  "/refund-policy",
+  "/pricing",
+  "/contact",
+]);
+
 function NewUserGate() {
   const { user, profile, profileLoading, loading } = useAuth();
   const [location, setLocation] = useLocation();
@@ -152,8 +171,7 @@ function NewUserGate() {
     if (!user || !profile) return;
     if (profile.tosAcceptedAt) return;
     if (location.startsWith("/login")) return;
-    if (location === "/terms" || location === "/privacy" || location === "/takedown")
-      return;
+    if (NEW_USER_GATE_ALLOWLIST.has(location)) return;
     setLocation("/login/welcome", { replace: true });
   }, [loading, profileLoading, user, profile, location, setLocation]);
 
@@ -182,6 +200,7 @@ function App() {
                   <Router />
                 </ErrorBoundary>
               </XpBurstProvider>
+              <Footer />
               <BottomNav />
             </TooltipProvider>
           </AuthProvider>

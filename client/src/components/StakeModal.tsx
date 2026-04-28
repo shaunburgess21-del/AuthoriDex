@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Target, Clock, TrendingUp, TrendingDown, LogIn, Star, MessageSquarePlus, HelpCircle, Lock } from "lucide-react";
+import { Target, Clock, TrendingUp, TrendingDown, LogIn, Star, MessageSquarePlus, HelpCircle, Lock, CreditCard } from "lucide-react";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { useMarketCycle } from "@/hooks/useMarketCycle";
 import { useAuth } from "@/contexts/AuthContext";
@@ -436,6 +436,35 @@ export function StakeModal({
               </span>
             </div>
           </div>
+
+          {/* Highest-converting placement for the Buy Credits CTA — the
+              user has explicit intent to predict and just discovered
+              they can't afford the entry. Two trigger conditions cover
+              both "below minimum stake" (idle state) and "tried to
+              over-stake" (active typing). Logged-out users see the
+              Sign In button instead, so this only matters once auth'd. */}
+          {isLoggedIn && (walletBalance < MIN_STAKE || balanceAfter < 0) && (
+            <div className="rounded-lg border border-violet-500/40 bg-violet-500/10 dark:border-violet-500/30 dark:bg-violet-500/8 p-3 flex items-center gap-3">
+              <CreditCard className="h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400" />
+              <p className="text-xs text-muted-foreground flex-1">
+                {walletBalance < MIN_STAKE
+                  ? "You need credits to predict."
+                  : "Not enough credits for that stake."}
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-violet-500/50 text-violet-700 dark:text-violet-300 hover:bg-violet-500/15"
+                onClick={() => {
+                  onClose();
+                  setLocation("/pricing");
+                }}
+                data-testid="button-buy-credits-stake"
+              >
+                Buy credits
+              </Button>
+            </div>
+          )}
         </div>
 
         {isUpDown && (
