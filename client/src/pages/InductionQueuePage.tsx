@@ -17,6 +17,7 @@ import { normalizeMarketCategory, type FilterCategory, CATEGORIES_WITH_FILTERS }
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -253,12 +254,12 @@ export default function InductionQueuePage() {
           </div>
           <div className="relative md:ml-auto md:w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <input
+            <Input
               type="text"
               placeholder="Search candidates..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 rounded-lg bg-muted/30 border border-border text-sm placeholder:text-muted-foreground focus:outline-none focus:border-cyan-500/60 dark:border-cyan-500/50"
+              className="pl-9"
             />
           </div>
         </div>

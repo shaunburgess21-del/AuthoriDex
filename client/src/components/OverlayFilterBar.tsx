@@ -87,7 +87,7 @@ export function OverlayFilterBar({
             placeholder={placeholder}
             value={searchValue}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="pl-10 h-9 bg-muted/40 dark:bg-slate-800/30 border-border/50 dark:border-slate-700/40"
+            className="pl-10 h-9"
             data-testid={`${testIdPrefix}-search`}
           />
         </div>
@@ -134,7 +134,7 @@ export function OverlayFilterBar({
             placeholder={placeholder}
             value={searchValue}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="pl-10 h-9 bg-muted/40 dark:bg-slate-800/30 border-border/50 dark:border-slate-700/40"
+            className="pl-10 h-9"
             data-testid={`${testIdPrefix}-search-desktop`}
           />
         </div>
