@@ -21,6 +21,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { CardComments, useCommentCount } from "@/components/comments/CardComments";
 import { apiRequest } from "@/lib/queryClient";
+import { optimisticVotePatch } from "@/hooks/useOpinionPollVoteMutation";
 import { isUnauthorizedApiError, signInToVoteToastOptions, signInToVoteTitle } from "@/lib/signInToVoteToast";
 import { formatDate } from "@/lib/formatDate";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
@@ -67,7 +68,8 @@ export default function OpinionPollDetailPage() {
     }
   }, [slugParam]);
   const [, setLocation] = useLocation();
-  const { user } = useAuth();  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
   const opCommentCount = useCommentCount("opinion-poll", slug || "");
   const { showNav, historyDepth } = useDetailNavigation(slug || undefined, "opinion");
   const [changeDialogOpen, setChangeDialogOpen] = useState(false);
@@ -95,12 +97,34 @@ export default function OpinionPollDetailPage() {
       const res = await apiRequest("POST", `/api/opinion-polls/${encodeURIComponent(slug)}/vote`, { optionId });
       return res.json();
     },
-    onSuccess: () => {
+    onMutate: async (optionId: string) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/opinion-polls"] });
+      const previousDetail = queryClient.getQueryData<any>(["/api/opinion-polls", slug]);
+      const previousList = queryClient.getQueryData<any[]>(["/api/opinion-polls"]);
+      queryClient.setQueryData<any>(["/api/opinion-polls", slug], (old: any) =>
+        old ? optimisticVotePatch(old, { kind: "vote", slug, optionId }) : old,
+      );
+      queryClient.setQueryData<any[]>(["/api/opinion-polls"], (old: any[] | undefined) =>
+        old?.map((p) => (p.slug === slug ? optimisticVotePatch(p, { kind: "vote", slug, optionId }) : p)),
+      );
+      return { previousDetail, previousList };
+    },
+    onSuccess: (data) => {
+      if (data?.poll) {
+        queryClient.setQueryData<any[]>(["/api/opinion-polls"], (old: any[] | undefined) =>
+          old?.map((p) => (p.id === data.poll.id ? data.poll : p)),
+        );
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/opinion-polls", slug] });
-      queryClient.invalidateQueries({ queryKey: ["/api/opinion-polls"] });
       toast("Vote recorded");
     },
-    onError: (error) => {
+    onError: (error, _vars, ctx) => {
+      if (ctx?.previousDetail !== undefined) {
+        queryClient.setQueryData(["/api/opinion-polls", slug], ctx.previousDetail);
+      }
+      if (ctx?.previousList !== undefined) {
+        queryClient.setQueryData(["/api/opinion-polls"], ctx.previousList);
+      }
       if (isUnauthorizedApiError(error)) {
         toast(signInToVoteTitle, signInToVoteToastOptions(() => setLocation("/login")));
       } else {
@@ -114,12 +138,34 @@ export default function OpinionPollDetailPage() {
       const res = await apiRequest("POST", `/api/opinion-polls/${encodeURIComponent(slug)}/vote`, { remove: true });
       return res.json();
     },
-    onSuccess: () => {
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ["/api/opinion-polls"] });
+      const previousDetail = queryClient.getQueryData<any>(["/api/opinion-polls", slug]);
+      const previousList = queryClient.getQueryData<any[]>(["/api/opinion-polls"]);
+      queryClient.setQueryData<any>(["/api/opinion-polls", slug], (old: any) =>
+        old ? optimisticVotePatch(old, { kind: "remove", slug }) : old,
+      );
+      queryClient.setQueryData<any[]>(["/api/opinion-polls"], (old: any[] | undefined) =>
+        old?.map((p) => (p.slug === slug ? optimisticVotePatch(p, { kind: "remove", slug }) : p)),
+      );
+      return { previousDetail, previousList };
+    },
+    onSuccess: (data) => {
+      if (data?.poll) {
+        queryClient.setQueryData<any[]>(["/api/opinion-polls"], (old: any[] | undefined) =>
+          old?.map((p) => (p.id === data.poll.id ? data.poll : p)),
+        );
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/opinion-polls", slug] });
-      queryClient.invalidateQueries({ queryKey: ["/api/opinion-polls"] });
       toast("Vote removed");
     },
-    onError: (error) => {
+    onError: (error, _vars, ctx) => {
+      if (ctx?.previousDetail !== undefined) {
+        queryClient.setQueryData(["/api/opinion-polls", slug], ctx.previousDetail);
+      }
+      if (ctx?.previousList !== undefined) {
+        queryClient.setQueryData(["/api/opinion-polls"], ctx.previousList);
+      }
       if (isUnauthorizedApiError(error)) {
         toast(signInToVoteTitle, signInToVoteToastOptions(() => setLocation("/login")));
       } else {
