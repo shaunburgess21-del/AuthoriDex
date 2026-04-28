@@ -53,7 +53,8 @@ export function UnderratedOverratedCard({
   const [localVote, setLocalVote] = useState<VoteType | null>(
     person.userValueVote ?? null
   );
-  const queryClient = useQueryClient();  const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();
+  const [, setLocation] = useLocation();
   const { user } = useAuth();
 
   const totalVotes = (person.underratedCount ?? 0) + (person.overratedCount ?? 0) + (person.fairlyRatedCount ?? 0);
