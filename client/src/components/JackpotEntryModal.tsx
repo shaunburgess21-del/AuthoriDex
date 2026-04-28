@@ -233,7 +233,23 @@ export function JackpotEntryModal({
                   <HelpCircle className="h-4 w-4 text-amber-500/60" />
                 </button>
               </PopoverTrigger>
-              <PopoverContent className="w-80 max-h-[70vh] overflow-y-auto" side="bottom" align="end">
+              {/* onWheel: Radix Dialog wraps its content in
+                  react-remove-scroll, which preventDefaults wheel
+                  events on anything outside its allowed scroll
+                  tree. PopoverContent is portaled to <body>, so it
+                  falls outside that tree and native wheel scroll is
+                  blocked — only the scrollbar drag works. We
+                  manually advance scrollTop here so the wheel still
+                  scrolls the rules content even though the native
+                  scroll is suppressed. */}
+              <PopoverContent
+                className="w-80 max-h-[70vh] overflow-y-auto"
+                side="bottom"
+                align="end"
+                onWheel={(e) => {
+                  e.currentTarget.scrollTop += e.deltaY;
+                }}
+              >
                 <RulesExplainer {...RULES_CONTENT.jackpot} />
               </PopoverContent>
             </Popover>

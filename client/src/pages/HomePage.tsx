@@ -23,8 +23,11 @@ import { TouchTooltip } from "@/components/ui/touch-tooltip";
 import { X, RefreshCw, TrendingUp, TrendingDown, Activity, ChevronRight, ChevronDown, LineChart, Vote, Trophy, Zap, Users, Sparkles, Target, Check, ThumbsDown, Minus, Rocket, Flame, Star, Info, Crown, HelpCircle } from "lucide-react";
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useDragScroll } from "@/hooks/use-drag-scroll";
-import { useQuery, useQueries, useInfiniteQuery, keepPreviousData } from "@tanstack/react-query";
-import { queryClient } from "@/lib/queryClient";
+import { useQuery, useQueries, useInfiniteQuery, useMutation, keepPreviousData } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useAuth } from "@/contexts/AuthContext";
+import { hapticSuccess, hapticError } from "@/lib/haptic";
+import { useXpBurst } from "@/components/XpBurstProvider";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { getMarketBaselineScore, type MarketBaselineSource } from "@/lib/predict-market-baseline";
 import { TrendingPerson } from "@shared/schema";
@@ -537,7 +540,16 @@ export default function HomePage() {
   const welcomeOnboardingRef = useRef<OnboardingDrawerHandle>(null);
   const [stakeModalOpen, setStakeModalOpen] = useState(false);
   const [pendingSelection, setPendingSelection] = useState<StakeSelection | null>(null);
-  const [walletCredits, setWalletCredits] = useState(10000);
+  // Real wallet balance from the auth profile — was previously a
+  // hardcoded `useState(10000)`, which let users on the home
+  // leaderboard appear to stake credits they didn't have. The
+  // PredictPage / UpDownDetailPage modals already read from
+  // profile.predictCredits; the home leaderboard's predict column
+  // now mirrors that single source of truth so balance + post-bet
+  // validation behave identically.
+  const { profile, refreshProfile } = useAuth();
+  const { trigger: triggerXpBurst } = useXpBurst();
+  const walletCredits = profile?.predictCredits ?? 0;
 
   const { data: nativeUpdownData } = useQuery<any[]>({
     queryKey: ['/api/native-markets/updown'],
@@ -561,10 +573,16 @@ export default function HomePage() {
         personName: person.name || m.title?.replace(/: Up or Down\?$/, "") || "Unknown",
         currentScore,
         startScore: baselineScore,
+        baselineScore,
+        upEntryId: upEntry?.id as string | undefined,
+        downEntryId: downEntry?.id as string | undefined,
         upMultiplier: upStake > 0 ? +(total / upStake).toFixed(1) : 2.0,
         downMultiplier: downStake > 0 ? +(total / downStake).toFixed(1) : 2.0,
         upPoolPercent: upPercent || 50,
         bettingCutoff: (m.bettingCutoff as string) || null,
+        startAt: (m.startAt as string) || null,
+        endAt: (m.endAt as string) || null,
+        tieRule: (m.tieRule as string) || "refund",
       };
     });
   }, [nativeUpdownData]);
@@ -599,21 +617,74 @@ export default function HomePage() {
       choice: direction === "up" ? "Trend Score UP" : "Trend Score DOWN",
       marketName: market.personName,
       marketId: market.id,
+      entryId: direction === "up" ? market.upEntryId : market.downEntryId,
       startScore: market.startScore,
       currentScore: market.currentScore,
       crowdSentiment,
       estimatedPayout,
+      baselineScore: market.baselineScore,
+      baselineTimestamp: market.startAt || undefined,
+      tieRule: market.tieRule,
+      endAt: market.endAt || undefined,
       bettingCutoff: market.bettingCutoff,
     });
+    refreshProfile?.().catch(() => {});
     setStakeModalOpen(true);
-  }, [updownMarkets, isUpdownCutoffPassed]);
+  }, [updownMarkets, isUpdownCutoffPassed, refreshProfile]);
+
+  // Real updown bet path, mirroring PredictPage's nativeUpdownBetMutation
+  // so the home leaderboard's predict column hits the same backend
+  // endpoint with the same payload, gets the same XP burst + cache
+  // invalidation + balance refresh, and shows the same error toast on
+  // failure. Previously this was a fake setState that just decremented
+  // a hardcoded local balance without ever calling the API.
+  const nativeUpdownBetMutation = useMutation({
+    mutationFn: async ({ marketId, entryId, stakeAmount }: { marketId: string; entryId: string; stakeAmount: number }) => {
+      const res = await apiRequest("POST", `/api/native-markets/updown/${marketId}/bet`, { entryId, stakeAmount });
+      return res.json();
+    },
+    onSuccess: async (data, variables) => {
+      hapticSuccess();
+      if (data?.xp?.xpAwarded) {
+        triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
+      }
+      toast("Prediction placed!", { description: "Your weekly up/down prediction has been recorded." });
+      setStakeModalOpen(false);
+      setPendingSelection(null);
+      await Promise.all([
+        refreshProfile(),
+        queryClient.invalidateQueries({ queryKey: ["/api/native-markets/updown"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/me/predictions"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
+      ]);
+    },
+    onError: (err: Error) => {
+      hapticError();
+      toast.error("Failed to place prediction", { description: err.message });
+    },
+  });
 
   const handleConfirmStake = useCallback((amount: number) => {
-    setWalletCredits(prev => prev - amount);
-    setStakeModalOpen(false);
-    setPendingSelection(null);
-    toast("Prediction placed!", { description: `You staked ${amount} credits.` });
-  }, []);
+    if (!pendingSelection || pendingSelection.type !== "updown" || !pendingSelection.marketId) {
+      setStakeModalOpen(false);
+      setPendingSelection(null);
+      return;
+    }
+    const market = updownMarkets.find((m) => m.id === pendingSelection.marketId);
+    if (!market) {
+      toast.error("Market unavailable", { description: "Could not find the selected market. Please refresh and try again." });
+      setStakeModalOpen(false);
+      setPendingSelection(null);
+      return;
+    }
+    const isDownPick = pendingSelection.choice.toUpperCase().includes("DOWN");
+    const entryId = isDownPick ? market.downEntryId : market.upEntryId;
+    if (!entryId) {
+      toast.error("Selection unavailable", { description: "This market selection is not available right now." });
+      return;
+    }
+    nativeUpdownBetMutation.mutate({ marketId: market.id, entryId, stakeAmount: amount });
+  }, [pendingSelection, updownMarkets, nativeUpdownBetMutation]);
   const [trendingNowCollapsed, setTrendingNowCollapsed] = useState(() => {
     try {
       const saved = localStorage.getItem('trending_now_collapsed');
@@ -1321,10 +1392,16 @@ export default function HomePage() {
             choice: dir === "up" ? "Trend Score UP" : "Trend Score DOWN",
             marketName: market.personName,
             marketId: market.id,
+            entryId: dir === "up" ? market.upEntryId : market.downEntryId,
             startScore: market.startScore,
             currentScore: market.currentScore,
             crowdSentiment,
             estimatedPayout,
+            baselineScore: market.baselineScore,
+            baselineTimestamp: market.startAt || undefined,
+            tieRule: market.tieRule,
+            endAt: market.endAt || undefined,
+            bettingCutoff: market.bettingCutoff,
           });
         }}
       />
