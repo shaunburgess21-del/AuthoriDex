@@ -11757,6 +11757,83 @@ Target length: about 90-150 words.`;
     return `${OPINION_POLL_BUCKET_BASE}/${pollSlug}/${slugifyOptionName(optionName)}.webp`;
   }
 
+  // Returns a single poll in the same shape as GET /api/opinion-polls (list shape):
+  // options[].votes/percent, totalOptions, totalVotes, userVote, relatedPeople.
+  // Intentionally NOT the detail shape (no realVotes/seedVotes/orderIndex/commentCount)
+  // so the client can patch the ['/api/opinion-polls'] cache directly with this payload.
+  async function loadOpinionPollListShape(pollId: string, userId: string | null) {
+    const [poll] = await db
+      .select()
+      .from(opinionPolls)
+      .where(eq(opinionPolls.id, pollId))
+      .limit(1);
+
+    if (!poll) return null;
+
+    const [relatedMap, optionRows, voteCounts, userVoteRows] = await Promise.all([
+      getRelatedPeopleForCards("opinion_poll", [poll.id]),
+      db
+        .select({
+          id: opinionPollOptions.id,
+          name: opinionPollOptions.name,
+          imageUrl: opinionPollOptions.imageUrl,
+          personId: opinionPollOptions.personId,
+          orderIndex: opinionPollOptions.orderIndex,
+          seedCount: opinionPollOptions.seedCount,
+          personName: trackedPeople.name,
+          personAvatar: trackedPeople.avatar,
+        })
+        .from(opinionPollOptions)
+        .leftJoin(trackedPeople, eq(opinionPollOptions.personId, trackedPeople.id))
+        .where(eq(opinionPollOptions.pollId, poll.id))
+        .orderBy(asc(opinionPollOptions.orderIndex)),
+      db
+        .select({
+          optionId: opinionPollVotes.optionId,
+          cnt: count(),
+        })
+        .from(opinionPollVotes)
+        .where(eq(opinionPollVotes.pollId, poll.id))
+        .groupBy(opinionPollVotes.optionId),
+      userId
+        ? db
+            .select({ optionId: opinionPollVotes.optionId })
+            .from(opinionPollVotes)
+            .where(and(eq(opinionPollVotes.pollId, poll.id), eq(opinionPollVotes.userId, userId)))
+            .limit(1)
+        : Promise.resolve([] as Array<{ optionId: string }>),
+    ]);
+
+    const voteCountByOptionId = new Map(voteCounts.map(v => [v.optionId, Number(v.cnt)]));
+    const optionsWithVotes = optionRows.map(o => {
+      const realVotes = voteCountByOptionId.get(o.id) || 0;
+      const seedVotes = o.seedCount || 0;
+      return { ...o, displayVotes: realVotes + seedVotes };
+    });
+    const totalDisplayVotes = optionsWithVotes.reduce((sum, o) => sum + o.displayVotes, 0);
+    const userVote = userVoteRows[0]?.optionId ?? null;
+    const pollImage = poll.imageUrl || opinionPollImageUrl(poll.slug);
+
+    return {
+      ...poll,
+      imageUrl: pollImage,
+      options: optionsWithVotes.map(o => ({
+        id: o.id,
+        name: o.name,
+        imageUrl: o.personAvatar || o.imageUrl || opinionOptionImageUrl(poll.slug, o.name),
+        personId: o.personId,
+        personName: o.personName || null,
+        votes: o.displayVotes,
+        percent: totalDisplayVotes > 0 ? Math.round((o.displayVotes / totalDisplayVotes) * 100) : 0,
+      })),
+      totalOptions: optionRows.length,
+      totalVotes: totalDisplayVotes,
+      userVote,
+      relatedPersonIds: (relatedMap[poll.id] || []).map(rp => rp.id),
+      relatedPeople: relatedMap[poll.id] || [],
+    };
+  }
+
   app.get("/api/opinion-polls", async (req, res) => {
     try {
       const authContext = await resolveAuthContextFromHeader(req.headers.authorization);
@@ -11993,7 +12070,8 @@ Target length: about 90-150 words.`;
             .set({ totalVotes: sql`GREATEST(${profiles.totalVotes} - 1, 0)` })
             .where(eq(profiles.id, userId));
         }
-        return res.json({ success: true, removed: true });
+        const updatedPoll = await loadOpinionPollListShape(poll.id, userId);
+        return res.json({ success: true, removed: true, poll: updatedPoll });
       }
 
       if (!optionId) {
@@ -12064,7 +12142,8 @@ Target length: about 90-150 words.`;
         } catch (e) { console.error("XP award failed:", e); }
       }
 
-      res.json({ success: true, xp: xpResult ?? null });
+      const updatedPoll = await loadOpinionPollListShape(poll.id, userId);
+      res.json({ success: true, xp: xpResult ?? null, poll: updatedPoll });
     } catch (error: any) {
       console.error("Error voting on opinion poll:", error.message);
       res.status(500).json({ error: "Failed to vote" });

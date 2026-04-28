@@ -53,6 +53,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { sharePage } from "@/lib/share";
 import { useFavorites } from "@/hooks/useFavorites";
+import { useOpinionPollVoteMutation } from "@/hooks/useOpinionPollVoteMutation";
 import { formatNumber, getApprovalColor } from "@/lib/formatNumber";
 import { WhyTrendingCard } from "@/components/WhyTrendingCard";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
@@ -740,6 +741,7 @@ function CategoryRankPill({ category, rank, personName }: { category: string; ra
 export default function PersonDetailPage() {
   const { user, session } = useAuth();
   const { trigger: triggerXpBurst } = useXpBurst();
+  const { vote: voteOnOpinionPoll, removeVote: removeOpinionPollVote } = useOpinionPollVoteMutation();
   const [, params] = useRoute("/person/:id");
   const [location, setLocation] = useLocation();
   const [favoriteLoading, setFavoriteLoading] = useState(false);
@@ -1514,18 +1516,8 @@ export default function PersonDetailPage() {
                       <OpinionPollCard
                         key={poll.id}
                         poll={poll}
-                        onVote={async (pollSlug, optionId) => {
-                          const res = await apiRequest("POST", `/api/opinion-polls/${pollSlug}/vote`, { optionId });
-                          const data = await res.json();
-                          queryClient.invalidateQueries({ queryKey: ["/api/opinion-polls"] });
-                          if (data?.xp?.xpAwarded) {
-                            triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
-                          }
-                        }}
-                        onRemoveVote={async (pollSlug) => {
-                          await apiRequest("POST", `/api/opinion-polls/${pollSlug}/vote`, { remove: true });
-                          queryClient.invalidateQueries({ queryKey: ["/api/opinion-polls"] });
-                        }}
+                        onVote={voteOnOpinionPoll}
+                        onRemoveVote={removeOpinionPollVote}
                         onFilterCategory={handleSentimentCategoryFilter}
                         categoryRaceMap={categoryRaceMap}
                         leaderboardCategories={leaderboardCats}

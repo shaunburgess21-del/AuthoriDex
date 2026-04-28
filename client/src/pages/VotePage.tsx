@@ -19,6 +19,7 @@ import { PersonAvatar } from "@/components/PersonAvatar";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useUserStats } from "@/hooks/useGamification";
+import { useOpinionPollVoteMutation } from "@/hooks/useOpinionPollVoteMutation";
 import { 
   ArrowLeft, 
   ArrowUp,
@@ -1239,6 +1240,7 @@ export default function VotePage() {
   const xp = userStats?.xpPoints ?? 0;
   const rank = userStats?.rank?.name ?? "Citizen";
   const { trigger: triggerXpBurst } = useXpBurst();
+  const { vote: voteOnOpinionPoll, removeVote: removeOpinionPollVote } = useOpinionPollVoteMutation();
 
   const [votedIds, setVotedIds] = useState<Set<string>>(new Set());
 
@@ -2681,18 +2683,8 @@ export default function VotePage() {
                 <div key={poll.id} role="button" tabIndex={0} onClick={(e) => handleCardEmptyTap(e, "opinion", poll.id)} onKeyDown={(e) => { if (e.key === "Enter") handleCardEmptyTap(e as any, "opinion", poll.id); }} className="h-full">
                   <OpinionPollCard
                     poll={poll}
-                    onVote={async (pollSlug, optionId) => {
-                      const res = await apiRequest("POST", `/api/opinion-polls/${pollSlug}/vote`, { optionId });
-                      const data = await res.json();
-                      queryClient.invalidateQueries({ queryKey: ['/api/opinion-polls'] });
-                      if (data?.xp?.xpAwarded) {
-                        triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
-                      }
-                    }}
-                    onRemoveVote={async (pollSlug) => {
-                      await apiRequest("POST", `/api/opinion-polls/${pollSlug}/vote`, { remove: true });
-                      queryClient.invalidateQueries({ queryKey: ['/api/opinion-polls'] });
-                    }}
+                    onVote={voteOnOpinionPoll}
+                    onRemoveVote={removeOpinionPollVote}
                     onFilterCategory={handleCategoryPillFilter}
                     categoryRaceMap={raceMap}
                     leaderboardCategories={leaderboardCats}
@@ -3705,18 +3697,8 @@ export default function VotePage() {
                   <OpinionPollCard
                     key={poll.id}
                     poll={poll}
-                    onVote={async (pollSlug, optionId) => {
-                      const res = await apiRequest("POST", `/api/opinion-polls/${pollSlug}/vote`, { optionId });
-                      const data = await res.json();
-                      queryClient.invalidateQueries({ queryKey: ['/api/opinion-polls'] });
-                      if (data?.xp?.xpAwarded) {
-                        triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
-                      }
-                    }}
-                    onRemoveVote={async (pollSlug) => {
-                      await apiRequest("POST", `/api/opinion-polls/${pollSlug}/vote`, { remove: true });
-                      queryClient.invalidateQueries({ queryKey: ['/api/opinion-polls'] });
-                    }}
+                    onVote={voteOnOpinionPoll}
+                    onRemoveVote={removeOpinionPollVote}
                     onFilterCategory={handleCategoryPillFilter}
                     categoryRaceMap={raceMap}
                     leaderboardCategories={leaderboardCats}
@@ -3856,18 +3838,8 @@ export default function VotePage() {
               return (
                 <OpinionPollCard
                   poll={p}
-                  onVote={async (pollSlug, optionId) => {
-                    const res = await apiRequest("POST", `/api/opinion-polls/${pollSlug}/vote`, { optionId });
-                    const data = await res.json();
-                    queryClient.invalidateQueries({ queryKey: ['/api/opinion-polls'] });
-                    if (data?.xp?.xpAwarded) {
-                      triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
-                    }
-                  }}
-                  onRemoveVote={async (pollSlug) => {
-                    await apiRequest("POST", `/api/opinion-polls/${pollSlug}/vote`, { remove: true });
-                    queryClient.invalidateQueries({ queryKey: ['/api/opinion-polls'] });
-                  }}
+                  onVote={voteOnOpinionPoll}
+                  onRemoveVote={removeOpinionPollVote}
                   onFilterCategory={handleCategoryPillFilter}
                   categoryRaceMap={raceMap}
                   leaderboardCategories={leaderboardCats}
