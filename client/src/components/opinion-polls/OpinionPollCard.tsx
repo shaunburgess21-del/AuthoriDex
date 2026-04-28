@@ -211,6 +211,16 @@ export function OpinionPollCard({
     setVoted(poll.userVote ?? null);
   }, [poll.userVote]);
 
+  useEffect(() => {
+    if (!optionsDrawerOpen && pendingChangeOption) {
+      const t = setTimeout(() => {
+        openChangeDialog(pendingChangeOption);
+        setPendingChangeOption(null);
+      }, 320);
+      return () => clearTimeout(t);
+    }
+  }, [optionsDrawerOpen, pendingChangeOption]);
+
   const handleVote = async (optionId: string, e: MouseEvent) => {
     e.stopPropagation();
     if (!voted) {
@@ -503,12 +513,6 @@ export function OpinionPollCard({
       <Drawer.Root
         open={optionsDrawerOpen}
         onOpenChange={setOptionsDrawerOpen}
-        onAnimationEnd={(open) => {
-          if (!open && pendingChangeOption) {
-            openChangeDialog(pendingChangeOption);
-            setPendingChangeOption(null);
-          }
-        }}
       >
         <Drawer.Portal>
           <Drawer.Overlay className="fixed inset-0 z-[70] bg-black/40" />
