@@ -29,10 +29,20 @@ export interface BadgeProps
   extends React.HTMLAttributes<HTMLDivElement>,
     VariantProps<typeof badgeVariants> {}
 
-function Badge({ className, variant, ...props }: BadgeProps) {
-  return (
-    <div className={cn(badgeVariants({ variant }), className)} {...props} />
-  );
-}
+// Forward refs so Radix `asChild` patterns (TooltipTrigger, PopoverTrigger,
+// DropdownMenuTrigger, etc.) can attach a ref to the underlying <div>.
+// Without this, wrapping <Badge> in any `<XTrigger asChild>` triggers a
+// React "function components cannot be given refs" warning because
+// Radix's Slot tries to forward a ref the function component drops.
+const Badge = React.forwardRef<HTMLDivElement, BadgeProps>(
+  ({ className, variant, ...props }, ref) => (
+    <div
+      ref={ref}
+      className={cn(badgeVariants({ variant }), className)}
+      {...props}
+    />
+  ),
+);
+Badge.displayName = "Badge";
 
 export { Badge, badgeVariants }
