@@ -4,7 +4,7 @@ These Terms of Service ("**Terms**") form a binding agreement between you and **
 
 By creating an account or using the Service in any way, you agree to these Terms. If you do not agree, do not use the Service.
 
-We may update these Terms from time to time. When we do, we will revise the "Last updated" date and, for material changes, give you reasonable notice — for example, by email or an in-app notice. Your continued use of the Service after the changes take effect means you accept the updated Terms.
+We may update these Terms from time to time. When we do, we will revise the "Last updated" date and, for material changes, give you reasonable notice â€” for example, by email or an in-app notice. Your continued use of the Service after the changes take effect means you accept the updated Terms.
 
 ## 2. What VoxDex is
 
@@ -30,11 +30,11 @@ The Service, as currently offered, uses an internal credit system ("**Credits**"
 - Credits are **not securities, derivatives, or financial instruments** of any kind
 - Purchases of additional Credits are **non-refundable** except as required by applicable law
 
-Credits exist solely to enable participation in the Service. Their use is for entertainment and skill-development purposes — to track your prediction record, compete on leaderboards, and engage with content about people and events you care about.
+Credits exist solely to enable participation in the Service. Their use is for entertainment and skill-development purposes â€” to track your prediction record, compete on leaderboards, and engage with content about people and events you care about.
 
 We may change, expire, or revoke Credits at any time, including for inactive accounts, for breaches of these Terms, or for operational reasons. We may also adjust how Credits are awarded, spent, or earned, with reasonable notice for material changes.
 
-**Looking ahead:** We may, in future, introduce additional services, features, or products — including services that involve real money, cryptocurrency, or other forms of consideration. Such services would be governed by separate or additional terms, may be available only in certain jurisdictions, and may require additional verification or eligibility checks. Nothing in these Terms commits us to keeping the Service play-money only, but nothing in these Terms changes the play-money nature of Credits as currently offered.
+**Looking ahead:** We may, in future, introduce additional services, features, or products â€” including services that involve real money, cryptocurrency, or other forms of consideration. Such services would be governed by separate or additional terms, may be available only in certain jurisdictions, and may require additional verification or eligibility checks. Nothing in these Terms commits us to keeping the Service play-money only, but nothing in these Terms changes the play-money nature of Credits as currently offered.
 
 ## 4. Eligibility
 
@@ -151,7 +151,7 @@ We are not liable for any loss arising from Service unavailability.
 - That the Service will meet your expectations or specific needs
 - That any defects in the Service will be corrected
 
-**The Service is not a source of professional advice.** Information presented on VoxDex — including trend scores, prediction-market odds, comments, and analysis — is for entertainment only. It is not investment advice, financial advice, legal advice, or professional advice of any kind. Do not rely on the Service to make decisions that have real-world consequences.
+**The Service is not a source of professional advice.** Information presented on VoxDex â€” including trend scores, prediction-market odds, comments, and analysis â€” is for entertainment only. It is not investment advice, financial advice, legal advice, or professional advice of any kind. Do not rely on the Service to make decisions that have real-world consequences.
 
 ## 13. Limitation of liability
 
@@ -175,11 +175,11 @@ You agree to defend, indemnify, and hold harmless VoxDex, its directors, officer
 
 ## 15. Termination
 
-You may stop using the Service at any time. To delete your account, contact us at [hello@voxdex.com](mailto:hello@voxdex.com) — see our [Privacy Policy](/privacy) for how account deletion is handled.
+You may stop using the Service at any time. To delete your account, contact us at [hello@voxdex.com](mailto:hello@voxdex.com) â€” see our [Privacy Policy](/privacy) for how account deletion is handled.
 
 We may suspend or terminate your account at any time, with or without notice, if we believe you have violated these Terms, applicable law, or for any reason at our discretion.
 
-The following sections survive termination: Sections 3 (Credits — to the extent of post-termination obligations), 7 (the license you granted to your User Content), 9 (Intellectual property), 12 (Disclaimers), 13 (Limitation of liability), 14 (Indemnification), 16 (Governing law), and 17 (Dispute resolution).
+The following sections survive termination: Sections 3 (Credits â€” to the extent of post-termination obligations), 7 (the license you granted to your User Content), 9 (Intellectual property), 12 (Disclaimers), 13 (Limitation of liability), 14 (Indemnification), 16 (Governing law), and 17 (Dispute resolution).
 
 ## 16. Governing law
 

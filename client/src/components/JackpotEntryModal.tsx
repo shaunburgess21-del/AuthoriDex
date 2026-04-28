@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { useLocation } from "wouter";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +9,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getSupabase } from "@/lib/supabase";
-import { Crown, Check, X, Loader2, Lock, TicketCheck, HelpCircle, Clock } from "lucide-react";
+import { Crown, Check, X, Loader2, Lock, TicketCheck, HelpCircle, Clock, CreditCard } from "lucide-react";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { RULES_CONTENT, RulesExplainer } from "@/components/predict/RulesContent";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
@@ -46,7 +47,9 @@ export function JackpotEntryModal({
   bettingCutoff,
   isCutoffPassed,
 }: JackpotEntryModalProps) {
-  const { session, loading, refreshProfile } = useAuth();  const queryClient = useQueryClient();
+  const { session, loading, refreshProfile } = useAuth();
+  const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();
   const { trigger: triggerXpBurst } = useXpBurst();
   const [scoreInput, setScoreInput] = useState("");
   const [availabilityStatus, setAvailabilityStatus] = useState<"idle" | "checking" | "available" | "taken">("idle");
@@ -395,9 +398,24 @@ export function JackpotEntryModal({
             </div>
 
             {userCredits < JACKPOT_TICKET_COST && (
-              <p className="text-xs text-red-600 dark:text-red-400 text-center">
-                You need at least {JACKPOT_TICKET_COST} credits to enter.
-              </p>
+              <div className="rounded-lg border border-violet-500/40 bg-violet-500/10 dark:border-violet-500/30 dark:bg-violet-500/8 p-3 flex items-center gap-3">
+                <CreditCard className="h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400" />
+                <p className="text-xs text-muted-foreground flex-1">
+                  Need at least {JACKPOT_TICKET_COST} credits to enter.
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-violet-500/50 text-violet-700 dark:text-violet-300 hover:bg-violet-500/15"
+                  onClick={() => {
+                    handleClose();
+                    setLocation("/pricing");
+                  }}
+                  data-testid="button-buy-credits-jackpot"
+                >
+                  Buy credits
+                </Button>
+              </div>
             )}
 
             {/* Submit */}

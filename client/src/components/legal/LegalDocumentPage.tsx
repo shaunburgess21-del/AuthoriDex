@@ -2,7 +2,7 @@ import type { AnchorHTMLAttributes, ReactNode } from "react";
 import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -140,19 +140,33 @@ export function LegalDocumentPage({
   markdown,
   backButtonTestId,
 }: LegalDocumentPageProps) {
+  const [, setLocation] = useLocation();
+
+  // Prefer browser history so a user reading these from /pricing,
+  // /me/settings, an in-app modal, etc. lands back where they came
+  // from. Falls back to home for direct visits / shared links where
+  // there's no in-app history to step back through.
+  const handleBack = () => {
+    if (window.history.length > 1) {
+      window.history.back();
+    } else {
+      setLocation("/");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur-xl">
         <div className="container mx-auto flex h-14 items-center gap-3 px-4">
-          <Link href="/">
-            <Button
-              variant="ghost"
-              size="icon"
-              data-testid={backButtonTestId}
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-          </Link>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleBack}
+            aria-label="Go back"
+            data-testid={backButtonTestId}
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
           <h1 className="font-semibold">{title}</h1>
         </div>
       </header>

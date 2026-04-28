@@ -1,6 +1,6 @@
 ## 1. Overview
 
-VoxDex tracks public attention and trends around real-world people, events, and topics. The information we present is derived from publicly available sources — news media, public search trends, encyclopedic content, and online discussion — and is intended for entertainment, comment, criticism, and analysis.
+VoxDex tracks public attention and trends around real-world people, events, and topics. The information we present is derived from publicly available sources â€” news media, public search trends, encyclopedic content, and online discussion â€” and is intended for entertainment, comment, criticism, and analysis.
 
 We respect the rights of public figures and other individuals featured on the Service. This policy describes how to request the removal, correction, or de-indexing of content on VoxDex. We respond to legitimate requests promptly and in good faith.
 
@@ -53,7 +53,7 @@ Include the following information:
 4. **Type of request:** what you want us to do (see Section 3).
 
 5. **Reason for the request:** why you are requesting this action. Examples:
-   - "Privacy concerns — I am not a public figure and did not consent to be featured"
+   - "Privacy concerns â€” I am not a public figure and did not consent to be featured"
    - "The information shown is factually inaccurate (specify what is wrong)"
    - "I am the copyright holder of this image and have not licensed it for this use"
    - "The associated user comments are defamatory"
@@ -64,7 +64,7 @@ Include the following information:
    - For representative requests: a letter on company letterhead stating your authority, or a verifiable email from the representative's official domain
    - For IP claims: documentation of ownership (registration, contract, etc.)
 
-7. **A good-faith statement** that the information in your request is accurate, that you are authorized to make the request, and that — for IP claims — you have a good-faith belief that the use is not authorized.
+7. **A good-faith statement** that the information in your request is accurate, that you are authorized to make the request, and that â€” for IP claims â€” you have a good-faith belief that the use is not authorized.
 
 8. **A signature** (digital signature, typed name, or actual signature on a scanned document is fine).
 
@@ -92,7 +92,7 @@ We try to balance the rights of individuals with the public interest in commenta
 
 - **Privacy of non-public-figures.** If you are not a public figure and information about you appears on the Service, we will treat removal requests with strong presumption in your favor.
 
-- **Factual accuracy.** We correct factual errors when notified. Trend scores and prediction-market outcomes are not factual statements about a person's character — they reflect attention and discussion. They are not subject to correction in the same way that, say, a misstated birthplace would be.
+- **Factual accuracy.** We correct factual errors when notified. Trend scores and prediction-market outcomes are not factual statements about a person's character â€” they reflect attention and discussion. They are not subject to correction in the same way that, say, a misstated birthplace would be.
 
 - **Legitimate commentary, criticism, and satire.** Comment, criticism, and analysis of public figures is a long-recognized exercise of free expression. We may decline to remove content that constitutes legitimate commentary, even if the subject finds it unflattering.
 
@@ -125,9 +125,9 @@ This policy is not:
 
 - A guarantee that any particular request will be granted
 - A waiver of VoxDex's right to make editorial decisions about what is featured on the Service
-- A substitute for formal legal process — we are not a court, and our decisions are not binding determinations of legal rights
+- A substitute for formal legal process â€” we are not a court, and our decisions are not binding determinations of legal rights
 
-If you believe you have a legal claim against VoxDex, you may pursue it through ordinary legal channels. We encourage you to try this informal process first — most issues are resolved here without need for litigation.
+If you believe you have a legal claim against VoxDex, you may pursue it through ordinary legal channels. We encourage you to try this informal process first â€” most issues are resolved here without need for litigation.
 
 ## 10. Confidentiality
 

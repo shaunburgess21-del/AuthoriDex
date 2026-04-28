@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { UserMenu } from "@/components/UserMenu";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
-import { ArrowLeft, User, Star, TrendingUp, Settings, LogOut, Vote, Wallet, Shield, Trophy, Sparkles, Eye, Lock, Flame } from "lucide-react";
+import { ArrowLeft, User, Star, TrendingUp, Settings, LogOut, Vote, Wallet, Shield, Trophy, Sparkles, Eye, Lock, Flame, CreditCard } from "lucide-react";
 import { useLocation } from "wouter";
 import { navigateToLogin } from "@/lib/authReturn";
 import { useAuth } from "@/contexts/AuthContext";
@@ -244,8 +244,21 @@ export default function MePage() {
                   </span>
                 </div>
               </div>
+              {/* Top-up CTA lives on the Predictor Stats card (rather than
+                  inside the dense 5-stat grid above) so there's room for a
+                  proper button that doesn't squeeze the credit number on
+                  mobile. /pricing is public, so logged-out viewers of this
+                  card never reach this surface anyway. */}
+              <Button
+                className="w-full mt-4 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
+                onClick={() => setLocation("/pricing")}
+                data-testid="button-buy-credits-me"
+              >
+                <CreditCard className="h-4 w-4 mr-2" />
+                Buy Credits
+              </Button>
               <p className="text-xs text-muted-foreground mt-3">
-                Virtual credits for testing prediction features. No real money is involved.
+                Credits power your predictions. They never expire and have no cash value.
               </p>
             </Card>
 

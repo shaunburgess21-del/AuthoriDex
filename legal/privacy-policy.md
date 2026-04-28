@@ -16,7 +16,7 @@ We collect personal information in three ways: information you give us, informat
 - **Authentication identifiers** when you sign in via Google or another third-party provider (typically your email address, name, and a unique account identifier)
 - **User content:** votes, predictions, comments, and any other content you submit
 - **Communications:** messages you send to us, including support requests
-- **Payment information** when you purchase Credits — handled by our third-party Merchant of Record. We do not see, store, or process your full card details. We receive a transaction record (date, amount, currency, last four digits of the card, country code) for our records
+- **Payment information** when you purchase Credits â€” handled by our third-party Merchant of Record. We do not see, store, or process your full card details. We receive a transaction record (date, amount, currency, last four digits of the card, country code) for our records
 
 ### 2.2 Information we collect automatically
 
@@ -34,14 +34,14 @@ We collect this data through standard web technologies and through analytics int
 We may receive information about you from:
 
 - **Third-party authentication providers** (e.g., Google) when you sign in with them, limited to what they share based on your privacy settings with that provider and the permissions you grant
-- **Public sources** that we use to populate the Service's content about public figures (news, encyclopedic content, public search trends) — this is not "personal information about you" but information about the people the Service tracks
+- **Public sources** that we use to populate the Service's content about public figures (news, encyclopedic content, public search trends) â€” this is not "personal information about you" but information about the people the Service tracks
 - **Service providers** who help us operate the Service (described in Section 6)
 
 We do not buy personal information from data brokers or marketing-list providers.
 
 ### 2.4 Future categories of information
 
-If we introduce features that require additional categories of information — for example, identity verification ("KYC") for any future real-money or regulated services — we will update this Privacy Policy and, where required, ask for your specific consent before collecting that information.
+If we introduce features that require additional categories of information â€” for example, identity verification ("KYC") for any future real-money or regulated services â€” we will update this Privacy Policy and, where required, ask for your specific consent before collecting that information.
 
 ## 3. How we use personal information
 
@@ -63,7 +63,7 @@ We do **not** use personal information to train machine-learning models that we 
 
 ## 4. Public-figure content (information about people the Service tracks)
 
-The Service displays information about public figures — politicians, athletes, entertainers, business leaders, and others who are the subject of significant public attention. This information is derived from publicly available sources and is presented for purposes of comment, criticism, analysis, and entertainment.
+The Service displays information about public figures â€” politicians, athletes, entertainers, business leaders, and others who are the subject of significant public attention. This information is derived from publicly available sources and is presented for purposes of comment, criticism, analysis, and entertainment.
 
 If you are a public figure (or represent one) and want to request removal or correction of content about you, please refer to our [Content & Takedown Policy](/takedown).
 
@@ -87,7 +87,7 @@ We may add, change, or remove service providers from time to time. We will updat
 
 ## 6. International data transfers
 
-VoxDex is based in South Africa, but the Service uses globally distributed infrastructure. As a result, your personal information may be transferred to, processed in, and stored in countries other than your country of residence — including the United States and other regions where our service providers operate.
+VoxDex is based in South Africa, but the Service uses globally distributed infrastructure. As a result, your personal information may be transferred to, processed in, and stored in countries other than your country of residence â€” including the United States and other regions where our service providers operate.
 
 We rely on the following safeguards to protect personal information during international transfers:
 
@@ -144,7 +144,7 @@ If you are in South Africa, you have the right to:
 
 If you are in the European Economic Area, the United Kingdom, or Switzerland, you have the rights listed above plus:
 
-- **Data portability** — receive your information in a machine-readable format and transmit it to another controller
+- **Data portability** â€” receive your information in a machine-readable format and transmit it to another controller
 - **Restriction of processing** in certain circumstances
 - **Right not to be subject to solely automated decisions** that produce legal or similarly significant effects (we do not currently make such decisions)
 
