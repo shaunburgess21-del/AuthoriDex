@@ -169,7 +169,10 @@ function PricingCard({ pkg }: { pkg: CreditPackage }) {
       )}
 
       <div className="mb-4">
-        <h3 className="text-lg font-semibold">{pkg.name}</h3>
+        {/* h2 (not h3) so we don't skip a heading level after the page
+            h1 — the section above the grid intentionally has no
+            heading. Visual size stays small via tailwind classes. */}
+        <h2 className="text-lg font-semibold">{pkg.name}</h2>
         <p className="mt-1 text-xs text-muted-foreground">{pkg.description}</p>
       </div>
 

@@ -1,5 +1,5 @@
 import { useRoute, Link, useLocation } from "wouter";
-import { ArrowLeft, Clock, CreditCard } from "lucide-react";
+import { ArrowLeft, ArrowRight, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
@@ -98,8 +98,8 @@ export default function CheckoutPage() {
                 className="w-full"
                 data-testid="button-checkout-keep-playing"
               >
-                <CreditCard className="mr-2 h-4 w-4" />
                 Keep playing
+                <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </Link>
           </div>

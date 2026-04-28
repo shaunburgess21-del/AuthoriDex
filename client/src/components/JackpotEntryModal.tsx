@@ -47,7 +47,7 @@ export function JackpotEntryModal({
   bettingCutoff,
   isCutoffPassed,
 }: JackpotEntryModalProps) {
-  const { session, loading, refreshProfile } = useAuth();
+  const { session, loading, refreshProfile, isLoggedIn } = useAuth();
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { trigger: triggerXpBurst } = useXpBurst();
@@ -397,7 +397,11 @@ export function JackpotEntryModal({
               </div>
             </div>
 
-            {userCredits < JACKPOT_TICKET_COST && (
+            {/* Mirror StakeModal: only nudge to /pricing once the user is
+                authenticated. Logged-out viewers shouldn't see a "Buy
+                credits" affordance — they need the Sign In path first,
+                and /checkout is a no-op for them anyway. */}
+            {isLoggedIn && userCredits < JACKPOT_TICKET_COST && (
               <div className="rounded-lg border border-violet-500/40 bg-violet-500/10 dark:border-violet-500/30 dark:bg-violet-500/8 p-3 flex items-center gap-3">
                 <CreditCard className="h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400" />
                 <p className="text-xs text-muted-foreground flex-1">
