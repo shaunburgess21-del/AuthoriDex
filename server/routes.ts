@@ -1850,7 +1850,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Failed to fetch trend context" });
     }
   });
-  
+
+  // Adjacent leaderboard neighbours for the celebrity profile
+  // page's "Continue exploring" navigator. Returns the person one
+  // rank above (prev) and one rank below (next) so the UI can let
+  // users walk the leaderboard without bouncing back to /. Payload
+  // is intentionally narrow — avatar + rank + category is enough
+  // for the card UI; deeper details belong on the profile itself.
+  app.get("/api/trending/:id/neighbours", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const people = await storage.getTrendingPeople();
+      if (people.length === 0) {
+        return res.json({ prev: null, next: null });
+      }
+      const idx = people.findIndex((p) => p.id === id);
+      if (idx < 0) {
+        // Person isn't on the current leaderboard (e.g. dropped
+        // out, archived). Returning nulls lets the client render
+        // the "edge" placeholder without a 404 — the rest of the
+        // profile page is still useful.
+        return res.json({ prev: null, next: null });
+      }
+      const slim = (p: (typeof people)[number] | undefined) =>
+        p
+          ? {
+              id: p.id,
+              name: p.name,
+              avatar: p.avatar,
+              rank: p.rank,
+              category: p.category,
+              trendScore: p.trendScore,
+              change24h: p.change24h,
+            }
+          : null;
+      res.json({
+        prev: slim(idx > 0 ? people[idx - 1] : undefined),
+        next: slim(idx < people.length - 1 ? people[idx + 1] : undefined),
+      });
+    } catch (error) {
+      console.error("Error fetching trending neighbours:", error);
+      res.status(500).json({ error: "Failed to fetch neighbours" });
+    }
+  });
+
   app.post("/api/trending/context/batch", async (req, res) => {
     try {
       const { personIds } = req.body;

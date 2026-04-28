@@ -518,7 +518,8 @@ function UpDownOutcomes({
 export default function MarketDetailPage() {
   const params = useParams<{ slug: string }>();
   const [, setLocation] = useLocation();
-  const { user, isLoggedIn, refreshProfile } = useAuth();  const queryClient = useQueryClient();
+  const { user, isLoggedIn, refreshProfile } = useAuth();
+  const queryClient = useQueryClient();
   const { trigger: triggerXpBurst } = useXpBurst();
   const marketCommentCount = useCommentCount("open-market", params.slug || "");
 

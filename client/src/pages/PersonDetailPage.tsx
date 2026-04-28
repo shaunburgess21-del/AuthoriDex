@@ -66,6 +66,7 @@ import { ViewAllOverlayHeader } from "@/components/ViewAllOverlayHeader";
 import { AvatarHeightHeadline } from "@/components/AvatarHeightHeadline";
 import { VersusCard, type VersusCardMatchup } from "@/components/matchups/VersusCard";
 import { OpinionPollCard } from "@/components/opinion-polls/OpinionPollCard";
+import { PersonNeighbourNav } from "@/components/PersonNeighbourNav";
 
 const LazyPredictTab = lazy(() =>
   import("@/components/PredictTab").then((m) => ({ default: m.PredictTab }))
@@ -1625,6 +1626,11 @@ export default function PersonDetailPage() {
             />
           </Suspense>
         )}
+
+        {/* Tab-agnostic: rendered once below both tab bodies so the
+            "previous / next on the leaderboard" jump is reachable
+            regardless of which tab the user lands on. */}
+        <PersonNeighbourNav personId={person.id} />
         </div>
         </div>
 

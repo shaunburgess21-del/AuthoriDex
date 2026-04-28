@@ -15,6 +15,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { formatDate } from "@/lib/formatDate";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { VoteDetailNavCluster } from "@/components/vote/VoteDetailNavCluster";
+import { SwipeNavigator } from "@/components/vote/SwipeNavigator";
 import { useDetailNavigation } from "@/hooks/useDetailNavigation";
 import { navigateToLogin } from "@/lib/authReturn";
 import { CardComments, useCommentCount } from "@/components/comments/CardComments";
@@ -72,12 +73,13 @@ export default function MatchupDetailPage() {
       return slugParam;
     }
   }, [slugParam]);
-  const [, setLocation] = useLocation();  const queryClient = useQueryClient();
+  const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();
   const { trigger: triggerXpBurst } = useXpBurst();
   const { user, isLoggedIn } = useAuth();
 
   const matchupCommentCount = useCommentCount("matchup", slug || "");
-  const { showNav, historyDepth } = useDetailNavigation(slug || undefined, "matchup");
+  const { showNav, historyDepth, goPrev, goNext, prevSlug, nextSlug } = useDetailNavigation(slug || undefined, "matchup");
 
   const { data: matchup, isLoading, error } = useQuery<MatchupDetail>({
     queryKey: ["/api/matchups/by-slug", slug],
@@ -146,14 +148,17 @@ export default function MatchupDetailPage() {
     return (
       <div className="min-h-screen bg-background">
         <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-md border-b border-border/50">
-          <div className="max-w-3xl mx-auto px-4 py-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+          <div className="max-w-3xl mx-auto px-4 py-3 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
             <div className="flex items-center gap-3 min-w-0 justify-self-start">
               <Link href="/" data-testid="link-logo-home">
                 <VoxDexLogo size={28} />
               </Link>
-              <Button variant="ghost" size="sm" onClick={() => { showNav ? window.history.go(-historyDepth) : (window.history.length > 1 ? window.history.back() : setLocation("/vote")); }} data-testid="button-back">
-                <ArrowLeft className="h-4 w-4 mr-1" />
-                Vote
+              {/* Icon-only on mobile so the prev-card chevron next
+                  to it has visible breathing room. Label returns
+                  at sm: for desktop clarity. */}
+              <Button variant="ghost" size="sm" className="px-2 sm:px-3" onClick={() => { showNav ? window.history.go(-historyDepth) : (window.history.length > 1 ? window.history.back() : setLocation("/vote")); }} data-testid="button-back" aria-label="Back to Vote">
+                <ArrowLeft className="h-4 w-4 sm:mr-1" />
+                <span className="hidden sm:inline">Vote</span>
               </Button>
             </div>
             <div className="flex justify-center min-w-0 col-start-2">
@@ -184,14 +189,17 @@ export default function MatchupDetailPage() {
   return (
     <div className="min-h-screen bg-background" data-testid="matchup-detail-page">
       <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-md border-b border-border/50">
-        <div className="max-w-3xl mx-auto px-4 py-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+        <div className="max-w-3xl mx-auto px-4 py-3 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
           <div className="flex items-center gap-3 min-w-0 justify-self-start">
             <Link href="/" data-testid="link-logo-home">
               <VoxDexLogo size={28} />
             </Link>
-            <Button variant="ghost" size="sm" onClick={() => { showNav ? window.history.go(-historyDepth) : (window.history.length > 1 ? window.history.back() : setLocation("/vote")); }} data-testid="button-back">
-              <ArrowLeft className="h-4 w-4 mr-1" />
-              Vote
+            {/* Icon-only on mobile so the prev-card chevron next
+                to it has visible breathing room. Label returns at
+                sm: for desktop clarity. */}
+            <Button variant="ghost" size="sm" className="px-2 sm:px-3" onClick={() => { showNav ? window.history.go(-historyDepth) : (window.history.length > 1 ? window.history.back() : setLocation("/vote")); }} data-testid="button-back" aria-label="Back to Vote">
+              <ArrowLeft className="h-4 w-4 sm:mr-1" />
+              <span className="hidden sm:inline">Vote</span>
             </Button>
           </div>
           <div className="flex justify-center min-w-0 col-start-2">
@@ -203,6 +211,12 @@ export default function MatchupDetailPage() {
         </div>
       </header>
 
+      <SwipeNavigator
+        onSwipeRight={goPrev}
+        onSwipeLeft={goNext}
+        disableRight={!prevSlug}
+        disableLeft={!nextSlug}
+      >
       <div className="max-w-3xl mx-auto px-4 pt-6 pb-24 md:pb-6">
         {/* Header Block */}
         <div className="mb-6" data-testid="section-matchup-header">
@@ -542,6 +556,7 @@ export default function MatchupDetailPage() {
           />
         </div>
       </div>
+      </SwipeNavigator>
     </div>
   );
 }

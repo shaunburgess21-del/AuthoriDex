@@ -26,6 +26,7 @@ import { isUnauthorizedApiError, signInToVoteToastOptions, signInToVoteTitle } f
 import { formatDate } from "@/lib/formatDate";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { VoteDetailNavCluster } from "@/components/vote/VoteDetailNavCluster";
+import { SwipeNavigator } from "@/components/vote/SwipeNavigator";
 import { useDetailNavigation } from "@/hooks/useDetailNavigation";
 import {
   ArrowLeft,
@@ -71,7 +72,7 @@ export default function OpinionPollDetailPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const opCommentCount = useCommentCount("opinion-poll", slug || "");
-  const { showNav, historyDepth } = useDetailNavigation(slug || undefined, "opinion");
+  const { showNav, historyDepth, goPrev, goNext, prevSlug, nextSlug } = useDetailNavigation(slug || undefined, "opinion");
   const [changeDialogOpen, setChangeDialogOpen] = useState(false);
   const [pendingOption, setPendingOption] = useState<{ id: string; name: string } | null>(null);
   const [headerImgError, setHeaderImgError] = useState(false);
@@ -221,14 +222,18 @@ export default function OpinionPollDetailPage() {
   return (
     <div className="min-h-screen bg-background" data-testid="opinion-poll-detail-page">
       <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-md border-b border-border/50">
-        <div className="max-w-3xl mx-auto px-4 py-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+        <div className="max-w-3xl mx-auto px-4 py-3 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
           <div className="flex items-center gap-3 min-w-0 justify-self-start">
             <Link href="/" data-testid="link-logo-home">
               <VoxDexLogo size={28} />
             </Link>
-            <Button variant="ghost" size="sm" onClick={() => { showNav ? window.history.go(-historyDepth) : (window.history.length > 1 ? window.history.back() : setLocation("/vote")); }} data-testid="button-back">
-              <ArrowLeft className="h-4 w-4 mr-1" />
-              Vote
+            {/* Icon-only on mobile so the prev-card chevron next to
+                it has visible breathing room and the two tap
+                targets don't fight for the same thumb. Label
+                returns at sm: for desktop clarity. */}
+            <Button variant="ghost" size="sm" className="px-2 sm:px-3" onClick={() => { showNav ? window.history.go(-historyDepth) : (window.history.length > 1 ? window.history.back() : setLocation("/vote")); }} data-testid="button-back" aria-label="Back to Vote">
+              <ArrowLeft className="h-4 w-4 sm:mr-1" />
+              <span className="hidden sm:inline">Vote</span>
             </Button>
           </div>
           <div className="flex justify-center min-w-0 col-start-2">
@@ -240,6 +245,12 @@ export default function OpinionPollDetailPage() {
         </div>
       </header>
 
+      <SwipeNavigator
+        onSwipeRight={goPrev}
+        onSwipeLeft={goNext}
+        disableRight={!prevSlug}
+        disableLeft={!nextSlug}
+      >
       <div className="max-w-3xl mx-auto px-4 pt-6 pb-24 md:pb-6">
         <div className="mb-6" data-testid="section-poll-header">
           <div className="flex items-center gap-2 flex-wrap mb-3">
@@ -622,6 +633,7 @@ export default function OpinionPollDetailPage() {
           />
         </div>
       </div>
+      </SwipeNavigator>
 
       {expandedImage && (
         <div

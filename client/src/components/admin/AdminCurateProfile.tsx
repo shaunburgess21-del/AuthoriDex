@@ -35,7 +35,8 @@ interface CelebrityImageData {
   addedAt: string;
 }
 
-export function AdminCurateProfile() {  const [searchQuery, setSearchQuery] = useState("");
+export function AdminCurateProfile() {
+  const [searchQuery, setSearchQuery] = useState("");
   const [visibilityFilter, setVisibilityFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [editingCard, setEditingCard] = useState<CurateCard | null>(null);
