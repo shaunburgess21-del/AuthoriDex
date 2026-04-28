@@ -125,7 +125,7 @@ function OptionRow({
   const isSelected = mode === "result-selected";
   const rowClass = `flex items-stretch overflow-hidden rounded-lg border transition-all duration-300 ${
     isSelected
-      ? "border-[#EFEFEF]/45 bg-white/[0.06] dark:border-white/40 dark:bg-white/5"
+      ? "border-cyan-500/30 border-l-4 border-l-cyan-500 bg-cyan-500/10 dark:bg-cyan-500/15"
       : "border-border/30 bg-muted/20"
   }`;
   const contentColumn = (
@@ -201,6 +201,7 @@ export function OpinionPollCard({
   const [pendingOption, setPendingOption] = useState<{ id: string; name: string } | null>(null);
   const [expandedImage, setExpandedImage] = useState<{ url: string; alt: string } | null>(null);
   const [optionsDrawerOpen, setOptionsDrawerOpen] = useState(false);
+  const [pendingChangeOption, setPendingChangeOption] = useState<typeof options[number] | null>(null);
   const options = poll.options || [];
   const visibleOptions = options.slice(0, OPINION_POLL_PREVIEW_COUNT);
   const remainingCount = Math.max(0, options.length - OPINION_POLL_PREVIEW_COUNT);
@@ -227,10 +228,16 @@ export function OpinionPollCard({
     }
   };
 
-  const openChangeDialog = (option: (typeof options)[0], e: MouseEvent) => {
-    e.stopPropagation();
+  const openChangeDialog = (option: (typeof options)[0], e?: MouseEvent) => {
+    if (e) e.stopPropagation();
     setPendingOption({ id: option.id, name: option.name });
     setChangeDialogOpen(true);
+  };
+
+  const handleDrawerChangeVote = (option: (typeof options)[0], e: MouseEvent) => {
+    e.stopPropagation();
+    setPendingChangeOption(option);
+    setOptionsDrawerOpen(false);
   };
 
   const confirmChangeVote = async () => {
@@ -440,7 +447,10 @@ export function OpinionPollCard({
             });
           }
           setChangeDialogOpen(open);
-          if (!open) setPendingOption(null);
+          if (!open) {
+            setPendingOption(null);
+            setPendingChangeOption(null);
+          }
         }}
       >
         <AlertDialogContent onClick={(e) => e.stopPropagation()}>
@@ -493,18 +503,26 @@ export function OpinionPollCard({
       <Drawer.Root
         open={optionsDrawerOpen}
         onOpenChange={setOptionsDrawerOpen}
-        snapPoints={[0.85]}
+        onAnimationEnd={(open) => {
+          if (!open && pendingChangeOption) {
+            openChangeDialog(pendingChangeOption);
+            setPendingChangeOption(null);
+          }
+        }}
       >
         <Drawer.Portal>
           <Drawer.Overlay className="fixed inset-0 z-[70] bg-black/40" />
           <Drawer.Content
-            className="fixed inset-x-0 bottom-0 z-[70] flex flex-col rounded-t-2xl border-t border-border/50 bg-background max-h-[100dvh]"
+            className="fixed inset-x-0 bottom-0 z-[70] flex flex-col rounded-t-2xl border-t border-border/50 bg-background max-h-[85dvh]"
             data-interactive="true"
             data-testid={`opinion-poll-options-drawer-${poll.id}`}
           >
             <div className="mx-auto mt-3 mb-2 h-1.5 w-16 rounded-full bg-muted-foreground/60" />
             <div className="flex items-center justify-between px-4 pb-2">
               <Drawer.Title className="text-sm font-semibold text-foreground">All options</Drawer.Title>
+              <Drawer.Description className="sr-only">
+                All options for {poll.title}
+              </Drawer.Description>
               <button
                 type="button"
                 onClick={() => setOptionsDrawerOpen(false)}
@@ -543,7 +561,7 @@ export function OpinionPollCard({
                     mode={isSelected ? "result-selected" : "result-other"}
                     percent={percent}
                     isLeading={isLeading}
-                    onChangeVote={(e) => openChangeDialog(option, e)}
+                    onChangeVote={(e) => handleDrawerChangeVote(option, e)}
                     onExpandImage={(url, alt) => setExpandedImage({ url, alt })}
                     testIdPrefix="opinion-poll-drawer-result"
                   />
