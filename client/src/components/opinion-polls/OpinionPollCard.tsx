@@ -36,7 +36,7 @@ function parseOpinionPollCardError(err: unknown): { message: string; retryAfter?
   return { message: "Something went wrong. Please try again." };
 }
 
-const OPINION_POLL_PREVIEW_COUNT = 5;
+const OPINION_POLL_PREVIEW_COUNT = 4;
 
 /** Poll row shape from `/api/opinion-polls` (Vote + profile Vote tab). */
 export interface OpinionPollCardPoll {
