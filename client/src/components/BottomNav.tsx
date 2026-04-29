@@ -51,7 +51,7 @@ export function BottomNav() {
               key={item.path}
               href={item.path}
               aria-current={isActive ? "page" : undefined}
-              className={`flex flex-col items-center justify-center gap-1 px-4 py-2 transition-colors ${
+              className={`flex flex-col items-center justify-center gap-1 px-4 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                 isActive 
                   ? "text-primary" 
                   : "text-muted-foreground hover:text-foreground"

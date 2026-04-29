@@ -240,7 +240,7 @@ function UserMenuContent({
               <Link
                 href="/me"
                 onClick={() => onClose?.()}
-                className="font-semibold truncate hover:underline cursor-pointer"
+                className="font-semibold truncate hover:underline cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 data-testid="link-my-account-name"
               >
                 {displayName}
@@ -259,7 +259,7 @@ function UserMenuContent({
               <Link
                 href={`/u/${profile.username}`}
                 onClick={() => onClose?.()}
-                className="block text-xs text-muted-foreground truncate hover:text-foreground hover:underline cursor-pointer"
+                className="block text-xs text-muted-foreground truncate hover:text-foreground hover:underline cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 data-testid="link-my-public-profile"
               >
                 @{profile.username}

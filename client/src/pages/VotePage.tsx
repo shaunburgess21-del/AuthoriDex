@@ -2312,7 +2312,7 @@ export default function VotePage() {
                 setLocation("/");
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
-              className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+              className="flex items-center gap-2 hover:opacity-80 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               data-testid="button-logo-home"
             >
               <VoxDexLogo size={32} variant="vote" />
