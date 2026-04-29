@@ -34,11 +34,13 @@ import { computePayoutMultiplier } from "@/lib/parimutuel";
 import { TrendingPerson } from "@shared/schema";
 import { useIntersectionObserver } from "@/hooks/useIntersectionObserver";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
+import { useLeaderboardCategories } from "@/hooks/useLeaderboardCategories";
 import { Loader2 } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { motion, AnimatePresence } from "framer-motion";
 import { LineChart as RechartsLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
 
 type HomeView = "leaderboard" | "predict" | "vote";
 const CATEGORY_OPTIONS = ["All", "Tech", "Business", "Politics", "Sports", "Music", "Film & TV", "Gaming", "Creator", "Food & Drink", "Lifestyle"] as const;
@@ -519,9 +521,14 @@ export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [category, setCategory] = useState(() => {
     const params = new URLSearchParams(window.location.search);
-    return params.get("category") || "all";
+    const raw = params.get("category");
+    if (!raw) return "all";
+    const lowered = raw.toLowerCase();
+    if (lowered === "all" || lowered === "favorites" || lowered === "trending") return lowered;
+    return normalizeMarketCategory(raw);
   });
   const [, setLocation] = useLocation();
+  const leaderboardCategories = useLeaderboardCategories();
 
   useEffect(() => {
     if (window.location.hash === "#leaderboard") {
@@ -883,6 +890,28 @@ export default function HomePage() {
   });
 
   const hasActiveFilters = searchQuery || category !== "all";
+  const leaderboardFilterCategories = useMemo(() => {
+    const pinned = [
+      { value: "all", label: "All Categories" },
+      { value: "favorites", label: "Favorites" },
+      { value: "trending", label: "Trending" },
+    ];
+    const dynamic = Array.from(leaderboardCategories ?? [])
+      .filter((id) => id && id !== "all" && id !== "favorites" && id !== "trending")
+      .sort((a, b) => getMarketCategoryLabel(a).localeCompare(getMarketCategoryLabel(b)))
+      .map((id) => ({ value: id, label: getMarketCategoryLabel(id) }));
+    if (category !== "all" && category !== "favorites" && category !== "trending" && !dynamic.some((c) => c.value === category)) {
+      dynamic.unshift({ value: category, label: getMarketCategoryLabel(category) });
+    }
+    return [...pinned, ...dynamic];
+  }, [leaderboardCategories, category]);
+
+  const activeCategoryLabel = useMemo(() => {
+    if (category === "all") return "All Categories";
+    if (category === "favorites") return "Favorites";
+    if (category === "trending") return "Trending";
+    return getMarketCategoryLabel(category);
+  }, [category]);
 
   if (isLoading) {
     return (
@@ -1133,7 +1162,11 @@ export default function HomePage() {
                   <div className="px-6 py-4 border-b bg-muted/30">
                     <div className="space-y-3">
                       <div className="flex items-center gap-2">
-                        <FilterDropdown value={category} onChange={setCategory} />
+                        <FilterDropdown
+                          value={category}
+                          onChange={setCategory}
+                          categories={leaderboardFilterCategories}
+                        />
                         <div className="flex-1">
                           <SearchBar 
                             onSearch={setSearchQuery} 
@@ -1155,7 +1188,7 @@ export default function HomePage() {
                           )}
                           {category !== "all" && (
                             <Badge variant="secondary" className="gap-1">
-                              Category: {category}
+                              Category: {activeCategoryLabel}
                               <X 
                                 className="h-3 w-3 cursor-pointer" 
                                 onClick={() => setCategory("all")}
