@@ -4,6 +4,7 @@ import { PersonAvatar } from "@/components/PersonAvatar";
 import { WeeklyUpDownNameBlock } from "@/components/WeeklyUpDownNameBlock";
 import { WeeklyUpDownActionButtons } from "@/components/predict/WeeklyUpDownActionButtons";
 import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
+import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
 import { PredictCard } from "@/components/predict/PredictCard";
 import { ParticipantAvatarStack, type ParticipantPreview } from "@/components/predict/ParticipantAvatarStack";
 import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
@@ -115,6 +116,13 @@ export function WeeklyUpDownCard({
           detailLabel="View Up/Down Details"
         />
       </div>
+
+      <MarketCycleStrip
+        bettingCutoff={market.bettingCutoff ?? null}
+        resolveAt={market.endAt ?? null}
+        variant="compact"
+        className="mb-2"
+      />
 
       <Link
         href={`/predict/updown/${market.id}`}

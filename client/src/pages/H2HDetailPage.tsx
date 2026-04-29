@@ -1,10 +1,14 @@
 import { useState, useMemo, useCallback } from "react";
 import { useRoute, useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { hapticSuccess, hapticError } from "@/lib/haptic";
 import { useMarketCycle } from "@/hooks/useMarketCycle";
 import { useAuth } from "@/contexts/AuthContext";
+import { useXpBurst } from "@/components/XpBurstProvider";
 import { StakeModal, type StakeSelection } from "@/components/StakeModal";
 import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
+import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { CategoryPill } from "@/components/CategoryPill";
 import { UserMenu } from "@/components/UserMenu";
@@ -17,12 +21,12 @@ import { h2hUserPickFromBet } from "@/components/predict/HeadToHeadCard";
 import { normalizeMarketCategory } from "@shared/constants";
 import { apiRequest } from "@/lib/queryClient";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
+import { computePayoutMultiplier } from "@/lib/parimutuel";
 import { goBack } from "@/lib/goBack";
 import {
   ArrowLeft,
   Swords,
   Clock,
-  Lock,
   HelpCircle,
   Users,
   TrendingUp,
@@ -41,6 +45,8 @@ interface HydratedH2H {
   person2EntryLabel?: string;
   category: string;
   totalPool: number;
+  person1Stake: number;
+  person2Stake: number;
   person1Percent: number;
   totalParticipants: number;
   tieRule: string;
@@ -53,8 +59,10 @@ export default function H2HDetailPage() {
   const [, params] = useRoute("/predict/h2h/:marketId");
   const [, setLocation] = useLocation();
   const marketId = params?.marketId || "";
-  const { user, profile } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
   const walletCredits = profile?.predictCredits ?? 0;
+  const queryClient = useQueryClient();
+  const { trigger: triggerXpBurst } = useXpBurst();
 
   const [stakeModalOpen, setStakeModalOpen] = useState(false);
   const [pendingSelection, setPendingSelection] = useState<StakeSelection | null>(null);
@@ -131,6 +139,8 @@ export default function H2HDetailPage() {
       person2EntryLabel: typeof e2.label === "string" ? e2.label : undefined,
       category: normalizeMarketCategory(market.category || "misc"),
       totalPool,
+      person1Stake: s1,
+      person2Stake: s2,
       person1Percent: s1 + s2 === 0 ? 50 : Math.round((s1 / total) * 100),
       totalParticipants,
       tieRule: market.tieRule || "refund",
@@ -171,6 +181,16 @@ export default function H2HDetailPage() {
       }
       const picked = person === 1 ? hydrated.person1 : hydrated.person2;
       const opponent = person === 1 ? hydrated.person2 : hydrated.person1;
+      const sentiment = person === 1 ? hydrated.person1Percent : 100 - hydrated.person1Percent;
+      // Use raw stakes (not the rounded percent) so extreme splits like
+      // 999/1 don't collapse to a 2.0x default in the modal.
+      const pickedStake = person === 1 ? hydrated.person1Stake : hydrated.person2Stake;
+      const otherStake = person === 1 ? hydrated.person2Stake : hydrated.person1Stake;
+      const userStakeTotal = pickedStake + otherStake;
+      const pickedPool = userStakeTotal === 0
+        ? hydrated.totalPool / 2
+        : (pickedStake / userStakeTotal) * hydrated.totalPool;
+      const estimatedPayout = computePayoutMultiplier(hydrated.totalPool, pickedPool);
       setPendingSelection({
         type: "h2h",
         marketId,
@@ -179,7 +199,9 @@ export default function H2HDetailPage() {
         marketName: hydrated.title,
         currentScore: picked.currentScore,
         opponentScore: opponent.currentScore,
-        crowdSentiment: person === 1 ? hydrated.person1Percent : 100 - hydrated.person1Percent,
+        crowdSentiment: sentiment,
+        estimatedPayout,
+        endAt: hydrated.endAt,
         bettingCutoff: hydrated.bettingCutoff,
       });
       setStakeModalOpen(true);
@@ -187,21 +209,46 @@ export default function H2HDetailPage() {
     [hydrated, isMarketClosed, userPickSide, marketId]
   );
 
+  const betMutation = useMutation({
+    mutationFn: async ({ entryId, stakeAmount }: { entryId: string; stakeAmount: number }) => {
+      const res = await apiRequest("POST", `/api/native-markets/${marketId}/bet`, {
+        entryId,
+        stakeAmount,
+      });
+      return res.json();
+    },
+    onSuccess: async (data) => {
+      hapticSuccess();
+      if (data?.xp?.xpAwarded) {
+        triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
+      }
+      toast("Prediction placed!", {
+        description: "Your head-to-head prediction has been recorded.",
+      });
+      setStakeModalOpen(false);
+      setPendingSelection(null);
+      await Promise.all([
+        refreshProfile?.(),
+        queryClient.invalidateQueries({ queryKey: ["/api/native-markets/h2h"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/me/predictions"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
+      ]);
+    },
+    onError: (err: Error) => {
+      hapticError();
+      toast.error("Failed to place prediction", { description: err.message });
+    },
+  });
+
   const handleConfirmStake = useCallback(
     async (amount: number) => {
       if (!pendingSelection?.entryId) return;
-      try {
-        await apiRequest("POST", `/api/native-markets/${marketId}/bet`, {
-          entryId: pendingSelection.entryId,
-          amount,
-        });
-      } catch {
-        // StakeModal handles toast
-      }
-      setStakeModalOpen(false);
-      setPendingSelection(null);
+      await betMutation.mutateAsync({
+        entryId: pendingSelection.entryId,
+        stakeAmount: amount,
+      });
     },
-    [pendingSelection, marketId]
+    [pendingSelection, betMutation]
   );
 
   const { timeRemaining } = marketState;
@@ -270,6 +317,12 @@ export default function H2HDetailPage() {
       </header>
 
       <div className="max-w-3xl mx-auto px-4 pt-4 space-y-4">
+        <MarketCycleStrip
+          bettingCutoff={hydrated.bettingCutoff}
+          resolveAt={hydrated.endAt}
+          variant="full"
+        />
+
         {/* Hero – Side-by-side portraits */}
         <Card className="relative overflow-hidden border-slate-500/30 dark:border-slate-500/20">
           <div className="absolute inset-0 pointer-events-none">
@@ -593,31 +646,6 @@ export default function H2HDetailPage() {
             How this resolves
           </div>
           <div className="text-[11px] text-muted-foreground space-y-1.5 leading-snug">
-            <div className="flex items-start gap-1.5">
-              <Clock className="h-3 w-3 mt-0.5 shrink-0" />
-              <span>
-                Market closes:{" "}
-                <span className="font-medium text-foreground">
-                  {hydrated.endAt
-                    ? new Date(hydrated.endAt).toUTCString().replace(/ GMT$/, " UTC")
-                    : "Sun 23:59 UTC"}
-                </span>
-              </span>
-            </div>
-            <div className="flex items-start gap-1.5">
-              <Lock className="h-3 w-3 mt-0.5 shrink-0 text-amber-700 dark:text-amber-500" />
-              <span>
-                Predictions close:{" "}
-                <span className="font-medium text-foreground">
-                  {(() => {
-                    if (!hydrated.bettingCutoff) return "Fri 23:59 UTC";
-                    const d = new Date(hydrated.bettingCutoff);
-                    if (isNaN(d.getTime())) return "Fri 23:59 UTC";
-                    return d.toUTCString().replace(/ GMT$/, " UTC");
-                  })()}
-                </span>
-              </span>
-            </div>
             <div className="flex items-start gap-1.5">
               <TrendingUp className="h-3 w-3 mt-0.5 shrink-0 text-blue-600 dark:text-blue-400" />
               <span>

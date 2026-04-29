@@ -4,17 +4,19 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Target, Clock, TrendingUp, TrendingDown, LogIn, Star, MessageSquarePlus, HelpCircle, Lock, CreditCard } from "lucide-react";
+import { Target, TrendingUp, TrendingDown, LogIn, Star, MessageSquarePlus, HelpCircle, Lock, CreditCard, Loader2 } from "lucide-react";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { useMarketCycle } from "@/hooks/useMarketCycle";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation } from "wouter";
 import { navigateToLogin } from "@/lib/authReturn";
 import { MarketResolutionInfo } from "@/components/predict/MarketResolutionInfo";
+import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
 import { WhatNeedsToHappen } from "@/components/predict/WhatNeedsToHappen";
 import { OutcomePathChart } from "@/components/predict/OutcomePathChart";
 import { RULES_CONTENT, RulesExplainer } from "@/components/predict/RulesContent";
 import { shouldRenderCrowdSentiment } from "@/lib/predict-display";
+import { estimateCreditsIfWin } from "@/lib/parimutuel";
 
 const MISSION_HEADERS: Record<string, string> = {
   jackpot: "Predict the exact Trend Score at week's end to win the pot.",
@@ -53,20 +55,20 @@ interface StakeModalProps {
   open: boolean;
   onClose: () => void;
   selection: StakeSelection | null;
-  onConfirm: (amount: number) => void;
-  onConfirmWithMeta?: (amount: number, meta: { confidence?: number; thesis?: string }) => void;
+  /**
+   * May return a Promise. When it does, the modal awaits it before firing
+   * confetti and resetting input state — so a failed bet (e.g. server 400)
+   * keeps the modal open with the user's entry intact and never plays the
+   * "you won" confetti on top of the parent's error toast.
+   */
+  onConfirm: (amount: number) => void | Promise<void>;
+  onConfirmWithMeta?: (
+    amount: number,
+    meta: { confidence?: number; thesis?: string },
+  ) => void | Promise<void>;
   walletBalance: number;
   onDirectionChange?: (direction: "up" | "down") => void;
   onChangePick?: () => void;
-}
-
-function formatCountdown(days: number, hours: number, minutes: number, seconds: number): string {
-  const parts: string[] = [];
-  if (days > 0) parts.push(`${days}d`);
-  parts.push(`${hours}h`);
-  parts.push(`${String(minutes).padStart(2, "0")}m`);
-  parts.push(`${String(seconds).padStart(2, "0")}s`);
-  return parts.join(" ");
 }
 
 const MIN_STAKE = 5;
@@ -94,6 +96,7 @@ export function StakeModal({
   const [confidence, setConfidence] = useState(0);
   const [thesis, setThesis] = useState("");
   const [showThesisSection, setShowThesisSection] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   if (!selection) return null;
 
@@ -106,55 +109,67 @@ export function StakeModal({
   const isUp = selection.choice.includes("UP");
   const isDown = selection.choice.includes("DOWN");
 
-  const triggerConfetti = () => {
-    if (confirmButtonRef.current) {
-      const rect = confirmButtonRef.current.getBoundingClientRect();
-      const x = (rect.left + rect.width / 2) / window.innerWidth;
-      const y = (rect.top + rect.height / 2) / window.innerHeight;
-
-      confetti({
-        particleCount: 60,
-        spread: 55,
-        origin: { x, y },
-        colors: ['#06b6d4', '#a855f7', '#8b5cf6', '#22d3ee'],
-        startVelocity: 25,
-        gravity: 1.2,
-        scalar: 0.8,
-        ticks: 100,
-      });
-    }
+  const fireConfetti = (origin: { x: number; y: number }) => {
+    confetti({
+      particleCount: 60,
+      spread: 55,
+      origin,
+      colors: ["#06b6d4", "#a855f7", "#8b5cf6", "#22d3ee"],
+      startVelocity: 25,
+      gravity: 1.2,
+      scalar: 0.8,
+      ticks: 100,
+    });
   };
 
-  const handleConfirm = () => {
-    if (parsedAmount >= MIN_STAKE && balanceAfter >= 0) {
-      try {
-        triggerConfetti();
-      } catch (e) {
-        console.error("Confetti error:", e);
+  const handleConfirm = async () => {
+    if (submitting) return;
+    if (parsedAmount < MIN_STAKE || balanceAfter < 0) return;
+
+    // Capture button position before any await: the parent typically closes
+    // this modal in its mutation `onSuccess`, which unmounts the button and
+    // nulls the ref before confetti would otherwise fire.
+    let confettiOrigin: { x: number; y: number } | null = null;
+    if (confirmButtonRef.current) {
+      const rect = confirmButtonRef.current.getBoundingClientRect();
+      confettiOrigin = {
+        x: (rect.left + rect.width / 2) / window.innerWidth,
+        y: (rect.top + rect.height / 2) / window.innerHeight,
+      };
+    }
+
+    setSubmitting(true);
+    try {
+      const result = onConfirmWithMeta
+        ? onConfirmWithMeta(parsedAmount, {
+            confidence: confidence || undefined,
+            thesis: thesis.trim() || undefined,
+          })
+        : onConfirm(parsedAmount);
+
+      if (result && typeof (result as Promise<void>).then === "function") {
+        await result;
       }
 
-      if (onConfirmWithMeta) {
-        onConfirmWithMeta(parsedAmount, {
-          confidence: confidence || undefined,
-          thesis: thesis.trim() || undefined,
-        });
-      } else {
-        onConfirm(parsedAmount);
+      if (confettiOrigin) {
+        try {
+          fireConfetti(confettiOrigin);
+        } catch (e) {
+          console.error("Confetti error:", e);
+        }
       }
 
       setStakeAmount("");
       setConfidence(0);
       setThesis("");
       setShowThesisSection(false);
+    } catch {
+      // Parent surfaces its own error toast; keep the modal open with
+      // the user's stake intact so they can retry.
+    } finally {
+      setSubmitting(false);
     }
   };
-
-  const { days, hours, minutes, seconds, totalSeconds } = marketCycle.timeRemaining;
-  const countdownText = formatCountdown(days, hours, minutes, seconds);
-  const urgencyColor =
-    marketCycle.urgencyLevel === "critical" ? "text-red-600 dark:text-red-400" :
-    marketCycle.urgencyLevel === "warning" ? "text-amber-600 dark:text-amber-400" :
-    "text-muted-foreground";
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => {
@@ -193,12 +208,11 @@ export function StakeModal({
           </DialogDescription>
         </DialogHeader>
 
-        {totalSeconds > 0 && (
-          <div className={`flex items-center justify-center gap-1.5 text-xs ${urgencyColor}`}>
-            <Clock className="h-3 w-3" />
-            <span>Market closes in <span className="font-mono font-medium">{countdownText}</span></span>
-          </div>
-        )}
+        <MarketCycleStrip
+          bettingCutoff={selection.bettingCutoff ?? null}
+          resolveAt={selection.endAt ?? null}
+          variant="modal"
+        />
 
         <div className="py-2 space-y-4">
           <Card className="p-3 bg-violet-500/8 dark:bg-violet-500/5 border-violet-500/20">
@@ -252,8 +266,8 @@ export function StakeModal({
 
           {showJackpotWarning && (
             <p className="text-xs text-amber-700 dark:text-amber-500 text-center flex items-center justify-center gap-1">
-              <Clock className="h-3 w-3" />
-              Predictions lock Thursday 5 PM UTC
+              <Lock className="h-3 w-3" />
+              Entries close Friday 23:59 UTC — Results Sunday
             </p>
           )}
 
@@ -331,7 +345,19 @@ export function StakeModal({
 
           {selection.estimatedPayout && !isNaN(selection.estimatedPayout) && (
             <p className="text-xs text-muted-foreground text-center">
-              Estimated Payout: <span className="font-mono font-medium text-green-700 dark:text-green-500">{selection.estimatedPayout.toFixed(1)}x</span>
+              Estimated Payout:{" "}
+              <span className="font-mono font-medium text-green-700 dark:text-green-500">
+                {selection.estimatedPayout.toFixed(1)}x
+              </span>
+              {parsedAmount >= MIN_STAKE && (
+                <>
+                  <span className="text-muted-foreground/70"> · </span>
+                  <span className="font-mono font-medium text-green-700 dark:text-green-500">
+                    ~{estimateCreditsIfWin(parsedAmount, selection.estimatedPayout).toLocaleString("en-US")}
+                  </span>{" "}
+                  credits if you win
+                </>
+              )}
             </p>
           )}
 
@@ -471,6 +497,11 @@ export function StakeModal({
           <MarketResolutionInfo
             baselineScore={selection.startScore || selection.baselineScore || 0}
             baselineTimestamp={selection.baselineTimestamp}
+            closeTime={
+              selection.endAt
+                ? new Date(selection.endAt).toUTCString().replace(/ GMT$/, " UTC")
+                : undefined
+            }
             bettingCutoff={selection.bettingCutoff}
             tieRule={selection.tieRule || "refund"}
             personName={selection.marketName}
@@ -552,10 +583,22 @@ export function StakeModal({
                 ref={confirmButtonRef}
                 onClick={handleConfirm}
                 className="flex-1 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
-                disabled={!stakeAmount || parsedAmount < MIN_STAKE || balanceAfter < 0}
+                disabled={
+                  submitting ||
+                  !stakeAmount ||
+                  parsedAmount < MIN_STAKE ||
+                  balanceAfter < 0
+                }
                 data-testid="button-confirm-stake"
               >
-                Confirm
+                {submitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                    Placing…
+                  </>
+                ) : (
+                  "Confirm"
+                )}
               </Button>
             )
           ) : (
@@ -573,11 +616,6 @@ export function StakeModal({
         {!isLoggedIn && (
           <p className="text-xs text-muted-foreground text-center -mt-1">
             Sign in to place your prediction
-          </p>
-        )}
-        {isCutoffPassed && isLoggedIn && (
-          <p className="text-xs text-amber-600/80 dark:text-amber-400/80 text-center -mt-1">
-            Predictions closed Friday 23:59 UTC — Results Sunday
           </p>
         )}
       </DialogContent>

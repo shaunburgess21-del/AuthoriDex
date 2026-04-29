@@ -801,6 +801,7 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
           <WeeklyJackpotCard
             onEnterJackpot={onExplore}
             bettingCutoff={serverBettingCutoff}
+            resolveAt={serverResolutionDeadline}
             marketStatus={marketState.status}
             timeRemaining={marketState.timeRemaining}
             trendingPeople={trendingPeople}

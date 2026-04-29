@@ -1,10 +1,14 @@
 import { useState, useMemo, useCallback } from "react";
 import { useRoute, useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { hapticSuccess, hapticError } from "@/lib/haptic";
 import { useMarketCycle } from "@/hooks/useMarketCycle";
 import { useAuth } from "@/contexts/AuthContext";
+import { useXpBurst } from "@/components/XpBurstProvider";
 import { StakeModal, type StakeSelection } from "@/components/StakeModal";
 import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
+import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { CategoryPill } from "@/components/CategoryPill";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
@@ -20,6 +24,7 @@ import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constan
 import { apiRequest } from "@/lib/queryClient";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { goBack } from "@/lib/goBack";
+import { computePayoutMultiplier } from "@/lib/parimutuel";
 import {
   ArrowLeft,
   TrendingUp,
@@ -51,8 +56,10 @@ export default function CategoryRaceDetailPage() {
   const [, params] = useRoute("/predict/race/:marketId");
   const [, setLocation] = useLocation();
   const marketId = params?.marketId || "";
-  const { user, profile } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
   const walletCredits = profile?.predictCredits ?? 0;
+  const queryClient = useQueryClient();
+  const { trigger: triggerXpBurst } = useXpBurst();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [stakeModalOpen, setStakeModalOpen] = useState(false);
@@ -187,35 +194,70 @@ export default function CategoryRaceDetailPage() {
       if (isMarketClosed) {
         return;
       }
+      const candidateStake = Number(candidate.totalStake || 0);
+      const estimatedPayout = computePayoutMultiplier(totalPool, candidateStake);
+      const crowdSentiment = totalPool > 0
+        ? Math.round((candidateStake / totalPool) * 100)
+        : 0;
       setPendingSelection({
         type: "gainer",
         marketId,
         entryId: candidate.entryId || "",
         choice: candidate.name,
         marketName: `Category Race: ${categoryLabel}`,
+        candidateRank: candidate.rank,
         candidatePercentGain: candidate.percentGain,
+        candidatePointsAdded: candidate.currentGain,
+        crowdSentiment,
+        estimatedPayout,
+        endAt: serverResolutionDeadline ?? undefined,
         bettingCutoff: market?.bettingCutoff || null,
       } as StakeSelection);
       setStakeModalOpen(true);
     },
-    [isMarketClosed, userPick, marketId, categoryLabel]
+    [isMarketClosed, userPick, marketId, categoryLabel, totalPool, market, serverResolutionDeadline]
   );
+
+  const betMutation = useMutation({
+    mutationFn: async ({ entryId, stakeAmount }: { entryId: string; stakeAmount: number }) => {
+      const res = await apiRequest("POST", `/api/native-markets/${marketId}/bet`, {
+        entryId,
+        stakeAmount,
+      });
+      return res.json();
+    },
+    onSuccess: async (data) => {
+      hapticSuccess();
+      if (data?.xp?.xpAwarded) {
+        triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
+      }
+      toast("Prediction placed!", {
+        description: "Your top gainer prediction has been recorded.",
+      });
+      setStakeModalOpen(false);
+      setPendingSelection(null);
+      await Promise.all([
+        refreshProfile?.(),
+        queryClient.invalidateQueries({ queryKey: ["/api/native-markets/gainer"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/me/predictions"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
+      ]);
+    },
+    onError: (err: Error) => {
+      hapticError();
+      toast.error("Failed to place prediction", { description: err.message });
+    },
+  });
 
   const handleConfirmStake = useCallback(
     async (amount: number) => {
       if (!pendingSelection?.entryId) return;
-      try {
-        await apiRequest("POST", `/api/native-markets/${marketId}/bet`, {
-          entryId: pendingSelection.entryId,
-          amount,
-        });
-      } catch {
-        // StakeModal handles toast
-      }
-      setStakeModalOpen(false);
-      setPendingSelection(null);
+      await betMutation.mutateAsync({
+        entryId: pendingSelection.entryId,
+        stakeAmount: amount,
+      });
     },
-    [pendingSelection, marketId]
+    [pendingSelection, betMutation]
   );
 
   const { timeRemaining } = marketState;
@@ -270,6 +312,12 @@ export default function CategoryRaceDetailPage() {
       </header>
 
       <div className="max-w-3xl mx-auto px-4 pt-4 space-y-4">
+        <MarketCycleStrip
+          bettingCutoff={market?.bettingCutoff ?? null}
+          resolveAt={market?.endAt ?? null}
+          variant="full"
+        />
+
         {/* Hero Stats */}
         <Card className="relative overflow-hidden border-violet-500/30 dark:border-violet-500/20">
           <div className="absolute inset-0 bg-gradient-to-r from-violet-500/5 via-transparent to-fuchsia-500/5" />
@@ -287,7 +335,7 @@ export default function CategoryRaceDetailPage() {
                 <TooltipContent className="max-w-[260px]">
                   <p className="text-xs">
                     Pick who will have the highest % gain in their Trend Score by
-                    Sunday close. The biggest mover wins -- not the highest ranked.
+                    Sunday close. The biggest mover wins — not the highest ranked.
                   </p>
                 </TooltipContent>
               </Tooltip>
@@ -579,6 +627,28 @@ export default function CategoryRaceDetailPage() {
                   </p>
                 )}
               </div>
+            </div>
+          </div>
+        </Card>
+
+        {/* How This Resolves */}
+        <Card className="p-3 bg-muted/30 border-border/40 space-y-2">
+          <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+            <Trophy className="h-3.5 w-3.5 text-violet-700 dark:text-violet-500" />
+            How this resolves
+          </div>
+          <div className="text-[11px] text-muted-foreground space-y-1.5 leading-snug">
+            <div className="flex items-start gap-1.5">
+              <TrendingUp className="h-3 w-3 mt-0.5 shrink-0 text-green-600 dark:text-green-500" />
+              <span>
+                Winner is whoever has the highest{" "}
+                <span className="font-medium text-foreground">% gain</span> in their
+                Trend Score by Sunday close.
+              </span>
+            </div>
+            <div className="flex items-start gap-1.5">
+              <Zap className="h-3 w-3 mt-0.5 shrink-0 text-amber-600 dark:text-amber-500" />
+              <span>Biggest mover wins — not the highest ranked.</span>
             </div>
           </div>
         </Card>

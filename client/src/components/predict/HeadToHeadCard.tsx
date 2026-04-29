@@ -1,14 +1,16 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
 import { PredictCard } from "@/components/predict/PredictCard";
+import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
 import type { ParticipantPreview } from "@/components/predict/ParticipantAvatarStack";
 import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { cn } from "@/lib/utils";
-import { Clock, Check, ChevronRight } from "lucide-react";
+import { multiplierFromPercent, formatMultiplier } from "@/lib/parimutuel";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Check, ChevronRight } from "lucide-react";
 import { Link } from "wouter";
 
 type CategoryFilter = "all" | "favorites" | "trending" | "tech" | "politics" | "business" | "music" | "sports" | "film-tv" | "gaming" | "creator" | "food-drink" | "lifestyle" | "misc";
@@ -27,6 +29,7 @@ export interface HeadToHeadMarket {
   person2Id?: string;
   category: CategoryFilter;
   endTime: string;
+  endAt?: string | null;
   totalPool: number;
   person1Percent: number;
   totalBets?: number;
@@ -122,18 +125,13 @@ export function HeadToHeadCard({
       </div>
 
       <div className="relative z-10 flex flex-col h-full">
-        <div className="flex items-center justify-between mb-3">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Badge variant="outline" className="text-xs cursor-help">
-                <Clock className="h-3 w-3 mr-1" />
-                {market.endTime}
-              </Badge>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p className="text-xs">Market closes {market.endTime}</p>
-            </TooltipContent>
-          </Tooltip>
+        <div className="flex items-center justify-between mb-3 gap-2">
+          <MarketCycleStrip
+            bettingCutoff={market.bettingCutoff ?? null}
+            resolveAt={market.endAt ?? null}
+            variant="compact"
+            className="min-w-0"
+          />
           <InteractiveCategoryPill
             category={market.category}
             onFilter={() => onFilterCategory?.(market.category)}
@@ -274,6 +272,15 @@ export function HeadToHeadCard({
         <div className="flex items-center justify-center mb-2">
           <span className="text-sm font-semibold text-violet-700 dark:text-violet-500">
             Pool: {market.totalPool.toLocaleString('en-US')}
+          </span>
+        </div>
+
+        <div className="flex items-center justify-between px-2 text-[11px] font-semibold mb-2">
+          <span className="text-blue-600 dark:text-blue-400">
+            {smartName(market.person1.name)} {formatMultiplier(multiplierFromPercent(market.person1Percent))}
+          </span>
+          <span className="text-purple-600 dark:text-purple-400">
+            {smartName(market.person2.name)} {formatMultiplier(multiplierFromPercent(100 - market.person1Percent))}
           </span>
         </div>
 

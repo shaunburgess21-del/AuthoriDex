@@ -34,6 +34,7 @@ import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActi
 import { WeeklyUpDownActionButtons } from "@/components/predict/WeeklyUpDownActionButtons";
 import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { formatSignedPercent, formatSignedPoints, getRecentActivityMarketPath } from "@/lib/predict-display";
+import { computePayoutMultiplier } from "@/lib/parimutuel";
 import {
   AGENT_AVATAR_FALLBACK_CLASS,
   getAvatarGradient,
@@ -697,6 +698,12 @@ function GainerCandidatesDialog({
               const candidateKey = candidate.entryId || candidate.personId || candidate.name;
               const isSelected = candidateKey === selectedCandidateKey;
               const isLeader = idx === 0 && !searchQuery;
+              // Per-candidate multipliers were too noisy here: candidates with
+              // ~0% backing all displayed huge but near-identical defaults
+              // (e.g. four candidates at "432.0x") which read as random
+              // rather than informative. The estimated payout in the stake
+              // modal — where the user has actually committed to a pick —
+              // is a clearer place for this number.
 
               return (
                 <button
@@ -919,6 +926,11 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
   const total = yesStake + noStake || 1;
   const yesPercent = Math.round((yesStake / total) * 100);
   const noPercent = 100 - yesPercent;
+  // Multipliers use raw stakes (not the rounded percent) so thin pools
+  // like 1 vs 999 don't collapse to a misleading 1.9x default.
+  // 0.95 haircut matches MarketDetailPage so card and detail agree.
+  const yesMultiplier = +(computePayoutMultiplier(total, yesStake) * 0.95).toFixed(1);
+  const noMultiplier = +(computePayoutMultiplier(total, noStake) * 0.95).toFixed(1);
   
   return (
     <PredictCard testId={`card-market-${market.slug}`} className={`${isMarketClosed && !isInactive ? 'opacity-75' : ''}`} inactive={isInactive} inactiveMessage={inactiveMessage}>
@@ -982,14 +994,14 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
                 onClick={() => onNavigate(market.slug, 'yes')}
                 data-testid={`button-yes-${market.slug}`}
               >
-                Yes {yesPercent}%
+                Yes {yesMultiplier}x
               </Button>
               <Button
                 className="!min-h-0 px-4 py-3.5 md:py-2.5 bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20"
                 onClick={() => onNavigate(market.slug, 'no')}
                 data-testid={`button-no-${market.slug}`}
               >
-                No {noPercent}%
+                No {noMultiplier}x
               </Button>
             </div>
           )}
@@ -1905,8 +1917,8 @@ export default function PredictPage() {
         const downStake = Number(downEntry?.totalStake || 0);
         const total = upStake + downStake || 1;
         const upPercent = Math.round((upStake / total) * 100);
-        const upMultiplier = upStake > 0 ? +(total / upStake).toFixed(1) : 2.0;
-        const downMultiplier = downStake > 0 ? +(total / downStake).toFixed(1) : 2.0;
+        const upMultiplier = computePayoutMultiplier(upStake + downStake, upStake);
+        const downMultiplier = computePayoutMultiplier(upStake + downStake, downStake);
         const currentScore = Number(person.trendScore || person.fameIndex || 0);
         const baselineScore = getMarketBaselineScore(m, currentScore) ?? currentScore;
         return {
@@ -1920,7 +1932,7 @@ export default function PredictPage() {
           change7d: Number(person.change7d || 0),
           upMultiplier,
           downMultiplier,
-          endTime: "Sun 23:59 UTC",
+          endTime: "",
           totalPool: upStake + downStake + Number(m.seedVolume || 0),
           upPoolPercent: upPercent || 50,
           category: normalizeMarketCategory(m.category || person.category || "misc") as CategoryFilter,
@@ -1967,7 +1979,8 @@ export default function PredictPage() {
           person1Id: e1.personId || "",
           person2Id: e2.personId || "",
           category: normalizeMarketCategory(m.category || "misc") as CategoryFilter,
-          endTime: "Sun 23:59 UTC",
+          endTime: "",
+          endAt: m.endAt || null,
           totalPool,
           person1Percent: (s1 + s2) === 0 ? 50 : Math.round((s1 / total) * 100),
           totalBets: (Number(m.activeParticipantCount || 0) || 0) + Number(m.seedConfig?.participants || 0),
@@ -2015,6 +2028,7 @@ export default function PredictPage() {
             rank: Number(p.rank || 0),
             entryId: e.id,
             personId: e.personId || "",
+            totalStake: Number(e.totalStake || 0),
           };
         }).sort((a: GainerCandidate, b: GainerCandidate) => b.percentGain - a.percentGain);
 
@@ -2024,7 +2038,8 @@ export default function PredictPage() {
           leaders: allCandidates.slice(0, 3),
           allCandidates,
           totalPool,
-          endTime: "Sun 23:59 UTC",
+          endTime: "",
+          endAt: m.endAt || null,
           totalBets: (Number(m.activeParticipantCount || 0) || 0) + Number(m.seedConfig?.participants || 0),
           totalEntries: entries.length,
           candidateCount: allCandidates.length,
@@ -2297,9 +2312,9 @@ export default function PredictPage() {
     const picked = person === 1 ? market.person1 : market.person2;
     const opponent = person === 1 ? market.person2 : market.person1;
     const sentiment = person === 1 ? market.person1Percent : 100 - market.person1Percent;
-    const stakePool = market.totalPool || 1;
-    const pickedPool = (sentiment / 100) * stakePool || 1;
-    const estimatedPayout = Math.round((stakePool / pickedPool) * 10) / 10;
+    const stakePool = market.totalPool || 0;
+    const pickedPool = (sentiment / 100) * stakePool;
+    const estimatedPayout = computePayoutMultiplier(stakePool, pickedPool);
 
     setPendingSelection({
       type: "h2h",
@@ -2334,6 +2349,12 @@ export default function PredictPage() {
 
     const categoryLabel = getMarketCategoryLabel(market.category);
 
+    const candidateStake = Number(candidate.totalStake || 0);
+    const estimatedPayout = computePayoutMultiplier(market.totalPool, candidateStake);
+    const crowdSentiment = market.totalPool > 0
+      ? Math.round((candidateStake / market.totalPool) * 100)
+      : 0;
+
     setPendingSelection({
       type: "gainer",
       choice: candidate.name,
@@ -2346,6 +2367,8 @@ export default function PredictPage() {
       candidateRank: candidate.rank,
       candidatePercentGain: candidate.percentGain,
       candidatePointsAdded: candidate.currentGain,
+      crowdSentiment,
+      estimatedPayout,
       endAt: serverResolutionDeadline ?? undefined,
       bettingCutoff: market.bettingCutoff,
     });
@@ -2359,7 +2382,7 @@ export default function PredictPage() {
     setGainerPickerState({ market, initialCandidate });
   };
 
-  const handleConfirmStake = (amount: number) => {
+  const handleConfirmStake = async (amount: number) => {
     if (!pendingSelection || !pendingSelection.marketId) {
       setStakeModalOpen(false);
       setPendingSelection(null);
@@ -2371,7 +2394,12 @@ export default function PredictPage() {
         toast.error("Selection unavailable", { description: "This market selection is not available right now." });
         return;
       }
-      nativeMarketBetMutation.mutate({ marketId: pendingSelection.marketId, entryId: pendingSelection.entryId, stakeAmount: amount, marketType: pendingSelection.type });
+      await nativeMarketBetMutation.mutateAsync({
+        marketId: pendingSelection.marketId,
+        entryId: pendingSelection.entryId,
+        stakeAmount: amount,
+        marketType: pendingSelection.type,
+      });
       return;
     }
 
@@ -2396,7 +2424,7 @@ export default function PredictPage() {
       return;
     }
 
-    nativeUpdownBetMutation.mutate({ marketId: market.id, entryId, stakeAmount: amount });
+    await nativeUpdownBetMutation.mutateAsync({ marketId: market.id, entryId, stakeAmount: amount });
   };
 
   // Kept as a no-op; CreatePredictionModal now handles its own API call and toast.
@@ -3403,6 +3431,7 @@ export default function PredictPage() {
           marketId={jackpotMarketForPerson?.id || null}
           userCredits={walletCredits}
           bettingCutoff={jackpotMarketForPerson?.bettingCutoff || null}
+          resolveAt={jackpotMarketForPerson?.endAt || null}
           isCutoffPassed={jackpotMarketForPerson?.isCutoffPassed || false}
         />
       )}

@@ -1,5 +1,5 @@
 import { Card } from "@/components/ui/card";
-import { Shield, Clock, TrendingUp, TrendingDown, RefreshCw, Database, CheckCircle, Lock } from "lucide-react";
+import { Shield, TrendingUp, TrendingDown, RefreshCw, Database, CheckCircle, Lock, Trophy } from "lucide-react";
 
 interface MarketResolutionInfoProps {
   baselineScore: number;
@@ -64,7 +64,11 @@ export function MarketResolutionInfo({
       <div className="text-[11px] text-muted-foreground space-y-0.5 leading-snug">
         <p>
           <Lock className="inline h-3 w-3 text-amber-500 mr-1" />
-          Predictions close: <span className="font-medium text-foreground">{predictionsCloseLabel}</span>
+          Entries close: <span className="font-medium text-foreground">{predictionsCloseLabel}</span>
+        </p>
+        <p>
+          <Trophy className="inline h-3 w-3 text-violet-500 mr-1" />
+          Results: <span className="font-medium text-foreground">{closeTime || "Sun 23:59 UTC"}</span>
         </p>
         <p>
           <TrendingUp className="inline h-3 w-3 text-green-500 mr-1" />
@@ -99,14 +103,17 @@ export function MarketResolutionInfo({
           </span>
         </div>
         <div className="flex items-start gap-1.5">
-          <Clock className="h-3 w-3 mt-0.5 shrink-0" />
-          <span>Market closes: <span className="font-medium text-foreground">{closeTime || "Sun 23:59 UTC"}</span></span>
-        </div>
-        <div className="flex items-start gap-1.5">
           <Lock className="h-3 w-3 mt-0.5 shrink-0 text-amber-500" />
           <span>
-            Predictions close:{" "}
+            Entries close:{" "}
             <span className="font-medium text-foreground">{predictionsCloseLabel}</span>
+          </span>
+        </div>
+        <div className="flex items-start gap-1.5">
+          <Trophy className="h-3 w-3 mt-0.5 shrink-0 text-violet-500" />
+          <span>
+            Results:{" "}
+            <span className="font-medium text-foreground">{closeTime || "Sun 23:59 UTC"}</span>
           </span>
         </div>
         <div className="flex items-start gap-1.5">

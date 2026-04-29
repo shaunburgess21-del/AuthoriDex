@@ -9,6 +9,7 @@ import { PredictCard } from "@/components/predict/PredictCard";
 import { ParticipantAvatarStack } from "@/components/predict/ParticipantAvatarStack";
 import { Link } from "wouter";
 import { Check, ChevronRight, Clock, Lock, Trophy, XCircle, RotateCcw } from "lucide-react";
+import { computePayoutMultiplier } from "@/lib/parimutuel";
 
 function MarketAvatar({ market }: { market: any }) {
   const imgUrl = market.coverImageUrl || market.linkedPersonAvatar;
@@ -159,6 +160,11 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
   const total = yesStake + noStake || 1;
   const yesPercent = Math.round((yesStake / total) * 100);
   const noPercent = 100 - yesPercent;
+  // Multipliers use raw stakes (not the rounded percent) so thin pools
+  // like 1 vs 999 don't collapse to a misleading 1.9x default.
+  // 0.95 haircut matches MarketDetailPage so card and detail agree.
+  const yesMultiplier = +(computePayoutMultiplier(total, yesStake) * 0.95).toFixed(1);
+  const noMultiplier = +(computePayoutMultiplier(total, noStake) * 0.95).toFixed(1);
 
   return (
     <PredictCard testId={`card-market-${market.slug}`} className={`${isMarketClosed && !isInactive ? 'opacity-75' : ''}`} inactive={isInactive} inactiveMessage={inactiveMessage}>
@@ -221,14 +227,14 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
                 onClick={() => onNavigate(market.slug, 'yes')}
                 data-testid={`button-yes-${market.slug}`}
               >
-                Yes {yesPercent}%
+                Yes {yesMultiplier}x
               </Button>
               <Button
                 className="!min-h-0 px-4 py-3.5 md:py-2.5 bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20"
                 onClick={() => onNavigate(market.slug, 'no')}
                 data-testid={`button-no-${market.slug}`}
               >
-                No {noPercent}%
+                No {noMultiplier}x
               </Button>
             </div>
           )}

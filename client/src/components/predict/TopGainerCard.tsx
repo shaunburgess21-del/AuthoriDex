@@ -4,6 +4,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
+import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
 import { PredictCard } from "@/components/predict/PredictCard";
 import type { ParticipantPreview } from "@/components/predict/ParticipantAvatarStack";
 import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
@@ -22,6 +23,8 @@ export type GainerCandidate = {
   rank?: number;
   entryId?: string;
   personId?: string;
+  /** Sum of user stakes on this candidate's entry — used for live payout multipliers. */
+  totalStake?: number;
 };
 
 export interface TopGainerMarket {
@@ -31,6 +34,7 @@ export interface TopGainerMarket {
   allCandidates?: GainerCandidate[];
   totalPool: number;
   endTime: string;
+  endAt?: string | null;
   totalEntries?: number;
   candidateCount?: number;
   totalBets?: number;
@@ -212,10 +216,16 @@ export function TopGainerCard({
         )}
       </div>
 
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center justify-between mb-2 gap-2">
         <span className="text-sm font-semibold text-muted-foreground">
           Pool: {market.totalPool.toLocaleString('en-US')}
         </span>
+        <MarketCycleStrip
+          bettingCutoff={market.bettingCutoff ?? null}
+          resolveAt={market.endAt ?? null}
+          variant="compact"
+          className="min-w-0"
+        />
       </div>
 
       <div className="mt-auto space-y-2">

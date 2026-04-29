@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ClosedMarketActionTrigger } from "./ClosedMarketActionTrigger";
+import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -15,6 +16,8 @@ export interface WeeklyJackpotCardProps {
   onEnterJackpot: () => void;
   /** When entries are closed, popover copy uses this (falls back to weekly client deadlines if omitted). */
   bettingCutoff?: string | null;
+  /** Sunday 23:59 UTC resolution time for the unified cycle strip. */
+  resolveAt?: string | null;
   marketStatus?: MarketStatus;
   timeRemaining: { days: number; hours: number; minutes: number; seconds: number };
   trendingPeople: TrendingPerson[];
@@ -116,6 +119,7 @@ function CelebritySearchModal({
 export function WeeklyJackpotCard({ 
   onEnterJackpot, 
   bettingCutoff,
+  resolveAt,
   marketStatus = "OPEN",
   timeRemaining,
   trendingPeople,
@@ -217,10 +221,17 @@ export function WeeklyJackpotCard({
               </button>
             </div>
             
-            <p className={`text-sm text-muted-foreground mb-4 ${compact ? '' : 'max-w-md'}`}>
+            <p className={`text-sm text-muted-foreground mb-2 ${compact ? '' : 'max-w-md'}`}>
               Predict the exact Trend Score at week's end. Closest wins the jackpot!
             </p>
-            
+
+            <MarketCycleStrip
+              bettingCutoff={bettingCutoff ?? null}
+              resolveAt={resolveAt ?? null}
+              variant="compact"
+              className="mb-4"
+            />
+
             {renderCTA()}
           </div>
           

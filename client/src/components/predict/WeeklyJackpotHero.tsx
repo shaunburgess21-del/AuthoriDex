@@ -9,6 +9,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useAuth } from "@/contexts/AuthContext";
 import { getSupabase } from "@/lib/supabase";
 import type { MarketStatus } from "@/hooks/useMarketCycle";
+import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
 import { TrendingPerson } from "@shared/schema";
 import {
   Crown,
@@ -310,7 +311,14 @@ export function WeeklyJackpotHero(props: WeeklyJackpotHeroProps) {
 
             <div className="mb-4">{personRow}</div>
 
-            <p className="text-sm text-muted-foreground mb-4 max-w-md mx-auto lg:mx-0">Predict the exact Trend Score. Closest wins the jackpot!</p>
+            <p className="text-sm text-muted-foreground mb-2 max-w-md mx-auto lg:mx-0">Predict the exact Trend Score. Closest wins the jackpot!</p>
+
+            <MarketCycleStrip
+              bettingCutoff={jackpotMarket?.bettingCutoff ?? null}
+              resolveAt={jackpotMarket?.endAt ?? null}
+              variant="compact"
+              className="mb-4"
+            />
 
             {renderCTA()}
             {myJackpotEntryCount > 0 && (

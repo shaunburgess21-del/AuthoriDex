@@ -1,8 +1,11 @@
 import { useState, useMemo, useCallback } from "react";
 import { useRoute, useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { hapticSuccess, hapticError } from "@/lib/haptic";
 import { useMarketCycle } from "@/hooks/useMarketCycle";
 import { useAuth } from "@/contexts/AuthContext";
+import { useXpBurst } from "@/components/XpBurstProvider";
 import { StakeModal, type StakeSelection } from "@/components/StakeModal";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { CategoryPill } from "@/components/CategoryPill";
@@ -11,6 +14,7 @@ import { OutcomePathChart } from "@/components/predict/OutcomePathChart";
 import { WhatNeedsToHappen } from "@/components/predict/WhatNeedsToHappen";
 import { WeeklyUpDownYourPositionPanel } from "@/components/predict/WeeklyUpDownYourPositionPanel";
 import { MarketResolutionInfo } from "@/components/predict/MarketResolutionInfo";
+import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
 import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -21,6 +25,7 @@ import { normalizeMarketCategory } from "@shared/constants";
 import { apiRequest } from "@/lib/queryClient";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { getMarketBaselineScore } from "@/lib/predict-market-baseline";
+import { computePayoutMultiplier } from "@/lib/parimutuel";
 import {
   ArrowLeft,
   TrendingUp,
@@ -37,8 +42,10 @@ export default function UpDownDetailPage() {
   const [, params] = useRoute("/predict/updown/:marketId");
   const [, setLocation] = useLocation();
   const marketId = params?.marketId || "";
-  const { user, profile } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
   const walletCredits = profile?.predictCredits ?? 0;
+  const queryClient = useQueryClient();
+  const { trigger: triggerXpBurst } = useXpBurst();
 
   const [stakeModalOpen, setStakeModalOpen] = useState(false);
   const [pendingSelection, setPendingSelection] = useState<StakeSelection | null>(null);
@@ -96,8 +103,8 @@ export default function UpDownDetailPage() {
     const downStake = Number(downEntry?.totalStake || 0);
     const total = upStake + downStake || 1;
     const upPercent = Math.round((upStake / total) * 100);
-    const upMultiplier = upStake > 0 ? +(total / upStake).toFixed(1) : 2.0;
-    const downMultiplier = downStake > 0 ? +(total / downStake).toFixed(1) : 2.0;
+    const upMultiplier = computePayoutMultiplier(upStake + downStake, upStake);
+    const downMultiplier = computePayoutMultiplier(upStake + downStake, downStake);
     const currentScore = Number(person.trendScore || person.fameIndex || 0);
     const baselineScore = getMarketBaselineScore(market, currentScore) ?? currentScore;
     const totalPool =
@@ -169,21 +176,46 @@ export default function UpDownDetailPage() {
     [hydrated, isMarketClosed, userPick, marketId]
   );
 
+  const betMutation = useMutation({
+    mutationFn: async ({ entryId, stakeAmount }: { entryId: string; stakeAmount: number }) => {
+      const res = await apiRequest("POST", `/api/native-markets/${marketId}/bet`, {
+        entryId,
+        stakeAmount,
+      });
+      return res.json();
+    },
+    onSuccess: async (data) => {
+      hapticSuccess();
+      if (data?.xp?.xpAwarded) {
+        triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
+      }
+      toast("Prediction placed!", {
+        description: "Your Up/Down prediction has been recorded.",
+      });
+      setStakeModalOpen(false);
+      setPendingSelection(null);
+      await Promise.all([
+        refreshProfile?.(),
+        queryClient.invalidateQueries({ queryKey: ["/api/native-markets/updown"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/me/predictions"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
+      ]);
+    },
+    onError: (err: Error) => {
+      hapticError();
+      toast.error("Failed to place prediction", { description: err.message });
+    },
+  });
+
   const handleConfirmStake = useCallback(
     async (amount: number) => {
       if (!pendingSelection?.entryId) return;
-      try {
-        await apiRequest("POST", `/api/native-markets/${marketId}/bet`, {
-          entryId: pendingSelection.entryId,
-          amount,
-        });
-      } catch {
-        // StakeModal handles toast
-      }
-      setStakeModalOpen(false);
-      setPendingSelection(null);
+      await betMutation.mutateAsync({
+        entryId: pendingSelection.entryId,
+        stakeAmount: amount,
+      });
     },
-    [pendingSelection, marketId]
+    [pendingSelection, betMutation]
   );
 
   const handleDirectionChange = useCallback(
@@ -266,6 +298,12 @@ export default function UpDownDetailPage() {
       </header>
 
       <div className="max-w-3xl mx-auto px-4 pt-4 space-y-4">
+        <MarketCycleStrip
+          bettingCutoff={hydrated.bettingCutoff}
+          resolveAt={hydrated.endAt}
+          variant="full"
+        />
+
         {/* Hero */}
         <Card className="relative overflow-hidden border-green-500/30 dark:border-green-500/20">
           <div className="absolute inset-0 bg-gradient-to-r from-green-500/5 via-transparent to-red-500/5" />

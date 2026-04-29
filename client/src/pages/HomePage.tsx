@@ -30,6 +30,7 @@ import { hapticSuccess, hapticError } from "@/lib/haptic";
 import { useXpBurst } from "@/components/XpBurstProvider";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { getMarketBaselineScore, type MarketBaselineSource } from "@/lib/predict-market-baseline";
+import { computePayoutMultiplier } from "@/lib/parimutuel";
 import { TrendingPerson } from "@shared/schema";
 import { useIntersectionObserver } from "@/hooks/useIntersectionObserver";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
@@ -576,8 +577,8 @@ export default function HomePage() {
         baselineScore,
         upEntryId: upEntry?.id as string | undefined,
         downEntryId: downEntry?.id as string | undefined,
-        upMultiplier: upStake > 0 ? +(total / upStake).toFixed(1) : 2.0,
-        downMultiplier: downStake > 0 ? +(total / downStake).toFixed(1) : 2.0,
+        upMultiplier: computePayoutMultiplier(upStake + downStake, upStake),
+        downMultiplier: computePayoutMultiplier(upStake + downStake, downStake),
         upPoolPercent: upPercent || 50,
         bettingCutoff: (m.bettingCutoff as string) || null,
         startAt: (m.startAt as string) || null,

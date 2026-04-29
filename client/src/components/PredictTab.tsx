@@ -12,6 +12,7 @@ import { useMarketCycle } from "@/hooks/useMarketCycle";
 import { MarketCycleHero } from "@/components/MarketCycleHero";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatSignedPercent, formatSignedPoints } from "@/lib/predict-display";
+import { computePayoutMultiplier } from "@/lib/parimutuel";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation, Link } from "wouter";
 import { navigateToLogin } from "@/lib/authReturn";
@@ -154,6 +155,12 @@ function GainerCandidatesDialog({
               const candidateKey = candidate.entryId || candidate.personId || candidate.name;
               const isSelected = candidateKey === selectedCandidateKey;
               const isLeader = idx === 0 && !searchQuery;
+              // Per-candidate multipliers were too noisy here: candidates with
+              // ~0% backing all displayed huge but near-identical defaults
+              // (e.g. four candidates at "432.0x") which read as random
+              // rather than informative. The estimated payout in the stake
+              // modal — where the user has actually committed to a pick —
+              // is a clearer place for this number.
 
               return (
                 <button
@@ -349,8 +356,8 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
     const downStake = Number(downEntry?.totalStake || 0);
     const total = upStake + downStake || 1;
     const upPercent = Math.round((upStake / total) * 100);
-    const upMultiplier = upStake > 0 ? +(total / upStake).toFixed(1) : 2.0;
-    const downMultiplier = downStake > 0 ? +(total / downStake).toFixed(1) : 2.0;
+    const upMultiplier = computePayoutMultiplier(upStake + downStake, upStake);
+    const downMultiplier = computePayoutMultiplier(upStake + downStake, downStake);
     const cs = Number(person.trendScore || person.fameIndex || 0);
     const baselineScore = getMarketBaselineScore(m, cs) ?? cs;
     return {
@@ -364,7 +371,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       change7d: Number(person.change7d || 0),
       upMultiplier,
       downMultiplier,
-      endTime: "Sun 23:59 UTC",
+      endTime: "",
       totalPool: upStake + downStake + Number(m.seedVolume || 0),
       upPoolPercent: upPercent || 50,
       category: normalizeMarketCategory(m.category || person.category || "misc") as CategoryFilter,
@@ -372,6 +379,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       downEntryId: downEntry?.id,
       startAt: m.startAt,
       endAt: m.endAt,
+      bettingCutoff: m.bettingCutoff || null,
       tieRule: m.metadata?.tieRule ?? "refund",
     };
   }, [nativeUpdownData, personId]);
@@ -400,7 +408,9 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
         person1EntryLabel: typeof e1.label === "string" ? e1.label : undefined,
         person2EntryLabel: typeof e2.label === "string" ? e2.label : undefined,
         category: normalizeMarketCategory(m.category || "misc") as CategoryFilter,
-        endTime: "Sun 23:59 UTC",
+        endTime: "",
+        endAt: m.endAt || null,
+        bettingCutoff: m.bettingCutoff || null,
         totalPool,
         person1Percent: (s1 + s2) === 0 ? 50 : Math.round((s1 / total) * 100),
         modelP1Percent: typeof m.modelP1Percent === "number" ? m.modelP1Percent : undefined,
@@ -441,6 +451,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
           rank: Number(p.rank || 0),
           entryId: e.id,
           personId: e.personId || "",
+          totalStake: Number(e.totalStake || 0),
         };
       }).sort((a: GainerCandidate, b: GainerCandidate) => b.percentGain - a.percentGain);
       return {
@@ -449,7 +460,9 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
         leaders: allCandidates.slice(0, 3),
         allCandidates,
         totalPool,
-        endTime: "Sun 23:59 UTC",
+        endTime: "",
+        endAt: m.endAt || null,
+        bettingCutoff: m.bettingCutoff || null,
         totalEntries: entries.length,
         candidateCount: allCandidates.length,
         teaser: typeof m.teaser === "string" && m.teaser.trim() ? m.teaser.trim() : null,
@@ -706,6 +719,11 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       return;
     }
     const categoryLabel = getMarketCategoryLabel(market.category);
+    const candidateStake = Number(candidate.totalStake || 0);
+    const estimatedPayout = computePayoutMultiplier(market.totalPool, candidateStake);
+    const crowdSentiment = market.totalPool > 0
+      ? Math.round((candidateStake / market.totalPool) * 100)
+      : 0;
     setPendingSelection({
       type: "gainer",
       choice: candidate.name,
@@ -716,6 +734,8 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       candidateRank: candidate.rank,
       candidatePercentGain: candidate.percentGain,
       candidatePointsAdded: candidate.currentGain,
+      crowdSentiment,
+      estimatedPayout,
       endAt: serverResolutionDeadline ?? undefined,
       bettingCutoff: serverBettingCutoff,
     });
@@ -729,14 +749,14 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
     setGainerPickerState({ market, initialCandidate });
   };
 
-  const handleConfirmStake = (amount: number) => {
+  const handleConfirmStake = async (amount: number) => {
     if (!pendingSelection || !pendingSelection.marketId) {
       setStakeModalOpen(false);
       setPendingSelection(null);
       return;
     }
     if (pendingSelection.type === "gainer" && pendingSelection.entryId) {
-      nativeMarketBetMutation.mutate({
+      await nativeMarketBetMutation.mutateAsync({
         marketId: pendingSelection.marketId,
         entryId: pendingSelection.entryId,
         stakeAmount: amount,
@@ -745,7 +765,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       return;
     }
     if (pendingSelection.type === "h2h" && pendingSelection.entryId) {
-      nativeMarketBetMutation.mutate({
+      await nativeMarketBetMutation.mutateAsync({
         marketId: pendingSelection.marketId,
         entryId: pendingSelection.entryId,
         stakeAmount: amount,
@@ -761,7 +781,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
         setPendingSelection(null);
         return;
       }
-      updownBetMutation.mutate({
+      await updownBetMutation.mutateAsync({
         marketId: pendingSelection.marketId,
         entryId,
         stakeAmount: amount,
@@ -855,6 +875,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
           marketId={jackpotMarket?.id || null}
           userCredits={walletCredits}
           bettingCutoff={jackpotMarket?.bettingCutoff || null}
+          resolveAt={jackpotMarket?.endAt || null}
           isCutoffPassed={jackpotMarket?.isCutoffPassed || false}
         />
       </section>
