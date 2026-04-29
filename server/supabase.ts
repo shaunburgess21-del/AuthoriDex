@@ -10,7 +10,9 @@ if (!supabaseUrl) {
 }
 
 if (!serviceRoleKey && isProduction) {
-  throw new Error('Missing Supabase environment variable: SUPABASE_SERVICE_ROLE_KEY');
+  throw new Error(
+    'SUPABASE_SERVICE_ROLE_KEY is required in production. Backend will not function correctly without it because RLS will block all anon-key queries.',
+  );
 }
 
 if (!serviceRoleKey && !anonKey) {
@@ -18,10 +20,12 @@ if (!serviceRoleKey && !anonKey) {
 }
 
 if (!serviceRoleKey) {
-  console.warn('[Supabase] SUPABASE_SERVICE_ROLE_KEY is not set. Falling back to anon key outside production; admin/storage operations may fail.');
+  console.error(
+    '[Supabase] SUPABASE_SERVICE_ROLE_KEY is not set in non-production. Falling back to SUPABASE_ANON_KEY. With RLS enabled, backend table queries may return empty results or fail authorization. Set SUPABASE_SERVICE_ROLE_KEY to mirror production behavior.',
+  );
 }
 
-const supabaseKey = serviceRoleKey || anonKey!;
+const supabaseKey = serviceRoleKey ?? anonKey!;
 
 export const hasSupabaseServiceRole = Boolean(serviceRoleKey);
 
