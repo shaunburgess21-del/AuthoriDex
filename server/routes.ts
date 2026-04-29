@@ -3911,7 +3911,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       let filtered = rows as any[];
       if (category && category !== "all") {
-        filtered = filtered.filter((r: any) => r.category === category);
+        const categoryCanonical = normalizeMarketCategory(category);
+        filtered = filtered.filter((r: any) => normalizeMarketCategory(r.category) === categoryCanonical);
       }
       if (search && search.trim()) {
         const term = search.trim().toLowerCase();
@@ -3982,7 +3983,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .selectDistinct({ category: trendingPeople.category })
         .from(trendingPeople)
         .where(isNotNull(trendingPeople.category));
-      res.json(rows.map(r => r.category).filter(Boolean));
+      const normalized = Array.from(
+        new Set(
+          rows
+            .map((r) => normalizeMarketCategory(r.category))
+            .filter(Boolean),
+        ),
+      );
+      res.json(normalized);
     } catch (error) {
       console.error("Error fetching leaderboard categories:", error);
       res.status(500).json({ error: "Failed to fetch categories" });
@@ -4006,9 +4014,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const nonSearchConditions: SQL<unknown>[] = [];
       
       if (category && category !== 'all') {
-        const categoryCondition = eq(trendingPeople.category, category);
-        conditions.push(categoryCondition);
-        nonSearchConditions.push(categoryCondition);
+        const canonicalCategory = normalizeMarketCategory(category);
+        const categoryRows = await db
+          .select({ id: trendingPeople.id, category: trendingPeople.category })
+          .from(trendingPeople)
+          .where(isNotNull(trendingPeople.category));
+        const matchingIds = categoryRows
+          .filter((row) => normalizeMarketCategory(row.category) === canonicalCategory)
+          .map((row) => row.id);
+
+        if (matchingIds.length === 0) {
+          const noRowsCondition = sql`1 = 0`;
+          conditions.push(noRowsCondition);
+          nonSearchConditions.push(noRowsCondition);
+        } else {
+          const categoryCondition = inArray(trendingPeople.id, matchingIds);
+          conditions.push(categoryCondition);
+          nonSearchConditions.push(categoryCondition);
+        }
       }
       
       if (search && search.trim()) {

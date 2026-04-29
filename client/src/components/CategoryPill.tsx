@@ -63,18 +63,49 @@ const CATEGORY_STYLES: Record<CanonicalMarketCategory, { bg: string; border: str
   },
 };
 
+// Palette for dynamically added categories (e.g. via admin category registry).
+// Keep these distinct from canonical category colors so new categories don't
+// visually collapse into existing ones.
+const DYNAMIC_CATEGORY_STYLES: Array<{ bg: string; border: string; text: string }> = [
+  { bg: "bg-[#22D3EE]/10", border: "border-[#22D3EE]/40", text: "text-[#22D3EE]" }, // cyan
+  { bg: "bg-[#14B8A6]/10", border: "border-[#14B8A6]/40", text: "text-[#14B8A6]" }, // teal
+  { bg: "bg-[#10B981]/10", border: "border-[#10B981]/40", text: "text-[#10B981]" }, // emerald
+  { bg: "bg-[#84CC16]/10", border: "border-[#84CC16]/40", text: "text-[#84CC16]" }, // lime
+  { bg: "bg-[#EAB308]/10", border: "border-[#EAB308]/40", text: "text-[#EAB308]" }, // yellow
+  { bg: "bg-[#F59E0B]/10", border: "border-[#F59E0B]/40", text: "text-[#F59E0B]" }, // amber
+  { bg: "bg-[#FB7185]/10", border: "border-[#FB7185]/40", text: "text-[#FB7185]" }, // rose
+  { bg: "bg-[#F43F5E]/10", border: "border-[#F43F5E]/40", text: "text-[#F43F5E]" }, // pink-red
+  { bg: "bg-[#E879F9]/10", border: "border-[#E879F9]/40", text: "text-[#E879F9]" }, // fuchsia
+  { bg: "bg-[#C084FC]/10", border: "border-[#C084FC]/40", text: "text-[#C084FC]" }, // purple-light
+  { bg: "bg-[#A78BFA]/10", border: "border-[#A78BFA]/40", text: "text-[#A78BFA]" }, // violet-light
+  { bg: "bg-[#818CF8]/10", border: "border-[#818CF8]/40", text: "text-[#818CF8]" }, // indigo-light
+  { bg: "bg-[#38BDF8]/10", border: "border-[#38BDF8]/40", text: "text-[#38BDF8]" }, // sky
+  { bg: "bg-[#2DD4BF]/10", border: "border-[#2DD4BF]/40", text: "text-[#2DD4BF]" }, // teal-light
+  { bg: "bg-[#4ADE80]/10", border: "border-[#4ADE80]/40", text: "text-[#4ADE80]" }, // green-light
+  { bg: "bg-[#FBBF24]/10", border: "border-[#FBBF24]/40", text: "text-[#FBBF24]" }, // amber-light
+];
+
 const DEFAULT_CATEGORY_STYLE = {
   bg: 'bg-[#94A3B8]/10',
   border: 'border-[#94A3B8]/40',
   text: 'text-[#94A3B8]',
 };
 
+function hashString(input: string): number {
+  let h = 0;
+  for (let i = 0; i < input.length; i++) {
+    h = (h * 31 + input.charCodeAt(i)) >>> 0;
+  }
+  return h;
+}
+
 export function getCategoryStyle(category: string) {
   const normalized = normalizeMarketCategory(category);
   if (normalized in CATEGORY_STYLES) {
     return CATEGORY_STYLES[normalized as CanonicalMarketCategory];
   }
-  return DEFAULT_CATEGORY_STYLE;
+  if (!normalized || normalized === "misc") return DEFAULT_CATEGORY_STYLE;
+  return DYNAMIC_CATEGORY_STYLES[hashString(normalized) % DYNAMIC_CATEGORY_STYLES.length];
 }
 
 export function getCategoryTextColor(category: string) {
