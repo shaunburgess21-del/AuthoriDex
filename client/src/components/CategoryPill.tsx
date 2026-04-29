@@ -17,9 +17,9 @@ const CATEGORY_STYLES: Record<CanonicalMarketCategory, { bg: string; border: str
     text: 'text-[#94A3B8]',
   },
   business: {
-    bg: 'bg-[#B8860B]/10',
-    border: 'border-[#B8860B]/40',
-    text: 'text-[#B8860B]',
+    bg: 'bg-[#38BDF8]/10',
+    border: 'border-[#38BDF8]/40',
+    text: 'text-[#38BDF8]',
   },
   sports: {
     bg: 'bg-[#FB923C]/10',
@@ -91,6 +91,15 @@ const DEFAULT_CATEGORY_STYLE = {
   text: 'text-[#94A3B8]',
 };
 
+// Named overrides for non-canonical categories that should have stable, explicit colors.
+const EXTRA_CATEGORY_STYLES: Record<string, { bg: string; border: string; text: string }> = {
+  media: {
+    bg: "bg-[#4ADE80]/10",
+    border: "border-[#4ADE80]/40",
+    text: "text-[#4ADE80]",
+  },
+};
+
 function hashString(input: string): number {
   let h = 0;
   for (let i = 0; i < input.length; i++) {
@@ -103,6 +112,9 @@ export function getCategoryStyle(category: string) {
   const normalized = normalizeMarketCategory(category);
   if (normalized in CATEGORY_STYLES) {
     return CATEGORY_STYLES[normalized as CanonicalMarketCategory];
+  }
+  if (normalized in EXTRA_CATEGORY_STYLES) {
+    return EXTRA_CATEGORY_STYLES[normalized];
   }
   if (!normalized || normalized === "misc") return DEFAULT_CATEGORY_STYLE;
   return DYNAMIC_CATEGORY_STYLES[hashString(normalized) % DYNAMIC_CATEGORY_STYLES.length];
