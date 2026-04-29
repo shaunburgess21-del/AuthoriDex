@@ -374,6 +374,147 @@ export async function generateWeeklyJackpot(): Promise<number> {
   return created;
 }
 
+type H2HCandidate = {
+  id: string;
+  name: string;
+  category: string | null;
+  fameIndex: number | null;
+};
+
+/**
+ * New H2H pairing model (week 19 onwards).
+ *
+ * For each category that has ≥ 2 people on the leaderboard:
+ *   - take the top 4 by fame
+ *   - if the category has 4+ people, emit interleaved pairs:
+ *       Card A: #1 vs #3   ("can the strong third upset the favourite?")
+ *       Card B: #2 vs #4   ("two contenders fighting for relevance")
+ *     Interleaving (rather than #1-vs-#2 + #3-vs-#4) gives a clearer
+ *     favourite-vs-underdog narrative and refreshes more often, since #3
+ *     and #4 churn faster than #1 and #2.
+ *   - if the category has exactly 3 people, fall back to:
+ *       Card A: #1 vs #2 (preserves the marquee fight)
+ *       #3 → wildcard seat (needs a cross-category partner)
+ *     Comedy is the only category in this branch today.
+ *
+ * Wildcard seats then get paired with the closest-fame leftover person from
+ * any other category (rank 5+ in their own category, not yet used). This
+ * keeps the matchup tight rather than producing a fame blowout, and the
+ * resulting card is tagged `category: 'trending'` to flag it as cross-cat.
+ *
+ * Properties:
+ *   - deterministic: identical pairings on repeat runs (no random shuffle).
+ *     Even without the idempotency fast-path, double-runs would be no-ops.
+ *   - no person appears in more than one card.
+ *   - every category that has ≥ 2 people gets at least one card.
+ *   - card count grows linearly with categories (today ≈ 20).
+ */
+function buildTop4PerCategoryPairings(
+  allPeople: H2HCandidate[],
+): [H2HCandidate, H2HCandidate][] {
+  const byCategory = new Map<string, H2HCandidate[]>();
+  for (const person of allPeople) {
+    const cat = normalizeMarketCategory(person.category);
+    if (!byCategory.has(cat)) byCategory.set(cat, []);
+    const group = byCategory.get(cat)!;
+    if (group.length < 4) group.push(person);
+  }
+
+  const pairings: [H2HCandidate, H2HCandidate][] = [];
+  const usedIds = new Set<string>();
+  const wildcardSeats: H2HCandidate[] = [];
+
+  // Sort categories alphabetically so output is order-stable across runs.
+  const sortedCats = Array.from(byCategory.keys()).sort();
+  for (const cat of sortedCats) {
+    const top4 = byCategory.get(cat)!;
+    if (top4.length >= 4) {
+      // Interleaved pairing: #1-vs-#3 + #2-vs-#4.
+      pairings.push([top4[0], top4[2]]);
+      pairings.push([top4[1], top4[3]]);
+      usedIds.add(top4[0].id);
+      usedIds.add(top4[1].id);
+      usedIds.add(top4[2].id);
+      usedIds.add(top4[3].id);
+    } else if (top4.length === 3) {
+      // Three people: keep the marquee #1-vs-#2 fight, send #3 to the
+      // wildcard pool for a cross-category partner.
+      pairings.push([top4[0], top4[1]]);
+      usedIds.add(top4[0].id);
+      usedIds.add(top4[1].id);
+      wildcardSeats.push(top4[2]);
+      usedIds.add(top4[2].id);
+    } else if (top4.length === 2) {
+      pairings.push([top4[0], top4[1]]);
+      usedIds.add(top4[0].id);
+      usedIds.add(top4[1].id);
+    }
+  }
+
+  if (wildcardSeats.length > 0) {
+    const leftoverPool = allPeople.filter((p) => !usedIds.has(p.id));
+    for (const seat of wildcardSeats) {
+      if (leftoverPool.length === 0) break;
+      const seatFame = seat.fameIndex ?? 0;
+      // Pick the leftover whose fame is closest to the seat's fame so the
+      // matchup feels intentional rather than a blowout. Stable on ties by
+      // falling back to the leftover's existing fame ordering.
+      let bestIdx = 0;
+      let bestDelta = Math.abs((leftoverPool[0].fameIndex ?? 0) - seatFame);
+      for (let i = 1; i < leftoverPool.length; i++) {
+        const delta = Math.abs((leftoverPool[i].fameIndex ?? 0) - seatFame);
+        if (delta < bestDelta) {
+          bestDelta = delta;
+          bestIdx = i;
+        }
+      }
+      const partner = leftoverPool.splice(bestIdx, 1)[0];
+      pairings.push([seat, partner]);
+      usedIds.add(partner.id);
+    }
+  }
+
+  return pairings;
+}
+
+/**
+ * Legacy pairing model — preserved behind the H2H_TOP4_PER_CATEGORY_ENABLED
+ * feature flag so we can fall back without redeploying. Pulled top-30 by
+ * fame globally, paired consecutive fame ranks within each category, and
+ * filled to 15 with a randomly shuffled cross-category remainder.
+ */
+function buildLegacyTop30Pairings(
+  top: H2HCandidate[],
+): [H2HCandidate, H2HCandidate][] {
+  const byCategory = new Map<string, H2HCandidate[]>();
+  for (const person of top) {
+    const cat = (person.category || "misc").toLowerCase();
+    if (!byCategory.has(cat)) byCategory.set(cat, []);
+    byCategory.get(cat)!.push(person);
+  }
+
+  const pairings: [H2HCandidate, H2HCandidate][] = [];
+  const paired = new Set<string>();
+  for (const [, group] of Array.from(byCategory)) {
+    for (let i = 0; i < group.length - 1 && pairings.length < 15; i += 2) {
+      pairings.push([group[i], group[i + 1]]);
+      paired.add(group[i].id);
+      paired.add(group[i + 1].id);
+    }
+  }
+  if (pairings.length < 15) {
+    const unpaired = top.filter((p) => !paired.has(p.id));
+    for (let i = unpaired.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [unpaired[i], unpaired[j]] = [unpaired[j], unpaired[i]];
+    }
+    for (let i = 0; i < unpaired.length - 1 && pairings.length < 15; i += 2) {
+      pairings.push([unpaired[i], unpaired[i + 1]]);
+    }
+  }
+  return pairings;
+}
+
 export async function generateWeeklyH2H(): Promise<number> {
   const { monday, sunday, weekNumber } = getWeekContext();
 
@@ -401,13 +542,20 @@ export async function generateWeeklyH2H(): Promise<number> {
     return 0;
   }
 
-  const top = await db
+  // Pull every leaderboard person ordered by fame so we can take a true top-4
+  // per category. Previously we capped at top-30 globally, which let one heavy
+  // category (politics) hog 5–6 cards and starved thin categories. The new
+  // model — top 4 per category, paired as (#1 vs #2) and (#3 vs #4) — is
+  // deterministic, gives every category equal billing, and guarantees no
+  // person appears in more than one card.
+  const allPeople = await db
     .select({ id: trendingPeople.id, name: trendingPeople.name, category: trendingPeople.category, fameIndex: trendingPeople.fameIndex })
     .from(trendingPeople)
-    .orderBy(desc(trendingPeople.fameIndex))
-    .limit(30);
+    .orderBy(desc(trendingPeople.fameIndex));
 
-  if (top.length < 2) return 0;
+  if (allPeople.length < 2) return 0;
+
+  const useTop4PerCategory = process.env.H2H_TOP4_PER_CATEGORY_ENABLED !== "false";
 
   const created: number = await db.transaction(async (tx) => {
     // Re-check inside the transaction in case a concurrent caller raced past
@@ -435,32 +583,11 @@ export async function generateWeeklyH2H(): Promise<number> {
       .where(and(eq(predictionMarkets.marketType, "h2h"), eq(predictionMarkets.weekNumber, weekNumber)));
     const existingSlugs = new Set(existingH2H.map(e => e.slug));
 
-    const byCategory = new Map<string, typeof top>();
-    for (const person of top) {
-      const cat = (person.category || "misc").toLowerCase();
-      if (!byCategory.has(cat)) byCategory.set(cat, []);
-      byCategory.get(cat)!.push(person);
-    }
+    const pairings: [typeof allPeople[0], typeof allPeople[0]][] = useTop4PerCategory
+      ? buildTop4PerCategoryPairings(allPeople)
+      : buildLegacyTop30Pairings(allPeople.slice(0, 30));
 
-    const pairings: [typeof top[0], typeof top[0]][] = [];
-    const paired = new Set<string>();
-    for (const [, group] of Array.from(byCategory)) {
-      for (let i = 0; i < group.length - 1 && pairings.length < 15; i += 2) {
-        pairings.push([group[i], group[i + 1]]);
-        paired.add(group[i].id);
-        paired.add(group[i + 1].id);
-      }
-    }
-    if (pairings.length < 15) {
-      const unpaired = top.filter(p => !paired.has(p.id));
-      for (let i = unpaired.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [unpaired[i], unpaired[j]] = [unpaired[j], unpaired[i]];
-      }
-      for (let i = 0; i < unpaired.length - 1 && pairings.length < 15; i += 2) {
-        pairings.push([unpaired[i], unpaired[i + 1]]);
-      }
-    }
+    log(`[MarketGenerator:H2H] Week ${weekNumber}: built ${pairings.length} pairings (mode=${useTop4PerCategory ? "top4-per-category" : "legacy-top30"})`);
 
     const allPersonIds = Array.from(new Set(pairings.flatMap(([a, b]) => [a.id, b.id])));
     const snapRows = allPersonIds.length > 0
