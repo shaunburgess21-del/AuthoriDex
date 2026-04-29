@@ -2601,7 +2601,7 @@ export default function PredictPage() {
                     ? "bg-violet-500/25 dark:bg-violet-500/20 text-violet-600 dark:text-violet-400 border border-violet-500/50 dark:border-violet-400/40 shadow-sm shadow-violet-500/30 dark:shadow-violet-500/20"
                     : myPositionsFilter === "hide-mine"
                       ? "bg-amber-500/15 dark:bg-amber-500/10 text-amber-600 dark:text-amber-500 border border-amber-500/50 dark:border-amber-500/40"
-                      : "bg-background text-muted-foreground hover:bg-muted border border-input"
+                      : "bg-background text-muted-foreground hover:bg-muted/40 dark:hover:bg-white/5 border border-input"
                 }`}
                 data-testid="toggle-my-positions-pill"
               >
