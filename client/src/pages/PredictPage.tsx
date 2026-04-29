@@ -2120,6 +2120,33 @@ export default function PredictPage() {
     ) || null;
   }, [selectedJackpotPerson, nativeJackpotData]);
 
+  // Server now caps jackpot eligibility at the top N most-famous people
+  // (default 20) to concentrate pool depth. The picker should mirror that —
+  // anyone without an active OPEN/live jackpot market is filtered out so
+  // users can't navigate to a "no market available" dead end. When the
+  // server-side cap changes (JACKPOT_TOP_N env var), the picker auto-adjusts
+  // because it derives eligibility from the live market list.
+  const jackpotEligiblePeople = useMemo(() => {
+    if (!nativeJackpotData) return [];
+    const eligibleIds = new Set(
+      nativeJackpotData
+        .filter((m: any) => m.status === "OPEN" && m.visibility === "live")
+        .map((m: any) => m.personId)
+        .filter(Boolean),
+    );
+    return (trendingPeople || []).filter((p) => eligibleIds.has(p.id));
+  }, [nativeJackpotData, trendingPeople]);
+
+  // Defensive: if the previously-selected person dropped out of eligibility
+  // (server cap changed mid-week, or rankings shifted), clear the selection
+  // so the UI doesn't silently show a stale picker target.
+  useEffect(() => {
+    if (!selectedJackpotPerson) return;
+    if (!jackpotEligiblePeople.some((p) => p.id === selectedJackpotPerson.id)) {
+      setSelectedJackpotPerson(null);
+    }
+  }, [selectedJackpotPerson, jackpotEligiblePeople]);
+
   // Sync global category filter to all section filters
   useEffect(() => {
     setUpdownCategory(categoryFilter);
@@ -2939,7 +2966,7 @@ export default function PredictPage() {
               onEnterJackpot={handleEnterJackpot}
               marketStatus={marketCycle.status}
               timeRemaining={marketCycle.timeRemaining}
-              trendingPeople={trendingPeople}
+              trendingPeople={jackpotEligiblePeople}
               selectedPerson={selectedJackpotPerson}
               onSelectPerson={setSelectedJackpotPerson}
               isLoading={isLoadingPeople}

@@ -299,33 +299,58 @@ export async function backfillGainerMarketForInductee(person: {
 
 export async function generateWeeklyJackpot(): Promise<number> {
   const { monday, sunday, weekNumber } = getWeekContext();
-  let people = await db.select().from(trackedPeople).where(eq(trackedPeople.status, "main_leaderboard"));
+
+  // Cap jackpot eligibility at the top N most-famous people. We previously
+  // generated one market for every main_leaderboard person (~150), which
+  // diluted pari-mutuel pools to ~900 credits of real bets each — too thin
+  // to feel like a meaningful prize. Concentrating to top 20 lifts the
+  // average headline pool ~7x without changing total betting volume.
+  // Override with JACKPOT_TOP_N env var (set to a very large number to
+  // restore the legacy behaviour).
+  const JACKPOT_TOP_N = (() => {
+    const raw = parseInt(process.env.JACKPOT_TOP_N || "20", 10);
+    return Number.isFinite(raw) && raw > 0 ? raw : 20;
+  })();
+
+  type JackpotCandidate = {
+    id: string;
+    name: string;
+    category: string | null;
+    avatar: string | null;
+  };
+
+  // Inner-join trackedPeople against trendingPeople so we can rank by
+  // fame_index. People without a fame index are excluded — they couldn't be
+  // ranked anyway. Order DESC + LIMIT N gives the top N.
+  let people: JackpotCandidate[] = await db
+    .select({
+      id: trackedPeople.id,
+      name: trackedPeople.name,
+      category: trackedPeople.category,
+      avatar: trackedPeople.avatar,
+    })
+    .from(trackedPeople)
+    .innerJoin(trendingPeople, eq(trendingPeople.id, trackedPeople.id))
+    .where(eq(trackedPeople.status, "main_leaderboard"))
+    .orderBy(desc(trendingPeople.fameIndex))
+    .limit(JACKPOT_TOP_N);
 
   if (people.length === 0) {
-    log(`[MarketGenerator:Jackpot] No trackedPeople found, falling back to trendingPeople`);
-    const trending = await db
-      .select({ id: trendingPeople.id, name: trendingPeople.name, category: trendingPeople.category, avatar: trendingPeople.avatar })
+    log(`[MarketGenerator:Jackpot] No trackedPeople matched, falling back to trendingPeople top ${JACKPOT_TOP_N}`);
+    people = await db
+      .select({
+        id: trendingPeople.id,
+        name: trendingPeople.name,
+        category: trendingPeople.category,
+        avatar: trendingPeople.avatar,
+      })
       .from(trendingPeople)
       .orderBy(desc(trendingPeople.fameIndex))
-      .limit(100);
-    people = trending.map(t => ({
-      ...t,
-      category: t.category || "misc",
-      displayOrder: 0,
-      imageSlug: null as string | null,
-      bio: null as string | null,
-      youtubeId: null as string | null,
-      spotifyId: null as string | null,
-      wikiSlug: null as string | null,
-      xHandle: null as string | null,
-      instagramHandle: null as string | null,
-      tiktokHandle: null as string | null,
-      searchQueryOverride: null as string | null,
-      newsQueryWidened: null as string | null,
-      status: "main_leaderboard",
-    }));
+      .limit(JACKPOT_TOP_N);
     log(`[MarketGenerator:Jackpot] Fallback: ${people.length} people from trendingPeople`);
   }
+
+  log(`[MarketGenerator:Jackpot] Week ${weekNumber}: generating up to ${people.length} jackpot markets (top ${JACKPOT_TOP_N})`);
 
   const existing = await db.select({ personId: predictionMarkets.personId })
     .from(predictionMarkets)

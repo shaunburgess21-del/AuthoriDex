@@ -845,9 +845,15 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
 
       <MarketCycleHero marketState={marketCycle} constrainedWidth />
 
-      {/* Weekly Jackpot — same hero as main Predict page; static person row (no celebrity picker) */}
-      <section data-testid="profile-jackpot-widget">
-        {jackpotMarket ? (
+      {/* Weekly Jackpot — same hero as main Predict page; static person row
+          (no celebrity picker). Server-side jackpot eligibility is capped
+          at the top N most-famous people (default 20) to concentrate pool
+          depth, so most profile pages won't have a jackpot market. We hide
+          the section entirely in that case rather than rendering an empty
+          "no market available" stub — users in the long tail of the
+          leaderboard simply don't see a jackpot widget on their profile. */}
+      {jackpotMarket && (
+        <section data-testid="profile-jackpot-widget">
           <WeeklyJackpotHero
             variant="profile"
             profilePerson={{
@@ -862,23 +868,19 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
             jackpotMarket={jackpotMarket}
             onRulesClick={() => setRulesModalOpen("jackpot")}
           />
-        ) : (
-          <div className="text-center py-6 text-muted-foreground">
-            No weekly jackpot market for {personName} yet.
-          </div>
-        )}
 
-        <JackpotEntryModal
-          open={jackpotModalOpen}
-          onClose={() => setJackpotModalOpen(false)}
-          person={{ id: personId, name: personName, avatar: personAvatar || "", trendScore: currentScore } as any}
-          marketId={jackpotMarket?.id || null}
-          userCredits={walletCredits}
-          bettingCutoff={jackpotMarket?.bettingCutoff || null}
-          resolveAt={jackpotMarket?.endAt || null}
-          isCutoffPassed={jackpotMarket?.isCutoffPassed || false}
-        />
-      </section>
+          <JackpotEntryModal
+            open={jackpotModalOpen}
+            onClose={() => setJackpotModalOpen(false)}
+            person={{ id: personId, name: personName, avatar: personAvatar || "", trendScore: currentScore } as any}
+            marketId={jackpotMarket.id}
+            userCredits={walletCredits}
+            bettingCutoff={jackpotMarket.bettingCutoff || null}
+            resolveAt={jackpotMarket.endAt || null}
+            isCutoffPassed={jackpotMarket.isCutoffPassed || false}
+          />
+        </section>
+      )}
 
       {/* Up/Down Predictions */}
       <section>
