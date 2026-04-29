@@ -1,4 +1,4 @@
-import { useState, useEffect, type MouseEvent } from "react";
+import { useState, useEffect, useContext, type MouseEvent } from "react";
 import { Link, useLocation } from "wouter";
 import { Users, ListChecks, CheckCircle2, MessageSquare, X } from "lucide-react";
 import { Drawer } from "vaul";
@@ -18,6 +18,7 @@ import {
 import { toast } from "sonner";
 import { CountdownDescription } from "@/components/CountdownDescription";
 import { isUnauthorizedApiError, signInToVoteToastOptions, signInToVoteTitle } from "@/lib/signInToVoteToast";
+import { SnapDismissContext } from "@/components/snap-scroll/VoteSnapScrollView";
 
 function parseOpinionPollCardError(err: unknown): { message: string; retryAfter?: number } {
   const retryAfter = (err as any)?.retryAfter as number | undefined;
@@ -220,6 +221,14 @@ export function OpinionPollCard({
       return () => clearTimeout(t);
     }
   }, [optionsDrawerOpen, pendingChangeOption]);
+
+  const snapDismiss = useContext(SnapDismissContext);
+  useEffect(() => {
+    if (snapDismiss > 0) {
+      setOptionsDrawerOpen(false);
+      setExpandedImage(null);
+    }
+  }, [snapDismiss]);
 
   const handleVote = async (optionId: string, e: MouseEvent) => {
     e.stopPropagation();
