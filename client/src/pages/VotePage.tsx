@@ -2312,7 +2312,7 @@ export default function VotePage() {
                 setLocation("/");
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
-              className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+              className="flex items-center gap-2 hover:opacity-80 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               data-testid="button-logo-home"
             >
               <VoxDexLogo size={32} variant="vote" />
@@ -2350,7 +2350,7 @@ export default function VotePage() {
                     ? "bg-cyan-500/25 dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border border-cyan-500/50 dark:border-cyan-400/40 shadow-sm shadow-cyan-500/30 dark:shadow-cyan-500/20"
                     : myVotesFilter === "hide-mine"
                       ? "bg-amber-500/15 dark:bg-amber-500/10 text-amber-600 dark:text-amber-500 border border-amber-500/50 dark:border-amber-500/40"
-                      : "bg-background text-muted-foreground hover:bg-muted border border-input"
+                      : "bg-background text-muted-foreground hover:bg-muted/40 dark:hover:bg-white/5 border border-input"
                 }`}
                 data-testid="toggle-my-votes-pill"
               >

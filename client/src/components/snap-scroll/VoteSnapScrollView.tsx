@@ -322,7 +322,7 @@ export function VoteSnapScrollView({
           <div className="shrink-0 flex items-center border-b border-border/30 bg-background/95 backdrop-blur-md safe-top">
             <button
               onClick={onClose}
-              className="p-3 text-muted-foreground hover:text-foreground transition-colors"
+              className="p-3 text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               data-interactive="true"
             >
               <ArrowLeft className="h-5 w-5" />

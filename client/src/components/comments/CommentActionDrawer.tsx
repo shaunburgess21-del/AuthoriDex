@@ -87,7 +87,7 @@ export function CommentActionDrawer({
           <div className="px-4 pb-4">
             <button
               onClick={handleShare}
-              className="flex items-center gap-3 w-full px-4 py-3.5 rounded-xl hover:bg-muted/50 transition-colors"
+              className="flex items-center gap-3 w-full px-4 py-3.5 rounded-xl hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
               <Share2 className="h-5 w-5 text-muted-foreground" />
               <span className="text-sm font-medium">Share</span>
@@ -95,7 +95,7 @@ export function CommentActionDrawer({
             {onReport && (
               <button
                 onClick={() => setShowReportPicker(true)}
-                className="flex items-center gap-3 w-full px-4 py-3.5 rounded-xl hover:bg-muted/50 transition-colors"
+                className="flex items-center gap-3 w-full px-4 py-3.5 rounded-xl hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
                 <Flag className="h-5 w-5 text-muted-foreground" />
                 <span className="text-sm font-medium">Report</span>
@@ -104,7 +104,7 @@ export function CommentActionDrawer({
             {onDelete && (
               <button
                 onClick={handleDelete}
-                className="flex items-center gap-3 w-full px-4 py-3.5 rounded-xl hover:bg-destructive/10 transition-colors text-destructive"
+                className="flex items-center gap-3 w-full px-4 py-3.5 rounded-xl hover:bg-destructive/10 transition-colors text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
                 <Trash2 className="h-5 w-5" />
                 <span className="text-sm font-medium">Delete</span>
@@ -112,7 +112,7 @@ export function CommentActionDrawer({
             )}
             <button
               onClick={onClose}
-              className="flex items-center gap-3 w-full px-4 py-3.5 rounded-xl hover:bg-muted/50 transition-colors mt-1 border-t border-border/10 pt-3"
+              className="flex items-center gap-3 w-full px-4 py-3.5 rounded-xl hover:bg-muted/50 transition-colors mt-1 border-t border-border/10 pt-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
               <X className="h-5 w-5 text-muted-foreground" />
               <span className="text-sm font-medium text-muted-foreground">Cancel</span>
@@ -125,14 +125,14 @@ export function CommentActionDrawer({
               <button
                 key={reason}
                 onClick={() => handleReport(reason)}
-                className="flex items-center w-full px-4 py-3 rounded-xl hover:bg-muted/50 transition-colors text-sm"
+                className="flex items-center w-full px-4 py-3 rounded-xl hover:bg-muted/50 transition-colors text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
                 {reason}
               </button>
             ))}
             <button
               onClick={() => setShowReportPicker(false)}
-              className="flex items-center gap-3 w-full px-4 py-3.5 rounded-xl hover:bg-muted/50 transition-colors mt-1 border-t border-border/10 pt-3"
+              className="flex items-center gap-3 w-full px-4 py-3.5 rounded-xl hover:bg-muted/50 transition-colors mt-1 border-t border-border/10 pt-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
               <span className="text-sm font-medium text-muted-foreground">Back</span>
             </button>

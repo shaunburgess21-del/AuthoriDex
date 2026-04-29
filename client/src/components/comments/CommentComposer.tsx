@@ -217,7 +217,7 @@ export function CommentComposer({
             </span>
             <button
               onClick={onCancelReply}
-              className="text-muted-foreground hover:text-foreground transition-colors"
+              className="text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             >
               <X className="h-3 w-3" />
             </button>
@@ -285,7 +285,7 @@ export function CommentComposer({
             <button
               type="button"
               onClick={() => setComposerMode("auto")}
-              className="rounded-lg p-2 text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
+              className="rounded-lg p-2 text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               aria-label="Close full-screen composer"
             >
               <X className="h-5 w-5" />

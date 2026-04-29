@@ -43,7 +43,7 @@ export function CommentSortHeader({
       <div className="inline-flex items-center rounded-lg bg-muted/50 p-0.5">
         <button
           onClick={() => onSortChange("top")}
-          className={`relative flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-all ${
+          className={`relative flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
             sort === "top" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"
           }`}
           data-testid="button-sort-top"
@@ -56,7 +56,7 @@ export function CommentSortHeader({
         </button>
         <button
           onClick={() => onSortChange("newest")}
-          className={`relative flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-all ${
+          className={`relative flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
             sort === "newest" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"
           }`}
           data-testid="button-sort-newest"
@@ -71,12 +71,12 @@ export function CommentSortHeader({
       {(onDetail || onShare) && (
         <div className="flex items-center gap-3 ml-auto">
           {onDetail && (
-            <button onClick={onDetail} className="text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors" data-interactive="true">
+            <button onClick={onDetail} className="text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" data-interactive="true">
               <ExternalLink className="h-4 w-4" />
             </button>
           )}
           {onShare && (
-            <button onClick={onShare} className="text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors" data-interactive="true">
+            <button onClick={onShare} className="text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" data-interactive="true">
               <Share2 className="h-4 w-4" />
             </button>
           )}

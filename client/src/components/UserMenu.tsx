@@ -185,7 +185,7 @@ function UserMenuContent({
         <Separator />
 
         <button
-          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors text-left"
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           onClick={() => handleNavClick("/predictions/leaderboard")}
           data-testid="link-prediction-leaderboard-loggedout"
         >
@@ -197,7 +197,7 @@ function UserMenuContent({
         <Separator />
         
         <button
-          className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors"
+          className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           onClick={onToggleTheme}
           data-testid="button-theme-toggle-menu"
         >
@@ -240,7 +240,7 @@ function UserMenuContent({
               <Link
                 href="/me"
                 onClick={() => onClose?.()}
-                className="font-semibold truncate hover:underline cursor-pointer"
+                className="font-semibold truncate hover:underline cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 data-testid="link-my-account-name"
               >
                 {displayName}
@@ -259,7 +259,7 @@ function UserMenuContent({
               <Link
                 href={`/u/${profile.username}`}
                 onClick={() => onClose?.()}
-                className="block text-xs text-muted-foreground truncate hover:text-foreground hover:underline cursor-pointer"
+                className="block text-xs text-muted-foreground truncate hover:text-foreground hover:underline cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 data-testid="link-my-public-profile"
               >
                 @{profile.username}
@@ -313,7 +313,7 @@ function UserMenuContent({
       <div className="px-2 py-1">
         <p className="px-2 py-1.5 text-xs font-medium text-muted-foreground">Activity</p>
         <button
-          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors text-left"
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           onClick={() => handleNavClick("/me")}
           data-testid="link-my-account"
         >
@@ -322,7 +322,7 @@ function UserMenuContent({
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
         </button>
         <button
-          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors text-left"
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           onClick={() => handleNavClick("/me/predictions")}
           data-testid="link-my-predictions"
         >
@@ -332,7 +332,7 @@ function UserMenuContent({
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
         </button>
         <button
-          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors text-left"
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           onClick={() => handleNavClick("/me/votes")}
           data-testid="link-my-votes"
         >
@@ -342,7 +342,7 @@ function UserMenuContent({
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
         </button>
         <button
-          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors text-left"
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           onClick={() => handleNavClick("/predictions/leaderboard")}
           data-testid="link-leaderboard"
         >
@@ -354,7 +354,7 @@ function UserMenuContent({
             monetization CTA stands out from the muted activity links
             without becoming the loudest thing in the menu. */}
         <button
-          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-violet-500/10 dark:hover:bg-violet-500/15 transition-colors text-left"
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-violet-500/10 dark:hover:bg-violet-500/15 transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           onClick={() => handleNavClick("/pricing")}
           data-testid="link-buy-credits"
         >
@@ -371,7 +371,7 @@ function UserMenuContent({
       <div className="px-2 py-1">
         <p className="px-2 py-1.5 text-xs font-medium text-muted-foreground">Settings</p>
         <button
-          className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors"
+          className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           onClick={onToggleTheme}
           data-testid="button-theme-toggle-menu"
         >

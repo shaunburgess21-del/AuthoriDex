@@ -752,7 +752,7 @@ export default function MarketDetailPage() {
                 <ArrowLeft className="h-5 w-5" />
               </Button>
               <Link href="/">
-                <button className="flex items-center gap-2 hover:opacity-80 transition-opacity" data-testid="button-logo-home">
+                <button className="flex items-center gap-2 hover:opacity-80 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" data-testid="button-logo-home">
                   <VoxDexLogo size={32} />
                   <span className="font-serif font-bold text-xl hidden sm:block">VoxDex</span>
                 </button>
@@ -810,7 +810,7 @@ export default function MarketDetailPage() {
             </Button>
             <Link href="/">
               <button
-                className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+                className="flex items-center gap-2 hover:opacity-80 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 data-testid="button-logo-home"
               >
                 <VoxDexLogo size={32} />

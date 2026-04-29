@@ -73,7 +73,7 @@ export function CommentRow({
           </div>
           <button
             onClick={onOpenActions}
-            className="shrink-0 p-1 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+            className="shrink-0 p-1 text-muted-foreground/50 hover:text-muted-foreground transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             data-interactive="true"
           >
             <MoreVertical className="h-4 w-4" />
@@ -117,7 +117,7 @@ export function CommentRow({
               {showReplyButton && onReply && (
                 <button
                   onClick={onReply}
-                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors"
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   data-testid={testIds?.reply ?? `button-reply-${comment.id}`}
                 >
                   <Reply className="h-3.5 w-3.5" />
