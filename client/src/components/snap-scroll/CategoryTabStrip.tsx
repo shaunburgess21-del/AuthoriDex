@@ -59,7 +59,7 @@ export function CategoryTabStrip({ categories, activeCategory, onSelect }: Categ
             key={cat}
             ref={isActive ? activeRef : undefined}
             onClick={() => onSelect(cat)}
-            className={`shrink-0 px-3 py-1.5 rounded-full text-sm font-semibold transition-all duration-200 whitespace-nowrap ${
+            className={`shrink-0 px-3 py-1.5 rounded-full text-sm font-semibold transition-all duration-200 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
               isActive ? "" : "text-muted-foreground dark:text-white/45"
             }`}
             style={

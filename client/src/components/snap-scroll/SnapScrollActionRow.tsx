@@ -13,14 +13,14 @@ export function SnapScrollActionRow({
     <div className="flex items-center justify-center gap-8 py-3 px-4">
       <button
         onClick={onDetail}
-        className="flex flex-col items-center gap-1 text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors"
+        className="flex flex-col items-center gap-1 text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
         data-interactive="true"
       >
         <ExternalLink className="h-5 w-5" />
       </button>
       <button
         onClick={onShare}
-        className="flex flex-col items-center gap-1 text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors"
+        className="flex flex-col items-center gap-1 text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
         data-interactive="true"
       >
         <Share2 className="h-5 w-5" />
