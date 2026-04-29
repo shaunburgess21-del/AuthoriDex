@@ -562,7 +562,6 @@ function SectionFilterBar({
       >
         {filters.map((cat) => {
           const IconComponent = CATEGORY_ICONS[cat.id];
-          const isIconOnly = cat.id === "favorites";
           return (
             <button
               key={cat.id}
@@ -573,14 +572,9 @@ function SectionFilterBar({
                   : 'bg-muted/50 border border-border/60 text-muted-foreground hover:border-violet-400/30 dark:bg-slate-800/30 dark:border-slate-700/40 dark:text-slate-400 dark:hover:border-violet-400/20'
               }`}
               data-testid={cat.id === "misc" ? `${testIdPrefix}-category-custom-topic` : `${testIdPrefix}-category-${cat.id}`}
-              aria-label={isIconOnly ? cat.label : undefined}
             >
               <IconComponent className="h-3.5 w-3.5" />
-              {isIconOnly ? (
-                <span className="hidden md:inline">{cat.label}</span>
-              ) : (
-                cat.label
-              )}
+              {cat.label}
             </button>
           );
         })}
