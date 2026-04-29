@@ -116,14 +116,9 @@ export function OverlayFilterBar({
                   isActive ? activeClasses : inactiveClasses
                 }`}
                 data-testid={`${testIdPrefix}-pill-${cat.value.toLowerCase()}`}
-                aria-label={isFavorites ? "Favorites" : undefined}
               >
                 <IconComponent className="h-3.5 w-3.5" />
-                {isFavorites ? (
-                  <span className="hidden lg:inline">{cat.label}</span>
-                ) : (
-                  cat.label
-                )}
+                {cat.label}
               </button>
             );
           })}

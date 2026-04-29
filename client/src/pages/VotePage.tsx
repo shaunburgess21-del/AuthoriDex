@@ -1152,7 +1152,6 @@ function FilterChip({
   isCustomTopic?: boolean;
 }) {
   const isFavorites = category === "favorites";
-  const isIconOnly = isFavorites;
   const IconComponent = VOTE_CATEGORY_ICONS[category] || LayoutGrid;
 
   const handleClick = () => {
@@ -1181,14 +1180,9 @@ function FilterChip({
           : "bg-muted/50 border-border/60 text-muted-foreground hover:border-foreground/30 dark:bg-slate-800/30 dark:border-slate-700/40 dark:text-slate-400 dark:hover:border-slate-600"
       }`}
       data-testid={getTestId()}
-      aria-label={isIconOnly ? getDisplayLabel() : undefined}
     >
       <IconComponent className="h-3.5 w-3.5" />
-      {isIconOnly ? (
-        <span className="hidden md:inline">{getDisplayLabel()}</span>
-      ) : (
-        getDisplayLabel()
-      )}
+      {getDisplayLabel()}
     </button>
   );
 }
@@ -2386,7 +2380,14 @@ export default function VotePage() {
                 {section === "Underrated/Overrated" && <BarChart3 className="h-4 w-4" />}
                 {section === "Induction Queue" && <UserPlus className="h-4 w-4" />}
                 {section === "Curate Profile" && <ImageIcon className="h-4 w-4" />}
-                {section}
+                {section === "All" ? (
+                  <>
+                    <span className="sm:hidden">All</span>
+                    <span className="hidden sm:inline">All Votes</span>
+                  </>
+                ) : (
+                  section
+                )}
               </button>
             ))}
           </ScrollMaskedChipRow>
