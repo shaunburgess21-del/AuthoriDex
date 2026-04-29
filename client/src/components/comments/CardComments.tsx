@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useContext, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
@@ -12,6 +12,7 @@ import { CommentComposer } from "./CommentComposer";
 import { useCommentThread } from "./useCommentThread";
 import { DeleteContentDialog } from "./DeleteContentDialog";
 import type { CommentAdapter, CommentItem, CommentEntityType } from "./types";
+import { SnapDismissContext } from "@/components/snap-scroll/VoteSnapScrollView";
 
 export type { CommentEntityType } from "./types";
 
@@ -65,6 +66,14 @@ export function CardComments({
   const [, setLocation] = useLocation();
   const [drawerComment, setDrawerComment] = useState<CommentItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CommentItem | null>(null);
+
+  const snapDismiss = useContext(SnapDismissContext);
+  useEffect(() => {
+    if (snapDismiss > 0) {
+      setDrawerComment(null);
+      setDeleteTarget(null);
+    }
+  }, [snapDismiss]);
 
   const base = API_BASE[entityType];
   const parentType = COMMENT_PARENT_TYPE[entityType];
