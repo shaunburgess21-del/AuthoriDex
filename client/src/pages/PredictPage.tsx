@@ -2969,7 +2969,7 @@ export default function PredictPage() {
               trendingPeople={jackpotEligiblePeople}
               selectedPerson={selectedJackpotPerson}
               onSelectPerson={setSelectedJackpotPerson}
-              isLoading={isLoadingPeople}
+              isLoading={isLoadingPeople || nativeJackpotData === undefined}
               jackpotMarket={jackpotMarketForPerson}
               onRulesClick={() => setRulesModalOpen("jackpot")}
             />

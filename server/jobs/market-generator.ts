@@ -321,7 +321,8 @@ export async function generateWeeklyJackpot(): Promise<number> {
 
   // Inner-join trackedPeople against trendingPeople so we can rank by
   // fame_index. People without a fame index are excluded — they couldn't be
-  // ranked anyway. Order DESC + LIMIT N gives the top N.
+  // ranked anyway. Order DESC + LIMIT N gives the top N. Secondary sort by
+  // id breaks fame_index ties deterministically.
   let people: JackpotCandidate[] = await db
     .select({
       id: trackedPeople.id,
@@ -332,7 +333,7 @@ export async function generateWeeklyJackpot(): Promise<number> {
     .from(trackedPeople)
     .innerJoin(trendingPeople, eq(trendingPeople.id, trackedPeople.id))
     .where(eq(trackedPeople.status, "main_leaderboard"))
-    .orderBy(desc(trendingPeople.fameIndex))
+    .orderBy(desc(trendingPeople.fameIndex), trackedPeople.id)
     .limit(JACKPOT_TOP_N);
 
   if (people.length === 0) {
@@ -345,7 +346,7 @@ export async function generateWeeklyJackpot(): Promise<number> {
         avatar: trendingPeople.avatar,
       })
       .from(trendingPeople)
-      .orderBy(desc(trendingPeople.fameIndex))
+      .orderBy(desc(trendingPeople.fameIndex), trendingPeople.id)
       .limit(JACKPOT_TOP_N);
     log(`[MarketGenerator:Jackpot] Fallback: ${people.length} people from trendingPeople`);
   }
@@ -573,14 +574,19 @@ export async function generateWeeklyH2H(): Promise<number> {
   // model — top 4 per category, paired as (#1 vs #2) and (#3 vs #4) — is
   // deterministic, gives every category equal billing, and guarantees no
   // person appears in more than one card.
+  //
+  // Secondary sort by id breaks fame_index ties deterministically — without
+  // it, two people with identical fame would swap positions across runs and
+  // produce non-deterministic pairings. Rare in practice but free to fix.
   const allPeople = await db
     .select({ id: trendingPeople.id, name: trendingPeople.name, category: trendingPeople.category, fameIndex: trendingPeople.fameIndex })
     .from(trendingPeople)
-    .orderBy(desc(trendingPeople.fameIndex));
+    .orderBy(desc(trendingPeople.fameIndex), trendingPeople.id);
 
   if (allPeople.length < 2) return 0;
 
-  const useTop4PerCategory = process.env.H2H_TOP4_PER_CATEGORY_ENABLED !== "false";
+  const useTop4PerCategory =
+    (process.env.H2H_TOP4_PER_CATEGORY_ENABLED || "").toLowerCase() !== "false";
 
   const created: number = await db.transaction(async (tx) => {
     // Re-check inside the transaction in case a concurrent caller raced past
