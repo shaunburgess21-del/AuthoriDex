@@ -57,6 +57,7 @@ import {
   Table2,
   Save,
   Inbox,
+  Layers,
 } from "lucide-react";
 import { AdminUnderratedOverrated } from "@/components/admin/AdminUnderratedOverrated";
 import { AdminCurateProfile } from "@/components/admin/AdminCurateProfile";
@@ -64,6 +65,7 @@ import { AdminInductionQueue } from "@/components/admin/AdminInductionQueue";
 import { AdminSettlementCenter } from "@/components/admin/AdminSettlementCenter";
 import { AdminUserCreditHistory } from "@/components/admin/AdminUserCreditHistory";
 import { AdminLeaderboardDiff } from "@/components/admin/AdminLeaderboardDiff";
+import { AdminCategoriesSection } from "@/components/admin/AdminCategoriesSection";
 import { AdminScoreInspector } from "@/components/admin/AdminScoreInspector";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -2546,6 +2548,7 @@ export default function AdminDashboard() {
     { id: "moderation" as const, label: "Moderation", icon: Shield },
     { id: "settlement" as const, label: "Settlement", icon: Gavel },
     { id: "users" as const, label: "Users", icon: Users },
+    { id: "categories" as const, label: "Categories", icon: Layers },
     { id: "tools" as const, label: "System Tools", icon: Settings },
   ];
 
@@ -3060,7 +3063,7 @@ export default function AdminDashboard() {
         </div>
       </aside>
 
-      {/* Mobile nav — horizontally scrollable so all 8 sections fit on a phone
+      {/* Mobile nav — horizontally scrollable so all nav sections fit on a phone
           without squishing labels into 2 lines. */}
       <nav
         className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card/95 backdrop-blur-xl"
@@ -5487,6 +5490,10 @@ export default function AdminDashboard() {
         )}
 
         {/* System Tools Section */}
+        {activeSection === "categories" && (
+          <AdminCategoriesSection enabled={isAdmin && activeSection === "categories"} />
+        )}
+
         {activeSection === "tools" && (
           <div className="space-y-6">
             <div className="flex items-center justify-between flex-wrap gap-2">

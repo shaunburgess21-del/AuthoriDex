@@ -20,6 +20,7 @@ export type AdminSection =
   | "moderation"
   | "settlement"
   | "users"
+  | "categories"
   | "tools";
 
 export interface AdminStats {

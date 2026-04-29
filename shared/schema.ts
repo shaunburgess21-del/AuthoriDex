@@ -862,6 +862,16 @@ export const profileItemPrivacyRelations = relations(profileItemPrivacy, ({ one 
   }),
 }));
 
+/** Admin-managed list of allowed category IDs (kebab-case); aligns with CANONICAL_CATEGORIES. */
+export const contentCategories = pgTable("content_categories", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  label: text("label").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export type ContentCategoryRow = typeof contentCategories.$inferSelect;
+
 export type ProfileItemPrivacy = typeof profileItemPrivacy.$inferSelect;
 export type InsertProfileItemPrivacy = typeof profileItemPrivacy.$inferInsert;
 

@@ -4,7 +4,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { getBaselineDiagnostics } from "./utils/baseline";
 import { db } from "./db";
-import { trendSnapshots, trackedPeople, communityInsights, insightVotes, comments as unifiedComments, commentVotes, matchups, votes, xpActions, xpLedger, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, insertCommunityInsightSchema, insertInsightVoteSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
+import { trendSnapshots, trackedPeople, communityInsights, insightVotes, comments as unifiedComments, commentVotes, matchups, votes, xpActions, xpLedger, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, contentCategories, insertCommunityInsightSchema, insertInsightVoteSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
 import { validateSuggestionPayload, SUGGESTION_TYPES } from "@shared/suggestionSchemas";
 import { normaliseSocialHandles } from "@shared/handleNormalise";
 import { eq, desc, and, gt, sql, count, gte, lte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull, isNull } from "drizzle-orm";
@@ -114,6 +114,72 @@ function isCommentVoteState(value: unknown): value is Exclude<CommentVoteState, 
 
 function uniqueStrings(values: Array<string | null | undefined>): string[] {
   return Array.from(new Set(values.filter((value): value is string => Boolean(value))));
+}
+
+/** Compare stored DB category text to a canonical registry id (handles legacy title-case vs kebab-case). */
+function storedMatchesCanonicalCategory(stored: string | null | undefined, canonicalId: string): boolean {
+  if (stored == null || stored === "") return false;
+  return normalizeMarketCategory(stored) === canonicalId;
+}
+
+type CategoryUsageBreakdown = {
+  celebrities: number;
+  trendingPolls: number;
+  opinionPolls: number;
+  faceOffs: number;
+  inductionCandidates: number;
+  predictionMarkets: number;
+  leaderboardRows: number;
+};
+
+function sumCategoryUsage(u: CategoryUsageBreakdown): number {
+  return (
+    u.celebrities +
+    u.trendingPolls +
+    u.opinionPolls +
+    u.faceOffs +
+    u.inductionCandidates +
+    u.predictionMarkets +
+    u.leaderboardRows
+  );
+}
+
+function usageBreakdownForId(
+  canonicalId: string,
+  buckets: {
+    trackedPeopleCats: { id: string; category: string | null }[];
+    trendingPollCats: { category: string | null }[];
+    opinionPollCats: { category: string | null }[];
+    faceOffCats: { category: string | null }[];
+    inductionCats: { category: string | null }[];
+    marketCats: { category: string | null }[];
+    trendingPeopleCats: { id: string; category: string | null }[];
+  },
+): CategoryUsageBreakdown {
+  const cnt = (rows: { category: string | null }[]) =>
+    rows.filter((r) => storedMatchesCanonicalCategory(r.category, canonicalId)).length;
+
+  const celebRows = buckets.trackedPeopleCats.filter((r) =>
+    storedMatchesCanonicalCategory(r.category, canonicalId),
+  );
+  const celebrities = celebRows.length;
+  const celebIds = new Set(celebRows.map((r) => r.id));
+
+  const trendingMatching = buckets.trendingPeopleCats.filter((r) =>
+    storedMatchesCanonicalCategory(r.category, canonicalId),
+  );
+  // Avoid double-counting the same person: leaderboard cache mirrors tracked_people for synced rows.
+  const leaderboardRows = trendingMatching.filter((r) => !celebIds.has(r.id)).length;
+
+  return {
+    celebrities,
+    trendingPolls: cnt(buckets.trendingPollCats),
+    opinionPolls: cnt(buckets.opinionPollCats),
+    faceOffs: cnt(buckets.faceOffCats),
+    inductionCandidates: cnt(buckets.inductionCats),
+    predictionMarkets: cnt(buckets.marketCats),
+    leaderboardRows,
+  };
 }
 
 function reportEntityTypeForCommentParent(parentType: CommentParentType): string {
@@ -8439,7 +8505,257 @@ Only return the JSON object.`;
       res.status(500).json({ error: "Failed to fetch traffic stats" });
     }
   });
-  
+
+  const ADMIN_CATEGORY_ID_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+  // Registry of canonical category ids (admin-managed; see content_categories migration).
+  app.get("/api/admin/categories", requireAuth, requireAdmin, async (_req: AuthRequest, res) => {
+    try {
+      const rows = await db
+        .select()
+        .from(contentCategories)
+        .orderBy(asc(contentCategories.sortOrder), asc(contentCategories.id));
+
+      const buckets = await Promise.all([
+        db.select({ id: trackedPeople.id, category: trackedPeople.category }).from(trackedPeople),
+        db.select({ category: trendingPolls.category }).from(trendingPolls),
+        db.select({ category: opinionPolls.category }).from(opinionPolls),
+        db.select({ category: matchups.category }).from(matchups),
+        db.select({ category: inductionCandidates.category }).from(inductionCandidates),
+        db.select({ category: predictionMarkets.category }).from(predictionMarkets),
+        db.select({ id: trendingPeople.id, category: trendingPeople.category }).from(trendingPeople),
+      ]);
+
+      const b = {
+        trackedPeopleCats: buckets[0],
+        trendingPollCats: buckets[1],
+        opinionPollCats: buckets[2],
+        faceOffCats: buckets[3],
+        inductionCats: buckets[4],
+        marketCats: buckets[5],
+        trendingPeopleCats: buckets[6],
+      };
+
+      const payload = rows.map((row) => {
+        const usage = usageBreakdownForId(row.id, b);
+        return {
+          id: row.id,
+          label: row.label,
+          sortOrder: row.sortOrder,
+          createdAt: row.createdAt?.toISOString?.() ?? null,
+          usage,
+          totalUsage: sumCategoryUsage(usage),
+        };
+      });
+
+      res.json(payload);
+    } catch (error: any) {
+      console.error("[admin/categories] list:", error);
+      res.status(500).json({ error: "Failed to load categories" });
+    }
+  });
+
+  app.post("/api/admin/categories", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const parsed = z.object({
+        id: z
+          .string()
+          .transform((s) => s.trim().toLowerCase())
+          .pipe(z.string().min(1).max(64)),
+        label: z
+          .string()
+          .transform((s) => s.trim())
+          .pipe(z.string().min(1).max(120)),
+      }).safeParse(req.body);
+      if (!parsed.success) {
+        return sendZodError(res, parsed.error);
+      }
+      const { id, label } = parsed.data;
+      if (!ADMIN_CATEGORY_ID_RE.test(id)) {
+        return res.status(400).json({
+          error: "Invalid id. Use lowercase letters, digits, and single hyphens (e.g. film-tv).",
+        });
+      }
+
+      const existing = await db.select({ id: contentCategories.id }).from(contentCategories).where(eq(contentCategories.id, id));
+      if (existing.length > 0) {
+        return res.status(409).json({ error: "A category with this id already exists." });
+      }
+
+      const sortRows = await db.select({ sortOrder: contentCategories.sortOrder }).from(contentCategories);
+      const nextSort = (sortRows.length ? Math.max(...sortRows.map((r) => r.sortOrder)) : 0) + 10;
+
+      await db.insert(contentCategories).values({
+        id,
+        label,
+        sortOrder: nextSort,
+      });
+
+      res.status(201).json({ ok: true, id });
+    } catch (error: any) {
+      console.error("[admin/categories] create:", error);
+      res.status(500).json({ error: "Failed to create category" });
+    }
+  });
+
+  app.delete("/api/admin/categories/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const [row] = await db.select().from(contentCategories).where(eq(contentCategories.id, id));
+      if (!row) {
+        return res.status(404).json({ error: "Category not found." });
+      }
+
+      const buckets = await Promise.all([
+        db.select({ id: trackedPeople.id, category: trackedPeople.category }).from(trackedPeople),
+        db.select({ category: trendingPolls.category }).from(trendingPolls),
+        db.select({ category: opinionPolls.category }).from(opinionPolls),
+        db.select({ category: matchups.category }).from(matchups),
+        db.select({ category: inductionCandidates.category }).from(inductionCandidates),
+        db.select({ category: predictionMarkets.category }).from(predictionMarkets),
+        db.select({ id: trendingPeople.id, category: trendingPeople.category }).from(trendingPeople),
+      ]);
+
+      const b = {
+        trackedPeopleCats: buckets[0],
+        trendingPollCats: buckets[1],
+        opinionPollCats: buckets[2],
+        faceOffCats: buckets[3],
+        inductionCats: buckets[4],
+        marketCats: buckets[5],
+        trendingPeopleCats: buckets[6],
+      };
+
+      const usage = usageBreakdownForId(id, b);
+      const total = sumCategoryUsage(usage);
+      if (total > 0) {
+        return res.status(409).json({
+          error:
+            "Cannot delete this category while content still references it. Reassign or remove those items first.",
+          usage,
+        });
+      }
+
+      await db.delete(contentCategories).where(eq(contentCategories.id, id));
+      res.json({ ok: true });
+    } catch (error: any) {
+      console.error("[admin/categories] delete:", error);
+      res.status(500).json({ error: "Failed to delete category" });
+    }
+  });
+
+  app.get("/api/admin/categories/:id/contents", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const [row] = await db.select().from(contentCategories).where(eq(contentCategories.id, id));
+      if (!row) {
+        return res.status(404).json({ error: "Category not found." });
+      }
+
+      const LIMIT = 100;
+
+      const [
+        peopleRows,
+        trendingRows,
+        opinionRows,
+        faceRows,
+        inductionRows,
+        marketRows,
+        leaderboardRows,
+      ] = await Promise.all([
+        db
+          .select({
+            id: trackedPeople.id,
+            name: trackedPeople.name,
+            category: trackedPeople.category,
+            status: trackedPeople.status,
+          })
+          .from(trackedPeople),
+        db
+          .select({
+            id: trendingPolls.id,
+            headline: trendingPolls.headline,
+            slug: trendingPolls.slug,
+            status: trendingPolls.status,
+            category: trendingPolls.category,
+          })
+          .from(trendingPolls),
+        db
+          .select({
+            id: opinionPolls.id,
+            title: opinionPolls.title,
+            slug: opinionPolls.slug,
+            visibility: opinionPolls.visibility,
+            category: opinionPolls.category,
+          })
+          .from(opinionPolls),
+        db
+          .select({
+            id: matchups.id,
+            title: matchups.title,
+            slug: matchups.slug,
+            visibility: matchups.visibility,
+            category: matchups.category,
+          })
+          .from(matchups),
+        db
+          .select({
+            id: inductionCandidates.id,
+            displayName: inductionCandidates.displayName,
+            inductionStatus: inductionCandidates.inductionStatus,
+            category: inductionCandidates.category,
+          })
+          .from(inductionCandidates),
+        db
+          .select({
+            id: predictionMarkets.id,
+            title: predictionMarkets.title,
+            slug: predictionMarkets.slug,
+            status: predictionMarkets.status,
+            marketType: predictionMarkets.marketType,
+            category: predictionMarkets.category,
+          })
+          .from(predictionMarkets),
+        db
+          .select({
+            id: trendingPeople.id,
+            name: trendingPeople.name,
+            category: trendingPeople.category,
+          })
+          .from(trendingPeople),
+      ]);
+
+      const filterMap = <T extends { category: string | null }>(rows: T[]) =>
+        rows.filter((r) => storedMatchesCanonicalCategory(r.category, id)).slice(0, LIMIT);
+
+      const celebritiesMatching = peopleRows.filter((r) =>
+        storedMatchesCanonicalCategory(r.category, id),
+      );
+      const celebIdsHere = new Set(celebritiesMatching.map((r) => r.id));
+      const leaderboardSupplementary = leaderboardRows
+        .filter((r) => storedMatchesCanonicalCategory(r.category, id))
+        .filter((r) => !celebIdsHere.has(r.id))
+        .slice(0, LIMIT);
+
+      res.json({
+        category: {
+          id: row.id,
+          label: row.label,
+        },
+        celebrities: celebritiesMatching.slice(0, LIMIT),
+        trendingPolls: filterMap(trendingRows),
+        opinionPolls: filterMap(opinionRows),
+        faceOffs: filterMap(faceRows),
+        inductionCandidates: filterMap(inductionRows),
+        predictionMarkets: filterMap(marketRows),
+        leaderboardRows: leaderboardSupplementary,
+      });
+    } catch (error: any) {
+      console.error("[admin/categories] contents:", error);
+      res.status(500).json({ error: "Failed to load category contents" });
+    }
+  });
+
   // ============ ENTITY RESOLUTION DIAGNOSTICS ============
   
   app.get("/api/admin/diagnostics/entity/:personId", requireAuth, requireAdmin, async (req: AuthRequest, res) => {

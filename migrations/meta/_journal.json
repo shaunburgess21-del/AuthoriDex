@@ -218,6 +218,13 @@
       "when": 1778100600000,
       "tag": "0030_drop_storage_listing_policies",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1778187000000,
+      "tag": "0031_content_categories",
+      "breakpoints": true
     }
   ]
 }
