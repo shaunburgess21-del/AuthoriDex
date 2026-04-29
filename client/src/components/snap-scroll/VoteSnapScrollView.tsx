@@ -274,7 +274,7 @@ export function VoteSnapScrollView({
 
     el.addEventListener("touchmove", handleTouchMove, { passive: false });
     return () => el.removeEventListener("touchmove", handleTouchMove);
-  }, [dragX]);
+  }, [dragX, open]);
 
   // ── Horizontal commit / spring-back ───────────────────────────────────
   const commitHorizontalSwipe = useCallback((direction: -1 | 1) => {
@@ -528,7 +528,7 @@ export function VoteSnapScrollView({
             <div className="flex-1 min-h-0 overflow-hidden" ref={hPanContainerRef}>
               <motion.div
                 className="flex h-full will-change-transform"
-                style={{ width: "300vw", x: containerX }}
+                style={{ width: "300vw", x: containerX, touchAction: "pan-y" }}
                 onTouchStart={handleHPanTouchStart}
                 onTouchEnd={handleHPanTouchEnd}
                 onTouchCancel={handleHPanTouchCancel}
