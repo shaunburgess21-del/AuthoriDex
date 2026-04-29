@@ -204,6 +204,13 @@
       "when": 1777927800000,
       "tag": "0028_induction_cycle_results",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1778014200000,
+      "tag": "0029_enable_rls_on_public_tables",
+      "breakpoints": true
     }
   ]
 }

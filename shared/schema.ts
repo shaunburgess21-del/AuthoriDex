@@ -4,6 +4,10 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { relations } from "drizzle-orm";
 
+// SECURITY NOTE:
+// Any new table in exposed schemas (especially public) must ship with a
+// migration that enables RLS. User-owned tables queried from the frontend via
+// the anon client also need owner policies (e.g., auth.uid()::text = user_id).
 export const contentStatusEnum = pgEnum("content_status", ["draft", "live", "archived"]);
 export const marketOutcomeEnum = pgEnum("market_outcome", ["yes", "no"]);
 export const commentParentTypeEnum = pgEnum("comment_parent_type", [
