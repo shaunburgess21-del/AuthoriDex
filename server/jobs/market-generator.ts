@@ -377,6 +377,30 @@ export async function generateWeeklyJackpot(): Promise<number> {
 export async function generateWeeklyH2H(): Promise<number> {
   const { monday, sunday, weekNumber } = getWeekContext();
 
+  // IDEMPOTENT FAST-PATH: if any OPEN/live (or inactive) H2H markets already
+  // exist for this week, skip generation entirely. This previously archived
+  // all existing OPEN H2H markets and recreated them from scratch on every
+  // call — silently wiping every user/agent bet (bets stay in the DB but
+  // the UI only surfaces "live"/"inactive" markets, so pools appeared to
+  // reset to 0). Up/Down and Gainer are already idempotent in the same way;
+  // H2H now matches. The check is outside the transaction to avoid the
+  // expensive `top` query on the no-op path; the cron call sites are
+  // serialised by the advisory lock around `ensureWeeklyMarketsForCurrentWeek`.
+  const existingOpenH2H = await db
+    .select({ id: predictionMarkets.id })
+    .from(predictionMarkets)
+    .where(and(
+      eq(predictionMarkets.marketType, "h2h"),
+      eq(predictionMarkets.weekNumber, weekNumber),
+      eq(predictionMarkets.status, "OPEN"),
+      inArray(predictionMarkets.visibility, ["live", "inactive"]),
+    ));
+
+  if (existingOpenH2H.length > 0) {
+    log(`[MarketGenerator:H2H] Week ${weekNumber}: ${existingOpenH2H.length} markets already open — skipping generation (idempotent).`);
+    return 0;
+  }
+
   const top = await db
     .select({ id: trendingPeople.id, name: trendingPeople.name, category: trendingPeople.category, fameIndex: trendingPeople.fameIndex })
     .from(trendingPeople)
@@ -386,17 +410,30 @@ export async function generateWeeklyH2H(): Promise<number> {
   if (top.length < 2) return 0;
 
   const created: number = await db.transaction(async (tx) => {
+    // Re-check inside the transaction in case a concurrent caller raced past
+    // the fast-path check above (cron endpoint is not behind the advisory lock).
+    const racedOpenH2H = await tx
+      .select({ id: predictionMarkets.id })
+      .from(predictionMarkets)
+      .where(and(
+        eq(predictionMarkets.marketType, "h2h"),
+        eq(predictionMarkets.weekNumber, weekNumber),
+        eq(predictionMarkets.status, "OPEN"),
+        inArray(predictionMarkets.visibility, ["live", "inactive"]),
+      ));
+    if (racedOpenH2H.length > 0) {
+      log(`[MarketGenerator:H2H] Week ${weekNumber}: race detected (${racedOpenH2H.length} markets created concurrently) — aborting.`);
+      return 0;
+    }
+
+    // First run for this week (or all prior runs are archived/resolved):
+    // collect existing slugs across all visibilities so we dodge any unique-
+    // constraint collisions with archived markets from earlier runs.
     const existingH2H = await tx
       .select({ slug: predictionMarkets.slug })
       .from(predictionMarkets)
       .where(and(eq(predictionMarkets.marketType, "h2h"), eq(predictionMarkets.weekNumber, weekNumber)));
     const existingSlugs = new Set(existingH2H.map(e => e.slug));
-
-    if (existingH2H.length > 0) {
-      await tx.update(predictionMarkets)
-        .set({ visibility: "archived", updatedAt: new Date() })
-        .where(and(eq(predictionMarkets.marketType, "h2h"), eq(predictionMarkets.weekNumber, weekNumber), eq(predictionMarkets.status, "OPEN")));
-    }
 
     const byCategory = new Map<string, typeof top>();
     for (const person of top) {
