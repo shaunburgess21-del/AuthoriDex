@@ -1424,6 +1424,41 @@ export default function AdminDashboard() {
     enabled: isAdmin && (activeSection === "celebrities" || activeSection === "voting" || activeSection === "predictions"),
   });
 
+  // Registry categories power the celebrity editor dropdown so admin-added categories appear here too.
+  const { data: adminCategoryRows } = useQuery<Array<{ id: string; label: string; sortOrder: number }>>({
+    queryKey: ["/api/admin/categories"],
+    queryFn: async () => {
+      const res = await fetchWithAuth("/api/admin/categories");
+      if (!res.ok) throw new Error("Failed to fetch admin categories");
+      return res.json();
+    },
+    enabled: isAdmin,
+  });
+
+  const celebrityCategoryOptions = useMemo(() => {
+    const fallback = [
+      "Tech",
+      "Music",
+      "Sports",
+      "Politics",
+      "Business",
+      "Film & TV",
+      "Gaming",
+      "Science",
+      "Creator",
+      "Comedy",
+      "Food & Drink",
+      "Lifestyle",
+      "Misc",
+    ];
+    const set = new Set<string>(fallback);
+    (adminCategoryRows || []).forEach((row) => {
+      if (row?.label?.trim()) set.add(row.label.trim());
+    });
+    if (celebrityForm.category?.trim()) set.add(celebrityForm.category.trim());
+    return Array.from(set);
+  }, [adminCategoryRows, celebrityForm.category]);
+
   const gainerCategoryCelebrities = useMemo(
     () => (celebrities || []).filter((celebrity) => normalizeMarketCategory(celebrity.category) === gainerCategory),
     [celebrities, gainerCategory]
@@ -7170,17 +7205,11 @@ export default function AdminDashboard() {
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Tech">Tech</SelectItem>
-                  <SelectItem value="Music">Music</SelectItem>
-                  <SelectItem value="Sports">Sports</SelectItem>
-                  <SelectItem value="Politics">Politics</SelectItem>
-                  <SelectItem value="Business">Business</SelectItem>
-                  <SelectItem value="Film & TV">Film & TV</SelectItem>
-                  <SelectItem value="Gaming">Gaming</SelectItem>
-                  <SelectItem value="Science">Science</SelectItem>
-                  <SelectItem value="Creator">Creator</SelectItem>
-                  <SelectItem value="Food & Drink">Food & Drink</SelectItem>
-                  <SelectItem value="Lifestyle">Lifestyle</SelectItem>
+                  {celebrityCategoryOptions.map((categoryLabel) => (
+                    <SelectItem key={categoryLabel} value={categoryLabel}>
+                      {categoryLabel}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
