@@ -211,6 +211,13 @@
       "when": 1778014200000,
       "tag": "0029_enable_rls_on_public_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1778100600000,
+      "tag": "0030_drop_storage_listing_policies",
+      "breakpoints": true
     }
   ]
 }
