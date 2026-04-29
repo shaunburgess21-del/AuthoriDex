@@ -2574,12 +2574,12 @@ export default function PredictPage() {
               <button
                 type="button"
                 onClick={cycleMyPositionsFilter}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all min-w-fit ${
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all min-w-fit focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                   myPositionsFilter === "show-mine"
                     ? "bg-violet-500/25 dark:bg-violet-500/20 text-violet-600 dark:text-violet-400 border border-violet-500/50 dark:border-violet-400/40 shadow-sm shadow-violet-500/30 dark:shadow-violet-500/20"
                     : myPositionsFilter === "hide-mine"
                       ? "bg-amber-500/15 dark:bg-amber-500/10 text-amber-600 dark:text-amber-500 border border-amber-500/50 dark:border-amber-500/40"
-                      : "bg-muted/50 text-muted-foreground hover:bg-muted border border-transparent"
+                      : "bg-background text-muted-foreground hover:bg-muted border border-input"
                 }`}
                 data-testid="toggle-my-positions-pill"
               >
@@ -2597,10 +2597,10 @@ export default function PredictPage() {
               <button
                 key={type.id}
                 onClick={() => setSelectedType(type.id)}
-                className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all min-w-fit ${
+                className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all min-w-fit focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                   selectedType === type.id
                     ? 'bg-violet-500/25 dark:bg-violet-500/20 text-violet-600 dark:text-violet-400 border border-violet-500/50 dark:border-violet-400/40 shadow-sm shadow-violet-500/30 dark:shadow-violet-500/20'
-                    : 'bg-muted/50 text-muted-foreground hover:bg-muted border border-transparent'
+                    : 'bg-muted/50 text-muted-foreground hover:bg-muted border border-border'
                 }`}
                 data-testid={`toggle-type-${type.id}`}
               >

@@ -2351,12 +2351,12 @@ export default function VotePage() {
               <button
                 type="button"
                 onClick={cycleMyVotesFilter}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all min-w-fit ${
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all min-w-fit focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                   myVotesFilter === "show-mine"
                     ? "bg-cyan-500/25 dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border border-cyan-500/50 dark:border-cyan-400/40 shadow-sm shadow-cyan-500/30 dark:shadow-cyan-500/20"
                     : myVotesFilter === "hide-mine"
                       ? "bg-amber-500/15 dark:bg-amber-500/10 text-amber-600 dark:text-amber-500 border border-amber-500/50 dark:border-amber-500/40"
-                      : "bg-muted/50 text-muted-foreground hover:bg-muted border border-transparent"
+                      : "bg-background text-muted-foreground hover:bg-muted border border-input"
                 }`}
                 data-testid="toggle-my-votes-pill"
               >
@@ -2372,10 +2372,10 @@ export default function VotePage() {
               <button
                 key={section}
                 onClick={() => setActiveSection(section)}
-                className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all min-w-fit ${
+                className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all min-w-fit focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                   activeSection === section
                     ? "bg-cyan-500/25 dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border border-cyan-500/50 dark:border-cyan-400/40 shadow-sm shadow-cyan-500/30 dark:shadow-cyan-500/20"
-                    : "bg-muted/50 text-muted-foreground hover:bg-muted border border-transparent"
+                    : "bg-muted/50 text-muted-foreground hover:bg-muted border border-border"
                 }`}
                 data-testid={`toggle-section-${section.toLowerCase().replace(/['\s]/g, '-')}`}
               >
