@@ -31,6 +31,8 @@ interface CurateSectionProps {
   onFilterCategory?: (category: string) => void;
   categoryRaceMap?: Map<string, string>;
   leaderboardCategories?: Set<string>;
+  onBrowseFullScreen?: (personId: string) => void;
+  onCardEmptyTap?: (personId: string, e: React.MouseEvent) => void;
 }
 
 export function CurateSection({ 
@@ -40,6 +42,8 @@ export function CurateSection({
   onFilterCategory,
   categoryRaceMap,
   leaderboardCategories,
+  onBrowseFullScreen,
+  onCardEmptyTap,
 }: CurateSectionProps) {
   const [viewAllOpen, setViewAllOpen] = useState(false);
   const [viewResultsPerson, setViewResultsPerson] = useState<CuratePerson | null>(null);
@@ -127,6 +131,7 @@ export function CurateSection({
                   onFilterCategory={onFilterCategory}
                   categoryRaceMap={categoryRaceMap}
                   leaderboardCategories={leaderboardCategories}
+                  onBrowseFullScreen={onBrowseFullScreen ? () => onBrowseFullScreen(person.id) : undefined}
                 />
               ))}
             </div>
@@ -158,7 +163,10 @@ export function CurateSection({
               >
                 {curatePersons.map((person, i) => (
                   <SwiperSlide key={person.id} virtualIndex={i}>
-                    <div className="w-full px-1.5 md:px-0">
+                    <div
+                      className="w-full px-1.5 md:px-0"
+                      onClick={onCardEmptyTap ? (e) => onCardEmptyTap(person.id, e) : undefined}
+                    >
                       <CurateProfileCard
                         person={person}
                         onVote={handleVote}
@@ -168,6 +176,7 @@ export function CurateSection({
                         onFilterCategory={onFilterCategory}
                         categoryRaceMap={categoryRaceMap}
                         leaderboardCategories={leaderboardCategories}
+                        onBrowseFullScreen={onBrowseFullScreen ? () => onBrowseFullScreen(person.id) : undefined}
                       />
                     </div>
                   </SwiperSlide>

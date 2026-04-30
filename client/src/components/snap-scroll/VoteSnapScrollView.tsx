@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo, createContext, type ReactNode } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence, useMotionValue, useTransform, animate as motionAnimate } from "framer-motion";
-import { ArrowLeft, ArrowUp, Inbox, Plus, X } from "lucide-react";
+import { ArrowLeft, ArrowUp, Inbox, MessageCircle, Plus, X } from "lucide-react";
 import { getCategoryStyle } from "@/components/CategoryPill";
 import { getMarketCategoryLabel } from "@shared/constants";
 import { sharePage } from "@/lib/share";
@@ -12,14 +12,22 @@ import {
 } from "@/lib/voteListNavigation";
 import { CategoryTabStrip } from "./CategoryTabStrip";
 import { CardComments, type CommentEntityType } from "@/components/comments/CardComments";
+import { CommunityInsights } from "@/components/CommunityInsights";
 
-export type SnapSectionType = "matchups" | "sentiment" | "opinion";
+export type SnapSectionType =
+  | "matchups" | "sentiment" | "opinion"
+  | "value" | "induction" | "curate"
+  | "world-markets" | "updown";
+
+export type SnapCommentMode = "card" | "person" | "none";
 
 export interface SnapItem {
   id: string;
   slug: string;
   category: string;
   title: string;
+  personId?: string;
+  personName?: string;
 }
 
 /** Incremented on horizontal category commit — descendants auto-dismiss overlays. */
@@ -33,27 +41,36 @@ interface VoteSnapScrollViewProps {
   initialItemId?: string;
   renderCard: (item: SnapItem) => ReactNode;
   onSuggest?: () => void;
+  commentMode?: SnapCommentMode;
 }
 
-const SECTION_COMMENT_TYPE: Record<SnapSectionType, CommentEntityType> = {
+const SECTION_COMMENT_TYPE: Partial<Record<SnapSectionType, CommentEntityType>> = {
   matchups: "matchup",
   sentiment: "poll",
   opinion: "opinion-poll",
+  "world-markets": "open-market",
 };
 
-const SECTION_DETAIL_PREFIX: Record<SnapSectionType, string> = {
+const SECTION_DETAIL_PREFIX: Partial<Record<SnapSectionType, string>> = {
   matchups: "/vote/matchups/",
   sentiment: "/polls/",
   opinion: "/vote/opinion-polls/",
+  "world-markets": "/markets/",
+  updown: "/predict/updown/",
 };
 
 const SECTION_LABEL: Record<SnapSectionType, string> = {
   matchups: "matchups",
   sentiment: "sentiment polls",
   opinion: "opinion polls",
+  value: "value ratings",
+  induction: "induction candidates",
+  curate: "curate profiles",
+  "world-markets": "world market predictions",
+  updown: "weekly predictions",
 };
 
-const SNAP_TO_VOTE_LIST_TYPE: Record<SnapSectionType, VoteListNavType> = {
+const SNAP_TO_VOTE_LIST_TYPE: Partial<Record<SnapSectionType, VoteListNavType>> = {
   matchups: "matchup",
   sentiment: "sentiment",
   opinion: "opinion",
@@ -63,6 +80,11 @@ const SECTION_SUGGEST_LABEL: Record<SnapSectionType, string> = {
   matchups: "Matchup",
   sentiment: "Sentiment Poll",
   opinion: "Opinion Poll",
+  value: "Profile Image",
+  induction: "Candidate",
+  curate: "Profile Image",
+  "world-markets": "Market Prediction",
+  updown: "Market Prediction",
 };
 
 const DRAG_THRESHOLD = 40;
@@ -202,6 +224,7 @@ export function VoteSnapScrollView({
   initialItemId,
   renderCard,
   onSuggest,
+  commentMode = "card",
 }: VoteSnapScrollViewProps) {
   const [, setLocation] = useLocation();
   const commentScrollRef = useRef<HTMLDivElement | null>(null);
@@ -523,19 +546,28 @@ export function VoteSnapScrollView({
   // ── Existing handlers (unchanged) ─────────────────────────────────────
   const navigateToDetail = useCallback(() => {
     const item = getVisibleItem();
-    if (!item?.slug) return;
-    const listItems = categoryItems.get(activeCategory) || [];
-    const slugs = listItems.map((i) => i.slug).filter(Boolean);
-    if (slugs.length === 0) return;
+    if (!item) return;
+    const detailPrefix = SECTION_DETAIL_PREFIX[sectionType];
+    if (!detailPrefix || !item.slug) {
+      if (item.personId) setLocation(`/person/${item.personId}`);
+      return;
+    }
     const listType = SNAP_TO_VOTE_LIST_TYPE[sectionType];
-    const voteList: VoteListHistoryState = {
-      type: listType,
-      slugs,
-      currentSlug: item.slug,
-      historyDepth: 1,
-    };
-    const path = `${SECTION_DETAIL_PREFIX[sectionType]}${encodeURIComponent(item.slug)}`;
-    navigateWithVoteList(setLocation, voteList, path);
+    if (listType) {
+      const listItems = categoryItems.get(activeCategory) || [];
+      const slugs = listItems.map((i) => i.slug).filter(Boolean);
+      if (slugs.length > 0) {
+        const voteList: VoteListHistoryState = {
+          type: listType,
+          slugs,
+          currentSlug: item.slug,
+          historyDepth: 1,
+        };
+        navigateWithVoteList(setLocation, voteList, `${detailPrefix}${encodeURIComponent(item.slug)}`);
+        return;
+      }
+    }
+    setLocation(`${detailPrefix}${encodeURIComponent(item.slug)}`);
   }, [activeCategory, categoryItems, getVisibleItem, sectionType, setLocation]);
 
   const handleShare = useCallback(() => {
@@ -626,7 +658,8 @@ export function VoteSnapScrollView({
   // middle slot (index 1) is the committed category.
   const containerX = useTransform(dragX, (v) => -window.innerWidth + v);
 
-  const commentEntityType = SECTION_COMMENT_TYPE[sectionType];
+  const commentEntityType = SECTION_COMMENT_TYPE[sectionType] ?? "matchup";
+  const hasComments = commentMode !== "none";
 
   // ── Render ────────────────────────────────────────────────────────────
   return (
@@ -699,6 +732,25 @@ export function VoteSnapScrollView({
                         >
                           {colItems.map((item) => {
                             const isExpanded = expandedItemId === item.id;
+
+                            if (!hasComments) {
+                              return (
+                                <div
+                                  key={item.id}
+                                  className="snap-start flex flex-col items-center justify-center px-3 pt-3"
+                                  style={{
+                                    height: "calc(100dvh - 52px)",
+                                    scrollSnapAlign: "start",
+                                    paddingBottom: "env(safe-area-inset-bottom, 16px)",
+                                  }}
+                                >
+                                  <div className="w-full max-w-lg mx-auto">
+                                    {renderCard(item)}
+                                  </div>
+                                </div>
+                              );
+                            }
+
                             return (
                               <div
                                 key={item.id}
@@ -709,7 +761,7 @@ export function VoteSnapScrollView({
                                   paddingBottom: "env(safe-area-inset-bottom, 16px)",
                                 }}
                               >
-                                {/* Vote card — hidden when comments expanded */}
+                                {/* Card — hidden when comments expanded */}
                                 <div
                                   className={`w-full max-w-lg mx-auto shrink-0 transition-all duration-200 overflow-hidden ${
                                     isExpanded ? "max-h-0 opacity-0" : "max-h-[2000px] opacity-100"
@@ -718,21 +770,32 @@ export function VoteSnapScrollView({
                                   {renderCard(item)}
                                 </div>
 
-                                {/* Drag handle */}
+                                {/* Drag handle / expand toggle */}
                                 <div className="flex justify-center">
-                                  <div
-                                    className="flex flex-col items-center px-6 pt-3 pb-3 cursor-grab active:cursor-grabbing touch-none select-none"
-                                    onTouchStart={handleDragStart}
-                                    onTouchEnd={(e) => handleDragEnd(e, item.id)}
-                                    onClick={() => setExpandedItemId(isExpanded ? null : item.id)}
-                                    role="button"
-                                    aria-label={isExpanded ? "Collapse comments" : "Expand comments"}
-                                  >
-                                    <div className="w-16 h-1.5 rounded-full bg-muted-foreground/60" />
-                                  </div>
+                                  {commentMode === "person" && !isExpanded ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => setExpandedItemId(item.id)}
+                                      className="flex items-center gap-2 px-5 py-2.5 mt-1 rounded-full border border-border/50 bg-muted/20 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/40 active:scale-[0.97]"
+                                    >
+                                      <MessageCircle className="h-3.5 w-3.5" />
+                                      View Insights
+                                    </button>
+                                  ) : (
+                                    <div
+                                      className="flex flex-col items-center px-6 pt-3 pb-3 cursor-grab active:cursor-grabbing touch-none select-none"
+                                      onTouchStart={handleDragStart}
+                                      onTouchEnd={(e) => handleDragEnd(e, item.id)}
+                                      onClick={() => setExpandedItemId(isExpanded ? null : item.id)}
+                                      role="button"
+                                      aria-label={isExpanded ? "Collapse" : "Expand"}
+                                    >
+                                      <div className="w-16 h-1.5 rounded-full bg-muted-foreground/60" />
+                                    </div>
+                                  )}
                                 </div>
 
-                                {/* Comments section */}
+                                {/* Comments / insights section */}
                                 <div
                                   ref={isExpanded ? commentScrollRef : undefined}
                                   className="flex-1 min-h-0 overflow-y-auto max-w-lg mx-auto w-full"
@@ -742,16 +805,24 @@ export function VoteSnapScrollView({
                                   onTouchEnd={(e) => handleCommentTouchEnd(e, item.id, isExpanded)}
                                   onTouchCancel={handleCommentTouchCancel}
                                 >
-                                  <CardComments
-                                    entityType={commentEntityType}
-                                    slug={item.slug}
-                                    variant="inline"
-                                    maxHeight="none"
-                                    placeholder="Add a comment..."
-                                    parentExpanded={isExpanded}
-                                    onDetail={navigateToDetail}
-                                    onShare={handleShare}
-                                  />
+                                  {commentMode === "person" && item.personId ? (
+                                    <CommunityInsights
+                                      personId={item.personId}
+                                      personName={item.personName || item.title}
+                                      compact
+                                    />
+                                  ) : (
+                                    <CardComments
+                                      entityType={commentEntityType}
+                                      slug={item.slug}
+                                      variant="inline"
+                                      maxHeight="none"
+                                      placeholder="Add a comment..."
+                                      parentExpanded={isExpanded}
+                                      onDetail={navigateToDetail}
+                                      onShare={handleShare}
+                                    />
+                                  )}
                                 </div>
                               </div>
                             );

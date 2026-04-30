@@ -88,6 +88,7 @@ interface CurateProfileCardProps {
   onFilterCategory?: (category: string) => void;
   categoryRaceMap?: Map<string, string>;
   leaderboardCategories?: Set<string>;
+  onBrowseFullScreen?: () => void;
 }
 
 export function CurateProfileCard({
@@ -100,13 +101,15 @@ export function CurateProfileCard({
   onFilterCategory,
   categoryRaceMap,
   leaderboardCategories,
+  onBrowseFullScreen,
 }: CurateProfileCardProps) {
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
   const [showShimmer, setShowShimmer] = useState(false);
   const [showResults, setShowResults] = useState(false);
   const [isEditingVote, setIsEditingVote] = useState(false);
   const [isVotePending, setIsVotePending] = useState(false);
-  const [resultMessage, setResultMessage] = useState<"recorded" | "saved">("recorded");  const [, setLocation] = useLocation();
+  const [resultMessage, setResultMessage] = useState<"recorded" | "saved">("recorded");
+  const [, setLocation] = useLocation();
   const { user } = useAuth();
   const imageQueryKey = useMemo(() => ["/api/people", person.id, "images"] as const, [person.id]);
 
@@ -230,6 +233,7 @@ export function CurateProfileCard({
             category={person.category}
             onFilter={() => onFilterCategory?.(person.category)}
             leaderboardCategories={leaderboardCategories}
+            onBrowseFullScreen={onBrowseFullScreen}
           />
         </div>
 

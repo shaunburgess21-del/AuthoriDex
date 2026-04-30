@@ -124,6 +124,11 @@ import {
 } from "@/components/predict/TopGainerCard";
 import { WeeklyJackpotHero } from "@/components/predict/WeeklyJackpotHero";
 import { OpenMarketCard } from "@/components/predict/OpenMarketCard";
+import { VoteSnapScrollView, type SnapItem, type SnapSectionType } from "@/components/snap-scroll/VoteSnapScrollView";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { consumeCategoryPillBrowseIntent, isCategoryPillDrawerDismissSuppressed } from "@/components/InteractiveCategoryPill";
+
+type SnapOpenSource = "card-tap" | "browse-button";
 
 const PREDICT_ONBOARDING_STEPS: readonly OnboardingStep[] = [
   {
@@ -1286,6 +1291,12 @@ export default function PredictPage() {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [rulesModalOpen, setRulesModalOpen] = useState<string | null>(null);
 
+  const isMobile = useIsMobile();
+  const [snapScrollOpen, setSnapScrollOpen] = useState(false);
+  const [snapScrollSection, setSnapScrollSection] = useState<SnapSectionType>("world-markets");
+  const [snapScrollInitialId, setSnapScrollInitialId] = useState<string | undefined>();
+  const savedSnapWindowScrollRef = useRef<number | null>(null);
+
   const openSuggestModal = (open: () => void) => {
     if (!user) {
       toast.error("Sign in required", { description: "Please sign in to suggest content." });
@@ -1293,7 +1304,51 @@ export default function PredictPage() {
     }
     open();
   };
-  
+
+  const openSnapScroll = useCallback((section: SnapSectionType, itemId?: string, source: SnapOpenSource = "card-tap") => {
+    if (!isMobile) return;
+    if (source === "browse-button") {
+      if (!consumeCategoryPillBrowseIntent()) return;
+    } else if (isCategoryPillDrawerDismissSuppressed()) {
+      return;
+    }
+    savedSnapWindowScrollRef.current = window.scrollY;
+    setSnapScrollSection(section);
+    setSnapScrollInitialId(itemId);
+    setSnapScrollOpen(true);
+    window.history.pushState({ overlay: `snap-${section}` }, "");
+  }, [isMobile]);
+
+  const closeSnapScroll = useCallback(() => {
+    setSnapScrollOpen(false);
+    window.history.back();
+  }, []);
+
+  useEffect(() => {
+    if (!snapScrollOpen && savedSnapWindowScrollRef.current !== null) {
+      const y = savedSnapWindowScrollRef.current;
+      savedSnapWindowScrollRef.current = null;
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: y, behavior: "auto" });
+      });
+    }
+  }, [snapScrollOpen]);
+
+  const handleCardEmptyTap = useCallback((e: React.MouseEvent, section: SnapSectionType, itemId: string) => {
+    if (!isMobile) return;
+    const target = e.target as HTMLElement;
+    const wrapper = e.currentTarget as HTMLElement;
+    let node: HTMLElement | null = target;
+    while (node && node !== wrapper) {
+      if (node.matches('button, a, input, textarea, select, [role="button"], [data-interactive]')) {
+        return;
+      }
+      node = node.parentElement;
+    }
+    e.stopPropagation();
+    openSnapScroll(section, itemId, "card-tap");
+  }, [isMobile, openSnapScroll]);
+
   const [pendingSelection, setPendingSelection] = useState<StakeSelection | null>(null);
   const [stakeModalOpen, setStakeModalOpen] = useState(false);
   const [townSquareCollapsed, setTownSquareCollapsed] = useState(true);
@@ -1731,7 +1786,14 @@ export default function PredictPage() {
 
   useEffect(() => {
     const onPopState = (e: PopStateEvent) => {
-      setViewAllCategory(e.state?.overlay || null);
+      const overlayName = e.state?.overlay || null;
+      if (overlayName?.startsWith("snap-")) {
+        setSnapScrollOpen(true);
+        setSnapScrollSection(overlayName.replace("snap-", "") as SnapSectionType);
+      } else {
+        setSnapScrollOpen(false);
+        setViewAllCategory(overlayName);
+      }
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
@@ -2202,6 +2264,39 @@ export default function PredictPage() {
 
   const showSection = (type: PredictionType) => selectedType === "all" || selectedType === type;
 
+  const worldMarketSnapItems: SnapItem[] = useMemo(
+    () =>
+      filteredCommunity.map((m: any) => ({
+        id: String(m.id),
+        slug: m.slug || String(m.id),
+        category: m.category || "misc",
+        title: m.title || "",
+      })),
+    [filteredCommunity],
+  );
+
+  const updownSnapItems: SnapItem[] = useMemo(
+    () =>
+      filteredUpDown.map((m: any) => ({
+        id: String(m.id),
+        slug: String(m.id),
+        category: m.category || "misc",
+        title: m.personName || "",
+        personId: m.personId,
+        personName: m.personName,
+      })),
+    [filteredUpDown],
+  );
+
+  useEffect(() => {
+    if (snapScrollOpen || viewAllCategory) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => { document.body.style.overflow = ''; };
+  }, [snapScrollOpen, viewAllCategory]);
+
   return (
     <div className="min-h-screen pb-20 md:pb-0 overflow-x-clip">
       <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">
@@ -2459,18 +2554,20 @@ export default function PredictPage() {
             ) : filteredCommunity.length > 0 ? (
               <CardSection desktopLimit={9} gap="gap-4" testIdPrefix="section-community" dotActiveColor="bg-violet-500">
                 {filteredCommunity.map((market: any) => (
-                  <OpenMarketCard 
-                    key={market.id} 
-                    market={market} 
-                    onNavigate={(slug, pick, direction) => setLocation(`/markets/${slug}${pick ? `?pick=${pick}${direction ? `&direction=${direction}` : ''}` : ''}`)}
-                    onPickEntry={handleCommunityPickEntry}
-                    isMarketClosed={market.status !== 'OPEN'}
-                    userBetResult={userBetsByMarket.get(String(market.id))}
-                    userBetsPerEntry={userBetsPerEntry.get(String(market.id))}
-                    onFilterCategory={handleCategoryPillFilter}
-                    categoryRaceMap={raceMap}
-                    leaderboardCategories={leaderboardCats}
-                  />
+                  <div key={market.id} onClick={(e) => handleCardEmptyTap(e, "world-markets", String(market.id))}>
+                    <OpenMarketCard 
+                      market={market} 
+                      onNavigate={(slug, pick, direction) => setLocation(`/markets/${slug}${pick ? `?pick=${pick}${direction ? `&direction=${direction}` : ''}` : ''}`)}
+                      onPickEntry={handleCommunityPickEntry}
+                      isMarketClosed={market.status !== 'OPEN'}
+                      userBetResult={userBetsByMarket.get(String(market.id))}
+                      userBetsPerEntry={userBetsPerEntry.get(String(market.id))}
+                      onFilterCategory={handleCategoryPillFilter}
+                      categoryRaceMap={raceMap}
+                      leaderboardCategories={leaderboardCats}
+                      onBrowseFullScreen={isMobile ? () => openSnapScroll("world-markets", String(market.id), "browse-button") : undefined}
+                    />
+                  </div>
                 ))}
               </CardSection>
             ) : (
@@ -2673,17 +2770,19 @@ export default function PredictPage() {
             ) : filteredUpDown.length > 0 ? (
               <CardSection desktopLimit={9} gap="gap-4" testIdPrefix="section-updown" dotActiveColor="bg-violet-500">
                 {filteredUpDown.map((market) => (
-                  <WeeklyUpDownCard 
-                    key={market.id} 
-                    market={market} 
-                    isMarketClosed={isMarketClosed}
-                    closedMessage={closedMarketMessage}
-                    onSelect={(choice) => handleUpDownSelect(market, choice)}
-                    onFilterCategory={handleCategoryPillFilter}
-                    categoryRaceMap={raceMap}
-                    leaderboardCategories={leaderboardCats}
-                    pendingPosition={pendingWeeklyUpDownPositionFromBet(userBetsByMarket.get(String(market.id)))}
-                  />
+                  <div key={market.id} onClick={(e) => handleCardEmptyTap(e, "updown", String(market.id))}>
+                    <WeeklyUpDownCard 
+                      market={market} 
+                      isMarketClosed={isMarketClosed}
+                      closedMessage={closedMarketMessage}
+                      onSelect={(choice) => handleUpDownSelect(market, choice)}
+                      onFilterCategory={handleCategoryPillFilter}
+                      categoryRaceMap={raceMap}
+                      leaderboardCategories={leaderboardCats}
+                      pendingPosition={pendingWeeklyUpDownPositionFromBet(userBetsByMarket.get(String(market.id)))}
+                      onBrowseFullScreen={isMobile ? () => openSnapScroll("updown", String(market.id), "browse-button") : undefined}
+                    />
+                  </div>
                 ))}
               </CardSection>
             ) : (
@@ -2761,7 +2860,7 @@ export default function PredictPage() {
                   );
                   return (
                     <HeadToHeadCard 
-                      key={market.id} 
+                      key={market.id}
                       market={market} 
                       isMarketClosed={isMarketClosed}
                       closedMessage={closedMarketMessage}
@@ -2844,7 +2943,7 @@ export default function PredictPage() {
               <CardSection desktopLimit={9} gap="gap-4" testIdPrefix="section-gainer" dotActiveColor="bg-violet-500">
                 {filteredGainers.map((market) => (
                   <TopGainerCard 
-                    key={market.id} 
+                    key={market.id}
                     market={market} 
                     isMarketClosed={isMarketClosed}
                     closedMessage={closedMarketMessage}
@@ -3134,6 +3233,63 @@ export default function PredictPage() {
           resolveAt={jackpotMarketForPerson?.endAt || null}
           isCutoffPassed={jackpotMarketForPerson?.isCutoffPassed || false}
         />
+      )}
+
+      {/* Snap Scroll Overlays (mobile only) */}
+      {isMobile && (
+        <>
+          <VoteSnapScrollView
+            open={snapScrollOpen && snapScrollSection === "world-markets"}
+            onClose={closeSnapScroll}
+            sectionType="world-markets"
+            commentMode="card"
+            items={worldMarketSnapItems}
+            initialItemId={snapScrollInitialId}
+            onSuggest={() => openSuggestModal(() => setCreateModalOpen(true))}
+            renderCard={(item) => {
+              const market = openMarkets.find((m: any) => String(m.id) === item.id);
+              if (!market) return null;
+              return (
+                <OpenMarketCard
+                  market={market}
+                  onNavigate={(slug, pick, direction) => setLocation(`/markets/${slug}${pick ? `?pick=${pick}${direction ? `&direction=${direction}` : ''}` : ''}`)}
+                  onPickEntry={handleCommunityPickEntry}
+                  isMarketClosed={market.status !== 'OPEN'}
+                  userBetResult={userBetsByMarket.get(String(market.id))}
+                  userBetsPerEntry={userBetsPerEntry.get(String(market.id))}
+                  onFilterCategory={handleCategoryPillFilter}
+                  categoryRaceMap={raceMap}
+                  leaderboardCategories={leaderboardCats}
+                />
+              );
+            }}
+          />
+          <VoteSnapScrollView
+            open={snapScrollOpen && snapScrollSection === "updown"}
+            onClose={closeSnapScroll}
+            sectionType="updown"
+            commentMode="person"
+            items={updownSnapItems}
+            initialItemId={snapScrollInitialId}
+            onSuggest={() => openSuggestModal(() => setCreateModalOpen(true))}
+            renderCard={(item) => {
+              const market = filteredUpDown.find((m: any) => String(m.id) === item.id);
+              if (!market) return null;
+              return (
+                <WeeklyUpDownCard
+                  market={market}
+                  isMarketClosed={isMarketClosed}
+                  closedMessage={closedMarketMessage}
+                  onSelect={(choice) => handleUpDownSelect(market, choice)}
+                  onFilterCategory={handleCategoryPillFilter}
+                  categoryRaceMap={raceMap}
+                  leaderboardCategories={leaderboardCats}
+                  pendingPosition={pendingWeeklyUpDownPositionFromBet(userBetsByMarket.get(String(market.id)))}
+                />
+              );
+            }}
+          />
+        </>
       )}
     </div>
   );

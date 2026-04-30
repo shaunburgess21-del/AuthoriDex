@@ -85,9 +85,10 @@ interface CommunityInsight {
 interface CommunityInsightsProps {
   personId: string;
   personName: string;
+  compact?: boolean;
 }
 
-export function CommunityInsights({ personId, personName }: CommunityInsightsProps) {
+export function CommunityInsights({ personId, personName, compact = false }: CommunityInsightsProps) {
   const { user, isLoggedIn, profile } = useAuth();
   const [, setLocation] = useLocation();
   const { trigger: triggerXpBurst } = useXpBurst();
@@ -285,9 +286,11 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
   if (thread.isLoading) {
     return (
       <div>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-2xl font-serif font-bold">Community Insights</h2>
-        </div>
+        {!compact && (
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-2xl font-serif font-bold">Community Insights</h2>
+          </div>
+        )}
         <div className="flex items-center justify-center py-8">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           <span className="ml-2 text-muted-foreground">
@@ -300,14 +303,16 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h2
-          className="text-2xl font-serif font-bold"
-          data-testid="text-community-insights-title"
-        >
-          Community Insights
-        </h2>
-      </div>
+      {!compact && (
+        <div className="flex items-center justify-between mb-6">
+          <h2
+            className="text-2xl font-serif font-bold"
+            data-testid="text-community-insights-title"
+          >
+            Community Insights
+          </h2>
+        </div>
+      )}
 
       <div className="max-w-2xl mx-auto">
         {/* Composer at top — matches original CommunityInsights placement and
