@@ -22,6 +22,7 @@ tmp/
 
 # Temporary commit-msg file (PowerShell has no heredocs)
 .git-commit-msg.tmp
+.commit-msg.tmp
 audit-*-output.json
 dry-run-*-output.json
 
