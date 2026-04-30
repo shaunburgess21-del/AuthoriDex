@@ -11,22 +11,17 @@
 UPDATE "agent_configs"
 SET "simulation_profile" = jsonb_set(
   jsonb_set(
-    jsonb_set(
-      "simulation_profile",
-      '{weeklyCommentCap}',
-      '1'::jsonb,
-      true
-    ),
-    '{dailyCommentChance}',
-    CASE
-      WHEN "simulation_profile" ->> 'personaBand' = 'noisy' THEN '0.14'::jsonb
-      WHEN "simulation_profile" ->> 'personaBand' = 'casual' THEN '0.08'::jsonb
-      ELSE '0.05'::jsonb
-    END,
+    "simulation_profile",
+    '{weeklyCommentCap}',
+    '1'::jsonb,
     true
   ),
-  '{cohortId}',
-  to_jsonb(COALESCE("simulation_profile" ->> 'cohortId', 'v2-2026-prelaunch')),
+  '{dailyCommentChance}',
+  CASE
+    WHEN "simulation_profile" ->> 'personaBand' = 'noisy' THEN '0.14'::jsonb
+    WHEN "simulation_profile" ->> 'personaBand' = 'casual' THEN '0.08'::jsonb
+    ELSE '0.05'::jsonb
+  END,
   true
 ),
 "updated_at" = NOW()

@@ -39,10 +39,8 @@ const MAX_COMMENTS_PER_SWEEP = 30;
 
 const COMMENT_WORKER_BOOT_DELAY_MS = 7 * 60_000;
 
-type CommentParentType = "matchup" | "trending_poll" | "opinion_poll" | "open_market";
-
 interface EligibleCommentParent {
-  parentType: CommentParentType;
+  parentType: CommentSurface;
   parentId: string;
   title: string;
   category: string | null;
@@ -221,7 +219,7 @@ export async function runCommentSweep(): Promise<{
     // Pull rich context (incl. the agent's own vote/bet) so the LLM can
     // produce a comment that actually reads the situation.
     const context = await fetchCommentContext(
-      parent.parentType as CommentSurface,
+      parent.parentType,
       parent.parentId,
       agent.userId,
     );

@@ -91,6 +91,7 @@ export type CommentContext =
 function clip(value: string | null | undefined, maxChars: number): string | null {
   if (!value) return null;
   const trimmed = value.trim();
+  if (trimmed.length === 0) return null;
   if (trimmed.length <= maxChars) return trimmed;
   return `${trimmed.slice(0, maxChars - 1).trimEnd()}…`;
 }
@@ -117,25 +118,21 @@ export async function fetchMatchupContext(
   if (!row) return null;
 
   // Pull bios for any linked people so the agent can riff on context
-  // (e.g. "Trump's recent state visit" rather than just "Trump").
-  let bioA: string | null = null;
-  let bioB: string | null = null;
-  if (row.personAId) {
+  // (e.g. "Trump's recent state visit" rather than just "Trump"). Run the
+  // two lookups in parallel — they're independent.
+  const fetchBio = async (personId: string | null): Promise<string | null> => {
+    if (!personId) return null;
     const [p] = await db
       .select({ bio: trackedPeople.bio })
       .from(trackedPeople)
-      .where(eq(trackedPeople.id, row.personAId))
+      .where(eq(trackedPeople.id, personId))
       .limit(1);
-    bioA = clip(p?.bio ?? null, 240);
-  }
-  if (row.personBId) {
-    const [p] = await db
-      .select({ bio: trackedPeople.bio })
-      .from(trackedPeople)
-      .where(eq(trackedPeople.id, row.personBId))
-      .limit(1);
-    bioB = clip(p?.bio ?? null, 240);
-  }
+    return clip(p?.bio ?? null, 240);
+  };
+  const [bioA, bioB] = await Promise.all([
+    fetchBio(row.personAId),
+    fetchBio(row.personBId),
+  ]);
 
   // Matchup votes are written by the API into the polymorphic `votes` table
   // with voteType="face_off" — see voteWorker insert path. So that's the
