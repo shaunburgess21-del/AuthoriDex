@@ -94,6 +94,11 @@ const DEFAULT_CATEGORY_STYLE = {
 // Named overrides for non-canonical categories that should have stable, explicit colors.
 const EXTRA_CATEGORY_STYLES: Record<string, { bg: string; border: string; text: string }> = {
   media: {
+    bg: "bg-[#10B981]/10",
+    border: "border-[#10B981]/40",
+    text: "text-[#10B981]",
+  },
+  streaming: {
     bg: "bg-[#4ADE80]/10",
     border: "border-[#4ADE80]/40",
     text: "text-[#4ADE80]",
