@@ -155,6 +155,14 @@ function sourceStatusTooltip(provider: string, status: string | null | undefined
   return base;
 }
 
+type BrandAssetVariant = "default" | "vote" | "predict";
+
+const BRAND_ASSET_VARIANTS: Record<BrandAssetVariant, { from: string; to: string }> = {
+  default: { from: "#06b6d4", to: "#2563eb" },
+  vote: { from: "#22d3ee", to: "#0d9488" },
+  predict: { from: "#8b5cf6", to: "#6d28d9" },
+};
+
 function RelatedCelebritiesField({
   value,
   onChange,
@@ -1135,6 +1143,7 @@ export default function AdminDashboard() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { user, isAdmin, profileLoading, profile } = useAuth();
+  const [brandAssetVariant, setBrandAssetVariant] = useState<BrandAssetVariant>("default");
   const [activeSection, setActiveSectionRaw] = useState<AdminSection>(() => {
     const saved = sessionStorage.getItem("admin_active_section");
     return (saved as AdminSection) || "overview";
@@ -1144,14 +1153,40 @@ export default function AdminDashboard() {
     setActiveSectionRaw(section);
   };
 
+  const buildBrandLogoSvgMarkup = useCallback((variant: BrandAssetVariant) => {
+    const colors = BRAND_ASSET_VARIANTS[variant];
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="${colors.from}"/>
+      <stop offset="100%" stop-color="${colors.to}"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="64" fill="url(#bg-gradient)"/>
+  <g transform="translate(25.6, 25.6) scale(4.608)">
+    <path d="M50 12L82 40L50 58L18 40L50 12Z" fill="white" opacity="0.95"/>
+    <path d="M50 58L82 40L82 62L50 80L18 62L18 40L50 58Z" fill="white" opacity="0.6"/>
+    <rect x="22" y="82" width="56" height="6" rx="3" fill="white" opacity="0.85"/>
+  </g>
+</svg>`;
+  }, []);
+
+  const getBrandAssetFilenameBase = useCallback((variant: BrandAssetVariant) => {
+    return variant === "default" ? "voxdex-logo" : `voxdex-logo-${variant}`;
+  }, []);
+
   const downloadBrandLogoSvg = useCallback(() => {
+    const svgMarkup = buildBrandLogoSvgMarkup(brandAssetVariant);
+    const svgBlob = new Blob([svgMarkup], { type: "image/svg+xml;charset=utf-8" });
+    const svgObjectUrl = URL.createObjectURL(svgBlob);
     const link = document.createElement("a");
-    link.href = "/voxdex-logo.svg";
-    link.download = "voxdex-logo.svg";
+    link.href = svgObjectUrl;
+    link.download = `${getBrandAssetFilenameBase(brandAssetVariant)}.svg`;
     document.body.appendChild(link);
     link.click();
     link.remove();
-  }, []);
+    URL.revokeObjectURL(svgObjectUrl);
+  }, [brandAssetVariant, buildBrandLogoSvgMarkup, getBrandAssetFilenameBase]);
 
   const downloadBrandLogoPng = useCallback((size: number) => {
     const canvas = document.createElement("canvas");
@@ -1164,22 +1199,27 @@ export default function AdminDashboard() {
       return;
     }
 
+    const svgMarkup = buildBrandLogoSvgMarkup(brandAssetVariant);
+    const svgBlob = new Blob([svgMarkup], { type: "image/svg+xml;charset=utf-8" });
+    const svgObjectUrl = URL.createObjectURL(svgBlob);
     const img = new Image();
     img.onload = () => {
       ctx.clearRect(0, 0, size, size);
       ctx.drawImage(img, 0, 0, size, size);
       const link = document.createElement("a");
       link.href = canvas.toDataURL("image/png");
-      link.download = `voxdex-logo-${size}px.png`;
+      link.download = `${getBrandAssetFilenameBase(brandAssetVariant)}-${size}px.png`;
       document.body.appendChild(link);
       link.click();
       link.remove();
+      URL.revokeObjectURL(svgObjectUrl);
     };
     img.onerror = () => {
       toast.error("Failed to render logo for PNG download");
+      URL.revokeObjectURL(svgObjectUrl);
     };
-    img.src = "/voxdex-logo.svg";
-  }, []);
+    img.src = svgObjectUrl;
+  }, [brandAssetVariant, buildBrandLogoSvgMarkup, getBrandAssetFilenameBase]);
 
   const [votingSubTab, setVotingSubTabRaw] = useState(() => sessionStorage.getItem("admin_voting_tab") || "polls");
   const setVotingSubTab = (tab: string) => { sessionStorage.setItem("admin_voting_tab", tab); setVotingSubTabRaw(tab); };
@@ -5610,6 +5650,23 @@ export default function AdminDashboard() {
                 <CardDescription>Download the current VoxDex logo in vector or high-resolution PNG formats.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">Choose logo variant</p>
+                  <Select
+                    value={brandAssetVariant}
+                    onValueChange={(value) => setBrandAssetVariant(value as BrandAssetVariant)}
+                  >
+                    <SelectTrigger className="w-full sm:w-[260px]" data-testid="select-brand-asset-variant">
+                      <SelectValue placeholder="Select logo variant" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="default">Default (Blue)</SelectItem>
+                      <SelectItem value="vote">Vote (Cyan)</SelectItem>
+                      <SelectItem value="predict">Predict (Purple)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 <div className="flex flex-wrap gap-2">
                   <Button
                     onClick={downloadBrandLogoSvg}
@@ -5622,9 +5679,11 @@ export default function AdminDashboard() {
                     variant="outline"
                     onClick={() => window.open("/logo-download.html", "_blank", "noopener,noreferrer")}
                     data-testid="button-open-logo-download-page"
+                    disabled={brandAssetVariant !== "default"}
+                    title={brandAssetVariant === "default" ? "Open full default logo download page" : "This page currently serves the default blue logo"}
                   >
                     <ExternalLink className="h-4 w-4 mr-2" />
-                    Open Download Page
+                    Open Default Download Page
                   </Button>
                 </div>
 
