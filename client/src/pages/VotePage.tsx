@@ -4,7 +4,6 @@ import { handleImageError } from "@/lib/imageResolver";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { CardGridSkeleton } from "@/components/ui/card-skeletons";
-import { Badge } from "@/components/ui/badge";
 import {
   consumeCategoryPillBrowseIntent,
   InteractiveCategoryPill,
@@ -22,8 +21,6 @@ import { useUserStats } from "@/hooks/useGamification";
 import { useOpinionPollVoteMutation } from "@/hooks/useOpinionPollVoteMutation";
 import { 
   ArrowLeft, 
-  ArrowUp,
-  ArrowDown,
   Plus, 
   Vote,
   Users,
@@ -34,21 +31,17 @@ import {
   Zap,
   Crown,
   MessageSquare,
-  Search,
   ThumbsDown,
   ThumbsUp,
   Minus,
-  ChevronDown,
   Star,
   Check,
   X,
   ChevronRight,
   HelpCircle,
-  Calendar,
   Swords,
   UserPlus,
   ImageIcon,
-  Globe,
   BarChart3,
   ListChecks,
   EyeOff,
@@ -75,24 +68,14 @@ import { toast } from "sonner";
 import { CountdownDescription } from "@/components/CountdownDescription";
 import { useLocation, Link } from "wouter";
 import { Drawer } from "vaul";
-import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogHeader,
-  AlertDialogFooter,
-  AlertDialogTitle,
-  AlertDialogDescription,
-  AlertDialogCancel,
-} from "@/components/ui/alert-dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { A11y } from "swiper/modules";
 import type { Swiper as SwiperType } from "swiper";
 import "swiper/css";
 import { motion, AnimatePresence } from "framer-motion";
-import { getFilterCategories, getMarketCategoryLabel, normalizeMarketCategory, type FilterCategory, CATEGORIES_WITH_FILTERS, CATEGORIES_LEADERBOARD, CATEGORIES_OPEN, OPINION_POLL_MIN_OPTIONS, OPINION_POLL_MAX_OPTIONS } from "@shared/constants";
+import { getFilterCategories, normalizeMarketCategory, type FilterCategory, CATEGORIES_WITH_FILTERS, CATEGORIES_LEADERBOARD, CATEGORIES_OPEN, OPINION_POLL_MIN_OPTIONS, OPINION_POLL_MAX_OPTIONS } from "@shared/constants";
 import { CurateSection } from "@/components/curate";
 import { UnderratedOverratedCard } from "@/components/UnderratedOverratedCard";
 import { CardSection } from "@/components/CardSection";
@@ -119,10 +102,9 @@ import {
 import { navigateWithVoteList } from "@/lib/voteListNavigation";
 import { parseVoteError } from "@/lib/voteErrors";
 import { getClientWeekDeadlines } from "@/hooks/useMarketCycle";
-import { usePeopleSearch, type SearchablePerson } from "@/hooks/usePeopleSearch";
 import { SuggestCategorySelect } from "@/components/suggest/SuggestCategorySelect";
 import { SuggestDurationPicker } from "@/components/suggest/SuggestDurationPicker";
-import { HybridSubjectCombobox, type SubjectSelection } from "@/components/suggest/HybridSubjectCombobox";
+import { HybridSubjectCombobox } from "@/components/suggest/HybridSubjectCombobox";
 import { OpinionOptionRow, type OpinionOptionInput } from "@/components/suggest/OpinionOptionRow";
 import { ContenderSelector, type ContenderSelection } from "@/components/suggest/ContenderSelector";
 
@@ -1091,31 +1073,6 @@ function CarouselSection({
 }
 
 
-function CelebrityAutocomplete({ 
-  value, 
-  onChange,
-  onSelect 
-}: { 
-  value: string; 
-  onChange: (value: string) => void;
-  onSelect: (name: string) => void;
-}) {
-  const handleSelect = (selection: SubjectSelection) => {
-    onSelect(selection.value);
-  };
-
-  return (
-    <HybridSubjectCombobox
-      value={value}
-      onChange={onChange}
-      onSelect={handleSelect}
-      placeholder="Search celebrity name..."
-      showCustomTopicOption={false}
-    />
-  );
-}
-
-
 const VOTE_CATEGORY_ICONS: Record<string, LucideIcon> = {
   all: LayoutGrid,
   favorites: Star,
@@ -1212,7 +1169,6 @@ export default function VotePage() {
   const raceMap = useCategoryRaceMap();
   const leaderboardCats = useLeaderboardCategories();
 
-  const [suggestModalOpen, setSuggestModalOpen] = useState(false);
   const [inductionSuggestOpen, setInductionSuggestOpen] = useState(false);
   const [matchupSuggestOpen, setMatchupSuggestOpen] = useState(false);
   const [curateSuggestOpen, setCurateSuggestOpen] = useState(false);
@@ -1330,7 +1286,6 @@ export default function VotePage() {
     return window.history.state?.overlay === "induction";
   });
   const prevInductionOverlayOpenRef = useRef(inductionOverlayOpen);
-  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
 
   const [topicsCategoryFilter, setTopicsCategoryFilter] = useState<FilterCategory>("all");
   const [topicsSearchQuery, setTopicsSearchQuery] = useState("");
@@ -1364,7 +1319,6 @@ export default function VotePage() {
   const [infoModalOpen, setInfoModalOpen] = useState<"governance" | null>(null);
   const [curateCategoryFilter, setCurateCategoryFilter] = useState<FilterCategory>("all");
   const [curateSearchQuery, setCurateSearchQuery] = useState("");
-  const [globalVoteSearchQuery, setGlobalVoteSearchQuery] = useState("");
   const [globalCategoryFilter, setGlobalCategoryFilter] = useState<FilterCategory>("all");
 
   const handleCategoryPillFilter = useCallback((category: string) => {
@@ -1796,13 +1750,13 @@ export default function VotePage() {
   }, [inductionOverlayOpen]);
 
   useEffect(() => {
-    if (inductionOverlayOpen || topicsOverlayOpen || suggestModalOpen || startPollModalOpen || matchupsOverlayOpen || inductionSuggestOpen || matchupSuggestOpen || valuePerceptionOverlayOpen || opinionPollsOverlayOpen || snapScrollOpen) {
+    if (inductionOverlayOpen || topicsOverlayOpen || startPollModalOpen || matchupsOverlayOpen || inductionSuggestOpen || matchupSuggestOpen || curateSuggestOpen || opinionSuggestOpen || valuePerceptionOverlayOpen || opinionPollsOverlayOpen || snapScrollOpen) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = '';
     }
     return () => { document.body.style.overflow = ''; };
-  }, [inductionOverlayOpen, topicsOverlayOpen, suggestModalOpen, startPollModalOpen, matchupsOverlayOpen, inductionSuggestOpen, matchupSuggestOpen, valuePerceptionOverlayOpen, opinionPollsOverlayOpen, snapScrollOpen]);
+  }, [inductionOverlayOpen, topicsOverlayOpen, startPollModalOpen, matchupsOverlayOpen, inductionSuggestOpen, matchupSuggestOpen, curateSuggestOpen, opinionSuggestOpen, valuePerceptionOverlayOpen, opinionPollsOverlayOpen, snapScrollOpen]);
 
   const applyOverlayState = useCallback((name: string | undefined) => {
     setInductionOverlayOpen(name === "induction");
@@ -3834,6 +3788,7 @@ export default function VotePage() {
             sectionType="matchups"
             items={matchupSnapItems}
             initialItemId={snapScrollInitialId}
+            onSuggest={() => openSuggestModal(() => setMatchupSuggestOpen(true))}
             renderCard={(item) => {
               const m = matchups.find(x => x.id === item.id);
               if (!m) return null;
@@ -3857,6 +3812,7 @@ export default function VotePage() {
             sectionType="sentiment"
             items={sentimentSnapItems}
             initialItemId={snapScrollInitialId}
+            onSuggest={() => openSuggestModal(() => setStartPollModalOpen(true))}
             renderCard={(item) => {
               const t = dbPolls.find((x: any) => x.id === item.id);
               if (!t) return null;
@@ -3878,6 +3834,7 @@ export default function VotePage() {
             sectionType="opinion"
             items={opinionSnapItems}
             initialItemId={snapScrollInitialId}
+            onSuggest={() => openSuggestModal(() => setOpinionSuggestOpen(true))}
             renderCard={(item) => {
               const p = opinionPolls.find((x: any) => x.id === item.id);
               if (!p) return null;

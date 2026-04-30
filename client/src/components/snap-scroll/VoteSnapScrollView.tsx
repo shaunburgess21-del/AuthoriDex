@@ -1,7 +1,9 @@
 import { useState, useRef, useCallback, useEffect, useMemo, createContext, type ReactNode } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence, useMotionValue, useTransform, animate as motionAnimate } from "framer-motion";
-import { ArrowLeft, Inbox } from "lucide-react";
+import { ArrowLeft, ArrowUp, Inbox, Plus, X } from "lucide-react";
+import { getCategoryStyle } from "@/components/CategoryPill";
+import { getMarketCategoryLabel } from "@shared/constants";
 import { sharePage } from "@/lib/share";
 import {
   navigateWithVoteList,
@@ -30,6 +32,7 @@ interface VoteSnapScrollViewProps {
   items: SnapItem[];
   initialItemId?: string;
   renderCard: (item: SnapItem) => ReactNode;
+  onSuggest?: () => void;
 }
 
 const SECTION_COMMENT_TYPE: Record<SnapSectionType, CommentEntityType> = {
@@ -56,6 +59,12 @@ const SNAP_TO_VOTE_LIST_TYPE: Record<SnapSectionType, VoteListNavType> = {
   opinion: "opinion",
 };
 
+const SECTION_SUGGEST_LABEL: Record<SnapSectionType, string> = {
+  matchups: "Matchup",
+  sentiment: "Sentiment Poll",
+  opinion: "Opinion Poll",
+};
+
 const DRAG_THRESHOLD = 40;
 const COMMENT_TAP_THRESHOLD = 12;
 const COMMENT_SWIPE_TOP_THRESHOLD = 8;
@@ -66,6 +75,114 @@ const H_VERTICAL_BIAS = 0.7;
 const H_COMMIT_RATIO = 0.3;
 const H_COMMIT_VELOCITY = 500;
 const H_BOUNCE_RESISTANCE = 3;
+
+function SnapEndCard({
+  category,
+  sectionType,
+  categories,
+  onSelectCategory,
+  onSuggest,
+  onBackToTop,
+  onClose,
+}: {
+  category: string;
+  sectionType: SnapSectionType;
+  categories: string[];
+  onSelectCategory: (cat: string) => void;
+  onSuggest?: () => void;
+  onBackToTop: () => void;
+  onClose: () => void;
+}) {
+  const otherCategories = categories.filter((c) => c !== category && c !== "All");
+  const displayCategory = category === "All" ? "this section" : category;
+  const sectionLabel = SECTION_LABEL[sectionType];
+  const suggestLabel = SECTION_SUGGEST_LABEL[sectionType];
+
+  return (
+    <div
+      className="snap-start flex flex-col items-center justify-center px-6 text-center"
+      style={{
+        height: "calc(100dvh - 52px)",
+        scrollSnapAlign: "start",
+        paddingBottom: "env(safe-area-inset-bottom, 16px)",
+        background: "linear-gradient(to bottom, hsl(var(--background)), hsl(var(--card) / 0.6))",
+      }}
+    >
+      <div className="flex flex-col items-center gap-6 max-w-sm w-full">
+        {/* Icon */}
+        <div className="rounded-full bg-muted/50 p-4">
+          <Inbox className="h-10 w-10 text-muted-foreground/60" />
+        </div>
+
+        {/* Heading */}
+        <div className="space-y-2">
+          <h2 className="text-xl font-semibold text-foreground">
+            That's all for {displayCategory}
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            You've seen every {sectionLabel} in this category
+          </p>
+        </div>
+
+        {/* Suggest button */}
+        {onSuggest && (
+          <button
+            onClick={onSuggest}
+            className="flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 active:scale-[0.97]"
+          >
+            <Plus className="h-4 w-4" />
+            Suggest a {suggestLabel}
+          </button>
+        )}
+
+        {/* Category navigation */}
+        {otherCategories.length > 0 && (
+          <div className="w-full space-y-3 pt-2">
+            <div className="flex items-center gap-3">
+              <div className="h-px flex-1 bg-border/50" />
+              <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
+                Explore other categories
+              </span>
+              <div className="h-px flex-1 bg-border/50" />
+            </div>
+            <div className="flex flex-wrap justify-center gap-2">
+              {otherCategories.map((cat) => {
+                const style = getCategoryStyle(cat);
+                return (
+                  <button
+                    key={cat}
+                    onClick={() => onSelectCategory(cat)}
+                    className={`rounded-full px-3.5 py-1.5 text-xs font-medium border transition-transform active:scale-95 ${style.bg} ${style.border} ${style.text}`}
+                  >
+                    {getMarketCategoryLabel(cat)}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Utility buttons */}
+        <div className="flex items-center gap-3 pt-4">
+          <button
+            onClick={onBackToTop}
+            className="flex items-center gap-1.5 rounded-lg border border-border/60 bg-muted/30 px-4 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50 active:scale-[0.97]"
+          >
+            <ArrowUp className="h-3.5 w-3.5" />
+            Back to top
+          </button>
+          <button
+            onClick={onClose}
+            className="flex items-center gap-1.5 rounded-lg border border-border/60 bg-muted/30 px-4 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50 active:scale-[0.97]"
+          >
+            <X className="h-3.5 w-3.5" />
+            Close snap view
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function isInteractiveTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -84,6 +201,7 @@ export function VoteSnapScrollView({
   items,
   initialItemId,
   renderCard,
+  onSuggest,
 }: VoteSnapScrollViewProps) {
   const [, setLocation] = useLocation();
   const commentScrollRef = useRef<HTMLDivElement | null>(null);
@@ -638,6 +756,18 @@ export function VoteSnapScrollView({
                               </div>
                             );
                           })}
+                          <SnapEndCard
+                            category={cat}
+                            sectionType={sectionType}
+                            categories={categories}
+                            onSelectCategory={handleCategorySelect}
+                            onSuggest={onSuggest}
+                            onBackToTop={() => {
+                              const el = columnScrollRefs.current[cat];
+                              if (el) el.scrollTo({ top: 0, behavior: "smooth" });
+                            }}
+                            onClose={onClose}
+                          />
                         </div>
                       )}
                     </div>

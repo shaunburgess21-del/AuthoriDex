@@ -2105,9 +2105,6 @@ export default function PredictPage() {
     await nativeUpdownBetMutation.mutateAsync({ marketId: market.id, entryId, stakeAmount: amount });
   };
 
-  // Kept as a no-op; CreatePredictionModal now handles its own API call and toast.
-  const handleCreatePrediction = () => {};
-
   // Section-specific filtering logic
   const matchesCategory = (cat: CategoryFilter, marketCategory: string, personId?: string) => {
     if (cat === "all") return true;
