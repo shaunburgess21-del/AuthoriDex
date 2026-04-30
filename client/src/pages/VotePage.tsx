@@ -77,6 +77,7 @@ import "swiper/css";
 import { motion, AnimatePresence } from "framer-motion";
 import { getFilterCategories, normalizeMarketCategory, type FilterCategory, CATEGORIES_WITH_FILTERS, CATEGORIES_LEADERBOARD, CATEGORIES_OPEN, OPINION_POLL_MIN_OPTIONS, OPINION_POLL_MAX_OPTIONS } from "@shared/constants";
 import { CurateSection } from "@/components/curate";
+import { CurateProfileCard as CurateProfileCardComponent, type CuratePerson } from "@/components/curate/CurateProfileCard";
 import { UnderratedOverratedCard } from "@/components/UnderratedOverratedCard";
 import { CardSection } from "@/components/CardSection";
 import { VersusCard, type VersusCardMatchup } from "@/components/matchups/VersusCard";
@@ -337,6 +338,7 @@ function InductionCandidateCard({
   onFilterCategory,
   categoryRaceMap,
   leaderboardCategories,
+  onBrowseFullScreen,
 }: { 
   candidate: InductionCandidate;
   rank: number;
@@ -347,6 +349,7 @@ function InductionCandidateCard({
   onFilterCategory: (category: string) => void;
   categoryRaceMap: Map<string, string>;
   leaderboardCategories?: Set<string>;
+  onBrowseFullScreen?: () => void;
 }) {
   const [showVoteAnimation, setShowVoteAnimation] = useState(false);
   const animationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -400,6 +403,7 @@ function InductionCandidateCard({
           leaderboardCategories={leaderboardCategories}
           detailHref="/vote/induction"
           detailLabel="View Induction Queue"
+          onBrowseFullScreen={onBrowseFullScreen}
           data-testid={`badge-category-${candidate.id}`}
         />
       </div>
@@ -1691,6 +1695,66 @@ export default function VotePage() {
     [displayOpinionPolls],
   );
 
+  const valueSnapItems: SnapItem[] = useMemo(
+    () =>
+      filteredValueCelebrities.map((person: any) => ({
+        id: person.id,
+        slug: person.id,
+        category: person.category || "misc",
+        title: person.name || "",
+        personId: person.id,
+        personName: person.name,
+      })),
+    [filteredValueCelebrities],
+  );
+
+  const inductionSnapItems: SnapItem[] = useMemo(
+    () =>
+      filteredCandidates.map((c: any) => ({
+        id: c.id,
+        slug: c.id,
+        category: c.category || "misc",
+        title: c.name || "",
+      })),
+    [filteredCandidates],
+  );
+
+  const { data: curateTrendingData } = useQuery<{ data: Array<{ id: string; name: string; category: string }> } | Array<{ id: string; name: string; category: string }>>({
+    queryKey: ['/api/trending?sort=rank&limit=100'],
+    staleTime: 60 * 1000,
+  });
+
+  const curateTrendingCelebrities = useMemo(() => {
+    if (!curateTrendingData) return [];
+    const raw = Array.isArray(curateTrendingData) ? curateTrendingData : (curateTrendingData as any).data;
+    return (Array.isArray(raw) ? raw : []).filter((p: any) => !!p?.id);
+  }, [curateTrendingData]);
+
+  const filteredCurateCelebrities = useMemo(() => {
+    const search = curateSearchQuery.trim().toLowerCase();
+    return curateTrendingCelebrities.filter((p: any) => {
+      const matchesCategory =
+        curateCategoryFilter === "all" ||
+        curateCategoryFilter === "trending" ||
+        normalizeMarketCategory(p.category) === curateCategoryFilter;
+      const matchesSearch = !search || p.name.toLowerCase().includes(search);
+      return matchesCategory && matchesSearch;
+    });
+  }, [curateTrendingCelebrities, curateCategoryFilter, curateSearchQuery]);
+
+  const curateSnapItems: SnapItem[] = useMemo(
+    () =>
+      filteredCurateCelebrities.map((person: any) => ({
+        id: person.id,
+        slug: person.id,
+        category: person.category || "misc",
+        title: person.name || "",
+        personId: person.id,
+        personName: person.name,
+      })),
+    [filteredCurateCelebrities],
+  );
+
   const openSnapScroll = useCallback((section: SnapSectionType, itemId?: string, source: SnapOpenSource = "card-tap") => {
     if (!isMobile) return;
     if (source === "browse-button") {
@@ -2723,14 +2787,16 @@ export default function VotePage() {
           ) : filteredValueCelebrities.length > 0 ? (
             <CardSection desktopLimit={9} gap="gap-5" testIdPrefix="section-value">
               {filteredValueCelebrities.map((person) => (
-                <UnderratedOverratedCard 
-                  key={person.id} 
-                  person={person}
-                  onVisitProfile={() => setLocation(`/person/${person.id}`)}
-                  onFilterCategory={handleCategoryPillFilter}
-                  categoryRaceMap={raceMap}
-                  leaderboardCategories={leaderboardCats}
-                />
+                <div key={person.id} onClick={(e) => handleCardEmptyTap(e, "value", person.id)}>
+                  <UnderratedOverratedCard 
+                    person={person}
+                    onVisitProfile={() => setLocation(`/person/${person.id}`)}
+                    onFilterCategory={handleCategoryPillFilter}
+                    categoryRaceMap={raceMap}
+                    leaderboardCategories={leaderboardCats}
+                    onBrowseFullScreen={isMobile ? () => openSnapScroll("value", person.id, "browse-button") : undefined}
+                  />
+                </div>
               ))}
             </CardSection>
           ) : (
@@ -2861,18 +2927,20 @@ export default function VotePage() {
           ) : filteredCandidates.length > 0 ? (
             <CardSection desktopLimit={9} gap="gap-4" testIdPrefix="section-induction">
               {filteredCandidates.map((candidate, index) => (
-                <InductionCandidateCard
-                  key={candidate.id}
-                  candidate={candidate}
-                  rank={index + 1}
-                  maxVotes={filteredMaxVotes}
-                  isVoted={votedIds.has(candidate.id)}
-                  onToggleVote={handleToggleVote}
-                  onXPGain={() => { /* bursts now fire from vote mutation onSuccess */ }}
-                  onFilterCategory={handleCategoryPillFilter}
-                  categoryRaceMap={raceMap}
-                  leaderboardCategories={leaderboardCats}
-                />
+                <div key={candidate.id} onClick={(e) => handleCardEmptyTap(e, "induction", candidate.id)}>
+                  <InductionCandidateCard
+                    candidate={candidate}
+                    rank={index + 1}
+                    maxVotes={filteredMaxVotes}
+                    isVoted={votedIds.has(candidate.id)}
+                    onToggleVote={handleToggleVote}
+                    onXPGain={() => { /* bursts now fire from vote mutation onSuccess */ }}
+                    onFilterCategory={handleCategoryPillFilter}
+                    categoryRaceMap={raceMap}
+                    leaderboardCategories={leaderboardCats}
+                    onBrowseFullScreen={isMobile ? () => openSnapScroll("induction", candidate.id, "browse-button") : undefined}
+                  />
+                </div>
               ))}
             </CardSection>
           ) : (
@@ -2961,7 +3029,15 @@ export default function VotePage() {
             </CategoryRowWithSearch>
           </UnifiedSectionHeader>
 
-          <CurateSection categoryFilter={curateCategoryFilter} searchQuery={curateSearchQuery} onFilterCategory={handleCategoryPillFilter} categoryRaceMap={raceMap} leaderboardCategories={leaderboardCats} />
+          <CurateSection
+            categoryFilter={curateCategoryFilter}
+            searchQuery={curateSearchQuery}
+            onFilterCategory={handleCategoryPillFilter}
+            categoryRaceMap={raceMap}
+            leaderboardCategories={leaderboardCats}
+            onBrowseFullScreen={isMobile ? (personId) => openSnapScroll("curate", personId, "browse-button") : undefined}
+            onCardEmptyTap={isMobile ? (personId, e) => handleCardEmptyTap(e, "curate", personId) : undefined}
+          />
         </section>
         )}
 
@@ -3526,6 +3602,7 @@ export default function VotePage() {
                     onFilterCategory={handleCategoryPillFilter}
                     categoryRaceMap={raceMap}
                     leaderboardCategories={leaderboardCats}
+                    onBrowseFullScreen={isMobile ? () => openSnapScroll("induction", candidate.id, "browse-button") : undefined}
                   />
                 ))}
               </div>
@@ -3766,6 +3843,7 @@ export default function VotePage() {
                     onFilterCategory={handleCategoryPillFilter}
                     categoryRaceMap={raceMap}
                     leaderboardCategories={leaderboardCats}
+                    onBrowseFullScreen={isMobile ? () => openSnapScroll("value", person.id, "browse-button") : undefined}
                   />
                 ))}
               </div>
@@ -3847,6 +3925,78 @@ export default function VotePage() {
                   categoryRaceMap={raceMap}
                   leaderboardCategories={leaderboardCats}
                   onNavigateToDetail={p.slug ? () => goOpinionDetail(p.slug) : undefined}
+                />
+              );
+            }}
+          />
+          <VoteSnapScrollView
+            open={snapScrollOpen && snapScrollSection === "value"}
+            onClose={closeSnapScroll}
+            sectionType="value"
+            commentMode="person"
+            items={valueSnapItems}
+            initialItemId={snapScrollInitialId}
+            onSuggest={() => openSuggestModal(() => setCurateSuggestOpen(true))}
+            renderCard={(item) => {
+              const person = filteredValueCelebrities.find((p: any) => p.id === item.id);
+              if (!person) return null;
+              return (
+                <UnderratedOverratedCard
+                  person={person}
+                  onVisitProfile={() => setLocation(`/person/${person.id}`)}
+                  onFilterCategory={handleCategoryPillFilter}
+                  categoryRaceMap={raceMap}
+                  leaderboardCategories={leaderboardCats}
+                />
+              );
+            }}
+          />
+          <VoteSnapScrollView
+            open={snapScrollOpen && snapScrollSection === "induction"}
+            onClose={closeSnapScroll}
+            sectionType="induction"
+            commentMode="none"
+            items={inductionSnapItems}
+            initialItemId={snapScrollInitialId}
+            onSuggest={() => openSuggestModal(() => setInductionSuggestOpen(true))}
+            renderCard={(item) => {
+              const idx = filteredCandidates.findIndex((c: any) => c.id === item.id);
+              const candidate = idx >= 0 ? filteredCandidates[idx] : null;
+              if (!candidate) return null;
+              return (
+                <InductionCandidateCard
+                  candidate={candidate}
+                  rank={idx + 1}
+                  maxVotes={filteredMaxVotes}
+                  isVoted={votedIds.has(candidate.id)}
+                  onToggleVote={handleToggleVote}
+                  onXPGain={() => {}}
+                  onFilterCategory={handleCategoryPillFilter}
+                  categoryRaceMap={raceMap}
+                  leaderboardCategories={leaderboardCats}
+                />
+              );
+            }}
+          />
+          <VoteSnapScrollView
+            open={snapScrollOpen && snapScrollSection === "curate"}
+            onClose={closeSnapScroll}
+            sectionType="curate"
+            commentMode="person"
+            items={curateSnapItems}
+            initialItemId={snapScrollInitialId}
+            onSuggest={() => openSuggestModal(() => setCurateSuggestOpen(true))}
+            renderCard={(item) => {
+              const person: CuratePerson = { id: item.id, name: item.title, category: item.category, imageUrl: null };
+              return (
+                <CurateProfileCardComponent
+                  person={person}
+                  onVote={() => {}}
+                  onComplete={() => {}}
+                  onViewResults={() => {}}
+                  onFilterCategory={handleCategoryPillFilter}
+                  categoryRaceMap={raceMap}
+                  leaderboardCategories={leaderboardCats}
                 />
               );
             }}

@@ -50,6 +50,7 @@ export function WeeklyUpDownCard({
   categoryRaceMap,
   leaderboardCategories,
   pendingPosition,
+  onBrowseFullScreen,
 }: {
   market: PredictionMarket;
   isMarketClosed?: boolean;
@@ -58,8 +59,8 @@ export function WeeklyUpDownCard({
   onFilterCategory?: (category: string) => void;
   categoryRaceMap?: Map<string, string>;
   leaderboardCategories?: Set<string>;
-  /** When set and market is open, replaces Up/Down with position CTA to detail. */
   pendingPosition?: { pick: "up" | "down" | null; stakeAmount: number } | null;
+  onBrowseFullScreen?: () => void;
 }) {
   const delta = market.currentScore - market.baselineScore;
   const pctDelta = market.baselineScore > 0 ? ((delta / market.baselineScore) * 100).toFixed(1) : "0";
@@ -114,6 +115,7 @@ export function WeeklyUpDownCard({
           leaderboardCategories={leaderboardCategories}
           detailHref={`/predict/updown/${market.id}`}
           detailLabel="View Up/Down Details"
+          onBrowseFullScreen={onBrowseFullScreen}
         />
       </div>
 
