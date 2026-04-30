@@ -156,7 +156,7 @@ export function LeaderboardRow({
   return (
     <div className="border-b">
       <div
-        className="flex items-center gap-3 sm:gap-4 lg:gap-5 pl-2 pr-3 py-4 sm:pl-3 sm:pr-4 sm:py-5 hover-elevate active-elevate-2 cursor-pointer"
+        className="flex items-center gap-3 sm:gap-4 lg:gap-5 pl-2 pr-2 py-4 sm:pl-3 sm:pr-3 sm:py-5 hover-elevate active-elevate-2 cursor-pointer"
         onClick={onVisitProfile}
         data-testid={`row-person-${person.id}`}
       >
