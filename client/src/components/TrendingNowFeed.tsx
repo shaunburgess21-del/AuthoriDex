@@ -5,7 +5,7 @@ import { getCategoryTextColor } from "@/components/CategoryPill";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 
-interface HotMover {
+export interface HotMover {
   id: string;
   name: string;
   avatar: string | null;
@@ -26,7 +26,7 @@ interface HotMoversResponse {
 }
 
 interface TrendingNowFeedProps {
-  onPersonClick: (id: string) => void;
+  onOpenInsight: (person: HotMover) => void;
   collapsed: boolean;
   onToggle: () => void;
 }
@@ -41,7 +41,7 @@ function formatUpdatedAgo(timestamp: number | undefined): string {
   return `${hours}h ago`;
 }
 
-export function TrendingNowFeed({ onPersonClick, collapsed, onToggle }: TrendingNowFeedProps) {
+export function TrendingNowFeed({ onOpenInsight, collapsed, onToggle }: TrendingNowFeedProps) {
   const { data: rawResponse } = useQuery<HotMoversResponse | HotMover[]>({
     queryKey: ['/api/trending/hot-movers'],
     refetchInterval: 60_000,
@@ -124,7 +124,7 @@ export function TrendingNowFeed({ onPersonClick, collapsed, onToggle }: Trending
                 <div
                   key={person.id}
                   className="flex items-center gap-2.5 p-2 rounded-lg hover-elevate cursor-pointer bg-muted/40 dark:bg-slate-800/30 border border-border/50 dark:border-slate-700/30 transition-colors hover:border-foreground/20 dark:hover:border-slate-600/50"
-                  onClick={() => onPersonClick(person.id)}
+                  onClick={() => onOpenInsight(person)}
                   data-testid={`trending-now-item-${person.id}`}
                 >
                   <div className="relative flex items-center rounded-md overflow-hidden shrink-0">
