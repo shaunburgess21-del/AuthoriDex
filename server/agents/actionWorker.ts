@@ -218,10 +218,12 @@ async function executeAction(action: {
     // direction stay backwards-compatible.
     const direction: "yes" | "no" = decision.direction === "no" ? "no" : "yes";
 
-    // Calculate potential payout (parimutuel) — for No bets we mirror the
-    // human bet endpoint (server/routes.ts ~13800) and base the payout on
-    // the share of the No pool for this entry, since No bets win when the
-    // outcome doesn't resolve true and split the losing Yes pool.
+    // Calculate potential payout (parimutuel). Mirror the human bet endpoint
+    // in server/routes.ts so the displayed expected payout is consistent
+    // between human and agent bets on the same market+direction. Note: this
+    // is only the *displayed* expected payout — the actual payout at resolve
+    // time comes from calculateSettlementPayouts, which is already
+    // direction-aware.
     const allEntries = await db
       .select({
         id: marketEntries.id,
@@ -231,23 +233,40 @@ async function executeAction(action: {
       .from(marketEntries)
       .where(eq(marketEntries.marketId, action.marketId));
 
+    const totalPoolBefore = allEntries.reduce(
+      (sum, e) => sum + e.totalStake + e.noStake,
+      0,
+    );
+    const totalNoPoolBefore = allEntries.reduce((sum, e) => sum + e.noStake, 0);
+    const otherEntries = allEntries.filter((e) => e.id !== action.entryId);
+
     let potentialPayout: number;
     if (direction === "no") {
-      const entryNoPool = entry.noStake + action.stakeAmount;
-      const otherEntriesYesPool = allEntries
-        .filter((e) => e.id !== action.entryId)
-        .reduce((sum, e) => sum + e.totalStake, 0);
-      const noShare = action.stakeAmount / Math.max(entryNoPool, 1);
+      // Forecast: assume the most likely winner is the OTHER entry with the
+      // highest Yes pool, and the agent's No bet wins along with all No bets
+      // on every other entry.
+      const likelyWinningEntry = otherEntries.reduce<typeof allEntries[number] | null>(
+        (best, e) => (!best || e.totalStake > best.totalStake ? e : best),
+        null,
+      );
+      const winnerPoolBefore =
+        (likelyWinningEntry?.totalStake ?? 0) +
+        (totalNoPoolBefore - (likelyWinningEntry?.noStake ?? 0));
+      const winnerPoolAfter = winnerPoolBefore + action.stakeAmount;
+      const totalPoolAfter = totalPoolBefore + action.stakeAmount;
       potentialPayout = Math.round(
-        action.stakeAmount + noShare * otherEntriesYesPool
+        (action.stakeAmount / Math.max(winnerPoolAfter, 1)) * totalPoolAfter,
       );
     } else {
-      const totalPool =
-        allEntries.reduce((sum, e) => sum + e.totalStake, 0) + action.stakeAmount;
-      const entryPool = entry.totalStake + action.stakeAmount;
-      const entryShare = entryPool / totalPool;
+      // Yes bet: winner pool is this entry's Yes pool + all other entries'
+      // No pools (because if this entry wins, those No bets lose too).
+      const winnerPoolBefore =
+        entry.totalStake +
+        otherEntries.reduce((sum, e) => sum + e.noStake, 0);
+      const winnerPoolAfter = winnerPoolBefore + action.stakeAmount;
+      const totalPoolAfter = totalPoolBefore + action.stakeAmount;
       potentialPayout = Math.round(
-        action.stakeAmount / Math.max(entryShare, 0.01)
+        (action.stakeAmount / Math.max(winnerPoolAfter, 1)) * totalPoolAfter,
       );
     }
 
