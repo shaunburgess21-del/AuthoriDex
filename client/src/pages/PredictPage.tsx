@@ -11,6 +11,7 @@ import { UserMenu } from "@/components/UserMenu";
 import { useXpBurst } from "@/components/XpBurstProvider";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Drawer } from "vaul";
 import { MarketCycleHero } from "@/components/MarketCycleHero";
 import { useMarketCycle, type MarketStatus } from "@/hooks/useMarketCycle";
 import { StakeModal, type StakeSelection } from "@/components/StakeModal";
@@ -84,6 +85,7 @@ import {
   Flame,
   RotateCcw,
   AlertTriangle,
+  X,
   XCircle,
   Clapperboard,
   Gamepad2,
@@ -1020,219 +1022,228 @@ function CreatePredictionModal({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
-      <DialogContent className="max-w-md max-h-[90vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Plus className="h-5 w-5 text-violet-700 dark:text-violet-500" />
-            Suggest a Market
-          </DialogTitle>
-          <DialogDescription>
-            Suggest a prediction market for the community. Your submission will be reviewed by an admin before going live.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="flex-1 min-h-0 overflow-y-auto space-y-4 py-4 pr-2 -mr-2">
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-sm font-medium">Title *</label>
-              <span className={`text-xs ${title.length > 60 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}>
-                {title.length}/60
-              </span>
+    <Drawer.Root open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
+      <Drawer.Portal>
+        <Drawer.Overlay className="fixed inset-0 z-[70] bg-black/40" />
+        <Drawer.Content className="fixed inset-x-0 bottom-0 z-[70] flex flex-col rounded-t-2xl border-t border-border/50 bg-background max-h-[85dvh]">
+          <div className="mx-auto mt-3 mb-2 h-1.5 w-16 rounded-full bg-muted-foreground/60" />
+          <div className="flex items-center justify-between px-4 pb-2">
+            <div>
+              <Drawer.Title className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Plus className="h-5 w-5 text-violet-700 dark:text-violet-500" />
+                Suggest a Market
+              </Drawer.Title>
+              <Drawer.Description className="text-xs text-muted-foreground mt-0.5">
+                Suggest a prediction market for the community. Your submission will be reviewed by an admin before going live.
+              </Drawer.Description>
             </div>
-            <Input
-              placeholder="e.g., Will Taylor Swift announce a tour?"
-              value={title}
-              onChange={(e) => setTitle(e.target.value.slice(0, 60))}
-              data-testid="input-prediction-title"
-            />
+            <button type="button" onClick={handleClose} className="p-1.5 rounded-lg hover:bg-muted/60 transition-colors" aria-label="Close">
+              <X className="h-4 w-4 text-muted-foreground" />
+            </button>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-sm font-medium mb-1 block">Type *</label>
-              <Select value={marketType} onValueChange={(v) => handleTypeChange(v as MarketTypeOption)}>
-                <SelectTrigger data-testid="select-prediction-type">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="binary">Yes/No</SelectItem>
-                  <SelectItem value="multi">Multiple Choice</SelectItem>
-                  <SelectItem value="updown">Above/Below</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <SuggestCategorySelect
-              value={category}
-              onChange={setCategory}
-              data-testid="select-prediction-category"
-            />
-          </div>
-
-          {marketType === "binary" && (
-            <div>
-              <label className="text-sm font-medium mb-1 block">Entries</label>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="px-3 py-2 rounded-lg border border-border bg-muted/30 text-sm font-medium text-center text-emerald-600 dark:text-emerald-400">
-                  Yes
-                </div>
-                <div className="px-3 py-2 rounded-lg border border-border bg-muted/30 text-sm font-medium text-center text-rose-600 dark:text-rose-400">
-                  No
-                </div>
-              </div>
-            </div>
-          )}
-
-          {marketType === "multi" && (
+          <div className="flex-1 overflow-y-auto px-4 pb-4 min-h-0 space-y-4">
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="text-sm font-medium">
-                  Options * (min {OPINION_POLL_MIN_OPTIONS}, max {OPINION_POLL_MAX_OPTIONS})
-                </label>
-                <span className="text-xs text-muted-foreground">{multiOptions.length} options</span>
+                <label className="text-sm font-medium">Title *</label>
+                <span className={`text-xs ${title.length > 60 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}>
+                  {title.length}/60
+                </span>
               </div>
-              <div className="space-y-2">
-                {multiOptions.map((opt, idx) => (
-                  <OpinionOptionRow
-                    key={idx}
-                    value={opt}
-                    onChange={(next) => {
-                      const arr = [...multiOptions];
-                      arr[idx] = next;
-                      setMultiOptions(arr);
-                    }}
-                    onRemove={
-                      multiOptions.length > OPINION_POLL_MIN_OPTIONS
-                        ? () => setMultiOptions(multiOptions.filter((_, i) => i !== idx))
-                        : undefined
-                    }
-                    testIdPrefix="prediction-multi"
-                    index={idx}
-                  />
-                ))}
-              </div>
-              {multiOptions.length < OPINION_POLL_MAX_OPTIONS && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setMultiOptions([...multiOptions, { name: "" }])}
-                  className="mt-2 text-violet-600 dark:text-violet-400"
-                  data-testid="button-add-prediction-multi-option"
-                >
-                  <Plus className="h-4 w-4 mr-1" />
-                  Add Option
-                </Button>
-              )}
+              <Input
+                placeholder="e.g., Will Taylor Swift announce a tour?"
+                value={title}
+                onChange={(e) => setTitle(e.target.value.slice(0, 60))}
+                data-testid="input-prediction-title"
+              />
             </div>
-          )}
 
-          {marketType === "updown" && (
-            <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium mb-1 block">Type *</label>
+                <Select value={marketType} onValueChange={(v) => handleTypeChange(v as MarketTypeOption)}>
+                  <SelectTrigger data-testid="select-prediction-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="binary">Yes/No</SelectItem>
+                    <SelectItem value="multi">Multiple Choice</SelectItem>
+                    <SelectItem value="updown">Above/Below</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <SuggestCategorySelect
+                value={category}
+                onChange={setCategory}
+                data-testid="select-prediction-category"
+              />
+            </div>
+
+            {marketType === "binary" && (
               <div>
                 <label className="text-sm font-medium mb-1 block">Entries</label>
                 <div className="grid grid-cols-2 gap-2">
                   <div className="px-3 py-2 rounded-lg border border-border bg-muted/30 text-sm font-medium text-center text-emerald-600 dark:text-emerald-400">
-                    Above
+                    Yes
                   </div>
                   <div className="px-3 py-2 rounded-lg border border-border bg-muted/30 text-sm font-medium text-center text-rose-600 dark:text-rose-400">
-                    Below
+                    No
                   </div>
                 </div>
               </div>
+            )}
+
+            {marketType === "multi" && (
               <div>
-                <label className="text-sm font-medium mb-1 block">Asset / Subject *</label>
-                <Input
-                  value={underlying}
-                  onChange={(e) => setUnderlying(e.target.value)}
-                  placeholder="e.g. Bitcoin, S&P 500, Tesla stock"
-                  data-testid="input-prediction-underlying"
-                />
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-sm font-medium">
+                    Options * (min {OPINION_POLL_MIN_OPTIONS}, max {OPINION_POLL_MAX_OPTIONS})
+                  </label>
+                  <span className="text-xs text-muted-foreground">{multiOptions.length} options</span>
+                </div>
+                <div className="space-y-2">
+                  {multiOptions.map((opt, idx) => (
+                    <OpinionOptionRow
+                      key={idx}
+                      value={opt}
+                      onChange={(next) => {
+                        const arr = [...multiOptions];
+                        arr[idx] = next;
+                        setMultiOptions(arr);
+                      }}
+                      onRemove={
+                        multiOptions.length > OPINION_POLL_MIN_OPTIONS
+                          ? () => setMultiOptions(multiOptions.filter((_, i) => i !== idx))
+                          : undefined
+                      }
+                      testIdPrefix="prediction-multi"
+                      index={idx}
+                    />
+                  ))}
+                </div>
+                {multiOptions.length < OPINION_POLL_MAX_OPTIONS && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setMultiOptions([...multiOptions, { name: "" }])}
+                    className="mt-2 text-violet-600 dark:text-violet-400"
+                    data-testid="button-add-prediction-multi-option"
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    Add Option
+                  </Button>
+                )}
               </div>
-              <div>
-                <label className="text-sm font-medium mb-1 block">Metric (optional)</label>
-                <Input
-                  value={metric}
-                  onChange={(e) => setMetric(e.target.value)}
-                  placeholder="e.g. price, market cap, revenue"
-                  data-testid="input-prediction-metric"
-                />
-              </div>
-              <div className="grid grid-cols-[1fr_100px] gap-2">
+            )}
+
+            {marketType === "updown" && (
+              <div className="space-y-3">
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Strike Value *</label>
+                  <label className="text-sm font-medium mb-1 block">Entries</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="px-3 py-2 rounded-lg border border-border bg-muted/30 text-sm font-medium text-center text-emerald-600 dark:text-emerald-400">
+                      Above
+                    </div>
+                    <div className="px-3 py-2 rounded-lg border border-border bg-muted/30 text-sm font-medium text-center text-rose-600 dark:text-rose-400">
+                      Below
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-1 block">Asset / Subject *</label>
                   <Input
-                    type="number"
-                    value={strike}
-                    onChange={(e) => setStrike(e.target.value)}
-                    placeholder="e.g. 100000"
-                    data-testid="input-prediction-strike"
+                    value={underlying}
+                    onChange={(e) => setUnderlying(e.target.value)}
+                    placeholder="e.g. Bitcoin, S&P 500, Tesla stock"
+                    data-testid="input-prediction-underlying"
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Unit</label>
+                  <label className="text-sm font-medium mb-1 block">Metric (optional)</label>
                   <Input
-                    value={unit}
-                    onChange={(e) => setUnit(e.target.value)}
-                    placeholder="$"
-                    data-testid="input-prediction-unit"
+                    value={metric}
+                    onChange={(e) => setMetric(e.target.value)}
+                    placeholder="e.g. price, market cap, revenue"
+                    data-testid="input-prediction-metric"
                   />
                 </div>
+                <div className="grid grid-cols-[1fr_100px] gap-2">
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Strike Value *</label>
+                    <Input
+                      type="number"
+                      value={strike}
+                      onChange={(e) => setStrike(e.target.value)}
+                      placeholder="e.g. 100000"
+                      data-testid="input-prediction-strike"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Unit</label>
+                    <Input
+                      value={unit}
+                      onChange={(e) => setUnit(e.target.value)}
+                      placeholder="$"
+                      data-testid="input-prediction-unit"
+                    />
+                  </div>
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          <SuggestDurationPicker
-            value={duration}
-            onChange={setDuration}
-            customDate={customDate}
-            onCustomDateChange={setCustomDate}
-            testIdPrefix="prediction"
-          />
-
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-sm font-medium">Description (optional)</label>
-              <span className={`text-xs ${description.length > 200 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}>
-                {description.length}/200
-              </span>
-            </div>
-            <Textarea
-              placeholder="Add more context for your prediction..."
-              value={description}
-              onChange={(e) => setDescription(e.target.value.slice(0, 200))}
-              maxLength={200}
-              className="resize-none"
-              data-testid="input-prediction-description"
+            <SuggestDurationPicker
+              value={duration}
+              onChange={setDuration}
+              customDate={customDate}
+              onCustomDateChange={setCustomDate}
+              testIdPrefix="prediction"
             />
+
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-sm font-medium">Description (optional)</label>
+                <span className={`text-xs ${description.length > 200 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}>
+                  {description.length}/200
+                </span>
+              </div>
+              <Textarea
+                placeholder="Add more context for your prediction..."
+                value={description}
+                onChange={(e) => setDescription(e.target.value.slice(0, 200))}
+                maxLength={200}
+                className="resize-none"
+                data-testid="input-prediction-description"
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium mb-1 block">Source URL (optional)</label>
+              <Input
+                type="url"
+                value={sourceUrl}
+                onChange={(e) => setSourceUrl(e.target.value)}
+                placeholder="Link to relevant article or source"
+                data-testid="input-prediction-source-url"
+              />
+            </div>
           </div>
 
-          <div>
-            <label className="text-sm font-medium mb-1 block">Source URL (optional)</label>
-            <Input
-              type="url"
-              value={sourceUrl}
-              onChange={(e) => setSourceUrl(e.target.value)}
-              placeholder="Link to relevant article or source"
-              data-testid="input-prediction-source-url"
-            />
+          <div className="border-t border-border/40 px-4 py-3 flex gap-2">
+            <Button variant="outline" onClick={handleClose} className="flex-1" data-testid="button-cancel-prediction">
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSubmit}
+              className="flex-1 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
+              disabled={isSubmitting || !canSubmit}
+              data-testid="button-submit-prediction"
+            >
+              {isSubmitting ? "Submitting…" : "Submit Suggestion"}
+            </Button>
           </div>
-        </div>
-
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={handleClose} className="flex-1" data-testid="button-cancel-prediction">
-            Cancel
-          </Button>
-          <Button
-            onClick={handleSubmit}
-            className="flex-1 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
-            disabled={isSubmitting || !canSubmit}
-            data-testid="button-submit-prediction"
-          >
-            {isSubmitting ? "Submitting…" : "Submit Suggestion"}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
+        </Drawer.Content>
+      </Drawer.Portal>
+    </Drawer.Root>
   );
 }
 

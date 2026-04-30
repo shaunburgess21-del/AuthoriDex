@@ -74,7 +74,7 @@ import { isUnauthorizedApiError, signInToVoteToastOptions, signInToVoteTitle } f
 import { toast } from "sonner";
 import { CountdownDescription } from "@/components/CountdownDescription";
 import { useLocation, Link } from "wouter";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Drawer } from "vaul";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -3023,437 +3023,482 @@ export default function VotePage() {
           </button>
         </div>
       </div>
-      <Dialog open={startPollModalOpen} onOpenChange={setStartPollModalOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <MessageSquare className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
-              Suggest a Poll
-            </DialogTitle>
-            <DialogDescription>
-              Suggest a topic for the community to vote on.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-sm font-medium">Headline *</label>
-                <span className={`text-xs ${pollHeadline.length > 80 ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>
-                  {pollHeadline.length}/80
-                </span>
+      <Drawer.Root open={startPollModalOpen} onOpenChange={setStartPollModalOpen}>
+        <Drawer.Portal>
+          <Drawer.Overlay className="fixed inset-0 z-[70] bg-black/40" />
+          <Drawer.Content className="fixed inset-x-0 bottom-0 z-[70] flex flex-col rounded-t-2xl border-t border-border/50 bg-background max-h-[85dvh]">
+            <div className="mx-auto mt-3 mb-2 h-1.5 w-16 rounded-full bg-muted-foreground/60" />
+            <div className="flex items-center justify-between px-4 pb-2">
+              <div>
+                <Drawer.Title className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <MessageSquare className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
+                  Suggest a Poll
+                </Drawer.Title>
+                <Drawer.Description className="text-xs text-muted-foreground mt-0.5">
+                  Suggest a topic for the community to vote on.
+                </Drawer.Description>
               </div>
-              <Input
-                value={pollHeadline}
-                onChange={(e) => setPollHeadline(e.target.value.slice(0, 80))}
-                placeholder="e.g. Should AI be regulated?"
-                data-testid="input-poll-headline"
-              />
+              <button type="button" onClick={() => setStartPollModalOpen(false)} className="p-1.5 rounded-lg hover:bg-muted/60 transition-colors" aria-label="Close">
+                <X className="h-4 w-4 text-muted-foreground" />
+              </button>
             </div>
-            <SuggestCategorySelect value={sentimentCategory} onChange={setSentimentCategory} data-testid="select-poll-category" />
-            <div>
-              <label className="text-sm font-medium mb-1 block">Subject (Entity) *</label>
-              <HybridSubjectCombobox
-                value={pollEntitySearch}
-                onChange={setPollEntitySearch}
-                onSelect={(selection) => {
-                  setPollEntitySearch(selection.value);
-                  setPollSubjectType(selection.type);
-                }}
-                placeholder="Search celebrity or create custom topic..."
-                showCustomTopicOption={true}
-              />
-              {pollSubjectType && (
-                <div className={`mt-2 text-xs flex items-center gap-1.5 ${pollSubjectType === 'custom' ? 'text-violet-600 dark:text-violet-400' : 'text-cyan-600 dark:text-cyan-400'}`}>
-                  {pollSubjectType === 'custom' ? (
-                    <>
-                      <Sparkles className="h-3 w-3" />
-                      {CATEGORIES_OPEN.find(c => c.id === sentimentCategory)?.label ?? "Misc"}
-                    </>
-                  ) : (
-                    <>
-                      <User className="h-3 w-3" />
-                      Celebrity
-                    </>
-                  )}
+            <div className="flex-1 overflow-y-auto px-4 pb-4 min-h-0 space-y-4">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-sm font-medium">Headline *</label>
+                  <span className={`text-xs ${pollHeadline.length > 80 ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>
+                    {pollHeadline.length}/80
+                  </span>
                 </div>
-              )}
-              {pollSubjectType === 'custom' && (
-                <div className="mt-3 p-3 rounded-lg border border-dashed border-amber-500/40 dark:border-amber-500/30 bg-amber-500/5">
-                  <label className="text-sm font-medium mb-2 block text-amber-600 dark:text-amber-400">Topic Image (Optional)</label>
-                  {pollSubjectImagePreview ? (
-                    <div className="flex items-center gap-3">
-                      <div className="h-16 w-16 rounded-md overflow-hidden border border-amber-500/40 dark:border-amber-500/30 bg-muted dark:bg-slate-800">
-                        <img 
-                          src={pollSubjectImagePreview} 
-                          alt="Topic preview"
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm text-muted-foreground truncate">{pollSubjectImage?.name}</p>
-                        <button
-                          onClick={() => {
-                            setPollSubjectImage(null);
-                            setPollSubjectImagePreview(null);
-                          }}
-                          className="text-xs text-red-600 dark:text-red-400 hover:underline mt-1"
-                          data-testid="button-remove-poll-image"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center gap-2">
-                      <div 
-                        onClick={() => pollFileInputRef.current?.click()}
-                        className="flex items-center justify-center w-full h-20 rounded-md border border-dashed border-slate-600 bg-slate-800/30 cursor-pointer hover:border-amber-500/50 hover:bg-amber-500/5 transition-all"
-                        data-testid="button-upload-poll-image"
-                      >
-                        <div className="flex flex-col items-center gap-1 text-muted-foreground">
-                          <ImageIcon className="h-6 w-6" />
-                          <span className="text-xs">Click to upload image</span>
+                <Input
+                  value={pollHeadline}
+                  onChange={(e) => setPollHeadline(e.target.value.slice(0, 80))}
+                  placeholder="e.g. Should AI be regulated?"
+                  data-testid="input-poll-headline"
+                />
+              </div>
+              <SuggestCategorySelect value={sentimentCategory} onChange={setSentimentCategory} data-testid="select-poll-category" />
+              <div>
+                <label className="text-sm font-medium mb-1 block">Subject (Entity) *</label>
+                <HybridSubjectCombobox
+                  value={pollEntitySearch}
+                  onChange={setPollEntitySearch}
+                  onSelect={(selection) => {
+                    setPollEntitySearch(selection.value);
+                    setPollSubjectType(selection.type);
+                  }}
+                  placeholder="Search celebrity or create custom topic..."
+                  showCustomTopicOption={true}
+                />
+                {pollSubjectType && (
+                  <div className={`mt-2 text-xs flex items-center gap-1.5 ${pollSubjectType === 'custom' ? 'text-violet-600 dark:text-violet-400' : 'text-cyan-600 dark:text-cyan-400'}`}>
+                    {pollSubjectType === 'custom' ? (
+                      <>
+                        <Sparkles className="h-3 w-3" />
+                        {CATEGORIES_OPEN.find(c => c.id === sentimentCategory)?.label ?? "Misc"}
+                      </>
+                    ) : (
+                      <>
+                        <User className="h-3 w-3" />
+                        Celebrity
+                      </>
+                    )}
+                  </div>
+                )}
+                {pollSubjectType === 'custom' && (
+                  <div className="mt-3 p-3 rounded-lg border border-dashed border-amber-500/40 dark:border-amber-500/30 bg-amber-500/5">
+                    <label className="text-sm font-medium mb-2 block text-amber-600 dark:text-amber-400">Topic Image (Optional)</label>
+                    {pollSubjectImagePreview ? (
+                      <div className="flex items-center gap-3">
+                        <div className="h-16 w-16 rounded-md overflow-hidden border border-amber-500/40 dark:border-amber-500/30 bg-muted dark:bg-slate-800">
+                          <img 
+                            src={pollSubjectImagePreview} 
+                            alt="Topic preview"
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm text-muted-foreground truncate">{pollSubjectImage?.name}</p>
+                          <button
+                            onClick={() => {
+                              setPollSubjectImage(null);
+                              setPollSubjectImagePreview(null);
+                            }}
+                            className="text-xs text-red-600 dark:text-red-400 hover:underline mt-1"
+                            data-testid="button-remove-poll-image"
+                          >
+                            Remove
+                          </button>
                         </div>
                       </div>
-                      <input
-                        ref={pollFileInputRef}
-                        type="file"
-                        accept="image/png,image/jpeg,image/webp"
-                        onChange={handlePollImageUpload}
-                        className="hidden"
-                        data-testid="input-poll-image"
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-            <SuggestDurationPicker value={pollDuration} onChange={setPollDuration} customDate={pollCustomDate} onCustomDateChange={setPollCustomDate} testIdPrefix="poll" />
-            <div>
-              <label className="text-sm font-medium mb-1 block">Short description (max 140 characters)</label>
-              <Input
-                value={pollDescription}
-                onChange={(e) => setPollDescription(e.target.value.slice(0, 140))}
-                placeholder="Brief context for voters..."
-                data-testid="input-poll-description"
-              />
-              <p className="text-xs text-muted-foreground mt-1">{pollDescription.length}/140</p>
-            </div>
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setStartPollModalOpen(false)} data-testid="button-cancel-poll">Cancel</Button>
-            <Button
-              onClick={handlePollSubmit}
-              disabled={isSuggestSubmitting || !pollHeadline || !pollEntitySearch}
-              className="bg-cyan-500 text-white"
-              data-testid="button-submit-poll"
-            >
-              {isSuggestSubmitting ? "Submitting…" : "Submit Poll"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-      <Dialog open={matchupSuggestOpen} onOpenChange={setMatchupSuggestOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Swords className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
-              Suggest a Matchup
-            </DialogTitle>
-            <DialogDescription>
-              Create an A vs B matchup for the community to vote on.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-sm font-medium">Headline *</label>
-                <span className={`text-xs ${matchupHeadline.length > 60 ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>
-                  {matchupHeadline.length}/60
-                </span>
+                    ) : (
+                      <div className="flex flex-col items-center gap-2">
+                        <div 
+                          onClick={() => pollFileInputRef.current?.click()}
+                          className="flex items-center justify-center w-full h-20 rounded-md border border-dashed border-slate-600 bg-slate-800/30 cursor-pointer hover:border-amber-500/50 hover:bg-amber-500/5 transition-all"
+                          data-testid="button-upload-poll-image"
+                        >
+                          <div className="flex flex-col items-center gap-1 text-muted-foreground">
+                            <ImageIcon className="h-6 w-6" />
+                            <span className="text-xs">Click to upload image</span>
+                          </div>
+                        </div>
+                        <input
+                          ref={pollFileInputRef}
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp"
+                          onChange={handlePollImageUpload}
+                          className="hidden"
+                          data-testid="input-poll-image"
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-              <Input
-                value={matchupHeadline}
-                onChange={(e) => setMatchupHeadline(e.target.value.slice(0, 60))}
-                placeholder="e.g. Battle of the Brands"
-                data-testid="input-matchup-headline"
-              />
-            </div>
-            <ContenderSelector
-              value={matchupContenderA}
-              onChange={setMatchupContenderA}
-              label="Contender A *"
-              placeholder="Search celebrity or enter name..."
-              testIdPrefix="matchup-contender-a"
-            />
-            <ContenderSelector
-              value={matchupContenderB}
-              onChange={setMatchupContenderB}
-              label="Contender B *"
-              placeholder="Search celebrity or enter name..."
-              testIdPrefix="matchup-contender-b"
-            />
-            <SuggestCategorySelect value={matchupCategory} onChange={setMatchupCategory} data-testid="select-matchup-category" />
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setMatchupSuggestOpen(false)} data-testid="button-cancel-matchup">Cancel</Button>
-            <Button
-              onClick={handleMatchupSuggestSubmit}
-              disabled={
-                isSuggestSubmitting ||
-                !matchupHeadline ||
-                !matchupCategory ||
-                !matchupContenderA.type ||
-                !matchupContenderB.type ||
-                (matchupContenderA.type === 'custom' && !matchupContenderA.uploadedPreview) ||
-                (matchupContenderB.type === 'custom' && !matchupContenderB.uploadedPreview)
-              }
-              className="bg-cyan-500 text-white"
-              data-testid="button-submit-matchup"
-            >
-              {isSuggestSubmitting ? "Submitting…" : "Submit Matchup"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-      <Dialog open={inductionSuggestOpen} onOpenChange={setInductionSuggestOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <UserPlus className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
-              Suggest a Candidate
-            </DialogTitle>
-            <DialogDescription>
-              Who are we missing? Suggest someone NEW to be added to VoxDex.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div>
-              <label className="text-sm font-medium mb-1 block">Candidate Name *</label>
-              <Input
-                value={suggestName}
-                onChange={(e) => setSuggestName(e.target.value)}
-                placeholder="Enter the person's name"
-                data-testid="input-induction-name"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-1 block">Social/Profile URL *</label>
-              <Input
-                value={suggestUrl}
-                onChange={(e) => setSuggestUrl(e.target.value)}
-                placeholder="https://twitter.com/... or https://instagram.com/..."
-                data-testid="input-induction-url"
-                className={suggestUrl && !suggestUrl.startsWith('http') ? 'border-red-500' : ''}
-              />
-              {suggestUrl && !suggestUrl.startsWith('http') ? (
-                <p className="text-xs text-red-600 dark:text-red-400 mt-1">Please enter a valid URL starting with http:// or https://</p>
-              ) : (
-                <p className="text-xs text-muted-foreground mt-1">Required for verification</p>
-              )}
-            </div>
-            <SuggestCategorySelect value={suggestCategory} onChange={setSuggestCategory} categories={CATEGORIES_LEADERBOARD} label="Category (optional)" data-testid="select-induction-category" />
-            <div>
-              <label className="text-sm font-medium mb-1 block">Why should they be on VoxDex? (optional)</label>
-              <Input
-                value={suggestReason}
-                onChange={(e) => setSuggestReason(e.target.value)}
-                placeholder="Brief reason..."
-                data-testid="input-induction-reason"
-              />
-            </div>
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setInductionSuggestOpen(false)} data-testid="button-cancel-induction">Cancel</Button>
-            <Button
-              onClick={handleInductionSuggestSubmit}
-              disabled={isSuggestSubmitting || !suggestName || !suggestUrl || !suggestUrl.startsWith('http')}
-              className="bg-cyan-500 text-white"
-              data-testid="button-submit-induction"
-            >
-              {isSuggestSubmitting ? "Submitting…" : "Submit Suggestion"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-      {/* Curate Profile Suggest Modal */}
-      <Dialog open={curateSuggestOpen} onOpenChange={setCurateSuggestOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Upload className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
-              Suggest a Profile Image
-            </DialogTitle>
-            <DialogDescription>
-              Upload a high-quality photo for a celebrity's profile.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div>
-              <label className="text-sm font-medium mb-1 block">Who is this for? *</label>
-              <HybridSubjectCombobox
-                value={curateCelebrity}
-                onChange={setCurateCelebrity}
-                onSelect={(selection) => {
-                  setCurateCelebrity(selection.value);
-                }}
-                placeholder="Search celebrity..."
-                showCustomTopicOption={false}
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-1 block">Upload Image *</label>
-              <div className="border-2 border-dashed border-slate-700 rounded-lg p-4 text-center hover:border-cyan-500/50 transition-colors">
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => setCurateImageFile(e.target.files?.[0] || null)}
-                  className="hidden"
-                  id="curate-image-upload"
-                  data-testid="input-curate-image-file"
+              <SuggestDurationPicker value={pollDuration} onChange={setPollDuration} customDate={pollCustomDate} onCustomDateChange={setPollCustomDate} testIdPrefix="poll" />
+              <div>
+                <label className="text-sm font-medium mb-1 block">Short description (max 140 characters)</label>
+                <Input
+                  value={pollDescription}
+                  onChange={(e) => setPollDescription(e.target.value.slice(0, 140))}
+                  placeholder="Brief context for voters..."
+                  data-testid="input-poll-description"
                 />
-                <label htmlFor="curate-image-upload" className="cursor-pointer">
-                  {curateImageFile ? (
-                    <div className="flex items-center justify-center gap-2 text-cyan-600 dark:text-cyan-400">
-                      <Check className="h-4 w-4" />
-                      <span className="text-sm">{curateImageFile.name}</span>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <Upload className="h-8 w-8 mx-auto text-muted-foreground" />
-                      <p className="text-sm text-muted-foreground">Click to upload an image</p>
-                      <p className="text-xs text-muted-foreground">PNG, JPG up to 5MB</p>
-                    </div>
-                  )}
-                </label>
+                <p className="text-xs text-muted-foreground mt-1">{pollDescription.length}/140</p>
               </div>
             </div>
-            <div>
-              <label className="text-sm font-medium mb-1 block">Source/Credit (optional)</label>
-              <Input
-                value={curateImageSource}
-                onChange={(e) => setCurateImageSource(e.target.value)}
-                placeholder="Photographer name or source URL..."
-                data-testid="input-curate-image-source"
+            <div className="border-t border-border/40 px-4 py-3 flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setStartPollModalOpen(false)} data-testid="button-cancel-poll">Cancel</Button>
+              <Button
+                onClick={handlePollSubmit}
+                disabled={isSuggestSubmitting || !pollHeadline || !pollEntitySearch}
+                className="bg-cyan-500 text-white"
+                data-testid="button-submit-poll"
+              >
+                {isSuggestSubmitting ? "Submitting…" : "Submit Poll"}
+              </Button>
+            </div>
+          </Drawer.Content>
+        </Drawer.Portal>
+      </Drawer.Root>
+      <Drawer.Root open={matchupSuggestOpen} onOpenChange={setMatchupSuggestOpen}>
+        <Drawer.Portal>
+          <Drawer.Overlay className="fixed inset-0 z-[70] bg-black/40" />
+          <Drawer.Content className="fixed inset-x-0 bottom-0 z-[70] flex flex-col rounded-t-2xl border-t border-border/50 bg-background max-h-[85dvh]">
+            <div className="mx-auto mt-3 mb-2 h-1.5 w-16 rounded-full bg-muted-foreground/60" />
+            <div className="flex items-center justify-between px-4 pb-2">
+              <div>
+                <Drawer.Title className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <Swords className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
+                  Suggest a Matchup
+                </Drawer.Title>
+                <Drawer.Description className="text-xs text-muted-foreground mt-0.5">
+                  Create an A vs B matchup for the community to vote on.
+                </Drawer.Description>
+              </div>
+              <button type="button" onClick={() => setMatchupSuggestOpen(false)} className="p-1.5 rounded-lg hover:bg-muted/60 transition-colors" aria-label="Close">
+                <X className="h-4 w-4 text-muted-foreground" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-4 pb-4 min-h-0 space-y-4">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-sm font-medium">Headline *</label>
+                  <span className={`text-xs ${matchupHeadline.length > 60 ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>
+                    {matchupHeadline.length}/60
+                  </span>
+                </div>
+                <Input
+                  value={matchupHeadline}
+                  onChange={(e) => setMatchupHeadline(e.target.value.slice(0, 60))}
+                  placeholder="e.g. Battle of the Brands"
+                  data-testid="input-matchup-headline"
+                />
+              </div>
+              <ContenderSelector
+                value={matchupContenderA}
+                onChange={setMatchupContenderA}
+                label="Contender A *"
+                placeholder="Search celebrity or enter name..."
+                testIdPrefix="matchup-contender-a"
               />
-              <p className="text-xs text-muted-foreground mt-1">Help us give proper attribution</p>
-            </div>
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button 
-              variant="outline" 
-              onClick={() => {
-                setCurateSuggestOpen(false);
-                setCurateCelebrity("");
-                setCurateImageFile(null);
-                setCurateImageSource("");
-              }}
-              data-testid="button-cancel-curate"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleCurateSuggestSubmit}
-              disabled={isSuggestSubmitting || !curateCelebrity || !curateImageFile}
-              className="bg-cyan-500 text-white"
-              data-testid="button-submit-curate"
-            >
-              {isSuggestSubmitting ? "Uploading…" : "Submit Image"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-      {/* Suggest Opinion Poll Modal */}
-      <Dialog open={opinionSuggestOpen} onOpenChange={setOpinionSuggestOpen}>
-        <DialogContent className="max-h-[90vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <ListChecks className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
-              Suggest an Opinion Poll
-            </DialogTitle>
-            <DialogDescription>
-              Create a multi-option poll for the community to vote on.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex-1 min-h-0 overflow-y-auto space-y-4 py-4 pr-2 -mr-2">
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-sm font-medium">Question / Title *</label>
-                <span className={`text-xs ${opinionSuggestTitle.length > 100 ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>
-                  {opinionSuggestTitle.length}/100
-                </span>
-              </div>
-              <Input
-                value={opinionSuggestTitle}
-                onChange={(e) => setOpinionSuggestTitle(e.target.value.slice(0, 100))}
-                placeholder="e.g. Who will win Album of the Year?"
-                data-testid="input-opinion-title"
+              <ContenderSelector
+                value={matchupContenderB}
+                onChange={setMatchupContenderB}
+                label="Contender B *"
+                placeholder="Search celebrity or enter name..."
+                testIdPrefix="matchup-contender-b"
               />
+              <SuggestCategorySelect value={matchupCategory} onChange={setMatchupCategory} data-testid="select-matchup-category" />
             </div>
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-sm font-medium">Options * (min {OPINION_POLL_MIN_OPTIONS}, max {OPINION_POLL_MAX_OPTIONS})</label>
-                <span className="text-xs text-muted-foreground">{opinionSuggestOptions.length} options</span>
+            <div className="border-t border-border/40 px-4 py-3 flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setMatchupSuggestOpen(false)} data-testid="button-cancel-matchup">Cancel</Button>
+              <Button
+                onClick={handleMatchupSuggestSubmit}
+                disabled={
+                  isSuggestSubmitting ||
+                  !matchupHeadline ||
+                  !matchupCategory ||
+                  !matchupContenderA.type ||
+                  !matchupContenderB.type ||
+                  (matchupContenderA.type === 'custom' && !matchupContenderA.uploadedPreview) ||
+                  (matchupContenderB.type === 'custom' && !matchupContenderB.uploadedPreview)
+                }
+                className="bg-cyan-500 text-white"
+                data-testid="button-submit-matchup"
+              >
+                {isSuggestSubmitting ? "Submitting…" : "Submit Matchup"}
+              </Button>
+            </div>
+          </Drawer.Content>
+        </Drawer.Portal>
+      </Drawer.Root>
+      <Drawer.Root open={inductionSuggestOpen} onOpenChange={setInductionSuggestOpen}>
+        <Drawer.Portal>
+          <Drawer.Overlay className="fixed inset-0 z-[70] bg-black/40" />
+          <Drawer.Content className="fixed inset-x-0 bottom-0 z-[70] flex flex-col rounded-t-2xl border-t border-border/50 bg-background max-h-[85dvh]">
+            <div className="mx-auto mt-3 mb-2 h-1.5 w-16 rounded-full bg-muted-foreground/60" />
+            <div className="flex items-center justify-between px-4 pb-2">
+              <div>
+                <Drawer.Title className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <UserPlus className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
+                  Suggest a Candidate
+                </Drawer.Title>
+                <Drawer.Description className="text-xs text-muted-foreground mt-0.5">
+                  Who are we missing? Suggest someone NEW to be added to VoxDex.
+                </Drawer.Description>
               </div>
-              <div className="space-y-2">
-                {opinionSuggestOptions.map((opt, idx) => (
-                  <OpinionOptionRow
-                    key={idx}
-                    value={opt}
-                    onChange={(next) => {
-                      const arr = [...opinionSuggestOptions];
-                      arr[idx] = next;
-                      setOpinionSuggestOptions(arr);
-                    }}
-                    onRemove={
-                      opinionSuggestOptions.length > OPINION_POLL_MIN_OPTIONS
-                        ? () => setOpinionSuggestOptions(opinionSuggestOptions.filter((_, i) => i !== idx))
-                        : undefined
-                    }
-                    testIdPrefix="opinion"
-                    index={idx}
+              <button type="button" onClick={() => setInductionSuggestOpen(false)} className="p-1.5 rounded-lg hover:bg-muted/60 transition-colors" aria-label="Close">
+                <X className="h-4 w-4 text-muted-foreground" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-4 pb-4 min-h-0 space-y-4">
+              <div>
+                <label className="text-sm font-medium mb-1 block">Candidate Name *</label>
+                <Input
+                  value={suggestName}
+                  onChange={(e) => setSuggestName(e.target.value)}
+                  placeholder="Enter the person's name"
+                  data-testid="input-induction-name"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1 block">Social/Profile URL *</label>
+                <Input
+                  value={suggestUrl}
+                  onChange={(e) => setSuggestUrl(e.target.value)}
+                  placeholder="https://twitter.com/... or https://instagram.com/..."
+                  data-testid="input-induction-url"
+                  className={suggestUrl && !suggestUrl.startsWith('http') ? 'border-red-500' : ''}
+                />
+                {suggestUrl && !suggestUrl.startsWith('http') ? (
+                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">Please enter a valid URL starting with http:// or https://</p>
+                ) : (
+                  <p className="text-xs text-muted-foreground mt-1">Required for verification</p>
+                )}
+              </div>
+              <SuggestCategorySelect value={suggestCategory} onChange={setSuggestCategory} categories={CATEGORIES_LEADERBOARD} label="Category (optional)" data-testid="select-induction-category" />
+              <div>
+                <label className="text-sm font-medium mb-1 block">Why should they be on VoxDex? (optional)</label>
+                <Input
+                  value={suggestReason}
+                  onChange={(e) => setSuggestReason(e.target.value)}
+                  placeholder="Brief reason..."
+                  data-testid="input-induction-reason"
+                />
+              </div>
+            </div>
+            <div className="border-t border-border/40 px-4 py-3 flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setInductionSuggestOpen(false)} data-testid="button-cancel-induction">Cancel</Button>
+              <Button
+                onClick={handleInductionSuggestSubmit}
+                disabled={isSuggestSubmitting || !suggestName || !suggestUrl || !suggestUrl.startsWith('http')}
+                className="bg-cyan-500 text-white"
+                data-testid="button-submit-induction"
+              >
+                {isSuggestSubmitting ? "Submitting…" : "Submit Suggestion"}
+              </Button>
+            </div>
+          </Drawer.Content>
+        </Drawer.Portal>
+      </Drawer.Root>
+      {/* Curate Profile Suggest Drawer */}
+      <Drawer.Root open={curateSuggestOpen} onOpenChange={setCurateSuggestOpen}>
+        <Drawer.Portal>
+          <Drawer.Overlay className="fixed inset-0 z-[70] bg-black/40" />
+          <Drawer.Content className="fixed inset-x-0 bottom-0 z-[70] flex flex-col rounded-t-2xl border-t border-border/50 bg-background max-h-[85dvh]">
+            <div className="mx-auto mt-3 mb-2 h-1.5 w-16 rounded-full bg-muted-foreground/60" />
+            <div className="flex items-center justify-between px-4 pb-2">
+              <div>
+                <Drawer.Title className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <Upload className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
+                  Suggest a Profile Image
+                </Drawer.Title>
+                <Drawer.Description className="text-xs text-muted-foreground mt-0.5">
+                  Upload a high-quality photo for a celebrity's profile.
+                </Drawer.Description>
+              </div>
+              <button type="button" onClick={() => setCurateSuggestOpen(false)} className="p-1.5 rounded-lg hover:bg-muted/60 transition-colors" aria-label="Close">
+                <X className="h-4 w-4 text-muted-foreground" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-4 pb-4 min-h-0 space-y-4">
+              <div>
+                <label className="text-sm font-medium mb-1 block">Who is this for? *</label>
+                <HybridSubjectCombobox
+                  value={curateCelebrity}
+                  onChange={setCurateCelebrity}
+                  onSelect={(selection) => {
+                    setCurateCelebrity(selection.value);
+                  }}
+                  placeholder="Search celebrity..."
+                  showCustomTopicOption={false}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1 block">Upload Image *</label>
+                <div className="border-2 border-dashed border-slate-700 rounded-lg p-4 text-center hover:border-cyan-500/50 transition-colors">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => setCurateImageFile(e.target.files?.[0] || null)}
+                    className="hidden"
+                    id="curate-image-upload"
+                    data-testid="input-curate-image-file"
                   />
-                ))}
+                  <label htmlFor="curate-image-upload" className="cursor-pointer">
+                    {curateImageFile ? (
+                      <div className="flex items-center justify-center gap-2 text-cyan-600 dark:text-cyan-400">
+                        <Check className="h-4 w-4" />
+                        <span className="text-sm">{curateImageFile.name}</span>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <Upload className="h-8 w-8 mx-auto text-muted-foreground" />
+                        <p className="text-sm text-muted-foreground">Click to upload an image</p>
+                        <p className="text-xs text-muted-foreground">PNG, JPG up to 5MB</p>
+                      </div>
+                    )}
+                  </label>
+                </div>
               </div>
-              {opinionSuggestOptions.length < OPINION_POLL_MAX_OPTIONS && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setOpinionSuggestOptions([...opinionSuggestOptions, { name: "" }])}
-                  className="mt-2 text-cyan-600 dark:text-cyan-400"
-                  data-testid="button-add-opinion-option"
-                >
-                  <Plus className="h-4 w-4 mr-1" />
-                  Add Option
-                </Button>
-              )}
+              <div>
+                <label className="text-sm font-medium mb-1 block">Source/Credit (optional)</label>
+                <Input
+                  value={curateImageSource}
+                  onChange={(e) => setCurateImageSource(e.target.value)}
+                  placeholder="Photographer name or source URL..."
+                  data-testid="input-curate-image-source"
+                />
+                <p className="text-xs text-muted-foreground mt-1">Help us give proper attribution</p>
+              </div>
             </div>
-            <SuggestCategorySelect value={opinionSuggestCategory} onChange={setOpinionSuggestCategory} label="Category" data-testid="select-opinion-category" />
-            <SuggestDurationPicker value={opinionSuggestDuration} onChange={setOpinionSuggestDuration} customDate={opinionSuggestCustomDate} onCustomDateChange={setOpinionSuggestCustomDate} testIdPrefix="opinion" />
-            <div>
-              <label className="text-sm font-medium mb-1 block">Short description (max 140 characters)</label>
-              <Input
-                value={opinionSuggestDescription}
-                onChange={(e) => setOpinionSuggestDescription(e.target.value.slice(0, 140))}
-                placeholder="Brief context for voters..."
-                data-testid="input-opinion-description"
-              />
-              <p className="text-xs text-muted-foreground mt-1">{opinionSuggestDescription.length}/140</p>
+            <div className="border-t border-border/40 px-4 py-3 flex justify-end gap-2">
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setCurateSuggestOpen(false);
+                  setCurateCelebrity("");
+                  setCurateImageFile(null);
+                  setCurateImageSource("");
+                }}
+                data-testid="button-cancel-curate"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleCurateSuggestSubmit}
+                disabled={isSuggestSubmitting || !curateCelebrity || !curateImageFile}
+                className="bg-cyan-500 text-white"
+                data-testid="button-submit-curate"
+              >
+                {isSuggestSubmitting ? "Uploading…" : "Submit Image"}
+              </Button>
             </div>
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setOpinionSuggestOpen(false)} data-testid="button-cancel-opinion-suggest">Cancel</Button>
-            <Button
-              onClick={handleOpinionSuggestSubmit}
-              disabled={isSuggestSubmitting || !opinionSuggestTitle || opinionSuggestOptions.filter(o => o.name.trim()).length < OPINION_POLL_MIN_OPTIONS}
-              className="bg-cyan-500 text-white"
-              data-testid="button-submit-opinion-suggest"
-            >
-              {isSuggestSubmitting ? "Submitting…" : "Submit Poll"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+          </Drawer.Content>
+        </Drawer.Portal>
+      </Drawer.Root>
+      {/* Suggest Opinion Poll Drawer */}
+      <Drawer.Root open={opinionSuggestOpen} onOpenChange={setOpinionSuggestOpen}>
+        <Drawer.Portal>
+          <Drawer.Overlay className="fixed inset-0 z-[70] bg-black/40" />
+          <Drawer.Content className="fixed inset-x-0 bottom-0 z-[70] flex flex-col rounded-t-2xl border-t border-border/50 bg-background max-h-[85dvh]">
+            <div className="mx-auto mt-3 mb-2 h-1.5 w-16 rounded-full bg-muted-foreground/60" />
+            <div className="flex items-center justify-between px-4 pb-2">
+              <div>
+                <Drawer.Title className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <ListChecks className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
+                  Suggest an Opinion Poll
+                </Drawer.Title>
+                <Drawer.Description className="text-xs text-muted-foreground mt-0.5">
+                  Create a multi-option poll for the community to vote on.
+                </Drawer.Description>
+              </div>
+              <button type="button" onClick={() => setOpinionSuggestOpen(false)} className="p-1.5 rounded-lg hover:bg-muted/60 transition-colors" aria-label="Close">
+                <X className="h-4 w-4 text-muted-foreground" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-4 pb-4 min-h-0 space-y-4">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-sm font-medium">Question / Title *</label>
+                  <span className={`text-xs ${opinionSuggestTitle.length > 100 ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>
+                    {opinionSuggestTitle.length}/100
+                  </span>
+                </div>
+                <Input
+                  value={opinionSuggestTitle}
+                  onChange={(e) => setOpinionSuggestTitle(e.target.value.slice(0, 100))}
+                  placeholder="e.g. Who will win Album of the Year?"
+                  data-testid="input-opinion-title"
+                />
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-sm font-medium">Options * (min {OPINION_POLL_MIN_OPTIONS}, max {OPINION_POLL_MAX_OPTIONS})</label>
+                  <span className="text-xs text-muted-foreground">{opinionSuggestOptions.length} options</span>
+                </div>
+                <div className="space-y-2">
+                  {opinionSuggestOptions.map((opt, idx) => (
+                    <OpinionOptionRow
+                      key={idx}
+                      value={opt}
+                      onChange={(next) => {
+                        const arr = [...opinionSuggestOptions];
+                        arr[idx] = next;
+                        setOpinionSuggestOptions(arr);
+                      }}
+                      onRemove={
+                        opinionSuggestOptions.length > OPINION_POLL_MIN_OPTIONS
+                          ? () => setOpinionSuggestOptions(opinionSuggestOptions.filter((_, i) => i !== idx))
+                          : undefined
+                      }
+                      testIdPrefix="opinion"
+                      index={idx}
+                    />
+                  ))}
+                </div>
+                {opinionSuggestOptions.length < OPINION_POLL_MAX_OPTIONS && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setOpinionSuggestOptions([...opinionSuggestOptions, { name: "" }])}
+                    className="mt-2 text-cyan-600 dark:text-cyan-400"
+                    data-testid="button-add-opinion-option"
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    Add Option
+                  </Button>
+                )}
+              </div>
+              <SuggestCategorySelect value={opinionSuggestCategory} onChange={setOpinionSuggestCategory} label="Category" data-testid="select-opinion-category" />
+              <SuggestDurationPicker value={opinionSuggestDuration} onChange={setOpinionSuggestDuration} customDate={opinionSuggestCustomDate} onCustomDateChange={setOpinionSuggestCustomDate} testIdPrefix="opinion" />
+              <div>
+                <label className="text-sm font-medium mb-1 block">Short description (max 140 characters)</label>
+                <Input
+                  value={opinionSuggestDescription}
+                  onChange={(e) => setOpinionSuggestDescription(e.target.value.slice(0, 140))}
+                  placeholder="Brief context for voters..."
+                  data-testid="input-opinion-description"
+                />
+                <p className="text-xs text-muted-foreground mt-1">{opinionSuggestDescription.length}/140</p>
+              </div>
+            </div>
+            <div className="border-t border-border/40 px-4 py-3 flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setOpinionSuggestOpen(false)} data-testid="button-cancel-opinion-suggest">Cancel</Button>
+              <Button
+                onClick={handleOpinionSuggestSubmit}
+                disabled={isSuggestSubmitting || !opinionSuggestTitle || opinionSuggestOptions.filter(o => o.name.trim()).length < OPINION_POLL_MIN_OPTIONS}
+                className="bg-cyan-500 text-white"
+                data-testid="button-submit-opinion-suggest"
+              >
+                {isSuggestSubmitting ? "Submitting…" : "Submit Poll"}
+              </Button>
+            </div>
+          </Drawer.Content>
+        </Drawer.Portal>
+      </Drawer.Root>
       {(["voice", "matchups", "opinion", "value", "induction", "curate"] as const).map((key) => {
         const cfg = VOTE_RULES_STEPS[key];
         return (
