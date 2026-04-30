@@ -296,9 +296,9 @@ export function VoteSnapScrollView({
     dragX.set(compensated);
 
     motionAnimate(dragX, 0, {
-      type: "spring",
-      stiffness: 300,
-      damping: 30,
+      type: "tween",
+      duration: 0.35,
+      ease: [0.32, 0.72, 0, 1],
       onComplete: () => {
         isAnimatingRef.current = false;
       },
@@ -377,9 +377,9 @@ export function VoteSnapScrollView({
     dragX.set(slideDir * -vw);
 
     motionAnimate(dragX, 0, {
-      type: "spring",
-      stiffness: 300,
-      damping: 30,
+      type: "tween",
+      duration: 0.35,
+      ease: [0.32, 0.72, 0, 1],
       onComplete: () => {
         isAnimatingRef.current = false;
       },
