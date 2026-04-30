@@ -17164,7 +17164,16 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       .from(scheduledAgentActions)
       .where(eq(scheduledAgentActions.status, "pending"))
       .orderBy(asc(scheduledAgentActions.executeAfter))
-      .limit(50);
+      .limit(200);
+
+      // True total pending count (the list above is capped for UI display).
+      // Without this, the cohort summary tile would always saturate at the
+      // limit and look frozen.
+      const pendingTotalRow = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(scheduledAgentActions)
+        .where(eq(scheduledAgentActions.status, "pending"));
+      const pendingTotal = pendingTotalRow[0]?.count ?? 0;
 
       const executedCount = await db.select({ count: sql<number>`count(*)` })
         .from(scheduledAgentActions)
@@ -17239,7 +17248,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           active_v2_agents: v2Agents.length,
           active_legacy_agents: activeAgents.length - v2Agents.length,
         },
-        pending_count: pendingActions.length,
+        pending_count: pendingTotal,
         executed_count: executedCount[0]?.count ?? 0,
         failed_count: failedCount[0]?.count ?? 0,
         next_actions: pendingActions,
