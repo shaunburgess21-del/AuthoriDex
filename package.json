@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "cross-env NODE_ENV=development tsx --env-file=.env server/index.ts",
     "build": "npm run check && vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
+    "build:client": "vite build",
     "start": "node scripts/db-deploy-migrate.cjs && cross-env NODE_ENV=production node dist/index.js",
     "db:deploy-migrate": "node scripts/db-deploy-migrate.cjs",
     "check": "tsc",
