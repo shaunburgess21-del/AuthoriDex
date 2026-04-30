@@ -58,6 +58,8 @@ import {
   Save,
   Inbox,
   Layers,
+  Download,
+  ExternalLink,
 } from "lucide-react";
 import { AdminUnderratedOverrated } from "@/components/admin/AdminUnderratedOverrated";
 import { AdminCurateProfile } from "@/components/admin/AdminCurateProfile";
@@ -1129,6 +1131,7 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
 // scheduled for a follow-up refactor.
 
 export default function AdminDashboard() {
+  const BRAND_ASSET_PNG_SIZES = [256, 512, 1024, 2048] as const;
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { user, isAdmin, profileLoading, profile } = useAuth();
@@ -1140,6 +1143,43 @@ export default function AdminDashboard() {
     sessionStorage.setItem("admin_active_section", section);
     setActiveSectionRaw(section);
   };
+
+  const downloadBrandLogoSvg = useCallback(() => {
+    const link = document.createElement("a");
+    link.href = "/voxdex-logo.svg";
+    link.download = "voxdex-logo.svg";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  }, []);
+
+  const downloadBrandLogoPng = useCallback((size: number) => {
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d");
+
+    if (!ctx) {
+      toast.error("PNG export unavailable in this browser");
+      return;
+    }
+
+    const img = new Image();
+    img.onload = () => {
+      ctx.clearRect(0, 0, size, size);
+      ctx.drawImage(img, 0, 0, size, size);
+      const link = document.createElement("a");
+      link.href = canvas.toDataURL("image/png");
+      link.download = `voxdex-logo-${size}px.png`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    };
+    img.onerror = () => {
+      toast.error("Failed to render logo for PNG download");
+    };
+    img.src = "/voxdex-logo.svg";
+  }, []);
 
   const [votingSubTab, setVotingSubTabRaw] = useState(() => sessionStorage.getItem("admin_voting_tab") || "polls");
   const setVotingSubTab = (tab: string) => { sessionStorage.setItem("admin_voting_tab", tab); setVotingSubTabRaw(tab); };
@@ -5560,6 +5600,52 @@ export default function AdminDashboard() {
                 </Button>
               </div>
             </div>
+
+            <Card data-testid="card-brand-assets">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Download className="h-5 w-5 text-cyan-500" />
+                  Brand Assets
+                </CardTitle>
+                <CardDescription>Download the current VoxDex logo in vector or high-resolution PNG formats.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    onClick={downloadBrandLogoSvg}
+                    data-testid="button-download-logo-svg"
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Download SVG
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => window.open("/logo-download.html", "_blank", "noopener,noreferrer")}
+                    data-testid="button-open-logo-download-page"
+                  >
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    Open Download Page
+                  </Button>
+                </div>
+
+                <div>
+                  <p className="text-sm text-muted-foreground mb-2">PNG quick downloads</p>
+                  <div className="flex flex-wrap gap-2">
+                    {BRAND_ASSET_PNG_SIZES.map((size) => (
+                      <Button
+                        key={size}
+                        variant="secondary"
+                        onClick={() => downloadBrandLogoPng(size)}
+                        data-testid={`button-download-logo-png-${size}`}
+                      >
+                        <Download className="h-4 w-4 mr-2" />
+                        PNG {size}px
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
             {engineHealth && (
               <Card data-testid="card-engine-health">
