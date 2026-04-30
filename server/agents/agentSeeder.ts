@@ -197,9 +197,12 @@ function buildSimulationProfile(seed: typeof V2_HANDLES[number]): AgentSimulatio
     minStake: large ? 200 : band === "liquidity" ? 40 : 75,
     maxStake: large ? 950 : band === "sharp" ? 380 : band === "noisy" ? 300 : 220,
     weeklyVoteCap: band === "liquidity" ? 7 : band === "noisy" ? 6 : band === "sharp" ? 3 : 5,
-    weeklyCommentCap: band === "sharp" ? 1 : band === "whale" ? 1 : band === "liquidity" ? 1 : 2,
+    // Comment caps deliberately conservative — agents post one comment per
+    // week max in this cohort. We're optimising for quality (LLM-generated,
+    // context-aware) over volume.
+    weeklyCommentCap: 1,
     dailyVoteChance: band === "liquidity" ? 0.78 : band === "noisy" ? 0.72 : band === "sharp" ? 0.38 : 0.56,
-    dailyCommentChance: band === "noisy" ? 0.28 : band === "casual" ? 0.18 : 0.10,
+    dailyCommentChance: band === "noisy" ? 0.14 : band === "casual" ? 0.08 : 0.05,
     commentStyle: band === "sharp" ? "analytical" : band === "noisy" ? "skeptical" : band === "liquidity" ? "short" : "casual",
     bankrollProfile: large ? "large" : band === "liquidity" ? "small" : "normal",
   };

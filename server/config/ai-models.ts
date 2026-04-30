@@ -4,6 +4,7 @@ const MODEL_ENV_BY_SCOPE = {
   profileAbout: "PROFILE_ABOUT_MODEL",
   whyTrending: "WHY_TRENDING_MODEL",
   agentRationale: "AGENT_RATIONALE_MODEL",
+  agentComments: "AGENT_COMMENTS_MODEL",
   marketResolver: "MARKET_RESOLVER_MODEL",
   worldMarkets: "WORLD_MARKETS_MODEL",
   aiDrafts: "AI_DRAFT_MODEL",

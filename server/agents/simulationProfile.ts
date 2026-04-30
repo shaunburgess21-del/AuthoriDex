@@ -40,7 +40,7 @@ const DEFAULT_SIMULATION_PROFILE: AgentSimulationProfile = {
   weeklyVoteCap: 4,
   weeklyCommentCap: 1,
   dailyVoteChance: 0.55,
-  dailyCommentChance: 0.18,
+  dailyCommentChance: 0.08,
   commentStyle: "casual",
   bankrollProfile: "normal",
 };
