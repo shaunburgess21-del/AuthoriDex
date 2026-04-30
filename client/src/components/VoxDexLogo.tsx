@@ -23,7 +23,7 @@ export function VoxDexLogo({ size = 32, variant = "default", className = "" }: V
         viewBox="0 0 100 100"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
-        style={{ width: size * 0.6, height: size * 0.6 }}
+        style={{ width: size * 0.84, height: size * 0.84 }}
       >
         <path
           d="M50 12L82 40L50 58L18 40L50 12Z"
