@@ -252,11 +252,20 @@ function MultiMarketCard({ market, entries, participants, timeLabel, onNavigate,
       const yesStake = Number(e.totalStake || 0);
       const noStake = Number(e.noStake || 0);
       const entryPool = yesStake + noStake;
+      // Per-entry parimutuel multipliers (matches binary card + detail page).
+      // 0.95 haircut keeps the card and the detail page in agreement.
+      // computePayoutMultiplier already falls back to DEFAULT_PAYOUT_MULTIPLIER
+      // when pool or stake is 0, so no extra null-guarding is needed — empty
+      // entries show "Yes 1.9x" / "No 1.9x" exactly like the binary card.
+      const yesMultiplier = +(computePayoutMultiplier(entryPool, yesStake) * 0.95).toFixed(1);
+      const noMultiplier = +(computePayoutMultiplier(entryPool, noStake) * 0.95).toFixed(1);
       return {
         ...e,
         pct: Math.round((entryPool / totalEntryStake) * 100),
         yesPct: entryPool > 0 ? Math.round((yesStake / entryPool) * 100) : 50,
         noPct: entryPool > 0 ? 100 - Math.round((yesStake / entryPool) * 100) : 50,
+        yesMultiplier,
+        noMultiplier,
       };
     })
     .sort((a: any, b: any) => b.pct - a.pct);
@@ -297,19 +306,19 @@ function MultiMarketCard({ market, entries, participants, timeLabel, onNavigate,
             const hasBet = !!entryBet && userBetResult?.result === "pending";
             const betAccent = entryBet?.direction === "no" ? "#FF0000" : "#00C853";
             return (
-              <div key={entry.id} className="flex items-center gap-2">
+              <div key={entry.id} className="flex items-center gap-1.5 md:gap-2">
                 {entry.imageUrl ? (
-                  <Avatar className="h-9 w-9 shrink-0 rounded-md">
+                  <Avatar className="h-8 w-8 md:h-9 md:w-9 shrink-0 rounded-md">
                     <AvatarImage src={entry.imageUrl} alt={entry.label} className="object-cover" />
                     <AvatarFallback className="text-[11px] rounded-md">{entry.label?.[0]}</AvatarFallback>
                   </Avatar>
                 ) : (
-                  <div className="h-9 w-9 shrink-0 rounded-md bg-muted/40 flex items-center justify-center">
+                  <div className="h-8 w-8 md:h-9 md:w-9 shrink-0 rounded-md bg-muted/40 flex items-center justify-center">
                     <span className="text-[11px] font-semibold text-muted-foreground">{entry.label?.[0]}</span>
                   </div>
                 )}
-                <span className="text-[14px] font-medium truncate flex-1 min-w-0">{entry.label}</span>
-                <span className="text-[14px] font-mono font-semibold text-muted-foreground w-10 text-right shrink-0">{entry.pct}%</span>
+                <span className="text-[13px] md:text-[14px] font-medium truncate flex-1 min-w-0">{entry.label}</span>
+                <span className="text-[12px] md:text-[14px] font-mono font-semibold text-muted-foreground tabular-nums shrink-0">{entry.pct}%</span>
                 {hasBet ? (
                   <Link
                     href={`/markets/${market.slug}`}
@@ -322,20 +331,20 @@ function MultiMarketCard({ market, entries, participants, timeLabel, onNavigate,
                     <span className="text-[10px] text-muted-foreground tabular-nums">{entryBet.stakeAmount.toLocaleString("en-US")}</span>
                   </Link>
                 ) : !isMarketClosed ? (
-                  <div className="flex gap-1.5 shrink-0">
+                  <div className="flex gap-1 md:gap-1.5 shrink-0">
                     <button
-                      className="px-3 py-2 text-xs font-semibold rounded-md bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20 transition-colors"
+                      className="px-2 md:px-2.5 py-1.5 md:py-2 text-[11px] md:text-xs font-semibold rounded-md bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20 transition-colors tabular-nums"
                       onClick={(e) => { e.stopPropagation(); onNavigate(market.slug, entry.id, 'yes'); }}
                       data-testid={`button-yes-${entry.id}`}
                     >
-                      Yes
+                      Yes {entry.yesMultiplier}x
                     </button>
                     <button
-                      className="px-3 py-2 text-xs font-semibold rounded-md bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20 transition-colors"
+                      className="px-2 md:px-2.5 py-1.5 md:py-2 text-[11px] md:text-xs font-semibold rounded-md bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20 transition-colors tabular-nums"
                       onClick={(e) => { e.stopPropagation(); onNavigate(market.slug, entry.id, 'no'); }}
                       data-testid={`button-no-${entry.id}`}
                     >
-                      No
+                      No {entry.noMultiplier}x
                     </button>
                   </div>
                 ) : (
