@@ -103,6 +103,7 @@ export function VoteSnapScrollView({
     startTime: number;
     locked: "h" | "v" | null;
   } | null>(null);
+  const hSwipeOccurredRef = useRef(false);
   const isAnimatingRef = useRef(false);
   const positionMemoryRef = useRef<Map<string, number>>(new Map());
   const columnScrollRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -273,8 +274,20 @@ export function VoteSnapScrollView({
       }
     };
 
+    const suppressClick = (e: Event) => {
+      if (hSwipeOccurredRef.current) {
+        e.preventDefault();
+        e.stopPropagation();
+        hSwipeOccurredRef.current = false;
+      }
+    };
+
     el.addEventListener("touchmove", handleTouchMove, { passive: false });
-    return () => el.removeEventListener("touchmove", handleTouchMove);
+    el.addEventListener("click", suppressClick, true);
+    return () => {
+      el.removeEventListener("touchmove", handleTouchMove);
+      el.removeEventListener("click", suppressClick, true);
+    };
   }, [dragX, open]);
 
   // ── Horizontal commit / spring-back ───────────────────────────────────
@@ -318,7 +331,6 @@ export function VoteSnapScrollView({
   // ── Horizontal pan: touchstart / touchend ─────────────────────────────
   const handleHPanTouchStart = useCallback((e: React.TouchEvent) => {
     if (isAnimatingRef.current) return;
-    if (isInteractiveTarget(e.target)) return;
     hPanRef.current = {
       startX: e.touches[0].clientX,
       startY: e.touches[0].clientY,
@@ -331,6 +343,9 @@ export function VoteSnapScrollView({
     const pan = hPanRef.current;
     hPanRef.current = null;
     if (!pan || pan.locked !== "h") return;
+
+    hSwipeOccurredRef.current = true;
+    requestAnimationFrame(() => { hSwipeOccurredRef.current = false; });
 
     const dx = e.changedTouches[0].clientX - pan.startX;
     const elapsed = Math.max(performance.now() - pan.startTime, 1);
