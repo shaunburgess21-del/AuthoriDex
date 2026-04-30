@@ -2569,9 +2569,9 @@ export default function PredictPage() {
                                   backed <span className="font-semibold">{item.choiceLabel}</span> on {item.marketTitle}
                                 </p>
                                 <p className="mt-0.5 text-xs text-muted-foreground">
-                                  {item.stakeAmount.toLocaleString("en-US")} credits{item.confidence != null ? ` • ${(item.confidence * 100).toFixed(0)}% confidence` : ""}
+                                  {item.stakeAmount.toLocaleString("en-US")} credits{!item.isAgent && item.confidence != null ? ` • ${(item.confidence * 100).toFixed(0)}% confidence` : ""}
                                 </p>
-                                {item.rationale && !item.isAgent && (
+                                {item.rationale && (
                                   <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
                                     "{item.rationale}"
                                   </p>

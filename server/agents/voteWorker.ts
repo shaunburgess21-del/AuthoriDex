@@ -12,18 +12,38 @@ import {
   matchups,
   trendingPolls,
   trendingPollVotes,
+  opinionPolls,
+  opinionPollOptions,
+  opinionPollVotes,
   sentimentVotes,
   trendingPeople,
+  userVotes,
+  celebrityMetrics,
 } from "@shared/schema";
-import { eq, and, sql, gte, count, desc } from "drizzle-orm";
+import { eq, and, sql, gte, count, desc, inArray } from "drizzle-orm";
 import { log } from "../log";
 import { gamificationService } from "../services/gamification";
+import { getSimulationProfile, type AgentSimulationProfile } from "./simulationProfile";
+import { recomputeCelebrityMetrics } from "../services/celebrity-metrics-recompute";
 
-const WEEKLY_VOTE_CAP = 3;
-const DAILY_SKIP_PROBABILITY = 0.50;
 const BOOT_DELAY_MS = 180_000; // 3 minutes after boot
 
-type VoteType = "matchup" | "sentiment_poll" | "underrated_overrated";
+type VoteType =
+  | "matchup"
+  | "sentiment_poll"
+  | "opinion_poll"
+  | "underrated_overrated"
+  | "approval_rating";
+
+// When approval_rating is the next type in the shuffled rotation, only run it
+// this fraction of the time. Keeps platform-wide rating volume to roughly
+// 20–30 ratings per week across the whole agent cohort so we add some life
+// without shifting leaderboard averages.
+const APPROVAL_RATING_TRIGGER_CHANCE = 0.2;
+
+// Limit candidate celebrities to the top of the leaderboard so agent ratings
+// land on relevant figures, not obscure long-tail people.
+const APPROVAL_RATING_CANDIDATE_LIMIT = 120;
 
 interface AgentVoteResult {
   agentName: string;
@@ -77,10 +97,35 @@ async function countAgentVotesThisWeek(userId: string): Promise<number> {
       )
     );
 
+  const [opinionCount] = await db
+    .select({ c: count() })
+    .from(opinionPollVotes)
+    .where(
+      and(
+        eq(opinionPollVotes.userId, userId),
+        gte(opinionPollVotes.createdAt, monday)
+      )
+    );
+
+  // Approval ratings (1–5 stars) live in user_votes; the unique constraint
+  // means upserts can move votedAt forward, so anything with votedAt this
+  // week is "fresh activity" for cap accounting.
+  const [approvalCount] = await db
+    .select({ c: count() })
+    .from(userVotes)
+    .where(
+      and(
+        eq(userVotes.userId, userId),
+        gte(userVotes.votedAt, monday)
+      )
+    );
+
   return (
     Number(matchupCount?.c || 0) +
     Number(pollCount?.c || 0) +
-    Number(sentimentCount?.c || 0)
+    Number(sentimentCount?.c || 0) +
+    Number(opinionCount?.c || 0) +
+    Number(approvalCount?.c || 0)
   );
 }
 
@@ -147,7 +192,65 @@ function decideMatchup(
   if (agent.contrarianism > 0.6) {
     return Math.random() < agent.contrarianism ? minority : majority;
   }
-  return Math.random() < aRatio ? "option_b" : "option_a";
+  return Math.random() < aRatio ? "option_a" : "option_b";
+}
+
+// ── Opinion poll voting ────────────────────────────────────────────────
+
+async function getEligibleOpinionPolls(userId: string) {
+  const active = await db
+    .select({
+      id: opinionPolls.id,
+      title: opinionPolls.title,
+      category: opinionPolls.category,
+    })
+    .from(opinionPolls)
+    .where(eq(opinionPolls.visibility, "live"));
+
+  if (!active.length) return [];
+
+  const alreadyVoted = await db
+    .select({ pollId: opinionPollVotes.pollId })
+    .from(opinionPollVotes)
+    .where(eq(opinionPollVotes.userId, userId));
+  const votedSet = new Set(alreadyVoted.map((v) => v.pollId));
+  const pollIds = active.map((poll) => poll.id);
+
+  const options = await db
+    .select({
+      id: opinionPollOptions.id,
+      pollId: opinionPollOptions.pollId,
+      name: opinionPollOptions.name,
+      seedCount: opinionPollOptions.seedCount,
+    })
+    .from(opinionPollOptions)
+    .where(inArray(opinionPollOptions.pollId, pollIds));
+
+  return active
+    .filter((poll) => !votedSet.has(poll.id))
+    .map((poll) => ({
+      ...poll,
+      options: options.filter((option) => option.pollId === poll.id),
+    }))
+    .filter((poll) => poll.options.length > 0);
+}
+
+function decideOpinionPoll(
+  agent: { contrarianism: number },
+  options: Array<{ id: string; name: string; seedCount: number }>,
+): { id: string; name: string } {
+  if (agent.contrarianism > 0.65) {
+    const sorted = [...options].sort((a, b) => a.seedCount - b.seedCount);
+    return Math.random() < agent.contrarianism ? sorted[0] : sorted[Math.floor(Math.random() * sorted.length)];
+  }
+
+  const total = options.reduce((sum, option) => sum + Math.max(1, option.seedCount), 0);
+  let roll = Math.random() * total;
+  for (const option of options) {
+    roll -= Math.max(1, option.seedCount);
+    if (roll <= 0) return option;
+  }
+  return options[0];
 }
 
 // ── Sentiment poll (trending poll) voting ──────────────────────────────
@@ -258,9 +361,102 @@ function decideUnderratedOverrated(
   return Math.random() < 0.55 ? "underrated" : "overrated";
 }
 
+// ── Approval rating (1–5) voting ───────────────────────────────────────
+
+interface RatingCandidate {
+  id: string;
+  name: string;
+  category: string | null;
+  trendScore: number;
+  currentAvg: number | null;
+}
+
+async function getEligiblePeopleForApprovalRating(userId: string): Promise<RatingCandidate[]> {
+  const alreadyRated = await db
+    .select({ personId: userVotes.personId })
+    .from(userVotes)
+    .where(eq(userVotes.userId, userId));
+  const ratedSet = new Set(alreadyRated.map((row) => row.personId));
+
+  const rows = await db
+    .select({
+      id: trendingPeople.id,
+      name: trendingPeople.name,
+      category: trendingPeople.category,
+      trendScore: trendingPeople.trendScore,
+      currentAvg: celebrityMetrics.approvalAvgRating,
+    })
+    .from(trendingPeople)
+    .leftJoin(celebrityMetrics, eq(celebrityMetrics.celebrityId, trendingPeople.id))
+    .orderBy(desc(trendingPeople.trendScore))
+    .limit(APPROVAL_RATING_CANDIDATE_LIMIT);
+
+  return rows
+    .filter((row) => !ratedSet.has(row.id))
+    .map((row) => ({
+      id: row.id,
+      name: row.name,
+      category: row.category ?? null,
+      trendScore: row.trendScore ?? 0,
+      currentAvg: row.currentAvg != null ? Number(row.currentAvg) : null,
+    }));
+}
+
+function chooseRatingTarget(
+  candidates: RatingCandidate[],
+  profile: AgentSimulationProfile,
+): RatingCandidate {
+  const preferred = candidates.filter(
+    (candidate) => candidate.category && profile.favoriteCategories.includes(candidate.category),
+  );
+  // 70% specialty-aligned, 30% open field — matches our voting/commenting bias.
+  const pool = preferred.length > 0 && Math.random() < 0.7 ? preferred : candidates;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+function decideApprovalRating(
+  agent: { contrarianism: number; prestigeBias: number },
+  profile: AgentSimulationProfile,
+  person: RatingCandidate,
+): number {
+  const seed = person.currentAvg ?? 3;
+  let target = seed;
+
+  // Mild contrarian pull toward the opposite end of crowd consensus.
+  if (agent.contrarianism > 0.6) {
+    const flip = seed >= 3 ? -1.2 : 1.2;
+    target = seed + flip * (agent.contrarianism - 0.5);
+  }
+
+  // High-fame people tilt slightly higher for prestige-leaning agents.
+  if (agent.prestigeBias > 0.55 && person.trendScore > 6000) {
+    target += 0.3;
+  }
+
+  // Persona-band variance: how far this agent is willing to drift from the
+  // crowd average. Sharp/liquidity stay close; noisy roams wide.
+  const variance =
+    profile.personaBand === "sharp" || profile.personaBand === "liquidity"
+      ? 0.4
+      : profile.personaBand === "casual"
+        ? 0.8
+        : profile.personaBand === "whale"
+          ? 0.6
+          : 1.4; // noisy
+  const noise = (Math.random() - 0.5) * 2 * variance;
+  let raw = target + noise;
+
+  // Noisy band occasionally splashes an extreme rating for colour.
+  if (profile.personaBand === "noisy" && Math.random() < 0.25) {
+    raw = Math.random() < 0.5 ? 1 : 5;
+  }
+
+  return Math.max(1, Math.min(5, Math.round(raw)));
+}
+
 // ── Main sweep ─────────────────────────────────────────────────────────
 
-async function runVoteSweep(): Promise<AgentVoteResult[]> {
+export async function runVoteSweep(): Promise<AgentVoteResult[]> {
   const agents = await db
     .select()
     .from(agentConfigs)
@@ -271,17 +467,25 @@ async function runVoteSweep(): Promise<AgentVoteResult[]> {
     return [];
   }
 
+  // Shuffle so the same agents don't always claim the first eligible
+  // matchup/poll each sweep.
+  for (let i = agents.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [agents[i], agents[j]] = [agents[j], agents[i]];
+  }
+
   const results: AgentVoteResult[] = [];
 
   for (const agent of agents) {
     try {
       const weeklyCount = await countAgentVotesThisWeek(agent.userId);
-      if (weeklyCount >= WEEKLY_VOTE_CAP) {
-        log(`[VoteWorker] ${agent.displayName} at weekly cap (${weeklyCount}/${WEEKLY_VOTE_CAP}), skipping`);
+      const simulation = getSimulationProfile(agent.simulationProfile);
+      if (weeklyCount >= simulation.weeklyVoteCap) {
+        log(`[VoteWorker] ${agent.displayName} at weekly cap (${weeklyCount}/${simulation.weeklyVoteCap}), skipping`);
         continue;
       }
 
-      if (Math.random() < DAILY_SKIP_PROBABILITY) {
+      if (Math.random() > simulation.dailyVoteChance) {
         log(`[VoteWorker] ${agent.displayName} randomly skipped today`);
         continue;
       }
@@ -290,7 +494,13 @@ async function runVoteSweep(): Promise<AgentVoteResult[]> {
       const prestigeBias = Number(agent.prestigeBias);
       const specialties = agent.specialties || [];
 
-      const voteTypes: VoteType[] = ["matchup", "sentiment_poll", "underrated_overrated"];
+      const voteTypes: VoteType[] = [
+        "matchup",
+        "sentiment_poll",
+        "opinion_poll",
+        "underrated_overrated",
+        "approval_rating",
+      ];
       for (let i = voteTypes.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [voteTypes[i], voteTypes[j]] = [voteTypes[j], voteTypes[i]];
@@ -398,6 +608,50 @@ async function runVoteSweep(): Promise<AgentVoteResult[]> {
           });
           voted = true;
           log(`[VoteWorker] ${agent.displayName} voted "${choice}" on poll "${poll.headline}" (+${xpAwarded} XP)`);
+        } else if (voteType === "opinion_poll") {
+          const eligible = await getEligibleOpinionPolls(agent.userId);
+          if (!eligible.length) continue;
+
+          const poll = eligible[Math.floor(Math.random() * eligible.length)];
+          const choice = decideOpinionPoll({ contrarianism }, poll.options);
+
+          const inserted = await db.transaction(async (tx) => {
+            const [row] = await tx.insert(opinionPollVotes).values({
+              pollId: poll.id,
+              optionId: choice.id,
+              userId: agent.userId,
+            }).onConflictDoNothing().returning({ id: opinionPollVotes.id });
+            if (!row) return false;
+            await tx
+              .update(profiles)
+              .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
+              .where(eq(profiles.id, agent.userId));
+            return true;
+          });
+          if (!inserted) continue;
+
+          let xpAwarded = 0;
+          try {
+            const xpResult = await gamificationService.awardXp(
+              agent.userId,
+              "vote_opinion",
+              `opinion_poll_${poll.id}_${agent.userId}`,
+              { pollId: poll.id, optionId: choice.id, agent: true }
+            );
+            xpAwarded = xpResult.xpAwarded;
+          } catch (e) {
+            log(`[VoteWorker] XP award failed for ${agent.displayName}: ${e}`);
+          }
+
+          results.push({
+            agentName: agent.displayName,
+            voteType: "opinion_poll",
+            target: poll.title,
+            choice: choice.name,
+            xpAwarded,
+          });
+          voted = true;
+          log(`[VoteWorker] ${agent.displayName} voted "${choice.name}" on opinion poll "${poll.title}" (+${xpAwarded} XP)`);
         } else if (voteType === "underrated_overrated") {
           const eligible = await getEligiblePeopleForSentiment(agent.userId);
           if (!eligible.length) continue;
@@ -448,6 +702,63 @@ async function runVoteSweep(): Promise<AgentVoteResult[]> {
           });
           voted = true;
           log(`[VoteWorker] ${agent.displayName} voted "${choice}" on ${person.name} (+${xpAwarded} XP)`);
+        } else if (voteType === "approval_rating") {
+          // Sparing trigger: even when this type is up next, only fire a small
+          // fraction of the time so total platform-wide approval volume stays
+          // well below "moves the needle" territory.
+          if (Math.random() >= APPROVAL_RATING_TRIGGER_CHANCE) continue;
+
+          const simulation = getSimulationProfile(agent.simulationProfile);
+          const candidates = await getEligiblePeopleForApprovalRating(agent.userId);
+          if (!candidates.length) continue;
+
+          const person = chooseRatingTarget(candidates, simulation);
+          const rating = decideApprovalRating(
+            { contrarianism, prestigeBias },
+            simulation,
+            person,
+          );
+
+          const inserted = await db.transaction(async (tx) => {
+            const [row] = await tx
+              .insert(userVotes)
+              .values({
+                userId: agent.userId,
+                personId: person.id,
+                personName: person.name,
+                rating,
+              })
+              .onConflictDoNothing({
+                target: [userVotes.userId, userVotes.personId],
+              })
+              .returning({ id: userVotes.id });
+            if (!row) return false;
+            await tx
+              .update(profiles)
+              .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
+              .where(eq(profiles.id, agent.userId));
+            return true;
+          });
+          if (!inserted) continue;
+
+          // Refresh the displayed leaderboard aggregates so the rating shows
+          // up immediately. Failure here doesn't roll back the rating —
+          // the next celebrity-metrics nightly recompute will fix it.
+          try {
+            await recomputeCelebrityMetrics(person.id);
+          } catch (recomputeErr) {
+            log(`[VoteWorker] Approval recompute failed for ${person.id}: ${recomputeErr}`);
+          }
+
+          results.push({
+            agentName: agent.displayName,
+            voteType: "approval_rating",
+            target: person.name,
+            choice: `${rating}/5`,
+            xpAwarded: 0,
+          });
+          voted = true;
+          log(`[VoteWorker] ${agent.displayName} rated ${person.name} ${rating}/5 (band=${simulation.personaBand}, crowd=${person.currentAvg ?? "-"})`);
         }
       }
 

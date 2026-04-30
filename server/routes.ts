@@ -5900,6 +5900,7 @@ Only return the JSON object.`;
 
       if (baseProfile.isAgent) {
         const { agentConfigs, agentPerformance } = await import("@shared/schema");
+        const { isV2SimulationProfile } = await import("./agents/simulationProfile");
 
         const [agentConfig] = await db
           .select({
@@ -5908,12 +5909,17 @@ Only return the JSON object.`;
             bio: agentConfigs.bio,
             archetype: agentConfigs.archetype,
             specialties: agentConfigs.specialties,
+            simulationProfile: agentConfigs.simulationProfile,
           })
           .from(agentConfigs)
           .where(eq(agentConfigs.userId, baseProfile.id))
           .limit(1);
 
-        if (agentConfig) {
+        // V2 (simulation) agents must look like normal users on the public
+        // profile. We deliberately do not surface internal labels (archetype,
+        // bio, specialties) for them. Legacy agents keep their old payload
+        // so admin/QA tools still work during the transition.
+        if (agentConfig && !isV2SimulationProfile(agentConfig.simulationProfile)) {
           const [latestPerformance] = await db
             .select({
               totalEntered: agentPerformance.totalEntered,
@@ -6014,10 +6020,24 @@ Only return the JSON object.`;
       const limit = Math.min(Number(req.query.limit) || 50, 100);
       const offset = Number(req.query.offset) || 0;
 
-      const [user] = await db.select({ id: profiles.id, isPublic: profiles.isPublic })
+      const [user] = await db.select({ id: profiles.id, isPublic: profiles.isPublic, isAgent: profiles.isAgent })
         .from(profiles).where(eq(profiles.username, username)).limit(1);
       if (!user) return res.status(404).json({ error: "User not found" });
       if (!user.isPublic) return res.status(403).json({ error: "Profile is private" });
+
+      const { getSimulationProfile, shouldShowPublicConfidence } = await import("./agents/simulationProfile");
+      let agentSimulationProfile: import("./agents/simulationProfile").AgentSimulationProfile | null = null;
+      if (user.isAgent) {
+        const { agentConfigs: agentConfigsTable } = await import("@shared/schema");
+        const [agentRow] = await db
+          .select({ simulationProfile: agentConfigsTable.simulationProfile })
+          .from(agentConfigsTable)
+          .where(eq(agentConfigsTable.userId, user.id))
+          .limit(1);
+        if (agentRow) {
+          agentSimulationProfile = getSimulationProfile(agentRow.simulationProfile);
+        }
+      }
 
       const statusFilter = tab === "active"
         ? eq(marketBets.status, "active")
@@ -6081,7 +6101,14 @@ Only return the JSON object.`;
           payout,
           pnl,
           status: b.betStatus,
-          confidence: b.confidence ? Number(b.confidence) : meta?.confidence ?? null,
+          confidence: (() => {
+            const rawConfidence = b.confidence ? Number(b.confidence) : meta?.confidence ?? null;
+            if (!user.isAgent) return rawConfidence;
+            if (rawConfidence == null || agentSimulationProfile == null) return null;
+            return shouldShowPublicConfidence(agentSimulationProfile, `bet:${b.betId}`)
+              ? rawConfidence
+              : null;
+          })(),
           thesis: meta?.thesis ?? null,
           predictedScore: meta?.predictedScore ?? null,
           placedAt: b.betCreatedAt,
@@ -14794,7 +14821,10 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       const marketIds = Array.from(new Set(recentBets.map((bet) => bet.marketId)));
       const entryIds = Array.from(new Set(recentBets.map((bet) => bet.entryId)));
 
-      const [profileRows, marketRows, entryRows] = await Promise.all([
+      const { getSimulationProfile, shouldShowPublicConfidence } = await import("./agents/simulationProfile");
+      const { agentConfigs: agentConfigsTable } = await import("@shared/schema");
+
+      const [profileRows, marketRows, entryRows, agentRows] = await Promise.all([
         db
           .select({
             id: profiles.id,
@@ -14823,11 +14853,21 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           })
           .from(marketEntries)
           .where(inArray(marketEntries.id, entryIds)),
+        db
+          .select({
+            userId: agentConfigsTable.userId,
+            simulationProfile: agentConfigsTable.simulationProfile,
+          })
+          .from(agentConfigsTable)
+          .where(inArray(agentConfigsTable.userId, userIds)),
       ]);
 
       const profileMap = new Map(profileRows.map((profile) => [profile.id, profile]));
       const marketMap = new Map(marketRows.map((market) => [market.id, market]));
       const entryMap = new Map(entryRows.map((entry) => [entry.id, entry]));
+      const agentSimulationMap = new Map(
+        agentRows.map((row) => [row.userId, getSimulationProfile(row.simulationProfile)] as const),
+      );
 
       const activity = recentBets
         .map((bet) => {
@@ -14846,11 +14886,20 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
               ? String((bet.betMetadata as Record<string, unknown>).rationale || "").trim()
               : null;
 
+          const rawConfidence = bet.confidence ? Number(bet.confidence) : null;
+          let displayConfidence: number | null = rawConfidence;
+          if (profile?.isAgent) {
+            const sim = agentSimulationMap.get(bet.userId);
+            displayConfidence = sim && rawConfidence != null && shouldShowPublicConfidence(sim, `bet:${bet.id}`)
+              ? rawConfidence
+              : null;
+          }
+
           return {
             id: bet.id,
             createdAt: bet.createdAt,
             stakeAmount: bet.stakeAmount,
-            confidence: bet.confidence ? Number(bet.confidence) : null,
+            confidence: displayConfidence,
             choiceLabel: entry.label,
             marketId: market.id,
             marketTitle: market.title,
@@ -16884,16 +16933,26 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
 
   app.post("/api/admin/agents/seed", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const { seedAgents } = await import("./agents/agentSeeder");
+      const { archiveLegacyAgents, seedAgents } = await import("./agents/agentSeeder");
+      const archive = req.body?.archiveLegacy === false
+        ? { archived: 0, hiddenProfiles: 0, skippedV2: 0, skippedActions: 0 }
+        : await archiveLegacyAgents({ hideProfiles: req.body?.hideLegacyProfiles !== false });
       const result = await seedAgents();
 
-      await db.update(profiles)
-        .set({ avatarUrl: null })
-        .where(eq(profiles.isAgent, true));
-
-      res.json({ ok: true, ...result });
+      res.json({ ok: true, archive, ...result });
     } catch (err: any) {
       console.error("[AgentAdmin] Seed failed:", err);
+      res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
+    }
+  });
+
+  app.post("/api/admin/agents/archive-legacy", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { archiveLegacyAgents } = await import("./agents/agentSeeder");
+      const result = await archiveLegacyAgents({ hideProfiles: req.body?.hideProfiles !== false });
+      res.json({ ok: true, ...result });
+    } catch (err: any) {
+      console.error("[AgentAdmin] Archive failed:", err);
       res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
     }
   });
@@ -16905,6 +16964,148 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       res.json({ ok: true, ...result });
     } catch (err: any) {
       console.error("[AgentAdmin] Run failed:", err);
+      res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
+    }
+  });
+
+  app.post("/api/admin/agents/run-comments", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { runCommentSweep } = await import("./agents/commentWorker");
+      const result = await runCommentSweep();
+      res.json({ ok: true, ...result });
+    } catch (err: any) {
+      console.error("[AgentAdmin] Comment run failed:", err);
+      res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
+    }
+  });
+
+  app.post("/api/admin/agents/run-votes", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { runVoteSweep } = await import("./agents/voteWorker");
+      const result = await runVoteSweep();
+      res.json({ ok: true, votes: result });
+    } catch (err: any) {
+      console.error("[AgentAdmin] Vote run failed:", err);
+      res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
+    }
+  });
+
+  // POST /api/admin/agents/:agentId/toggle-active - Pause or resume a single
+  // agent's simulation activity without banning their profile.
+  // Body: { active: boolean }. Setting active=false also skips any pending
+  // scheduled actions so we don't fire stale bets after a resume.
+  app.post("/api/admin/agents/:agentId/toggle-active", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { agentConfigs, scheduledAgentActions } = await import("@shared/schema");
+      const { agentId } = req.params;
+
+      if (typeof req.body?.active !== "boolean") {
+        return sendBadRequest(res, "Body must include { active: boolean }");
+      }
+      const desired: boolean = req.body.active;
+
+      const [existing] = await db
+        .select({ id: agentConfigs.id, isActive: agentConfigs.isActive, displayName: agentConfigs.displayName })
+        .from(agentConfigs)
+        .where(eq(agentConfigs.id, agentId))
+        .limit(1);
+
+      if (!existing) {
+        return res.status(404).json({ error: "Agent not found" });
+      }
+
+      const now = new Date();
+      let skippedPending = 0;
+
+      await db.transaction(async (tx) => {
+        await tx
+          .update(agentConfigs)
+          .set({ isActive: desired, updatedAt: now })
+          .where(eq(agentConfigs.id, agentId));
+
+        if (!desired) {
+          const skipped = await tx
+            .update(scheduledAgentActions)
+            .set({
+              status: "skipped",
+              errorMessage: "Agent paused via admin",
+              executedAt: now,
+            })
+            .where(
+              and(
+                eq(scheduledAgentActions.agentId, agentId),
+                sql`${scheduledAgentActions.status} IN ('pending', 'in_progress')`,
+              )
+            )
+            .returning({ id: scheduledAgentActions.id });
+          skippedPending = skipped.length;
+        }
+
+        await tx.insert(adminAuditLog).values({
+          adminId: req.userId!,
+          actionType: desired ? "agent_resume" : "agent_pause",
+          targetTable: "agent_configs",
+          targetId: agentId,
+          previousData: { isActive: existing.isActive },
+          newData: { isActive: desired },
+          metadata: { displayName: existing.displayName, skippedPending },
+        });
+      });
+
+      res.json({ ok: true, agentId, active: desired, skippedPending });
+    } catch (err: any) {
+      console.error("[AgentAdmin] Toggle active failed:", err);
+      res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
+    }
+  });
+
+  // POST /api/admin/agents/:agentId/clear-pending - Mark a single agent's
+  // pending/in_progress scheduled actions as skipped. Useful when one agent
+  // gets stuck or queues something we don't want fired.
+  app.post("/api/admin/agents/:agentId/clear-pending", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { agentConfigs, scheduledAgentActions } = await import("@shared/schema");
+      const { agentId } = req.params;
+
+      const [existing] = await db
+        .select({ id: agentConfigs.id, displayName: agentConfigs.displayName })
+        .from(agentConfigs)
+        .where(eq(agentConfigs.id, agentId))
+        .limit(1);
+
+      if (!existing) {
+        return res.status(404).json({ error: "Agent not found" });
+      }
+
+      const now = new Date();
+      const skipped = await db
+        .update(scheduledAgentActions)
+        .set({
+          status: "skipped",
+          errorMessage: "Cleared via admin",
+          executedAt: now,
+        })
+        .where(
+          and(
+            eq(scheduledAgentActions.agentId, agentId),
+            sql`${scheduledAgentActions.status} IN ('pending', 'in_progress')`,
+          )
+        )
+        .returning({ id: scheduledAgentActions.id });
+
+      await db.insert(adminAuditLog).values({
+        adminId: req.userId!,
+        actionType: "agent_clear_pending",
+        targetTable: "scheduled_agent_actions",
+        targetId: agentId,
+        previousData: null,
+        newData: { skipped: skipped.length },
+        metadata: { displayName: existing.displayName },
+      });
+
+      res.json({ ok: true, agentId, skipped: skipped.length });
+    } catch (err: any) {
+      console.error("[AgentAdmin] Clear pending failed:", err);
       res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
     }
   });
@@ -16928,16 +17129,25 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
 
       const agents = await db.select({
         id: agentConfigs.id,
+        userId: agentConfigs.userId,
         displayName: agentConfigs.displayName,
         username: agentConfigs.username,
         archetype: agentConfigs.archetype,
         isActive: agentConfigs.isActive,
+        simulationProfile: agentConfigs.simulationProfile,
       }).from(agentConfigs);
+
+      const activeAgents = agents.filter((agent) => agent.isActive);
+      const v2Agents = activeAgents.filter((agent) => {
+        const profile = agent.simulationProfile as Record<string, unknown> | null;
+        return profile?.cohortId === "v2-2026-prelaunch";
+      });
 
       const pendingActions = await db.select({
         id: scheduledAgentActions.id,
         agentId: scheduledAgentActions.agentId,
         marketId: scheduledAgentActions.marketId,
+        actionType: scheduledAgentActions.actionType,
         status: scheduledAgentActions.status,
         executeAfter: scheduledAgentActions.executeAfter,
         stakeAmount: scheduledAgentActions.stakeAmount,
@@ -16955,16 +17165,159 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         .from(scheduledAgentActions)
         .where(eq(scheduledAgentActions.status, "failed"));
 
+      const pnlRows = await db.execute(sql`
+        SELECT
+          ac.id,
+          ac.username,
+          ac.is_active AS "isActive",
+          COALESCE(SUM(CASE
+            WHEN mb.status = 'won' THEN COALESCE(mb.payout_amount, 0) - mb.stake_amount
+            WHEN mb.status = 'lost' THEN -mb.stake_amount
+            ELSE 0
+          END), 0)::int AS "profitLoss",
+          COUNT(mb.id)::int AS "totalBets",
+          COALESCE(SUM(mb.stake_amount), 0)::int AS "volume"
+        FROM agent_configs ac
+        LEFT JOIN market_bets mb ON mb.agent_id = ac.id
+        GROUP BY ac.id, ac.username, ac.is_active
+        ORDER BY "profitLoss" DESC
+      `);
+
+      const activityRows = await db.execute(sql`
+        SELECT
+          COUNT(*) FILTER (WHERE c.created_at >= NOW() - INTERVAL '24 hours')::int AS comments_24h,
+          COUNT(*) FILTER (WHERE c.created_at >= NOW() - INTERVAL '7 days')::int AS comments_7d
+        FROM comments c
+        JOIN profiles p ON p.id = c.user_id
+        WHERE p.is_agent = true
+      `);
+
+      const ratingRows = await db.execute(sql`
+        SELECT
+          COUNT(*) FILTER (WHERE uv.voted_at >= NOW() - INTERVAL '24 hours')::int AS ratings_24h,
+          COUNT(*) FILTER (WHERE uv.voted_at >= NOW() - INTERVAL '7 days')::int AS ratings_7d,
+          COALESCE(AVG(uv.rating) FILTER (WHERE uv.voted_at >= NOW() - INTERVAL '7 days'), 0)::numeric(3,2) AS avg_rating_7d
+        FROM user_votes uv
+        JOIN profiles p ON p.id = uv.user_id
+        WHERE p.is_agent = true
+      `);
+
+      const poolRows = await db.execute(sql`
+        SELECT
+          pm.market_type AS "marketType",
+          COUNT(DISTINCT pm.id)::int AS "openMarkets",
+          COALESCE(AVG(entry_totals.pool), 0)::int AS "avgPool",
+          COALESCE(MIN(entry_totals.pool), 0)::int AS "minPool",
+          COALESCE(MAX(entry_totals.pool), 0)::int AS "maxPool"
+        FROM prediction_markets pm
+        LEFT JOIN (
+          SELECT market_id, SUM(COALESCE(total_stake, 0) + COALESCE(no_stake, 0)) AS pool
+          FROM market_entries
+          GROUP BY market_id
+        ) entry_totals ON entry_totals.market_id = pm.id
+        WHERE pm.status = 'OPEN'
+          AND pm.visibility IN ('live', 'inactive')
+          AND pm.market_type IN ('updown', 'h2h', 'gainer', 'jackpot', 'community')
+        GROUP BY pm.market_type
+        ORDER BY pm.market_type
+      `);
+
       res.json({
         agents,
+        cohort: {
+          total_agents: agents.length,
+          active_agents: activeAgents.length,
+          active_v2_agents: v2Agents.length,
+          active_legacy_agents: activeAgents.length - v2Agents.length,
+        },
         pending_count: pendingActions.length,
         executed_count: executedCount[0]?.count ?? 0,
         failed_count: failedCount[0]?.count ?? 0,
         next_actions: pendingActions,
+        pnl: pnlRows.rows,
+        comments: activityRows.rows[0] ?? { comments_24h: 0, comments_7d: 0 },
+        ratings: ratingRows.rows[0] ?? { ratings_24h: 0, ratings_7d: 0, avg_rating_7d: 0 },
+        pool_realism: poolRows.rows,
       });
     } catch (err: any) {
       console.error("[AgentAdmin] Status failed:", err);
       res.status(500).json({ error: err?.message ?? "Unknown error" });
+    }
+  });
+
+  app.get("/api/admin/agents/dry-run", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { agentConfigs } = await import("@shared/schema");
+      const { getSimulationProfile } = await import("./agents/simulationProfile");
+      const limitAgents = Math.max(1, Math.min(Number(req.query.agents ?? 12), 50));
+      const limitMarkets = Math.max(1, Math.min(Number(req.query.markets ?? 12), 50));
+      const now = new Date();
+
+      const [agents, markets] = await Promise.all([
+        db
+          .select({
+            id: agentConfigs.id,
+            username: agentConfigs.username,
+            displayName: agentConfigs.displayName,
+            archetype: agentConfigs.archetype,
+            activityRate: agentConfigs.activityRate,
+            simulationProfile: agentConfigs.simulationProfile,
+          })
+          .from(agentConfigs)
+          .where(eq(agentConfigs.isActive, true))
+          .limit(limitAgents),
+        db
+          .select({
+            id: predictionMarkets.id,
+            title: predictionMarkets.title,
+            marketType: predictionMarkets.marketType,
+            category: predictionMarkets.category,
+            endAt: predictionMarkets.endAt,
+          })
+          .from(predictionMarkets)
+          .where(and(
+            eq(predictionMarkets.status, "OPEN"),
+            eq(predictionMarkets.visibility, "live"),
+            gte(predictionMarkets.endAt, now),
+          ))
+          .limit(limitMarkets),
+      ]);
+
+      const previews = agents.map((agent) => {
+        const profile = getSimulationProfile(agent.simulationProfile);
+        const activityRate = Number(agent.activityRate ?? 0.6);
+        const marketPreview = markets.slice(0, 5).map((market) => {
+          const categoryMatch = market.category && profile.favoriteCategories.includes(market.category);
+          const actionScore = activityRate * (categoryMatch ? 1.25 : 0.85) * (profile.personaBand === "sharp" ? 0.75 : 1);
+          return {
+            marketId: market.id,
+            marketType: market.marketType,
+            title: market.title,
+            estimatedAction: actionScore > 0.55 ? "prediction_candidate" : "likely_abstain",
+            categoryMatch: Boolean(categoryMatch),
+          };
+        });
+        return {
+          agentId: agent.id,
+          username: agent.username,
+          personaBand: profile.personaBand,
+          skillTier: profile.skillTier,
+          weeklyVoteCap: profile.weeklyVoteCap,
+          weeklyCommentCap: profile.weeklyCommentCap,
+          markets: marketPreview,
+        };
+      });
+
+      res.json({
+        ok: true,
+        writes: false,
+        sampledAgents: agents.length,
+        sampledMarkets: markets.length,
+        previews,
+      });
+    } catch (err: any) {
+      console.error("[AgentAdmin] Dry run failed:", err);
+      res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
     }
   });
 

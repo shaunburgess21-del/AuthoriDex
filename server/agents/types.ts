@@ -17,6 +17,7 @@ export interface AgentConfigData {
   riskAppetite: number;
   consensusSensitivity: number;
   activityRate: number;
+  simulationProfile?: unknown;
   isActive: boolean;
 }
 
@@ -38,6 +39,7 @@ export interface MarketEntryData {
   id: string;
   label: string | null;
   totalStake: number;
+  noStake?: number;
   personId?: string | null;
 }
 
@@ -64,6 +66,8 @@ export interface PredictionDecision {
   direction?: "yes" | "no";
   rawProbability?: number;
   confidence?: number;
+  impliedProbability?: number;
+  edge?: number;
   source?: "deterministic" | "gpt-5.4-world";
   reasoning?: string;
   predictedScore?: number;

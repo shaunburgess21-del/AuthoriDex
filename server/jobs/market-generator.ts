@@ -380,7 +380,7 @@ export async function generateWeeklyJackpot(): Promise<number> {
       weekNumber,
       seedParticipants: 0,
       seedVolume: "0",
-      seedConfig: { enabled: true, targetParticipantsMin: 10, targetParticipantsMax: 40, targetPoolMin: 2000, targetPoolMax: 8000 },
+      seedConfig: { enabled: true, targetParticipantsMin: 15, targetParticipantsMax: 55, targetPoolMin: 5000, targetPoolMax: 12000 },
       featured: false,
     };
 
@@ -663,7 +663,7 @@ export async function generateWeeklyH2H(): Promise<number> {
         seedParticipants: 0,
         seedVolume: "0",
         metadata: h2hMeta,
-        seedConfig: { enabled: true, targetParticipantsMin: 40, targetParticipantsMax: 120, targetPoolMin: 10000, targetPoolMax: 35000, distributionBias: { personA: 50, personB: 50 } },
+        seedConfig: { enabled: true, targetParticipantsMin: 55, targetParticipantsMax: 140, targetPoolMin: 18000, targetPoolMax: 40000, distributionBias: { personA: 50, personB: 50 } },
         featured: false,
       }).returning();
 

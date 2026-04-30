@@ -235,7 +235,7 @@ function UserRow({
 
       <UserProfileAvatar
         displayName={user.displayName}
-        avatarUrl={user.isAgent ? null : user.avatarUrl}
+        avatarUrl={user.avatarUrl}
         size="sm"
         className="shrink-0"
       />

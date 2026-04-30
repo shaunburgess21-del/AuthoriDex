@@ -182,6 +182,17 @@ async function executeAction(action: {
       await markFailed(action.id, "Agent config not found");
       return;
     }
+    if (!agent.isActive) {
+      await db
+        .update(scheduledAgentActions)
+        .set({
+          status: "skipped",
+          errorMessage: "Agent archived or inactive",
+          executedAt: new Date(),
+        })
+        .where(eq(scheduledAgentActions.id, action.id));
+      return;
+    }
 
     // Verify entry exists
     const [entry] = await db
@@ -453,6 +464,12 @@ async function executeJackpotAction(
 
     if (!agent) {
       await markFailed(action.id, "Agent config not found");
+      return;
+    }
+    if (!agent.isActive) {
+      await db.update(scheduledAgentActions)
+        .set({ status: "skipped", errorMessage: "Agent archived or inactive", executedAt: new Date() })
+        .where(eq(scheduledAgentActions.id, action.id));
       return;
     }
 

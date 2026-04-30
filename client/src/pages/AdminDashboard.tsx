@@ -60,6 +60,7 @@ import {
   Layers,
   Download,
   ExternalLink,
+  Bot,
 } from "lucide-react";
 import { AdminUnderratedOverrated } from "@/components/admin/AdminUnderratedOverrated";
 import { AdminCurateProfile } from "@/components/admin/AdminCurateProfile";
@@ -69,6 +70,7 @@ import { AdminUserCreditHistory } from "@/components/admin/AdminUserCreditHistor
 import { AdminLeaderboardDiff } from "@/components/admin/AdminLeaderboardDiff";
 import { AdminCategoriesSection } from "@/components/admin/AdminCategoriesSection";
 import { AdminScoreInspector } from "@/components/admin/AdminScoreInspector";
+import { AdminAgentsSection } from "@/components/admin/AdminAgentsSection";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -2663,6 +2665,7 @@ export default function AdminDashboard() {
     { id: "moderation" as const, label: "Moderation", icon: Shield },
     { id: "settlement" as const, label: "Settlement", icon: Gavel },
     { id: "users" as const, label: "Users", icon: Users },
+    { id: "agents" as const, label: "Agents", icon: Bot },
     { id: "categories" as const, label: "Categories", icon: Layers },
     { id: "tools" as const, label: "System Tools", icon: Settings },
   ];
@@ -5602,6 +5605,11 @@ export default function AdminDashboard() {
               />
             )}
           </div>
+        )}
+
+        {/* Agents Section */}
+        {activeSection === "agents" && (
+          <AdminAgentsSection />
         )}
 
         {/* System Tools Section */}

@@ -18,7 +18,7 @@ interface UserSocialAvatarProps {
 export function UserSocialAvatar({
   displayName,
   avatarUrl,
-  isAgent = false,
+  isAgent: _isAgent = false,
   className,
   onClick,
 }: UserSocialAvatarProps) {
@@ -39,7 +39,7 @@ export function UserSocialAvatar({
       className={wrapperClass}
     >
       <Avatar className={cn("h-9 w-9 rounded-full", className)}>
-        {avatarUrl && !isAgent ? (
+        {avatarUrl ? (
           <AvatarImage src={avatarUrl} alt={displayName} className="rounded-full object-cover" />
         ) : (
           <AvatarFallback

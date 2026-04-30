@@ -1362,6 +1362,7 @@ export const agentConfigs = pgTable("agent_configs", {
   consensusSensitivity: numeric("consensus_sensitivity", { precision: 3, scale: 2 }).notNull().default("0.50"),
   activityRate: numeric("activity_rate", { precision: 3, scale: 2 }).notNull().default("0.60"),
 
+  simulationProfile: jsonb("simulation_profile"),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),

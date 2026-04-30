@@ -26,7 +26,7 @@ export function ParticipantAvatarStack({
           <UserProfileAvatar
             key={`${participant.userId}-${participant.username || participant.displayName}`}
             displayName={participant.displayName}
-            avatarUrl={participant.isAgent ? null : participant.avatarUrl}
+            avatarUrl={participant.avatarUrl}
             size="xs"
             className="border-2 border-background"
           />

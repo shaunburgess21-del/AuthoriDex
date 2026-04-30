@@ -225,6 +225,13 @@
       "when": 1778187000000,
       "tag": "0031_content_categories",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1778273400000,
+      "tag": "0032_agent_simulation_profile",
+      "breakpoints": true
     }
   ]
 }

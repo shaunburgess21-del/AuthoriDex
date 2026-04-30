@@ -20,6 +20,7 @@ export type AdminSection =
   | "moderation"
   | "settlement"
   | "users"
+  | "agents"
   | "categories"
   | "tools";
 

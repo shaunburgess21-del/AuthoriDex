@@ -26,7 +26,7 @@ function getRankProgress(xp: number, ranks: RankRow[] | undefined) {
 }
 import {
   ArrowLeft, User, Trophy, Vote, TrendingUp, Calendar, Lock, Sparkles,
-  Shield, BrainCircuit, BarChart3, Coins, Target, ChevronRight, Loader2, Share2, Check,
+  Shield, BarChart3, Coins, Target, ChevronRight, Loader2, Share2, Check,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MyVoteCard, type MyVoteCardData } from "@/components/me/MyVoteCard";
@@ -178,7 +178,7 @@ function PublicVotesSection({ username }: { username: string }) {
   );
 }
 
-function BetHistorySection({ username }: { username: string }) {
+function BetHistorySection({ username, isAgent }: { username: string; isAgent?: boolean }) {
   const [tab, setTab] = useState<"settled" | "active">("settled");
   const [, setLocation] = useLocation();
 
@@ -267,7 +267,7 @@ function BetHistorySection({ username }: { username: string }) {
                   {bet.predictedScore != null && (
                     <span className="text-amber-600 dark:text-amber-400">Score: {Number(bet.predictedScore).toLocaleString()}</span>
                   )}
-                  {bet.confidence != null && (
+                  {!isAgent && bet.confidence != null && (
                     <span className="text-cyan-600 dark:text-cyan-400">{Math.round(bet.confidence * 100)}% conf</span>
                   )}
                   <span>{bet.stakeAmount.toLocaleString()} credits</span>
@@ -383,7 +383,7 @@ export default function PublicProfilePage() {
     );
   }
 
-  const displayName = profile.agentProfile?.displayName || profile.username || "User";
+  const displayName = profile.username || "User";
   const memberSince = profile.createdAt ? new Date(profile.createdAt).toLocaleDateString("en-US", {
     year: "numeric",
     month: "long"
@@ -412,7 +412,7 @@ export default function PublicProfilePage() {
           <div className="flex items-start gap-4 mb-6">
             <UserProfileAvatar
               displayName={displayName}
-              avatarUrl={profile.isAgent ? null : profile.avatarUrl}
+              avatarUrl={profile.avatarUrl}
               className="h-20 w-20"
               fallbackClassName="text-2xl"
             />
@@ -424,25 +424,6 @@ export default function PublicProfilePage() {
               </div>
             </div>
           </div>
-
-          {profile.isAgent && profile.agentProfile && (
-            <div className="mb-6 rounded-lg border border-violet-500/30 dark:border-violet-500/20 bg-violet-500/8 dark:bg-violet-500/5 p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <BrainCircuit className="h-4 w-4 text-violet-500 dark:text-violet-300" />
-                <p className="text-sm font-medium capitalize">{profile.agentProfile.archetype.replace(/_/g, " ")}</p>
-              </div>
-              {profile.agentProfile.bio && (
-                <p className="text-sm text-muted-foreground mb-3">{profile.agentProfile.bio}</p>
-              )}
-              {(profile.agentProfile.specialties ?? []).length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {(profile.agentProfile.specialties ?? []).map((specialty: string) => (
-                    <Badge key={specialty} variant="secondary" className="capitalize">{specialty}</Badge>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
 
           <div className="flex items-center gap-2 text-sm text-muted-foreground mb-6">
             <Calendar className="h-4 w-4" />
@@ -533,7 +514,7 @@ export default function PublicProfilePage() {
         {username && <PublicVotesSection username={username} />}
 
         {/* Bet History */}
-        {username && <BetHistorySection username={username} />}
+        {username && <BetHistorySection username={username} isAgent={profile.isAgent} />}
       </div>
     </div>
   );

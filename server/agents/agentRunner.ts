@@ -28,6 +28,7 @@ import type {
   CrowdSplit,
   PredictionDecision,
 } from "./types";
+import { getSimulationProfile } from "./simulationProfile";
 import {
   ARCHETYPE_DELAY_RANGES,
   WORLD_MARKET_DELAY_RANGES,
@@ -347,6 +348,7 @@ async function runAgentBatchOnce(): Promise<{
           id: marketEntries.id,
           label: marketEntries.label,
           totalStake: marketEntries.totalStake,
+          noStake: marketEntries.noStake,
           personId: marketEntries.personId,
         })
         .from(marketEntries)
@@ -475,6 +477,8 @@ async function runAgentBatchOnce(): Promise<{
         decision = computePrediction(agentData, marketData, signals, crowd, undefined, entrySignals);
       }
 
+      decision = applySimulationDecisionLayer(agentData, marketData, decision);
+
       if (decision.abstain) {
         abstained++;
         log(`[AgentRunner] ${agent.displayName} abstained on ${market.id.slice(0, 8)}: ${decision.abstainReason}`);
@@ -510,7 +514,7 @@ async function runAgentBatchOnce(): Promise<{
         : computeExecuteAfter(agent.archetype);
 
       const chosenEntry = entries.find((entry) => entry.id === decision.entryId);
-      let stakeAmount = computeStakeAmount(decision.confidence ?? 0.5);
+      let stakeAmount = computeAgentStakeAmount(agentData, decision);
 
       // Agent-specific stake overrides
       const override = AGENT_STAKE_OVERRIDES[agent.username];
@@ -749,6 +753,7 @@ function toAgentData(row: typeof agentConfigs.$inferSelect): AgentConfigData {
     riskAppetite: parseFloat(String(row.riskAppetite)),
     consensusSensitivity: parseFloat(String(row.consensusSensitivity)),
     activityRate: parseFloat(String(row.activityRate)),
+    simulationProfile: row.simulationProfile,
     isActive: row.isActive,
   };
 }
@@ -860,6 +865,117 @@ function computeStakeAmount(confidence: number): number {
     BASE_STAKE_AMOUNT +
     Math.round((confidence - 0.5) * 2 * (MAX_AGENT_STAKE - BASE_STAKE_AMOUNT));
   return Math.max(BASE_STAKE_AMOUNT, Math.min(MAX_AGENT_STAKE, scaled));
+}
+
+function applySimulationDecisionLayer(
+  agent: AgentConfigData,
+  market: MarketWithEntries,
+  decision: PredictionDecision,
+): PredictionDecision {
+  if (decision.abstain || !decision.entryId) return decision;
+
+  const simulation = getSimulationProfile(agent.simulationProfile);
+  const impliedProbability = computeImpliedProbability(market.entries, decision);
+  const modelProbability = computeModelProbability(market, decision);
+  const baseConfidence = decision.confidence ?? modelProbability;
+  const calibrationScale = 0.82 + simulation.skillTier * 0.34;
+  let confidence = 0.5 + (baseConfidence - 0.5) * calibrationScale;
+
+  if (simulation.personaBand === "noisy") {
+    confidence = Math.min(0.95, confidence + 0.04);
+  }
+  confidence = Math.max(0.05, Math.min(0.95, confidence));
+
+  if (impliedProbability == null) {
+    return { ...decision, confidence: Number(confidence.toFixed(3)) };
+  }
+
+  const edge = modelProbability - impliedProbability;
+  if (edge < simulation.edgeThreshold) {
+    return {
+      ...decision,
+      abstain: true,
+      abstainReason: "low_edge",
+      confidence: Number(confidence.toFixed(3)),
+      impliedProbability: Number(impliedProbability.toFixed(3)),
+      edge: Number(edge.toFixed(3)),
+    };
+  }
+
+  return {
+    ...decision,
+    confidence: Number(confidence.toFixed(3)),
+    impliedProbability: Number(impliedProbability.toFixed(3)),
+    edge: Number(edge.toFixed(3)),
+  };
+}
+
+function computeImpliedProbability(
+  entries: MarketWithEntries["entries"],
+  decision: PredictionDecision,
+): number | null {
+  if (!decision.entryId || entries.length === 0) return null;
+  const entry = entries.find((item) => item.id === decision.entryId);
+  if (!entry) return null;
+
+  const yesPool = entries.reduce((sum, item) => sum + Number(item.totalStake || 0), 0);
+  const noPool = entries.reduce((sum, item) => sum + Number(item.noStake || 0), 0);
+  const totalPool = yesPool + noPool;
+  if (totalPool <= 0) return 1 / Math.max(entries.length, 2);
+
+  if (decision.direction === "no") {
+    const otherEntries = entries.filter((item) => item.id !== decision.entryId);
+    const likelyWinner = otherEntries.reduce<typeof entries[number] | null>(
+      (best, item) => (!best || Number(item.totalStake || 0) > Number(best.totalStake || 0) ? item : best),
+      null,
+    );
+    const winnerPool =
+      Number(likelyWinner?.totalStake || 0) +
+      (noPool - Number(likelyWinner?.noStake || 0));
+    return Math.max(0.02, Math.min(0.98, winnerPool / totalPool));
+  }
+
+  const winnerPool =
+    Number(entry.totalStake || 0) +
+    entries
+      .filter((item) => item.id !== decision.entryId)
+      .reduce((sum, item) => sum + Number(item.noStake || 0), 0);
+  return Math.max(0.02, Math.min(0.98, winnerPool / totalPool));
+}
+
+function computeModelProbability(
+  market: MarketWithEntries,
+  decision: PredictionDecision,
+): number {
+  const fallback = decision.confidence ?? 0.5;
+  const raw = decision.rawProbability;
+
+  // H2H rawProbability is normalized by the deterministic engine. Multi-option
+  // markets use relative scores, so confidence is the safer comparable signal.
+  if (
+    market.marketType === "h2h" &&
+    typeof raw === "number" &&
+    Number.isFinite(raw)
+  ) {
+    return Math.max(0.05, Math.min(0.95, raw));
+  }
+
+  return Math.max(0.05, Math.min(0.95, fallback));
+}
+
+function computeAgentStakeAmount(
+  agent: AgentConfigData,
+  decision: PredictionDecision,
+): number {
+  const simulation = getSimulationProfile(agent.simulationProfile);
+  const confidence = decision.confidence ?? 0.5;
+  const edge = Math.max(0, decision.edge ?? 0);
+  const edgeBoost = 1 + Math.min(edge, 0.35) * 2.5;
+  const variance = 0.85 + Math.random() * 0.35;
+  const base = computeStakeAmount(confidence);
+  const stake = Math.round(base * simulation.stakeMultiplier * edgeBoost * variance);
+
+  return Math.max(simulation.minStake, Math.min(simulation.maxStake, stake));
 }
 
 function isOtherStyleOutcome(label: string | null): boolean {

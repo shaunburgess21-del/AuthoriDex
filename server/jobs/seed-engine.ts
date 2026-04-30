@@ -3,9 +3,18 @@ import { predictionMarkets, marketEntries } from "../../shared/schema";
 import { eq, and, inArray, sql } from "drizzle-orm";
 
 interface SeedConfig {
+  enabled?: boolean;
   participants?: number;
   poolTarget?: number;
+  targetPoolMin?: number;
+  targetPoolMax?: number;
+  targetParticipantsMin?: number;
+  targetParticipantsMax?: number;
   upBias?: number;
+  distributionBias?: {
+    personA?: number;
+    personB?: number;
+  };
   distributionShape?: "front-loaded" | "uniform" | "bell-curve";
   batchesCompleted?: number;
   totalBatches?: number;
@@ -60,7 +69,10 @@ function generateSeedBets(
 ): { entryId: string; amount: number }[] {
   const bets: { entryId: string; amount: number }[] = [];
 
-  if ((marketType === "updown" || marketType === "jackpot") && entries.length === 2) {
+  if (marketType === "jackpot" && entries.length > 0) {
+    const jackpotEntry = entries.find(e => e.label?.toLowerCase().includes("score")) || entries[0];
+    bets.push({ entryId: jackpotEntry.id, amount: jitter(batchCredits, 0.12) });
+  } else if (marketType === "updown" && entries.length === 2) {
     const upEntry = entries.find(e => e.label?.toLowerCase() === "up");
     const downEntry = entries.find(e => e.label?.toLowerCase() === "down");
     if (!upEntry || !downEntry) return bets;
@@ -126,7 +138,7 @@ export async function runSeedBatch(
     .where(
       and(
         eq(predictionMarkets.status, "OPEN"),
-        inArray(predictionMarkets.marketType, ["updown", "h2h", "gainer"]),
+        inArray(predictionMarkets.marketType, ["updown", "h2h", "gainer", "jackpot"]),
         inArray(predictionMarkets.visibility, ["live", "inactive"]),
         eq(predictionMarkets.weekNumber, currentWeek)
       )
@@ -162,6 +174,10 @@ export async function runSeedBatch(
     }
 
     const config: SeedConfig = (market.seedConfig as SeedConfig) || {};
+    if (config.enabled === false) {
+      skipped++;
+      continue;
+    }
     const batchesCompleted = config.batchesCompleted || 0;
     const totalBatches = config.totalBatches || TOTAL_SEED_BATCHES;
 
@@ -180,8 +196,8 @@ export async function runSeedBatch(
       }
     }
 
-    const poolTarget = config.poolTarget || getDefaultPoolTarget(market.marketType);
-    const upBias = config.upBias ?? 55;
+    const poolTarget = resolvePoolTarget(config, market.marketType);
+    const upBias = resolveBias(config, market.marketType);
     const shape = config.distributionShape || "bell-curve";
 
     const weight = getBatchWeight(batchesCompleted, totalBatches, shape);
@@ -208,7 +224,7 @@ export async function runSeedBatch(
 
     const currentVolume = Number(market.seedVolume || 0);
     const batchTotal = bets.reduce((s, b) => s + b.amount, 0);
-    const participants = config.participants || getDefaultParticipants(market.marketType);
+    const participants = config.participants || resolveParticipantTarget(config, market.marketType);
     const newParticipants = Math.round(participants * (weight / sumWeights) * (0.8 + Math.random() * 0.4));
 
     await db.update(predictionMarkets)
@@ -240,11 +256,41 @@ export async function runSeedBatch(
 function getDefaultPoolTarget(marketType: string): number {
   switch (marketType) {
     case "updown": return 5000 + Math.round(Math.random() * 3000);
-    case "h2h": return 15000 + Math.round(Math.random() * 10000);
+    case "h2h": return 18000 + Math.round(Math.random() * 12000);
     case "gainer": return 12000 + Math.round(Math.random() * 8000);
-    case "jackpot": return 3000 + Math.round(Math.random() * 2000);
+    case "jackpot": return 5000 + Math.round(Math.random() * 5000);
     default: return 8000;
   }
+}
+
+function resolvePoolTarget(config: SeedConfig, marketType: string): number {
+  if (typeof config.poolTarget === "number" && Number.isFinite(config.poolTarget)) {
+    return config.poolTarget;
+  }
+  if (
+    typeof config.targetPoolMin === "number" &&
+    typeof config.targetPoolMax === "number" &&
+    Number.isFinite(config.targetPoolMin) &&
+    Number.isFinite(config.targetPoolMax) &&
+    config.targetPoolMax >= config.targetPoolMin
+  ) {
+    return config.targetPoolMin + Math.round(Math.random() * (config.targetPoolMax - config.targetPoolMin));
+  }
+  return getDefaultPoolTarget(marketType);
+}
+
+function resolveBias(config: SeedConfig, marketType: string): number {
+  if (typeof config.upBias === "number" && Number.isFinite(config.upBias)) {
+    return config.upBias;
+  }
+  if (
+    marketType === "h2h" &&
+    typeof config.distributionBias?.personA === "number" &&
+    Number.isFinite(config.distributionBias.personA)
+  ) {
+    return Math.max(20, Math.min(80, config.distributionBias.personA));
+  }
+  return 55;
 }
 
 function getDefaultParticipants(marketType: string): number {
@@ -255,4 +301,17 @@ function getDefaultParticipants(marketType: string): number {
     case "jackpot": return 20 + Math.round(Math.random() * 15);
     default: return 50;
   }
+}
+
+function resolveParticipantTarget(config: SeedConfig, marketType: string): number {
+  if (
+    typeof config.targetParticipantsMin === "number" &&
+    typeof config.targetParticipantsMax === "number" &&
+    Number.isFinite(config.targetParticipantsMin) &&
+    Number.isFinite(config.targetParticipantsMax) &&
+    config.targetParticipantsMax >= config.targetParticipantsMin
+  ) {
+    return config.targetParticipantsMin + Math.round(Math.random() * (config.targetParticipantsMax - config.targetParticipantsMin));
+  }
+  return getDefaultParticipants(marketType);
 }

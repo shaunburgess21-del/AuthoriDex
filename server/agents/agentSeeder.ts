@@ -1,249 +1,315 @@
 /**
- * One-time seeder: creates 14 real Supabase Auth accounts + profiles + agent_configs.
- * Uses service-role key to bypass RLS and email confirmation.
- * Run via admin route or directly: npx tsx server/agents/agentSeeder.ts
+ * V2 simulation seeder: archives legacy obvious agents and creates a larger
+ * human-style cohort with internal persona metadata.
  */
 
 import { supabaseServer } from "../supabase";
 import { db } from "../db";
-import { profiles, agentConfigs } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { profiles, agentConfigs, scheduledAgentActions } from "@shared/schema";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { randomBytes } from "crypto";
 import { log } from "../log";
 import { AGENT_CREDIT_TOPUP_TARGET } from "./constants";
+import { agentAvatarSeed, uploadGeneratedAgentAvatar } from "./avatarGenerator";
+import {
+  SIMULATION_V2_COHORT_ID,
+  type AgentSimulationProfile,
+  type SimulationPersonaBand,
+  isV2SimulationProfile,
+} from "./simulationProfile";
 
-const AGENT_SEEDS = [
-  {
-    username: "trendrider_za",
-    displayName: "TrendRider_ZA",
-    bio: "Chasing momentum. If the trend score is climbing, I'm in.",
-    archetype: "momentum_chaser",
-    specialties: ["music", "creator", "entertainment"],
-    boldness: 0.8,
-    contrarianism: 0.15,
-    recencyWeight: 0.9,
-    prestigeBias: 0.35,
-    confidenceCal: 0.72,
-    riskAppetite: 0.3,
-    consensusSensitivity: 0.45,
-    activityRate: 0.7,
-    daysAgo: 78,
-  },
-  {
-    username: "oldguard_analyst",
-    displayName: "OldGuard_Analyst",
-    bio: "Legacy speaks louder than last week's spike.",
-    archetype: "prestige_maximiser",
-    specialties: ["entertainment", "politics", "business", "sports"],
-    boldness: 0.45,
-    contrarianism: 0.2,
-    recencyWeight: 0.25,
-    prestigeBias: 0.9,
-    confidenceCal: 0.65,
-    riskAppetite: 0.55,
-    consensusSensitivity: 0.35,
-    activityRate: 0.45,
-    daysAgo: 62,
-  },
-  {
-    username: "fadeking_official",
-    displayName: "FadeKing",
-    bio: "The crowd is always wrong at the extremes. Always.",
-    archetype: "contrarian",
-    specialties: ["sports", "entertainment", "creator"],
-    boldness: 0.65,
-    contrarianism: 0.88,
-    recencyWeight: 0.5,
-    prestigeBias: 0.3,
-    confidenceCal: 0.6,
-    riskAppetite: 0.5,
-    consensusSensitivity: 0.9,
-    activityRate: 0.55,
-    daysAgo: 45,
-  },
-  {
-    username: "pulsescout",
-    displayName: "PulseScout",
-    bio: "News is signal. Everything else is noise.",
-    archetype: "news_reactive",
-    specialties: ["politics", "business", "sports", "tech"],
-    boldness: 0.7,
-    contrarianism: 0.3,
-    recencyWeight: 0.75,
-    prestigeBias: 0.5,
-    confidenceCal: 0.68,
-    riskAppetite: 0.4,
-    consensusSensitivity: 0.4,
-    activityRate: 0.65,
-    daysAgo: 55,
-  },
-  {
-    username: "culturedeep",
-    displayName: "CultureDeep",
-    bio: "Slow calls. Strong conviction. I don't chase.",
-    archetype: "long_horizon",
-    specialties: ["music", "entertainment", "creator"],
-    boldness: 0.35,
-    contrarianism: 0.4,
-    recencyWeight: 0.2,
-    prestigeBias: 0.6,
-    confidenceCal: 0.82,
-    riskAppetite: 0.75,
-    consensusSensitivity: 0.5,
-    activityRate: 0.35,
-    daysAgo: 88,
-  },
-  {
-    username: "vibecheck_sa",
-    displayName: "VibeCheck_SA",
-    bio: "Got a feeling. Always got a feeling.",
-    archetype: "recency_bias",
-    specialties: ["creator", "music", "entertainment"],
-    boldness: 0.9,
-    contrarianism: 0.2,
-    recencyWeight: 0.8,
-    prestigeBias: 0.25,
-    confidenceCal: 0.55,
-    riskAppetite: 0.25,
-    consensusSensitivity: 0.35,
-    activityRate: 0.88,
-    daysAgo: 30,
-  },
-  // ── Wave 2: 8 new agents for World Markets liquidity ──────────────
-  {
-    username: "sportsbrain_official",
-    displayName: "SportsBrain",
-    bio: "The numbers don't lie. Stats, form, and fixtures tell the story.",
-    archetype: "domain_specialist",
-    specialties: ["sports"],
-    boldness: 0.7,
-    contrarianism: 0.3,
-    recencyWeight: 0.8,
-    prestigeBias: 0.4,
-    confidenceCal: 0.70,
-    riskAppetite: 0.6,
-    consensusSensitivity: 0.40,
-    activityRate: 0.7,
-    daysAgo: 21,
-  },
-  {
-    username: "geopolitik_official",
-    displayName: "GeoPolitik",
-    bio: "Power shifts slowly, until it doesn't. Follow the institutions.",
-    archetype: "domain_specialist",
-    specialties: ["politics", "business"],
-    boldness: 0.5,
-    contrarianism: 0.4,
-    recencyWeight: 0.5,
-    prestigeBias: 0.7,
-    confidenceCal: 0.65,
-    riskAppetite: 0.4,
-    consensusSensitivity: 0.50,
-    activityRate: 0.6,
-    daysAgo: 18,
-  },
-  {
-    username: "popvault_bot",
-    displayName: "PopVault",
-    bio: "If it's trending, I already knew about it yesterday.",
-    archetype: "culture_tracker",
-    specialties: ["entertainment", "music", "creator"],
-    boldness: 0.8,
-    contrarianism: 0.5,
-    recencyWeight: 0.9,
-    prestigeBias: 0.3,
-    confidenceCal: 0.60,
-    riskAppetite: 0.7,
-    consensusSensitivity: 0.40,
-    activityRate: 0.75,
-    daysAgo: 15,
-  },
-  {
-    username: "ironhands_official",
-    displayName: "IronHands",
-    bio: "Fewer bets, bigger stakes. Patience pays.",
-    archetype: "high_conviction",
-    specialties: ["sports", "politics", "business", "tech"],
-    boldness: 0.9,
-    contrarianism: 0.5,
-    recencyWeight: 0.5,
-    prestigeBias: 0.5,
-    confidenceCal: 0.85,
-    riskAppetite: 0.9,
-    consensusSensitivity: 0.30,
-    activityRate: 0.35,
-    daysAgo: 25,
-  },
-  {
-    username: "crowdfader_official",
-    displayName: "CrowdFader",
-    bio: "When everyone zigs, I zag. The crowd is always late.",
-    archetype: "contrarian",
-    specialties: ["sports", "politics", "entertainment", "tech"],
-    boldness: 0.8,
-    contrarianism: 0.92,
-    recencyWeight: 0.4,
-    prestigeBias: 0.2,
-    confidenceCal: 0.62,
-    riskAppetite: 0.7,
-    consensusSensitivity: 0.85,
-    activityRate: 0.6,
-    daysAgo: 12,
-  },
-  {
-    username: "formguide_bot",
-    displayName: "FormGuide",
-    bio: "Form is temporary, class is permanent — but I bet on form.",
-    archetype: "momentum_chaser",
-    specialties: ["sports", "music", "creator"],
-    boldness: 0.7,
-    contrarianism: 0.2,
-    recencyWeight: 0.95,
-    prestigeBias: 0.2,
-    confidenceCal: 0.68,
-    riskAppetite: 0.65,
-    consensusSensitivity: 0.35,
-    activityRate: 0.7,
-    daysAgo: 10,
-  },
-  {
-    username: "safeplay_bot",
-    displayName: "SafePlay",
-    bio: "Small edges, consistent returns. The house always wins.",
-    archetype: "conservative",
-    specialties: ["politics", "business", "tech", "sports"],
-    boldness: 0.3,
-    contrarianism: 0.2,
-    recencyWeight: 0.5,
-    prestigeBias: 0.6,
-    confidenceCal: 0.55,
-    riskAppetite: 0.3,
-    consensusSensitivity: 0.60,
-    activityRate: 0.8,
-    daysAgo: 8,
-  },
-  {
-    username: "wildcard_za",
-    displayName: "WildCard_ZA",
-    bio: "Fortune favours the bold. Or the crazy. Same thing.",
-    archetype: "chaos_agent",
-    specialties: ["sports", "entertainment", "music", "creator", "misc"],
-    boldness: 0.95,
-    contrarianism: 0.7,
-    recencyWeight: 0.6,
-    prestigeBias: 0.1,
-    confidenceCal: 0.50,
-    riskAppetite: 0.95,
-    consensusSensitivity: 0.30,
-    activityRate: 0.5,
-    daysAgo: 5,
-  },
+type AgentSeed = {
+  username: string;
+  displayName: string;
+  bio: string;
+  archetype: string;
+  specialties: string[];
+  boldness: number;
+  contrarianism: number;
+  recencyWeight: number;
+  prestigeBias: number;
+  confidenceCal: number;
+  riskAppetite: number;
+  consensusSensitivity: number;
+  activityRate: number;
+  daysAgo: number;
+  xpPoints: number;
+  rank: string;
+  predictCredits: number;
+  simulationProfile: AgentSimulationProfile;
+};
+
+const V2_HANDLES: Array<{ username: string; band: SimulationPersonaBand; specialties: string[] }> = [
+  { username: "BetTom42", band: "casual", specialties: ["sports", "entertainment"] },
+  { username: "mikaOdds", band: "sharp", specialties: ["music", "creator"] },
+  { username: "dawnpriced", band: "sharp", specialties: ["business", "politics"] },
+  { username: "JoziLedger", band: "liquidity", specialties: ["sports", "music"] },
+  { username: "knotfade", band: "noisy", specialties: ["entertainment", "creator"] },
+  { username: "plumline8", band: "casual", specialties: ["music", "entertainment"] },
+  { username: "NiaStack", band: "sharp", specialties: ["sports", "tech"] },
+  { username: "metroMilo", band: "casual", specialties: ["creator", "music"] },
+  { username: "quietEdge", band: "sharp", specialties: ["politics", "business"] },
+  { username: "TapiwaTakes", band: "casual", specialties: ["sports", "entertainment"] },
+  { username: "randside", band: "liquidity", specialties: ["business", "sports"] },
+  { username: "lunaOver", band: "noisy", specialties: ["music", "creator"] },
+  { username: "wagerWren", band: "casual", specialties: ["entertainment", "music"] },
+  { username: "capetownCal", band: "casual", specialties: ["sports", "creator"] },
+  { username: "saffronSlip", band: "casual", specialties: ["politics", "business"] },
+  { username: "evKabelo", band: "sharp", specialties: ["sports", "business"] },
+  { username: "matchaMarket", band: "liquidity", specialties: ["music", "entertainment"] },
+  { username: "zebraParlay", band: "noisy", specialties: ["sports", "creator"] },
+  { username: "pixelPunter", band: "casual", specialties: ["tech", "creator"] },
+  { username: "TheoTick", band: "sharp", specialties: ["entertainment", "music"] },
+  { username: "greenroomGus", band: "casual", specialties: ["music", "entertainment"] },
+  { username: "bigNandi", band: "whale", specialties: ["sports", "business"] },
+  { username: "skewedSam", band: "noisy", specialties: ["politics", "sports"] },
+  { username: "marulaLine", band: "casual", specialties: ["creator", "entertainment"] },
+  { username: "oddsAnele", band: "sharp", specialties: ["politics", "tech"] },
+  { username: "biscuitAlpha", band: "casual", specialties: ["music", "creator"] },
+  { username: "poolsidePip", band: "liquidity", specialties: ["sports", "entertainment"] },
+  { username: "reckonRue", band: "casual", specialties: ["business", "politics"] },
+  { username: "MphoMoonshot", band: "noisy", specialties: ["creator", "music"] },
+  { username: "cedarBook", band: "casual", specialties: ["tech", "business"] },
+  { username: "rareForm", band: "sharp", specialties: ["sports", "music"] },
+  { username: "DurbnDelta", band: "casual", specialties: ["entertainment", "sports"] },
+  { username: "chalkRiver", band: "liquidity", specialties: ["business", "politics"] },
+  { username: "luckyMole", band: "noisy", specialties: ["sports", "entertainment"] },
+  { username: "VusiValue", band: "sharp", specialties: ["business", "sports"] },
+  { username: "peachTicket", band: "casual", specialties: ["music", "creator"] },
+  { username: "needlePrice", band: "sharp", specialties: ["tech", "business"] },
+  { username: "sunsetStake", band: "casual", specialties: ["entertainment", "music"] },
+  { username: "PennyKicks", band: "casual", specialties: ["sports", "creator"] },
+  { username: "massiveMoss", band: "whale", specialties: ["entertainment", "sports"] },
+  { username: "rumourRatio", band: "noisy", specialties: ["creator", "entertainment"] },
+  { username: "TableTopEV", band: "sharp", specialties: ["politics", "business"] },
+  { username: "bloomBets", band: "casual", specialties: ["music", "business"] },
+  { username: "sourSignal", band: "noisy", specialties: ["politics", "entertainment"] },
+  { username: "flatlineFlo", band: "liquidity", specialties: ["sports", "tech"] },
+  { username: "JunoJuice", band: "casual", specialties: ["creator", "music"] },
+  { username: "properPrice", band: "sharp", specialties: ["sports", "politics"] },
+  { username: "smallEdge", band: "liquidity", specialties: ["business", "tech"] },
+  { username: "NateNoChill", band: "noisy", specialties: ["sports", "music"] },
+  { username: "fameFolio", band: "casual", specialties: ["entertainment", "creator"] },
+  { username: "irisIndex", band: "casual", specialties: ["politics", "tech"] },
+  { username: "whaleKaya", band: "whale", specialties: ["business", "entertainment"] },
+  { username: "ZolaZigs", band: "casual", specialties: ["sports", "creator"] },
+  { username: "lineLentil", band: "liquidity", specialties: ["music", "business"] },
+  { username: "bentOdds", band: "noisy", specialties: ["creator", "sports"] },
+  { username: "maybMarket", band: "casual", specialties: ["entertainment", "politics"] },
 ];
+
+const BAND_TRAITS: Record<SimulationPersonaBand, Omit<AgentSeed, "username" | "displayName" | "specialties" | "daysAgo" | "xpPoints" | "rank" | "predictCredits" | "simulationProfile">> = {
+  sharp: {
+    bio: "Picks spots carefully and hates bad prices.",
+    archetype: "domain_specialist",
+    boldness: 0.52,
+    contrarianism: 0.34,
+    recencyWeight: 0.48,
+    prestigeBias: 0.50,
+    confidenceCal: 0.78,
+    riskAppetite: 0.42,
+    consensusSensitivity: 0.34,
+    activityRate: 0.42,
+  },
+  casual: {
+    bio: "Follows the market, the timeline, and the occasional hunch.",
+    archetype: "momentum_chaser",
+    boldness: 0.62,
+    contrarianism: 0.28,
+    recencyWeight: 0.68,
+    prestigeBias: 0.42,
+    confidenceCal: 0.62,
+    riskAppetite: 0.48,
+    consensusSensitivity: 0.48,
+    activityRate: 0.62,
+  },
+  noisy: {
+    bio: "High variance, loud opinions, and not always enough patience.",
+    archetype: "chaos_agent",
+    boldness: 0.84,
+    contrarianism: 0.62,
+    recencyWeight: 0.76,
+    prestigeBias: 0.28,
+    confidenceCal: 0.48,
+    riskAppetite: 0.72,
+    consensusSensitivity: 0.32,
+    activityRate: 0.74,
+  },
+  liquidity: {
+    bio: "Small positions across many cards, usually near the middle.",
+    archetype: "conservative",
+    boldness: 0.38,
+    contrarianism: 0.24,
+    recencyWeight: 0.50,
+    prestigeBias: 0.46,
+    confidenceCal: 0.60,
+    riskAppetite: 0.30,
+    consensusSensitivity: 0.72,
+    activityRate: 0.82,
+  },
+  whale: {
+    bio: "Rarely everywhere, sometimes very present.",
+    archetype: "high_conviction",
+    boldness: 0.78,
+    contrarianism: 0.40,
+    recencyWeight: 0.52,
+    prestigeBias: 0.56,
+    confidenceCal: 0.70,
+    riskAppetite: 0.82,
+    consensusSensitivity: 0.30,
+    activityRate: 0.30,
+  },
+};
+
+function hashNumber(input: string): number {
+  let hash = 2166136261;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function seededRoll(input: string, min: number, max: number): number {
+  const roll = hashNumber(input) / 0xffffffff;
+  return min + (max - min) * roll;
+}
+
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value));
+}
+
+function buildSimulationProfile(seed: typeof V2_HANDLES[number]): AgentSimulationProfile {
+  const band = seed.band;
+  const skillBase = band === "sharp" ? 0.82 : band === "whale" ? 0.68 : band === "liquidity" ? 0.58 : band === "casual" ? 0.52 : 0.34;
+  const jitter = seededRoll(`${seed.username}:skill`, -0.08, 0.08);
+  const large = band === "whale";
+
+  return {
+    schemaVersion: 2,
+    cohortId: SIMULATION_V2_COHORT_ID,
+    personaBand: band,
+    skillTier: clamp01(skillBase + jitter),
+    favoriteCategories: seed.specialties,
+    edgeThreshold: band === "sharp" ? 0.05 : band === "liquidity" ? -0.03 : band === "noisy" ? -0.12 : band === "whale" ? 0.02 : -0.05,
+    publicConfidenceRate: band === "sharp" ? 0.12 : band === "noisy" ? 0.35 : 0.22,
+    stakeMultiplier: large ? 2.6 : band === "liquidity" ? 0.65 : band === "sharp" ? 1.25 : band === "noisy" ? 1.05 : 0.9,
+    minStake: large ? 200 : band === "liquidity" ? 40 : 75,
+    maxStake: large ? 950 : band === "sharp" ? 380 : band === "noisy" ? 300 : 220,
+    weeklyVoteCap: band === "liquidity" ? 7 : band === "noisy" ? 6 : band === "sharp" ? 3 : 5,
+    weeklyCommentCap: band === "sharp" ? 1 : band === "whale" ? 1 : band === "liquidity" ? 1 : 2,
+    dailyVoteChance: band === "liquidity" ? 0.78 : band === "noisy" ? 0.72 : band === "sharp" ? 0.38 : 0.56,
+    dailyCommentChance: band === "noisy" ? 0.28 : band === "casual" ? 0.18 : 0.10,
+    commentStyle: band === "sharp" ? "analytical" : band === "noisy" ? "skeptical" : band === "liquidity" ? "short" : "casual",
+    bankrollProfile: large ? "large" : band === "liquidity" ? "small" : "normal",
+  };
+}
+
+const AGENT_SEEDS: AgentSeed[] = V2_HANDLES.map((handle, index) => {
+  const traits = BAND_TRAITS[handle.band];
+  const variance = seededRoll(`${handle.username}:traits`, -0.06, 0.06);
+  const daysAgo = Math.round(seededRoll(`${handle.username}:age`, 18, 130));
+  const xpPoints = Math.round(seededRoll(`${handle.username}:xp`, 90, handle.band === "whale" ? 4200 : 1800));
+  const rank = xpPoints > 2800 ? "Analyst" : xpPoints > 1400 ? "Insider" : xpPoints > 450 ? "Aspirant" : "Citizen";
+  const creditsBase = handle.band === "whale" ? 22000 : handle.band === "sharp" ? 14000 : AGENT_CREDIT_TOPUP_TARGET;
+
+  return {
+    username: handle.username,
+    displayName: handle.username,
+    bio: traits.bio,
+    archetype: traits.archetype,
+    specialties: handle.specialties,
+    boldness: clamp01(traits.boldness + variance),
+    contrarianism: clamp01(traits.contrarianism - variance / 2),
+    recencyWeight: clamp01(traits.recencyWeight + variance / 2),
+    prestigeBias: clamp01(traits.prestigeBias - variance / 3),
+    confidenceCal: clamp01(traits.confidenceCal + variance / 2),
+    riskAppetite: clamp01(traits.riskAppetite + variance),
+    consensusSensitivity: clamp01(traits.consensusSensitivity - variance / 2),
+    activityRate: clamp01(traits.activityRate + variance / 3),
+    daysAgo: daysAgo + (index % 5),
+    xpPoints,
+    rank,
+    predictCredits: Math.round(creditsBase + seededRoll(`${handle.username}:credits`, -1200, 1800)),
+    simulationProfile: buildSimulationProfile(handle),
+  };
+});
 
 function pastDate(daysAgo: number): Date {
   const d = new Date();
   d.setDate(d.getDate() - daysAgo);
   return d;
+}
+
+export async function archiveLegacyAgents(options: { hideProfiles?: boolean } = {}): Promise<{
+  archived: number;
+  hiddenProfiles: number;
+  skippedV2: number;
+  skippedActions: number;
+}> {
+  const hideProfiles = options.hideProfiles ?? true;
+  const activeAgents = await db
+    .select({
+      id: agentConfigs.id,
+      userId: agentConfigs.userId,
+      username: agentConfigs.username,
+      simulationProfile: agentConfigs.simulationProfile,
+    })
+    .from(agentConfigs)
+    .where(eq(agentConfigs.isActive, true));
+
+  const legacyAgents = activeAgents.filter((agent) => !isV2SimulationProfile(agent.simulationProfile));
+  const legacyIds = legacyAgents.map((agent) => agent.id);
+  const legacyUserIds = legacyAgents.map((agent) => agent.userId);
+
+  if (legacyIds.length === 0) {
+    return {
+      archived: 0,
+      hiddenProfiles: 0,
+      skippedV2: activeAgents.length,
+      skippedActions: 0,
+    };
+  }
+
+  const now = new Date();
+  await db
+    .update(agentConfigs)
+    .set({ isActive: false, updatedAt: now })
+    .where(inArray(agentConfigs.id, legacyIds));
+
+  const skipped = await db
+    .update(scheduledAgentActions)
+    .set({
+      status: "skipped",
+      errorMessage: "Legacy agent archived",
+      executedAt: now,
+    })
+    .where(
+      and(
+        inArray(scheduledAgentActions.agentId, legacyIds),
+        sql`${scheduledAgentActions.status} IN ('pending', 'in_progress')`,
+      )
+    )
+    .returning({ id: scheduledAgentActions.id });
+
+  let hiddenProfiles = 0;
+  if (hideProfiles && legacyUserIds.length > 0) {
+    const hidden = await db
+      .update(profiles)
+      .set({ isPublic: false, lastActiveAt: now })
+      .where(inArray(profiles.id, legacyUserIds))
+      .returning({ id: profiles.id });
+    hiddenProfiles = hidden.length;
+  }
+
+  log(`[AgentSeeder] Archived ${legacyIds.length} legacy agents; hid ${hiddenProfiles} profiles`);
+
+  return {
+    archived: legacyIds.length,
+    hiddenProfiles,
+    skippedV2: activeAgents.length - legacyIds.length,
+    skippedActions: skipped.length,
+  };
 }
 
 export async function seedAgents(): Promise<{
@@ -255,7 +321,7 @@ export async function seedAgents(): Promise<{
   const skipped: string[] = [];
   const errors: string[] = [];
 
-  log("[AgentSeeder] Starting agent seeding...");
+  log(`[AgentSeeder] Starting ${SIMULATION_V2_COHORT_ID} seeding...`);
 
   for (const seed of AGENT_SEEDS) {
     try {
@@ -284,6 +350,7 @@ export async function seedAgents(): Promise<{
           user_metadata: {
             display_name: seed.displayName,
             is_agent: true,
+            simulation_cohort: SIMULATION_V2_COHORT_ID,
           },
         });
 
@@ -295,17 +362,29 @@ export async function seedAgents(): Promise<{
       }
 
       const userId = authData.user.id;
+      const avatarSeed = agentAvatarSeed(userId);
+      let avatarUrl: string | null = null;
+
+      try {
+        avatarUrl = await uploadGeneratedAgentAvatar(userId, avatarSeed);
+      } catch (avatarErr) {
+        log(`[AgentSeeder] Avatar generation failed for ${seed.username}; falling back to initials: ${avatarErr instanceof Error ? avatarErr.message : avatarErr}`);
+      }
 
       try {
         await db.transaction(async (tx) => {
           await tx.insert(profiles).values({
             id: userId,
             username: seed.username,
-            avatarUrl: null,
+            avatarUrl,
+            avatarSeed,
             isPublic: true,
             role: "user",
+            rank: seed.rank,
+            xpPoints: seed.xpPoints,
             isAgent: true,
-            predictCredits: AGENT_CREDIT_TOPUP_TARGET,
+            predictCredits: seed.predictCredits,
+            lastActiveAt: pastDate(Math.max(1, Math.round(seed.daysAgo / 3))),
             createdAt: pastDate(seed.daysAgo),
           });
 
@@ -324,6 +403,8 @@ export async function seedAgents(): Promise<{
             riskAppetite: seed.riskAppetite.toFixed(2),
             consensusSensitivity: seed.consensusSensitivity.toFixed(2),
             activityRate: seed.activityRate.toFixed(2),
+            simulationProfile: seed.simulationProfile,
+            isActive: true,
           });
         });
       } catch (txErr) {
