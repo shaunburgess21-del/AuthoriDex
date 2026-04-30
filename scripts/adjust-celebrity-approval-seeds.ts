@@ -1,10 +1,10 @@
 #!/usr/bin/env npx tsx
 /**
- * One-off: scale existing approval seed votes to ~60% of current total (40% reduction)
+ * One-off: scale existing approval seed votes to ~30% of current total (70% reduction)
  * using largest-remainder allocation to preserve each celebrity's seed-only average.
  *
- * Celebrities with zero seed votes get a random baseline: total votes in [30, 200],
- * implied average in [4.5, 4.9] (via target sum S clamped to [ceil(4.5T), floor(4.9T)]).
+ * Celebrities with zero seed votes get a random baseline: total votes in [7, 70],
+ * implied average in [4.4, 4.9] (via target sum S clamped to [ceil(4.4T), floor(4.9T)]).
  *
  * Usage:
  *   npx tsx scripts/adjust-celebrity-approval-seeds.ts              # dry-run
@@ -53,7 +53,7 @@ function totalVotes(c: ApprovalSeedCounts): number {
 }
 
 /**
- * New total = round(T_old * 0.6) — 40% reduction of seed count.
+ * New total = round(T_old * 0.3) — 70% reduction of seed count.
  * Allocate integer buckets via Hamilton / largest remainder.
  */
 function allocateProportionalToTotal(old: ApprovalSeedCounts, targetTotal: number): ApprovalSeedCounts {
@@ -102,17 +102,17 @@ function randomCountsFromTotalAndSum(rng: () => number, T: number, S: number): A
 
 function generateRandomBaseline(rng: () => number): ApprovalSeedCounts {
   for (let attempt = 0; attempt < 8000; attempt++) {
-    const T = 30 + Math.floor(rng() * (200 - 30 + 1));
-    const A = 4.5 + rng() * 0.4;
+    const T = 7 + Math.floor(rng() * (70 - 7 + 1));
+    const A = 4.4 + rng() * 0.5;
     let S = Math.round(A * T);
-    const sMin = Math.ceil(4.5 * T);
+    const sMin = Math.ceil(4.4 * T);
     const sMax = Math.floor(4.9 * T);
     if (sMin > sMax) continue;
     S = Math.max(sMin, Math.min(sMax, S));
     const c = randomCountsFromTotalAndSum(rng, T, S);
     if (!c) continue;
     const avg = impliedAvgRating(c);
-    if (avg != null && avg >= 4.5 - 1e-9 && avg <= 4.9 + 1e-9) return c;
+    if (avg != null && avg >= 4.4 - 1e-9 && avg <= 4.9 + 1e-9) return c;
   }
   throw new Error("Failed to generate random baseline (increase attempts or check constraints)");
 }
@@ -151,7 +151,7 @@ async function main() {
 
     if (T_old > 0) {
       branchScale++;
-      const T_new = Math.max(0, Math.round(T_old * 0.6));
+      const T_new = Math.max(0, Math.round(T_old * 0.3));
       const next = allocateProportionalToTotal(current, T_new);
       const newAvg = impliedAvgRating(next);
       console.log(

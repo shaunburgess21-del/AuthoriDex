@@ -1,0 +1,20 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "buildCommand": "npm run build:client",
+  "outputDirectory": "dist/public",
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "https://authoridex-production.up.railway.app/api/$1"
+    },
+    {
+      "source": "/attached_assets/(.*)",
+      "destination": "https://authoridex-production.up.railway.app/attached_assets/$1"
+    },
+    {
+      "source": "/((?!api/|attached_assets/|.*\\.).*)",
+      "destination": "/index.html"
+    }
+  ]
+}

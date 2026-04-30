@@ -530,7 +530,7 @@
   /* ===== NEUTRAL WHITE (Daily Movers) ===== */
   .pulse-card-blue {
     background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, transparent 40%),
-                linear-gradient(180deg, rgba(15, 23, 42, 0.9) 0%, rgba(15, 23, 42, 0.95) 100%);
+                linear-gradient(180deg, hsl(var(--background) / 0.95) 0%, hsl(var(--background)) 100%);
     border: 1px solid rgba(255, 255, 255, 0.15);
     box-shadow:
       0 4px 20px -4px rgba(255, 255, 255, 0.08),
@@ -553,7 +553,7 @@
   /* ===== GREEN (Weekly Gainers) ===== */
   .pulse-card-green {
     background: linear-gradient(135deg, rgba(34, 197, 94, 0.08) 0%, transparent 40%),
-                linear-gradient(180deg, rgba(15, 23, 42, 0.9) 0%, rgba(15, 23, 42, 0.95) 100%);
+                linear-gradient(180deg, hsl(var(--background) / 0.95) 0%, hsl(var(--background)) 100%);
     border: 1px solid rgba(34, 197, 94, 0.2);
     box-shadow: 
       0 4px 20px -4px rgba(34, 197, 94, 0.15),
@@ -576,7 +576,7 @@
   /* ===== RED (Weekly Droppers) ===== */
   .pulse-card-red {
     background: linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, transparent 40%),
-                linear-gradient(180deg, rgba(15, 23, 42, 0.9) 0%, rgba(15, 23, 42, 0.95) 100%);
+                linear-gradient(180deg, hsl(var(--background) / 0.95) 0%, hsl(var(--background)) 100%);
     border: 1px solid rgba(239, 68, 68, 0.2);
     box-shadow: 
       0 4px 20px -4px rgba(239, 68, 68, 0.15),
@@ -610,7 +610,7 @@
   /* ===== ORANGE (Trending Now) ===== */
   .pulse-card-orange {
     background: linear-gradient(135deg, rgba(249, 115, 22, 0.08) 0%, transparent 40%),
-                linear-gradient(180deg, rgba(15, 23, 42, 0.9) 0%, rgba(15, 23, 42, 0.95) 100%);
+                linear-gradient(180deg, hsl(var(--background) / 0.95) 0%, hsl(var(--background)) 100%);
     border: 1px solid rgba(249, 115, 22, 0.2);
     box-shadow: 
       0 4px 20px -4px rgba(249, 115, 22, 0.15),
@@ -636,7 +636,7 @@
   /* ===== VOXDEX BLUE (Vox Pulse) — same glow *weights* as .pulse-card-blue / market pulse row (blue-tinted) ===== */
   .pulse-card-voxdex {
     background: linear-gradient(135deg, rgba(59, 130, 246, 0.03) 0%, transparent 40%),
-                linear-gradient(180deg, rgba(15, 23, 42, 0.9) 0%, rgba(15, 23, 42, 0.95) 100%);
+                linear-gradient(180deg, hsl(var(--background) / 0.95) 0%, hsl(var(--background)) 100%);
     border: 1px solid rgba(59, 130, 246, 0.15);
     box-shadow:
       0 4px 20px -4px rgba(59, 130, 246, 0.08),
