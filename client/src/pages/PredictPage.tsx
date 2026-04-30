@@ -1838,6 +1838,71 @@ export default function PredictPage() {
     setStakeModalOpen(true);
   };
 
+  // World/community market betting via StakeModal (mirrors native markets).
+  // Replaces the previous "Yes/No on the card → URL hop → inline form" flow,
+  // which lacked the credits-banner UX and produced an ugly toast on
+  // insufficient funds. Now the same StakeModal that powers H2H/UpDown/Gainer
+  // also handles community markets — single source of truth for the credits
+  // affordance, idempotent retry path, and confetti.
+  const communityMarketBetMutation = useMutation({
+    mutationFn: async ({ slug, entryId, stakeAmount, direction }: { slug: string; entryId: string; stakeAmount: number; direction: "yes" | "no" }) => {
+      const res = await apiRequest("POST", `/api/open-markets/${slug}/bet`, { entryId, stakeAmount, direction });
+      return res.json();
+    },
+    onSuccess: async (data: any) => {
+      hapticSuccess();
+      if (data?.xp?.xpAwarded) {
+        triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
+      }
+      toast("Prediction placed!", { description: "Your world-market prediction has been recorded." });
+      setStakeModalOpen(false);
+      setPendingSelection(null);
+      await Promise.all([
+        refreshProfile(),
+        queryClient.invalidateQueries({ queryKey: ["/api/open-markets"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/me/predictions"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
+      ]);
+    },
+    onError: (err: Error) => {
+      hapticError();
+      toast.error("Failed to place prediction", { description: err.message });
+    },
+  });
+
+  const handleCommunityPickEntry = (market: any, entry: any, direction: "yes" | "no") => {
+    if (market.status !== "OPEN" || market.visibility !== "live") {
+      return;
+    }
+    if (!user) {
+      toast("Sign in required", { description: "Sign in to place predictions." });
+      navigateToLogin(setLocation);
+      return;
+    }
+
+    const yesStake = Number(entry.totalStake || 0);
+    const noStake = Number(entry.noStake || 0);
+    const entryPool = yesStake + noStake;
+    const sideStake = direction === "yes" ? yesStake : noStake;
+    const estimatedPayout = +(computePayoutMultiplier(entryPool, sideStake) * 0.95).toFixed(1);
+
+    setPendingSelection({
+      type: "community",
+      // The StakeModal heading shows "{choice}" prominently — include
+      // direction so the user can't misread which side they're betting.
+      choice: `${direction === "no" ? "No" : "Yes"} \u00b7 ${entry.label}`,
+      marketName: market.title,
+      marketId: market.id,
+      entryId: entry.id,
+      estimatedPayout,
+      // Community markets resolve at endAt; no separate weekly betting cutoff.
+      endAt: market.endAt,
+      bettingCutoff: null,
+      direction,
+    });
+    openStakeModal();
+  };
+
   const handleUpDownSelect = (market: PredictionMarket, choice: "up" | "down") => {
     if (isMarketClosed) {
       return;
@@ -1978,6 +2043,29 @@ export default function PredictPage() {
         entryId: pendingSelection.entryId,
         stakeAmount: amount,
         marketType: pendingSelection.type,
+      });
+      return;
+    }
+
+    if (pendingSelection.type === "community") {
+      if (!pendingSelection.entryId) {
+        toast.error("Selection unavailable", { description: "This market selection is not available right now." });
+        return;
+      }
+      // Community markets aren't in `hydratedMarkets` (which is upDown-only);
+      // look them up in the openMarkets list to recover the slug.
+      const market = openMarkets.find((m: any) => String(m.id) === String(pendingSelection.marketId));
+      if (!market?.slug) {
+        toast.error("Market unavailable", { description: "Could not find the selected market. Please refresh and try again." });
+        setStakeModalOpen(false);
+        setPendingSelection(null);
+        return;
+      }
+      await communityMarketBetMutation.mutateAsync({
+        slug: market.slug,
+        entryId: pendingSelection.entryId,
+        stakeAmount: amount,
+        direction: pendingSelection.direction === "no" ? "no" : "yes",
       });
       return;
     }
@@ -2367,6 +2455,7 @@ export default function PredictPage() {
                     key={market.id} 
                     market={market} 
                     onNavigate={(slug, pick, direction) => setLocation(`/markets/${slug}${pick ? `?pick=${pick}${direction ? `&direction=${direction}` : ''}` : ''}`)}
+                    onPickEntry={handleCommunityPickEntry}
                     isMarketClosed={market.status !== 'OPEN'}
                     userBetResult={userBetsByMarket.get(String(market.id))}
                     userBetsPerEntry={userBetsPerEntry.get(String(market.id))}
@@ -2935,6 +3024,7 @@ export default function PredictPage() {
               key={market.id} 
               market={market} 
               onNavigate={(slug, pick, direction) => setLocation(`/markets/${slug}${pick ? `?pick=${pick}${direction ? `&direction=${direction}` : ''}` : ''}`)}
+              onPickEntry={handleCommunityPickEntry}
               isMarketClosed={market.status !== 'OPEN'}
               userBetResult={userBetsByMarket.get(String(market.id))}
               userBetsPerEntry={userBetsPerEntry.get(String(market.id))}
@@ -2961,16 +3051,39 @@ export default function PredictPage() {
           openGainerPicker(market, currentCandidate || null);
         } : undefined}
         onDirectionChange={(dir) => {
-          if (!pendingSelection || pendingSelection.type !== "updown") return;
-          const marketId = pendingSelection.marketId;
-          const market = hydratedMarkets.find(m => m.id === marketId);
-          if (!market) return;
-          setPendingSelection({
-            ...pendingSelection,
-            choice: dir === "up" ? "Trend Score UP" : "Trend Score DOWN",
-            crowdSentiment: dir === "up" ? market.upPoolPercent : 100 - market.upPoolPercent,
-            estimatedPayout: dir === "up" ? market.upMultiplier : market.downMultiplier,
-          });
+          if (!pendingSelection) return;
+
+          if (pendingSelection.type === "updown" && (dir === "up" || dir === "down")) {
+            const market = hydratedMarkets.find(m => m.id === pendingSelection.marketId);
+            if (!market) return;
+            setPendingSelection({
+              ...pendingSelection,
+              choice: dir === "up" ? "Trend Score UP" : "Trend Score DOWN",
+              crowdSentiment: dir === "up" ? market.upPoolPercent : 100 - market.upPoolPercent,
+              estimatedPayout: dir === "up" ? market.upMultiplier : market.downMultiplier,
+            });
+            return;
+          }
+
+          if (pendingSelection.type === "community" && (dir === "yes" || dir === "no")) {
+            // Recompute multiplier and label for the new side without closing
+            // the modal. We re-derive from the current openMarkets snapshot so
+            // a stale pendingSelection picks up any pool drift since the click.
+            const market = openMarkets.find((m: any) => String(m.id) === String(pendingSelection.marketId));
+            const entry = market?.entries?.find((e: any) => String(e.id) === String(pendingSelection.entryId));
+            if (!market || !entry) return;
+            const yesStake = Number(entry.totalStake || 0);
+            const noStake = Number(entry.noStake || 0);
+            const entryPool = yesStake + noStake;
+            const sideStake = dir === "yes" ? yesStake : noStake;
+            const estimatedPayout = +(computePayoutMultiplier(entryPool, sideStake) * 0.95).toFixed(1);
+            setPendingSelection({
+              ...pendingSelection,
+              choice: `${dir === "no" ? "No" : "Yes"} \u00b7 ${entry.label}`,
+              estimatedPayout,
+              direction: dir,
+            });
+          }
         }}
       />
       <CreatePredictionModal

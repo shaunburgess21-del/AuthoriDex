@@ -219,8 +219,12 @@ export default function UpDownDetailPage() {
   );
 
   const handleDirectionChange = useCallback(
-    (dir: "up" | "down") => {
+    // Widened to match the StakeModal signature now that community markets
+    // can pass "yes" | "no". UpDownDetailPage only ever fires for upDown so
+    // we narrow back here.
+    (dir: "up" | "down" | "yes" | "no") => {
       if (!hydrated) return;
+      if (dir !== "up" && dir !== "down") return;
       setPendingSelection((prev) =>
         prev
           ? {
