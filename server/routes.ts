@@ -16957,37 +16957,46 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
     }
   });
 
-  app.post("/api/admin/agents/run", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
-    try {
-      const { runAgentBatch } = await import("./agents/agentRunner");
-      const result = await runAgentBatch();
-      res.json({ ok: true, ...result });
-    } catch (err: any) {
-      console.error("[AgentAdmin] Run failed:", err);
-      res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
-    }
+  // These sweeps can take longer than the 30s edge timeout on Railway, so we
+  // dispatch them as fire-and-forget background jobs and ack immediately.
+  // The admin UI polls /status afterwards to see the real numbers.
+  app.post("/api/admin/agents/run", requireAuth, requireAdmin, async (_req: AuthRequest, res) => {
+    res.json({ ok: true, started: true, mode: "background", message: "Prediction batch started — refresh in 1-3 min to see scheduled actions." });
+    void (async () => {
+      try {
+        const { runAgentBatch } = await import("./agents/agentRunner");
+        const result = await runAgentBatch();
+        console.log("[AgentAdmin] Prediction batch finished:", result);
+      } catch (err: any) {
+        console.error("[AgentAdmin] Prediction batch failed:", err);
+      }
+    })();
   });
 
-  app.post("/api/admin/agents/run-comments", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
-    try {
-      const { runCommentSweep } = await import("./agents/commentWorker");
-      const result = await runCommentSweep();
-      res.json({ ok: true, ...result });
-    } catch (err: any) {
-      console.error("[AgentAdmin] Comment run failed:", err);
-      res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
-    }
+  app.post("/api/admin/agents/run-comments", requireAuth, requireAdmin, async (_req: AuthRequest, res) => {
+    res.json({ ok: true, started: true, mode: "background", message: "Comment sweep started — refresh shortly to see Comments 7d update." });
+    void (async () => {
+      try {
+        const { runCommentSweep } = await import("./agents/commentWorker");
+        const result = await runCommentSweep();
+        console.log("[AgentAdmin] Comment sweep finished:", result);
+      } catch (err: any) {
+        console.error("[AgentAdmin] Comment sweep failed:", err);
+      }
+    })();
   });
 
-  app.post("/api/admin/agents/run-votes", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
-    try {
-      const { runVoteSweep } = await import("./agents/voteWorker");
-      const result = await runVoteSweep();
-      res.json({ ok: true, votes: result });
-    } catch (err: any) {
-      console.error("[AgentAdmin] Vote run failed:", err);
-      res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
-    }
+  app.post("/api/admin/agents/run-votes", requireAuth, requireAdmin, async (_req: AuthRequest, res) => {
+    res.json({ ok: true, started: true, mode: "background", message: "Vote sweep started — refresh shortly to see Ratings 7d / vote counts update." });
+    void (async () => {
+      try {
+        const { runVoteSweep } = await import("./agents/voteWorker");
+        const result = await runVoteSweep();
+        console.log(`[AgentAdmin] Vote sweep finished: ${result.length} votes cast`);
+      } catch (err: any) {
+        console.error("[AgentAdmin] Vote sweep failed:", err);
+      }
+    })();
   });
 
   // POST /api/admin/agents/:agentId/toggle-active - Pause or resume a single

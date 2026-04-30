@@ -101,7 +101,8 @@ export function getSimulationProfile(value: unknown): AgentSimulationProfile {
 }
 
 export function isV2SimulationProfile(value: unknown): boolean {
-  return getSimulationProfile(value).cohortId === SIMULATION_V2_COHORT_ID;
+  if (!isRecord(value)) return false;
+  return value.cohortId === SIMULATION_V2_COHORT_ID;
 }
 
 export function shouldShowPublicConfidence(profile: AgentSimulationProfile, stableKey: string): boolean {

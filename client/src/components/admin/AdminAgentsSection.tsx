@@ -224,18 +224,21 @@ export function AdminAgentsSection() {
     onError: (err: Error) => toast.error("Archive failed", { description: err.message }),
   });
 
+  // The three sweep endpoints below run as background jobs server-side
+  // (predictions especially can take >30s with LLM calls). The UI just acks
+  // the start; the user refreshes /status to see real counts.
   const runPredictMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/admin/agents/run");
       return res.json();
     },
     onSuccess: (data: any) => {
-      toast("Prediction batch complete", {
-        description: `Scheduled ${data?.scheduled ?? 0}, abstained ${data?.abstained ?? 0}, skipped ${data?.skipped ?? 0}.`,
+      toast("Prediction batch started", {
+        description: data?.message ?? "Running in background — refresh in 1-3 min to see scheduled actions.",
       });
-      refresh();
+      setTimeout(refresh, 5000);
     },
-    onError: (err: Error) => toast.error("Run failed", { description: err.message }),
+    onError: (err: Error) => toast.error("Could not start prediction batch", { description: err.message }),
   });
 
   const runVotesMutation = useMutation({
@@ -244,11 +247,12 @@ export function AdminAgentsSection() {
       return res.json();
     },
     onSuccess: (data: any) => {
-      const count = Array.isArray(data?.votes) ? data.votes.length : 0;
-      toast("Vote sweep complete", { description: `${count} votes cast.` });
-      refresh();
+      toast("Vote sweep started", {
+        description: data?.message ?? "Running in background — refresh shortly to see counts update.",
+      });
+      setTimeout(refresh, 5000);
     },
-    onError: (err: Error) => toast.error("Vote sweep failed", { description: err.message }),
+    onError: (err: Error) => toast.error("Could not start vote sweep", { description: err.message }),
   });
 
   const runCommentsMutation = useMutation({
@@ -257,12 +261,12 @@ export function AdminAgentsSection() {
       return res.json();
     },
     onSuccess: (data: any) => {
-      toast("Comment sweep complete", {
-        description: `Posted ${data?.posted ?? 0}, skipped ${data?.skipped ?? 0}.`,
+      toast("Comment sweep started", {
+        description: data?.message ?? "Running in background — refresh shortly to see Comments 7d update.",
       });
-      refresh();
+      setTimeout(refresh, 5000);
     },
-    onError: (err: Error) => toast.error("Comment sweep failed", { description: err.message }),
+    onError: (err: Error) => toast.error("Could not start comment sweep", { description: err.message }),
   });
 
   const dryRunMutation = useMutation({

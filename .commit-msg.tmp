@@ -1,0 +1,16 @@
+fix(agents): correct legacy detection + dispatch slow sweeps in background
+
+- isV2SimulationProfile was returning true for null/undefined profiles
+  because getSimulationProfile fills in a default with cohortId set to
+  the V2 cohort id. That meant archiveLegacyAgents (and every worker
+  that used isV2SimulationProfile to gate v2-only behaviour) treated
+  legacy agents as v2 and never archived them. Now check the raw value
+  has a record-shaped cohortId match, no defaulting.
+
+- runAgentBatch / runVoteSweep / runCommentSweep can take >30s
+  (especially predictions, which call LLMs for world markets). Railway's
+  edge gateway 502s after the timeout even though work continues
+  server-side. Switch the three admin endpoints to fire-and-forget:
+  return immediately with { started: true } and run the sweep in a
+  detached promise. Admin UI now shows "started" toasts and refreshes
+  status after 5s so the user sees counts climb naturally.
