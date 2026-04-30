@@ -162,8 +162,8 @@ export function CommentComposer({
     [onSubmit, handleCancel],
   );
 
-  const buttonRowClass = `mt-2 flex items-center justify-end gap-2 motion-safe:transition-opacity motion-safe:duration-150 motion-safe:ease-out ${
-    showButtons ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+  const buttonRowClass = `flex items-center justify-end gap-2 overflow-hidden motion-safe:transition-all motion-safe:duration-150 motion-safe:ease-out ${
+    showButtons ? "opacity-100 pointer-events-auto max-h-12 mt-2" : "opacity-0 pointer-events-none max-h-0 mt-0"
   }`;
 
   const postButtonClass =
