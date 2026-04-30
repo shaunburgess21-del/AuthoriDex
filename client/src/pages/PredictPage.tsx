@@ -121,6 +121,7 @@ import {
   type GainerCandidate,
 } from "@/components/predict/TopGainerCard";
 import { WeeklyJackpotHero } from "@/components/predict/WeeklyJackpotHero";
+import { OpenMarketCard } from "@/components/predict/OpenMarketCard";
 
 const PREDICT_ONBOARDING_STEPS: readonly OnboardingStep[] = [
   {
@@ -146,25 +147,6 @@ const PREDICT_ONBOARDING_STEPS: readonly OnboardingStep[] = [
   },
 ] as const;
 
-function MarketAvatar({ market }: { market: any }) {
-  const imgUrl = market.coverImageUrl || market.linkedPersonAvatar;
-  if (!imgUrl) return null;
-  return (
-    <Avatar className="h-20 w-20 shrink-0 rounded-md md:h-16 md:w-16">
-      <AvatarImage src={imgUrl} alt={market.title} className="object-cover" />
-      <AvatarFallback className="text-sm rounded-md">{(market.title || "?")[0]}</AvatarFallback>
-    </Avatar>
-  );
-}
-
-/** Keeps title vertical budget consistent when there is no market image. */
-function MarketAvatarOrSpacer({ market }: { market: any }) {
-  const imgUrl = market.coverImageUrl || market.linkedPersonAvatar;
-  if (!imgUrl) {
-    return <div className="h-20 w-20 shrink-0 rounded-md md:h-16 md:w-16 bg-muted/25" aria-hidden />;
-  }
-  return <MarketAvatar market={market} />;
-}
 
 function LinkedPersonChip({ market }: { market: any }) {
   const name = market.linkedPersonName;
@@ -771,436 +753,6 @@ function GainerCandidatesDialog({
         </div>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function PayoutDetails({ marketId }: { marketId: string }) {
-  const [open, setOpen] = useState(false);
-  const { data, isLoading } = useQuery<{ totalPool: number; userStake: number; winnerPoolTotal: number; userPayout: number; remainderPolicy: string }>({
-    queryKey: ['/api/markets', marketId, 'my-payout'],
-    enabled: open,
-  });
-
-  if (!open) {
-    return (
-      <button onClick={() => setOpen(true)} className="text-[10px] text-muted-foreground underline underline-offset-2 mt-1" data-testid="button-payout-details">
-        View details
-      </button>
-    );
-  }
-
-  return (
-    <div className="mt-1.5 text-[10px] text-muted-foreground space-y-0.5 border-t border-border/50 pt-1.5" data-testid="section-payout-details">
-      {isLoading ? (
-        <span>Loading...</span>
-      ) : data ? (
-        (() => {
-          const netPL = data.userPayout - data.userStake;
-          const plColor = netPL > 0 ? 'text-emerald-600 dark:text-emerald-400' : netPL < 0 ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground';
-          const plSign = netPL > 0 ? '+' : '';
-          return (
-            <>
-              <div className="flex items-center justify-between gap-2"><span>Your stake</span><span className="font-mono">{data.userStake.toLocaleString()}</span></div>
-              <div className="flex items-center justify-between gap-2"><span>Your payout</span><span className="font-mono font-semibold">{data.userPayout.toLocaleString()}</span></div>
-              <div className="flex items-center justify-between gap-2"><span>Net P&L</span><span className={`font-mono font-semibold ${plColor}`}>{plSign}{netPL.toLocaleString()}</span></div>
-              <div className="flex items-center justify-between gap-2 pt-0.5 border-t border-border/30"><span>Total pool</span><span className="font-mono">{data.totalPool.toLocaleString()}</span></div>
-              {data.winnerPoolTotal > 0 && <div className="flex items-center justify-between gap-2"><span>Winner pool</span><span className="font-mono">{data.winnerPoolTotal.toLocaleString()}</span></div>}
-            </>
-          );
-        })()
-      ) : (
-        <span>Could not load details</span>
-      )}
-    </div>
-  );
-}
-
-function UserBetResult({ betResult, isMarketClosed = false }: { betResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number; marketId?: string }; isMarketClosed?: boolean }) {
-  if (!betResult) return null;
-  if (betResult.result === 'pending') {
-    if (!isMarketClosed) return null;
-    return (
-      <div className="flex items-center gap-2 text-xs font-semibold px-2 py-1.5 rounded-md mt-2 bg-muted/50 text-muted-foreground" data-testid="text-bet-awaiting">
-        <Clock className="h-3.5 w-3.5" />
-        Awaiting Results
-        <span className="font-normal ml-auto">Picked: {betResult.entryLabel}</span>
-      </div>
-    );
-  }
-  const isResolved = betResult.result === 'won' || betResult.result === 'lost';
-  return (
-    <div>
-      <div className={`flex items-center gap-2 text-xs font-semibold px-2 py-1.5 rounded-md mt-2 ${
-        betResult.result === 'won' ? 'bg-emerald-500/15 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' :
-        betResult.result === 'refunded' ? 'bg-yellow-500/15 dark:bg-yellow-500/10 text-yellow-600 dark:text-yellow-400' :
-        'bg-red-500/15 dark:bg-red-500/10 text-red-600 dark:text-red-400'
-      }`} data-testid="text-bet-result">
-        {betResult.result === 'won' && <Trophy className="h-3.5 w-3.5" />}
-        {betResult.result === 'lost' && <XCircle className="h-3.5 w-3.5" />}
-        {betResult.result === 'refunded' && <RotateCcw className="h-3.5 w-3.5" />}
-        {betResult.result === 'won' ? `Won +${betResult.payout} credits` :
-         betResult.result === 'refunded' ? `Refunded ${betResult.stakeAmount} credits` :
-         `Lost ${betResult.stakeAmount} credits`}
-        <span className="text-muted-foreground font-normal ml-auto">Picked: {betResult.entryLabel}</span>
-      </div>
-      {isResolved && betResult.marketId && <PayoutDetails marketId={betResult.marketId} />}
-    </div>
-  );
-}
-
-function isYesLikeLabel(label: string) {
-  const l = (label || "").toLowerCase();
-  return l === "yes" || l === "above";
-}
-
-function PendingBetLinkRow({ entryLabel, stakeAmount, href }: { entryLabel: string; stakeAmount: number; href: string }) {
-  const yesLike = isYesLikeLabel(entryLabel);
-  const accent = yesLike ? "#00C853" : "#FF0000";
-  return (
-    <Link
-      href={href}
-      className="block w-full rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-      aria-label={`View your prediction: ${entryLabel}`}
-    >
-      <div
-        className="flex min-h-10 items-center justify-between gap-2 rounded-md border px-3 py-3 md:py-2 text-left w-full transition-colors"
-        style={{
-          backgroundColor: `${accent}10`,
-          borderColor: `${accent}80`,
-        }}
-        data-testid="pending-bet-link"
-      >
-        <div className="flex items-center gap-2 min-w-0 flex-1">
-          <div
-            className="h-5 w-5 rounded-full flex items-center justify-center shrink-0 border"
-            style={{ backgroundColor: `${accent}1A`, borderColor: `${accent}80` }}
-          >
-            <Check className="h-2.5 w-2.5" style={{ color: accent }} />
-          </div>
-          <div className="min-w-0 flex flex-row flex-wrap items-center gap-1.5">
-            <span className="text-xs font-semibold uppercase tracking-wide leading-none text-foreground">Your pick</span>
-            <span className="text-xs font-semibold leading-none" style={{ color: accent }}>
-              {entryLabel.toUpperCase()}
-            </span>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <div className="flex items-baseline gap-1 tabular-nums">
-            <span className="text-[10px] text-muted-foreground">Stake</span>
-            <span className="text-xs font-semibold text-foreground">{stakeAmount.toLocaleString("en-US")}</span>
-          </div>
-          <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden />
-        </div>
-      </div>
-    </Link>
-  );
-}
-
-function OpenMarketCard({ market, onNavigate, isMarketClosed = false, userBetResult, userBetsPerEntry, onFilterCategory, categoryRaceMap, leaderboardCategories }: { market: any; onNavigate: (slug: string, pick?: string, direction?: string) => void; isMarketClosed?: boolean; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number }; userBetsPerEntry?: Map<string, { direction: string; stakeAmount: number }>; onFilterCategory?: (cat: string) => void; categoryRaceMap?: Map<string, string>; leaderboardCategories?: Set<string> }) {
-  const entries = market.entries || [];
-  const isCommunity = market.marketType === "community";
-  const totalStake = entries.reduce((sum: number, e: any) => sum + Number(e.totalStake || 0) + Number(e.noStake || 0), 0);
-  const totalPool = isCommunity ? totalStake : totalStake + Number(market.seedVolume || 0);
-  const participants = market.activeParticipantCount || market.betCount || 0;
-  const isInactive = market.visibility === "inactive";
-  
-  const endDate = market.endAt ? new Date(market.endAt) : null;
-  const now = new Date();
-  const daysLeft = endDate ? Math.max(0, Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))) : 0;
-  const timeLabel = daysLeft > 1 ? `${daysLeft}d left` : daysLeft === 1 ? "1d left" : "Closing soon";
-
-  if (market.openMarketType === "updown") {
-    return <UpDownMarketCard market={market} entries={entries} totalPool={totalPool} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} isMarketClosed={isMarketClosed || isInactive} isInactive={isInactive} inactiveMessage={market.inactiveMessage} userBetResult={userBetResult} onFilterCategory={onFilterCategory} categoryRaceMap={categoryRaceMap} leaderboardCategories={leaderboardCategories} />;
-  }
-  if (market.openMarketType === "multi") {
-    return <MultiMarketCard market={market} entries={entries} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} isMarketClosed={isMarketClosed || isInactive} isInactive={isInactive} inactiveMessage={market.inactiveMessage} userBetResult={userBetResult} userBetsPerEntry={userBetsPerEntry} onFilterCategory={onFilterCategory} categoryRaceMap={categoryRaceMap} leaderboardCategories={leaderboardCategories} />;
-  }
-  return <BinaryMarketCard market={market} entries={entries} totalPool={totalPool} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} isMarketClosed={isMarketClosed || isInactive} isInactive={isInactive} inactiveMessage={market.inactiveMessage} userBetResult={userBetResult} onFilterCategory={onFilterCategory} categoryRaceMap={categoryRaceMap} leaderboardCategories={leaderboardCategories} />;
-}
-
-function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel, onNavigate, isMarketClosed, isInactive = false, inactiveMessage, userBetResult, onFilterCategory, categoryRaceMap, leaderboardCategories }: { market: any; entries: any[]; totalPool: number; participants: number; timeLabel: string; onNavigate: (slug: string, pick?: string, direction?: string) => void; isMarketClosed: boolean; isInactive?: boolean; inactiveMessage?: string; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number }; onFilterCategory?: (cat: string) => void; categoryRaceMap?: Map<string, string>; leaderboardCategories?: Set<string> }) {
-  const yesEntry = entries.find((e: any) => e.label === "Yes") || entries[0];
-  const noEntry = entries.find((e: any) => e.label === "No") || entries[1];
-  const yesStake = Number(yesEntry?.totalStake || 0);
-  const noStake = Number(noEntry?.totalStake || 0);
-  const total = yesStake + noStake || 1;
-  const yesPercent = Math.round((yesStake / total) * 100);
-  const noPercent = 100 - yesPercent;
-  // Multipliers use raw stakes (not the rounded percent) so thin pools
-  // like 1 vs 999 don't collapse to a misleading 1.9x default.
-  // 0.95 haircut matches MarketDetailPage so card and detail agree.
-  const yesMultiplier = +(computePayoutMultiplier(total, yesStake) * 0.95).toFixed(1);
-  const noMultiplier = +(computePayoutMultiplier(total, noStake) * 0.95).toFixed(1);
-  
-  return (
-    <PredictCard testId={`card-market-${market.slug}`} className={`${isMarketClosed && !isInactive ? 'opacity-75' : ''}`} inactive={isInactive} inactiveMessage={inactiveMessage}>
-      <div className="flex items-center justify-between mb-3 flex-wrap gap-1">
-        <Badge variant="outline" className="text-xs">
-          <Clock className="h-3 w-3 mr-1" />
-          {timeLabel}
-        </Badge>
-        {market.category && <InteractiveCategoryPill category={market.category} onFilter={() => onFilterCategory?.(market.category)} leaderboardCategories={leaderboardCategories} detailHref={`/markets/${market.slug}`} detailLabel="View Market Details" />}
-      </div>
-      
-      <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); if (!isInactive) onNavigate(market.slug); }} className={isInactive ? "cursor-default" : "cursor-pointer"}>
-        <AvatarHeightHeadline
-          className="mb-2"
-          text={market.title || ""}
-          serif={false}
-          avatar={<MarketAvatarOrSpacer market={market} />}
-          titleClassName={`!font-semibold ${isInactive ? "" : "hover:!text-violet-600 dark:hover:!text-violet-400"}`}
-        />
-      </a>
-      {market.teaser && (
-        <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); if (!isInactive) onNavigate(market.slug); }} className={isInactive ? "cursor-default" : "cursor-pointer"}>
-          <p className={`text-sm text-muted-foreground mb-3 line-clamp-3 leading-[1.4] ${!isInactive ? 'hover:text-violet-600 dark:hover:text-violet-400' : ''} transition-colors`}>{market.teaser}</p>
-        </a>
-      )}
-      
-      {/* Mobile: max-md:mt-auto pulls participants + pool + Yes/No to card base; md:contents keeps desktop flex layout unchanged */}
-      <div className="flex flex-col max-md:mt-auto md:contents">
-        <div className="pt-1 md:mt-auto md:pt-1">
-          <div className="mb-2 md:mb-3">
-            <ParticipantAvatarStack participants={market.recentParticipants} totalCount={participants} />
-          </div>
-          
-          <div className="mb-2 md:mb-3">
-            <div className="h-3 rounded-full bg-red-500/25 dark:bg-red-500/20 overflow-hidden">
-              <div className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all" style={{ width: `${yesPercent}%` }} />
-            </div>
-            <div className="flex items-center justify-between text-xs mt-1.5">
-              <span className="text-green-500 font-semibold">Yes {yesPercent}%</span>
-              <span className="text-red-500 font-semibold">No {noPercent}%</span>
-            </div>
-          </div>
-        </div>
-        
-        <div className="max-md:mt-1">
-          <div className="flex items-center justify-center mb-1.5">
-            <span className="text-sm font-semibold text-muted-foreground">Pool: {totalPool.toLocaleString('en-US')}</span>
-          </div>
-          
-          {isMarketClosed ? (
-            <Button className="w-full bg-muted text-muted-foreground cursor-not-allowed" disabled>
-              <Lock className="h-4 w-4 mr-2" />
-              Closed
-            </Button>
-          ) : userBetResult?.result === "pending" ? (
-            <PendingBetLinkRow entryLabel={userBetResult.entryLabel} stakeAmount={userBetResult.stakeAmount} href={`/markets/${market.slug}`} />
-          ) : (
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                className="!min-h-0 px-4 py-3.5 md:py-2.5 bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20"
-                onClick={() => onNavigate(market.slug, 'yes')}
-                data-testid={`button-yes-${market.slug}`}
-              >
-                Yes {yesMultiplier}x
-              </Button>
-              <Button
-                className="!min-h-0 px-4 py-3.5 md:py-2.5 bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20"
-                onClick={() => onNavigate(market.slug, 'no')}
-                data-testid={`button-no-${market.slug}`}
-              >
-                No {noMultiplier}x
-              </Button>
-            </div>
-          )}
-          <UserBetResult betResult={userBetResult} isMarketClosed={isMarketClosed} />
-        </div>
-      </div>
-    </PredictCard>
-  );
-}
-
-function MultiMarketCard({ market, entries, participants, timeLabel, onNavigate, isMarketClosed, isInactive = false, inactiveMessage, userBetResult, userBetsPerEntry, onFilterCategory, categoryRaceMap, leaderboardCategories }: { market: any; entries: any[]; participants: number; timeLabel: string; onNavigate: (slug: string, pick?: string, direction?: string) => void; isMarketClosed: boolean; isInactive?: boolean; inactiveMessage?: string; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number }; userBetsPerEntry?: Map<string, { direction: string; stakeAmount: number }>; onFilterCategory?: (cat: string) => void; categoryRaceMap?: Map<string, string>; leaderboardCategories?: Set<string> }) {
-  const totalEntryStake = entries.reduce((sum: number, e: any) => sum + Number(e.totalStake || 0) + Number(e.noStake || 0), 0) || 1;
-  const rankedEntries = [...entries]
-    .map((e: any) => {
-      const yesStake = Number(e.totalStake || 0);
-      const noStake = Number(e.noStake || 0);
-      const entryPool = yesStake + noStake;
-      return {
-        ...e,
-        pct: Math.round((entryPool / totalEntryStake) * 100),
-        yesPct: entryPool > 0 ? Math.round((yesStake / entryPool) * 100) : 50,
-        noPct: entryPool > 0 ? 100 - Math.round((yesStake / entryPool) * 100) : 50,
-      };
-    })
-    .sort((a: any, b: any) => b.pct - a.pct);
-
-  return (
-    <PredictCard testId={`card-market-${market.slug}`} className={`${isMarketClosed && !isInactive ? 'opacity-75' : ''}`} inactive={isInactive} inactiveMessage={inactiveMessage}>
-      <div className="flex items-center justify-between mb-3 flex-wrap gap-1">
-        <Badge variant="outline" className="text-xs">
-          <Clock className="h-3 w-3 mr-1" />
-          {timeLabel}
-        </Badge>
-        {market.category && <InteractiveCategoryPill category={market.category} onFilter={() => onFilterCategory?.(market.category)} leaderboardCategories={leaderboardCategories} detailHref={`/markets/${market.slug}`} detailLabel="View Market Details" />}
-      </div>
-
-      <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); if (!isInactive) onNavigate(market.slug); }} className={isInactive ? "cursor-default" : "cursor-pointer"}>
-        <AvatarHeightHeadline
-          className="mb-2"
-          text={market.title || ""}
-          serif={false}
-          avatar={<MarketAvatarOrSpacer market={market} />}
-          titleClassName={`!font-semibold ${isInactive ? "" : "hover:!text-violet-600 dark:hover:!text-violet-400"}`}
-        />
-      </a>
-      {market.teaser && (
-        <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); if (!isInactive) onNavigate(market.slug); }} className={isInactive ? "cursor-default" : "cursor-pointer"}>
-          <p className={`text-sm text-muted-foreground mb-3 line-clamp-2 leading-[1.4] ${!isInactive ? 'hover:text-violet-600 dark:hover:text-violet-400' : ''} transition-colors`}>{market.teaser}</p>
-        </a>
-      )}
-
-      <div className="mb-3 flex items-center gap-2">
-        <ParticipantAvatarStack participants={market.recentParticipants} totalCount={participants} />
-        <Badge variant="outline" className="text-[10px] ml-auto">{entries.length} options</Badge>
-      </div>
-
-      <div className="space-y-1.5">
-          {rankedEntries.slice(0, 4).map((entry: any) => {
-            const entryBet = userBetsPerEntry?.get(String(entry.id));
-            const hasBet = !!entryBet && userBetResult?.result === "pending";
-            const betAccent = entryBet?.direction === "no" ? "#FF0000" : "#00C853";
-            return (
-              <div key={entry.id} className="flex items-center gap-2">
-                {entry.imageUrl ? (
-                  <Avatar className="h-9 w-9 shrink-0 rounded-md">
-                    <AvatarImage src={entry.imageUrl} alt={entry.label} className="object-cover" />
-                    <AvatarFallback className="text-[11px] rounded-md">{entry.label?.[0]}</AvatarFallback>
-                  </Avatar>
-                ) : (
-                  <div className="h-9 w-9 shrink-0 rounded-md bg-muted/40 flex items-center justify-center">
-                    <span className="text-[11px] font-semibold text-muted-foreground">{entry.label?.[0]}</span>
-                  </div>
-                )}
-                <span className="text-[14px] font-medium truncate flex-1 min-w-0">{entry.label}</span>
-                <span className="text-[14px] font-mono font-semibold text-muted-foreground w-10 text-right shrink-0">{entry.pct}%</span>
-                {hasBet ? (
-                  <Link
-                    href={`/markets/${market.slug}`}
-                    className="flex items-center gap-1.5 shrink-0 rounded-md border px-2 py-1.5 transition-colors"
-                    style={{ backgroundColor: `${betAccent}10`, borderColor: `${betAccent}80` }}
-                    data-testid={`pending-entry-${entry.id}`}
-                  >
-                    <Check className="h-3 w-3" style={{ color: betAccent }} />
-                    <span className="text-[10px] font-semibold" style={{ color: betAccent }}>Your pick</span>
-                    <span className="text-[10px] text-muted-foreground tabular-nums">{entryBet.stakeAmount.toLocaleString("en-US")}</span>
-                  </Link>
-                ) : !isMarketClosed ? (
-                  <div className="flex gap-1.5 shrink-0">
-                    <button
-                      className="px-3 py-2 text-xs font-semibold rounded-md bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20 transition-colors"
-                      onClick={(e) => { e.stopPropagation(); onNavigate(market.slug, entry.id, 'yes'); }}
-                      data-testid={`button-yes-${entry.id}`}
-                    >
-                      Yes
-                    </button>
-                    <button
-                      className="px-3 py-2 text-xs font-semibold rounded-md bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20 transition-colors"
-                      onClick={(e) => { e.stopPropagation(); onNavigate(market.slug, entry.id, 'no'); }}
-                      data-testid={`button-no-${entry.id}`}
-                    >
-                      No
-                    </button>
-                  </div>
-                ) : (
-                  <span className="text-xs text-muted-foreground shrink-0 w-24 text-right">{entry.yesPct}% Yes / {entry.noPct}% No</span>
-                )}
-              </div>
-            );
-          })}
-      </div>
-
-      <UserBetResult betResult={userBetResult} isMarketClosed={isMarketClosed} />
-    </PredictCard>
-  );
-}
-
-function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel, onNavigate, isMarketClosed, isInactive = false, inactiveMessage, userBetResult, onFilterCategory, categoryRaceMap, leaderboardCategories }: { market: any; entries: any[]; totalPool: number; participants: number; timeLabel: string; onNavigate: (slug: string, pick?: string, direction?: string) => void; isMarketClosed: boolean; isInactive?: boolean; inactiveMessage?: string; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number }; onFilterCategory?: (cat: string) => void; categoryRaceMap?: Map<string, string>; leaderboardCategories?: Set<string> }) {
-  const aboveEntry = entries.find((e: any) => e.label === "Above") || entries[0];
-  const belowEntry = entries.find((e: any) => e.label === "Below") || entries[1];
-  const aboveStake = Number(aboveEntry?.totalStake || 0);
-  const belowStake = Number(belowEntry?.totalStake || 0);
-  const total = aboveStake + belowStake || 1;
-  const abovePercent = Math.round((aboveStake / total) * 100);
-  const belowPercent = 100 - abovePercent;
-  
-  return (
-    <PredictCard testId={`card-market-${market.slug}`} className={`${isMarketClosed && !isInactive ? 'opacity-75' : ''}`} inactive={isInactive} inactiveMessage={inactiveMessage}>
-      <div className="flex items-center justify-between mb-3 flex-wrap gap-1">
-        <Badge variant="outline" className="text-xs">
-          <Clock className="h-3 w-3 mr-1" />
-          {timeLabel}
-        </Badge>
-        {market.category && <InteractiveCategoryPill category={market.category} onFilter={() => onFilterCategory?.(market.category)} leaderboardCategories={leaderboardCategories} detailHref={`/markets/${market.slug}`} detailLabel="View Market Details" />}
-      </div>
-      
-      <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); if (!isInactive) onNavigate(market.slug); }} className={isInactive ? "cursor-default" : "cursor-pointer"}>
-        <AvatarHeightHeadline
-          className="mb-2"
-          text={market.title || ""}
-          serif={false}
-          avatar={<MarketAvatarOrSpacer market={market} />}
-          titleClassName={`!font-semibold ${isInactive ? "" : "hover:!text-violet-600 dark:hover:!text-violet-400"}`}
-        />
-      </a>
-      {market.teaser && (
-        <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); if (!isInactive) onNavigate(market.slug); }} className={isInactive ? "cursor-default" : "cursor-pointer"}>
-          <p className={`text-sm text-muted-foreground mb-3 line-clamp-3 leading-[1.4] ${!isInactive ? 'hover:text-violet-600 dark:hover:text-violet-400' : ''} transition-colors`}>{market.teaser}</p>
-        </a>
-      )}
-      
-      <div className="mt-auto pt-1">
-        <div className="mb-2">
-          <ParticipantAvatarStack participants={market.recentParticipants} totalCount={participants} />
-        </div>
-        
-        <div className="mb-2">
-          <div className="h-3 rounded-full bg-red-500/25 dark:bg-red-500/20 overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all" style={{ width: `${abovePercent}%` }} />
-          </div>
-          <div className="flex items-center justify-between text-xs mt-1.5">
-            <span className="text-green-500 font-semibold">Above {abovePercent}%</span>
-            <span className="text-red-500 font-semibold">Below {belowPercent}%</span>
-          </div>
-        </div>
-      </div>
-      
-      <div>
-        <div className="flex items-center justify-center mb-1.5">
-          <span className="text-sm font-semibold text-muted-foreground">Pool: {totalPool.toLocaleString('en-US')}</span>
-        </div>
-        
-        {isMarketClosed ? (
-          <Button className="w-full bg-muted text-muted-foreground cursor-not-allowed" disabled>
-            <Lock className="h-4 w-4 mr-2" />
-            Closed
-          </Button>
-        ) : userBetResult?.result === "pending" ? (
-          <PendingBetLinkRow entryLabel={userBetResult.entryLabel} stakeAmount={userBetResult.stakeAmount} href={`/markets/${market.slug}`} />
-        ) : (
-          <div className="grid grid-cols-2 gap-2">
-            <Button
-              className="!min-h-0 px-4 py-3.5 md:py-2.5 bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20"
-              onClick={() => onNavigate(market.slug, 'above')}
-              data-testid={`button-above-${market.slug}`}
-            >
-              Above {abovePercent}%
-            </Button>
-            <Button
-              className="!min-h-0 px-4 py-3.5 md:py-2.5 bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20"
-              onClick={() => onNavigate(market.slug, 'below')}
-              data-testid={`button-below-${market.slug}`}
-            >
-              Below {belowPercent}%
-            </Button>
-          </div>
-        )}
-        <UserBetResult betResult={userBetResult} isMarketClosed={isMarketClosed} />
-      </div>
-    </PredictCard>
   );
 }
 
@@ -2286,6 +1838,71 @@ export default function PredictPage() {
     setStakeModalOpen(true);
   };
 
+  // World/community market betting via StakeModal (mirrors native markets).
+  // Replaces the previous "Yes/No on the card → URL hop → inline form" flow,
+  // which lacked the credits-banner UX and produced an ugly toast on
+  // insufficient funds. Now the same StakeModal that powers H2H/UpDown/Gainer
+  // also handles community markets — single source of truth for the credits
+  // affordance, idempotent retry path, and confetti.
+  const communityMarketBetMutation = useMutation({
+    mutationFn: async ({ slug, entryId, stakeAmount, direction }: { slug: string; entryId: string; stakeAmount: number; direction: "yes" | "no" }) => {
+      const res = await apiRequest("POST", `/api/open-markets/${slug}/bet`, { entryId, stakeAmount, direction });
+      return res.json();
+    },
+    onSuccess: async (data: any) => {
+      hapticSuccess();
+      if (data?.xp?.xpAwarded) {
+        triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
+      }
+      toast("Prediction placed!", { description: "Your world-market prediction has been recorded." });
+      setStakeModalOpen(false);
+      setPendingSelection(null);
+      await Promise.all([
+        refreshProfile(),
+        queryClient.invalidateQueries({ queryKey: ["/api/open-markets"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/me/predictions"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
+      ]);
+    },
+    onError: (err: Error) => {
+      hapticError();
+      toast.error("Failed to place prediction", { description: err.message });
+    },
+  });
+
+  const handleCommunityPickEntry = (market: any, entry: any, direction: "yes" | "no") => {
+    if (market.status !== "OPEN" || market.visibility !== "live") {
+      return;
+    }
+    if (!user) {
+      toast("Sign in required", { description: "Sign in to place predictions." });
+      navigateToLogin(setLocation);
+      return;
+    }
+
+    const yesStake = Number(entry.totalStake || 0);
+    const noStake = Number(entry.noStake || 0);
+    const entryPool = yesStake + noStake;
+    const sideStake = direction === "yes" ? yesStake : noStake;
+    const estimatedPayout = +(computePayoutMultiplier(entryPool, sideStake) * 0.95).toFixed(1);
+
+    setPendingSelection({
+      type: "community",
+      // The StakeModal heading shows "{choice}" prominently — include
+      // direction so the user can't misread which side they're betting.
+      choice: `${direction === "no" ? "No" : "Yes"} \u00b7 ${entry.label}`,
+      marketName: market.title,
+      marketId: market.id,
+      entryId: entry.id,
+      estimatedPayout,
+      // Community markets resolve at endAt; no separate weekly betting cutoff.
+      endAt: market.endAt,
+      bettingCutoff: null,
+      direction,
+    });
+    openStakeModal();
+  };
+
   const handleUpDownSelect = (market: PredictionMarket, choice: "up" | "down") => {
     if (isMarketClosed) {
       return;
@@ -2426,6 +2043,29 @@ export default function PredictPage() {
         entryId: pendingSelection.entryId,
         stakeAmount: amount,
         marketType: pendingSelection.type,
+      });
+      return;
+    }
+
+    if (pendingSelection.type === "community") {
+      if (!pendingSelection.entryId) {
+        toast.error("Selection unavailable", { description: "This market selection is not available right now." });
+        return;
+      }
+      // Community markets aren't in `hydratedMarkets` (which is upDown-only);
+      // look them up in the openMarkets list to recover the slug.
+      const market = openMarkets.find((m: any) => String(m.id) === String(pendingSelection.marketId));
+      if (!market?.slug) {
+        toast.error("Market unavailable", { description: "Could not find the selected market. Please refresh and try again." });
+        setStakeModalOpen(false);
+        setPendingSelection(null);
+        return;
+      }
+      await communityMarketBetMutation.mutateAsync({
+        slug: market.slug,
+        entryId: pendingSelection.entryId,
+        stakeAmount: amount,
+        direction: pendingSelection.direction === "no" ? "no" : "yes",
       });
       return;
     }
@@ -2815,6 +2455,7 @@ export default function PredictPage() {
                     key={market.id} 
                     market={market} 
                     onNavigate={(slug, pick, direction) => setLocation(`/markets/${slug}${pick ? `?pick=${pick}${direction ? `&direction=${direction}` : ''}` : ''}`)}
+                    onPickEntry={handleCommunityPickEntry}
                     isMarketClosed={market.status !== 'OPEN'}
                     userBetResult={userBetsByMarket.get(String(market.id))}
                     userBetsPerEntry={userBetsPerEntry.get(String(market.id))}
@@ -3383,6 +3024,7 @@ export default function PredictPage() {
               key={market.id} 
               market={market} 
               onNavigate={(slug, pick, direction) => setLocation(`/markets/${slug}${pick ? `?pick=${pick}${direction ? `&direction=${direction}` : ''}` : ''}`)}
+              onPickEntry={handleCommunityPickEntry}
               isMarketClosed={market.status !== 'OPEN'}
               userBetResult={userBetsByMarket.get(String(market.id))}
               userBetsPerEntry={userBetsPerEntry.get(String(market.id))}
@@ -3409,16 +3051,39 @@ export default function PredictPage() {
           openGainerPicker(market, currentCandidate || null);
         } : undefined}
         onDirectionChange={(dir) => {
-          if (!pendingSelection || pendingSelection.type !== "updown") return;
-          const marketId = pendingSelection.marketId;
-          const market = hydratedMarkets.find(m => m.id === marketId);
-          if (!market) return;
-          setPendingSelection({
-            ...pendingSelection,
-            choice: dir === "up" ? "Trend Score UP" : "Trend Score DOWN",
-            crowdSentiment: dir === "up" ? market.upPoolPercent : 100 - market.upPoolPercent,
-            estimatedPayout: dir === "up" ? market.upMultiplier : market.downMultiplier,
-          });
+          if (!pendingSelection) return;
+
+          if (pendingSelection.type === "updown" && (dir === "up" || dir === "down")) {
+            const market = hydratedMarkets.find(m => m.id === pendingSelection.marketId);
+            if (!market) return;
+            setPendingSelection({
+              ...pendingSelection,
+              choice: dir === "up" ? "Trend Score UP" : "Trend Score DOWN",
+              crowdSentiment: dir === "up" ? market.upPoolPercent : 100 - market.upPoolPercent,
+              estimatedPayout: dir === "up" ? market.upMultiplier : market.downMultiplier,
+            });
+            return;
+          }
+
+          if (pendingSelection.type === "community" && (dir === "yes" || dir === "no")) {
+            // Recompute multiplier and label for the new side without closing
+            // the modal. We re-derive from the current openMarkets snapshot so
+            // a stale pendingSelection picks up any pool drift since the click.
+            const market = openMarkets.find((m: any) => String(m.id) === String(pendingSelection.marketId));
+            const entry = market?.entries?.find((e: any) => String(e.id) === String(pendingSelection.entryId));
+            if (!market || !entry) return;
+            const yesStake = Number(entry.totalStake || 0);
+            const noStake = Number(entry.noStake || 0);
+            const entryPool = yesStake + noStake;
+            const sideStake = dir === "yes" ? yesStake : noStake;
+            const estimatedPayout = +(computePayoutMultiplier(entryPool, sideStake) * 0.95).toFixed(1);
+            setPendingSelection({
+              ...pendingSelection,
+              choice: `${dir === "no" ? "No" : "Yes"} \u00b7 ${entry.label}`,
+              estimatedPayout,
+              direction: dir,
+            });
+          }
         }}
       />
       <CreatePredictionModal

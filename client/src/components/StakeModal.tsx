@@ -49,6 +49,9 @@ export interface StakeSelection {
   candidatePercentGain?: number;
   candidatePointsAdded?: number;
   bettingCutoff?: string | null;
+  /** Yes/No side for community-market multi-option entries.
+   *  Other market types (updown/h2h/gainer/jackpot) ignore this. */
+  direction?: "yes" | "no";
 }
 
 interface StakeModalProps {
@@ -67,7 +70,10 @@ interface StakeModalProps {
     meta: { confidence?: number; thesis?: string },
   ) => void | Promise<void>;
   walletBalance: number;
-  onDirectionChange?: (direction: "up" | "down") => void;
+  /** Up/Down for `updown` markets, Yes/No for `community` markets.
+   *  When provided, the modal renders an in-place toggle so a misclick on
+   *  the card doesn't require closing + reopening the modal. */
+  onDirectionChange?: (direction: "up" | "down" | "yes" | "no") => void;
   onChangePick?: () => void;
 }
 
@@ -106,6 +112,8 @@ export function StakeModal({
   const isUpDown = selection.type === "updown";
   const isH2H = selection.type === "h2h";
   const isGainer = selection.type === "gainer";
+  const isCommunity = selection.type === "community";
+  const isCommunityNo = isCommunity && selection.direction === "no";
   const isUp = selection.choice.includes("UP");
   const isDown = selection.choice.includes("DOWN");
 
@@ -208,11 +216,16 @@ export function StakeModal({
           </DialogDescription>
         </DialogHeader>
 
-        <MarketCycleStrip
-          bettingCutoff={selection.bettingCutoff ?? null}
-          resolveAt={selection.endAt ?? null}
-          variant="modal"
-        />
+        {/* Community markets resolve any time and don't follow the weekly
+            cycle, so the strip with its Friday-cutoff/Sunday-resolve fallbacks
+            would show misleading info. Native (weekly) markets keep it. */}
+        {!isCommunity && (
+          <MarketCycleStrip
+            bettingCutoff={selection.bettingCutoff ?? null}
+            resolveAt={selection.endAt ?? null}
+            variant="modal"
+          />
+        )}
 
         <div className="py-2 space-y-4">
           <Card className="p-3 bg-violet-500/8 dark:bg-violet-500/5 border-violet-500/20">
@@ -225,7 +238,7 @@ export function StakeModal({
                 {isDown && <span className="text-[#FF0000]">DOWN</span>}
               </p>
             ) : (
-              <p className="text-lg font-bold mt-1 text-[#00c853]">{selection.choice}</p>
+              <p className={`text-lg font-bold mt-1 ${isCommunityNo ? "text-[#FF0000]" : "text-[#00C853]"}`}>{selection.choice}</p>
             )}
 
             {isGainer && onChangePick && (
@@ -259,6 +272,38 @@ export function StakeModal({
                   }`}
                 >
                   <TrendingDown className="h-3 w-3" /> Down
+                </button>
+              </div>
+            )}
+
+            {/* Community-market direction toggle — mirrors the upDown one
+                so a user who tapped the wrong side on the card can flip
+                without closing + reopening the modal. */}
+            {isCommunity && onDirectionChange && (
+              <div className="flex gap-2 mt-2" role="group" aria-label="Yes / No toggle">
+                <button
+                  type="button"
+                  onClick={() => onDirectionChange("yes")}
+                  className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md text-xs font-medium border transition-all ${
+                    selection.direction !== "no"
+                      ? "bg-[#00C853]/20 border-[#00C853]/60 text-[#00C853]"
+                      : "bg-transparent border-slate-700 text-slate-600 dark:text-slate-400 hover:border-[#00C853]/40 hover:text-[#00C853]/60"
+                  }`}
+                  data-testid="stake-modal-toggle-yes"
+                >
+                  Yes
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onDirectionChange("no")}
+                  className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md text-xs font-medium border transition-all ${
+                    selection.direction === "no"
+                      ? "bg-[#FF0000]/20 border-[#FF0000]/60 text-[#FF0000]"
+                      : "bg-transparent border-slate-700 text-slate-600 dark:text-slate-400 hover:border-[#FF0000]/40 hover:text-[#FF0000]/60"
+                  }`}
+                  data-testid="stake-modal-toggle-no"
+                >
+                  No
                 </button>
               </div>
             )}

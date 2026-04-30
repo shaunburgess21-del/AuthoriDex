@@ -11,7 +11,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { navigateToLogin } from "@/lib/authReturn";
@@ -19,6 +18,7 @@ import { formatTimeAgo, formatDate } from "@/lib/formatDate";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { CardComments, useCommentCount } from "@/components/comments/CardComments";
 import { CommentsBottomSheet } from "@/components/snap-scroll/CommentsBottomSheet";
+import { computePayoutMultiplier, formatMultiplier } from "@/lib/parimutuel";
 import {
   ArrowLeft,
   Check,
@@ -43,7 +43,10 @@ import {
   X,
   MessageSquare,
   ChevronRight,
+  CreditCard,
 } from "lucide-react";
+
+const MIN_STAKE = 5;
 
 interface MarketEntry {
   id: string;
@@ -174,12 +177,18 @@ function getEntryPercentages(entries: MarketEntry[]) {
     const weight = yesStake + noStake + (e.seedCount || 0);
     const livePool = yesStake + noStake;
     const yesPercentage = livePool > 0 ? Math.round((yesStake / livePool) * 100) : 50;
+    // Per-entry parimutuel multipliers — same 0.95 haircut as the card and
+    // OpenMarketCard so the URL detail page agrees with the card it came from.
+    const yesMultiplier = +(computePayoutMultiplier(livePool, yesStake) * 0.95).toFixed(1);
+    const noMultiplier = +(computePayoutMultiplier(livePool, noStake) * 0.95).toFixed(1);
     return {
       ...e,
       percentage: totalWeight > 0 ? Math.round((weight / totalWeight) * 100) : Math.round(100 / entries.length),
       displayStake: weight,
       yesPercentage,
       noPercentage: livePool > 0 ? 100 - yesPercentage : 50,
+      yesMultiplier,
+      noMultiplier,
     };
   });
 }
@@ -379,18 +388,10 @@ function MultiOutcomes({
             } ${tone?.rowClass ?? ""} ${disabled ? "cursor-not-allowed" : "cursor-pointer hover:bg-muted/20"}`}
             data-testid={`button-outcome-${entry.id}`}
           >
-            {(entry as any).imageUrl ? (
-              <Avatar className="h-8 w-8 shrink-0 rounded-md">
-                <AvatarImage src={(entry as any).imageUrl} alt={entry.label} className="object-cover" />
-                <AvatarFallback className="text-[9px] rounded-md">{entry.label[0]}</AvatarFallback>
-              </Avatar>
-            ) : (
-              <div className="h-8 w-8 shrink-0 rounded-md bg-muted/40 flex items-center justify-center">
-                <span className="text-xs font-semibold text-muted-foreground">{entry.label[0]}</span>
-              </div>
-            )}
+            {/* No avatar placeholder — see pick-row comment. Names alone
+                read better than "S." on mobile when the column shrinks. */}
             <span
-              className={`w-[30%] sm:w-[25%] text-sm truncate shrink-0 ${
+              className={`w-[40%] sm:w-[30%] text-sm truncate shrink-0 ${
                 isUserPick ? "font-semibold text-foreground" : isLeading ? "font-medium text-violet-600 dark:text-violet-400" : "text-muted-foreground"
               }`}
             >
@@ -518,7 +519,7 @@ function UpDownOutcomes({
 export default function MarketDetailPage() {
   const params = useParams<{ slug: string }>();
   const [, setLocation] = useLocation();
-  const { user, isLoggedIn, refreshProfile } = useAuth();
+  const { user, profile, isLoggedIn, refreshProfile } = useAuth();
   const queryClient = useQueryClient();
   const { trigger: triggerXpBurst } = useXpBurst();
   const marketCommentCount = useCommentCount("open-market", params.slug || "");
@@ -733,6 +734,37 @@ export default function MarketDetailPage() {
     }
     betMutation.mutate({ entryId: selectedEntry, stakeAmount: amount, direction: selectedDirection });
   };
+
+  // Credits-affordance bits shared across the multi-option and binary forms.
+  // Hoisted out of JSX so both branches stay in sync — previously only the
+  // multi-option panel had the banner, leaving binary world-market users
+  // with the old "Insufficient credits" toast on submit.
+  const walletBalance = profile?.predictCredits ?? 0;
+  const parsedStake = Number(stakeAmount) || 0;
+  const tooFewToBet = isLoggedIn && walletBalance < MIN_STAKE;
+  const overstake = isLoggedIn && parsedStake > 0 && parsedStake > walletBalance;
+  const showCreditsBanner = tooFewToBet || overstake;
+  const insufficientCredits = isLoggedIn && parsedStake > walletBalance;
+  const creditsBanner = showCreditsBanner ? (
+    <div
+      className="rounded-lg border border-violet-500/40 bg-violet-500/10 dark:border-violet-500/30 dark:bg-violet-500/8 p-3 flex items-center gap-3"
+      data-testid="banner-buy-credits"
+    >
+      <CreditCard className="h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400" />
+      <p className="text-xs text-muted-foreground flex-1">
+        {tooFewToBet ? "You need credits to predict." : "Not enough credits for that stake."}
+      </p>
+      <Button
+        size="sm"
+        variant="outline"
+        className="border-violet-500/50 text-violet-700 dark:text-violet-300 hover:bg-violet-500/15"
+        onClick={() => setLocation("/pricing")}
+        data-testid="button-buy-credits-detail"
+      >
+        Buy credits
+      </Button>
+    </div>
+  ) : null;
 
   if (isLoading) {
     return (
@@ -1051,21 +1083,19 @@ export default function MarketDetailPage() {
                           }`}
                           data-testid={`pick-row-${entry.id}`}
                         >
-                          {(entry as any).imageUrl ? (
-                            <Avatar className="h-8 w-8 shrink-0 rounded-md">
-                              <AvatarImage src={(entry as any).imageUrl} alt={entry.label} className="object-cover" />
-                              <AvatarFallback className="text-[10px] rounded-md">{entry.label[0]}</AvatarFallback>
-                            </Avatar>
-                          ) : (
-                            <div className="h-8 w-8 shrink-0 rounded-md bg-muted/40 flex items-center justify-center">
-                              <span className="text-xs font-semibold text-muted-foreground">{entry.label[0]}</span>
-                            </div>
-                          )}
+                          {/* Initial-circle placeholders dropped: on mobile
+                              they shrank the label column hard enough that
+                              names truncated to a single letter. The card
+                              hero image already sets visual context. */}
                           <span className="text-sm font-medium truncate flex-1 min-w-0">{entry.label}</span>
                           <span className="text-sm font-mono font-semibold text-muted-foreground w-10 text-right shrink-0">{entry.percentage}%</span>
+                          {/* Fixed-width Yes/No buttons keep the right column
+                              aligned regardless of multiplier length, and
+                              formatMultiplier ensures we always render "1.0x"
+                              not "1x" so character counts match across rows. */}
                           <div className="flex gap-1.5 shrink-0">
                             <button
-                              className={`px-3 py-1.5 text-xs font-semibold rounded transition-all ${
+                              className={`shrink-0 text-center w-[64px] px-1.5 py-1.5 text-xs font-semibold rounded transition-all tabular-nums ${
                                 isYesActive
                                   ? "bg-[#00C853]/20 border border-[#00C853] text-[#00C853] shadow-[0_0_8px_rgba(0,200,83,0.25)]"
                                   : "bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20"
@@ -1073,10 +1103,10 @@ export default function MarketDetailPage() {
                               onClick={() => { setSelectedEntry(entry.id); setSelectedDirection("yes"); }}
                               data-testid={`button-yes-${entry.id}`}
                             >
-                              Yes
+                              Yes {formatMultiplier(entry.yesMultiplier)}
                             </button>
                             <button
-                              className={`px-3 py-1.5 text-xs font-semibold rounded transition-all ${
+                              className={`shrink-0 text-center w-[64px] px-1.5 py-1.5 text-xs font-semibold rounded transition-all tabular-nums ${
                                 isNoActive
                                   ? "bg-[#FF0000]/20 border border-[#FF0000] text-[#FF0000] shadow-[0_0_8px_rgba(255,0,0,0.25)]"
                                   : "bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20"
@@ -1084,7 +1114,7 @@ export default function MarketDetailPage() {
                               onClick={() => { setSelectedEntry(entry.id); setSelectedDirection("no"); }}
                               data-testid={`button-no-${entry.id}`}
                             >
-                              No
+                              No {formatMultiplier(entry.noMultiplier)}
                             </button>
                           </div>
                         </div>
@@ -1097,7 +1127,7 @@ export default function MarketDetailPage() {
                   <label className="text-sm font-medium mb-1.5 block">Stake Amount</label>
                   <Input
                     type="number"
-                    min="1"
+                    min={MIN_STAKE}
                     placeholder="Enter stake amount..."
                     value={stakeAmount}
                     onChange={(e) => setStakeAmount(e.target.value)}
@@ -1116,11 +1146,19 @@ export default function MarketDetailPage() {
                   </div>
                 )}
 
+                {creditsBanner}
+
                 <p className="text-[10px] text-muted-foreground/50 text-center">Final payout may differ as the pool changes.</p>
 
                 <Button
                   className="w-full bg-gradient-to-r from-violet-700 to-violet-600 hover:from-violet-600 hover:to-violet-500 text-white"
-                  disabled={!selectedEntry || !stakeAmount || Number(stakeAmount) <= 0 || betMutation.isPending}
+                  disabled={
+                    !selectedEntry ||
+                    !stakeAmount ||
+                    Number(stakeAmount) <= 0 ||
+                    betMutation.isPending ||
+                    insufficientCredits
+                  }
                   onClick={handlePlaceBet}
                   data-testid="button-submit-prediction"
                 >
@@ -1135,7 +1173,9 @@ export default function MarketDetailPage() {
                       ? "Select an outcome"
                       : !stakeAmount || Number(stakeAmount) <= 0
                         ? "Enter stake amount"
-                        : `Place ${selectedDirection === "no" ? "No" : "Yes"} on ${entriesWithPercentages.find(e => e.id === selectedEntry)?.label || "..."}`}
+                        : insufficientCredits
+                          ? "Not enough credits"
+                          : `Place ${selectedDirection === "no" ? "No" : "Yes"} on ${entriesWithPercentages.find(e => e.id === selectedEntry)?.label || "..."}`}
                 </Button>
               </div>
             ) : (
@@ -1173,7 +1213,7 @@ export default function MarketDetailPage() {
                   <label className="text-sm font-medium mb-1.5 block">Stake Amount</label>
                   <Input
                     type="number"
-                    min="1"
+                    min={MIN_STAKE}
                     placeholder="Enter stake amount..."
                     value={stakeAmount}
                     onChange={(e) => setStakeAmount(e.target.value)}
@@ -1192,11 +1232,19 @@ export default function MarketDetailPage() {
                   </div>
                 )}
 
+                {creditsBanner}
+
                 <p className="text-[10px] text-muted-foreground/50 text-center">Final payout may differ as the pool changes.</p>
 
                 <Button
                   className="w-full bg-gradient-to-r from-violet-700 to-violet-600 hover:from-violet-600 hover:to-violet-500 text-white"
-                  disabled={!selectedEntry || !stakeAmount || Number(stakeAmount) <= 0 || betMutation.isPending}
+                  disabled={
+                    !selectedEntry ||
+                    !stakeAmount ||
+                    Number(stakeAmount) <= 0 ||
+                    betMutation.isPending ||
+                    insufficientCredits
+                  }
                   onClick={handlePlaceBet}
                   data-testid="button-submit-prediction"
                 >
@@ -1211,7 +1259,9 @@ export default function MarketDetailPage() {
                       ? "Select an outcome"
                       : !stakeAmount || Number(stakeAmount) <= 0
                         ? "Enter stake amount"
-                        : "Place Prediction"}
+                        : insufficientCredits
+                          ? "Not enough credits"
+                          : "Place Prediction"}
                 </Button>
               </div>
             )}

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Drawer } from "vaul";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -7,9 +8,9 @@ import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
 import { AvatarHeightHeadline } from "@/components/AvatarHeightHeadline";
 import { PredictCard } from "@/components/predict/PredictCard";
 import { ParticipantAvatarStack } from "@/components/predict/ParticipantAvatarStack";
-import { Link } from "wouter";
-import { Check, ChevronRight, Clock, Lock, Trophy, XCircle, RotateCcw } from "lucide-react";
-import { computePayoutMultiplier } from "@/lib/parimutuel";
+import { Link, useLocation } from "wouter";
+import { Check, ChevronRight, Clock, Lock, Trophy, XCircle, RotateCcw, X, ExternalLink } from "lucide-react";
+import { computePayoutMultiplier, formatMultiplier } from "@/lib/parimutuel";
 
 function MarketAvatar({ market }: { market: any }) {
   const imgUrl = market.coverImageUrl || market.linkedPersonAvatar;
@@ -227,14 +228,14 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
                 onClick={() => onNavigate(market.slug, 'yes')}
                 data-testid={`button-yes-${market.slug}`}
               >
-                Yes {yesMultiplier}x
+                Yes {formatMultiplier(yesMultiplier)}
               </Button>
               <Button
                 className="!min-h-0 px-4 py-3.5 md:py-2.5 bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20"
                 onClick={() => onNavigate(market.slug, 'no')}
                 data-testid={`button-no-${market.slug}`}
               >
-                No {noMultiplier}x
+                No {formatMultiplier(noMultiplier)}
               </Button>
             </div>
           )}
@@ -245,30 +246,163 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
   );
 }
 
-function MultiMarketCard({ market, entries, participants, timeLabel, onNavigate, isMarketClosed, isInactive = false, inactiveMessage, userBetResult, userBetsPerEntry, onFilterCategory, categoryRaceMap, leaderboardCategories }: { market: any; entries: any[]; participants: number; timeLabel: string; onNavigate: (slug: string, pick?: string, direction?: string) => void; isMarketClosed: boolean; isInactive?: boolean; inactiveMessage?: string; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number }; userBetsPerEntry?: Map<string, { direction: string; stakeAmount: number }>; onFilterCategory?: (cat: string) => void; categoryRaceMap?: Map<string, string>; leaderboardCategories?: Set<string> }) {
+/** Single row in a multi-option market — used by both the card preview
+ *  and the "all options" drawer so they always render identically. */
+function MultiMarketEntryRow({
+  entry,
+  market,
+  userBet,
+  hasPendingBet,
+  isMarketClosed,
+  showEntryPool = false,
+  compact = false,
+  onNavigate,
+  onPickEntry,
+  onBeforeNavigate,
+}: {
+  entry: any;
+  market: any;
+  userBet?: { direction: string; stakeAmount: number };
+  hasPendingBet: boolean;
+  isMarketClosed: boolean;
+  /** Show raw entry pool credits below the row (drawer only). */
+  showEntryPool?: boolean;
+  /** Polymarket-style compact mode for the card preview: drop the per-side
+   *  multipliers from the Yes/No buttons (just "Yes" / "No"). The drawer +
+   *  URL detail page show "Yes 1.0x" / "No 1.9x" so users have the full
+   *  picture once they're committed enough to scroll a list of options. */
+  compact?: boolean;
+  onNavigate: (slug: string, pick?: string, direction?: string) => void;
+  /** Preferred handler. When provided, Yes/No clicks open an in-page stake
+   *  modal instead of routing to the URL detail page. The card keeps the
+   *  legacy onNavigate fallback for any consumer that hasn't wired this yet. */
+  onPickEntry?: (market: any, entry: any, direction: "yes" | "no") => void;
+  /** Called before onPickEntry/onNavigate so the drawer can close cleanly first. */
+  onBeforeNavigate?: () => void;
+}) {
+  const betAccent = userBet?.direction === "no" ? "#FF0000" : "#00C853";
+  const entryPool =
+    Number(entry.totalStake || 0) + Number(entry.noStake || 0);
+
+  const handlePick = (e: React.MouseEvent, direction: "yes" | "no") => {
+    e.stopPropagation();
+    const fire = () => {
+      if (onPickEntry) {
+        onPickEntry(market, entry, direction);
+      } else {
+        onNavigate(market.slug, entry.id, direction);
+      }
+    };
+    if (onBeforeNavigate) {
+      onBeforeNavigate();
+      // Match opinion-poll drawer pattern: let the drawer animate out
+      // before the stake modal opens so they don't fight for focus.
+      setTimeout(fire, 320);
+    } else {
+      fire();
+    }
+  };
+
+  // Polymarket-style: per-entry avatar placeholders dropped entirely. The
+  // initial-circle was shrinking on mobile to the point names truncated to
+  // a single letter (e.g. "S." for Shai Gilgeous-Alexander), which read worse
+  // than just the name. The card hero image already sets the visual context.
+
+  // Fixed-width Yes/No buttons keep the right-hand column aligned across all
+  // rows. Without this, an outlier multiplier like "9.5x" pushes its row's
+  // No button further right than its neighbours, breaking the grid feel.
+  // 64px / 56px fits "Yes 9.9x" (worst case 4 chars + label) without wrap.
+  const buttonClass =
+    "shrink-0 text-center w-[60px] md:w-[64px] px-1 md:px-1.5 py-1.5 md:py-2 text-[11px] md:text-xs font-semibold rounded-md transition-colors tabular-nums";
+
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex-1 min-w-0">
+        <div className="truncate text-[13px] md:text-[14px] font-medium">{entry.label}</div>
+        {showEntryPool && (
+          <div className="text-[10px] text-muted-foreground mt-0.5 tabular-nums">
+            {entryPool.toLocaleString("en-US")} credits in pool
+          </div>
+        )}
+      </div>
+      <span className="text-[12px] md:text-[14px] font-mono font-semibold text-muted-foreground tabular-nums shrink-0 w-9 text-right">{entry.pct}%</span>
+      {hasPendingBet && userBet ? (
+        <Link
+          href={`/markets/${market.slug}`}
+          className="flex items-center gap-1.5 shrink-0 rounded-md border px-2 py-1.5 transition-colors"
+          style={{ backgroundColor: `${betAccent}10`, borderColor: `${betAccent}80` }}
+          data-testid={`pending-entry-${entry.id}`}
+        >
+          <Check className="h-3 w-3" style={{ color: betAccent }} />
+          <span className="text-[10px] font-semibold" style={{ color: betAccent }}>Your pick</span>
+          <span className="text-[10px] text-muted-foreground tabular-nums">{userBet.stakeAmount.toLocaleString("en-US")}</span>
+        </Link>
+      ) : !isMarketClosed ? (
+        <div className="flex gap-1 md:gap-1.5 shrink-0">
+          <button
+            className={`${buttonClass} bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20`}
+            onClick={(e) => handlePick(e, "yes")}
+            data-testid={`button-yes-${entry.id}`}
+          >
+            {compact ? "Yes" : `Yes ${formatMultiplier(entry.yesMultiplier)}`}
+          </button>
+          <button
+            className={`${buttonClass} bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20`}
+            onClick={(e) => handlePick(e, "no")}
+            data-testid={`button-no-${entry.id}`}
+          >
+            {compact ? "No" : `No ${formatMultiplier(entry.noMultiplier)}`}
+          </button>
+        </div>
+      ) : (
+        <span className="text-xs text-muted-foreground shrink-0 w-24 text-right">{entry.yesPct}% Yes / {entry.noPct}% No</span>
+      )}
+    </div>
+  );
+}
+
+const MULTI_MARKET_PREVIEW_COUNT = 4;
+
+function MultiMarketCard({ market, entries, participants, timeLabel, onNavigate, onPickEntry, isMarketClosed, isInactive = false, inactiveMessage, userBetResult, userBetsPerEntry, onFilterCategory, categoryRaceMap, leaderboardCategories }: { market: any; entries: any[]; participants: number; timeLabel: string; onNavigate: (slug: string, pick?: string, direction?: string) => void; onPickEntry?: (market: any, entry: any, direction: "yes" | "no") => void; isMarketClosed: boolean; isInactive?: boolean; inactiveMessage?: string; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number }; userBetsPerEntry?: Map<string, { direction: string; stakeAmount: number }>; onFilterCategory?: (cat: string) => void; categoryRaceMap?: Map<string, string>; leaderboardCategories?: Set<string> }) {
+  const [, setLocation] = useLocation();
+  const [optionsDrawerOpen, setOptionsDrawerOpen] = useState(false);
+
   const totalEntryStake = entries.reduce((sum: number, e: any) => sum + Number(e.totalStake || 0) + Number(e.noStake || 0), 0) || 1;
-  const rankedEntries = [...entries]
-    .map((e: any) => {
-      const yesStake = Number(e.totalStake || 0);
-      const noStake = Number(e.noStake || 0);
-      const entryPool = yesStake + noStake;
-      // Per-entry parimutuel multipliers (matches binary card + detail page).
-      // 0.95 haircut keeps the card and the detail page in agreement.
-      // computePayoutMultiplier already falls back to DEFAULT_PAYOUT_MULTIPLIER
-      // when pool or stake is 0, so no extra null-guarding is needed — empty
-      // entries show "Yes 1.9x" / "No 1.9x" exactly like the binary card.
-      const yesMultiplier = +(computePayoutMultiplier(entryPool, yesStake) * 0.95).toFixed(1);
-      const noMultiplier = +(computePayoutMultiplier(entryPool, noStake) * 0.95).toFixed(1);
-      return {
-        ...e,
-        pct: Math.round((entryPool / totalEntryStake) * 100),
-        yesPct: entryPool > 0 ? Math.round((yesStake / entryPool) * 100) : 50,
-        noPct: entryPool > 0 ? 100 - Math.round((yesStake / entryPool) * 100) : 50,
-        yesMultiplier,
-        noMultiplier,
-      };
-    })
-    .sort((a: any, b: any) => b.pct - a.pct);
+  const hasPendingResult = userBetResult?.result === "pending";
+
+  // Per-entry parimutuel multipliers (matches binary card + detail page).
+  // 0.95 haircut keeps the card and the detail page in agreement.
+  // computePayoutMultiplier already falls back to DEFAULT_PAYOUT_MULTIPLIER
+  // when pool or stake is 0, so no extra null-guarding is needed — empty
+  // entries show "Yes 1.9x" / "No 1.9x" exactly like the binary card.
+  const enriched = entries.map((e: any) => {
+    const yesStake = Number(e.totalStake || 0);
+    const noStake = Number(e.noStake || 0);
+    const entryPool = yesStake + noStake;
+    return {
+      ...e,
+      pct: Math.round((entryPool / totalEntryStake) * 100),
+      yesPct: entryPool > 0 ? Math.round((yesStake / entryPool) * 100) : 50,
+      noPct: entryPool > 0 ? 100 - Math.round((yesStake / entryPool) * 100) : 50,
+      yesMultiplier: +(computePayoutMultiplier(entryPool, yesStake) * 0.95).toFixed(1),
+      noMultiplier: +(computePayoutMultiplier(entryPool, noStake) * 0.95).toFixed(1),
+    };
+  });
+
+  // Sort: entries the user has an active pending bet on get pinned to the
+  // top (sub-sorted by pct desc), then the rest by pct desc. This mirrors the
+  // opinion-poll drawer pattern so a user's pick is always immediately
+  // visible without scrolling, but adapts to the prediction-market reality
+  // that a single user may have several pending bets across entries.
+  const rankedEntries = [...enriched].sort((a: any, b: any) => {
+    const aPinned = hasPendingResult && userBetsPerEntry?.has(String(a.id)) ? 1 : 0;
+    const bPinned = hasPendingResult && userBetsPerEntry?.has(String(b.id)) ? 1 : 0;
+    if (aPinned !== bPinned) return bPinned - aPinned;
+    return b.pct - a.pct;
+  });
+
+  const visibleEntries = rankedEntries.slice(0, MULTI_MARKET_PREVIEW_COUNT);
+  const remainingCount = Math.max(0, rankedEntries.length - MULTI_MARKET_PREVIEW_COUNT);
 
   return (
     <PredictCard testId={`card-market-${market.slug}`} className={`${isMarketClosed && !isInactive ? 'opacity-75' : ''}`} inactive={isInactive} inactiveMessage={inactiveMessage}>
@@ -297,65 +431,112 @@ function MultiMarketCard({ market, entries, participants, timeLabel, onNavigate,
 
       <div className="mb-3 flex items-center gap-2">
         <ParticipantAvatarStack participants={market.recentParticipants} totalCount={participants} />
+        {/* Polymarket-style total pool readout — gives users a quick sense of
+            how much liquidity the market has accumulated. We sum across all
+            entries (live stake only, excluding seed) so it tracks real money.
+            Hidden when the pool is empty to avoid a noisy "0 in pool" line. */}
+        {totalEntryStake > 1 && (
+          <span className="text-[11px] text-muted-foreground tabular-nums" data-testid={`pool-volume-${market.slug}`}>
+            {totalEntryStake.toLocaleString("en-US")} in pool
+          </span>
+        )}
         <Badge variant="outline" className="text-[10px] ml-auto">{entries.length} options</Badge>
       </div>
 
       <div className="space-y-1.5">
-          {rankedEntries.slice(0, 4).map((entry: any) => {
-            const entryBet = userBetsPerEntry?.get(String(entry.id));
-            const hasBet = !!entryBet && userBetResult?.result === "pending";
-            const betAccent = entryBet?.direction === "no" ? "#FF0000" : "#00C853";
-            return (
-              <div key={entry.id} className="flex items-center gap-1.5 md:gap-2">
-                {entry.imageUrl ? (
-                  <Avatar className="h-8 w-8 md:h-9 md:w-9 shrink-0 rounded-md">
-                    <AvatarImage src={entry.imageUrl} alt={entry.label} className="object-cover" />
-                    <AvatarFallback className="text-[11px] rounded-md">{entry.label?.[0]}</AvatarFallback>
-                  </Avatar>
-                ) : (
-                  <div className="h-8 w-8 md:h-9 md:w-9 shrink-0 rounded-md bg-muted/40 flex items-center justify-center">
-                    <span className="text-[11px] font-semibold text-muted-foreground">{entry.label?.[0]}</span>
-                  </div>
-                )}
-                <span className="text-[13px] md:text-[14px] font-medium truncate flex-1 min-w-0">{entry.label}</span>
-                <span className="text-[12px] md:text-[14px] font-mono font-semibold text-muted-foreground tabular-nums shrink-0">{entry.pct}%</span>
-                {hasBet ? (
-                  <Link
-                    href={`/markets/${market.slug}`}
-                    className="flex items-center gap-1.5 shrink-0 rounded-md border px-2 py-1.5 transition-colors"
-                    style={{ backgroundColor: `${betAccent}10`, borderColor: `${betAccent}80` }}
-                    data-testid={`pending-entry-${entry.id}`}
-                  >
-                    <Check className="h-3 w-3" style={{ color: betAccent }} />
-                    <span className="text-[10px] font-semibold" style={{ color: betAccent }}>Your pick</span>
-                    <span className="text-[10px] text-muted-foreground tabular-nums">{entryBet.stakeAmount.toLocaleString("en-US")}</span>
-                  </Link>
-                ) : !isMarketClosed ? (
-                  <div className="flex gap-1 md:gap-1.5 shrink-0">
-                    <button
-                      className="px-2 md:px-2.5 py-1.5 md:py-2 text-[11px] md:text-xs font-semibold rounded-md bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20 transition-colors tabular-nums"
-                      onClick={(e) => { e.stopPropagation(); onNavigate(market.slug, entry.id, 'yes'); }}
-                      data-testid={`button-yes-${entry.id}`}
-                    >
-                      Yes {entry.yesMultiplier}x
-                    </button>
-                    <button
-                      className="px-2 md:px-2.5 py-1.5 md:py-2 text-[11px] md:text-xs font-semibold rounded-md bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20 transition-colors tabular-nums"
-                      onClick={(e) => { e.stopPropagation(); onNavigate(market.slug, entry.id, 'no'); }}
-                      data-testid={`button-no-${entry.id}`}
-                    >
-                      No {entry.noMultiplier}x
-                    </button>
-                  </div>
-                ) : (
-                  <span className="text-xs text-muted-foreground shrink-0 w-24 text-right">{entry.yesPct}% Yes / {entry.noPct}% No</span>
-                )}
-              </div>
-            );
-          })}
+        {visibleEntries.map((entry: any) => {
+          const entryBet = userBetsPerEntry?.get(String(entry.id));
+          return (
+            <MultiMarketEntryRow
+              key={entry.id}
+              entry={entry}
+              market={market}
+              userBet={entryBet}
+              hasPendingBet={!!entryBet && hasPendingResult}
+              isMarketClosed={isMarketClosed}
+              compact
+              onNavigate={onNavigate}
+              onPickEntry={onPickEntry}
+            />
+          );
+        })}
+        {remainingCount > 0 && (
+          <button
+            type="button"
+            onClick={() => setOptionsDrawerOpen(true)}
+            className="w-full"
+            data-testid={`link-more-options-${market.slug}`}
+          >
+            <p className="text-xs text-violet-600 dark:text-violet-400 text-center cursor-pointer hover:underline mt-2.5">
+              +{remainingCount} more options
+            </p>
+          </button>
+        )}
       </div>
 
       <UserBetResult betResult={userBetResult} isMarketClosed={isMarketClosed} />
+
+      <Drawer.Root open={optionsDrawerOpen} onOpenChange={setOptionsDrawerOpen}>
+        <Drawer.Portal>
+          <Drawer.Overlay className="fixed inset-0 z-[70] bg-black/40" />
+          <Drawer.Content
+            className="fixed inset-x-0 bottom-0 z-[70] flex flex-col rounded-t-2xl border-t border-border/50 bg-background max-h-[85dvh]"
+            data-interactive="true"
+            data-testid={`multi-market-options-drawer-${market.slug}`}
+          >
+            <div className="mx-auto mt-3 mb-2 h-1.5 w-16 rounded-full bg-muted-foreground/60" />
+            <div className="flex items-center justify-between px-4 pb-2">
+              <div className="min-w-0">
+                <Drawer.Title className="text-sm font-semibold text-foreground truncate">All options</Drawer.Title>
+                <Drawer.Description className="sr-only">All options for {market.title}</Drawer.Description>
+                <p className="text-[11px] text-muted-foreground truncate">{market.title}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOptionsDrawerOpen(false)}
+                className="p-1.5 rounded-lg hover:bg-muted/60 transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background shrink-0"
+                aria-label="Close"
+              >
+                <X className="h-4 w-4 text-muted-foreground" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-4 pb-2 min-h-0 space-y-1.5">
+              {rankedEntries.map((entry: any) => {
+                const entryBet = userBetsPerEntry?.get(String(entry.id));
+                return (
+                  <MultiMarketEntryRow
+                    key={entry.id}
+                    entry={entry}
+                    market={market}
+                    userBet={entryBet}
+                    hasPendingBet={!!entryBet && hasPendingResult}
+                    isMarketClosed={isMarketClosed}
+                    showEntryPool
+                    onNavigate={onNavigate}
+                    onPickEntry={onPickEntry}
+                    onBeforeNavigate={() => setOptionsDrawerOpen(false)}
+                  />
+                );
+              })}
+            </div>
+            <div className="border-t border-border/40 px-4 py-3">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={() => {
+                  setOptionsDrawerOpen(false);
+                  setTimeout(() => setLocation(`/markets/${market.slug}`), 320);
+                }}
+                data-testid={`button-drawer-details-${market.slug}`}
+              >
+                <ExternalLink className="h-4 w-4 mr-2" />
+                View market details
+              </Button>
+            </div>
+          </Drawer.Content>
+        </Drawer.Portal>
+      </Drawer.Root>
     </PredictCard>
   );
 }
@@ -446,7 +627,7 @@ function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel,
   );
 }
 
-export function OpenMarketCard({ market, onNavigate, isMarketClosed = false, userBetResult, userBetsPerEntry, onFilterCategory, categoryRaceMap, leaderboardCategories }: { market: any; onNavigate: (slug: string, pick?: string, direction?: string) => void; isMarketClosed?: boolean; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number }; userBetsPerEntry?: Map<string, { direction: string; stakeAmount: number }>; onFilterCategory?: (cat: string) => void; categoryRaceMap?: Map<string, string>; leaderboardCategories?: Set<string> }) {
+export function OpenMarketCard({ market, onNavigate, onPickEntry, isMarketClosed = false, userBetResult, userBetsPerEntry, onFilterCategory, categoryRaceMap, leaderboardCategories }: { market: any; onNavigate: (slug: string, pick?: string, direction?: string) => void; /** When provided, multi-option Yes/No clicks open an in-page stake modal instead of navigating to /markets/:slug. Falls through to onNavigate for binary/up-down cards. */ onPickEntry?: (market: any, entry: any, direction: "yes" | "no") => void; isMarketClosed?: boolean; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number }; userBetsPerEntry?: Map<string, { direction: string; stakeAmount: number }>; onFilterCategory?: (cat: string) => void; categoryRaceMap?: Map<string, string>; leaderboardCategories?: Set<string> }) {
   const entries = market.entries || [];
   const isCommunity = market.marketType === "community";
   const totalStake = entries.reduce((sum: number, e: any) => sum + Number(e.totalStake || 0) + Number(e.noStake || 0), 0);
@@ -463,7 +644,7 @@ export function OpenMarketCard({ market, onNavigate, isMarketClosed = false, use
     return <UpDownMarketCard market={market} entries={entries} totalPool={totalPool} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} isMarketClosed={isMarketClosed || isInactive} isInactive={isInactive} inactiveMessage={market.inactiveMessage} userBetResult={userBetResult} onFilterCategory={onFilterCategory} categoryRaceMap={categoryRaceMap} leaderboardCategories={leaderboardCategories} />;
   }
   if (market.openMarketType === "multi") {
-    return <MultiMarketCard market={market} entries={entries} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} isMarketClosed={isMarketClosed || isInactive} isInactive={isInactive} inactiveMessage={market.inactiveMessage} userBetResult={userBetResult} userBetsPerEntry={userBetsPerEntry} onFilterCategory={onFilterCategory} categoryRaceMap={categoryRaceMap} leaderboardCategories={leaderboardCategories} />;
+    return <MultiMarketCard market={market} entries={entries} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} onPickEntry={onPickEntry} isMarketClosed={isMarketClosed || isInactive} isInactive={isInactive} inactiveMessage={market.inactiveMessage} userBetResult={userBetResult} userBetsPerEntry={userBetsPerEntry} onFilterCategory={onFilterCategory} categoryRaceMap={categoryRaceMap} leaderboardCategories={leaderboardCategories} />;
   }
   return <BinaryMarketCard market={market} entries={entries} totalPool={totalPool} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} isMarketClosed={isMarketClosed || isInactive} isInactive={isInactive} inactiveMessage={market.inactiveMessage} userBetResult={userBetResult} onFilterCategory={onFilterCategory} categoryRaceMap={categoryRaceMap} leaderboardCategories={leaderboardCategories} />;
 }
