@@ -62,6 +62,7 @@ const COMMENT_SWIPE_TOP_THRESHOLD = 8;
 const COMMENT_SWIPE_VELOCITY_THRESHOLD = 0.5;
 
 const H_PAN_LOCK_THRESHOLD = 10;
+const H_VERTICAL_BIAS = 0.7;
 const H_COMMIT_RATIO = 0.3;
 const H_COMMIT_VELOCITY = 500;
 const H_BOUNCE_RESISTANCE = 3;
@@ -250,7 +251,7 @@ export function VoteSnapScrollView({
       if (pan.locked === null) {
         const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist >= H_PAN_LOCK_THRESHOLD) {
-          pan.locked = Math.abs(dx) > Math.abs(dy) ? "h" : "v";
+          pan.locked = Math.abs(dx) > Math.abs(dy) * H_VERTICAL_BIAS ? "h" : "v";
         }
       }
 
