@@ -27,6 +27,11 @@ interface PredictionAssessment {
   selectedOutcomeIndex: number;
   confidence: number;
   probabilities: Array<{ outcomeIndex: number; probability: number }>;
+  // Optional: outcome the model is most confident WILL NOT happen. Used for
+  // No-side bets when the long-shot read has more edge than the favourite.
+  // Backwards-compatible — older responses without this field default to Yes.
+  unlikelyOutcomeIndex?: number;
+  unlikelyConfidence?: number;
   briefReasoning: string;
 }
 
@@ -53,11 +58,12 @@ INSTRUCTIONS:
    - If you are a momentum chaser (recencyWeight > 0.7): Weight recent form and trends more heavily than historical reputation.
    - If you are news-reactive: Weight very recent developments (last 1-2 weeks) more heavily.
 4. Decide whether to bet or abstain. Abstain if you have low confidence (below 0.4) or if the market is too uncertain for your risk appetite.
-5. If betting, select the single outcome you want to back and your confidence level (0.4 to 0.95).
+5. If betting, select the single outcome you want to back ("selectedOutcomeIndex") and your confidence level (0.4 to 0.95).
+6. Each outcome can also be bet AGAINST (No-side bet), winning if that outcome does NOT happen. If you are highly confident a specific outcome WILL NOT win — typically because its probability is below 0.10 — also fill in "unlikelyOutcomeIndex" with that outcome's number and "unlikelyConfidence" with your confidence (0.6 to 0.95) that it won't happen. Leave these null if no outcome stands out as a clear short.
 
 IMPORTANT:
 - Your probabilities should roughly align with real-world consensus odds but can deviate based on your persona.
-- Contrarian agents SHOULD deviate from consensus — that is the whole point. Back underdogs.
+- Contrarian agents SHOULD deviate from consensus — that is the whole point. Back underdogs, or short overhyped favourites with No bets.
 - Conservative agents should stick closer to consensus favourites.
 - Be honest about uncertainty. If you genuinely cannot assess this market, abstain.
 - The "briefReasoning" field is for internal logging only, keep it to 1 sentence.
@@ -68,6 +74,8 @@ You MUST respond with a single JSON object and nothing else. No markdown, no exp
   "selectedOutcomeIndex": <1-based integer matching the outcome number>,
   "confidence": <number between 0.4 and 0.95>,
   "probabilities": [{"outcomeIndex": 1, "probability": 0.35}, ...],
+  "unlikelyOutcomeIndex": <1-based integer or null>,
+  "unlikelyConfidence": <number between 0.6 and 0.95, or null>,
   "briefReasoning": "<one sentence>"
 }
 Include every outcome in the probabilities array. Probabilities should sum to approximately 1.0.`;
@@ -268,6 +276,7 @@ export async function computeWorldMarketPrediction(
   // the crowd favourite, flip to the second-highest probability outcome
   let chosenEntryId = selectedEntry.id;
   let rawConfidence = Math.max(0.4, Math.min(0.95, assessment.confidence));
+  let direction: "yes" | "no" = "yes";
 
   if (agent.contrarianism > 0.7) {
     const totalPool = entries.reduce((s, e) => s + e.totalStake, 0);
@@ -292,6 +301,52 @@ export async function computeWorldMarketPrediction(
     }
   }
 
+  // Step 4c: No-side bet on a clear long-shot.
+  //
+  // When GPT flags an outcome it considers very unlikely, decide whether to
+  // back the favourite (Yes on selectedEntry) or short the long-shot (No on
+  // unlikelyEntry). Persona-weighted: contrarians and bold agents lean
+  // toward shorts because that's their whole pitch. Conservative/cautious
+  // agents stay on Yes because shorts are higher-variance.
+  //
+  // Only fires when:
+  //   - the market has 3+ entries (multi-option),
+  //   - GPT specified an unlikely outcome that's distinct from the chosen
+  //     entry,
+  //   - the unlikely confidence is meaningful (>= 0.6).
+  //
+  // The "no" side of an entry pays out from the Yes pool of OTHER entries,
+  // so we don't need to recompute confidence — we keep GPT's stated short
+  // confidence directly.
+  if (
+    entries.length >= 3 &&
+    typeof assessment.unlikelyOutcomeIndex === "number" &&
+    typeof assessment.unlikelyConfidence === "number" &&
+    assessment.unlikelyConfidence >= 0.6
+  ) {
+    const unlikelyEntry = entries[assessment.unlikelyOutcomeIndex - 1];
+    if (unlikelyEntry && unlikelyEntry.id !== chosenEntryId) {
+      // Persona weight: 0.0 (never short) → 1.0 (always short when offered).
+      // Contrarianism dominates; boldness adds a smaller secondary push.
+      const shortPropensity = Math.min(
+        1,
+        agent.contrarianism * 0.7 + agent.boldness * 0.3,
+      );
+      // Edge bonus: when GPT's stated short confidence exceeds its long
+      // confidence, the No side is the higher-edge play even for moderate
+      // personas. Adds up to +0.25 to the propensity.
+      const edgeBonus = Math.max(
+        0,
+        Math.min(0.25, (assessment.unlikelyConfidence - rawConfidence) * 0.5),
+      );
+      if (rng.nextFloat() < shortPropensity + edgeBonus) {
+        chosenEntryId = unlikelyEntry.id;
+        rawConfidence = Math.max(0.4, Math.min(0.95, assessment.unlikelyConfidence));
+        direction = "no";
+      }
+    }
+  }
+
   // Step 5: Confidence calibration (same formula as deterministic engine)
   const n = entries.length;
   const chanceLevel = 1 / n;
@@ -305,6 +360,7 @@ export async function computeWorldMarketPrediction(
   return {
     abstain: false,
     entryId: chosenEntryId,
+    direction,
     rawProbability: parseFloat(rawConfidence.toFixed(4)),
     confidence: parseFloat(clampedConfidence.toFixed(3)),
     source: "gpt-5.4-world",

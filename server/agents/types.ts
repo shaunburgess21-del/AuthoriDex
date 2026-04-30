@@ -58,6 +58,10 @@ export interface PredictionDecision {
   abstain: boolean;
   abstainReason?: "domain" | "activity_gate" | "low_edge" | "random" | "world_abstain" | "api_error";
   entryId?: string;
+  // Yes = agent thinks the outcome WILL happen (back the entry).
+  // No  = agent thinks the outcome WILL NOT happen (short the entry).
+  // Defaults to "yes" when omitted to preserve legacy behaviour.
+  direction?: "yes" | "no";
   rawProbability?: number;
   confidence?: number;
   source?: "deterministic" | "gpt-5.4-world";

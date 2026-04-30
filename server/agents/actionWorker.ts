@@ -212,19 +212,44 @@ async function executeAction(action: {
       return;
     }
 
-    // Calculate potential payout (parimutuel)
+    // Honour the decision's direction. "no" means the agent is shorting the
+    // outcome (betting it will NOT happen) and the stake goes into the entry's
+    // noStake pool. Defaults to "yes" so older queued actions without a
+    // direction stay backwards-compatible.
+    const direction: "yes" | "no" = decision.direction === "no" ? "no" : "yes";
+
+    // Calculate potential payout (parimutuel) — for No bets we mirror the
+    // human bet endpoint (server/routes.ts ~13800) and base the payout on
+    // the share of the No pool for this entry, since No bets win when the
+    // outcome doesn't resolve true and split the losing Yes pool.
     const allEntries = await db
-      .select({ totalStake: marketEntries.totalStake })
+      .select({
+        id: marketEntries.id,
+        totalStake: marketEntries.totalStake,
+        noStake: marketEntries.noStake,
+      })
       .from(marketEntries)
       .where(eq(marketEntries.marketId, action.marketId));
 
-    const totalPool =
-      allEntries.reduce((sum, e) => sum + e.totalStake, 0) + action.stakeAmount;
-    const entryPool = entry.totalStake + action.stakeAmount;
-    const entryShare = entryPool / totalPool;
-    const potentialPayout = Math.round(
-      action.stakeAmount / Math.max(entryShare, 0.01)
-    );
+    let potentialPayout: number;
+    if (direction === "no") {
+      const entryNoPool = entry.noStake + action.stakeAmount;
+      const otherEntriesYesPool = allEntries
+        .filter((e) => e.id !== action.entryId)
+        .reduce((sum, e) => sum + e.totalStake, 0);
+      const noShare = action.stakeAmount / Math.max(entryNoPool, 1);
+      potentialPayout = Math.round(
+        action.stakeAmount + noShare * otherEntriesYesPool
+      );
+    } else {
+      const totalPool =
+        allEntries.reduce((sum, e) => sum + e.totalStake, 0) + action.stakeAmount;
+      const entryPool = entry.totalStake + action.stakeAmount;
+      const entryShare = entryPool / totalPool;
+      potentialPayout = Math.round(
+        action.stakeAmount / Math.max(entryShare, 0.01)
+      );
+    }
 
     // Place the bet (same transactional logic as placeMarketBet)
     await db.transaction(async (tx) => {
@@ -257,6 +282,7 @@ async function executeAction(action: {
           status: "active",
           agentId: agent.id,
           confidence: decision.confidence?.toFixed(2) ?? null,
+          direction,
           betMetadata: buildAgentBetMetadata(action.id),
         })
         .returning();
@@ -274,23 +300,33 @@ async function executeAction(action: {
           entryId: action.entryId,
           betId: insertedBet.id,
           agentId: agent.id,
+          direction,
           ...buildAgentBetMetadata(action.id),
         },
       });
 
-      await tx
-        .update(marketEntries)
-        .set({
-          totalStake: sql`${marketEntries.totalStake} + ${action.stakeAmount}`,
-        })
-        .where(eq(marketEntries.id, action.entryId));
+      if (direction === "no") {
+        await tx
+          .update(marketEntries)
+          .set({
+            noStake: sql`${marketEntries.noStake} + ${action.stakeAmount}`,
+          })
+          .where(eq(marketEntries.id, action.entryId));
+      } else {
+        await tx
+          .update(marketEntries)
+          .set({
+            totalStake: sql`${marketEntries.totalStake} + ${action.stakeAmount}`,
+          })
+          .where(eq(marketEntries.id, action.entryId));
+      }
     });
 
     // Mark action as executed
     await markExecuted(action.id);
 
     log(
-      `[ActionWorker] Executed: agent=${agent.displayName} market=${action.marketId} entry=${entry.label} confidence=${decision.confidence} stake=${action.stakeAmount}`
+      `[ActionWorker] Executed: agent=${agent.displayName} market=${action.marketId} entry=${entry.label} direction=${direction} confidence=${decision.confidence} stake=${action.stakeAmount}`
     );
   } catch (err: any) {
     const [alreadyPlacedBet] = await db
