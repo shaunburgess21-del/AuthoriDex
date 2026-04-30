@@ -6,13 +6,9 @@ import { Popover, PopoverTrigger, PopoverContent, PopoverClose } from "@/compone
 import { useState, useEffect, useRef } from "react";
 import { compactNumber, formatDelta, compactVotes, getApprovalColor } from "@/lib/formatNumber";
 import { ThumbsUp, Star, Zap, TrendingUp, TrendingDown, Check, X } from "lucide-react";
-import { getExceptionalIndicator, type PercentileThresholds } from "@/lib/leaderboard-exceptional";
 import { getCategoryTextColor } from "@/components/CategoryPill";
 import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
-
-export { getExceptionalIndicator, computePercentileThresholds } from "@/lib/leaderboard-exceptional";
-export type { PercentileThresholds } from "@/lib/leaderboard-exceptional";
 
 const SEGMENT_COLORS_5 = ['#FF0000', '#FF9100', '#FFC400', '#76FF03', '#00C853'];
 
@@ -44,8 +40,6 @@ interface LeaderboardRowProps {
   onPredictDown?: () => void;
   predictionsDisabled?: boolean;
   predictionsClosedMessage?: Pick<ClosedMarketMessage, "title" | "lines">;
-  showExceptional?: boolean;
-  thresholds?: PercentileThresholds;
   approvalShowResults?: boolean;
 }
 
@@ -75,8 +69,6 @@ export function LeaderboardRow({
   onPredictDown,
   predictionsDisabled,
   predictionsClosedMessage,
-  showExceptional = true,
-  thresholds,
   approvalShowResults,
 }: LeaderboardRowProps) {
   const [sentimentScore, setSentimentScore] = useState<number | null>(null);
@@ -136,8 +128,6 @@ export function LeaderboardRow({
   const fameScore = (person as any).fameIndexLive ?? person.fameIndex ?? Math.round(person.trendScore / 100);
   const delta24h = formatDelta(person.change24h);
   const showDelta = person.change24h != null && Math.abs(person.change24h) >= 2;
-  const exceptional = showExceptional && activeTab === "fame" ? getExceptionalIndicator(person, thresholds) : null;
-  const ExceptionalIcon = exceptional?.icon;
   const hasVoted = sentimentScore !== null;
   const showVotePulse = !hasVoted && !hasEverVoted;
   const [justVoted, setJustVoted] = useState(false);
@@ -192,29 +182,9 @@ export function LeaderboardRow({
           />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5">
-            <h3 className="font-semibold text-sm sm:text-base truncate" data-testid={`text-name-${person.id}`}>
-              {person.name}
-            </h3>
-            {exceptional && ExceptionalIcon && (
-              <TouchTooltip
-                content={
-                  <>
-                    <p className="font-semibold text-xs">{exceptional.label} — {exceptional.description.split('\n')[0]}</p>
-                    {exceptional.description.includes('\n') && (
-                      <p className="text-[11px] text-muted-foreground mt-0.5 font-mono">{exceptional.description.split('\n')[1]}</p>
-                    )}
-                  </>
-                }
-                side="top"
-                className="max-w-[220px] text-center"
-              >
-                <span className="inline-flex cursor-help" data-testid={`indicator-${exceptional.label.toLowerCase()}-${person.id}`}>
-                  <ExceptionalIcon className={`h-3.5 w-3.5 shrink-0 ${exceptional.color}`} />
-                </span>
-              </TouchTooltip>
-            )}
-          </div>
+          <h3 className="font-semibold text-sm sm:text-base truncate" data-testid={`text-name-${person.id}`}>
+            {person.name}
+          </h3>
           {person.category && (
             <p className={`hidden md:block text-sm truncate ${getCategoryTextColor(person.category)}`}>
               {person.category}

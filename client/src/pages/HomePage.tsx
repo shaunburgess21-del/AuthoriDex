@@ -2,8 +2,7 @@ import { VoxDexPulse } from "@/components/VoxDexPulse";
 import { WelcomeModal } from "@/components/WelcomeModal";
 import type { OnboardingDrawerHandle } from "@/components/OnboardingDrawer";
 import { SearchBar } from "@/components/SearchBar";
-import { LeaderboardRow, getExceptionalIndicator } from "@/components/LeaderboardRow";
-import type { PercentileThresholds } from "@/components/LeaderboardRow";
+import { LeaderboardRow } from "@/components/LeaderboardRow";
 import { VotingModal } from "@/components/VotingModal";
 import { StakeModal, type StakeSelection } from "@/components/StakeModal";
 import { toast } from "sonner";
@@ -20,7 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
-import { X, RefreshCw, TrendingUp, TrendingDown, Activity, ChevronRight, ChevronDown, LineChart, Vote, Trophy, Zap, Users, Sparkles, Target, Check, ThumbsDown, Minus, Rocket, Flame, Star, Info, Crown, HelpCircle } from "lucide-react";
+import { X, RefreshCw, TrendingUp, TrendingDown, Activity, ChevronRight, ChevronDown, LineChart, Vote, Trophy, Zap, Users, Sparkles, Target, Check, ThumbsDown, Minus, Star, Info, Crown, HelpCircle } from "lucide-react";
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useDragScroll } from "@/hooks/use-drag-scroll";
 import { useQuery, useQueries, useInfiniteQuery, useMutation, keepPreviousData } from "@tanstack/react-query";
@@ -836,23 +835,6 @@ export default function HomePage() {
     return allPeople;
   }, [allPeople]);
 
-  const percentileThresholds = useMemo(() => {
-    const thresholds = data?.pages[0]?.thresholds;
-    if (!thresholds) return undefined;
-    return thresholds as PercentileThresholds;
-  }, [data]);
-
-  const exceptionalIds = useMemo(() => {
-    if (!percentileThresholds) return new Set<string>();
-    const candidates = displayPeople
-      .filter(p => {
-        const ind = getExceptionalIndicator(p as any, percentileThresholds);
-        return ind != null;
-      })
-      .map(p => p.id);
-    return new Set(candidates);
-  }, [displayPeople, percentileThresholds]);
-
   const { data: systemFreshness } = useQuery<{
     lastScoredAt: string;
     lastScoredAtFormatted: string;
@@ -1207,37 +1189,15 @@ export default function HomePage() {
                       )}
                     </div>
                   </div>
-                  {leaderboardTab === "fame" && percentileThresholds && (
-                    <div className="px-4 sm:px-6 py-2.5 border-b bg-muted/20 flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-muted-foreground" data-testid="indicator-legend">
-                      <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
-                        <TouchTooltip content="Big score surge combined with a major rank jump" side="bottom" className="text-xs max-w-[200px]">
-                          <span className="inline-flex items-center gap-1 cursor-help" data-testid="legend-breakout">
-                            <Rocket className="h-3 w-3 text-orange-600 dark:text-orange-400" />
-                            Breakout
-                          </span>
-                        </TouchTooltip>
-                        <TouchTooltip content="Top percentile score spike or rank jump in the last 24 hours" side="bottom" className="text-xs max-w-[200px]">
-                          <span className="inline-flex items-center gap-1 cursor-help" data-testid="legend-surging">
-                            <Flame className="h-3 w-3 text-yellow-600 dark:text-yellow-400" />
-                            Surging
-                          </span>
-                        </TouchTooltip>
-                        <TouchTooltip content="Fading momentum or dropping in rank" side="bottom" className="text-xs max-w-[200px]">
-                          <span className="inline-flex items-center gap-1 cursor-help opacity-80" data-testid="legend-cooling">
-                            <TrendingDown className="h-3 w-3 text-sky-500 dark:text-sky-300" />
-                            Cooling
-                          </span>
-                        </TouchTooltip>
-                      </div>
-                      <div className="ml-auto shrink-0 lg:hidden">
-                        <TouchTooltip
-                          content="Predict whether each celebrity's Trend Score will go Up or Down this week."
-                          side="bottom"
-                          className="text-xs max-w-[220px]"
-                        >
-                          <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground cursor-help">Predict</span>
-                        </TouchTooltip>
-                      </div>
+                  {leaderboardTab === "fame" && (
+                    <div className="px-4 sm:px-6 py-2.5 border-b bg-muted/20 flex items-center justify-end lg:hidden">
+                      <TouchTooltip
+                        content="Predict whether each celebrity's Trend Score will go Up or Down this week."
+                        side="bottom"
+                        className="text-xs max-w-[220px]"
+                      >
+                        <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground cursor-help">Predict</span>
+                      </TouchTooltip>
                     </div>
                   )}
                   {leaderboardTab === "approval" && (
@@ -1306,8 +1266,6 @@ export default function HomePage() {
                         onPredictDown={() => handleLeaderboardPredict(person.id, "down")}
                         predictionsDisabled={isUpdownCutoffPassed}
                         predictionsClosedMessage={leaderboardClosedMessage}
-                        showExceptional={exceptionalIds.has(person.id)}
-                        thresholds={percentileThresholds}
                         approvalShowResults={approvalShowResults}
                       />
                     ))}
