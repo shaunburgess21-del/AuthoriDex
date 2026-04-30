@@ -1069,9 +1069,15 @@ export default function MarketDetailPage() {
             ) : effectiveOpenMarketType === "multi" ? (
               <div className="space-y-4">
                 <div>
-                  <label className="text-sm font-medium mb-2 block">Your Pick</label>
+                  {/* Sort by popularity (% of pool) descending so the page
+                      mirrors the card and the all-options drawer — those
+                      lead with the favourite, this used to lead with whatever
+                      order the admin happened to type first. The "Your Pick"
+                      label was also dropped: the parent card already says
+                      "Place Your Prediction", so this read like a column
+                      header sitting awkwardly between the two cards. */}
                   <div className="space-y-1.5">
-                    {entriesWithPercentages.sort((a, b) => a.displayOrder - b.displayOrder).map((entry) => {
+                    {[...entriesWithPercentages].sort((a, b) => b.percentage - a.percentage).map((entry) => {
                       const isEntrySelected = selectedEntry === entry.id;
                       const isYesActive = isEntrySelected && selectedDirection === "yes";
                       const isNoActive = isEntrySelected && selectedDirection === "no";
