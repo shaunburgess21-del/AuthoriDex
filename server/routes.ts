@@ -420,7 +420,6 @@ const LEADERBOARD_MAX_OFFSET = Math.max(
   0,
   parseInt(process.env.LEADERBOARD_MAX_OFFSET || "20000", 10) || 20000,
 );
-const LEADERBOARD_THRESHOLDS_TTL_MS = 5 * 60 * 1000;
 const NATIVE_MARKETS_SELF_HEAL_COOLDOWN_MS = 2 * 60 * 1000;
 
 const _viewDedupe = new Map<string, number>();
@@ -505,15 +504,6 @@ let _cachedHotMovers: HotMoversResponse | null = null;
 let _hotMoversCachedAt: number = 0;
 let _hotMoversCachedRunId: string | null = null;
 const HOT_MOVERS_TTL_MS = 10 * 60 * 1000; // 10 minutes
-type LeaderboardThresholds = {
-  rankChangeP90: number;
-  deltaP90: number;
-  negRankChangeP10: number;
-  negDeltaP10: number;
-};
-let _cachedLeaderboardThresholds:
-  | { runId: string | null; computedAt: number; value: LeaderboardThresholds }
-  | null = null;
 
 function parseBoundedInt(value: unknown, fallback: number, min: number, max: number): number {
   const parsed = typeof value === "string" ? parseInt(value, 10) : Number.NaN;
@@ -1131,293 +1121,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const prevRanks = await getSnapshotRankMap();
 
-      const enriched = people.map(p => ({
-        ...p,
+      // Pick the top positive 24h movers. We deliberately stopped
+      // classifying these into Breakout / Surging / Cooling bands in
+      // April 2026 — the rank-change and change_24h signals are ~0.94
+      // correlated in production, so the bands collapsed to a single
+      // "Breakout" group anyway. The list is now simply the biggest
+      // upward movers, ranked by raw 24h percentage change.
+      const HOT_MOVERS_CAP = 5;
+      const candidates = people
+        .filter(p => p.change24h != null && p.change24h > 0)
+        .sort((a, b) => (b.change24h ?? 0) - (a.change24h ?? 0))
+        .slice(0, HOT_MOVERS_CAP);
+
+      const result = candidates.map(p => ({
+        id: p.id,
+        name: p.name,
+        avatar: p.avatar,
+        category: p.category,
+        rank: p.rank,
+        fameIndex: p.fameIndex,
+        change24h: p.change24h,
         rankChange: prevRanks.has(p.id) ? (prevRanks.get(p.id)! - p.rank) : null,
       }));
 
-      const rankChanges = enriched.filter(p => p.rankChange != null).map(p => p.rankChange!);
-      const deltas = enriched.filter(p => p.change24h != null).map(p => p.change24h!);
-
-      const positiveRC = rankChanges.filter(v => v > 0).sort((a, b) => b - a);
-      const positiveDeltas = deltas.filter(v => v > 0).sort((a, b) => b - a);
-
-      const p5Index = (arr: number[]) => Math.max(0, Math.ceil(arr.length * 0.05) - 1);
-
-      const thresholds = {
-        rankChangeP90: positiveRC.length > 0 ? positiveRC[p5Index(positiveRC)] : 999,
-        deltaP90: positiveDeltas.length > 0 ? positiveDeltas[p5Index(positiveDeltas)] : 999,
-      };
-
-      const hotMovers: Array<{
-        id: string;
-        name: string;
-        avatar: string | null;
-        category: string | null;
-        rank: number;
-        fameIndex: number | null;
-        change24h: number | null;
-        rankChange: number | null;
-        badge: { label: string; color: string; description: string };
-        sourceBreakdown?: { sources: Array<{ key: string; pct: number }>; activeSources: number } | null;
-      }> = [];
-
-      for (const p of enriched) {
-        const delta = p.change24h;
-        const rc = p.rankChange;
-
-        const fmtDelta = (v: number) => `${v > 0 ? '+' : ''}${Math.round(v)}%`;
-        const fmtRank = (v: number) => `${v > 0 ? '+' : ''}${v}`;
-        const metrics = `24h: ${delta != null ? fmtDelta(delta) : '—'} · Rank: ${rc != null ? fmtRank(rc) : '—'}`;
-
-        let badge: { label: string; color: string; description: string } | null = null;
-
-        if (rc != null && rc >= thresholds.rankChangeP90 && delta != null && delta >= thresholds.deltaP90) {
-          badge = { label: "Breakout", color: "text-orange-400", description: `Big surge + big rank jump\n${metrics}` };
-        } else if (delta != null && delta >= thresholds.deltaP90) {
-          badge = { label: "Surging", color: "text-yellow-400", description: `Driver: Score spike\n${metrics}` };
-        } else if (
-          rc != null &&
-          rc >= thresholds.rankChangeP90 &&
-          // Hot Movers is a positive-vibes panel. The rank-only path can
-          // technically admit someone whose score actually fell but whose
-          // rank rose because everyone else fell harder. Block negative
-          // change24h rows so the |change24h| sort can't surface them
-          // ahead of legitimate small positive movers.
-          (delta == null || delta >= 0)
-        ) {
-          badge = { label: "Surging", color: "text-yellow-400", description: `Driver: Rank jump\n${metrics}` };
-        }
-
-        if (badge) {
-          hotMovers.push({
-            id: p.id,
-            name: p.name,
-            avatar: p.avatar,
-            category: p.category,
-            rank: p.rank,
-            fameIndex: p.fameIndex,
-            change24h: p.change24h,
-            rankChange: p.rankChange,
-            badge,
-          });
-        }
-      }
-
-      hotMovers.sort((a, b) => Math.abs(b.change24h ?? 0) - Math.abs(a.change24h ?? 0));
-
       if (debug) {
-        const sorted = [...hotMovers];
         res.json({
           baselineStatus: meta.baselineStatus,
-          thresholds,
           smoothingMode: "off",
           newsAggregationMode: getNewsAggregationMode(),
-          totalQualified: sorted.length,
-          cap: 8,
-          candidates: sorted.map((c, i) => ({
-            ...c,
-            qualifies: true,
-            reason: (c.rankChange != null && c.rankChange >= thresholds.rankChangeP90 && c.change24h != null && c.change24h >= thresholds.deltaP90)
-              ? 'both'
-              : (c.change24h != null && c.change24h >= thresholds.deltaP90)
-                ? 'score'
-                : 'rank',
-            rankAmongQualified: i + 1,
-            excludedBecause: i >= 8 ? 'cap' : null,
-          })),
+          cap: HOT_MOVERS_CAP,
+          totalQualified: result.length,
+          candidates: result,
         });
         return;
       }
 
-      const result = hotMovers.slice(0, 8);
-
-      // Compute per-source score driver attribution for top movers
-      const moverIds = result.map(m => m.id);
-      const sourceAttribution = new Map<string, { sources: Array<{ key: string; pct: number; status: string }>; activeSources: number; dominantDriver: string | null }>();
-      if (moverIds.length > 0) {
-        try {
-          const now = new Date();
-          const window30h = new Date(now.getTime() - 30 * 60 * 60 * 1000);
-          const window18h = new Date(now.getTime() - 18 * 60 * 60 * 1000);
-          const time24h = now.getTime() - 24 * 60 * 60 * 1000;
-
-          // Previously this fetched every snapshot for each mover in both
-          // windows and deduped in JS — typically 5-10× the rows we actually
-          // needed. Use `DISTINCT ON (person_id)` so Postgres returns exactly
-          // one row per person, picked by the ORDER BY clause:
-          //   • current:   latest snapshot within the last 18h
-          //   • previous:  snapshot closest to exactly 24h ago within the
-          //                30h–18h window (closest wins via ABS(...) sort).
-          type SnapRow = {
-            personId: string;
-            searchVolume: number | null;
-            newsCount: number | null;
-            wikiPageviews: number | null;
-            timestamp: Date;
-            diagnostics: Record<string, unknown> | null;
-          };
-          const time24hIso = new Date(time24h).toISOString();
-
-          // Drizzle's `sql` template binds a JS array as a composite record,
-          // which fails at runtime with "cannot cast type record to text[]".
-          // Expanding via `sql.join` binds each id as its own parameter, which
-          // is what `market-generator.ts` already does for the same pattern.
-          const moverIdList = sql.join(moverIds.map(id => sql`${id}`), sql`, `);
-
-          const [currentResult, prevResult] = await Promise.all([
-            db.execute(sql`
-              SELECT DISTINCT ON (person_id)
-                person_id       AS "personId",
-                search_volume   AS "searchVolume",
-                news_count      AS "newsCount",
-                wiki_pageviews  AS "wikiPageviews",
-                timestamp,
-                diagnostics
-              FROM trend_snapshots
-              WHERE person_id IN (${moverIdList})
-                AND timestamp >= ${window18h.toISOString()}
-              ORDER BY person_id, timestamp DESC, id DESC
-            `),
-            db.execute(sql`
-              SELECT DISTINCT ON (person_id)
-                person_id       AS "personId",
-                search_volume   AS "searchVolume",
-                news_count      AS "newsCount",
-                wiki_pageviews  AS "wikiPageviews",
-                timestamp,
-                diagnostics
-              FROM trend_snapshots
-              WHERE person_id IN (${moverIdList})
-                AND timestamp >= ${window30h.toISOString()}
-                AND timestamp <= ${window18h.toISOString()}
-              ORDER BY person_id, ABS(EXTRACT(EPOCH FROM (timestamp - ${time24hIso}::timestamptz))) ASC, id DESC
-            `),
-          ]);
-          const currentSnaps = currentResult.rows as unknown as SnapRow[];
-          const prevSnaps = prevResult.rows as unknown as SnapRow[];
-
-          const latestByPerson = new Map<string, SnapRow>();
-          for (const s of currentSnaps) {
-            latestByPerson.set(s.personId, s);
-          }
-          const prevByPerson = new Map<string, SnapRow>();
-          for (const s of prevSnaps) {
-            prevByPerson.set(s.personId, s);
-          }
-
-          for (const id of moverIds) {
-            const curr = latestByPerson.get(id);
-            const prev = prevByPerson.get(id);
-            if (!curr) continue;
-
-            const currDiag = curr.diagnostics as Record<string, any> | null;
-            const prevDiag = prev?.diagnostics as Record<string, any> | null;
-            const currentVC = currDiag?.velocityComponents;
-            const prevVC = prevDiag?.velocityComponents;
-
-            let sources: Array<{ key: string; pct: number; status: string }> = [];
-            let dominantDriver: string | null = null;
-
-            if (currentVC && prevVC && currentVC.weights && prevVC.weights) {
-              const searchWeighted = currentVC.search * currentVC.weights.search;
-              const newsWeighted = currentVC.news * currentVC.weights.news;
-              const wikiWeighted = currentVC.wiki * currentVC.weights.wiki;
-              // Momentum slot (Apr 2026 — PR2 Fix X). The current tick
-              // always has `momentum` post-Fix-X. The previous tick may
-              // pre-date Fix X (during the first 24h after deploy) — in
-              // that case `prevVC.weights.momentum` is undefined. We
-              // detect that and *exclude momentum from the delta math
-              // entirely* rather than treating prev as 0, which would
-              // otherwise make momentum=full-current-weight dominate the
-              // breakdown for the entire transition window and label
-              // every top-mover as "News momentum surging" (PR3 fix).
-              const prevHasMomentum = typeof prevVC.weights?.momentum === "number";
-              const momentumWeighted = (currentVC.momentum ?? 0) * (currentVC.weights.momentum ?? 0);
-
-              const searchDelta = Math.abs(searchWeighted - (prevVC.search * prevVC.weights.search));
-              const newsDelta = Math.abs(newsWeighted - (prevVC.news * prevVC.weights.news));
-              const wikiDelta = Math.abs(wikiWeighted - (prevVC.wiki * prevVC.weights.wiki));
-              const momentumDelta = prevHasMomentum
-                ? Math.abs(
-                    momentumWeighted - ((prevVC.momentum ?? 0) * (prevVC.weights.momentum ?? 0))
-                  )
-                : 0;
-              const totalDelta = searchDelta + newsDelta + wikiDelta + momentumDelta;
-
-              if (totalDelta > 0) {
-                const built: Array<{ key: string; pct: number; status: string }> = [
-                  { key: "news", pct: Math.round((newsDelta / totalDelta) * 100), status: "active" as string },
-                  { key: "wiki", pct: Math.round((wikiDelta / totalDelta) * 100), status: "active" as string },
-                ];
-                // `search` is intentionally omitted from the active-source
-                // attribution: weight is 0, so it contributes nothing
-                // meaningful even when searchDelta ≠ 0 (it'd be 0% anyway).
-                // It's still listed below as a quiet source for backward
-                // compat with admin tooling that expects all 4 keys.
-                if (prevHasMomentum) {
-                  built.push({ key: "momentum", pct: Math.round((momentumDelta / totalDelta) * 100), status: "active" as string });
-                }
-                sources = built.filter(s => s.pct > 0).sort((a, b) => b.pct - a.pct);
-              }
-            }
-
-            if (sources.length === 0) {
-              const newsChange = Math.abs((curr.newsCount ?? 0) - (prev?.newsCount ?? 0));
-              const wikiChange = Math.abs((curr.wikiPageviews ?? 0) - (prev?.wikiPageviews ?? 0));
-              const newsContrib = newsChange * PLATFORM_WEIGHTS.velocity.news;
-              const wikiContrib = wikiChange * PLATFORM_WEIGHTS.velocity.wiki;
-              // `search` excluded from the fallback (weight is 0, contribution
-              // is always 0). Momentum can't be approximated from raw column
-              // changes either — it requires the 24h/7d ratio rederiv —
-              // so attribution falls back to wiki/news only. The exact
-              // path above covers the momentum slice when both ticks have
-              // post-Fix-X velocityComponents.
-              const totalContrib = newsContrib + wikiContrib;
-
-              if (totalContrib > 0) {
-                sources = [
-                  { key: "news", absContrib: newsContrib },
-                  { key: "wiki", absContrib: wikiContrib },
-                ].filter((c: any) => c.absContrib > 0)
-                  .map((c: any) => ({ key: c.key, pct: Math.round((c.absContrib / totalContrib) * 100), status: "active" }))
-                  .sort((a, b) => b.pct - a.pct);
-              }
-            }
-
-            const allKeys = ["search", "news", "wiki", "momentum"];
-            const presentKeys = new Set(sources.map(s => s.key));
-            const hasAnyData = (curr.searchVolume ?? 0) > 0 || (curr.newsCount ?? 0) > 0 || (curr.wikiPageviews ?? 0) > 0;
-            for (const k of allKeys) {
-              if (!presentKeys.has(k)) {
-                sources.push({ key: k, pct: 0, status: hasAnyData ? "quiet" : "no-data" });
-              }
-            }
-
-            const top = sources.find(s => s.status === "active");
-            if (top) {
-              const driverLabels: Record<string, string> = {
-                news: "News coverage up",
-                wiki: "Wiki views up",
-                search: "Search interest up",
-                momentum: "News momentum surging",
-              };
-              dominantDriver = driverLabels[top.key] ?? null;
-            }
-
-            sourceAttribution.set(id, { sources, activeSources: sources.filter(s => s.status === "active").length, dominantDriver });
-          }
-        } catch (e) {
-          console.warn("[hot-movers] Source attribution computation failed:", e);
-        }
-      }
-
-      const safeResult = result.map(p => ({
-        ...p,
-        sourceBreakdown: sourceAttribution.get(p.id) ?? null,
-      }));
       const responseWithMeta: HotMoversResponse = {
-        data: safeResult,
+        data: result,
         meta,
       };
       _cachedHotMovers = responseWithMeta;
@@ -4136,53 +3876,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const prevRankLookup = await getSnapshotRankMap();
       const baselineStatus = prevRankLookup.size > 0 ? "normal" : "degraded";
 
-      const runIdForThresholds = _lastCompletedRunId;
-      const now = Date.now();
-      let canonicalThresholds: LeaderboardThresholds;
-      if (
-        _cachedLeaderboardThresholds &&
-        _cachedLeaderboardThresholds.runId === runIdForThresholds &&
-        now - _cachedLeaderboardThresholds.computedAt < LEADERBOARD_THRESHOLDS_TTL_MS
-      ) {
-        canonicalThresholds = _cachedLeaderboardThresholds.value;
-      } else {
-        const allPeopleForThresholds = await db
-          .select({
-            id: trendingPeople.id,
-            rank: trendingPeople.rank,
-            change24h: trendingPeople.change24h,
-          })
-          .from(trendingPeople);
-
-        const allRankChanges = allPeopleForThresholds
-          .map(p => (prevRankLookup.get(p.id) ?? p.rank) - p.rank)
-          .filter(v => v !== 0);
-        const allDeltas = allPeopleForThresholds
-          .map(p => p.change24h)
-          .filter((v): v is number => v != null && v !== 0);
-
-        const positiveRC = allRankChanges.filter(v => v > 0).sort((a, b) => b - a);
-        const positiveDeltas = allDeltas.filter(v => v > 0).sort((a, b) => b - a);
-        const negativeRC = allRankChanges.filter(v => v < 0).sort((a, b) => a - b);
-        const negativeDeltas = allDeltas.filter(v => v < 0).sort((a, b) => a - b);
-
-        const p5Idx = (arr: number[]) => Math.max(0, Math.ceil(arr.length * 0.05) - 1);
-        const p10Idx = (arr: number[]) => Math.max(0, Math.ceil(arr.length * 0.10) - 1);
-
-        canonicalThresholds = {
-          rankChangeP90: positiveRC.length > 0 ? positiveRC[p5Idx(positiveRC)] : 999,
-          deltaP90: positiveDeltas.length > 0 ? positiveDeltas[p5Idx(positiveDeltas)] : 999,
-          negRankChangeP10: negativeRC.length > 0 ? negativeRC[p10Idx(negativeRC)] : -999,
-          negDeltaP10: negativeDeltas.length > 0 ? negativeDeltas[p10Idx(negativeDeltas)] : -999,
-        };
-
-        _cachedLeaderboardThresholds = {
-          runId: runIdForThresholds,
-          computedAt: now,
-          value: canonicalThresholds,
-        };
-      }
-
       let approvalRankById = new Map<string, number>();
       if (tab === 'approval') {
         let approvalRankQuery = db
@@ -4244,12 +3937,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         total: safeLeaderboard.length,
         totalCount,
         data: safeLeaderboard,
-        // When the 24h baseline is degraded the percentages on each row are
-        // already nulled above. Stripping thresholds here suppresses the
-        // Breakout / Surging / Cooling icons on the rows AND the legend in
-        // the header so users don't see "Surging" badges next to rows that
-        // have no visible 24h percentage.
-        thresholds: baselineDegraded ? null : canonicalThresholds,
         baselineStatus: baselineMeta.baseline24hStatus,
         meta: {
           currentRunId: baselineMeta.currentRunId,
