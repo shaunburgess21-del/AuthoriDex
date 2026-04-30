@@ -289,7 +289,7 @@ export function VoteSnapScrollView({
 
     isAnimatingRef.current = true;
     const vw = window.innerWidth;
-    const compensated = dragX.get() + (-direction) * vw;
+    const compensated = dragX.get() + direction * vw;
 
     setActiveCategoryIdx(newIdx);
     setVisualCategoryIdx(newIdx);
@@ -374,7 +374,7 @@ export function VoteSnapScrollView({
 
     setActiveCategoryIdx(newIdx);
     setVisualCategoryIdx(newIdx);
-    dragX.set(slideDir * -vw);
+    dragX.set(slideDir * vw);
 
     motionAnimate(dragX, 0, {
       type: "tween",
