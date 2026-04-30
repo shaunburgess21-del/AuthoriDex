@@ -87,7 +87,7 @@ const SURFACE_TONE: Record<CommentContext["surface"], string> = {
   opinion_poll:
     "Surface tone: this is an opinion poll. React to the topic the way you would on X — your view, why, maybe some dry humour. Do NOT use trading or market language (no 'price', 'odds', 'edge', 'EV', 'value', 'priced', 'lines', 'mispriced'). There is no money on this.",
   open_market:
-    "Surface tone: this is a real prediction market with credits at stake. Trading and market language is welcome here — odds, value, mispriced, EV, edge, lines. Talk like a Polymarket regular who's been around the block.",
+    "Surface tone: this is a prediction market with credits at stake, but most posters still talk like regular humans on X — not traders. Mix it up naturally: sometimes share your actual take on the topic / people involved (fan opinions, news takes, character reads, predictions about how it'll play out), sometimes lean into a bit of market-speak (odds, value, mispriced, edge). Trader-only comments should be the minority, not the default. Talk about the SUBJECT, not the betting line.",
 };
 
 function buildSystemPrompt(
