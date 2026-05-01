@@ -9,7 +9,7 @@
  * Each fetcher returns a typed bundle that the generator turns into a prompt.
  */
 
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import {
   matchups,
   trackedPeople,
@@ -22,10 +22,15 @@ import {
   marketEntries,
   marketBets,
   votes,
+  comments as unifiedComments,
 } from "@shared/schema";
 import { db } from "../db";
 
 export type CommentSurface = "matchup" | "trending_poll" | "opinion_poll" | "open_market";
+
+/** Up to N most-recent comments shown to the LLM so it doesn't paraphrase
+ *  what a previous user / agent already said. */
+const EXISTING_COMMENT_LIMIT = 5;
 
 /** Common shape across all surfaces. */
 interface BaseContext {
@@ -35,6 +40,9 @@ interface BaseContext {
   /** What the agent voted/bet on this parent, if anything. Used to keep the
    *  comment consistent with their position. */
   agentChoice?: string | null;
+  /** Most-recent comment bodies on this parent, for de-duplication. The
+   *  agent reads these and is told not to echo them. */
+  existingComments?: Array<{ body: string }>;
 }
 
 export interface MatchupContext extends BaseContext {
@@ -45,6 +53,7 @@ export interface MatchupContext extends BaseContext {
   optionB: { label: string; bio: string | null };
   /** "Person A label" | "Person B label" | "neutral" */
   agentChoice?: string | null;
+  existingComments?: Array<{ body: string }>;
 }
 
 export interface TrendingPollContext extends BaseContext {
@@ -55,6 +64,7 @@ export interface TrendingPollContext extends BaseContext {
   timeline: string | null;
   /** "support" | "neutral" | "oppose" */
   agentChoice?: string | null;
+  existingComments?: Array<{ body: string }>;
 }
 
 export interface OpinionPollContext extends BaseContext {
@@ -64,6 +74,7 @@ export interface OpinionPollContext extends BaseContext {
   options: Array<{ name: string }>;
   /** the option label they voted for */
   agentChoice?: string | null;
+  existingComments?: Array<{ body: string }>;
 }
 
 export interface OpenMarketContext extends BaseContext {
@@ -75,6 +86,7 @@ export interface OpenMarketContext extends BaseContext {
   entries: Array<{ label: string; description: string | null }>;
   /** "<entry label> (yes|no)" */
   agentChoice?: string | null;
+  existingComments?: Array<{ body: string }>;
 }
 
 export type CommentContext =
@@ -94,6 +106,30 @@ function clip(value: string | null | undefined, maxChars: number): string | null
   if (trimmed.length === 0) return null;
   if (trimmed.length <= maxChars) return trimmed;
   return `${trimmed.slice(0, maxChars - 1).trimEnd()}…`;
+}
+
+/**
+ * Pull the most-recent live comments on a parent so the LLM can read what
+ * other users (or earlier agents) have already said. The agent is then told
+ * not to echo, paraphrase, or duplicate any of these.
+ */
+async function fetchExistingComments(
+  parentType: CommentSurface,
+  parentId: string,
+): Promise<Array<{ body: string }>> {
+  const rows = await db
+    .select({ body: unifiedComments.body })
+    .from(unifiedComments)
+    .where(
+      and(
+        eq(unifiedComments.parentType, parentType),
+        eq(unifiedComments.parentId, parentId),
+        sql`${unifiedComments.deletedAt} IS NULL`,
+      ),
+    )
+    .orderBy(desc(unifiedComments.createdAt))
+    .limit(EXISTING_COMMENT_LIMIT);
+  return rows.map((row) => ({ body: row.body }));
 }
 
 export async function fetchMatchupContext(
@@ -129,9 +165,10 @@ export async function fetchMatchupContext(
       .limit(1);
     return clip(p?.bio ?? null, 240);
   };
-  const [bioA, bioB] = await Promise.all([
+  const [bioA, bioB, existingComments] = await Promise.all([
     fetchBio(row.personAId),
     fetchBio(row.personBId),
+    fetchExistingComments("matchup", matchupId),
   ]);
 
   // Matchup votes are written by the API into the polymorphic `votes` table
@@ -165,6 +202,7 @@ export async function fetchMatchupContext(
     optionA: { label: row.optionAText, bio: bioA },
     optionB: { label: row.optionBText, bio: bioB },
     agentChoice,
+    existingComments,
   };
 }
 
@@ -186,16 +224,20 @@ export async function fetchTrendingPollContext(
 
   if (!row) return null;
 
-  const [agentVote] = await db
-    .select({ choice: trendingPollVotes.choice })
-    .from(trendingPollVotes)
-    .where(
-      and(
-        eq(trendingPollVotes.pollId, pollId),
-        eq(trendingPollVotes.userId, agentUserId),
-      ),
-    )
-    .limit(1);
+  const [agentVoteResult, existingComments] = await Promise.all([
+    db
+      .select({ choice: trendingPollVotes.choice })
+      .from(trendingPollVotes)
+      .where(
+        and(
+          eq(trendingPollVotes.pollId, pollId),
+          eq(trendingPollVotes.userId, agentUserId),
+        ),
+      )
+      .limit(1),
+    fetchExistingComments("trending_poll", pollId),
+  ]);
+  const agentVote = agentVoteResult[0];
 
   return {
     surface: "trending_poll",
@@ -206,6 +248,7 @@ export async function fetchTrendingPollContext(
     description: clip(row.description, 800),
     timeline: clip(row.timeline, 240),
     agentChoice: agentVote?.choice ?? null,
+    existingComments,
   };
 }
 
@@ -226,25 +269,28 @@ export async function fetchOpinionPollContext(
 
   if (!row) return null;
 
-  const optionRows = await db
-    .select({
-      id: opinionPollOptions.id,
-      name: opinionPollOptions.name,
-    })
-    .from(opinionPollOptions)
-    .where(eq(opinionPollOptions.pollId, pollId))
-    .orderBy(opinionPollOptions.orderIndex);
-
-  const [agentVote] = await db
-    .select({ optionId: opinionPollVotes.optionId })
-    .from(opinionPollVotes)
-    .where(
-      and(
-        eq(opinionPollVotes.pollId, pollId),
-        eq(opinionPollVotes.userId, agentUserId),
-      ),
-    )
-    .limit(1);
+  const [optionRows, agentVoteResult, existingComments] = await Promise.all([
+    db
+      .select({
+        id: opinionPollOptions.id,
+        name: opinionPollOptions.name,
+      })
+      .from(opinionPollOptions)
+      .where(eq(opinionPollOptions.pollId, pollId))
+      .orderBy(opinionPollOptions.orderIndex),
+    db
+      .select({ optionId: opinionPollVotes.optionId })
+      .from(opinionPollVotes)
+      .where(
+        and(
+          eq(opinionPollVotes.pollId, pollId),
+          eq(opinionPollVotes.userId, agentUserId),
+        ),
+      )
+      .limit(1),
+    fetchExistingComments("opinion_poll", pollId),
+  ]);
+  const agentVote = agentVoteResult[0];
 
   let agentChoice: string | null = null;
   if (agentVote) {
@@ -260,6 +306,7 @@ export async function fetchOpinionPollContext(
     summary: clip(row.summary, 600),
     options: optionRows.map((o) => ({ name: o.name })),
     agentChoice,
+    existingComments,
   };
 }
 
@@ -282,32 +329,35 @@ export async function fetchOpenMarketContext(
 
   if (!row) return null;
 
-  const entryRows = await db
-    .select({
-      id: marketEntries.id,
-      label: marketEntries.label,
-      description: marketEntries.description,
-    })
-    .from(marketEntries)
-    .where(eq(marketEntries.marketId, marketId))
-    .orderBy(marketEntries.displayOrder);
-
-  // Most-recent active bet for this agent on this market — gives us the
-  // entry + direction so the comment can read like an opinion they hold.
-  const [agentBet] = await db
-    .select({
-      entryId: marketBets.entryId,
-      direction: marketBets.direction,
-    })
-    .from(marketBets)
-    .where(
-      and(
-        eq(marketBets.marketId, marketId),
-        eq(marketBets.userId, agentUserId),
-        eq(marketBets.status, "active"),
-      ),
-    )
-    .limit(1);
+  const [entryRows, agentBetResult, existingComments] = await Promise.all([
+    db
+      .select({
+        id: marketEntries.id,
+        label: marketEntries.label,
+        description: marketEntries.description,
+      })
+      .from(marketEntries)
+      .where(eq(marketEntries.marketId, marketId))
+      .orderBy(marketEntries.displayOrder),
+    // Most-recent active bet for this agent on this market — gives us the
+    // entry + direction so the comment can read like an opinion they hold.
+    db
+      .select({
+        entryId: marketBets.entryId,
+        direction: marketBets.direction,
+      })
+      .from(marketBets)
+      .where(
+        and(
+          eq(marketBets.marketId, marketId),
+          eq(marketBets.userId, agentUserId),
+          eq(marketBets.status, "active"),
+        ),
+      )
+      .limit(1),
+    fetchExistingComments("open_market", marketId),
+  ]);
+  const agentBet = agentBetResult[0];
 
   let agentChoice: string | null = null;
   if (agentBet) {
@@ -327,6 +377,7 @@ export async function fetchOpenMarketContext(
     endAt: row.endAt ?? null,
     entries: entryRows.map((e) => ({ label: e.label, description: clip(e.description, 200) })),
     agentChoice,
+    existingComments,
   };
 }
 
