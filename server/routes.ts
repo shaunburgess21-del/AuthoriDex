@@ -14076,13 +14076,20 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       }
 
       const [market] = await db
-        .select({ id: predictionMarkets.id, closeAt: predictionMarkets.closeAt })
+        .select({
+          id: predictionMarkets.id,
+          closeAt: predictionMarkets.closeAt,
+          endAt: predictionMarkets.endAt,
+        })
         .from(predictionMarkets)
         .where(
           and(
             eq(predictionMarkets.slug, slug),
             eq(predictionMarkets.marketType, "community"),
-            eq(predictionMarkets.status, "OPEN")
+            eq(predictionMarkets.status, "OPEN"),
+            // Match native-market parity: never accept bets on draft / inactive
+            // / archived markets even if their status row is still OPEN.
+            eq(predictionMarkets.visibility, "live"),
           )
         )
         .limit(1);
@@ -14091,7 +14098,14 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         return res.status(404).json({ error: "Market not found or not open" });
       }
 
-      if (market.closeAt && new Date(market.closeAt) < new Date()) {
+      // Match native-market parity: defend against late bets if the resolver
+      // hasn't flipped status yet. Either closeAt OR endAt being past is
+      // enough to lock the market.
+      const now = new Date();
+      if (
+        (market.closeAt && new Date(market.closeAt) < now) ||
+        (market.endAt && new Date(market.endAt) < now)
+      ) {
         return res.status(400).json({ error: "Betting is closed for this market" });
       }
 

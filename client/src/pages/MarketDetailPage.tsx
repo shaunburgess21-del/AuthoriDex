@@ -167,14 +167,22 @@ function useCountdown(endDate: string | null) {
 }
 
 function getEntryPercentages(entries: MarketEntry[]) {
-  const totalWeight = entries.reduce(
-    (sum, e) => sum + (e.totalStake || 0) + (e.noStake || 0) + (e.seedCount || 0),
+  // Popularity weight uses LIVE stake only (yes + no) — no seedCount.
+  // Reasons:
+  //   1. OpenMarketCard / ranking surface uses live stake only, so the
+  //      detail page must agree or "most popular" ordering and the
+  //      headline percentage diverge between surfaces.
+  //   2. "X staked" is shown to users; counting hidden admin seeds in
+  //      that figure misleads them about real volume.
+  //   3. Resolver payouts are also driven by live stake, so this keeps
+  //      display, ordering, and settlement on a single canonical model.
+  const totalLivePool = entries.reduce(
+    (sum, e) => sum + (e.totalStake || 0) + (e.noStake || 0),
     0,
   );
   return entries.map((e) => {
     const yesStake = e.totalStake || 0;
     const noStake = e.noStake || 0;
-    const weight = yesStake + noStake + (e.seedCount || 0);
     const livePool = yesStake + noStake;
     const yesPercentage = livePool > 0 ? Math.round((yesStake / livePool) * 100) : 50;
     // Per-entry parimutuel multipliers — same 0.95 haircut as the card and
@@ -183,8 +191,8 @@ function getEntryPercentages(entries: MarketEntry[]) {
     const noMultiplier = +(computePayoutMultiplier(livePool, noStake) * 0.95).toFixed(1);
     return {
       ...e,
-      percentage: totalWeight > 0 ? Math.round((weight / totalWeight) * 100) : Math.round(100 / entries.length),
-      displayStake: weight,
+      percentage: totalLivePool > 0 ? Math.round((livePool / totalLivePool) * 100) : Math.round(100 / entries.length),
+      displayStake: livePool,
       yesPercentage,
       noPercentage: livePool > 0 ? 100 - yesPercentage : 50,
       yesMultiplier,
