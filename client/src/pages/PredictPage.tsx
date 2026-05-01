@@ -2552,7 +2552,7 @@ export default function PredictPage() {
                 ))}
               </div>
             ) : filteredCommunity.length > 0 ? (
-              <CardSection desktopLimit={9} gap="gap-4" testIdPrefix="section-community" dotActiveColor="bg-violet-500">
+              <CardSection desktopLimit={9} gap="gap-4" testIdPrefix="section-community" dotActiveColor="bg-violet-500" mobileSlideMinHeight="min-h-[420px]">
                 {filteredCommunity.map((market: any) => (
                   <div key={market.id} onClick={(e) => handleCardEmptyTap(e, "world-markets", String(market.id))}>
                     <OpenMarketCard 
@@ -2575,7 +2575,7 @@ export default function PredictPage() {
                 No markets available yet
               </div>
             )}
-            <div className="flex justify-center mt-6">
+            <div className="text-center mt-2 md:mt-6">
               <Button 
                 variant="ghost" 
                 size="sm" 
@@ -2768,7 +2768,7 @@ export default function PredictPage() {
             ) : updownLoading ? (
               <CardGridSkeleton count={3} />
             ) : filteredUpDown.length > 0 ? (
-              <CardSection desktopLimit={9} gap="gap-4" testIdPrefix="section-updown" dotActiveColor="bg-violet-500">
+              <CardSection desktopLimit={9} gap="gap-4" testIdPrefix="section-updown" dotActiveColor="bg-violet-500" mobileSlideMinHeight="min-h-[420px]">
                 {filteredUpDown.map((market) => (
                   <div key={market.id} onClick={(e) => handleCardEmptyTap(e, "updown", String(market.id))}>
                     <WeeklyUpDownCard 
@@ -2790,7 +2790,7 @@ export default function PredictPage() {
                 No markets match your filters
               </div>
             )}
-            <div className="flex justify-center mt-6">
+            <div className="text-center mt-2 md:mt-6">
               <Button 
                 variant="ghost" 
                 size="sm" 
@@ -2851,7 +2851,7 @@ export default function PredictPage() {
             ) : h2hLoading ? (
               <CardGridSkeleton count={3} />
             ) : filteredH2H.length > 0 ? (
-              <CardSection desktopLimit={9} gap="gap-4" testIdPrefix="section-h2h" dotActiveColor="bg-violet-500">
+              <CardSection desktopLimit={9} gap="gap-4" testIdPrefix="section-h2h" dotActiveColor="bg-violet-500" mobileSlideMinHeight="min-h-[420px]">
                 {filteredH2H.map((market) => {
                   const bet = userBetsByMarket.get(String(market.id));
                   const h2hUserPick = h2hUserPickFromBet(
@@ -2879,7 +2879,7 @@ export default function PredictPage() {
                 No matchups match your filters
               </div>
             )}
-            <div className="flex justify-center mt-6">
+            <div className="text-center mt-2 md:mt-6">
               <Button 
                 variant="ghost" 
                 size="sm" 
@@ -2940,7 +2940,7 @@ export default function PredictPage() {
             ) : gainerLoading ? (
               <CardGridSkeleton count={3} />
             ) : filteredGainers.length > 0 ? (
-              <CardSection desktopLimit={9} gap="gap-4" testIdPrefix="section-gainer" dotActiveColor="bg-violet-500">
+              <CardSection desktopLimit={9} gap="gap-4" testIdPrefix="section-gainer" dotActiveColor="bg-violet-500" mobileSlideMinHeight="min-h-[420px]">
                 {filteredGainers.map((market) => (
                   <TopGainerCard 
                     key={market.id}
@@ -2962,7 +2962,7 @@ export default function PredictPage() {
                 {gainerEmptyMessage}
               </div>
             )}
-            <div className="flex justify-center mt-6">
+            <div className="text-center mt-2 md:mt-6">
               <Button 
                 variant="ghost" 
                 size="sm" 
