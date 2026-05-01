@@ -369,7 +369,7 @@ function ValueCard({
   onChangeVote: (personId: string) => void;
 }) {
   const hasVoted = userVote !== null;
-  const totalVotes = (person.underratedCount || 0) + (person.overratedCount || 0);
+  const totalVotes = (person.underratedCount || 0) + (person.overratedCount || 0) + (person.fairlyRatedCount || 0);
   
   return (
     <Card className="relative overflow-visible bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border border-slate-700/50" style={{ minHeight: '340px' }}>

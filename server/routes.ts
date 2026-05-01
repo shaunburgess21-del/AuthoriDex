@@ -3880,6 +3880,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           underratedPct: celebrityMetrics.underratedPct,
           overratedPct: celebrityMetrics.overratedPct,
           fairlyRatedPct: celebrityMetrics.fairlyRatedPct,
+          underratedCount: celebrityMetrics.underratedVotesCount,
+          overratedCount: celebrityMetrics.overratedVotesCount,
+          fairlyRatedCount: celebrityMetrics.fairlyRatedVotesCount,
           valueScore: celebrityMetrics.valueScore,
         })
         .from(trendingPeople)
