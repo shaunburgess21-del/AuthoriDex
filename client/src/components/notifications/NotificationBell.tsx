@@ -73,25 +73,19 @@ export function NotificationBell({ size = "default", className }: NotificationBe
   const hasNew = (counts.data?.unseen ?? 0) > 0;
   const cap = counts.data?.cap ?? 99;
 
-  const trigger = (
-    <NotificationBellTrigger
-      unreadCount={unread}
-      hasNew={hasNew}
-      cap={cap}
-      size={size}
-      className={className}
-      onClick={() => setOpen((v) => !v)}
-    />
-  );
-
   if (isMobile) {
+    // Mobile: the trigger lives outside the Sheet (sheet has no trigger
+    // slot), so we drive `open` ourselves via the trigger's onClick.
     return (
       <>
-        {/* Sheet's own trigger pattern doesn't compose cleanly with our
-            stateless trigger button; use controlled open + render the
-            trigger inline. Matches how UserMenu solves the same
-            problem (client/src/components/UserMenu.tsx:454-468). */}
-        {trigger}
+        <NotificationBellTrigger
+          unreadCount={unread}
+          hasNew={hasNew}
+          cap={cap}
+          size={size}
+          className={className}
+          onClick={() => setOpen(true)}
+        />
         <Sheet open={open} onOpenChange={setOpen}>
           <SheetContent side="right" className="w-[360px] max-w-[100vw] p-0">
             <SheetHeader className="sr-only">
@@ -108,9 +102,22 @@ export function NotificationBell({ size = "default", className }: NotificationBe
     );
   }
 
+  // Desktop: Radix's DropdownMenuTrigger handles the click → open/close
+  // wiring via Slot. Do NOT pass our own onClick here — adding one
+  // double-toggles state (Radix sets open=true and our handler computes
+  // !true → open=false in the same React batch, so the panel never
+  // appears to open).
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
-      <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
+      <DropdownMenuTrigger asChild>
+        <NotificationBellTrigger
+          unreadCount={unread}
+          hasNew={hasNew}
+          cap={cap}
+          size={size}
+          className={className}
+        />
+      </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
         sideOffset={8}

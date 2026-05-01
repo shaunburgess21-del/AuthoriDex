@@ -7347,6 +7347,140 @@ Only return the JSON object.`;
     }
   });
 
+  // GET /api/markets/:id/my-position
+  //
+  // Single source of truth for the "My Position" card on every market
+  // detail page (jackpot, updown, h2h, race/gainer, community).
+  //
+  // Why this exists rather than reusing /api/me/predictions:
+  //   - /api/me/predictions returns up to 100 rows across every market
+  //     a user has ever touched. The detail page only cares about ONE
+  //     market and refreshes after every bet → fetching the entire
+  //     history every time is wasteful.
+  //   - It doesn't expose betMetadata, so jackpot tickets show up
+  //     without their predictedScore — the very piece of data the user
+  //     needs to see how close they are.
+  //   - Race/gainer detail page calls a non-existent /api/me/bets and
+  //     silently 404s; this endpoint replaces that broken contract.
+  //
+  // Response is shaped to be UI-ready: live currentScore included so
+  // we don't need a separate /history round-trip just to render the
+  // header. Bets come back newest-first.
+  app.get("/api/markets/:id/my-position", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.userId!;
+      const { id } = req.params;
+
+      const [market] = await db
+        .select({
+          id: predictionMarkets.id,
+          marketType: predictionMarkets.marketType,
+          status: predictionMarkets.status,
+          slug: predictionMarkets.slug,
+          title: predictionMarkets.title,
+          baselineScore: predictionMarkets.baselineScore,
+          startAt: predictionMarkets.startAt,
+          endAt: predictionMarkets.endAt,
+          closeAt: predictionMarkets.closeAt,
+          personId: predictionMarkets.personId,
+        })
+        .from(predictionMarkets)
+        .where(eq(predictionMarkets.id, id))
+        .limit(1);
+
+      if (!market) return res.status(404).json({ error: "Market not found" });
+
+      // Live trend score for the linked person (when there is one).
+      // Many markets are not person-linked (e.g. category races aren't
+      // anchored to a single person), so this can legitimately be null.
+      let currentScore: number | null = null;
+      if (market.personId) {
+        const [person] = await db
+          .select({ trendScore: trendingPeople.trendScore })
+          .from(trendingPeople)
+          .where(eq(trendingPeople.id, market.personId))
+          .limit(1);
+        currentScore = person?.trendScore ?? null;
+      }
+
+      // User's bets on this market with the entry label and metadata
+      // joined in. We include settled bets too so a user revisiting a
+      // resolved market can still see their position summary; the UI
+      // decides what to render based on `market.status`.
+      const myBets = await db
+        .select({
+          betId: marketBets.id,
+          entryId: marketBets.entryId,
+          stakeAmount: marketBets.stakeAmount,
+          potentialPayout: marketBets.potentialPayout,
+          status: marketBets.status,
+          direction: marketBets.direction,
+          createdAt: marketBets.createdAt,
+          settledAt: marketBets.settledAt,
+          payoutAmount: marketBets.payoutAmount,
+          confidence: marketBets.confidence,
+          betMetadata: marketBets.betMetadata,
+          entryLabel: marketEntries.label,
+          entryPersonId: marketEntries.personId,
+          entryDisplayOrder: marketEntries.displayOrder,
+          entryResolutionStatus: marketEntries.resolutionStatus,
+        })
+        .from(marketBets)
+        .innerJoin(marketEntries, eq(marketBets.entryId, marketEntries.id))
+        .where(and(eq(marketBets.marketId, id), eq(marketBets.userId, userId)))
+        .orderBy(desc(marketBets.createdAt));
+
+      const bets = myBets.map((b) => {
+        const meta = (b.betMetadata as Record<string, any> | null) ?? null;
+        return {
+          betId: b.betId,
+          entryId: b.entryId,
+          entryLabel: b.entryLabel,
+          entryPersonId: b.entryPersonId,
+          entryDisplayOrder: b.entryDisplayOrder,
+          entryResolutionStatus: b.entryResolutionStatus,
+          stakeAmount: b.stakeAmount,
+          potentialPayout: b.potentialPayout,
+          payoutAmount: b.payoutAmount,
+          status: b.status,
+          direction: b.direction,
+          confidence: b.confidence != null ? Number(b.confidence) : null,
+          // Surface predictedScore for jackpot tickets — the prior
+          // /api/me/predictions contract dropped this so the UI couldn't
+          // show "you predicted 352000, current is 348100, off by 3,900".
+          predictedScore: typeof meta?.predictedScore === "number" ? meta.predictedScore : null,
+          thesis: typeof meta?.thesis === "string" ? meta.thesis : null,
+          placedAt: b.createdAt,
+          settledAt: b.settledAt,
+        };
+      });
+
+      const totalStake = bets.reduce((s, b) => s + (b.stakeAmount ?? 0), 0);
+
+      res.json({
+        market: {
+          id: market.id,
+          marketType: market.marketType,
+          status: market.status,
+          slug: market.slug,
+          title: market.title,
+          baselineScore: market.baselineScore,
+          startAt: market.startAt,
+          endAt: market.endAt,
+          closeAt: market.closeAt,
+          personId: market.personId,
+        },
+        currentScore,
+        totalStake,
+        betCount: bets.length,
+        bets,
+      });
+    } catch (error: any) {
+      console.error("Error fetching my-position:", error.message);
+      res.status(500).json({ error: "Failed to fetch your position" });
+    }
+  });
+
   // Get user's favorites
   // NOTE: Favorites CRUD (GET / POST / DELETE /api/me/favorites[/:personId])
   // has been extracted into server/route-modules/favorites-routes.ts

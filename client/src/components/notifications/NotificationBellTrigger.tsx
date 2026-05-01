@@ -8,7 +8,17 @@ interface NotificationBellTriggerProps {
   hasNew: boolean;
   /** Caps at 9+; rendered as the badge. */
   cap: number;
-  onClick: () => void;
+  /**
+   * Optional click handler. Intentionally optional: when this trigger is
+   * wrapped in a Radix `<DropdownMenuTrigger asChild>` the parent supplies
+   * the open/close click via Slot, and adding our own `onClick` would
+   * double-toggle the state in the same React batch (Radix sets open=true,
+   * then our handler computes !true → open=false → panel never opens).
+   *
+   * Pass an explicit handler when rendering OUTSIDE a Radix trigger
+   * (e.g. the mobile Sheet variant).
+   */
+  onClick?: () => void;
   /**
    * Render size. `compact` matches the existing 8x8 ScrollText icon used
    * on the dense PredictPage mobile header; `default` matches the 9x9

@@ -267,6 +267,7 @@ async function deriveMarketClosingSoon(): Promise<number> {
       id: predictionMarkets.id,
       slug: predictionMarkets.slug,
       title: predictionMarkets.title,
+      marketType: predictionMarkets.marketType,
       closeAt: predictionMarkets.closeAt,
       endAt: predictionMarkets.endAt,
     })
@@ -304,15 +305,47 @@ async function deriveMarketClosingSoon(): Promise<number> {
     const hoursLeft = Math.round(minutesLeft / 60);
     const timing = hoursLeft >= 1 ? `${hoursLeft}h` : `${minutesLeft}m`;
 
+    // Per-kind wording. The prior wording ("Closing in 5h") was ambiguous
+    // for weekly markets where entries close on Friday but the market
+    // doesn't actually resolve until Sunday. Each market type now uses
+    // language that matches what's actually closing — entries (jackpots
+    // are buy-in tickets) vs. bets (yes/no positions on H2H / Up-Down).
+    const verb =
+      market.marketType === "jackpot"
+        ? "Entries close"
+        : "Betting closes";
+    const title = `${verb} in ${timing}`;
+
+    // Deep-link to the right detail surface per market kind so the
+    // notification CTA opens the page that actually shows their open
+    // bet — not the generic /markets/:slug fallback (which only really
+    // makes sense for jackpot/scoring markets).
+    const href = (() => {
+      switch (market.marketType) {
+        case "updown":
+          return `/predict/updown/${market.id}`;
+        case "h2h":
+          return `/predict/h2h/${market.id}`;
+        case "race":
+        case "gainer":
+          return `/predict/race/${market.id}`;
+        default:
+          return market.slug ? `/markets/${market.slug}` : "/predict";
+      }
+    })();
+
     const id = await createNotification({
       userId: bet.userId,
       kind: "market_closing_soon",
-      title: `Closing in ${timing}`,
+      title,
       body: market.title,
-      href: market.slug ? `/markets/${market.slug}` : "/predict",
+      href,
       entityType: "market",
       entityId: market.id,
-      metadata: { closeAt: closeAt.toISOString() },
+      metadata: {
+        closeAt: closeAt.toISOString(),
+        marketType: market.marketType,
+      },
       idempotencyKey: `closing:${bet.userId}:${market.id}`,
     });
     if (id) inserted += 1;

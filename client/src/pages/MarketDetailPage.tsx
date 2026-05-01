@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useLocation, Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
@@ -19,6 +19,7 @@ import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { CardComments, useCommentCount } from "@/components/comments/CardComments";
 import { CommentsBottomSheet } from "@/components/snap-scroll/CommentsBottomSheet";
 import { computePayoutMultiplier, formatMultiplier } from "@/lib/parimutuel";
+import { MyPositionCard, myPositionQueryKey } from "@/components/predict/MyPositionCard";
 import {
   ArrowLeft,
   Check,
@@ -546,6 +547,14 @@ export default function MarketDetailPage() {
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
   const [commentsSheetOpen, setCommentsSheetOpen] = useState(false);
 
+  // Refs for the "Add another entry / Increase stake" CTA on
+  // MyPositionCard. Jackpot has a single always-rendered input we can
+  // focus directly. For community/multi markets the stake input only
+  // mounts after the user picks an entry, so we just scroll the
+  // section into view and let the user choose their entry from there.
+  const jackpotInputRef = useRef<HTMLInputElement | null>(null);
+  const placePredictionSectionRef = useRef<HTMLDivElement | null>(null);
+
   const { data: market, isLoading, error } = useQuery<MarketData>({
     queryKey: ["/api/open-markets", params.slug],
     queryFn: async () => {
@@ -556,16 +565,11 @@ export default function MarketDetailPage() {
     enabled: !!params.slug,
   });
 
-  const { data: userPredictionsData } = useQuery<any>({
-    queryKey: ["/api/me/predictions"],
-    enabled: !!user,
-  });
-
-  const existingBets = useMemo(() => {
-    if (!market || !userPredictionsData) return [];
-    const betsArray = Array.isArray(userPredictionsData) ? userPredictionsData : (userPredictionsData as any)?.predictions ?? [];
-    return (betsArray as any[]).filter((b: any) => b.marketId === market.id);
-  }, [userPredictionsData, market]);
+  // The page used to fetch /api/me/predictions to surface a per-market
+  // "your prediction" pill list. That responsibility now belongs to
+  // <MyPositionCard /> below, which fetches a per-market endpoint
+  // (/api/markets/:id/my-position) — so we no longer need the global
+  // predictions query here. See MyPositionCard for the migration notes.
 
   const isCommunityMarket = market?.marketType === "community";
   const isJackpotMarket = market?.marketType === "jackpot";
@@ -610,6 +614,7 @@ export default function MarketDetailPage() {
         queryClient.invalidateQueries({ queryKey: ["/api/native-markets/gainer"] }),
         queryClient.invalidateQueries({ queryKey: ["/api/me/predictions"] }),
         queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
+        market?.id ? queryClient.invalidateQueries({ queryKey: myPositionQueryKey(market.id) }) : Promise.resolve(),
       ]);
       setSelectedEntry(null);
       setSelectedDirection("yes");
@@ -662,6 +667,7 @@ export default function MarketDetailPage() {
         queryClient.invalidateQueries({ queryKey: ["/api/me/predictions"] }),
         queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
         queryClient.invalidateQueries({ queryKey: ["/api/predict/recent-activity"] }),
+        market?.id ? queryClient.invalidateQueries({ queryKey: myPositionQueryKey(market.id) }) : Promise.resolve(),
       ]);
     },
     onError: (error: any) => {
@@ -968,46 +974,44 @@ export default function MarketDetailPage() {
           )}
         </div>
 
+        {/* Live "My Position" card. Renders only when the user has at
+            least one active bet on this market. Replaces the inline
+            "Your Prediction" pill panel that used to live inside the
+            place-prediction card so users can see live current score,
+            distance from each entry, and jump back into the entry
+            flow without scrolling. */}
+        {isOpen && !isInactive && market.id && (
+          <MyPositionCard
+            marketId={market.id}
+            marketType={market.marketType}
+            onAddEntry={() => {
+              // Scroll the place-prediction section into view, then
+              // focus the appropriate input. setTimeout 250ms lets the
+              // smooth scroll settle before we focus, avoiding the
+              // jarring jump-to-input that focus() alone causes.
+              placePredictionSectionRef.current?.scrollIntoView({
+                behavior: "smooth",
+                block: "start",
+              });
+              window.setTimeout(() => {
+                if (isJackpotMarket) {
+                  jackpotInputRef.current?.focus();
+                }
+              }, 250);
+            }}
+          />
+        )}
+
         {isOpen && !isInactive && (
-          <Card className="p-5 mb-6 border-border/40 bg-muted/5" data-testid="section-place-prediction">
+          <Card
+            ref={placePredictionSectionRef}
+            className="p-5 mb-6 border-border/40 bg-muted/5"
+            data-testid="section-place-prediction"
+          >
             <h2 className="text-lg font-serif font-bold mb-4 flex items-center gap-2">
               <Trophy className="h-5 w-5 text-violet-700 dark:text-violet-500" />
               Place Your Prediction
             </h2>
-
-            {existingBets.length > 0 && (
-              <div className="mb-4 rounded-lg border border-violet-500/40 dark:border-violet-500/30 bg-violet-500/8 dark:bg-violet-500/5 p-3.5" data-testid="panel-your-prediction">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="h-6 w-6 rounded-full bg-violet-500/20 dark:bg-violet-500/15 border border-violet-500/50 dark:border-violet-500/40 flex items-center justify-center shrink-0">
-                    <Check className="h-3 w-3 text-violet-600 dark:text-violet-400" />
-                  </div>
-                  <span className="text-sm font-semibold text-violet-700 dark:text-violet-400">Your Prediction</span>
-                </div>
-                <div className="space-y-1.5">
-                  {existingBets.map((bet: any, i: number) => {
-                    const label = bet.entryLabel || "Unknown";
-                    const dir = bet.direction;
-                    const isYesDir = !dir || dir === "yes";
-                    const accentColor = isYesDir ? "#00C853" : "#FF0000";
-                    return (
-                      <div key={bet.id ?? i} className="flex items-center justify-between gap-2 text-sm">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span
-                            className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-semibold border"
-                            style={{ backgroundColor: `${accentColor}15`, borderColor: `${accentColor}50`, color: accentColor }}
-                          >
-                            {dir === "no" ? "No" : "Yes"} &middot; {label}
-                          </span>
-                        </div>
-                        <span className="text-xs text-muted-foreground tabular-nums shrink-0">
-                          Stake: <span className="font-semibold text-foreground">{(bet.stakeAmount || 0).toLocaleString("en-US")}</span>
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
 
             {!isLoggedIn ? (
               <div className="text-center py-4">
@@ -1026,6 +1030,7 @@ export default function MarketDetailPage() {
                     min="1"
                     step="1"
                     placeholder="Enter exact score (e.g. 352000)"
+                    ref={jackpotInputRef}
                     value={jackpotScoreInput}
                     onChange={(e) => setJackpotScoreInput(e.target.value)}
                     className="bg-background/50"

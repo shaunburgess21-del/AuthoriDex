@@ -199,6 +199,7 @@ export default function UpDownDetailPage() {
         queryClient.invalidateQueries({ queryKey: ["/api/native-markets/updown"] }),
         queryClient.invalidateQueries({ queryKey: ["/api/me/predictions"] }),
         queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/markets", marketId, "my-position"] }),
       ]);
     },
     onError: (err: Error) => {

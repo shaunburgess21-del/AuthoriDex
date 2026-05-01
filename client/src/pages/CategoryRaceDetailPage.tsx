@@ -90,10 +90,37 @@ export default function CategoryRaceDetailPage() {
     });
   }, [serverCutoff, serverResolutionDeadline]);
 
-  const { data: userBets } = useQuery<any[]>({
-    queryKey: ["/api/me/bets"],
-    enabled: !!user,
+  // FIXED (2026-05-01): this page used to query /api/me/bets, which is
+  // not a real endpoint — the request silently 404'd via getQueryFn so
+  // `userBets` was always undefined and the "Your Position" card never
+  // rendered for users who actually had a bet on the race. We now
+  // query the per-market /my-position endpoint, which returns:
+  //   { market, currentScore, totalStake, betCount, bets: [...] }
+  // and pluck the first active bet for this market. The shape is
+  // mapped below into the same `userBet` contract the existing UI
+  // (rank/%-gain card + sticky bottom bar) was already written
+  // against, so we don't have to rewrite the panel.
+  const { data: myPosition } = useQuery<any>({
+    queryKey: ["/api/markets", marketId, "my-position"],
+    enabled: !!user && !!marketId,
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/markets/${marketId}/my-position`);
+      return res.json();
+    },
+    staleTime: 30_000,
+    retry: false,
   });
+  const userBets = useMemo(() => {
+    if (!myPosition?.bets) return [] as any[];
+    return myPosition.bets.map((b: any) => ({
+      marketId,
+      entryId: b.entryId,
+      amount: b.stakeAmount, // legacy field name expected by the existing panel
+      stakeAmount: b.stakeAmount,
+      potentialPayout: b.potentialPayout,
+      placedAt: b.placedAt,
+    }));
+  }, [myPosition, marketId]);
 
   const market = useMemo(() => {
     if (!allGainerMarkets) return null;
@@ -241,6 +268,10 @@ export default function CategoryRaceDetailPage() {
         queryClient.invalidateQueries({ queryKey: ["/api/native-markets/gainer"] }),
         queryClient.invalidateQueries({ queryKey: ["/api/me/predictions"] }),
         queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
+        // Invalidate the per-market my-position cache so the "Your
+        // Position" panel above the leaderboard rerenders with the
+        // freshly-placed bet without a manual reload.
+        queryClient.invalidateQueries({ queryKey: ["/api/markets", marketId, "my-position"] }),
       ]);
     },
     onError: (err: Error) => {
