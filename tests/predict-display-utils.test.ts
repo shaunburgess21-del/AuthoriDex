@@ -44,15 +44,27 @@ test("shouldRenderCrowdSentiment renders 0 but not nullish values", () => {
   assert.equal(shouldRenderCrowdSentiment(undefined), false);
 });
 
-test("getRecentActivityMarketPath routes native market types to details when slug exists", () => {
-  assert.equal(getRecentActivityMarketPath("weekly-foo", "updown"), "/markets/weekly-foo");
-  assert.equal(getRecentActivityMarketPath("weekly-foo", "jackpot"), "/markets/weekly-foo");
-  assert.equal(getRecentActivityMarketPath("weekly-foo", "h2h"), "/markets/weekly-foo");
+test("getRecentActivityMarketPath routes community markets by slug", () => {
+  assert.equal(getRecentActivityMarketPath("rfk-vs-ternus", "community", "abc-id"), "/markets/rfk-vs-ternus");
+  // No slug => fallback rather than broken URL
+  assert.equal(getRecentActivityMarketPath(null, "community", "abc-id"), "/predict");
 });
 
-test("getRecentActivityMarketPath stays on /predict without slug or without native type", () => {
+test("getRecentActivityMarketPath routes native markets by id to their dedicated detail page", () => {
+  assert.equal(getRecentActivityMarketPath("weekly-foo", "updown", "abc-id"), "/predict/updown/abc-id");
+  assert.equal(getRecentActivityMarketPath("weekly-foo", "h2h", "abc-id"), "/predict/h2h/abc-id");
+  assert.equal(getRecentActivityMarketPath("weekly-foo", "gainer", "abc-id"), "/predict/race/abc-id");
+});
+
+test("getRecentActivityMarketPath sends jackpot bets to the predict page (no detail page)", () => {
+  assert.equal(getRecentActivityMarketPath("weekly-foo", "jackpot", "abc-id"), "/predict");
+});
+
+test("getRecentActivityMarketPath falls back to /predict when inputs are missing or unrecognised", () => {
   assert.equal(getRecentActivityMarketPath("weekly-foo"), "/predict");
   assert.equal(getRecentActivityMarketPath(""), "/predict");
   assert.equal(getRecentActivityMarketPath(undefined), "/predict");
   assert.equal(getRecentActivityMarketPath(null), "/predict");
+  // Native type but no marketId => can't build a valid URL, fall back
+  assert.equal(getRecentActivityMarketPath("weekly-foo", "h2h"), "/predict");
 });

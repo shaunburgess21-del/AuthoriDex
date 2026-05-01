@@ -139,11 +139,11 @@ export default function TownSquarePage() {
                   className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/30 cursor-pointer focus-within:bg-muted/30"
                   role="button"
                   tabIndex={0}
-                  onClick={() => setLocation(getRecentActivityMarketPath(item.marketSlug, item.marketType))}
+                  onClick={() => setLocation(getRecentActivityMarketPath(item.marketSlug, item.marketType, item.marketId))}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
-                      setLocation(getRecentActivityMarketPath(item.marketSlug, item.marketType));
+                      setLocation(getRecentActivityMarketPath(item.marketSlug, item.marketType, item.marketId));
                     }
                   }}
                 >
