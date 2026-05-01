@@ -14,6 +14,7 @@ import { MarketResolutionInfo } from "@/components/predict/MarketResolutionInfo"
 import { MyPositionCard } from "@/components/predict/MyPositionCard";
 import { ShareIconButton } from "@/components/predict/ShareIconButton";
 import { RelatedMarkets } from "@/components/predict/RelatedMarkets";
+import { MuteMarketToggle } from "@/components/predict/MuteMarketToggle";
 import { H2HWhatNeedsToHappen } from "@/components/predict/WhatNeedsToHappen";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { CategoryPill } from "@/components/CategoryPill";
@@ -332,6 +333,7 @@ export default function H2HDetailPage() {
             {pad(timeRemaining.days)}d {pad(timeRemaining.hours)}h{" "}
             {pad(timeRemaining.minutes)}m
           </Badge>
+          <MuteMarketToggle marketId={marketId} />
           <ShareIconButton title={`${hydrated.title} on VoxDex`} />
           <HeaderUserActions />
         </div>

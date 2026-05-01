@@ -14,6 +14,7 @@ import { MarketResolutionInfo } from "@/components/predict/MarketResolutionInfo"
 import { MyPositionCard } from "@/components/predict/MyPositionCard";
 import { ShareIconButton } from "@/components/predict/ShareIconButton";
 import { RelatedMarkets } from "@/components/predict/RelatedMarkets";
+import { MuteMarketToggle } from "@/components/predict/MuteMarketToggle";
 import { RaceWhatNeedsToHappen } from "@/components/predict/WhatNeedsToHappen";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { CategoryPill } from "@/components/CategoryPill";
@@ -356,6 +357,7 @@ export default function CategoryRaceDetailPage() {
             <Clock className="h-3 w-3 mr-1" />
             {pad(timeRemaining.days)}d {pad(timeRemaining.hours)}h {pad(timeRemaining.minutes)}m
           </Badge>
+          <MuteMarketToggle marketId={marketId} />
           <ShareIconButton title={`Category Race: ${categoryLabel} on VoxDex`} />
           <HeaderUserActions />
         </div>

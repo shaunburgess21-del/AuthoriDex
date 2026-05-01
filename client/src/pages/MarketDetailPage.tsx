@@ -22,6 +22,7 @@ import { computePayoutMultiplier, formatMultiplier } from "@/lib/parimutuel";
 import { MyPositionCard, myPositionQueryKey } from "@/components/predict/MyPositionCard";
 import { MarketDetailSkeleton } from "@/components/predict/MarketDetailSkeleton";
 import { RelatedMarkets } from "@/components/predict/RelatedMarkets";
+import { MuteMarketToggle } from "@/components/predict/MuteMarketToggle";
 import { getCommunityMarketStatusMessage } from "@/lib/marketClosedMessaging";
 import { goBack } from "@/lib/goBack";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
@@ -958,16 +959,18 @@ export default function MarketDetailPage() {
                 <span>Source</span>
               </a>
             )}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => sharePage(`${market.title} on VoxDex`)}
-              className="ml-auto"
-              data-testid="button-share"
-            >
-              <Share2 className="h-4 w-4 mr-1" />
-              Share
-            </Button>
+            <div className="ml-auto flex items-center gap-1">
+              <MuteMarketToggle marketId={market.id} />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => sharePage(`${market.title} on VoxDex`)}
+                data-testid="button-share"
+              >
+                <Share2 className="h-4 w-4 mr-1" />
+                Share
+              </Button>
+            </div>
           </div>
 
           {market.tags && market.tags.length > 0 && (

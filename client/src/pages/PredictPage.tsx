@@ -1348,12 +1348,20 @@ export default function PredictPage() {
   const { data: trendingResponse, isLoading: isLoadingPeople, error: trendingError, refetch: refetchTrending } = useQuery<{ data: TrendingPerson[], totalCount: number, hasMore: boolean }>({
     queryKey: ['/api/trending?sort=rank'],
   });
-  const trendingPeople = trendingResponse?.data || [];
+  /* `useQuery`'s `data` returns `undefined` until the first response,
+   * and the `?? []` fallback otherwise produces a fresh empty array on
+   * every render — defeating any downstream `useMemo` that lists this
+   * as a dep. Memoize so the array reference is stable until the
+   * fetched data actually changes. */
+  const trendingPeople = useMemo(
+    () => trendingResponse?.data || [],
+    [trendingResponse],
+  );
   
   const { data: openMarketsData, isLoading: isLoadingOpenMarkets, error: openMarketsError, refetch: refetchOpenMarkets } = useQuery<any[]>({
     queryKey: ['/api/open-markets'],
   });
-  const openMarkets = openMarketsData || [];
+  const openMarkets = useMemo(() => openMarketsData || [], [openMarketsData]);
 
   const { data: nativeUpdownData, isLoading: updownLoading, error: updownError, refetch: refetchUpdown } = useQuery<any[]>({
     queryKey: ['/api/native-markets/updown'],
@@ -2209,34 +2217,116 @@ export default function PredictPage() {
       Number(m.totalPool ?? 0),
     );
 
-  const filteredUpDown = hydratedMarkets.filter(m =>
-    matchesCategory(updownCategory, m.category, m.personId) &&
-    (!updownSearch || m.personName.toLowerCase().includes(updownSearch.toLowerCase())) &&
-    passesMyPositionsFilter(m.id)
-  ).sort((a, b) => updownCategory === "trending"
-    ? trendingCompare(a.totalBets, b.totalBets, updownFame(a), updownFame(b))
-    : 0);
+  /* The four filteredX lists are wrapped in useMemo not because the
+   * filter+sort itself is expensive (markets are O(few-dozen)), but
+   * because they feed downstream snap-item useMemos and section
+   * mappers — recreating these arrays on every parent render forced
+   * those memos to recompute too, defeating their purpose. With stable
+   * references, the snap-scroll modal and its grid skip re-renders
+   * unless filters / data actually change. */
+  const filteredUpDown = useMemo(
+    () =>
+      hydratedMarkets
+        .filter(
+          (m) =>
+            matchesCategory(updownCategory, m.category, m.personId) &&
+            (!updownSearch ||
+              m.personName.toLowerCase().includes(updownSearch.toLowerCase())) &&
+            passesMyPositionsFilter(m.id),
+        )
+        .sort((a, b) =>
+          updownCategory === "trending"
+            ? trendingCompare(
+                a.totalBets,
+                b.totalBets,
+                updownFame(a),
+                updownFame(b),
+              )
+            : 0,
+        ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- helper closures (matchesCategory, passesMyPositionsFilter, trendingCompare, updownFame) capture state already covered below; listing every helper would be noise
+    [
+      hydratedMarkets,
+      updownCategory,
+      updownSearch,
+      myPositionsFilter,
+      userBetsByMarket,
+      favoriteIds,
+    ],
+  );
 
-  const filteredH2H = hydratedH2H.filter(m =>
-    (h2hCategory === "all" || h2hCategory === "trending" ||
-     (h2hCategory === "favorites" ? (favoriteIds.has(m.person1Id || "") || favoriteIds.has(m.person2Id || "")) : matchesCategory(h2hCategory, m.category))) &&
-    (!h2hSearch || m.title.toLowerCase().includes(h2hSearch.toLowerCase()) ||
-     m.person1.name.toLowerCase().includes(h2hSearch.toLowerCase()) ||
-     m.person2.name.toLowerCase().includes(h2hSearch.toLowerCase())) &&
-    passesMyPositionsFilter(m.id)
-  ).sort((a, b) => h2hCategory === "trending"
-    ? trendingCompare(a.totalBets, b.totalBets, h2hFame(a), h2hFame(b))
-    : 0);
+  const filteredH2H = useMemo(
+    () =>
+      hydratedH2H
+        .filter(
+          (m) =>
+            (h2hCategory === "all" ||
+              h2hCategory === "trending" ||
+              (h2hCategory === "favorites"
+                ? favoriteIds.has(m.person1Id || "") ||
+                  favoriteIds.has(m.person2Id || "")
+                : matchesCategory(h2hCategory, m.category))) &&
+            (!h2hSearch ||
+              m.title.toLowerCase().includes(h2hSearch.toLowerCase()) ||
+              m.person1.name.toLowerCase().includes(h2hSearch.toLowerCase()) ||
+              m.person2.name.toLowerCase().includes(h2hSearch.toLowerCase())) &&
+            passesMyPositionsFilter(m.id),
+        )
+        .sort((a, b) =>
+          h2hCategory === "trending"
+            ? trendingCompare(a.totalBets, b.totalBets, h2hFame(a), h2hFame(b))
+            : 0,
+        ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      hydratedH2H,
+      h2hCategory,
+      h2hSearch,
+      myPositionsFilter,
+      userBetsByMarket,
+      favoriteIds,
+    ],
+  );
 
-  const filteredGainers = hydratedGainers.filter(m =>
-    (gainerCategory === "all" || gainerCategory === "trending" ||
-     (gainerCategory === "favorites" ? m.leaders.some(l => l.personId && favoriteIds.has(l.personId)) : matchesCategory(gainerCategory, m.category))) &&
-    (!gainerSearch || getMarketCategoryLabel(m.category).toLowerCase().includes(gainerSearch.toLowerCase()) ||
-     (m.allCandidates || m.leaders).some(l => l.name.toLowerCase().includes(gainerSearch.toLowerCase()))) &&
-    passesMyPositionsFilter(m.id)
-  ).sort((a, b) => gainerCategory === "trending"
-    ? trendingCompare(a.totalBets, b.totalBets, gainerFame(a), gainerFame(b))
-    : 0);
+  const filteredGainers = useMemo(
+    () =>
+      hydratedGainers
+        .filter(
+          (m) =>
+            (gainerCategory === "all" ||
+              gainerCategory === "trending" ||
+              (gainerCategory === "favorites"
+                ? m.leaders.some((l) => l.personId && favoriteIds.has(l.personId))
+                : matchesCategory(gainerCategory, m.category))) &&
+            (!gainerSearch ||
+              getMarketCategoryLabel(m.category)
+                .toLowerCase()
+                .includes(gainerSearch.toLowerCase()) ||
+              (m.allCandidates || m.leaders).some((l) =>
+                l.name.toLowerCase().includes(gainerSearch.toLowerCase()),
+              )) &&
+            passesMyPositionsFilter(m.id),
+        )
+        .sort((a, b) =>
+          gainerCategory === "trending"
+            ? trendingCompare(
+                a.totalBets,
+                b.totalBets,
+                gainerFame(a),
+                gainerFame(b),
+              )
+            : 0,
+        ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      hydratedGainers,
+      gainerCategory,
+      gainerSearch,
+      myPositionsFilter,
+      userBetsByMarket,
+      favoriteIds,
+    ],
+  );
 
   const hasLiveGainers = hydratedGainers.length > 0;
   const hasInactiveOnlyGainers = (nativeGainerData || []).length > 0 && !hasLiveGainers;
@@ -2260,17 +2350,43 @@ export default function PredictPage() {
         ? "No gainers match your filters"
         : "No Category Races are available right now";
 
-  const filteredCommunity = openMarkets.filter((m: any) =>
-    (communityCategory === "all" ||
-      communityCategory === "trending" ||
-      (communityCategory === "favorites"
-        ? !!m.personId && favoriteIds.has(m.personId)
-        : normalizeMarketCategory(m.category) === communityCategory)) &&
-    (!communitySearch || m.title?.toLowerCase().includes(communitySearch.toLowerCase())) &&
-    passesMyPositionsFilter(m.id)
-  ).sort((a: any, b: any) => communityCategory === "trending"
-    ? trendingCompare(a.totalBets, b.totalBets, Number(a.totalPool ?? a.seedVolume ?? 0), Number(b.totalPool ?? b.seedVolume ?? 0))
-    : 0);
+  const filteredCommunity = useMemo(
+    () =>
+      openMarkets
+        .filter(
+          (m: any) =>
+            (communityCategory === "all" ||
+              communityCategory === "trending" ||
+              (communityCategory === "favorites"
+                ? !!m.personId && favoriteIds.has(m.personId)
+                : normalizeMarketCategory(m.category) ===
+                  communityCategory)) &&
+            (!communitySearch ||
+              m.title
+                ?.toLowerCase()
+                .includes(communitySearch.toLowerCase())) &&
+            passesMyPositionsFilter(m.id),
+        )
+        .sort((a: any, b: any) =>
+          communityCategory === "trending"
+            ? trendingCompare(
+                a.totalBets,
+                b.totalBets,
+                Number(a.totalPool ?? a.seedVolume ?? 0),
+                Number(b.totalPool ?? b.seedVolume ?? 0),
+              )
+            : 0,
+        ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      openMarkets,
+      communityCategory,
+      communitySearch,
+      myPositionsFilter,
+      userBetsByMarket,
+      favoriteIds,
+    ],
+  );
 
   const updownCategoryFilters = useMemo(
     () =>

@@ -433,6 +433,7 @@ export async function settleMarketBets(marketId: string, winnerEntryId: string, 
           href,
           entityType: "market",
           entityId: marketId,
+          marketId,
           metadata: { betId: bet.id, status: bet.status, payout, stake: bet.stakeAmount, profit },
           idempotencyKey: `market_resolved:${marketId}:${bet.id}`,
         });
@@ -531,6 +532,7 @@ export async function voidMarketBets(marketId: string): Promise<number> {
           href,
           entityType: "market",
           entityId: marketId,
+          marketId,
           metadata: { betId: bet.id, refund: bet.stakeAmount },
           idempotencyKey: `market_void_refund:${marketId}:${bet.id}`,
         });
@@ -1036,6 +1038,7 @@ async function resolveJackpot(market: any): Promise<"resolved" | "blocked"> {
         href,
         entityType: "market",
         entityId: market.id,
+        marketId: market.id,
         metadata: { betId: w.id, status: "won", payout: share, stake: w.stakeAmount, actualScore, predictedScore: w.predictedScore, margin: w.diff },
         idempotencyKey: `market_resolved:${market.id}:${w.id}`,
       });
@@ -1049,6 +1052,7 @@ async function resolveJackpot(market: any): Promise<"resolved" | "blocked"> {
         href,
         entityType: "market",
         entityId: market.id,
+        marketId: market.id,
         metadata: { betId: loser.id, status: "lost", payout: 0, stake: loser.stakeAmount, actualScore },
         idempotencyKey: `market_resolved:${market.id}:${loser.id}`,
       });

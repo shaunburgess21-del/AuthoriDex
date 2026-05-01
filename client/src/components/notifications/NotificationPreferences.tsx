@@ -1,8 +1,10 @@
-import { Bell } from "lucide-react";
+import { Bell, BellOff, ExternalLink } from "lucide-react";
+import { Link } from "wouter";
 import { Card } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   CATEGORY_LABELS,
@@ -10,7 +12,12 @@ import {
   type NotificationCategory,
   type NotificationPreferences as NotificationPreferencesRow,
 } from "@/lib/notifications/types";
-import { useNotificationPreferences } from "@/hooks/useNotifications";
+import {
+  useNotificationPreferences,
+  useNotificationMutes,
+  useToggleMarketMute,
+  type MutedMarket,
+} from "@/hooks/useNotifications";
 
 /**
  * Settings → Notifications card.
@@ -98,7 +105,129 @@ export function NotificationPreferences() {
           />
         ))}
       </div>
+
+      <MutedMarketsSection />
     </Card>
+  );
+}
+
+/**
+ * Per-market mute list. Lives below the channel toggles because it's a
+ * fine-grained "and also silence these specific markets" override on top
+ * of the category preferences. Hidden entirely when the user has nothing
+ * muted to keep the panel uncluttered for the 95% case.
+ */
+function MutedMarketsSection() {
+  const { data, isLoading } = useNotificationMutes();
+  const toggle = useToggleMarketMute();
+
+  if (isLoading) return null;
+  const items = data?.items ?? [];
+  if (items.length === 0) {
+    return (
+      <div className="mt-6 pt-5 border-t">
+        <div className="flex items-center gap-2 mb-1.5">
+          <BellOff className="h-4 w-4 text-muted-foreground" />
+          <h3 className="text-sm font-semibold">Muted markets</h3>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          No markets muted. Tap the bell icon on any market to silence it
+          without turning off the broader category.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-6 pt-5 border-t" data-testid="muted-markets-section">
+      <div className="flex items-center gap-2 mb-1">
+        <BellOff className="h-4 w-4 text-muted-foreground" />
+        <h3 className="text-sm font-semibold">Muted markets</h3>
+        <Badge variant="secondary" className="text-[10px] py-0 px-1.5 leading-none">
+          {items.length}
+        </Badge>
+      </div>
+      <p className="text-xs text-muted-foreground mb-3">
+        These markets won't trigger any notifications, even when the
+        category above is on.
+      </p>
+
+      <ul className="divide-y rounded-md border">
+        {items.map((item) => (
+          <MutedMarketRow
+            key={item.marketId}
+            item={item}
+            disabled={toggle.isPending}
+            onUnmute={() =>
+              toggle.mutate({ marketId: item.marketId, muted: false })
+            }
+          />
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+interface MutedMarketRowProps {
+  item: MutedMarket;
+  onUnmute: () => void;
+  disabled?: boolean;
+}
+
+function MutedMarketRow({ item, onUnmute, disabled }: MutedMarketRowProps) {
+  // Map marketType to the canonical SPA detail-page path so the user
+  // can click through to the muted market and re-engage if they
+  // change their mind. Falls back to /predict for unknown types.
+  const href = (() => {
+    switch (item.marketType) {
+      case "updown":
+        return `/predict/updown/${item.marketId}`;
+      case "h2h":
+        return `/predict/h2h/${item.marketId}`;
+      case "gainer":
+      case "race":
+        return `/predict/race/${item.marketId}`;
+      case "binary":
+      case "multi":
+      case "updown_open":
+      case "community":
+        return item.marketSlug ? `/markets/${item.marketSlug}` : "/predict";
+      case "jackpot":
+        return `/predict#jackpot`;
+      default:
+        return "/predict";
+    }
+  })();
+
+  return (
+    <li className="flex items-center gap-3 p-3 text-sm">
+      <BellOff className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+      <Link
+        href={href}
+        className="flex-1 min-w-0 hover:text-violet-600 dark:hover:text-violet-400 transition-colors"
+      >
+        <div className="flex items-center gap-1.5 truncate">
+          <span className="font-medium truncate">{item.marketTitle}</span>
+          <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground/60" />
+        </div>
+        {item.marketStatus && item.marketStatus !== "OPEN" && (
+          <p className="text-[11px] text-muted-foreground capitalize">
+            {item.marketStatus.toLowerCase().replace(/_/g, " ")}
+          </p>
+        )}
+      </Link>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="h-7 px-2 text-xs"
+        onClick={onUnmute}
+        disabled={disabled}
+        data-testid={`unmute-${item.marketId}`}
+      >
+        Unmute
+      </Button>
+    </li>
   );
 }
 

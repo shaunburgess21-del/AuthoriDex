@@ -1,6 +1,6 @@
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "../db";
-import { notificationPreferences, notifications, profiles } from "@shared/schema";
+import { notificationPreferences, notifications, notificationMarketMutes, profiles } from "@shared/schema";
 import { logger } from "../log";
 
 /**
@@ -87,6 +87,14 @@ export interface CreateNotificationInput {
    * Optional override; defaults to the kind's registry priority.
    */
   priority?: 0 | 1;
+  /**
+   * Market this notification is about. When set, the dispatcher checks
+   * the user's `notification_market_mutes` list and short-circuits if
+   * the market is muted — composing with the category-level toggles.
+   * Use the market's primary key (`prediction_markets.id`), not its
+   * slug, so jackpot/H2H/Race etc. all use the same lookup column.
+   */
+  marketId?: string;
 }
 
 const CATEGORY_TO_IN_APP_COLUMN: Record<NotificationCategory, keyof typeof notificationPreferences.$inferSelect> = {
@@ -127,6 +135,32 @@ async function isInAppEnabled(userId: string, category: NotificationCategory): P
 }
 
 /**
+ * Returns true when the user has explicitly muted this market. We
+ * fail OPEN here too — a transient DB hiccup shouldn't silently drop
+ * a notification (the worst case is the user gets a single ping they
+ * thought they'd silenced; the right case is a genuine alert always
+ * lands).
+ */
+async function isMarketMuted(userId: string, marketId: string): Promise<boolean> {
+  try {
+    const [row] = await db
+      .select({ marketId: notificationMarketMutes.marketId })
+      .from(notificationMarketMutes)
+      .where(
+        and(
+          eq(notificationMarketMutes.userId, userId),
+          eq(notificationMarketMutes.marketId, marketId),
+        ),
+      )
+      .limit(1);
+    return Boolean(row);
+  } catch (err) {
+    logger.warn({ err, userId, marketId }, "[notifications] mute lookup failed; defaulting to unmuted");
+    return false;
+  }
+}
+
+/**
  * Insert a notification with idempotency.
  *
  * - Short-circuits if the user has the category disabled.
@@ -146,6 +180,11 @@ export async function createNotification(input: CreateNotificationInput): Promis
 
   const enabled = await isInAppEnabled(input.userId, meta.category);
   if (!enabled) return null;
+
+  if (input.marketId) {
+    const muted = await isMarketMuted(input.userId, input.marketId);
+    if (muted) return null;
+  }
 
   const priority = input.priority ?? meta.priority;
 

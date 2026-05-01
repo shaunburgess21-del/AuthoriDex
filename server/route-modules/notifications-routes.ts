@@ -2,7 +2,12 @@ import type { Express } from "express";
 import { z } from "zod";
 import { and, desc, eq, isNull, lt, sql } from "drizzle-orm";
 import { db } from "../db";
-import { notificationPreferences, notifications } from "@shared/schema";
+import {
+  notificationPreferences,
+  notifications,
+  notificationMarketMutes,
+  predictionMarkets,
+} from "@shared/schema";
 import { requireAuth, type AuthRequest } from "../auth-middleware";
 import {
   dismissNotification,
@@ -284,4 +289,128 @@ export function registerNotificationsRoutes(app: Express): void {
       res.status(500).json({ error: "Failed to update notification preferences" });
     }
   });
+
+  /* ─────────────────────────────────────────────────── Mute by market
+   *
+   * The category preferences above are coarse-grained (everything
+   * related to predictions on/off). "Mute this market" is the
+   * fine-grained escape hatch: a user might want to keep predictions
+   * notifications on overall but stop hearing about a specific jackpot
+   * ticket they entered for the meme value. Compose with category
+   * gating in the dispatcher (see services/notifications.ts).
+   *
+   *   GET    /api/me/notification-mutes
+   *      → { items: [{ marketId, marketTitle, marketType, mutedAt }] }
+   *   POST   /api/me/notification-mutes/:marketId   → idempotent mute
+   *   DELETE /api/me/notification-mutes/:marketId   → idempotent unmute
+   */
+
+  app.get(
+    "/api/me/notification-mutes",
+    requireAuth,
+    async (req: AuthRequest, res) => {
+      try {
+        const userId = req.userId!;
+
+        const rows = await db
+          .select({
+            marketId: notificationMarketMutes.marketId,
+            createdAt: notificationMarketMutes.createdAt,
+            marketTitle: predictionMarkets.title,
+            marketType: predictionMarkets.marketType,
+            marketSlug: predictionMarkets.slug,
+            marketStatus: predictionMarkets.status,
+            marketEndAt: predictionMarkets.endAt,
+          })
+          .from(notificationMarketMutes)
+          .leftJoin(
+            predictionMarkets,
+            eq(notificationMarketMutes.marketId, predictionMarkets.id),
+          )
+          .where(eq(notificationMarketMutes.userId, userId))
+          .orderBy(desc(notificationMarketMutes.createdAt));
+
+        res.json({
+          items: rows.map((r) => ({
+            marketId: r.marketId,
+            marketTitle: r.marketTitle ?? "Unknown market",
+            marketType: r.marketType,
+            marketSlug: r.marketSlug,
+            marketStatus: r.marketStatus,
+            marketEndAt: r.marketEndAt,
+            mutedAt: r.createdAt,
+          })),
+        });
+      } catch (error: any) {
+        req.log?.error({ err: error }, "[notifications] mutes GET failed");
+        res.status(500).json({ error: "Failed to fetch muted markets" });
+      }
+    },
+  );
+
+  app.post(
+    "/api/me/notification-mutes/:marketId",
+    requireAuth,
+    async (req: AuthRequest, res) => {
+      try {
+        const userId = req.userId!;
+        const { marketId } = req.params;
+        if (!marketId) {
+          return res.status(400).json({ error: "Market id required" });
+        }
+
+        const [market] = await db
+          .select({ id: predictionMarkets.id })
+          .from(predictionMarkets)
+          .where(eq(predictionMarkets.id, marketId))
+          .limit(1);
+        if (!market) {
+          return res.status(404).json({ error: "Market not found" });
+        }
+
+        await db
+          .insert(notificationMarketMutes)
+          .values({ userId, marketId })
+          .onConflictDoNothing({
+            target: [
+              notificationMarketMutes.userId,
+              notificationMarketMutes.marketId,
+            ],
+          });
+
+        res.json({ muted: true, marketId });
+      } catch (error: any) {
+        req.log?.error({ err: error }, "[notifications] mute failed");
+        res.status(500).json({ error: "Failed to mute market" });
+      }
+    },
+  );
+
+  app.delete(
+    "/api/me/notification-mutes/:marketId",
+    requireAuth,
+    async (req: AuthRequest, res) => {
+      try {
+        const userId = req.userId!;
+        const { marketId } = req.params;
+        if (!marketId) {
+          return res.status(400).json({ error: "Market id required" });
+        }
+
+        await db
+          .delete(notificationMarketMutes)
+          .where(
+            and(
+              eq(notificationMarketMutes.userId, userId),
+              eq(notificationMarketMutes.marketId, marketId),
+            ),
+          );
+
+        res.json({ muted: false, marketId });
+      } catch (error: any) {
+        req.log?.error({ err: error }, "[notifications] unmute failed");
+        res.status(500).json({ error: "Failed to unmute market" });
+      }
+    },
+  );
 }

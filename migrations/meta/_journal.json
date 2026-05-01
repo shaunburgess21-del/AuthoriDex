@@ -260,6 +260,13 @@
       "when": 1778621400000,
       "tag": "0036_notification_preferences",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1778894400000,
+      "tag": "0037_notification_market_mutes",
+      "breakpoints": true
     }
   ]
 }

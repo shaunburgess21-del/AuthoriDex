@@ -342,6 +342,7 @@ async function deriveMarketClosingSoon(): Promise<number> {
       href,
       entityType: "market",
       entityId: market.id,
+      marketId: market.id,
       metadata: {
         closeAt: closeAt.toISOString(),
         marketType: market.marketType,

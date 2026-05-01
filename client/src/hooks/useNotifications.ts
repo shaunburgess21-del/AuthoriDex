@@ -397,3 +397,102 @@ export const NOTIFICATIONS_QUERY_KEYS = {
   list: LIST_QUERY_KEY,
   preferences: PREFS_QUERY_KEY,
 };
+
+/* ─────────────────────────────────────────────────────── Mute by market
+ *
+ * Per-(user, market) mute composes with the category preferences above:
+ * a notification fires only if the category is enabled AND the market
+ * isn't muted. We surface this as a mute toggle on each detail page
+ * header plus a list view in Settings → Notifications so users can
+ * audit / un-mute later.
+ */
+
+const MUTES_QUERY_KEY = ["notifications", "mutes"] as const;
+
+export interface MutedMarket {
+  marketId: string;
+  marketTitle: string;
+  marketType: string | null;
+  marketSlug: string | null;
+  marketStatus: string | null;
+  marketEndAt: string | null;
+  mutedAt: string;
+}
+
+interface MutesResponse {
+  items: MutedMarket[];
+}
+
+export function useNotificationMutes() {
+  const { isLoggedIn } = useAuth();
+  return useQuery<MutesResponse>({
+    queryKey: MUTES_QUERY_KEY,
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/me/notification-mutes");
+      return res.json();
+    },
+    enabled: isLoggedIn,
+    staleTime: 60_000,
+  });
+}
+
+/**
+ * Quick check whether a single market is muted. Reads from the same
+ * cached list so the mute toggle on a detail page renders instantly
+ * without an extra round-trip.
+ */
+export function useIsMarketMuted(marketId: string | undefined): boolean {
+  const { data } = useNotificationMutes();
+  if (!marketId || !data?.items) return false;
+  return data.items.some((m) => m.marketId === marketId);
+}
+
+export function useToggleMarketMute() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ marketId, muted }: { marketId: string; muted: boolean }) => {
+      const method = muted ? "POST" : "DELETE";
+      const res = await apiRequest(method, `/api/me/notification-mutes/${marketId}`);
+      return res.json();
+    },
+    onMutate: async ({ marketId, muted }) => {
+      await queryClient.cancelQueries({ queryKey: MUTES_QUERY_KEY });
+      const previous = queryClient.getQueryData<MutesResponse>(MUTES_QUERY_KEY);
+      if (previous) {
+        const exists = previous.items.some((m) => m.marketId === marketId);
+        if (muted && !exists) {
+          // Optimistic add. We don't know the title client-side yet, so
+          // we stub it; the next refetch will populate the real title.
+          queryClient.setQueryData<MutesResponse>(MUTES_QUERY_KEY, {
+            items: [
+              {
+                marketId,
+                marketTitle: "Muted market",
+                marketType: null,
+                marketSlug: null,
+                marketStatus: null,
+                marketEndAt: null,
+                mutedAt: new Date().toISOString(),
+              },
+              ...previous.items,
+            ],
+          });
+        } else if (!muted && exists) {
+          queryClient.setQueryData<MutesResponse>(MUTES_QUERY_KEY, {
+            items: previous.items.filter((m) => m.marketId !== marketId),
+          });
+        }
+      }
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(MUTES_QUERY_KEY, context.previous);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: MUTES_QUERY_KEY });
+    },
+  });
+}

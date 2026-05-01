@@ -19,6 +19,7 @@ import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
 import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
 import { ShareIconButton } from "@/components/predict/ShareIconButton";
 import { RelatedMarkets } from "@/components/predict/RelatedMarkets";
+import { MuteMarketToggle } from "@/components/predict/MuteMarketToggle";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -319,6 +320,7 @@ export default function UpDownDetailPage() {
             {pad(timeRemaining.days)}d {pad(timeRemaining.hours)}h{" "}
             {pad(timeRemaining.minutes)}m
           </Badge>
+          <MuteMarketToggle marketId={marketId} />
           <ShareIconButton title={`${hydrated.personName}: Up or Down? on VoxDex`} />
           <HeaderUserActions />
         </div>

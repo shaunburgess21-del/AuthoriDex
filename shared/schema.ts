@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, pgEnum, text, varchar, integer, real, timestamp, unique, uniqueIndex, jsonb, serial, boolean, index, numeric, check, type AnyPgColumn } from "drizzle-orm/pg-core";
+import { pgTable, pgEnum, text, varchar, integer, real, timestamp, unique, uniqueIndex, jsonb, serial, boolean, index, numeric, check, primaryKey, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { relations } from "drizzle-orm";
@@ -1572,3 +1572,30 @@ export const notificationPreferences = pgTable("notification_preferences", {
 
 export type NotificationPreferences = typeof notificationPreferences.$inferSelect;
 export type InsertNotificationPreferences = typeof notificationPreferences.$inferInsert;
+
+/**
+ * Per-(user, market) mute. Composes with the category-level toggles in
+ * `notificationPreferences`: a notification is delivered only if (a) the
+ * user has the relevant category enabled AND (b) the market isn't on
+ * the user's mute list. The row count is bounded by user activity (a
+ * user only mutes markets they engage with), so we keep the data model
+ * simple — no expiry, no enum of "mute kinds", just (userId, marketId).
+ */
+export const notificationMarketMutes = pgTable(
+  "notification_market_mutes",
+  {
+    userId: varchar("user_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    marketId: varchar("market_id")
+      .notNull()
+      .references(() => predictionMarkets.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.userId, table.marketId] }),
+  }),
+);
+
+export type NotificationMarketMute = typeof notificationMarketMutes.$inferSelect;
+export type InsertNotificationMarketMute = typeof notificationMarketMutes.$inferInsert;
