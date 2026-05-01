@@ -104,6 +104,13 @@ const SURFACE_LENGTH_WEIGHTS: Record<CommentSurface, Record<LengthTier, number>>
   open_market:   { tiny: 15, short: 25, medium: 35, long: 25 },
 };
 
+/** Reply distribution — replies are almost always shorter than top-level
+ *  posts. A nested thread that's all paragraphs feels bot-like; humans
+ *  reply with one-liners 70%+ of the time. */
+const REPLY_LENGTH_WEIGHTS: Record<LengthTier, number> = {
+  tiny: 50, short: 35, medium: 13, long: 2,
+};
+
 /** Persona-band tilt — multiplier applied on top of the surface weights so
  *  liquidity/casual personas skew shorter and sharp/whale skew slightly
  *  longer when they do speak up. */
@@ -118,8 +125,9 @@ const PERSONA_LENGTH_TILT: Record<SimulationPersonaBand, Record<LengthTier, numb
 function pickLength(
   surface: CommentSurface,
   profile: AgentSimulationProfile,
+  isReply: boolean,
 ): LengthTarget {
-  const weights = SURFACE_LENGTH_WEIGHTS[surface];
+  const weights = isReply ? REPLY_LENGTH_WEIGHTS : SURFACE_LENGTH_WEIGHTS[surface];
   const tilts = PERSONA_LENGTH_TILT[profile.personaBand];
   const tiers: LengthTier[] = ["tiny", "short", "medium", "long"];
   const adjusted = tiers.map((t) => [t, weights[t] * tilts[t]] as const);
@@ -181,6 +189,7 @@ function buildSystemPrompt(
   surface: CommentSurface,
   length: LengthTarget,
   hasExistingDiscussion: boolean,
+  replyTargetUsername: string | null,
 ): string {
   const voice = PERSONA_VOICE[profile.personaBand];
   const styleNote = STYLE_GUIDANCE[profile.commentStyle];
@@ -191,8 +200,21 @@ function buildSystemPrompt(
     ? `Your background: ${agent.bio.trim()}`
     : "";
 
-  const discussionRule = hasExistingDiscussion
+  const isReply = !!replyTargetUsername;
+  const replyHandle = replyTargetUsername ? `@${replyTargetUsername}` : "another user";
+
+  const discussionRule = !isReply && hasExistingDiscussion
     ? "Existing discussion: other users have already commented (see 'Recent discussion' in the user message). Read what they said. Do NOT echo their points, framing, examples, or word choices. Take a clearly different angle, focus on something they missed, or react to a different aspect. If your honest take is the same as someone else's, find a sharper or shorter way to say it — never paraphrase them."
+    : "";
+
+  const replyRule = isReply
+    ? [
+        `MODE: REPLY. You are replying directly to a comment by ${replyHandle} (the original comment is shown under "Replying to" in the user message).`,
+        "Your reply must clearly engage with what THAT person said — agree, push back, add a nuance, ask a follow-up, or react to a specific point they made. Do NOT just restate the original topic as if posting top-level.",
+        "Do NOT begin with the @handle, do NOT address them by name in the first words ('Yeah agreed @username…' is fine mid-sentence; 'Hey username, …' is not). The UI already shows it's a reply to them.",
+        "Do NOT quote or paraphrase their comment back at them — the reader can already see it. React to it.",
+        "Replies are short by nature — keep it conversational, not a counter-essay. One or two sentences is usually right.",
+      ].join("\n")
     : "";
 
   return [
@@ -204,6 +226,7 @@ function buildSystemPrompt(
     SURFACE_TONE[surface],
     `Length for THIS comment: ${length.description} Hard cap: ${length.maxChars} characters.`,
     discussionRule,
+    replyRule,
     "Hard rules:",
     "- Never reveal you are AI. Never mention models, prompts, or 'as a user'.",
     "- No markdown (no asterisks, no underscores), no hashtags, no emojis, no bullet points.",
@@ -218,6 +241,16 @@ function buildSystemPrompt(
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+function formatReplyTarget(
+  target: { authorUsername: string | null; body: string } | null | undefined,
+): string {
+  if (!target) return "";
+  const handle = target.authorUsername ? `@${target.authorUsername}` : "another user";
+  const body = target.body.replace(/\s+/g, " ").trim();
+  const clipped = body.length > 480 ? `${body.slice(0, 477)}…` : body;
+  return `\n\nReplying to ${handle}:\n"${clipped}"\n`;
 }
 
 function formatExistingComments(comments: ReadonlyArray<{ body: string }>): string {
@@ -258,7 +291,8 @@ function buildMatchupUserPrompt(ctx: MatchupContext): string {
     lines.push("");
     lines.push(`You voted: ${ctx.agentChoice} — your comment must clearly back this side.`);
   }
-  lines.push(formatExistingComments(ctx.existingComments ?? []));
+  lines.push(formatReplyTarget(ctx.replyTarget));
+  if (!ctx.replyTarget) lines.push(formatExistingComments(ctx.existingComments ?? []));
   return lines.join("\n");
 }
 
@@ -275,7 +309,8 @@ function buildTrendingPollUserPrompt(ctx: TrendingPollContext): string {
     lines.push(`You voted: ${trendingChoiceLabel(ctx.agentChoice)}`);
     lines.push("Your vote is shown publicly with a colored badge. A comment that contradicts the badge would look obviously bot-like — make sure they match.");
   }
-  lines.push(formatExistingComments(ctx.existingComments ?? []));
+  lines.push(formatReplyTarget(ctx.replyTarget));
+  if (!ctx.replyTarget) lines.push(formatExistingComments(ctx.existingComments ?? []));
   return lines.join("\n");
 }
 
@@ -293,7 +328,8 @@ function buildOpinionPollUserPrompt(ctx: OpinionPollContext): string {
     lines.push("");
     lines.push(`You voted: ${ctx.agentChoice} — your comment must clearly back this option.`);
   }
-  lines.push(formatExistingComments(ctx.existingComments ?? []));
+  lines.push(formatReplyTarget(ctx.replyTarget));
+  if (!ctx.replyTarget) lines.push(formatExistingComments(ctx.existingComments ?? []));
   return lines.join("\n");
 }
 
@@ -315,7 +351,8 @@ function buildOpenMarketUserPrompt(ctx: OpenMarketContext): string {
     lines.push("");
     lines.push(`You bet: ${ctx.agentChoice} — if you reference your position, it must match this.`);
   }
-  lines.push(formatExistingComments(ctx.existingComments ?? []));
+  lines.push(formatReplyTarget(ctx.replyTarget));
+  if (!ctx.replyTarget) lines.push(formatExistingComments(ctx.existingComments ?? []));
   return lines.join("\n");
 }
 
@@ -418,9 +455,17 @@ export async function generateAgentComment(
   profile: AgentSimulationProfile,
   ctx: CommentContext,
 ): Promise<string | null> {
-  const length = pickLength(ctx.surface, profile);
+  const isReply = !!ctx.replyTarget;
+  const length = pickLength(ctx.surface, profile, isReply);
   const hasDiscussion = (ctx.existingComments?.length ?? 0) > 0;
-  const systemPrompt = buildSystemPrompt(agent, profile, ctx.surface, length, hasDiscussion);
+  const systemPrompt = buildSystemPrompt(
+    agent,
+    profile,
+    ctx.surface,
+    length,
+    hasDiscussion,
+    ctx.replyTarget?.authorUsername ?? null,
+  );
   const userPrompt = buildUserPrompt(ctx);
 
   try {

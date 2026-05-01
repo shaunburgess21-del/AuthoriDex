@@ -18,6 +18,7 @@ import { generateAllWeeklyMarkets, startMarketGeneratorScheduler } from "./jobs/
 import { resolveExpiredMarkets } from "./jobs/market-resolver";
 import { startVoteWorkerScheduler } from "./agents/voteWorker";
 import { startCommentWorkerScheduler } from "./agents/commentWorker";
+import { startCommentVoteWorkerScheduler } from "./agents/commentVoteWorker";
 import { pool, db, startDbPoolMonitor } from "./db";
 import { setDbGuardrailsVerified } from "./guardrails";
 import { fetchBatchGdeltNews } from "./providers/gdelt";
@@ -744,6 +745,7 @@ async function startServer() {
     // Start agent voting system (daily sweep, max 3 votes/agent/week)
     startScheduler("VoteWorker", startVoteWorkerScheduler);
     startScheduler("CommentWorker", startCommentWorkerScheduler);
+    startScheduler("CommentVoteWorker", startCommentVoteWorkerScheduler);
 
     // Start approval snapshot scheduler (captures approval metrics every 6 hours for pulse chart)
     startScheduler("ApprovalSnapshots", startApprovalSnapshotScheduler);

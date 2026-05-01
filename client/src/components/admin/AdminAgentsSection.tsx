@@ -28,6 +28,7 @@ import {
   Loader2,
   Megaphone,
   Play,
+  ThumbsUp,
   RefreshCw,
   Sparkles,
   Trash2,
@@ -108,7 +109,8 @@ interface AgentStatusResponse {
   failed_count: number;
   next_actions: PendingActionRow[];
   pnl: PnlRow[];
-  comments: { comments_24h: number; comments_7d: number };
+  comments: { comments_24h: number; comments_7d: number; replies_7d?: number };
+  likes?: { likes_24h: number; likes_7d: number; upvotes_7d: number; downvotes_7d: number };
   ratings?: { ratings_24h: number; ratings_7d: number; avg_rating_7d: number | string };
   pool_realism: PoolRow[];
   cost_safety?: CostSafetyInfo;
@@ -289,6 +291,20 @@ export function AdminAgentsSection() {
     onError: (err: Error) => toast.error("Could not start comment sweep", { description: err.message }),
   });
 
+  const runLikesMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/agents/run-likes");
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      toast("Comment-likes sweep started", {
+        description: data?.message ?? "Running in background — refresh shortly to see Likes 7d update.",
+      });
+      setTimeout(refresh, 5000);
+    },
+    onError: (err: Error) => toast.error("Could not start likes sweep", { description: err.message }),
+  });
+
   const dryRunMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("GET", "/api/admin/agents/dry-run?agents=12&markets=8");
@@ -416,11 +432,18 @@ export function AdminAgentsSection() {
             />
             <SummaryStat label="Pending actions" value={status?.pending_count} />
             <SummaryStat label="Comments 7d" value={status?.comments?.comments_7d} />
+            <SummaryStat label="Replies 7d" value={status?.comments?.replies_7d} />
+            <SummaryStat label="Likes 7d" value={status?.likes?.likes_7d} />
             <SummaryStat label="Ratings 7d" value={status?.ratings?.ratings_7d} />
           </div>
           {(status?.ratings?.ratings_7d ?? 0) > 0 && (
             <p className="mt-3 text-xs text-muted-foreground">
               Avg rating last 7d: {Number(status?.ratings?.avg_rating_7d ?? 0).toFixed(2)} / 5
+            </p>
+          )}
+          {(status?.likes?.likes_7d ?? 0) > 0 && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Likes last 7d: {status?.likes?.upvotes_7d ?? 0}↑ / {status?.likes?.downvotes_7d ?? 0}↓
             </p>
           )}
         </CardContent>
@@ -566,6 +589,15 @@ export function AdminAgentsSection() {
             >
               {runCommentsMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Megaphone className="h-4 w-4 mr-2" />}
               Run Comment Sweep
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => runLikesMutation.mutate()}
+              disabled={runLikesMutation.isPending}
+              data-testid="button-run-likes"
+            >
+              {runLikesMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <ThumbsUp className="h-4 w-4 mr-2" />}
+              Run Likes Sweep
             </Button>
             <Button
               variant="outline"

@@ -9,7 +9,7 @@
  * Each fetcher returns a typed bundle that the generator turns into a prompt.
  */
 
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import {
   matchups,
   trackedPeople,
@@ -23,6 +23,7 @@ import {
   marketBets,
   votes,
   comments as unifiedComments,
+  profiles,
 } from "@shared/schema";
 import { db } from "../db";
 
@@ -43,6 +44,20 @@ interface BaseContext {
   /** Most-recent comment bodies on this parent, for de-duplication. The
    *  agent reads these and is told not to echo them. */
   existingComments?: Array<{ body: string }>;
+  /** When set, the agent is REPLYING to this specific comment instead of
+   *  posting a top-level comment. The LLM gets a different system prompt
+   *  that tells it to address what this person said. */
+  replyTarget?: ReplyTarget | null;
+}
+
+export interface ReplyTarget {
+  commentId: string;
+  authorUsername: string | null;
+  body: string;
+  /** Used to derive whether the original commenter agreed or disagreed
+   *  with the agent's own position, so the LLM can be told if it should
+   *  expect to agree, push back, or add nuance. */
+  authorChoiceOnParent?: string | null;
 }
 
 export interface MatchupContext extends BaseContext {
@@ -54,6 +69,7 @@ export interface MatchupContext extends BaseContext {
   /** "Person A label" | "Person B label" | "neutral" */
   agentChoice?: string | null;
   existingComments?: Array<{ body: string }>;
+  replyTarget?: ReplyTarget | null;
 }
 
 export interface TrendingPollContext extends BaseContext {
@@ -65,6 +81,7 @@ export interface TrendingPollContext extends BaseContext {
   /** "support" | "neutral" | "oppose" */
   agentChoice?: string | null;
   existingComments?: Array<{ body: string }>;
+  replyTarget?: ReplyTarget | null;
 }
 
 export interface OpinionPollContext extends BaseContext {
@@ -75,6 +92,7 @@ export interface OpinionPollContext extends BaseContext {
   /** the option label they voted for */
   agentChoice?: string | null;
   existingComments?: Array<{ body: string }>;
+  replyTarget?: ReplyTarget | null;
 }
 
 export interface OpenMarketContext extends BaseContext {
@@ -87,6 +105,7 @@ export interface OpenMarketContext extends BaseContext {
   /** "<entry label> (yes|no)" */
   agentChoice?: string | null;
   existingComments?: Array<{ body: string }>;
+  replyTarget?: ReplyTarget | null;
 }
 
 export type CommentContext =
@@ -378,6 +397,85 @@ export async function fetchOpenMarketContext(
     entries: entryRows.map((e) => ({ label: e.label, description: clip(e.description, 200) })),
     agentChoice,
     existingComments,
+  };
+}
+
+/**
+ * Pick an eligible top-level comment for the given agent to reply to:
+ *   - not the agent's own comment
+ *   - not deleted
+ *   - top-level only (no thread replies)
+ *   - posted in the last 7 days (anything older feels bot-like)
+ *   - the agent has not already replied to it
+ *
+ * Returns the most-recent eligible comment with author username resolved,
+ * or null if none qualifies.
+ */
+export async function findReplyTarget(
+  parentType: CommentSurface,
+  parentId: string,
+  agentUserId: string,
+): Promise<ReplyTarget | null> {
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const candidates = await db
+    .select({
+      id: unifiedComments.id,
+      userId: unifiedComments.userId,
+      body: unifiedComments.body,
+      authorUsername: profiles.username,
+    })
+    .from(unifiedComments)
+    .leftJoin(profiles, eq(unifiedComments.userId, profiles.id))
+    .where(
+      and(
+        eq(unifiedComments.parentType, parentType),
+        eq(unifiedComments.parentId, parentId),
+        sql`${unifiedComments.deletedAt} IS NULL`,
+        sql`${unifiedComments.parentCommentId} IS NULL`,
+        sql`${unifiedComments.userId} != ${agentUserId}`,
+        sql`${unifiedComments.createdAt} >= ${sevenDaysAgo}`,
+      ),
+    )
+    .orderBy(desc(unifiedComments.createdAt))
+    .limit(20);
+
+  if (!candidates.length) return null;
+
+  // Filter out comments that this agent has already replied to (so threads
+  // don't accumulate from the same agent).
+  const candidateIds = candidates.map((c) => c.id);
+  const alreadyReplied = await db
+    .select({ parentCommentId: unifiedComments.parentCommentId })
+    .from(unifiedComments)
+    .where(
+      and(
+        eq(unifiedComments.userId, agentUserId),
+        inArray(unifiedComments.parentCommentId, candidateIds),
+        sql`${unifiedComments.deletedAt} IS NULL`,
+      ),
+    );
+  const blocked = new Set(alreadyReplied.map((r) => r.parentCommentId).filter(Boolean) as string[]);
+  const eligible = candidates.filter((c) => !blocked.has(c.id));
+  if (!eligible.length) return null;
+
+  // Pick a random eligible comment, biased toward the most recent half so
+  // we don't constantly reply to week-old comments. Top-3 weighted 50%,
+  // next-7 weighted 35%, rest weighted 15%.
+  const r = Math.random();
+  let pickIndex: number;
+  if (r < 0.5 && eligible.length >= 1) {
+    pickIndex = Math.floor(Math.random() * Math.min(3, eligible.length));
+  } else if (r < 0.85 && eligible.length > 3) {
+    pickIndex = 3 + Math.floor(Math.random() * Math.min(7, eligible.length - 3));
+  } else {
+    pickIndex = Math.floor(Math.random() * eligible.length);
+  }
+  const chosen = eligible[Math.min(pickIndex, eligible.length - 1)];
+
+  return {
+    commentId: chosen.id,
+    authorUsername: chosen.authorUsername ?? null,
+    body: chosen.body,
   };
 }
 

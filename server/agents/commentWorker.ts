@@ -26,8 +26,17 @@ import {
   isV2SimulationProfile,
   type AgentSimulationProfile,
 } from "./simulationProfile";
-import { fetchCommentContext, type CommentSurface } from "./commentContext";
+import { fetchCommentContext, findReplyTarget, type CommentSurface, type ReplyTarget } from "./commentContext";
 import { generateAgentComment, type AgentForComment } from "./llmCommentGenerator";
+
+/**
+ * Probability that an agent's daily comment becomes a reply to someone
+ * else's existing comment instead of a fresh top-level post. Replies are
+ * conversational glue — too many makes the site feel like a thread farm,
+ * too few looks like everyone is shouting past each other. 30% feels
+ * Polymarket-natural.
+ */
+const REPLY_PROBABILITY = 0.30;
 
 /**
  * Defensive cap on how many comments a single sweep can post platform-wide.
@@ -70,7 +79,12 @@ async function countAgentCommentsThisWeek(userId: string): Promise<number> {
   return Number(row?.c ?? 0);
 }
 
-async function getEligibleParents(userId: string): Promise<EligibleCommentParent[]> {
+/** All currently-open parents across every commentable surface, with no
+ *  per-user filtering. Reused by both the top-level path (which then
+ *  excludes parents the agent has already commented on) and the reply
+ *  path (which doesn't — replying to a thread you've already posted in
+ *  is normal). */
+async function getOpenParents(): Promise<EligibleCommentParent[]> {
   const now = new Date();
   const [faceOffs, trendPolls, opinion, markets] = await Promise.all([
     db
@@ -103,8 +117,6 @@ async function getEligibleParents(userId: string): Promise<EligibleCommentParent
       .where(eq(opinionPolls.visibility, "live"))
       .orderBy(desc(opinionPolls.createdAt))
       .limit(30),
-    // Only world markets that are still open AND haven't expired yet — agents
-    // commenting on a market that closes in an hour reads as bot-like.
     db
       .select({
         parentId: predictionMarkets.id,
@@ -122,13 +134,16 @@ async function getEligibleParents(userId: string): Promise<EligibleCommentParent
       .limit(30),
   ]);
 
-  const parents: EligibleCommentParent[] = [
+  return [
     ...faceOffs.map((row) => ({ ...row, parentType: "matchup" as const })),
     ...trendPolls.map((row) => ({ ...row, parentType: "trending_poll" as const })),
     ...opinion.map((row) => ({ ...row, parentType: "opinion_poll" as const })),
     ...markets.map((row) => ({ ...row, parentType: "open_market" as const })),
   ];
+}
 
+async function getEligibleParents(userId: string, allParents?: EligibleCommentParent[]): Promise<EligibleCommentParent[]> {
+  const parents = allParents ?? (await getOpenParents());
   if (!parents.length) return [];
 
   const parentIds = parents.map((parent) => parent.parentId);
@@ -161,8 +176,38 @@ function chooseParent(parents: EligibleCommentParent[], profile: AgentSimulation
 // the actual prompt or vote context — we now pass full surface context to
 // the model on every comment.
 
+/** Try to find a parent + reply target for the agent. We pick a small
+ *  random sample of open parents and probe each for an eligible target —
+ *  no point hammering findReplyTarget on every parent in the universe. */
+async function findReplyOpportunity(
+  agent: { userId: string; displayName: string },
+  allParents: EligibleCommentParent[],
+  profile: AgentSimulationProfile,
+): Promise<{ parent: EligibleCommentParent; target: ReplyTarget } | null> {
+  if (!allParents.length) return null;
+
+  // Bias toward favoured categories first, then everything else.
+  const preferred = allParents.filter(
+    (p) => p.category && profile.favoriteCategories.includes(p.category),
+  );
+  const ordered = [...preferred.sort(() => Math.random() - 0.5), ...allParents.sort(() => Math.random() - 0.5)];
+  const probed = new Set<string>();
+
+  for (const parent of ordered) {
+    const key = `${parent.parentType}:${parent.parentId}`;
+    if (probed.has(key)) continue;
+    probed.add(key);
+    if (probed.size > 6) break;
+
+    const target = await findReplyTarget(parent.parentType, parent.parentId, agent.userId);
+    if (target) return { parent, target };
+  }
+  return null;
+}
+
 export async function runCommentSweep(): Promise<{
   posted: number;
+  replies: number;
   skipped: number;
   llmRejected: number;
   capReached: boolean;
@@ -180,9 +225,14 @@ export async function runCommentSweep(): Promise<{
   }
 
   let posted = 0;
+  let replies = 0;
   let skipped = 0;
   let llmRejected = 0;
   let capReached = false;
+
+  // One shared parent universe per sweep — cheaper than re-querying for
+  // every agent. Each agent then derives their own eligible subset.
+  const allParents = await getOpenParents();
 
   for (const agent of agents) {
     if (posted >= MAX_COMMENTS_PER_SWEEP) {
@@ -208,16 +258,32 @@ export async function runCommentSweep(): Promise<{
       continue;
     }
 
-    const parents = await getEligibleParents(agent.userId);
-    if (!parents.length) {
-      skipped++;
-      continue;
+    let parent: EligibleCommentParent | null = null;
+    let replyTarget: ReplyTarget | null = null;
+
+    // Reply path — try first when the dice say so. If no eligible target
+    // exists, fall back to top-level rather than burn the agent's slot.
+    if (Math.random() < REPLY_PROBABILITY) {
+      const opp = await findReplyOpportunity(
+        { userId: agent.userId, displayName: agent.displayName },
+        allParents,
+        simulation,
+      );
+      if (opp) {
+        parent = opp.parent;
+        replyTarget = opp.target;
+      }
     }
 
-    const parent = chooseParent(parents, simulation);
+    if (!parent) {
+      const eligible = await getEligibleParents(agent.userId, allParents);
+      if (!eligible.length) {
+        skipped++;
+        continue;
+      }
+      parent = chooseParent(eligible, simulation);
+    }
 
-    // Pull rich context (incl. the agent's own vote/bet) so the LLM can
-    // produce a comment that actually reads the situation.
     const context = await fetchCommentContext(
       parent.parentType,
       parent.parentId,
@@ -227,6 +293,11 @@ export async function runCommentSweep(): Promise<{
       skipped++;
       log(`[CommentWorker] ${agent.displayName}: no context for ${parent.parentType}:${parent.parentId}`);
       continue;
+    }
+
+    if (replyTarget) {
+      // Attach reply target so the LLM enters reply mode.
+      (context as { replyTarget?: ReplyTarget }).replyTarget = replyTarget;
     }
 
     const agentForComment: AgentForComment = {
@@ -240,7 +311,7 @@ export async function runCommentSweep(): Promise<{
     if (!body) {
       llmRejected++;
       skipped++;
-      log(`[CommentWorker] ${agent.displayName}: LLM produced no usable comment for ${parent.parentType}`);
+      log(`[CommentWorker] ${agent.displayName}: LLM produced no usable comment for ${parent.parentType}${replyTarget ? " (reply)" : ""}`);
       continue;
     }
 
@@ -249,6 +320,7 @@ export async function runCommentSweep(): Promise<{
         await tx.insert(unifiedComments).values({
           parentType: parent.parentType,
           parentId: parent.parentId,
+          parentCommentId: replyTarget?.commentId ?? null,
           userId: agent.userId,
           body,
         });
@@ -258,8 +330,9 @@ export async function runCommentSweep(): Promise<{
           .where(eq(profiles.id, agent.userId));
       });
       posted++;
+      if (replyTarget) replies++;
       log(
-        `[CommentWorker] ${agent.displayName} commented on ${parent.parentType}:${parent.parentId} — "${body.slice(0, 80)}${body.length > 80 ? "…" : ""}"`,
+        `[CommentWorker] ${agent.displayName} ${replyTarget ? `replied to @${replyTarget.authorUsername ?? "user"}` : "commented"} on ${parent.parentType}:${parent.parentId} — "${body.slice(0, 80)}${body.length > 80 ? "…" : ""}"`,
       );
     } catch (err) {
       skipped++;
@@ -267,7 +340,7 @@ export async function runCommentSweep(): Promise<{
     }
   }
 
-  return { posted, skipped, llmRejected, capReached };
+  return { posted, replies, skipped, llmRejected, capReached };
 }
 
 function msUntilNextSweep(): number {
@@ -284,7 +357,7 @@ function scheduleNextSweep(): void {
   setTimeout(async () => {
     try {
       const result = await runCommentSweep();
-      log(`[CommentWorker] Sweep complete: ${result.posted} posted, ${result.skipped} skipped`);
+      log(`[CommentWorker] Sweep complete: ${result.posted} posted (${result.replies} replies), ${result.skipped} skipped`);
     } catch (err) {
       console.error("[CommentWorker] Sweep failed:", err);
     }
@@ -297,7 +370,7 @@ export function startCommentWorkerScheduler(): void {
   setTimeout(async () => {
     try {
       const result = await runCommentSweep();
-      log(`[CommentWorker] Initial sweep: ${result.posted} posted, ${result.skipped} skipped`);
+      log(`[CommentWorker] Initial sweep: ${result.posted} posted (${result.replies} replies), ${result.skipped} skipped`);
     } catch (err) {
       console.error("[CommentWorker] Initial sweep failed:", err);
     }

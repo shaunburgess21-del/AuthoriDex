@@ -17136,6 +17136,19 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
     })();
   });
 
+  app.post("/api/admin/agents/run-likes", requireAuth, requireAdmin, async (_req: AuthRequest, res) => {
+    res.json({ ok: true, started: true, mode: "background", message: "Comment-likes sweep started — refresh shortly to see Likes 7d update." });
+    void (async () => {
+      try {
+        const { runCommentVoteSweep } = await import("./agents/commentVoteWorker");
+        const result = await runCommentVoteSweep();
+        console.log(`[AgentAdmin] Comment-likes sweep finished:`, result);
+      } catch (err: any) {
+        console.error("[AgentAdmin] Comment-likes sweep failed:", err);
+      }
+    })();
+  });
+
   // POST /api/admin/agents/:agentId/toggle-active - Pause or resume a single
   // agent's simulation activity without banning their profile.
   // Body: { active: boolean }. Setting active=false also skips any pending
@@ -17341,9 +17354,22 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       const activityRows = await db.execute(sql`
         SELECT
           COUNT(*) FILTER (WHERE c.created_at >= NOW() - INTERVAL '24 hours')::int AS comments_24h,
-          COUNT(*) FILTER (WHERE c.created_at >= NOW() - INTERVAL '7 days')::int AS comments_7d
+          COUNT(*) FILTER (WHERE c.created_at >= NOW() - INTERVAL '7 days')::int AS comments_7d,
+          COUNT(*) FILTER (WHERE c.created_at >= NOW() - INTERVAL '7 days' AND c.parent_comment_id IS NOT NULL)::int AS replies_7d
         FROM comments c
         JOIN profiles p ON p.id = c.user_id
+        WHERE p.is_agent = true
+          AND c.deleted_at IS NULL
+      `);
+
+      const likeRows = await db.execute(sql`
+        SELECT
+          COUNT(*) FILTER (WHERE cv.voted_at >= NOW() - INTERVAL '24 hours')::int AS likes_24h,
+          COUNT(*) FILTER (WHERE cv.voted_at >= NOW() - INTERVAL '7 days')::int AS likes_7d,
+          COUNT(*) FILTER (WHERE cv.voted_at >= NOW() - INTERVAL '7 days' AND cv.vote_type = 'up')::int AS upvotes_7d,
+          COUNT(*) FILTER (WHERE cv.voted_at >= NOW() - INTERVAL '7 days' AND cv.vote_type = 'down')::int AS downvotes_7d
+        FROM comment_votes cv
+        JOIN profiles p ON p.id = cv.user_id
         WHERE p.is_agent = true
       `);
 
@@ -17448,7 +17474,8 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         failed_count: failedCount[0]?.count ?? 0,
         next_actions: pendingActions,
         pnl: pnlRows.rows,
-        comments: activityRows.rows[0] ?? { comments_24h: 0, comments_7d: 0 },
+        comments: activityRows.rows[0] ?? { comments_24h: 0, comments_7d: 0, replies_7d: 0 },
+        likes: likeRows.rows[0] ?? { likes_24h: 0, likes_7d: 0, upvotes_7d: 0, downvotes_7d: 0 },
         ratings: ratingRows.rows[0] ?? { ratings_24h: 0, ratings_7d: 0, avg_rating_7d: 0 },
         pool_realism: poolRows.rows,
         cost_safety: {
