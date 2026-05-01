@@ -12,6 +12,8 @@ import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
 import { MarketDetailSkeleton } from "@/components/predict/MarketDetailSkeleton";
 import { MarketResolutionInfo } from "@/components/predict/MarketResolutionInfo";
 import { MyPositionCard } from "@/components/predict/MyPositionCard";
+import { ShareIconButton } from "@/components/predict/ShareIconButton";
+import { RelatedMarkets } from "@/components/predict/RelatedMarkets";
 import { H2HWhatNeedsToHappen } from "@/components/predict/WhatNeedsToHappen";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { CategoryPill } from "@/components/CategoryPill";
@@ -26,6 +28,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { computePayoutMultiplier } from "@/lib/parimutuel";
 import { goBack } from "@/lib/goBack";
+import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import {
   ArrowLeft,
   Swords,
@@ -268,6 +271,17 @@ export default function H2HDetailPage() {
   const { timeRemaining } = marketState;
   const pad = (n: number) => String(n).padStart(2, "0");
 
+  const h2hShareTitle = hydrated
+    ? `${hydrated.person1.name} vs ${hydrated.person2.name}`
+    : "Head-to-Head";
+  useDocumentMeta({
+    title: `${h2hShareTitle} • VoxDex`,
+    description: hydrated
+      ? `Who'll gain more Trend Score points this week — ${hydrated.person1.name} or ${hydrated.person2.name}? Predict on VoxDex.`
+      : "Head-to-head Trend Score battle. Predict on VoxDex.",
+    image: `/api/og/image/market.png?title=${encodeURIComponent(h2hShareTitle)}&subtitle=${encodeURIComponent("Who'll gain more this week?")}&badge=${encodeURIComponent("Head to head")}`,
+  });
+
   if (isLoading) {
     return <MarketDetailSkeleton variant="weekly" />;
   }
@@ -318,6 +332,7 @@ export default function H2HDetailPage() {
             {pad(timeRemaining.days)}d {pad(timeRemaining.hours)}h{" "}
             {pad(timeRemaining.minutes)}m
           </Badge>
+          <ShareIconButton title={`${hydrated.title} on VoxDex`} />
           <HeaderUserActions />
         </div>
       </header>
@@ -621,6 +636,16 @@ export default function H2HDetailPage() {
           tieRule={hydrated.tieRule}
           person1Name={hydrated.person1.name}
           person2Name={hydrated.person2.name}
+        />
+
+        {/* Related markets — bottom-of-page so it's out of the way of
+            the betting flow. Reuses the cached `/api/native-markets/h2h`
+            list so this costs zero extra requests. */}
+        <RelatedMarkets
+          type="h2h"
+          currentMarketId={marketId}
+          category={hydrated.category}
+          className="pt-2"
         />
       </div>
 

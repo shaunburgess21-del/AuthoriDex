@@ -12,6 +12,8 @@ import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
 import { MarketDetailSkeleton } from "@/components/predict/MarketDetailSkeleton";
 import { MarketResolutionInfo } from "@/components/predict/MarketResolutionInfo";
 import { MyPositionCard } from "@/components/predict/MyPositionCard";
+import { ShareIconButton } from "@/components/predict/ShareIconButton";
+import { RelatedMarkets } from "@/components/predict/RelatedMarkets";
 import { RaceWhatNeedsToHappen } from "@/components/predict/WhatNeedsToHappen";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { CategoryPill } from "@/components/CategoryPill";
@@ -27,6 +29,7 @@ import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constan
 import { apiRequest } from "@/lib/queryClient";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { goBack } from "@/lib/goBack";
+import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { computePayoutMultiplier } from "@/lib/parimutuel";
 import {
   ArrowLeft,
@@ -308,6 +311,15 @@ export default function CategoryRaceDetailPage() {
   const { timeRemaining } = marketState;
   const pad = (n: number) => String(n).padStart(2, "0");
 
+  const raceTitle = categoryLabel ? `${categoryLabel} Race` : "Category Race";
+  useDocumentMeta({
+    title: `${raceTitle} • VoxDex`,
+    description: categoryLabel
+      ? `Pick the biggest mover in ${categoryLabel} this week. Predict on VoxDex.`
+      : "Pick the biggest mover in the category this week. Predict on VoxDex.",
+    image: `/api/og/image/market.png?title=${encodeURIComponent(raceTitle)}&subtitle=${encodeURIComponent("Biggest mover this week")}&badge=${encodeURIComponent("Race")}`,
+  });
+
   if (isLoading) {
     return <MarketDetailSkeleton variant="weekly" />;
   }
@@ -344,6 +356,7 @@ export default function CategoryRaceDetailPage() {
             <Clock className="h-3 w-3 mr-1" />
             {pad(timeRemaining.days)}d {pad(timeRemaining.hours)}h {pad(timeRemaining.minutes)}m
           </Badge>
+          <ShareIconButton title={`Category Race: ${categoryLabel} on VoxDex`} />
           <HeaderUserActions />
         </div>
       </header>
@@ -660,6 +673,16 @@ export default function CategoryRaceDetailPage() {
           bettingCutoff={serverCutoff}
           closeTime={serverResolutionDeadline ? new Date(serverResolutionDeadline).toUTCString().replace(/ GMT$/, " UTC") : undefined}
           categoryLabel={categoryLabel}
+        />
+
+        {/* Related markets — bottom-of-page so it's out of the way of
+            the betting flow. Reuses the cached `/api/native-markets/gainer`
+            list so this costs zero extra requests. */}
+        <RelatedMarkets
+          type="race"
+          currentMarketId={marketId}
+          category={market?.category ?? null}
+          className="pt-2"
         />
       </div>
 

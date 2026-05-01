@@ -61,7 +61,7 @@ import { sendError, sendBadRequest, sendZodError } from "./utils/api-response";
 import { approveInductionCandidate } from "./services/induction-service";
 import { CANONICAL_MARKET_CATEGORIES, getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
 import { resolvePublicMatchupBySlugOrId } from "./utils/matchup-resolve";
-import { registerCronRoutes, registerPublicRoutes, registerGamificationRoutes, registerFavoritesRoutes, registerNotificationsRoutes } from "./route-modules";
+import { registerCronRoutes, registerPublicRoutes, registerGamificationRoutes, registerFavoritesRoutes, registerNotificationsRoutes, registerOgRoutes } from "./route-modules";
 import { handleAuthHook } from "./emails/routes/auth-hook";
 import { sendEmail } from "./emails/send";
 import { WelcomeEmail, welcomeSubject } from "./emails/templates/lifecycle/Welcome";
@@ -900,6 +900,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerGamificationRoutes(app);
   registerFavoritesRoutes(app);
   registerNotificationsRoutes(app);
+  registerOgRoutes(app);
 
   // ---- Supabase Send Email Auth Hook -------------------------------------
   // Receives webhooks from Supabase whenever an auth email needs sending.

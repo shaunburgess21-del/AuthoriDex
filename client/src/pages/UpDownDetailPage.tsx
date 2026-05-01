@@ -17,6 +17,8 @@ import { MarketDetailSkeleton } from "@/components/predict/MarketDetailSkeleton"
 import { MarketResolutionInfo } from "@/components/predict/MarketResolutionInfo";
 import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
 import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
+import { ShareIconButton } from "@/components/predict/ShareIconButton";
+import { RelatedMarkets } from "@/components/predict/RelatedMarkets";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +30,7 @@ import { getMarketBaselineScore } from "@/lib/predict-market-baseline";
 import { computePayoutMultiplier } from "@/lib/parimutuel";
 import { getUpDownWinningState, UP_DOWN_STATE_LABELS } from "@/lib/updownState";
 import { goBack } from "@/lib/goBack";
+import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import {
   ArrowLeft,
   TrendingUp,
@@ -253,6 +256,22 @@ export default function UpDownDetailPage() {
   const { timeRemaining } = marketState;
   const pad = (n: number) => String(n).padStart(2, "0");
 
+  /* Dynamic meta — keeps the browser tab in sync and gives JS-running
+   * crawlers (Google, Bing) a real preview, while non-JS crawlers
+   * (Slack, iMessage) hit the server-side OG endpoint via the Vercel
+   * UA-matched rewrite. */
+  useDocumentMeta({
+    title: hydrated
+      ? `${hydrated.personName}: Up or Down? • VoxDex`
+      : "Up / Down • VoxDex",
+    description: hydrated
+      ? `Will ${hydrated.personName}'s Trend Score close above or below baseline this week? Predict on VoxDex.`
+      : "Predict whether a person's weekly Trend Score closes above or below baseline.",
+    image: `/api/og/image/market.png?title=${encodeURIComponent(
+      hydrated ? `${hydrated.personName}: Up or Down?` : "Up / Down",
+    )}&subtitle=${encodeURIComponent("Up or down this week?")}&badge=${encodeURIComponent("Up / Down")}`,
+  });
+
   if (isLoading) {
     return <MarketDetailSkeleton variant="weekly" />;
   }
@@ -300,6 +319,7 @@ export default function UpDownDetailPage() {
             {pad(timeRemaining.days)}d {pad(timeRemaining.hours)}h{" "}
             {pad(timeRemaining.minutes)}m
           </Badge>
+          <ShareIconButton title={`${hydrated.personName}: Up or Down? on VoxDex`} />
           <HeaderUserActions />
         </div>
       </header>
@@ -494,6 +514,17 @@ export default function UpDownDetailPage() {
           bettingCutoff={hydrated.bettingCutoff}
           tieRule={hydrated.tieRule}
           personName={hydrated.personName}
+        />
+
+        {/* Related markets — bottom of page so it's out of the way of
+            the betting flow but discoverable once the user has read the
+            resolution rules. Reuses the cached `/api/native-markets/updown`
+            list so this costs zero extra requests. */}
+        <RelatedMarkets
+          type="updown"
+          currentMarketId={marketId}
+          category={hydrated.category}
+          className="pt-2"
         />
       </div>
 

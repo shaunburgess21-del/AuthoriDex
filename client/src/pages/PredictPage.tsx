@@ -127,6 +127,7 @@ import { WeeklyJackpotHero } from "@/components/predict/WeeklyJackpotHero";
 import { OpenMarketCard } from "@/components/predict/OpenMarketCard";
 import { VoteSnapScrollView, type SnapItem, type SnapSectionType } from "@/components/snap-scroll/VoteSnapScrollView";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useScrollToHash } from "@/hooks/useScrollToHash";
 import { consumeCategoryPillBrowseIntent, isCategoryPillDrawerDismissSuppressed } from "@/components/InteractiveCategoryPill";
 
 type SnapOpenSource = "card-tap" | "browse-button";
@@ -1383,6 +1384,21 @@ export default function PredictPage() {
     refetchOnWindowFocus: true,
   });
 
+  /* Hash deep-linking: a "share this jackpot" / "share Up/Down" link
+   * carries a fragment like `/predict#jackpot`. Browsers don't honour
+   * fragments on SPA route transitions, so this hook scrolls the
+   * matching `<section id="…" data-hash-anchor>` into view once it
+   * mounts. Re-runs whenever the four data slices arrive so the scroll
+   * lands on the section AFTER it has rendered (rather than where the
+   * skeleton used to live). */
+  useScrollToHash([
+    nativeJackpotData,
+    nativeUpdownData,
+    nativeH2hData,
+    nativeGainerData,
+    openMarketsData,
+  ]);
+
   const { serverBettingCutoff, serverResolutionDeadline } = useMemo(() => {
     const allNative = [
       ...(nativeUpdownData || []),
@@ -2560,7 +2576,7 @@ export default function PredictPage() {
         )}
         {/* World Markets Section - First */}
         {showSection("community") && (
-          <section className="mb-12 mt-[5px]">
+          <section id="community" data-hash-anchor className="mb-12 mt-[5px]">
             <UnifiedSectionHeader
               title="World Markets"
               subtitle="Predict the outcome of global events"
@@ -2790,35 +2806,37 @@ export default function PredictPage() {
         <MarketCycleHero marketState={marketCycle} />
 
         {showSection("jackpot") && (
-          trendingError ? (
-            <Card className="p-8 text-center mb-8">
-              <p className="text-destructive mb-2">Couldn&apos;t load trending data</p>
-              <p className="text-muted-foreground text-sm mb-4">Please try again in a moment.</p>
-              <Button onClick={() => refetchTrending()} data-testid="button-retry-trending">Retry</Button>
-            </Card>
-          ) : jackpotError ? (
-            <Card className="p-8 text-center mb-8">
-              <p className="text-destructive mb-2">Couldn&apos;t load this week&apos;s Jackpot</p>
-              <p className="text-muted-foreground text-sm mb-4">Please try again in a moment.</p>
-              <Button onClick={() => refetchJackpot()} data-testid="button-retry-jackpot">Retry</Button>
-            </Card>
-          ) : (
-            <WeeklyJackpotHero 
-              onEnterJackpot={handleEnterJackpot}
-              marketStatus={marketCycle.status}
-              timeRemaining={marketCycle.timeRemaining}
-              trendingPeople={jackpotEligiblePeople}
-              selectedPerson={selectedJackpotPerson}
-              onSelectPerson={setSelectedJackpotPerson}
-              isLoading={isLoadingPeople || nativeJackpotData === undefined}
-              jackpotMarket={jackpotMarketForPerson}
-              onRulesClick={() => setRulesModalOpen("jackpot")}
-            />
-          )
+          <section id="jackpot" data-hash-anchor className="mb-10 scroll-mt-16">
+            {trendingError ? (
+              <Card className="p-8 text-center mb-8">
+                <p className="text-destructive mb-2">Couldn&apos;t load trending data</p>
+                <p className="text-muted-foreground text-sm mb-4">Please try again in a moment.</p>
+                <Button onClick={() => refetchTrending()} data-testid="button-retry-trending">Retry</Button>
+              </Card>
+            ) : jackpotError ? (
+              <Card className="p-8 text-center mb-8">
+                <p className="text-destructive mb-2">Couldn&apos;t load this week&apos;s Jackpot</p>
+                <p className="text-muted-foreground text-sm mb-4">Please try again in a moment.</p>
+                <Button onClick={() => refetchJackpot()} data-testid="button-retry-jackpot">Retry</Button>
+              </Card>
+            ) : (
+              <WeeklyJackpotHero 
+                onEnterJackpot={handleEnterJackpot}
+                marketStatus={marketCycle.status}
+                timeRemaining={marketCycle.timeRemaining}
+                trendingPeople={jackpotEligiblePeople}
+                selectedPerson={selectedJackpotPerson}
+                onSelectPerson={setSelectedJackpotPerson}
+                isLoading={isLoadingPeople || nativeJackpotData === undefined}
+                jackpotMarket={jackpotMarketForPerson}
+                onRulesClick={() => setRulesModalOpen("jackpot")}
+              />
+            )}
+          </section>
         )}
 
         {showSection("updown") && (
-          <section className="mb-10">
+          <section id="updown" data-hash-anchor className="mb-10">
             <UnifiedSectionHeader
               title="Weekly Up / Down"
               subtitle="Will their Trend Score be higher / lower"
@@ -2919,7 +2937,7 @@ export default function PredictPage() {
         )}
 
         {showSection("h2h") && (
-          <section className="mb-10">
+          <section id="h2h" data-hash-anchor className="mb-10">
             <UnifiedSectionHeader
               title="Head-to-Head Battles"
               subtitle="Who will gain more points"
@@ -3026,7 +3044,7 @@ export default function PredictPage() {
         )}
 
         {showSection("gainer") && (
-          <section className="mb-10">
+          <section id="race" data-hash-anchor className="mb-10">
             <UnifiedSectionHeader
               title="Category Races"
               subtitle="Pick the biggest mover in each category"

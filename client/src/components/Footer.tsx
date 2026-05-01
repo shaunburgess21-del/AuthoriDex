@@ -36,10 +36,20 @@ const FOOTER_LINKS: FooterLink[] = [
  * and admin tooling don't benefit from the public footer — the
  * BottomNav follows the same self-hide rule, keeping behaviour
  * consistent. Legal links remain accessible via the disclaimer
- * text on /login and the ToS-checkbox on /login/welcome. */
+ * text on /login and the ToS-checkbox on /login/welcome.
+ *
+ * Native prediction detail pages (Up/Down, H2H, Race) carry a
+ * sticky "Place prediction" CTA bar that overlaps the footer
+ * (legal links would render behind the bar, illegible). Hiding
+ * the footer there keeps the CTA the visual full-stop on those
+ * screens; legal links remain reachable from the BottomNav
+ * "Profile" tab and from `/me/settings`. */
 function shouldHideFooter(pathname: string): boolean {
   if (pathname === "/login" || pathname.startsWith("/login/")) return true;
   if (pathname === "/admin" || pathname.startsWith("/admin/")) return true;
+  if (pathname.startsWith("/predict/updown/")) return true;
+  if (pathname.startsWith("/predict/h2h/")) return true;
+  if (pathname.startsWith("/predict/race/")) return true;
   return false;
 }
 

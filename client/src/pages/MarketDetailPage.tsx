@@ -21,8 +21,10 @@ import { CommentsBottomSheet } from "@/components/snap-scroll/CommentsBottomShee
 import { computePayoutMultiplier, formatMultiplier } from "@/lib/parimutuel";
 import { MyPositionCard, myPositionQueryKey } from "@/components/predict/MyPositionCard";
 import { MarketDetailSkeleton } from "@/components/predict/MarketDetailSkeleton";
+import { RelatedMarkets } from "@/components/predict/RelatedMarkets";
 import { getCommunityMarketStatusMessage } from "@/lib/marketClosedMessaging";
 import { goBack } from "@/lib/goBack";
+import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import {
   ArrowLeft,
   Star,
@@ -782,6 +784,19 @@ export default function MarketDetailPage() {
     </div>
   ) : null;
 
+  /* Dynamic meta — keeps the browser tab title and JS-running crawlers
+   * (Google, Bing) in sync with the market. Slack / iMessage / X go via
+   * the bot-UA Vercel rewrite (see vercel.json) to /api/og/markets/:slug. */
+  useDocumentMeta({
+    title: market ? `${market.title} • VoxDex` : "Market • VoxDex",
+    description: market
+      ? market.teaser ?? market.summary ?? `Predict on "${market.title}" — World market on VoxDex.`
+      : null,
+    image: market
+      ? `/api/og/image/market.png?title=${encodeURIComponent(market.title)}&subtitle=${encodeURIComponent("World market • VoxDex")}&badge=${encodeURIComponent("World market")}`
+      : null,
+  });
+
   if (isLoading) {
     return <MarketDetailSkeleton />;
   }
@@ -1513,7 +1528,17 @@ export default function MarketDetailPage() {
           </>
         )}
 
-        {/* Related Markets - placeholder for future implementation */}
+        {/* More like this — bottom of the page so it sits below the
+            primary trade flow + discussion. Picks from the cached
+            `/api/open-markets` list and biases same-category items
+            to the front. */}
+        <div className="mt-8">
+          <RelatedMarkets
+            type="community"
+            currentMarketId={market.id}
+            category={market.category ?? null}
+          />
+        </div>
       </div>
 
       {isCommunityMarket && (

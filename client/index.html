@@ -7,6 +7,30 @@
     <meta name="description" content="VoxDex — the voice of the people, indexed. Track how famous people are trending online with real-time data from social media, search engines, and more. See the top 1000 trending celebrities and influencers." />
     <link rel="icon" type="image/svg+xml" href="/voxdex-logo.svg" />
     <meta name="theme-color" content="#0f172a" />
+
+    <!--
+      Open Graph + Twitter card fallback. These are the meta tags that
+      Slack, iMessage, Facebook, and X read for link previews. We keep
+      them in index.html so even crawlers that don't hit our UA-matched
+      Vercel rewrite (see vercel.json → /api/og/...) still get a
+      reasonable preview. Per-page detail pages override these via the
+      client `useDocumentMeta` hook — the matching server-side OG endpoint
+      remains the source of truth for non-JS crawlers.
+    -->
+    <link rel="canonical" href="https://voxdex.com/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="VoxDex" />
+    <meta property="og:title" content="VoxDex — Vox Populi Index" />
+    <meta property="og:description" content="Track how famous people are trending. Predict, vote, and win on real-world events." />
+    <meta property="og:url" content="https://voxdex.com/" />
+    <meta property="og:image" content="https://voxdex.com/api/og/image/default.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@voxdex" />
+    <meta name="twitter:title" content="VoxDex — Vox Populi Index" />
+    <meta name="twitter:description" content="Track how famous people are trending. Predict, vote, and win on real-world events." />
+    <meta name="twitter:image" content="https://voxdex.com/api/og/image/default.png" />
     <script>
       (function () {
         try {

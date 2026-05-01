@@ -1028,3 +1028,14 @@ html [data-sonner-toaster][data-sonner-theme="dark"] [data-rich-colors="true"][d
   border-color: hsl(217 91% 16%);
   color: hsl(217 91% 70%);
 }
+
+/* ===== HASH DEEP-LINK SCROLL OFFSET =====
+ * Pages with a sticky top bar (PredictPage, detail pages) need their
+ * fragment targets to settle BELOW the bar — otherwise the section
+ * heading lands behind the sticky header on hash navigation. The
+ * sticky header is currently 56px (h-14) plus a small visual breathing
+ * room. This applies globally to anything tagged with `data-hash-anchor`
+ * so pages can opt in without restyling each section. */
+[data-hash-anchor] {
+  scroll-margin-top: 72px;
+}
