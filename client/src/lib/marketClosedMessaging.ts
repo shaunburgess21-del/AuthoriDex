@@ -99,3 +99,67 @@ export function getClosedMarketMessage(options: ClosedMarketMessageOptions = {})
     times,
   };
 }
+
+/**
+ * Status-driven copy for community / jackpot detail pages. Lives next
+ * to getClosedMarketMessage so every "this market isn't open" surface
+ * — weekly natives, community, jackpot, popovers, banners — pulls from
+ * the same module and stays in tone.
+ *
+ * Community markets don't follow the weekly Fri-cutoff / Sun-resolve
+ * cycle, so we don't pretend they do; the messaging is anchored on
+ * lifecycle status (CLOSED_PENDING / RESOLVED / VOID) instead of
+ * calendar deadlines.
+ */
+export interface CommunityMarketStatusOptions {
+  /** "OPEN" | "CLOSED_PENDING" | "RESOLVED" | "VOID" — anything else falls to the closed default. */
+  status: string;
+  /** Outcome label for resolved markets ("Yes", "Up", "Person A"). */
+  outcomeLabel?: string | null;
+  /** Reason supplied by admin / auto-resolver when status === "VOID". */
+  voidReason?: string | null;
+  /** Jackpot detail picks a slightly different RESOLVED line. */
+  isJackpotMarket?: boolean;
+}
+
+export interface CommunityMarketStatusMessage {
+  title: string;
+  description: string;
+}
+
+export function getCommunityMarketStatusMessage({
+  status,
+  outcomeLabel,
+  voidReason,
+  isJackpotMarket,
+}: CommunityMarketStatusOptions): CommunityMarketStatusMessage {
+  if (status === "CLOSED_PENDING") {
+    return {
+      title: "Predictions are currently closed",
+      description:
+        "Betting is closed and we're waiting for the final outcome to be confirmed.",
+    };
+  }
+  if (status === "RESOLVED") {
+    return {
+      title: "Official Result",
+      description: outcomeLabel
+        ? `${outcomeLabel} was the final outcome.`
+        : isJackpotMarket
+          ? "This jackpot market has been resolved."
+          : "This market has been officially resolved.",
+    };
+  }
+  if (status === "VOID") {
+    return {
+      title: "Market Voided",
+      description:
+        voidReason ||
+        "This market was cancelled and any affected bets were voided or refunded.",
+    };
+  }
+  return {
+    title: "Market Closed",
+    description: "Betting has ended for this market.",
+  };
+}

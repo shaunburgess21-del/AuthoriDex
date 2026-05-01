@@ -31,6 +31,14 @@ export interface StakeSelection {
   type: string;
   choice: string;
   marketName: string;
+  /**
+   * Person being predicted on (when applicable). Used by prose like
+   * MarketResolutionInfo to render "UP wins if {personName} closes
+   * above {baseline}". Falls back to `marketName` if absent, but
+   * setting this avoids awkward sentences like "UP wins if Name: Up
+   * or Down? closes above ..." on the Up/Down detail page.
+   */
+  personName?: string;
   marketId?: string;
   entryId?: string;
   startScore?: number;
@@ -412,28 +420,33 @@ export function StakeModal({
             </p>
           )}
 
-          {isUpDown && (
-            <div className="text-xs text-center space-y-1">
-              {isUp && (
-                <p className="text-muted-foreground">
-                  <span className="text-[#00C853] font-medium">UP</span> wins if <span className="font-medium text-foreground">{selection.marketName}</span> closes above <span className="font-mono font-medium text-foreground">{(selection.startScore ?? 0).toLocaleString("en-US")}</span> at weekly close.
-                </p>
-              )}
-              {isDown && (
-                <p className="text-muted-foreground">
-                  <span className="text-[#FF0000] font-medium">DOWN</span> wins if <span className="font-medium text-foreground">{selection.marketName}</span> closes below <span className="font-mono font-medium text-foreground">{(selection.startScore ?? 0).toLocaleString("en-US")}</span> at weekly close.
-                </p>
-              )}
-              <p className="text-muted-foreground/70 italic">Exact tie: all positions refunded.</p>
-            </div>
-          )}
+          {isUpDown && (() => {
+            // Prose uses personName so we say "UP wins if Bieber..."
+            // not "UP wins if Bieber: Up or Down? closes above ...".
+            const proseName = selection.personName ?? selection.marketName;
+            return (
+              <div className="text-xs text-center space-y-1">
+                {isUp && (
+                  <p className="text-muted-foreground">
+                    <span className="text-[#00C853] font-medium">UP</span> wins if <span className="font-medium text-foreground">{proseName}</span> closes above <span className="font-mono font-medium text-foreground">{(selection.startScore ?? 0).toLocaleString("en-US")}</span> at weekly close.
+                  </p>
+                )}
+                {isDown && (
+                  <p className="text-muted-foreground">
+                    <span className="text-[#FF0000] font-medium">DOWN</span> wins if <span className="font-medium text-foreground">{proseName}</span> closes below <span className="font-mono font-medium text-foreground">{(selection.startScore ?? 0).toLocaleString("en-US")}</span> at weekly close.
+                  </p>
+                )}
+                <p className="text-muted-foreground/70 italic">Exact tie: all positions refunded.</p>
+              </div>
+            );
+          })()}
 
           {isUpDown && (
             <WhatNeedsToHappen
               pick={isUp ? "up" : "down"}
               baselineScore={selection.startScore || selection.baselineScore || 0}
               currentScore={selection.currentScore || 0}
-              personName={selection.marketName}
+              personName={selection.personName ?? selection.marketName}
               compact
               tieRule={selection.tieRule}
             />
@@ -444,7 +457,7 @@ export function StakeModal({
               marketId={selection.marketId}
               baselineScore={selection.startScore || selection.baselineScore || 0}
               currentScore={selection.currentScore || 0}
-              personName={selection.marketName}
+              personName={selection.personName ?? selection.marketName}
               compact
               userPick={isUp ? "up" : isDown ? "down" : null}
             />
@@ -550,7 +563,7 @@ export function StakeModal({
             }
             bettingCutoff={selection.bettingCutoff}
             tieRule={selection.tieRule || "refund"}
-            personName={selection.marketName}
+            personName={selection.personName ?? selection.marketName}
             compact
           />
         )}

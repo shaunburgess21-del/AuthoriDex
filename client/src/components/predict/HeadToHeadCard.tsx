@@ -271,7 +271,7 @@ export function HeadToHeadCard({
 
         <div className="flex items-center justify-center mb-2">
           <span className="text-sm font-semibold text-violet-700 dark:text-violet-500">
-            Pool: {market.totalPool.toLocaleString('en-US')}
+            Pool: {market.totalPool.toLocaleString('en-US')} credits
           </span>
         </div>
 

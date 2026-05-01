@@ -149,7 +149,7 @@ export function WeeklyUpDownCard({
           <span className="text-muted-foreground/40">&middot;</span>
           <span>Delta: <span className={`font-mono ${delta >= 0 ? "text-green-500" : "text-red-500"}`}>{delta >= 0 ? "+" : ""}{delta.toLocaleString('en-US')}</span></span>
           <span className="text-muted-foreground/40">&middot;</span>
-          <span>Pool: <span className="font-mono text-violet-600 dark:text-violet-400">{market.totalPool.toLocaleString('en-US')}</span></span>
+          <span>Pool: <span className="font-mono text-violet-600 dark:text-violet-400">{market.totalPool.toLocaleString('en-US')}</span> credits</span>
         </div>
       </Link>
 

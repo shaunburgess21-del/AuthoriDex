@@ -211,7 +211,7 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
 
         <div className="max-md:mt-1">
           <div className="flex items-center justify-center mb-1.5">
-            <span className="text-sm font-semibold text-muted-foreground">Pool: {totalPool.toLocaleString('en-US')}</span>
+            <span className="text-sm font-semibold text-muted-foreground">Pool: {totalPool.toLocaleString('en-US')} credits</span>
           </div>
 
           {isMarketClosed ? (
@@ -593,7 +593,7 @@ function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel,
 
       <div>
         <div className="flex items-center justify-center mb-1.5">
-          <span className="text-sm font-semibold text-muted-foreground">Pool: {totalPool.toLocaleString('en-US')}</span>
+          <span className="text-sm font-semibold text-muted-foreground">Pool: {totalPool.toLocaleString('en-US')} credits</span>
         </div>
 
         {isMarketClosed ? (

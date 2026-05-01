@@ -13,13 +13,13 @@ import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { OutcomePathChart } from "@/components/predict/OutcomePathChart";
 import { WhatNeedsToHappen } from "@/components/predict/WhatNeedsToHappen";
 import { MyPositionCard } from "@/components/predict/MyPositionCard";
+import { MarketDetailSkeleton } from "@/components/predict/MarketDetailSkeleton";
 import { MarketResolutionInfo } from "@/components/predict/MarketResolutionInfo";
 import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
 import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { normalizeMarketCategory } from "@shared/constants";
 import { apiRequest } from "@/lib/queryClient";
@@ -27,6 +27,7 @@ import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { getMarketBaselineScore } from "@/lib/predict-market-baseline";
 import { computePayoutMultiplier } from "@/lib/parimutuel";
 import { getUpDownWinningState, UP_DOWN_STATE_LABELS } from "@/lib/updownState";
+import { goBack } from "@/lib/goBack";
 import {
   ArrowLeft,
   TrendingUp,
@@ -51,16 +52,23 @@ export default function UpDownDetailPage() {
   const [stakeModalOpen, setStakeModalOpen] = useState(false);
   const [pendingSelection, setPendingSelection] = useState<StakeSelection | null>(null);
 
-  const goBack = useCallback(() => {
-    if (window.history.length > 1) {
-      window.history.back();
-    } else {
-      setLocation("/predict");
-    }
+  const handleGoBack = useCallback(() => {
+    goBack(setLocation, "/predict");
   }, [setLocation]);
 
   const { data: allUpdownMarkets, isLoading } = useQuery<any[]>({
     queryKey: ["/api/native-markets/updown"],
+    // Keep the live trend score / pool numbers fresh while the user
+    // is on the page. 60s matches MyPositionCard + OutcomePathChart;
+    // we pause when the market closes since nothing's changing.
+    refetchInterval: (query) => {
+      if (typeof document !== "undefined" && document.hidden) return false;
+      const list = query.state.data as any[] | undefined;
+      const found = list?.find((m: any) => m.id === marketId);
+      if (found && found.status && found.status !== "OPEN") return false;
+      return 60_000;
+    },
+    refetchOnWindowFocus: true,
   });
 
   const serverCutoff = useMemo(() => {
@@ -163,6 +171,7 @@ export default function UpDownDetailPage() {
         entryId: choice === "up" ? hydrated.upEntryId : hydrated.downEntryId,
         choice: choice.toUpperCase(),
         marketName: `${hydrated.personName}: Up or Down?`,
+        personName: hydrated.personName,
         startScore: hydrated.baselineScore,
         currentScore: hydrated.currentScore,
         baselineScore: hydrated.baselineScore,
@@ -245,15 +254,7 @@ export default function UpDownDetailPage() {
   const pad = (n: number) => String(n).padStart(2, "0");
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen bg-background">
-        <div className="max-w-3xl mx-auto px-4 py-8 space-y-4">
-          <Skeleton className="h-8 w-48" />
-          <Skeleton className="h-48 w-full rounded-xl" />
-          <Skeleton className="h-64 w-full rounded-xl" />
-        </div>
-      </div>
-    );
+    return <MarketDetailSkeleton variant="weekly" />;
   }
 
   if (!market || !hydrated) {
@@ -261,7 +262,7 @@ export default function UpDownDetailPage() {
       <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4 px-4">
         <TrendingUp className="h-12 w-12 text-muted-foreground" />
         <h2 className="text-lg font-semibold">Market not found</h2>
-        <Button variant="outline" onClick={goBack}>
+        <Button variant="outline" onClick={handleGoBack}>
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back to Predict
         </Button>
@@ -283,7 +284,7 @@ export default function UpDownDetailPage() {
         <div className="max-w-3xl mx-auto px-4 h-14 flex items-center gap-3">
           <button
             type="button"
-            onClick={goBack}
+            onClick={handleGoBack}
             className="p-1.5 rounded-lg hover:bg-muted transition-colors"
             aria-label="Go back"
           >

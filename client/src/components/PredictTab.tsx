@@ -887,8 +887,8 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
         <SectionHeader
           icon={<TrendingUp className="h-5 w-5 text-violet-600 dark:text-violet-400" />}
           title="Weekly Up / Down"
-          subtitle="Will their trend score be higher / lower"
-          infoTooltip="Predict whether their trend score finishes the week above or below the starting value"
+          subtitle="Will their Trend Score be higher / lower"
+          infoTooltip="Predict whether their Trend Score finishes the week above or below the starting value"
         />
         {weeklyMarket ? (
           <WeeklyUpDownCard

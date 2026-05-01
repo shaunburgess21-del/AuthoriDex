@@ -138,7 +138,7 @@ function UpDownCard({
         
         <div className="flex items-center justify-between text-xs mb-3">
           <span className="text-green-700 dark:text-green-500">Up {market.upMultiplier}x</span>
-          <span className="text-muted-foreground">Pool: {market.totalPool.toLocaleString('en-US')}</span>
+          <span className="text-muted-foreground">Pool: {market.totalPool.toLocaleString('en-US')} credits</span>
           <span className="text-red-700 dark:text-red-500">Down {market.downMultiplier}x</span>
         </div>
         
@@ -254,7 +254,7 @@ function H2HCard({
         
         <div className="flex items-center justify-center mb-3">
           <span className="text-sm font-semibold text-violet-700 dark:text-violet-500">
-            Pool: {market.totalPool.toLocaleString('en-US')}
+            Pool: {market.totalPool.toLocaleString('en-US')} credits
           </span>
         </div>
         
@@ -358,7 +358,7 @@ function CommunityCard({
         )}
         
         <div className="flex items-center justify-center mb-3">
-          <span className="text-sm font-semibold text-violet-700 dark:text-violet-500">Pool: {totalPool.toLocaleString('en-US')}</span>
+          <span className="text-sm font-semibold text-violet-700 dark:text-violet-500">Pool: {totalPool.toLocaleString('en-US')} credits</span>
         </div>
         
         <Button 
@@ -437,7 +437,7 @@ function GainerCard({
         
         <div className="flex items-center justify-center mb-3">
           <span className="text-sm font-semibold text-violet-600 dark:text-violet-400">
-            Pool: {market.totalPool.toLocaleString('en-US')}
+            Pool: {market.totalPool.toLocaleString('en-US')} credits
           </span>
         </div>
         

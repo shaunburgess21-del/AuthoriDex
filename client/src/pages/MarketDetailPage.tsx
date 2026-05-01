@@ -20,6 +20,9 @@ import { CardComments, useCommentCount } from "@/components/comments/CardComment
 import { CommentsBottomSheet } from "@/components/snap-scroll/CommentsBottomSheet";
 import { computePayoutMultiplier, formatMultiplier } from "@/lib/parimutuel";
 import { MyPositionCard, myPositionQueryKey } from "@/components/predict/MyPositionCard";
+import { MarketDetailSkeleton } from "@/components/predict/MarketDetailSkeleton";
+import { getCommunityMarketStatusMessage } from "@/lib/marketClosedMessaging";
+import { goBack } from "@/lib/goBack";
 import {
   ArrowLeft,
   Star,
@@ -780,11 +783,7 @@ export default function MarketDetailPage() {
   ) : null;
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" data-testid="loading-spinner" />
-      </div>
-    );
+    return <MarketDetailSkeleton />;
   }
 
   if (error || !market) {
@@ -793,7 +792,7 @@ export default function MarketDetailPage() {
         <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">
           <div className="container mx-auto px-4 h-16 flex items-center justify-between gap-4">
             <div className="flex items-center gap-4">
-              <Button variant="ghost" size="icon" onClick={() => window.history.back()} aria-label="Go back" data-testid="button-back">
+              <Button variant="ghost" size="icon" onClick={() => goBack(setLocation, "/markets")} aria-label="Go back" data-testid="button-back">
                 <ArrowLeft className="h-5 w-5" />
               </Button>
               <Link href="/">
@@ -828,29 +827,23 @@ export default function MarketDetailPage() {
   const resultWinningPrediction = market.resolutionSummary?.winningPrediction ?? null;
   const resultResolvedAt = market.resolutionSummary?.closeSnapshotAt || market.resolvedAt || null;
 
-  let resultTitle = "Market Closed";
-  let resultDescription = "Betting has ended for this market.";
-  if (market.status === "CLOSED_PENDING") {
-    resultTitle = "Awaiting Resolution";
-    resultDescription = "Betting is closed. We are waiting for the final outcome to be confirmed.";
-  } else if (market.status === "RESOLVED") {
-    resultTitle = "Official Result";
-    resultDescription = market.resolutionSummary?.outcomeLabel
-      ? `${market.resolutionSummary.outcomeLabel} was the final outcome.`
-      : isJackpotMarket
-        ? "This jackpot market has been resolved."
-        : "This market has been officially resolved.";
-  } else if (market.status === "VOID") {
-    resultTitle = "Market Voided";
-    resultDescription = market.voidReason || "This market was cancelled and any affected bets were voided or refunded.";
-  }
+  // Status-driven copy lives in lib/marketClosedMessaging so every
+  // "this market isn't open" surface (weekly, community, jackpot,
+  // popovers) speaks in the same voice.
+  const { title: resultTitle, description: resultDescription } =
+    getCommunityMarketStatusMessage({
+      status: market.status,
+      outcomeLabel: market.resolutionSummary?.outcomeLabel ?? null,
+      voidReason: market.voidReason ?? null,
+      isJackpotMarket,
+    });
 
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => window.history.back()} aria-label="Go back" data-testid="button-back">
+            <Button variant="ghost" size="icon" onClick={() => goBack(setLocation, "/markets")} aria-label="Go back" data-testid="button-back">
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <Link href="/">

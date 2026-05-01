@@ -9,6 +9,7 @@ import { useXpBurst } from "@/components/XpBurstProvider";
 import { StakeModal, type StakeSelection } from "@/components/StakeModal";
 import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
 import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
+import { MarketDetailSkeleton } from "@/components/predict/MarketDetailSkeleton";
 import { MarketResolutionInfo } from "@/components/predict/MarketResolutionInfo";
 import { MyPositionCard } from "@/components/predict/MyPositionCard";
 import { RaceWhatNeedsToHappen } from "@/components/predict/WhatNeedsToHappen";
@@ -20,7 +21,6 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatSignedPercent, formatSignedPoints } from "@/lib/predict-display";
 import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
@@ -71,6 +71,16 @@ export default function CategoryRaceDetailPage() {
 
   const { data: allGainerMarkets, isLoading } = useQuery<any[]>({
     queryKey: ["/api/native-markets/gainer"],
+    // Keep live % gain numbers fresh while the user is on the page.
+    // 60s matches MyPositionCard + OutcomePathChart.
+    refetchInterval: (query) => {
+      if (typeof document !== "undefined" && document.hidden) return false;
+      const list = query.state.data as any[] | undefined;
+      const found = list?.find((m: any) => m.id === marketId);
+      if (found && found.status && found.status !== "OPEN") return false;
+      return 60_000;
+    },
+    refetchOnWindowFocus: true,
   });
 
   const serverCutoff = useMemo(() => {
@@ -299,15 +309,7 @@ export default function CategoryRaceDetailPage() {
   const pad = (n: number) => String(n).padStart(2, "0");
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen bg-background">
-        <div className="max-w-3xl mx-auto px-4 py-8 space-y-4">
-          <Skeleton className="h-8 w-48" />
-          <Skeleton className="h-32 w-full rounded-xl" />
-          <Skeleton className="h-64 w-full rounded-xl" />
-        </div>
-      </div>
-    );
+    return <MarketDetailSkeleton variant="weekly" />;
   }
 
   if (!market) {

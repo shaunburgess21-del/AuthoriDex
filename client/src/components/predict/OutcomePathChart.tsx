@@ -96,6 +96,16 @@ export function OutcomePathChart({
     queryKey: [`/api/native-markets/${marketId}/history`],
     enabled: !!marketId,
     staleTime: 60_000,
+    // Match MyPositionCard's 60s polling cadence so the chart and
+    // header score stay in sync as the week unfolds. Pause polling
+    // when the tab is hidden or the market has resolved.
+    refetchInterval: (query) => {
+      if (typeof document !== "undefined" && document.hidden) return false;
+      const status = (query.state.data as MarketHistory | undefined)?.status;
+      if (status && status !== "OPEN") return false;
+      return 60_000;
+    },
+    refetchOnWindowFocus: true,
   });
 
   const chartData = useMemo(() => {

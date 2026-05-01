@@ -218,7 +218,7 @@ export function TopGainerCard({
 
       <div className="flex items-center justify-between mb-2 gap-2">
         <span className="text-sm font-semibold text-muted-foreground">
-          Pool: {market.totalPool.toLocaleString('en-US')}
+          Pool: {market.totalPool.toLocaleString('en-US')} credits
         </span>
         <MarketCycleStrip
           bettingCutoff={market.bettingCutoff ?? null}

@@ -2821,7 +2821,7 @@ export default function PredictPage() {
           <section className="mb-10">
             <UnifiedSectionHeader
               title="Weekly Up / Down"
-              subtitle="Will their trend score be higher / lower"
+              subtitle="Will their Trend Score be higher / lower"
               icon={<TrendingUp className="h-5 w-5 text-violet-600 dark:text-violet-400" />}
               accent="violet"
               testId="section-header-updown"
