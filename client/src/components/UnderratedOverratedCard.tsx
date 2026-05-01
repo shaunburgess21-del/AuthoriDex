@@ -225,16 +225,20 @@ export function UnderratedOverratedCard({
           </button>
         </div>
       ) : (
-        <div className="flex flex-col gap-4 md:gap-3 mt-auto">
-          <Link
-            href={`/vote/value-rankings?focus=${encodeURIComponent(person.id)}`}
-            className="inline-flex items-center gap-1 self-start text-sm font-medium text-cyan-600/80 dark:text-cyan-400/80 hover:text-cyan-500 dark:hover:text-cyan-300 transition-colors"
-            data-testid={`link-value-compare-${person.id}`}
-            onClick={(e) => e.stopPropagation()}
-          >
-            See how {person.name.split(" ")[0]} compares
-            <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-90" aria-hidden />
-          </Link>
+        <>
+          <div className="flex flex-1 items-center justify-center py-4 md:py-3">
+            <Link
+              href={`/vote/value-rankings?focus=${encodeURIComponent(person.id)}`}
+              className="group inline-flex items-center gap-2 rounded-full border border-cyan-500/25 bg-cyan-500/10 px-4 py-2 text-sm font-medium text-cyan-600 transition-all duration-200 hover:border-cyan-500/45 hover:bg-cyan-500/15 dark:border-cyan-400/25 dark:bg-cyan-400/10 dark:text-cyan-400 dark:hover:border-cyan-400/45 dark:hover:bg-cyan-400/15"
+              data-testid={`link-value-compare-${person.id}`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <BarChart2 className="h-4 w-4 shrink-0" aria-hidden />
+              <span>See how {person.name.split(" ")[0]} compares</span>
+              <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 group-hover:translate-x-0.5" aria-hidden />
+            </Link>
+          </div>
+          <div className="flex flex-col gap-4 md:gap-3">
           <div className="flex items-center gap-3 md:gap-2.5">
             <ArrowUp className="h-5 w-5 md:h-4 md:w-4 text-[#00C853] shrink-0" />
             <span className="text-base font-medium md:text-sm text-[#00C853] w-[5.25rem] md:w-20 shrink-0">Underrated</span>
@@ -287,7 +291,8 @@ export function UnderratedOverratedCard({
               Change
             </Button>
           </div>
-        </div>
+          </div>
+        </>
       )}
     </Card>
     </div>
