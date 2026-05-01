@@ -1614,10 +1614,33 @@ export default function AdminDashboard() {
   });
 
   // Fetch comments for moderation
+  // Comment moderation filters — kept in component state, applied to the
+  // query key so a change refetches with new server-side filters.
+  const [commentParentFilter, setCommentParentFilter] = useState<
+    "all" | "matchup" | "trending_poll" | "opinion_poll" | "open_market" | "community_insight"
+  >("all");
+  const [commentAuthorFilter, setCommentAuthorFilter] = useState<"all" | "agents" | "humans">("all");
+  const [commentSearch, setCommentSearch] = useState("");
+  const [commentSearchDebounced, setCommentSearchDebounced] = useState("");
+  useEffect(() => {
+    const handle = setTimeout(() => setCommentSearchDebounced(commentSearch.trim()), 300);
+    return () => clearTimeout(handle);
+  }, [commentSearch]);
+
   const { data: moderationComments, isLoading: commentsLoading } = useQuery<InsightComment[]>({
-    queryKey: ["/api/admin/moderation/comments"],
+    queryKey: [
+      "/api/admin/moderation/comments",
+      commentParentFilter,
+      commentAuthorFilter,
+      commentSearchDebounced,
+    ],
     queryFn: async () => {
-      const res = await fetchWithAuth("/api/admin/moderation/comments");
+      const params = new URLSearchParams();
+      if (commentParentFilter !== "all") params.set("parentType", commentParentFilter);
+      if (commentAuthorFilter !== "all") params.set("author", commentAuthorFilter);
+      if (commentSearchDebounced) params.set("q", commentSearchDebounced);
+      params.set("limit", "200");
+      const res = await fetchWithAuth(`/api/admin/moderation/comments?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch comments");
       return res.json();
     },
@@ -5423,8 +5446,71 @@ export default function AdminDashboard() {
               <TabsContent value="comments" className="mt-4">
                 <Card>
                   <CardHeader>
-                    <CardTitle>Comments</CardTitle>
-                    <CardDescription>Comments on insights and posts</CardDescription>
+                    <div className="flex items-start justify-between gap-4 flex-wrap">
+                      <div>
+                        <CardTitle>Comments</CardTitle>
+                        <CardDescription>
+                          All user + agent comments across matchups, polls, world markets, and celebrity insights
+                        </CardDescription>
+                      </div>
+                      {moderationComments && (
+                        <div className="text-xs text-muted-foreground self-end">
+                          Showing <span className="font-semibold text-foreground">{moderationComments.length}</span>
+                          {moderationComments.length === 200 && " (capped — refine filters to see more)"}
+                        </div>
+                      )}
+                    </div>
+                    {/* Filter bar */}
+                    <div className="mt-4 flex flex-wrap items-center gap-2">
+                      <div className="relative flex-1 min-w-[200px] max-w-md">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Search comment text…"
+                          value={commentSearch}
+                          onChange={(e) => setCommentSearch(e.target.value)}
+                          className="pl-10"
+                          data-testid="comments-search"
+                        />
+                      </div>
+                      <Select value={commentParentFilter} onValueChange={(v) => setCommentParentFilter(v as typeof commentParentFilter)}>
+                        <SelectTrigger className="w-[180px]" data-testid="comments-parent-filter">
+                          <SelectValue placeholder="All surfaces" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All surfaces</SelectItem>
+                          <SelectItem value="matchup">Matchups</SelectItem>
+                          <SelectItem value="trending_poll">Sentiment polls</SelectItem>
+                          <SelectItem value="opinion_poll">Opinion polls</SelectItem>
+                          <SelectItem value="open_market">World markets</SelectItem>
+                          <SelectItem value="community_insight">Community insights</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Select value={commentAuthorFilter} onValueChange={(v) => setCommentAuthorFilter(v as typeof commentAuthorFilter)}>
+                        <SelectTrigger className="w-[150px]" data-testid="comments-author-filter">
+                          <SelectValue placeholder="All authors" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All authors</SelectItem>
+                          <SelectItem value="humans">Humans only</SelectItem>
+                          <SelectItem value="agents">Agents only</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {(commentParentFilter !== "all" || commentAuthorFilter !== "all" || commentSearch) && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setCommentParentFilter("all");
+                            setCommentAuthorFilter("all");
+                            setCommentSearch("");
+                          }}
+                          data-testid="comments-clear-filters"
+                        >
+                          <X className="h-3 w-3 mr-1" />
+                          Clear
+                        </Button>
+                      )}
+                    </div>
                   </CardHeader>
                   <CardContent>
                     {commentsLoading ? (
@@ -5433,40 +5519,97 @@ export default function AdminDashboard() {
                       </div>
                     ) : moderationComments && moderationComments.length > 0 ? (
                       <div className="space-y-3" data-testid="comments-list">
-                        {moderationComments.map((comment) => (
-                          <div
-                            key={comment.id}
-                            className="flex items-start justify-between p-3 rounded-lg border"
-                            data-testid={`comment-row-${comment.id}`}
-                          >
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm line-clamp-2">{comment.content}</p>
-                              <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
-                                <span>User: {comment.userId}</span>
-                                <span>•</span>
-                                <span>{new Date(comment.createdAt).toLocaleString()}</span>
-                              </div>
-                            </div>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="text-destructive hover:text-destructive ml-2"
-                              onClick={() => {
-                                setDeleteTarget({ type: "comment", id: comment.id, name: "this comment" });
-                                setShowDeleteConfirm(true);
-                              }}
-                              aria-label="Delete"
-                              data-testid={`button-delete-comment-${comment.id}`}
+                        {moderationComments.map((comment) => {
+                          const surfaceLabel: Record<typeof comment.parentType, string> = {
+                            matchup: "Matchup",
+                            trending_poll: "Sentiment poll",
+                            opinion_poll: "Opinion poll",
+                            open_market: "World market",
+                            community_insight: "Insight",
+                          };
+                          return (
+                            <div
+                              key={comment.id}
+                              className="flex items-start justify-between gap-3 p-4 rounded-lg border bg-card hover:bg-muted/30 transition-colors"
+                              data-testid={`comment-row-${comment.id}`}
                             >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        ))}
+                              <div className="flex-1 min-w-0 space-y-2">
+                                {/* Author + parent header */}
+                                <div className="flex items-center gap-2 flex-wrap text-xs">
+                                  {comment.authorLink ? (
+                                    <a
+                                      href={comment.authorLink}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="font-semibold text-foreground hover:underline"
+                                    >
+                                      @{comment.username}
+                                    </a>
+                                  ) : (
+                                    <span className="font-semibold text-muted-foreground italic">
+                                      {comment.username || "[deleted user]"}
+                                    </span>
+                                  )}
+                                  {comment.isAgent && (
+                                    <Badge variant="outline" className="h-5 px-1.5 text-[10px] border-violet-500/40 text-violet-500">
+                                      <Bot className="h-3 w-3 mr-1" />
+                                      AGENT
+                                    </Badge>
+                                  )}
+                                  <span className="text-muted-foreground">on</span>
+                                  <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
+                                    {surfaceLabel[comment.parentType]}
+                                  </Badge>
+                                  {comment.parentLink ? (
+                                    <a
+                                      href={comment.parentLink}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-foreground hover:underline truncate max-w-[400px] inline-flex items-center gap-1"
+                                      title={comment.parentTitle ?? ""}
+                                    >
+                                      {comment.parentTitle ?? "(untitled)"}
+                                      <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                                    </a>
+                                  ) : (
+                                    <span className="text-muted-foreground truncate max-w-[400px]" title={comment.parentTitle ?? ""}>
+                                      {comment.parentTitle ?? "(unresolvable parent)"}
+                                    </span>
+                                  )}
+                                  {comment.parentCategory && (
+                                    <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
+                                      {comment.parentCategory}
+                                    </Badge>
+                                  )}
+                                </div>
+                                {/* Comment body */}
+                                <p className="text-sm whitespace-pre-wrap break-words text-foreground">{comment.body}</p>
+                                {/* Timestamp */}
+                                <div className="text-xs text-muted-foreground">
+                                  {new Date(comment.createdAt).toLocaleString()}
+                                </div>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-destructive hover:text-destructive flex-shrink-0"
+                                onClick={() => {
+                                  setDeleteTarget({ type: "comment", id: comment.id, name: "this comment" });
+                                  setShowDeleteConfirm(true);
+                                }}
+                                aria-label="Delete"
+                                data-testid={`button-delete-comment-${comment.id}`}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          );
+                        })}
                       </div>
                     ) : (
                       <div className="text-center py-8 text-muted-foreground">
                         <MessageSquare className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                        <p>No comments to moderate</p>
+                        <p>No comments {(commentParentFilter !== "all" || commentAuthorFilter !== "all" || commentSearchDebounced) ? "match your filters" : "to moderate"}</p>
                       </div>
                     )}
                   </CardContent>

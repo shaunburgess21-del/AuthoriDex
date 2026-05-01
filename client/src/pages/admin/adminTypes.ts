@@ -193,10 +193,36 @@ export interface CommunityInsight {
   downvotes: number;
 }
 
+/**
+ * Comment shape served by /api/admin/moderation/comments. Renamed from
+ * InsightComment because it now spans every parent surface (matchups,
+ * polls, world markets, community insights), not just insights. The
+ * `insightId` field is preserved for backwards compatibility.
+ */
 export interface InsightComment {
   id: string;
-  insightId: string;
+  /** Polymorphic parent type. */
+  parentType: "matchup" | "trending_poll" | "opinion_poll" | "open_market" | "community_insight";
+  parentId: string;
+  parentCommentId: string | null;
+  /** Friendly title resolved from the parent table. */
+  parentTitle: string | null;
+  /** Frontend route to view the parent in context (or null if unresolvable). */
+  parentLink: string | null;
+  /** Parent category (sports, music, etc.) if applicable. */
+  parentCategory: string | null;
+  /** Backwards-compat: only set when parentType === 'community_insight'. */
+  insightId: string | null;
   userId: string;
+  /** Author username, or "[deleted user]" if profile is missing. */
+  username: string | null;
+  avatarUrl: string | null;
+  /** Whether the author is a simulated agent. Surfaced as a badge. */
+  isAgent: boolean;
+  /** Link to the author's public profile, null when deleted. */
+  authorLink: string | null;
+  body: string;
+  /** Backwards-compat alias for body. */
   content: string;
   createdAt: string;
 }

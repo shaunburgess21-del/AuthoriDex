@@ -10694,10 +10694,36 @@ Only return the JSON object.`;
     }
   });
 
-  // Get comments for moderation
+  // Get comments for moderation. Enriched with author info (incl. is_agent
+  // flag) and parent info (title, slug, category, personId) so the admin
+  // page can show "@username (agent) on Tesla market: 'comment text…'"
+  // with a deep-link instead of an opaque UUID. Supports filters:
+  //   ?parentType=matchup|trending_poll|opinion_poll|open_market|community_insight
+  //   ?author=agents|humans|all   (default: all)
+  //   ?q=substring                 (case-insensitive comment body search)
+  //   ?limit=200                   (default 100, capped at 500)
   app.get("/api/admin/moderation/comments", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const comments = await db.select({
+      const parentTypeFilter = typeof req.query.parentType === "string" ? req.query.parentType : null;
+      const authorFilter = typeof req.query.author === "string" ? req.query.author : "all";
+      const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+      const limit = Math.max(1, Math.min(500, Number(req.query.limit ?? 100) || 100));
+
+      const conditions = [] as any[];
+      if (parentTypeFilter && (COMMENT_PARENT_TYPES as readonly string[]).includes(parentTypeFilter)) {
+        conditions.push(eq(unifiedComments.parentType, parentTypeFilter as CommentParentType));
+      }
+      if (authorFilter === "agents") {
+        conditions.push(eq(profiles.isAgent, true));
+      } else if (authorFilter === "humans") {
+        conditions.push(sql`COALESCE(${profiles.isAgent}, false) = false`);
+      }
+      if (q.length > 0) {
+        conditions.push(sql`${unifiedComments.body} ILIKE ${`%${q}%`}`);
+      }
+      conditions.push(sql`${unifiedComments.deletedAt} IS NULL`);
+
+      const rows = await db.select({
         id: unifiedComments.id,
         parentType: unifiedComments.parentType,
         parentId: unifiedComments.parentId,
@@ -10705,18 +10731,129 @@ Only return the JSON object.`;
         userId: unifiedComments.userId,
         body: unifiedComments.body,
         createdAt: unifiedComments.createdAt,
-        ...commentAuthorSelect,
+        authorUsername: profiles.username,
+        authorAvatarUrl: profiles.avatarUrl,
+        authorIsAgent: profiles.isAgent,
+        authorId: profiles.id,
       }).from(unifiedComments)
         .leftJoin(profiles, eq(unifiedComments.userId, profiles.id))
+        .where(conditions.length > 0 ? and(...conditions) : undefined)
         .orderBy(desc(unifiedComments.createdAt))
-        .limit(100);
-      
-      res.json(comments.map(({ authorId, authorUsername, authorAvatarUrl, ...comment }) => ({
-        ...comment,
-        insightId: comment.parentType === "community_insight" ? comment.parentId : null,
-        content: comment.body,
-        ...formatCommentAuthor({ authorId, authorUsername, authorAvatarUrl }),
-      })));
+        .limit(limit);
+
+      // Group parent IDs by type so we can do one query per parent table.
+      const idsByType = new Map<string, Set<string>>();
+      for (const row of rows) {
+        if (!idsByType.has(row.parentType)) idsByType.set(row.parentType, new Set());
+        idsByType.get(row.parentType)!.add(row.parentId);
+      }
+
+      const matchupMeta = new Map<string, { title: string; slug: string | null; category: string | null }>();
+      const trendingPollMeta = new Map<string, { title: string; slug: string | null; category: string | null }>();
+      const opinionPollMeta = new Map<string, { title: string; slug: string | null; category: string | null }>();
+      const marketMeta = new Map<string, { title: string; slug: string; category: string | null }>();
+      const insightMeta = new Map<string, { personId: string; personName: string | null }>();
+
+      const toArray = (s: Set<string> | undefined) => (s ? Array.from(s) : []);
+
+      const matchupIds = toArray(idsByType.get("matchup"));
+      const trendingIds = toArray(idsByType.get("trending_poll"));
+      const opinionIds = toArray(idsByType.get("opinion_poll"));
+      const marketIds = toArray(idsByType.get("open_market"));
+      const insightIds = toArray(idsByType.get("community_insight"));
+
+      await Promise.all([
+        matchupIds.length > 0
+          ? db.select({ id: matchups.id, title: matchups.title, slug: matchups.slug, category: matchups.category })
+              .from(matchups).where(inArray(matchups.id, matchupIds))
+              .then((res) => res.forEach((r) => matchupMeta.set(r.id, { title: r.title, slug: r.slug, category: r.category })))
+          : Promise.resolve(),
+        trendingIds.length > 0
+          ? db.select({ id: trendingPolls.id, title: trendingPolls.headline, slug: trendingPolls.slug, category: trendingPolls.category })
+              .from(trendingPolls).where(inArray(trendingPolls.id, trendingIds))
+              .then((res) => res.forEach((r) => trendingPollMeta.set(r.id, { title: r.title, slug: r.slug, category: r.category })))
+          : Promise.resolve(),
+        opinionIds.length > 0
+          ? db.select({ id: opinionPolls.id, title: opinionPolls.title, slug: opinionPolls.slug, category: opinionPolls.category })
+              .from(opinionPolls).where(inArray(opinionPolls.id, opinionIds))
+              .then((res) => res.forEach((r) => opinionPollMeta.set(r.id, { title: r.title, slug: r.slug, category: r.category })))
+          : Promise.resolve(),
+        marketIds.length > 0
+          ? db.select({ id: predictionMarkets.id, title: predictionMarkets.title, slug: predictionMarkets.slug, category: predictionMarkets.category })
+              .from(predictionMarkets).where(inArray(predictionMarkets.id, marketIds))
+              .then((res) => res.forEach((r) => marketMeta.set(r.id, { title: r.title, slug: r.slug, category: r.category })))
+          : Promise.resolve(),
+        insightIds.length > 0
+          ? db.select({
+              id: communityInsights.id,
+              personId: communityInsights.personId,
+              personName: trackedPeople.name,
+            })
+              .from(communityInsights)
+              .leftJoin(trackedPeople, eq(communityInsights.personId, trackedPeople.id))
+              .where(inArray(communityInsights.id, insightIds))
+              .then((res) => res.forEach((r) =>
+                insightMeta.set(r.id, { personId: r.personId, personName: r.personName })
+              ))
+          : Promise.resolve(),
+      ]);
+
+      const enriched = rows.map((row) => {
+        let parentTitle: string | null = null;
+        let parentLink: string | null = null;
+        let parentCategory: string | null = null;
+
+        if (row.parentType === "matchup") {
+          const m = matchupMeta.get(row.parentId);
+          parentTitle = m?.title ?? null;
+          parentCategory = m?.category ?? null;
+          parentLink = m?.slug ? `/vote/matchups/${m.slug}` : null;
+        } else if (row.parentType === "trending_poll") {
+          const m = trendingPollMeta.get(row.parentId);
+          parentTitle = m?.title ?? null;
+          parentCategory = m?.category ?? null;
+          parentLink = m?.slug ? `/polls/${m.slug}` : null;
+        } else if (row.parentType === "opinion_poll") {
+          const m = opinionPollMeta.get(row.parentId);
+          parentTitle = m?.title ?? null;
+          parentCategory = m?.category ?? null;
+          parentLink = m?.slug ? `/polls/${m.slug}` : null;
+        } else if (row.parentType === "open_market") {
+          const m = marketMeta.get(row.parentId);
+          parentTitle = m?.title ?? null;
+          parentCategory = m?.category ?? null;
+          parentLink = m?.slug ? `/markets/${m.slug}` : null;
+        } else if (row.parentType === "community_insight") {
+          const m = insightMeta.get(row.parentId);
+          parentTitle = m?.personName ? `Insight on ${m.personName}` : null;
+          parentLink = m?.personId ? `/celebrity/${m.personId}` : null;
+        }
+
+        const isAgent = !!row.authorIsAgent;
+        const username = row.authorId ? row.authorUsername : DELETED_COMMENT_AUTHOR_USERNAME;
+
+        return {
+          id: row.id,
+          parentType: row.parentType,
+          parentId: row.parentId,
+          parentCommentId: row.parentCommentId,
+          parentTitle,
+          parentLink,
+          parentCategory,
+          // Backwards compatibility with the old shape:
+          insightId: row.parentType === "community_insight" ? row.parentId : null,
+          content: row.body,
+          body: row.body,
+          createdAt: row.createdAt,
+          userId: row.userId,
+          username,
+          avatarUrl: row.authorAvatarUrl,
+          isAgent,
+          authorLink: username && username !== DELETED_COMMENT_AUTHOR_USERNAME ? `/u/${username}` : null,
+        };
+      });
+
+      res.json(enriched);
     } catch (error: any) {
       console.error("Error fetching comments for moderation:", error.message);
       res.status(500).json({ error: "Failed to fetch comments" });
