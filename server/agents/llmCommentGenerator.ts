@@ -386,6 +386,7 @@ function sanitise(
   rawText: string,
   maxChars: number,
   agent: AgentForComment,
+  replyTargetUsername: string | null,
 ): string | null {
   let text = rawText.trim();
   if (!text) return null;
@@ -398,11 +399,19 @@ function sanitise(
   }
 
   // Strip "DisplayName: …", "@username: …", or "username — …" name prefixes
-  // that the model occasionally adds despite instructions.
+  // that the model occasionally adds despite instructions. Also strips a
+  // leading "@replyTarget" or "Hey replyTarget," when in reply mode (the
+  // UI already shows the relationship).
   const namePatterns = [
     new RegExp(`^@?${escapeRegex(agent.username)}\\s*[:\\-—–]\\s*`, "i"),
     new RegExp(`^@?${escapeRegex(agent.displayName)}\\s*[:\\-—–]\\s*`, "i"),
   ];
+  if (replyTargetUsername) {
+    namePatterns.push(
+      new RegExp(`^@${escapeRegex(replyTargetUsername)}\\b[\\s,:\\-—–]*`, "i"),
+      new RegExp(`^(hey|hi|hello|yo)\\s+@?${escapeRegex(replyTargetUsername)}\\b[\\s,:\\-—–]*`, "i"),
+    );
+  }
   for (const pattern of namePatterns) {
     text = text.replace(pattern, "");
   }
@@ -485,13 +494,17 @@ export async function generateAgentComment(
 
     const raw = response.choices[0]?.message?.content;
     if (!raw) return null;
-    const cleaned = sanitise(raw, length.maxChars, agent);
+    const cleaned = sanitise(raw, length.maxChars, agent, ctx.replyTarget?.authorUsername ?? null);
     if (!cleaned) return null;
 
     // Light duplicate guard: if the generated comment has very high token
     // overlap with an existing comment, reject it. The system prompt tells
     // the model to avoid this, but the safety net catches the rare miss.
-    if (hasDiscussion && isLikelyDuplicate(cleaned, ctx.existingComments ?? [])) {
+    // In reply mode we also include the target body so the agent doesn't
+    // accidentally paraphrase the very comment they're replying to.
+    const dupePool: Array<{ body: string }> = [...(ctx.existingComments ?? [])];
+    if (ctx.replyTarget) dupePool.push({ body: ctx.replyTarget.body });
+    if (dupePool.length > 0 && isLikelyDuplicate(cleaned, dupePool)) {
       return null;
     }
 

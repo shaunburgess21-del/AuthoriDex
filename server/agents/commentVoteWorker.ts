@@ -17,7 +17,7 @@
  *     consistent. Unique (userId, commentId) constraint prevents dupes.
  */
 
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import {
   agentConfigs,
   comments as unifiedComments,
@@ -55,6 +55,24 @@ const PERSONA_LIKE_BEHAVIOUR: Record<
  *  small minority of downvote behaviour you see on Polymarket / Reddit
  *  thread comments. */
 const DOWNVOTE_RATE = 0.10;
+
+/** Count likes this agent has cast in the last 24h. Used to skip agents
+ *  that already hit their per-day target — important because a Railway
+ *  redeploy fires a fresh boot sweep, and without this guard the same
+ *  agent could vote 2-3× their daily quota across multiple deploys. */
+async function countLikesLast24h(userId: string): Promise<number> {
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const [row] = await db
+    .select({ c: count() })
+    .from(commentVotes)
+    .where(
+      and(
+        eq(commentVotes.userId, userId),
+        gte(commentVotes.votedAt, cutoff),
+      ),
+    );
+  return Number(row?.c ?? 0);
+}
 
 /** Pool of recent comments that this agent could potentially vote on:
  *   - Not their own
@@ -180,13 +198,23 @@ export async function runCommentVoteSweep(): Promise<{
       continue;
     }
 
+    // Deploy-storm guard: if this agent has already hit their per-day max
+    // (from an earlier sweep that day, e.g. a previous boot), skip.
+    const last24h = await countLikesLast24h(agent.userId);
+    if (last24h >= behaviour.max) {
+      skipped++;
+      continue;
+    }
+
     const pool = await getCandidateComments(agent.userId);
     if (!pool.length) {
       skipped++;
       continue;
     }
 
-    const targetLikes = behaviour.min + Math.floor(Math.random() * (behaviour.max - behaviour.min + 1));
+    const remainingDailyQuota = behaviour.max - last24h;
+    const desiredLikes = behaviour.min + Math.floor(Math.random() * (behaviour.max - behaviour.min + 1));
+    const targetLikes = Math.min(desiredLikes, remainingDailyQuota);
     const used = new Set<string>();
     let agentDidVote = false;
 
@@ -203,6 +231,12 @@ export async function runCommentVoteSweep(): Promise<{
       const voteType = pickVoteType(simulation);
 
       try {
+        // Insert WITHOUT onConflictDoNothing on purpose: if the unique
+        // (userId, commentId) constraint fires, we want the transaction
+        // to roll back so the denormalised counter doesn't drift. The
+        // candidate filter already excludes already-voted comments, so
+        // a conflict only happens in a tiny race window — treat it as
+        // an error and skip rather than silently bump the count.
         await db.transaction(async (tx) => {
           await tx
             .insert(commentVotes)
@@ -210,9 +244,6 @@ export async function runCommentVoteSweep(): Promise<{
               commentId: target.id,
               userId: agent.userId,
               voteType,
-            })
-            .onConflictDoNothing({
-              target: [commentVotes.userId, commentVotes.commentId],
             });
           await tx
             .update(unifiedComments)
@@ -226,7 +257,12 @@ export async function runCommentVoteSweep(): Promise<{
         if (voteType === "up") upvotes++; else downvotes++;
         agentDidVote = true;
       } catch (err) {
-        log(`[CommentVoteWorker] Failed for ${agent.displayName} on comment ${target.id}: ${err instanceof Error ? err.message : err}`);
+        // Most common cause: unique violation from a concurrent vote.
+        // Logged at debug level — not actionable.
+        const msg = err instanceof Error ? err.message : String(err);
+        if (!/unique|duplicate/i.test(msg)) {
+          log(`[CommentVoteWorker] Failed for ${agent.displayName} on comment ${target.id}: ${msg}`);
+        }
       }
     }
 

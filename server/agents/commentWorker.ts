@@ -208,6 +208,9 @@ async function findReplyOpportunity(
 export async function runCommentSweep(): Promise<{
   posted: number;
   replies: number;
+  /** Number of agents that tried the reply path but had no eligible
+   *  target and fell back to top-level. Useful for tuning REPLY_PROBABILITY. */
+  replyFallbacks: number;
   skipped: number;
   llmRejected: number;
   capReached: boolean;
@@ -226,6 +229,7 @@ export async function runCommentSweep(): Promise<{
 
   let posted = 0;
   let replies = 0;
+  let replyFallbacks = 0;
   let skipped = 0;
   let llmRejected = 0;
   let capReached = false;
@@ -260,10 +264,11 @@ export async function runCommentSweep(): Promise<{
 
     let parent: EligibleCommentParent | null = null;
     let replyTarget: ReplyTarget | null = null;
+    const wantedReply = Math.random() < REPLY_PROBABILITY;
 
     // Reply path — try first when the dice say so. If no eligible target
     // exists, fall back to top-level rather than burn the agent's slot.
-    if (Math.random() < REPLY_PROBABILITY) {
+    if (wantedReply) {
       const opp = await findReplyOpportunity(
         { userId: agent.userId, displayName: agent.displayName },
         allParents,
@@ -276,6 +281,7 @@ export async function runCommentSweep(): Promise<{
     }
 
     if (!parent) {
+      if (wantedReply) replyFallbacks++;
       const eligible = await getEligibleParents(agent.userId, allParents);
       if (!eligible.length) {
         skipped++;
@@ -296,8 +302,9 @@ export async function runCommentSweep(): Promise<{
     }
 
     if (replyTarget) {
-      // Attach reply target so the LLM enters reply mode.
-      (context as { replyTarget?: ReplyTarget }).replyTarget = replyTarget;
+      // All four CommentContext variants declare replyTarget?:, so this
+      // assignment is type-safe across the union.
+      context.replyTarget = replyTarget;
     }
 
     const agentForComment: AgentForComment = {
@@ -340,7 +347,7 @@ export async function runCommentSweep(): Promise<{
     }
   }
 
-  return { posted, replies, skipped, llmRejected, capReached };
+  return { posted, replies, replyFallbacks, skipped, llmRejected, capReached };
 }
 
 function msUntilNextSweep(): number {
