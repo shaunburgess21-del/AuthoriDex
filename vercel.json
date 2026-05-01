@@ -26,7 +26,7 @@
         {
           "type": "header",
           "key": "user-agent",
-          "value": "(?i).*(facebookexternalhit|twitterbot|linkedinbot|slackbot|discordbot|whatsapp|telegrambot|skypeuripreview|pinterest|applebot|googlebot|bingbot|yandex|duckduckbot|redditbot|embedly|quora link preview).*"
+          "value": "(?i).*(facebookexternalhit|twitterbot|linkedinbot|slackbot|discordbot|whatsapp|telegrambot|skypeuripreview|pinterest|redditbot|embedly|quora link preview|iframely|mastodon|nuzzel|vkshare|tumblr).*"
         }
       ],
       "destination": "https://authoridex-production.up.railway.app/api/og/markets/:slug"
@@ -37,7 +37,7 @@
         {
           "type": "header",
           "key": "user-agent",
-          "value": "(?i).*(facebookexternalhit|twitterbot|linkedinbot|slackbot|discordbot|whatsapp|telegrambot|skypeuripreview|pinterest|applebot|googlebot|bingbot|yandex|duckduckbot|redditbot|embedly|quora link preview).*"
+          "value": "(?i).*(facebookexternalhit|twitterbot|linkedinbot|slackbot|discordbot|whatsapp|telegrambot|skypeuripreview|pinterest|redditbot|embedly|quora link preview|iframely|mastodon|nuzzel|vkshare|tumblr).*"
         }
       ],
       "destination": "https://authoridex-production.up.railway.app/api/og/predict/updown/:marketId"
@@ -48,7 +48,7 @@
         {
           "type": "header",
           "key": "user-agent",
-          "value": "(?i).*(facebookexternalhit|twitterbot|linkedinbot|slackbot|discordbot|whatsapp|telegrambot|skypeuripreview|pinterest|applebot|googlebot|bingbot|yandex|duckduckbot|redditbot|embedly|quora link preview).*"
+          "value": "(?i).*(facebookexternalhit|twitterbot|linkedinbot|slackbot|discordbot|whatsapp|telegrambot|skypeuripreview|pinterest|redditbot|embedly|quora link preview|iframely|mastodon|nuzzel|vkshare|tumblr).*"
         }
       ],
       "destination": "https://authoridex-production.up.railway.app/api/og/predict/h2h/:marketId"
@@ -59,7 +59,7 @@
         {
           "type": "header",
           "key": "user-agent",
-          "value": "(?i).*(facebookexternalhit|twitterbot|linkedinbot|slackbot|discordbot|whatsapp|telegrambot|skypeuripreview|pinterest|applebot|googlebot|bingbot|yandex|duckduckbot|redditbot|embedly|quora link preview).*"
+          "value": "(?i).*(facebookexternalhit|twitterbot|linkedinbot|slackbot|discordbot|whatsapp|telegrambot|skypeuripreview|pinterest|redditbot|embedly|quora link preview|iframely|mastodon|nuzzel|vkshare|tumblr).*"
         }
       ],
       "destination": "https://authoridex-production.up.railway.app/api/og/predict/race/:marketId"
@@ -70,7 +70,7 @@
         {
           "type": "header",
           "key": "user-agent",
-          "value": "(?i).*(facebookexternalhit|twitterbot|linkedinbot|slackbot|discordbot|whatsapp|telegrambot|skypeuripreview|pinterest|applebot|googlebot|bingbot|yandex|duckduckbot|redditbot|embedly|quora link preview).*"
+          "value": "(?i).*(facebookexternalhit|twitterbot|linkedinbot|slackbot|discordbot|whatsapp|telegrambot|skypeuripreview|pinterest|redditbot|embedly|quora link preview|iframely|mastodon|nuzzel|vkshare|tumblr).*"
         }
       ],
       "destination": "https://authoridex-production.up.railway.app/api/og/site"
