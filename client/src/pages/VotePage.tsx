@@ -2949,7 +2949,7 @@ export default function VotePage() {
             </div>
           )}
 
-          <div className="text-center mb-6">
+          <div className="text-center mt-2 md:mt-6 mb-6">
             <Button
               variant="ghost"
               onClick={() => openOverlay("induction")}

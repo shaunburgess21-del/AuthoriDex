@@ -16,6 +16,8 @@ interface CardSectionProps {
   dotActiveColor?: string;
   /** When true (e.g. profile Vote tab), center 1–2 cards on desktop like PredictTab sections. Default off for Vote/Predict pages. */
   centerShortRows?: boolean;
+  /** Optional Tailwind min-height class applied to each mobile slide wrapper. Anchors Swiper container height so following siblings (dots) don't shift between variable-height cards. */
+  mobileSlideMinHeight?: string;
 }
 
 function desktopChildKey(child: unknown, index: number): string | number {
@@ -33,6 +35,7 @@ export function CardSection({
   testIdPrefix = "card-section",
   dotActiveColor = "bg-cyan-400",
   centerShortRows = false,
+  mobileSlideMinHeight,
 }: CardSectionProps) {
   const items = useMemo(() => Children.toArray(children).filter(Boolean), [children]);
   const desktopItems = items.slice(0, desktopLimit);
@@ -112,7 +115,7 @@ export function CardSection({
                 : `slide-${i}`;
             return (
               <SwiperSlide key={slideKey} virtualIndex={i}>
-                <div className="w-full px-1.5 md:px-0">
+                <div className={`w-full px-1.5 md:px-0${mobileSlideMinHeight ? ` ${mobileSlideMinHeight} flex flex-col [&>*]:h-full` : ""}`}>
                   {item}
                 </div>
               </SwiperSlide>

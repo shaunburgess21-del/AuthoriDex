@@ -158,7 +158,7 @@ export function CurateSection({
                   prevSlideMessage: "Previous slide",
                   nextSlideMessage: "Next slide",
                 }}
-                className="py-2"
+                className="pt-0 pb-2 md:py-2"
                 data-testid="section-curate-carousel"
               >
                 {curatePersons.map((person, i) => (
