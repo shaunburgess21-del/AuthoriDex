@@ -5,6 +5,9 @@
  */
 
 import OpenAI from "openai";
+import { eq, sql } from "drizzle-orm";
+import { db } from "../db";
+import { predictionMarkets } from "@shared/schema";
 import type {
   AgentConfigData,
   MarketWithEntries,
@@ -13,7 +16,12 @@ import type {
 } from "./types";
 import { productionRNG, type RNG } from "./prng";
 import { log } from "../log";
-import { WORLD_MARKET_BOOST_ENABLED, WORLD_MARKET_ACTIVITY_MULTIPLIER } from "./constants";
+import {
+  WORLD_MARKET_BOOST_ENABLED,
+  WORLD_MARKET_ACTIVITY_MULTIPLIER,
+  WORLD_MARKETS_LLM_ENABLED,
+  WORLD_MARKET_ASSESSMENT_TTL_MS,
+} from "./constants";
 import { getAiModel } from "../config/ai-models";
 
 const openai = new OpenAI({
@@ -21,6 +29,57 @@ const openai = new OpenAI({
 });
 
 const API_TIMEOUT_MS = 45_000;
+const MAX_OUTPUT_TOKENS = 400;
+
+// In-process dedupe: when 56 agents simultaneously evaluate the same market in
+// a single sweep, only one of them should fire the LLM call. The rest await
+// the same promise. Survives only the lifetime of the Node process; the DB
+// cache below covers cross-process / restart scenarios.
+const inFlightAssessments = new Map<string, Promise<PredictionAssessment | null>>();
+
+interface CachedAssessment {
+  assessment: PredictionAssessment;
+  cachedAt: string; // ISO timestamp
+}
+
+function readCachedAssessment(marketMetadata: unknown): PredictionAssessment | null {
+  if (!marketMetadata || typeof marketMetadata !== "object") return null;
+  const cached = (marketMetadata as Record<string, unknown>).worldAssessment as
+    | CachedAssessment
+    | undefined;
+  if (!cached || typeof cached !== "object") return null;
+  if (!cached.cachedAt || !cached.assessment) return null;
+  const age = Date.now() - new Date(cached.cachedAt).getTime();
+  if (!Number.isFinite(age) || age < 0) return null;
+  if (age > WORLD_MARKET_ASSESSMENT_TTL_MS) return null;
+  return cached.assessment;
+}
+
+async function writeCachedAssessment(
+  marketId: string,
+  assessment: PredictionAssessment,
+): Promise<void> {
+  try {
+    const payload = {
+      worldAssessment: {
+        assessment,
+        cachedAt: new Date().toISOString(),
+      },
+    };
+    // jsonb || merges keys, preserving any other metadata fields.
+    await db
+      .update(predictionMarkets)
+      .set({
+        metadata: sql`COALESCE(${predictionMarkets.metadata}, '{}'::jsonb) || ${JSON.stringify(payload)}::jsonb`,
+        updatedAt: new Date(),
+      })
+      .where(eq(predictionMarkets.id, marketId));
+  } catch (err) {
+    log(
+      `[WorldEngine] Failed to cache assessment for market=${marketId.slice(0, 8)}: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
 
 interface PredictionAssessment {
   decision: "bet" | "abstain";
@@ -158,6 +217,120 @@ function extractOutputText(response: any): string | null {
   return null;
 }
 
+/**
+ * Fire the actual LLM call. Used as the seed for the cached assessment that
+ * all agents will share within a 24h window.
+ *
+ * SAFETY: This is the only path that hits OpenAI. Everything upstream
+ * (cache check, kill switch, in-flight dedupe) gates whether we get here.
+ */
+async function callWorldMarketLlm(
+  agent: AgentConfigData,
+  market: MarketWithEntries,
+  entries: MarketEntryData[],
+): Promise<PredictionAssessment | null> {
+  const systemPrompt = buildSystemPrompt(agent);
+  const userPrompt = buildUserPrompt(market, entries);
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+
+    const response = await openai.responses.create(
+      {
+        model: getAiModel("worldMarkets"),
+        tools: [{ type: "web_search" as any }],
+        max_output_tokens: MAX_OUTPUT_TOKENS,
+        instructions: systemPrompt,
+        input: userPrompt,
+      } as any,
+      { signal: controller.signal },
+    );
+
+    clearTimeout(timeout);
+
+    const outputText = extractOutputText(response);
+    if (!outputText) {
+      const outputTypes = Array.isArray((response as any).output)
+        ? (response as any).output.map((item: any) => item.type).join(", ")
+        : "no output array";
+      log(
+        `[WorldEngine] Empty response for market=${market.id.slice(0, 8)} (seed agent=${agent.displayName}) — output items: [${outputTypes}]`,
+      );
+      return null;
+    }
+
+    let jsonText = outputText.trim();
+    if (jsonText.startsWith("```")) {
+      jsonText = jsonText.replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "");
+    }
+
+    let parsed: any;
+    try {
+      parsed = JSON.parse(jsonText);
+    } catch {
+      log(
+        `[WorldEngine] JSON parse failed for market=${market.id.slice(0, 8)} (seed agent=${agent.displayName}) — raw: ${jsonText.slice(0, 200)}`,
+      );
+      return null;
+    }
+
+    if (
+      !parsed ||
+      typeof parsed.decision !== "string" ||
+      !["bet", "abstain"].includes(parsed.decision) ||
+      typeof parsed.confidence !== "number" ||
+      typeof parsed.briefReasoning !== "string"
+    ) {
+      log(
+        `[WorldEngine] Invalid schema for market=${market.id.slice(0, 8)} — keys: ${Object.keys(parsed).join(", ")}`,
+      );
+      return null;
+    }
+
+    return parsed as PredictionAssessment;
+  } catch (err: any) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log(
+      `[WorldEngine] API error for market=${market.id.slice(0, 8)} (seed agent=${agent.displayName}): ${msg}`,
+    );
+    return null;
+  }
+}
+
+/**
+ * Get an assessment for the market — preferring cache (DB) and in-flight
+ * dedupe (in-process) over a fresh LLM call. Writes through to the DB cache
+ * on success so subsequent agents (this batch and future batches within the
+ * TTL) reuse the same web-search-backed analysis.
+ */
+async function getOrCreateAssessment(
+  agent: AgentConfigData,
+  market: MarketWithEntries,
+  entries: MarketEntryData[],
+): Promise<PredictionAssessment | null> {
+  const cached = readCachedAssessment(market.metadata);
+  if (cached) return cached;
+
+  const inFlight = inFlightAssessments.get(market.id);
+  if (inFlight) return inFlight;
+
+  const promise = (async () => {
+    const fresh = await callWorldMarketLlm(agent, market, entries);
+    if (fresh) {
+      await writeCachedAssessment(market.id, fresh);
+    }
+    return fresh;
+  })();
+
+  inFlightAssessments.set(market.id, promise);
+  try {
+    return await promise;
+  } finally {
+    inFlightAssessments.delete(market.id);
+  }
+}
+
 export async function computeWorldMarketPrediction(
   agent: AgentConfigData,
   market: MarketWithEntries,
@@ -173,6 +346,14 @@ export async function computeWorldMarketPrediction(
   });
 
   if (!entries.length) return abstain("low_edge");
+
+  // SAFETY GATE: kill switch. When the env var is off (the safe default after
+  // the 2026-05-01 cost incident), no agent ever touches OpenAI for World
+  // Markets. They simply abstain with a domain reason so the per-agent
+  // re-eval gate fires on the next sweep once the env var is flipped on.
+  if (!WORLD_MARKETS_LLM_ENABLED) {
+    return abstain("domain");
+  }
 
   // Step 1: Domain filter (relaxed for world markets to increase coverage)
   const marketCategory = market.category?.toLowerCase() ?? "";
@@ -192,66 +373,12 @@ export async function computeWorldMarketPrediction(
     : agent.activityRate;
   if (rng.nextFloat() > effectiveActivityRate) return abstain("activity_gate");
 
-  // Step 3: Call GPT-5.4 with web search
-  const systemPrompt = buildSystemPrompt(agent);
-  const userPrompt = buildUserPrompt(market, entries);
-
-  let assessment: PredictionAssessment;
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
-
-    const response = await openai.responses.create(
-      {
-        model: getAiModel("worldMarkets"),
-        tools: [{ type: "web_search" as any }],
-        max_output_tokens: 1000,
-        instructions: systemPrompt,
-        input: userPrompt,
-      } as any,
-      { signal: controller.signal }
-    );
-
-    clearTimeout(timeout);
-
-    const outputText = extractOutputText(response);
-    if (!outputText) {
-      const outputTypes = Array.isArray((response as any).output)
-        ? (response as any).output.map((item: any) => item.type).join(", ")
-        : "no output array";
-      log(`[WorldEngine] Empty response for agent=${agent.displayName} market=${market.id.slice(0, 8)} — output items: [${outputTypes}]`);
-      return abstain("api_error");
-    }
-
-    // Strip markdown code fences the model may wrap around the JSON
-    let jsonText = outputText.trim();
-    if (jsonText.startsWith("```")) {
-      jsonText = jsonText.replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "");
-    }
-
-    let parsed: any;
-    try {
-      parsed = JSON.parse(jsonText);
-    } catch (parseErr) {
-      log(`[WorldEngine] JSON parse failed for agent=${agent.displayName} market=${market.id.slice(0, 8)} — raw: ${jsonText.slice(0, 200)}`);
-      return abstain("api_error");
-    }
-
-    if (
-      !parsed ||
-      typeof parsed.decision !== "string" ||
-      !["bet", "abstain"].includes(parsed.decision) ||
-      typeof parsed.confidence !== "number" ||
-      typeof parsed.briefReasoning !== "string"
-    ) {
-      log(`[WorldEngine] Invalid schema for agent=${agent.displayName} market=${market.id.slice(0, 8)} — keys: ${Object.keys(parsed).join(", ")}`);
-      return abstain("api_error");
-    }
-
-    assessment = parsed as PredictionAssessment;
-  } catch (err: any) {
-    const msg = err instanceof Error ? err.message : String(err);
-    log(`[WorldEngine] API error for agent=${agent.displayName} market=${market.id.slice(0, 8)}: ${msg}`);
+  // Step 3: Get a market assessment — preferring cache. This is the cost
+  // hot-spot. Pre-cache: every agent fires its own web_search call (~$0.25
+  // each, 56 agents per market = ~$14/market). Post-cache: ONE call per
+  // market per 24h, shared by all 56 agents (~$0.25/market). 56x savings.
+  const assessment = await getOrCreateAssessment(agent, market, entries);
+  if (!assessment) {
     return abstain("api_error");
   }
 

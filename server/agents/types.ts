@@ -32,6 +32,7 @@ export interface MarketWithEntries {
   endAt: Date | null;
   teaser?: string | null;
   resolutionCriteria?: string[] | null;
+  metadata?: unknown;
   entries: MarketEntryData[];
 }
 

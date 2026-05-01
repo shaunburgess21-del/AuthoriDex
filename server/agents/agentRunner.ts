@@ -194,6 +194,7 @@ async function runAgentBatchOnce(): Promise<{
       endAt: predictionMarkets.endAt,
       teaser: predictionMarkets.teaser,
       resolutionCriteria: predictionMarkets.resolutionCriteria,
+      metadata: predictionMarkets.metadata,
     })
     .from(predictionMarkets)
     .where(

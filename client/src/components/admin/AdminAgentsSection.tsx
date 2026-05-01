@@ -81,6 +81,14 @@ interface PendingActionRow {
   stakeAmount: number;
 }
 
+interface CostSafetyInfo {
+  world_markets_llm_enabled: boolean;
+  world_market_boost_enabled: boolean;
+  cached_world_assessments: number;
+  open_world_markets: number;
+  assessment_ttl_hours: number;
+}
+
 interface AgentStatusResponse {
   agents: AgentRow[];
   cohort: CohortStats;
@@ -92,6 +100,7 @@ interface AgentStatusResponse {
   comments: { comments_24h: number; comments_7d: number };
   ratings?: { ratings_24h: number; ratings_7d: number; avg_rating_7d: number | string };
   pool_realism: PoolRow[];
+  cost_safety?: CostSafetyInfo;
 }
 
 interface DryRunMarketPreview {
@@ -405,6 +414,90 @@ export function AdminAgentsSection() {
           )}
         </CardContent>
       </Card>
+
+      {/* Cost safety — World Market LLM kill switch & cache state */}
+      {status?.cost_safety && (
+        <Card
+          data-testid="card-agents-cost-safety"
+          className={
+            status.cost_safety.world_markets_llm_enabled
+              ? "border-amber-500/40"
+              : "border-emerald-500/40"
+          }
+        >
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Coins className="h-5 w-5 text-amber-500" />
+              OpenAI Cost Safety
+            </CardTitle>
+            <CardDescription>
+              World Markets used to fire one LLM web-search call per agent per market (~$0.25 each, ~$45 burned in 2 hours on 2026-05-01).
+              The kill switch below pauses all World Market LLM activity. When enabled, the per-market cache means only ONE call per market per {status.cost_safety.assessment_ttl_hours}h, shared by all {cohort?.active_v2_agents ?? 0} V2 agents.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="rounded-lg border bg-muted/30 p-3">
+                <div className="text-xs text-muted-foreground">World Market LLM</div>
+                <div
+                  className={`text-lg font-semibold ${
+                    status.cost_safety.world_markets_llm_enabled
+                      ? "text-amber-500"
+                      : "text-emerald-500"
+                  }`}
+                >
+                  {status.cost_safety.world_markets_llm_enabled ? "ENABLED" : "DISABLED"}
+                </div>
+                <div className="mt-1 text-[11px] text-muted-foreground">
+                  env: <code>WORLD_MARKETS_LLM_ENABLED</code>
+                </div>
+              </div>
+              <div className="rounded-lg border bg-muted/30 p-3">
+                <div className="text-xs text-muted-foreground">Boost mode</div>
+                <div
+                  className={`text-lg font-semibold ${
+                    status.cost_safety.world_market_boost_enabled ? "text-amber-500" : "text-emerald-500"
+                  }`}
+                >
+                  {status.cost_safety.world_market_boost_enabled ? "ON (3x volume)" : "OFF"}
+                </div>
+                <div className="mt-1 text-[11px] text-muted-foreground">
+                  env: <code>WORLD_MARKET_BOOST_ENABLED</code>
+                </div>
+              </div>
+              <div className="rounded-lg border bg-muted/30 p-3">
+                <div className="text-xs text-muted-foreground">Cached assessments</div>
+                <div className="text-lg font-semibold">
+                  {status.cost_safety.cached_world_assessments} / {status.cost_safety.open_world_markets}
+                </div>
+                <div className="mt-1 text-[11px] text-muted-foreground">
+                  open world markets covered by cache
+                </div>
+              </div>
+              <div className="rounded-lg border bg-muted/30 p-3">
+                <div className="text-xs text-muted-foreground">Cache TTL</div>
+                <div className="text-lg font-semibold">{status.cost_safety.assessment_ttl_hours}h</div>
+                <div className="mt-1 text-[11px] text-muted-foreground">
+                  per-market shared analysis
+                </div>
+              </div>
+            </div>
+            {!status.cost_safety.world_markets_llm_enabled && (
+              <div className="mt-3 rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-700 dark:text-emerald-300">
+                Safe mode: agents are abstaining on World Markets without touching OpenAI. Native markets (Jackpot, H2H, UpDown, Gainer) are unaffected and still use the deterministic engine (no LLM cost).
+              </div>
+            )}
+            {status.cost_safety.world_markets_llm_enabled && (
+              <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
+                LLM mode active. Expected spend: ~$0.25 per uncovered World Market per {status.cost_safety.assessment_ttl_hours}h. Estimated cost for next sweep: ~$
+                {(
+                  Math.max(0, status.cost_safety.open_world_markets - status.cost_safety.cached_world_assessments) * 0.25
+                ).toFixed(2)}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Action buttons */}
       <Card data-testid="card-agents-actions">

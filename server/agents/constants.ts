@@ -57,9 +57,29 @@ export const AGENT_RUNNER_STARTUP_DELAY_MS = 3 * 60 * 1000;
 export const MARKETS_PER_SWEEP = 15;
 export const WORLD_MARKET_RESERVE_PER_SWEEP = 10;
 
-// World Market boost mode (toggle via env WORLD_MARKET_BOOST_ENABLED)
-export const WORLD_MARKET_BOOST_ENABLED = process.env.WORLD_MARKET_BOOST_ENABLED !== "false";
+// World Market boost mode (toggle via env WORLD_MARKET_BOOST_ENABLED).
+// SAFETY: Default flipped to OFF (2026-05-01). When enabled, drops the
+// per-market skip rate dramatically and 1.5x's the activity gate, which
+// multiplies LLM call volume ~3x. Only re-enable once per-market caching
+// has been proven stable in production.
+export const WORLD_MARKET_BOOST_ENABLED = process.env.WORLD_MARKET_BOOST_ENABLED === "true";
 export const WORLD_MARKET_ACTIVITY_MULTIPLIER = 1.5;
+
+// HARD KILL SWITCH for World Market LLM calls (web_search Responses API).
+// Each call costs ~$0.20-0.40 (web search + ~1k output tokens). With 56 agents
+// independently evaluating each market, a single sweep can burn $40+. When
+// false, agents abstain from World Markets without ever touching OpenAI.
+//
+// Set WORLD_MARKETS_LLM_ENABLED=true ONLY after:
+//   1. Topping up the OpenAI billing balance, AND
+//   2. Confirming the per-market cache (predictionMarkets.metadata.worldAssessment)
+//      is in place so the LLM only runs ONCE per market per TTL.
+export const WORLD_MARKETS_LLM_ENABLED = process.env.WORLD_MARKETS_LLM_ENABLED === "true";
+
+// TTL for cached per-market LLM assessments. Within this window, all agents
+// share the same web-search-backed analysis instead of each calling the LLM.
+// 24h is plenty for slow-moving real-world markets and cuts spend ~50x.
+export const WORLD_MARKET_ASSESSMENT_TTL_MS = 24 * 60 * 60 * 1000;
 
 // Conviction re-bets: allow agents to bet again on markets with significant score movement
 export const CONVICTION_SCORE_THRESHOLD_PCT = 0.05; // 5% move from baseline
