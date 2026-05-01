@@ -86,7 +86,18 @@ interface CostSafetyInfo {
   world_market_boost_enabled: boolean;
   cached_world_assessments: number;
   open_world_markets: number;
-  assessment_ttl_hours: number;
+  ttl_tiers?: {
+    final_hours: number;
+    near_hours: number;
+    medium_hours: number;
+    long_hours: number;
+  };
+  markets_by_tier?: {
+    final: number;
+    near: number;
+    medium: number;
+    long: number;
+  };
 }
 
 interface AgentStatusResponse {
@@ -432,7 +443,7 @@ export function AdminAgentsSection() {
             </CardTitle>
             <CardDescription>
               World Markets used to fire one LLM web-search call per agent per market (~$0.25 each, ~$45 burned in 2 hours on 2026-05-01).
-              The kill switch below pauses all World Market LLM activity. When enabled, the per-market cache means only ONE call per market per {status.cost_safety.assessment_ttl_hours}h, shared by all {cohort?.active_v2_agents ?? 0} V2 agents.
+              The kill switch below pauses all World Market LLM activity. When enabled, the per-market cache means only ONE call per market per refresh window (shared by all {cohort?.active_v2_agents ?? 0} V2 agents). The refresh window is adaptive — short for markets resolving in days, long for year-out markets.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -475,13 +486,30 @@ export function AdminAgentsSection() {
                 </div>
               </div>
               <div className="rounded-lg border bg-muted/30 p-3">
-                <div className="text-xs text-muted-foreground">Cache TTL</div>
-                <div className="text-lg font-semibold">{status.cost_safety.assessment_ttl_hours}h</div>
-                <div className="mt-1 text-[11px] text-muted-foreground">
-                  per-market shared analysis
-                </div>
+                <div className="text-xs text-muted-foreground">Adaptive refresh windows</div>
+                {status.cost_safety.ttl_tiers ? (
+                  <div className="mt-1 space-y-0.5 text-[11px] text-muted-foreground">
+                    <div>&lt;3d to resolve: <span className="text-foreground">{status.cost_safety.ttl_tiers.final_hours}h</span></div>
+                    <div>3-14d: <span className="text-foreground">{status.cost_safety.ttl_tiers.near_hours}h</span></div>
+                    <div>14-60d: <span className="text-foreground">{status.cost_safety.ttl_tiers.medium_hours / 24}d</span></div>
+                    <div>&gt;60d: <span className="text-foreground">{status.cost_safety.ttl_tiers.long_hours / 24}d</span></div>
+                  </div>
+                ) : (
+                  <div className="text-lg font-semibold">—</div>
+                )}
               </div>
             </div>
+            {status.cost_safety.markets_by_tier && (
+              <div className="mt-3 rounded-md border bg-muted/20 p-3 text-xs">
+                <div className="mb-1 text-muted-foreground">Open world markets by resolution window:</div>
+                <div className="flex flex-wrap gap-3 text-foreground">
+                  <span>Final stretch (&lt;3d): <span className="font-semibold">{status.cost_safety.markets_by_tier.final}</span></span>
+                  <span>Near (3-14d): <span className="font-semibold">{status.cost_safety.markets_by_tier.near}</span></span>
+                  <span>Medium (14-60d): <span className="font-semibold">{status.cost_safety.markets_by_tier.medium}</span></span>
+                  <span>Long (&gt;60d): <span className="font-semibold">{status.cost_safety.markets_by_tier.long}</span></span>
+                </div>
+              </div>
+            )}
             {!status.cost_safety.world_markets_llm_enabled && (
               <div className="mt-3 rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-700 dark:text-emerald-300">
                 Safe mode: agents are abstaining on World Markets without touching OpenAI. Native markets (Jackpot, H2H, UpDown, Gainer) are unaffected and still use the deterministic engine (no LLM cost).
@@ -489,7 +517,7 @@ export function AdminAgentsSection() {
             )}
             {status.cost_safety.world_markets_llm_enabled && (
               <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
-                LLM mode active. Expected spend: ~$0.25 per uncovered World Market per {status.cost_safety.assessment_ttl_hours}h. Estimated cost for next sweep: ~$
+                LLM mode active. Expected spend: ~$0.25 per uncovered World Market per refresh window. Estimated cost for next sweep: ~$
                 {(
                   Math.max(0, status.cost_safety.open_world_markets - status.cost_safety.cached_world_assessments) * 0.25
                 ).toFixed(2)}

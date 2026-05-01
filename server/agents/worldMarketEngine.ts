@@ -20,7 +20,10 @@ import {
   WORLD_MARKET_BOOST_ENABLED,
   WORLD_MARKET_ACTIVITY_MULTIPLIER,
   WORLD_MARKETS_LLM_ENABLED,
-  WORLD_MARKET_ASSESSMENT_TTL_MS,
+  WORLD_MARKET_ASSESSMENT_TTL_FINAL_MS,
+  WORLD_MARKET_ASSESSMENT_TTL_NEAR_MS,
+  WORLD_MARKET_ASSESSMENT_TTL_MEDIUM_MS,
+  WORLD_MARKET_ASSESSMENT_TTL_LONG_MS,
 } from "./constants";
 import { getAiModel } from "../config/ai-models";
 
@@ -42,7 +45,26 @@ interface CachedAssessment {
   cachedAt: string; // ISO timestamp
 }
 
-function readCachedAssessment(marketMetadata: unknown): PredictionAssessment | null {
+/**
+ * Adaptive TTL: how long the cached assessment is valid for THIS market.
+ * Markets nearing resolution refresh more often (news matters); long-horizon
+ * markets refresh rarely (noise dominates). See `constants.ts` for tier
+ * thresholds and the cost rationale.
+ */
+export function getAssessmentTtlMs(market: { endAt?: Date | null }): number {
+  if (!market.endAt) return WORLD_MARKET_ASSESSMENT_TTL_LONG_MS;
+  const daysToResolution =
+    (market.endAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000);
+  if (daysToResolution < 3) return WORLD_MARKET_ASSESSMENT_TTL_FINAL_MS;
+  if (daysToResolution < 14) return WORLD_MARKET_ASSESSMENT_TTL_NEAR_MS;
+  if (daysToResolution < 60) return WORLD_MARKET_ASSESSMENT_TTL_MEDIUM_MS;
+  return WORLD_MARKET_ASSESSMENT_TTL_LONG_MS;
+}
+
+function readCachedAssessment(
+  market: { metadata?: unknown; endAt?: Date | null },
+): PredictionAssessment | null {
+  const marketMetadata = market.metadata;
   if (!marketMetadata || typeof marketMetadata !== "object") return null;
   const cached = (marketMetadata as Record<string, unknown>).worldAssessment as
     | CachedAssessment
@@ -51,7 +73,8 @@ function readCachedAssessment(marketMetadata: unknown): PredictionAssessment | n
   if (!cached.cachedAt || !cached.assessment) return null;
   const age = Date.now() - new Date(cached.cachedAt).getTime();
   if (!Number.isFinite(age) || age < 0) return null;
-  if (age > WORLD_MARKET_ASSESSMENT_TTL_MS) return null;
+  const ttl = getAssessmentTtlMs(market);
+  if (age > ttl) return null;
   return cached.assessment;
 }
 
@@ -309,7 +332,7 @@ async function getOrCreateAssessment(
   market: MarketWithEntries,
   entries: MarketEntryData[],
 ): Promise<PredictionAssessment | null> {
-  const cached = readCachedAssessment(market.metadata);
+  const cached = readCachedAssessment(market);
   if (cached) return cached;
 
   const inFlight = inFlightAssessments.get(market.id);

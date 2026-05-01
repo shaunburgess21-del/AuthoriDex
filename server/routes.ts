@@ -17241,32 +17241,62 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       `);
 
       // Cost-safety surface: surface the World Market kill switch + cache hit
-      // rate so the admin can see whether they're about to burn money. The
-      // cache row count is a proxy for how many distinct LLM calls have been
-      // made in the last 24h (one per market).
+      // rate so the admin can see whether they're about to burn money. With
+      // the adaptive TTL (final/near/medium/long tiers based on days-to-
+      // resolution), each market has its own validity window. We compute
+      // the "effective cached" count per-row in SQL so the dashboard isn't
+      // misleading.
       const {
         WORLD_MARKETS_LLM_ENABLED,
         WORLD_MARKET_BOOST_ENABLED,
-        WORLD_MARKET_ASSESSMENT_TTL_MS,
+        WORLD_MARKET_ASSESSMENT_TTL_FINAL_MS,
+        WORLD_MARKET_ASSESSMENT_TTL_NEAR_MS,
+        WORLD_MARKET_ASSESSMENT_TTL_MEDIUM_MS,
+        WORLD_MARKET_ASSESSMENT_TTL_LONG_MS,
       } = await import("./agents/constants");
+      const ttlFinalSec = WORLD_MARKET_ASSESSMENT_TTL_FINAL_MS / 1000;
+      const ttlNearSec = WORLD_MARKET_ASSESSMENT_TTL_NEAR_MS / 1000;
+      const ttlMediumSec = WORLD_MARKET_ASSESSMENT_TTL_MEDIUM_MS / 1000;
+      const ttlLongSec = WORLD_MARKET_ASSESSMENT_TTL_LONG_MS / 1000;
+
       const cachedAssessmentRow = await db.execute(sql`
         SELECT COUNT(*)::int AS cached
         FROM prediction_markets pm
-        WHERE pm.metadata ? 'worldAssessment'
+        WHERE pm.market_type = 'community'
+          AND pm.status = 'OPEN'
+          AND pm.visibility = 'live'
+          AND pm.metadata ? 'worldAssessment'
           AND (pm.metadata->'worldAssessment'->>'cachedAt')::timestamptz
-              > NOW() - (${WORLD_MARKET_ASSESSMENT_TTL_MS / 1000} || ' seconds')::interval
+              > NOW() - (
+                CASE
+                  WHEN EXTRACT(EPOCH FROM (pm.end_at - NOW())) / 86400 < 3
+                    THEN ${ttlFinalSec}
+                  WHEN EXTRACT(EPOCH FROM (pm.end_at - NOW())) / 86400 < 14
+                    THEN ${ttlNearSec}
+                  WHEN EXTRACT(EPOCH FROM (pm.end_at - NOW())) / 86400 < 60
+                    THEN ${ttlMediumSec}
+                  ELSE ${ttlLongSec}
+                END || ' seconds'
+              )::interval
       `);
       const cachedAssessments = Number(
         (cachedAssessmentRow.rows[0] as { cached?: number } | undefined)?.cached ?? 0,
       );
-      const openWorldMarketsRow = await db.execute(sql`
-        SELECT COUNT(*)::int AS total
+
+      const openWorldMarketsByTierRow = await db.execute(sql`
+        SELECT
+          COUNT(*)::int AS total,
+          COUNT(*) FILTER (WHERE EXTRACT(EPOCH FROM (end_at - NOW())) / 86400 < 3)::int AS final_count,
+          COUNT(*) FILTER (WHERE EXTRACT(EPOCH FROM (end_at - NOW())) / 86400 >= 3 AND EXTRACT(EPOCH FROM (end_at - NOW())) / 86400 < 14)::int AS near_count,
+          COUNT(*) FILTER (WHERE EXTRACT(EPOCH FROM (end_at - NOW())) / 86400 >= 14 AND EXTRACT(EPOCH FROM (end_at - NOW())) / 86400 < 60)::int AS medium_count,
+          COUNT(*) FILTER (WHERE EXTRACT(EPOCH FROM (end_at - NOW())) / 86400 >= 60)::int AS long_count
         FROM prediction_markets
         WHERE market_type = 'community' AND status = 'OPEN' AND visibility = 'live'
       `);
-      const openWorldMarkets = Number(
-        (openWorldMarketsRow.rows[0] as { total?: number } | undefined)?.total ?? 0,
-      );
+      const openWorldMarketsByTier = (openWorldMarketsByTierRow.rows[0] as
+        | { total?: number; final_count?: number; near_count?: number; medium_count?: number; long_count?: number }
+        | undefined) ?? {};
+      const openWorldMarkets = Number(openWorldMarketsByTier.total ?? 0);
 
       res.json({
         agents,
@@ -17289,7 +17319,19 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           world_market_boost_enabled: WORLD_MARKET_BOOST_ENABLED,
           cached_world_assessments: cachedAssessments,
           open_world_markets: openWorldMarkets,
-          assessment_ttl_hours: WORLD_MARKET_ASSESSMENT_TTL_MS / (60 * 60 * 1000),
+          // Adaptive TTL: refresh window depends on days-to-resolution.
+          ttl_tiers: {
+            final_hours: WORLD_MARKET_ASSESSMENT_TTL_FINAL_MS / (60 * 60 * 1000),
+            near_hours: WORLD_MARKET_ASSESSMENT_TTL_NEAR_MS / (60 * 60 * 1000),
+            medium_hours: WORLD_MARKET_ASSESSMENT_TTL_MEDIUM_MS / (60 * 60 * 1000),
+            long_hours: WORLD_MARKET_ASSESSMENT_TTL_LONG_MS / (60 * 60 * 1000),
+          },
+          markets_by_tier: {
+            final: Number(openWorldMarketsByTier.final_count ?? 0),
+            near: Number(openWorldMarketsByTier.near_count ?? 0),
+            medium: Number(openWorldMarketsByTier.medium_count ?? 0),
+            long: Number(openWorldMarketsByTier.long_count ?? 0),
+          },
         },
       });
     } catch (err: any) {

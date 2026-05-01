@@ -76,10 +76,30 @@ export const WORLD_MARKET_ACTIVITY_MULTIPLIER = 1.5;
 //      is in place so the LLM only runs ONCE per market per TTL.
 export const WORLD_MARKETS_LLM_ENABLED = process.env.WORLD_MARKETS_LLM_ENABLED === "true";
 
-// TTL for cached per-market LLM assessments. Within this window, all agents
-// share the same web-search-backed analysis instead of each calling the LLM.
-// 24h is plenty for slow-moving real-world markets and cuts spend ~50x.
-export const WORLD_MARKET_ASSESSMENT_TTL_MS = 24 * 60 * 60 * 1000;
+// TTL for cached per-market LLM assessments — adaptive by time-to-resolution.
+//
+// Most world markets resolve months out (e.g. "Will Tesla close above $400 on
+// Dec 31?") and don't materially change day-to-day; refreshing those daily
+// burns money on noise. But markets in their final stretch (e.g. a verdict
+// expected this week) ARE news-sensitive and need a tighter cache.
+//
+// Tiers (read by `getAssessmentTtlMs` in worldMarketEngine):
+//   • < 3 days to resolve  → 6h   (final stretch, news swings outcomes)
+//   • 3-14 days            → 24h  (this week's news still matters)
+//   • 14-60 days           → 3d   (medium horizon, occasional refresh)
+//   • > 60 days OR unknown → 7d   (long horizon — noise > signal)
+//
+// Versus a flat 24h, the typical world-market mix (most are 1-12 months out)
+// drops average refresh frequency ~5-7x, with no loss of news responsiveness
+// where it actually matters.
+export const WORLD_MARKET_ASSESSMENT_TTL_FINAL_MS = 6 * 60 * 60 * 1000;
+export const WORLD_MARKET_ASSESSMENT_TTL_NEAR_MS = 24 * 60 * 60 * 1000;
+export const WORLD_MARKET_ASSESSMENT_TTL_MEDIUM_MS = 3 * 24 * 60 * 60 * 1000;
+export const WORLD_MARKET_ASSESSMENT_TTL_LONG_MS = 7 * 24 * 60 * 60 * 1000;
+/** Effective ceiling — used by admin diagnostics & cache cleanup. */
+export const WORLD_MARKET_ASSESSMENT_TTL_MAX_MS = WORLD_MARKET_ASSESSMENT_TTL_LONG_MS;
+/** @deprecated Kept for backwards compatibility with admin status JSON. */
+export const WORLD_MARKET_ASSESSMENT_TTL_MS = WORLD_MARKET_ASSESSMENT_TTL_NEAR_MS;
 
 // Conviction re-bets: allow agents to bet again on markets with significant score movement
 export const CONVICTION_SCORE_THRESHOLD_PCT = 0.05; // 5% move from baseline
