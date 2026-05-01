@@ -133,7 +133,7 @@ export function CardComments({
     <>
       <div className={`${variant === "inline" ? "flex flex-col h-full" : "mb-6 px-1"}`} data-testid="section-comments">
         <CommentSortHeader
-          count={thread.comments.length}
+          count={thread.visibleCount}
           countLabel="Discussion"
           variant={variant}
           sort={thread.sort}

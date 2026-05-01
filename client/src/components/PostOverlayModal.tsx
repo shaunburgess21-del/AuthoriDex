@@ -353,7 +353,7 @@ function PostOverlayModalContent({
 
                 <div className="flex items-center gap-1 ml-4 text-muted-foreground">
                   <MessageCircle className="h-5 w-5" />
-                  <span className="text-sm">{thread.comments.length}</span>
+                  <span className="text-sm">{thread.visibleCount}</span>
                 </div>
               </div>
             </div>
@@ -363,7 +363,7 @@ function PostOverlayModalContent({
         <div className="border-t border-border">
           <div className="p-4">
             <CommentSortHeader
-              count={thread.comments.length}
+              count={thread.visibleCount}
               countLabel="Replies"
               variant="inline"
               sort={thread.sort}

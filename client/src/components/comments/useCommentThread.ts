@@ -7,6 +7,8 @@ export type CommentSort = "top" | "newest";
 
 export interface UseCommentThreadResult {
   comments: CommentItem[];
+  /** Count of publicly visible comments (excludes soft-deleted rows). */
+  visibleCount: number;
   threaded: ThreadedComment[];
   isLoading: boolean;
   sort: CommentSort;
@@ -68,8 +70,14 @@ export function useCommentThread(adapter: CommentAdapter): UseCommentThreadResul
 
   const threaded = useMemo<ThreadedComment[]>(() => {
     if (!comments.length) return [];
-    const topLevel = comments.filter((c) => !c.parentId);
-    const replies = comments.filter((c) => !!c.parentId);
+    // Hide deleted comments entirely from the public view. Admin/moderation
+    // surfaces should fetch from a different endpoint if they need them.
+    // Edge case: a deleted top-level comment with live replies will hide
+    // the parent and its orphaned children — the user explicitly preferred
+    // no "[deleted]" tombstones over preserving orphan replies.
+    const live = comments.filter((c) => !c.deletedAt);
+    const topLevel = live.filter((c) => !c.parentId);
+    const replies = live.filter((c) => !!c.parentId);
 
     if (sort === "top") {
       topLevel.sort((a, b) => (b.upvotes - b.downvotes) - (a.upvotes - a.downvotes));
@@ -92,6 +100,13 @@ export function useCommentThread(adapter: CommentAdapter): UseCommentThreadResul
       replies: replyMap.get(parent.id) || [],
     }));
   }, [comments, sort]);
+
+  // Count of publicly visible comments (top-level + live replies). Used by
+  // the "Discussion (N)" header so it stays in sync with what the user
+  // actually sees, instead of including deleted rows.
+  const visibleCount = useMemo(() => {
+    return threaded.reduce((acc, t) => acc + 1 + t.replies.length, 0);
+  }, [threaded]);
 
   const invalidateAll = useCallback(() => {
     queryClient.invalidateQueries({ queryKey });
@@ -289,6 +304,7 @@ export function useCommentThread(adapter: CommentAdapter): UseCommentThreadResul
 
   return {
     comments,
+    visibleCount,
     threaded,
     isLoading,
     sort,

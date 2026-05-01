@@ -233,6 +233,7 @@ function buildSystemPrompt(
     "- Do not wrap your comment in quotes.",
     "- Do not prefix the comment with your username, display name, or any 'name:' label.",
     "- Do not start with 'I think' or 'In my opinion'.",
+    "- Do NOT open the comment by announcing your vote. Words like 'Support.', 'Support —', 'Oppose:', 'Neutral.', 'Approve:', 'Disapprove —', 'Yes,', 'No,' as the FIRST word of the comment are forbidden. The UI already shows your vote with a coloured badge next to your name. Just start the comment with your actual take, the way a human would on X (e.g. 'Iron Mike was a freak athlete, but Ali…' instead of 'Support. Iron Mike was…').",
     "- Sound like a human posting on X: contractions, casual flow, occasional sentence fragments are fine.",
     "- A touch of dry wit or humour is welcome when it fits the topic, but never forced and never at someone's expense.",
     "- Reference the ACTUAL subject matter (the people, the topic, the question). No generic platitudes.",
@@ -415,6 +416,21 @@ function sanitise(
   }
   for (const pattern of namePatterns) {
     text = text.replace(pattern, "");
+  }
+
+  // Strip a leading vote-label opener like "Support.", "Oppose —", "Neutral:",
+  // "Approve,", "Disapprove —", "Yes — ", "No, ". The vote already appears
+  // as a coloured badge next to the username on the UI, so opening with the
+  // label reads as bot-like (real users just start with their take). We only
+  // strip when the label is followed by punctuation or a dash so we don't
+  // eat genuine sentences that happen to begin with "Support" / "No".
+  const VOTE_OPENER = /^(?:support|oppose|neutral|approve|disapprove|yes|no|agree|disagree)\b\s*(?:[:.,!?\-—–]+|\u2014)\s*/i;
+  // Apply twice so combined openers like "Support — Yeah, ..." get fully cleared.
+  text = text.replace(VOTE_OPENER, "").replace(VOTE_OPENER, "");
+
+  // Capitalise the new first letter if we just chopped a label off the front.
+  if (text.length > 0 && /[a-z]/.test(text[0])) {
+    text = text[0].toUpperCase() + text.slice(1);
   }
 
   // Strip simple markdown emphasis (**bold**, *italic*, __bold__, _italic_,
