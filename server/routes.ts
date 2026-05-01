@@ -17283,6 +17283,99 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
     }
   });
 
+  // POST /api/admin/agents/:agentId/rename - Change an agent's public-facing
+  // username (and display name). Updates BOTH agent_configs and profiles in
+  // a single transaction so the leaderboard, comments, town square, and
+  // admin tools all show the new name immediately. The displayName defaults
+  // to the new username unless explicitly provided.
+  app.post("/api/admin/agents/:agentId/rename", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { agentConfigs } = await import("@shared/schema");
+      const { agentId } = req.params;
+      const rawUsername = typeof req.body?.username === "string" ? req.body.username.trim() : "";
+      const rawDisplayName = typeof req.body?.displayName === "string" ? req.body.displayName.trim() : "";
+
+      // Username rules: 3-30 chars, alphanumeric + underscore only. Mirrors
+      // what real users can register — keeps agents visually indistinguishable
+      // from humans on the public surfaces.
+      if (!/^[A-Za-z0-9_]{3,30}$/.test(rawUsername)) {
+        return sendBadRequest(
+          res,
+          "Username must be 3-30 chars, letters/numbers/underscore only.",
+        );
+      }
+      const newUsername = rawUsername;
+      const newDisplayName = rawDisplayName.length > 0 ? rawDisplayName : rawUsername;
+
+      const [agent] = await db
+        .select({
+          id: agentConfigs.id,
+          userId: agentConfigs.userId,
+          username: agentConfigs.username,
+          displayName: agentConfigs.displayName,
+        })
+        .from(agentConfigs)
+        .where(eq(agentConfigs.id, agentId))
+        .limit(1);
+
+      if (!agent) {
+        return res.status(404).json({ error: "Agent not found" });
+      }
+
+      // No-op short-circuit so callers can blindly resubmit without 409s.
+      if (agent.username === newUsername && agent.displayName === newDisplayName) {
+        return res.json({ ok: true, unchanged: true, agent });
+      }
+
+      // Uniqueness pre-check across BOTH tables. The DB unique constraints
+      // would catch this on insert/update too, but a clear 409 is friendlier
+      // than a generic Postgres error string.
+      const conflictingProfile = await db
+        .select({ id: profiles.id })
+        .from(profiles)
+        .where(and(eq(profiles.username, newUsername), sql`${profiles.id} != ${agent.userId}`))
+        .limit(1);
+      if (conflictingProfile.length > 0) {
+        return res.status(409).json({ error: "Username is already taken." });
+      }
+      const conflictingAgent = await db
+        .select({ id: agentConfigs.id })
+        .from(agentConfigs)
+        .where(and(eq(agentConfigs.username, newUsername), sql`${agentConfigs.id} != ${agentId}`))
+        .limit(1);
+      if (conflictingAgent.length > 0) {
+        return res.status(409).json({ error: "Username is already taken." });
+      }
+
+      const now = new Date();
+      await db.transaction(async (tx) => {
+        await tx
+          .update(agentConfigs)
+          .set({ username: newUsername, displayName: newDisplayName, updatedAt: now })
+          .where(eq(agentConfigs.id, agentId));
+        await tx
+          .update(profiles)
+          .set({ username: newUsername })
+          .where(eq(profiles.id, agent.userId));
+      });
+
+      res.json({
+        ok: true,
+        agent: {
+          id: agent.id,
+          userId: agent.userId,
+          previousUsername: agent.username,
+          previousDisplayName: agent.displayName,
+          username: newUsername,
+          displayName: newDisplayName,
+        },
+      });
+    } catch (err: any) {
+      console.error("[AgentAdmin] Rename failed:", err);
+      res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
+    }
+  });
+
   app.post("/api/admin/agents/clear-world-abstained", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { scheduledAgentActions } = await import("@shared/schema");

@@ -27,6 +27,7 @@ import {
   FlaskConical,
   Loader2,
   Megaphone,
+  Pencil,
   Play,
   ThumbsUp,
   RefreshCw,
@@ -367,6 +368,35 @@ export function AdminAgentsSection() {
     onError: (err: Error) => toast.error("Clear failed", { description: err.message }),
     onSettled: () => setPendingClearAgentId(null),
   });
+
+  const renameMutation = useMutation({
+    mutationFn: async ({ agentId, username }: { agentId: string; username: string }) => {
+      const res = await apiRequest("POST", `/api/admin/agents/${agentId}/rename`, { username });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      if (data?.unchanged) {
+        toast("No change", { description: "That's the current name." });
+        return;
+      }
+      toast("Agent renamed", {
+        description: `${data?.agent?.previousUsername ?? "Agent"} \u2192 @${data?.agent?.username}`,
+      });
+      refresh();
+    },
+    onError: (err: Error) => toast.error("Rename failed", { description: err.message }),
+  });
+
+  const handleRenameAgent = (agent: { id: string; username: string }) => {
+    const next = window.prompt(
+      `Rename @${agent.username}\n\nNew username (3-30 chars, letters/numbers/underscore):`,
+      agent.username,
+    );
+    if (next == null) return;
+    const trimmed = next.trim();
+    if (!trimmed || trimmed === agent.username) return;
+    renameMutation.mutate({ agentId: agent.id, username: trimmed });
+  };
 
   const cohort = status?.cohort;
   const v2Agents = useMemo(() => {
@@ -831,7 +861,22 @@ export function AdminAgentsSection() {
                     const band = agent.simulationProfile?.personaBand;
                     return (
                       <TableRow key={agent.id} data-testid={`row-agent-${agent.username}`}>
-                        <TableCell className="font-medium">{agent.username}</TableCell>
+                        <TableCell className="font-medium">
+                          <div className="inline-flex items-center gap-1.5">
+                            <span>{agent.username}</span>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                              onClick={() => handleRenameAgent({ id: agent.id, username: agent.username })}
+                              disabled={renameMutation.isPending}
+                              title="Rename agent"
+                              data-testid={`button-rename-${agent.username}`}
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </TableCell>
                         <TableCell>
                           <Badge variant="outline" className={bandTone(band)}>
                             {band ?? "-"}
