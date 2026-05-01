@@ -1142,7 +1142,7 @@ function FilterChip({
 }
 
 const OVERLAY_SCROLL_PREFIX = "overlay_scroll_";
-type SnapOpenSource = "card-tap" | "browse-button";
+type SnapOpenSource = "card-tap" | "browse-button" | "header-icon";
 
 function saveOverlayScroll(name: string, scrollTop: number) {
   sessionStorage.setItem(OVERLAY_SCROLL_PREFIX + name, String(Math.round(scrollTop)));
@@ -1845,7 +1845,7 @@ export default function VotePage() {
     if (!isMobile) return;
     if (source === "browse-button") {
       if (!consumeCategoryPillBrowseIntent()) return;
-    } else if (isCategoryPillDrawerDismissSuppressed()) {
+    } else if (source !== "header-icon" && isCategoryPillDrawerDismissSuppressed()) {
       return;
     }
     savedSnapWindowScrollRef.current = window.scrollY;
@@ -2535,11 +2535,12 @@ export default function VotePage() {
                 </Button>
                 <Button
                   size="icon"
-                  onClick={() => openSuggestModal(() => setStartPollModalOpen(true))}
-                  className="rounded-full bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/25 dark:hover:bg-cyan-500/20 md:hidden"
-                  data-testid="button-suggest-poll-mobile"
+                  onClick={() => openSnapScroll("sentiment", displayTopics[0]?.id, "header-icon")}
+                  variant="ghost"
+                  className="text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300 md:hidden"
+                  data-testid="button-snap-sentiment"
                 >
-                  <Plus className="h-4 w-4" />
+                  <svg viewBox="0 0 16 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-8 w-[21px]"><path d="M1 5V2a1 1 0 0 1 1-1h3" /><path d="M11 1h3a1 1 0 0 1 1 1v3" /><path d="M15 15v3a1 1 0 0 1-1 1h-3" /><path d="M5 19H2a1 1 0 0 1-1-1v-3" /></svg>
                 </Button>
               </>
             }
@@ -2639,11 +2640,12 @@ export default function VotePage() {
                 </Button>
                 <Button
                   size="icon"
-                  onClick={() => openSuggestModal(() => setMatchupSuggestOpen(true))}
-                  className="rounded-full bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/25 dark:hover:bg-cyan-500/20 md:hidden"
-                  data-testid="button-suggest-matchup-mobile"
+                  onClick={() => openSnapScroll("matchups", displayMatchups[0]?.id, "header-icon")}
+                  variant="ghost"
+                  className="text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300 md:hidden"
+                  data-testid="button-snap-matchups"
                 >
-                  <Plus className="h-4 w-4" />
+                  <svg viewBox="0 0 16 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-8 w-[21px]"><path d="M1 5V2a1 1 0 0 1 1-1h3" /><path d="M11 1h3a1 1 0 0 1 1 1v3" /><path d="M15 15v3a1 1 0 0 1-1 1h-3" /><path d="M5 19H2a1 1 0 0 1-1-1v-3" /></svg>
                 </Button>
               </>
             }
@@ -2751,11 +2753,12 @@ export default function VotePage() {
                 </Button>
                 <Button
                   size="icon"
-                  onClick={() => openSuggestModal(() => setOpinionSuggestOpen(true))}
-                  className="rounded-full bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/25 dark:hover:bg-cyan-500/20 md:hidden"
-                  data-testid="button-suggest-opinion-mobile"
+                  onClick={() => openSnapScroll("opinion", displayOpinionPolls[0]?.id, "header-icon")}
+                  variant="ghost"
+                  className="text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300 md:hidden"
+                  data-testid="button-snap-opinion"
                 >
-                  <Plus className="h-4 w-4" />
+                  <svg viewBox="0 0 16 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-8 w-[21px]"><path d="M1 5V2a1 1 0 0 1 1-1h3" /><path d="M11 1h3a1 1 0 0 1 1 1v3" /><path d="M15 15v3a1 1 0 0 1-1 1h-3" /><path d="M5 19H2a1 1 0 0 1-1-1v-3" /></svg>
                 </Button>
               </>
             }
@@ -2830,22 +2833,33 @@ export default function VotePage() {
             accent="cyan"
             testId="section-header-value"
             actions={
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setRulesModalOpen("value")}
-                    className="text-cyan-600 dark:text-cyan-400"
-                    data-testid="button-rules-value"
-                  >
-                    <HelpCircle className="h-5 w-5" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent className="bg-popover dark:bg-slate-900/95 border-border dark:border-slate-700 text-popover-foreground dark:text-slate-200 text-xs">
-                  How it works
-                </TooltipContent>
-              </Tooltip>
+              <>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setRulesModalOpen("value")}
+                      className="text-cyan-600 dark:text-cyan-400"
+                      data-testid="button-rules-value"
+                    >
+                      <HelpCircle className="h-5 w-5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="bg-popover dark:bg-slate-900/95 border-border dark:border-slate-700 text-popover-foreground dark:text-slate-200 text-xs">
+                    How it works
+                  </TooltipContent>
+                </Tooltip>
+                <Button
+                  size="icon"
+                  onClick={() => openSnapScroll("value", filteredValueCelebrities[0]?.id, "header-icon")}
+                  variant="ghost"
+                  className="text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300 md:hidden"
+                  data-testid="button-snap-value"
+                >
+                  <svg viewBox="0 0 16 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-8 w-[21px]"><path d="M1 5V2a1 1 0 0 1 1-1h3" /><path d="M11 1h3a1 1 0 0 1 1 1v3" /><path d="M15 15v3a1 1 0 0 1-1 1h-3" /><path d="M5 19H2a1 1 0 0 1-1-1v-3" /></svg>
+                </Button>
+              </>
             }
           >
             <CategoryRowWithSearch
@@ -2967,11 +2981,12 @@ export default function VotePage() {
                 </Button>
                 <Button
                   size="icon"
-                  onClick={() => openSuggestModal(() => setInductionSuggestOpen(true))}
-                  className="rounded-full bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/25 dark:hover:bg-cyan-500/20 md:hidden"
-                  data-testid="button-suggest-induction-mobile"
+                  onClick={() => openSnapScroll("induction", filteredCandidates[0]?.id, "header-icon")}
+                  variant="ghost"
+                  className="text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300 md:hidden"
+                  data-testid="button-snap-induction"
                 >
-                  <Plus className="h-4 w-4" />
+                  <svg viewBox="0 0 16 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-8 w-[21px]"><path d="M1 5V2a1 1 0 0 1 1-1h3" /><path d="M11 1h3a1 1 0 0 1 1 1v3" /><path d="M15 15v3a1 1 0 0 1-1 1h-3" /><path d="M5 19H2a1 1 0 0 1-1-1v-3" /></svg>
                 </Button>
               </>
             }
@@ -3086,11 +3101,12 @@ export default function VotePage() {
                 </Button>
                 <Button
                   size="icon"
-                  onClick={() => openSuggestModal(() => setCurateSuggestOpen(true))}
-                  className="rounded-full bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/25 dark:hover:bg-cyan-500/20 md:hidden"
-                  data-testid="button-suggest-curate-mobile"
+                  onClick={() => openSnapScroll("curate", undefined, "header-icon")}
+                  variant="ghost"
+                  className="text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300 md:hidden"
+                  data-testid="button-snap-curate"
                 >
-                  <Plus className="h-4 w-4" />
+                  <svg viewBox="0 0 16 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-8 w-[21px]"><path d="M1 5V2a1 1 0 0 1 1-1h3" /><path d="M11 1h3a1 1 0 0 1 1 1v3" /><path d="M15 15v3a1 1 0 0 1-1 1h-3" /><path d="M5 19H2a1 1 0 0 1-1-1v-3" /></svg>
                 </Button>
               </>
             }
