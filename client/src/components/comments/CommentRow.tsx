@@ -39,9 +39,7 @@ export function CommentRow({
   return (
     <div
       id={`comment-${comment.id}`}
-      className={`flex gap-3 py-3 ${isReply ? "ml-8 pl-3 border-l-2 border-border/20" : ""} ${
-        isTopComment ? "bg-cyan-500/8 dark:bg-cyan-500/5 px-3 rounded-lg border border-cyan-500/20" : ""
-      }`}
+      className={`flex gap-3 py-3 ${isReply ? "ml-8 pl-3 border-l-2 border-border/20" : ""}`}
       data-testid={testIds?.root ?? `comment-${comment.id}`}
     >
       {!isDeleted && (
