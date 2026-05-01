@@ -1,4 +1,4 @@
-import { TrendingUp, TrendingDown, Clock } from "lucide-react";
+import { TrendingUp, TrendingDown, Clock, Swords, Trophy } from "lucide-react";
 
 interface WhatNeedsToHappenProps {
   pick: "up" | "down";
@@ -237,3 +237,103 @@ export function WhatNeedsToHappen({
     </div>
   );
 }
+
+/**
+ * H2H "path to win" callout. Mirrors the WhatNeedsToHappen pattern from
+ * Up/Down so users get the same "here's exactly what needs to happen
+ * for me to win" answer regardless of market type.
+ */
+interface H2HWhatNeedsToHappenProps {
+  myPickName: string;
+  myPickScore: number;
+  opponentName: string;
+  opponentScore: number;
+  className?: string;
+}
+
+export function H2HWhatNeedsToHappen({
+  myPickName,
+  myPickScore,
+  opponentName,
+  opponentScore,
+  className,
+}: H2HWhatNeedsToHappenProps) {
+  const lead = myPickScore - opponentScore;
+  const isLeading = lead > 0;
+  const isTied = lead === 0;
+  const myFirst = myPickName.split(" ")[0];
+  const oppFirst = opponentName.split(" ")[0];
+
+  return (
+    <div className={`rounded-lg border border-border/40 bg-muted/20 p-3 space-y-2 ${className || ""}`}>
+      <p className="text-xs font-medium text-foreground flex items-center gap-1.5">
+        <Swords className="h-3.5 w-3.5 text-violet-500" />
+        What needs to happen
+      </p>
+      <p className="text-[11px] leading-snug">
+        {isLeading ? (
+          <span className="text-green-600 dark:text-green-400">
+            {myFirst} leads by {formatScore(Math.abs(lead))} pts. Wins if {myFirst.toLowerCase() === oppFirst.toLowerCase() ? "they stay" : "they stay"} ahead of {oppFirst} by close.
+          </span>
+        ) : isTied ? (
+          <span className="text-amber-600 dark:text-amber-400">
+            {myFirst} and {oppFirst} are tied. First to pull ahead wins; an exact tie refunds.
+          </span>
+        ) : (
+          <span className="text-red-600 dark:text-red-400">
+            {myFirst} trails {oppFirst} by {formatScore(Math.abs(lead))} pts. Needs <span className="font-mono font-medium text-foreground">+{formatScore(Math.abs(lead) + 1)}</span> pts to overtake by close.
+          </span>
+        )}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Race "path to win" callout. Tells the user how far behind the leader
+ * their pick is in % gain, since Race resolves on biggest mover.
+ */
+interface RaceWhatNeedsToHappenProps {
+  myPickName: string;
+  myPickPercentGain: number;
+  leaderName: string;
+  leaderPercentGain: number;
+  className?: string;
+}
+
+export function RaceWhatNeedsToHappen({
+  myPickName,
+  myPickPercentGain,
+  leaderName,
+  leaderPercentGain,
+  className,
+}: RaceWhatNeedsToHappenProps) {
+  const myFirst = myPickName.split(" ")[0];
+  const leaderFirst = leaderName.split(" ")[0];
+  const isLeader = myPickPercentGain >= leaderPercentGain;
+  const gap = leaderPercentGain - myPickPercentGain;
+  const fmtPct = (n: number) => `${n >= 0 ? "+" : ""}${n.toFixed(1)}%`;
+
+  return (
+    <div className={`rounded-lg border border-border/40 bg-muted/20 p-3 space-y-2 ${className || ""}`}>
+      <p className="text-xs font-medium text-foreground flex items-center gap-1.5">
+        <Trophy className="h-3.5 w-3.5 text-violet-500" />
+        What needs to happen
+      </p>
+      <p className="text-[11px] leading-snug">
+        {isLeader ? (
+          <span className="text-green-600 dark:text-green-400">
+            {myFirst} is leading the field at <span className="font-mono font-medium text-foreground">{fmtPct(myPickPercentGain)}</span>.
+            Wins if they hold the highest % gain by close.
+          </span>
+        ) : (
+          <span className="text-red-600 dark:text-red-400">
+            {myFirst} is at <span className="font-mono font-medium text-foreground">{fmtPct(myPickPercentGain)}</span> vs {leaderFirst}'s <span className="font-mono font-medium text-foreground">{fmtPct(leaderPercentGain)}</span>.
+            Needs to outgain by <span className="font-mono font-medium text-foreground">+{gap.toFixed(1)} pts</span> to overtake.
+          </span>
+        )}
+      </p>
+    </div>
+  );
+}
+

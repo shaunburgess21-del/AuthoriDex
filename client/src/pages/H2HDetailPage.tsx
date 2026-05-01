@@ -9,6 +9,9 @@ import { useXpBurst } from "@/components/XpBurstProvider";
 import { StakeModal, type StakeSelection } from "@/components/StakeModal";
 import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
 import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
+import { MarketResolutionInfo } from "@/components/predict/MarketResolutionInfo";
+import { MyPositionCard } from "@/components/predict/MyPositionCard";
+import { H2HWhatNeedsToHappen } from "@/components/predict/WhatNeedsToHappen";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { CategoryPill } from "@/components/CategoryPill";
 import { HeaderUserActions } from "@/components/HeaderUserActions";
@@ -448,59 +451,27 @@ export default function H2HDetailPage() {
           </div>
         </Card>
 
-        {/* Your Position */}
-        {userBet && userPickSide && (
-          <Card className="border-green-500/40 dark:border-green-500/30 bg-green-500/8 dark:bg-green-500/5">
-            <div className="p-4">
-              <p className="text-xs font-semibold text-green-700 dark:text-green-500 uppercase tracking-wider mb-2">
-                Your Position
-              </p>
-              <div className="flex items-center gap-3">
-                <PersonAvatar
-                  name={
-                    userPickSide === 1 ? hydrated.person1.name : hydrated.person2.name
-                  }
-                  avatar={
-                    userPickSide === 1
-                      ? hydrated.person1.avatar
-                      : hydrated.person2.avatar
-                  }
-                  className="h-14 w-14"
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-sm">
-                    {userPickSide === 1
-                      ? hydrated.person1.name
-                      : hydrated.person2.name}
-                  </p>
-                  <Badge
-                    variant="outline"
-                    className={
-                      (userPickSide === 1 && person1Leading) ||
-                      (userPickSide === 2 && person2Leading)
-                        ? "text-green-700 dark:text-green-500 border-green-500/40 dark:border-green-500/30"
-                        : scoreTied
-                        ? "text-amber-700 dark:text-amber-500 border-amber-500/40 dark:border-amber-500/30"
-                        : "text-red-700 dark:text-red-500 border-red-500/40 dark:border-red-500/30"
-                    }
-                  >
-                    {(userPickSide === 1 && person1Leading) ||
-                    (userPickSide === 2 && person2Leading)
-                      ? `Leading by ${leadAmount.toLocaleString("en-US")} pts`
-                      : scoreTied
-                      ? "Tied"
-                      : `Behind by ${leadAmount.toLocaleString("en-US")} pts`}
-                  </Badge>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs text-muted-foreground">Stake</p>
-                  <p className="font-semibold text-sm">
-                    {Number(userBet.stakeAmount || 0).toLocaleString("en-US")}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </Card>
+        {/* Your Position — unified across all detail pages. The H2H
+            sticky bar already shows Winning / Tied / Behind so we hide
+            the card's CTA and let the sticky strip drive action; this
+            block exists so users always see live "your position" near
+            the top of the page (matching the community/jackpot UX). */}
+        <MyPositionCard
+          marketId={marketId}
+          marketType="h2h"
+          hideCta
+        />
+
+        {/* Path-to-win callout — mirrors the WhatNeedsToHappen pattern
+            from Up/Down so users know exactly what gap their pick has
+            to close. Only shown when they've picked. */}
+        {userPickSide && (
+          <H2HWhatNeedsToHappen
+            myPickName={userPickSide === 1 ? hydrated.person1.name : hydrated.person2.name}
+            myPickScore={userPickSide === 1 ? hydrated.person1.currentScore : hydrated.person2.currentScore}
+            opponentName={userPickSide === 1 ? hydrated.person2.name : hydrated.person1.name}
+            opponentScore={userPickSide === 1 ? hydrated.person2.currentScore : hydrated.person1.currentScore}
+          />
         )}
 
         {/* Score Comparison */}
@@ -641,35 +612,14 @@ export default function H2HDetailPage() {
         </Card>
 
         {/* How This Resolves */}
-        <Card className="p-3 bg-muted/30 border-border/40 space-y-2">
-          <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
-            <Shield className="h-3.5 w-3.5 text-violet-700 dark:text-violet-500" />
-            How this resolves
-          </div>
-          <div className="text-[11px] text-muted-foreground space-y-1.5 leading-snug">
-            <div className="flex items-start gap-1.5">
-              <TrendingUp className="h-3 w-3 mt-0.5 shrink-0 text-blue-600 dark:text-blue-400" />
-              <span>
-                {hydrated.person1.name} wins if their final Trend Score is higher
-              </span>
-            </div>
-            <div className="flex items-start gap-1.5">
-              <TrendingDown className="h-3 w-3 mt-0.5 shrink-0 text-purple-600 dark:text-purple-400" />
-              <span>
-                {hydrated.person2.name} wins if their final Trend Score is higher
-              </span>
-            </div>
-            <div className="flex items-start gap-1.5">
-              <Shield className="h-3 w-3 mt-0.5 shrink-0" />
-              <span>
-                Exact tie:{" "}
-                {hydrated.tieRule === "refund"
-                  ? "all positions refunded"
-                  : hydrated.tieRule}
-              </span>
-            </div>
-          </div>
-        </Card>
+        <MarketResolutionInfo
+          mode="h2h"
+          bettingCutoff={hydrated.bettingCutoff}
+          closeTime={hydrated.endAt ? new Date(hydrated.endAt).toUTCString().replace(/ GMT$/, " UTC") : undefined}
+          tieRule={hydrated.tieRule}
+          person1Name={hydrated.person1.name}
+          person2Name={hydrated.person2.name}
+        />
       </div>
 
       {/* Sticky Bottom CTA — lifted above the global mobile BottomNav

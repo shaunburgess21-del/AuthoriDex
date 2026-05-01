@@ -1,15 +1,52 @@
 import { Card } from "@/components/ui/card";
-import { Shield, TrendingUp, TrendingDown, RefreshCw, Database, CheckCircle, Lock, Trophy } from "lucide-react";
+import {
+  Shield,
+  TrendingUp,
+  TrendingDown,
+  RefreshCw,
+  Database,
+  CheckCircle,
+  Lock,
+  Trophy,
+  Swords,
+  Zap,
+} from "lucide-react";
+
+/**
+ * "How this resolves" card. One component, four flavours, so every
+ * detail page (Up/Down, H2H, Race/Gainer, Community) tells users the
+ * same story in the same shape.
+ *
+ * Up/Down used to own this card; H2H and Race each rolled their own
+ * muted Card with subtly different bullet patterns. We unify them via
+ * a `mode` prop so a notification deep-link lands users in the same
+ * visual rhythm regardless of market type.
+ */
+
+export type MarketResolutionMode = "updown" | "h2h" | "race" | "community";
 
 interface MarketResolutionInfoProps {
-  baselineScore: number;
+  mode?: MarketResolutionMode;
+  /** Up/Down only — baseline trend score for UP/DOWN bullet copy. */
+  baselineScore?: number;
+  /** Up/Down only — when the baseline snapshot was taken. */
   baselineTimestamp?: string;
+  /** Up/Down: results time. H2H/Race: market resolution time. */
   closeTime?: string;
   /** ISO date for weekly betting cutoff (Fri 23:59 UTC); falls back to label if missing */
   bettingCutoff?: string | null;
+  /** "refund" | "up_wins" | "down_wins" — only meaningful for Up/Down + H2H. */
   tieRule?: string;
   resolveMethod?: string;
+  /** Up/Down only — person being predicted on. */
   personName?: string;
+  /** H2H only — both contenders. */
+  person1Name?: string;
+  person2Name?: string;
+  /** Race only — category label (e.g. "Athletes", "Musicians"). */
+  categoryLabel?: string;
+  /** Community only — caller-supplied free-form Yes/No criteria. */
+  resolutionCriteria?: string;
   compact?: boolean;
 }
 
@@ -41,23 +78,115 @@ const TIE_RULE_LABELS: Record<string, string> = {
   up_wins: "UP wins on exact tie",
 };
 
+const H2H_TIE_LABEL = "All positions refunded";
+
 export function MarketResolutionInfo({
-  baselineScore,
+  mode = "updown",
+  baselineScore = 0,
   baselineTimestamp,
   closeTime,
   bettingCutoff,
   tieRule = "refund",
   resolveMethod,
   personName,
+  person1Name,
+  person2Name,
+  categoryLabel,
+  resolutionCriteria,
   compact = false,
 }: MarketResolutionInfoProps) {
-  const name = personName || "Subject";
   const tieLabel = TIE_RULE_LABELS[tieRule] || "All positions refunded";
   const resolutionLabel =
     resolveMethod === "admin_manual"
       ? "Admin resolution"
       : "Auto-calculated from VoxDex trend engine";
   const predictionsCloseLabel = formatBettingCutoffUtc(bettingCutoff) ?? BETTING_CUTOFF_FALLBACK;
+  const resultsLabel = closeTime || "Sun 23:59 UTC";
+
+  const Bullets = (() => {
+    if (mode === "h2h") {
+      const a = person1Name || "Side A";
+      const b = person2Name || "Side B";
+      return (
+        <>
+          <Bullet icon={<TrendingUp className="h-3 w-3 text-blue-600 dark:text-blue-400" />}>
+            <span>
+              <span className="font-medium text-foreground">{a}</span> wins if their final Trend Score is higher
+            </span>
+          </Bullet>
+          <Bullet icon={<TrendingDown className="h-3 w-3 text-purple-600 dark:text-purple-400" />}>
+            <span>
+              <span className="font-medium text-foreground">{b}</span> wins if their final Trend Score is higher
+            </span>
+          </Bullet>
+          <Bullet icon={<Swords className="h-3 w-3" />}>
+            <span>Exact tie: {(tieRule === "refund" ? H2H_TIE_LABEL : tieLabel).toLowerCase()}</span>
+          </Bullet>
+        </>
+      );
+    }
+    if (mode === "race") {
+      const cat = categoryLabel ? ` in ${categoryLabel}` : "";
+      return (
+        <>
+          <Bullet icon={<TrendingUp className="h-3 w-3 text-green-600 dark:text-green-500" />}>
+            <span>
+              Winner is whoever has the highest{" "}
+              <span className="font-medium text-foreground">% gain</span> in their Trend Score by close{cat}.
+            </span>
+          </Bullet>
+          <Bullet icon={<Zap className="h-3 w-3 text-amber-600 dark:text-amber-500" />}>
+            <span>Biggest mover wins &mdash; not the highest ranked.</span>
+          </Bullet>
+        </>
+      );
+    }
+    if (mode === "community") {
+      return (
+        <>
+          {resolutionCriteria ? (
+            <Bullet icon={<CheckCircle className="h-3 w-3 text-violet-500" />}>
+              <span>{resolutionCriteria}</span>
+            </Bullet>
+          ) : (
+            <Bullet icon={<CheckCircle className="h-3 w-3 text-violet-500" />}>
+              <span>Resolves Yes / No based on the market description.</span>
+            </Bullet>
+          )}
+        </>
+      );
+    }
+    // Default: updown
+    const name = personName || "Subject";
+    return (
+      <>
+        <Bullet icon={<Database className="h-3 w-3" />}>
+          <span>
+            Baseline Score:{" "}
+            <span className="font-mono font-medium text-foreground">{formatScore(baselineScore)}</span>
+            {baselineTimestamp && (
+              <span className="text-muted-foreground"> at {formatTimestamp(baselineTimestamp)}</span>
+            )}
+          </span>
+        </Bullet>
+        <Bullet icon={<TrendingUp className="h-3 w-3 text-green-500" />}>
+          <span>
+            UP wins if {name} closes above{" "}
+            <span className="font-mono font-medium text-foreground">{formatScore(baselineScore)}</span>
+          </span>
+        </Bullet>
+        <Bullet icon={<TrendingDown className="h-3 w-3 text-red-500" />}>
+          <span>
+            DOWN wins if {name} closes below{" "}
+            <span className="font-mono font-medium text-foreground">{formatScore(baselineScore)}</span>
+          </span>
+        </Bullet>
+        <Bullet icon={<RefreshCw className="h-3 w-3" />}>
+          <span>Exact tie: {tieLabel.toLowerCase()}</span>
+        </Bullet>
+      </>
+    );
+  })();
 
   if (compact) {
     return (
@@ -68,20 +197,51 @@ export function MarketResolutionInfo({
         </p>
         <p>
           <Trophy className="inline h-3 w-3 text-violet-500 mr-1" />
-          Results: <span className="font-medium text-foreground">{closeTime || "Sun 23:59 UTC"}</span>
+          Results: <span className="font-medium text-foreground">{resultsLabel}</span>
         </p>
-        <p>
-          <TrendingUp className="inline h-3 w-3 text-green-500 mr-1" />
-          UP wins if {name} closes above {formatScore(baselineScore)}
-        </p>
-        <p>
-          <TrendingDown className="inline h-3 w-3 text-red-500 mr-1" />
-          DOWN wins if {name} closes below {formatScore(baselineScore)}
-        </p>
-        <p>
-          <RefreshCw className="inline h-3 w-3 mr-1" />
-          Exact tie: {tieLabel.toLowerCase()}
-        </p>
+        {mode === "updown" && (() => {
+          const name = personName || "Subject";
+          return (
+            <>
+              <p>
+                <TrendingUp className="inline h-3 w-3 text-green-500 mr-1" />
+                UP wins if {name} closes above {formatScore(baselineScore)}
+              </p>
+              <p>
+                <TrendingDown className="inline h-3 w-3 text-red-500 mr-1" />
+                DOWN wins if {name} closes below {formatScore(baselineScore)}
+              </p>
+              <p>
+                <RefreshCw className="inline h-3 w-3 mr-1" />
+                Exact tie: {tieLabel.toLowerCase()}
+              </p>
+            </>
+          );
+        })()}
+        {mode === "h2h" && (
+          <>
+            <p>
+              <TrendingUp className="inline h-3 w-3 text-blue-500 mr-1" />
+              {(person1Name || "Side A")} wins if their final Trend Score is higher
+            </p>
+            <p>
+              <TrendingDown className="inline h-3 w-3 text-purple-500 mr-1" />
+              {(person2Name || "Side B")} wins if their final Trend Score is higher
+            </p>
+          </>
+        )}
+        {mode === "race" && (
+          <p>
+            <TrendingUp className="inline h-3 w-3 text-green-500 mr-1" />
+            Highest % gain in Trend Score by close wins.
+          </p>
+        )}
+        {mode === "community" && resolutionCriteria && (
+          <p>
+            <CheckCircle className="inline h-3 w-3 text-violet-500 mr-1" />
+            {resolutionCriteria}
+          </p>
+        )}
       </div>
     );
   }
@@ -93,46 +253,30 @@ export function MarketResolutionInfo({
         How this resolves
       </div>
       <div className="text-[11px] text-muted-foreground space-y-1.5 leading-snug">
-        <div className="flex items-start gap-1.5">
-          <Database className="h-3 w-3 mt-0.5 shrink-0" />
+        <Bullet icon={<Lock className="h-3 w-3 text-amber-500" />}>
           <span>
-            Baseline Score: <span className="font-mono font-medium text-foreground">{formatScore(baselineScore)}</span>
-            {baselineTimestamp && (
-              <span className="text-muted-foreground"> at {formatTimestamp(baselineTimestamp)}</span>
-            )}
+            Entries close: <span className="font-medium text-foreground">{predictionsCloseLabel}</span>
           </span>
-        </div>
-        <div className="flex items-start gap-1.5">
-          <Lock className="h-3 w-3 mt-0.5 shrink-0 text-amber-500" />
+        </Bullet>
+        <Bullet icon={<Trophy className="h-3 w-3 text-violet-500" />}>
           <span>
-            Entries close:{" "}
-            <span className="font-medium text-foreground">{predictionsCloseLabel}</span>
+            Results: <span className="font-medium text-foreground">{resultsLabel}</span>
           </span>
-        </div>
-        <div className="flex items-start gap-1.5">
-          <Trophy className="h-3 w-3 mt-0.5 shrink-0 text-violet-500" />
-          <span>
-            Results:{" "}
-            <span className="font-medium text-foreground">{closeTime || "Sun 23:59 UTC"}</span>
-          </span>
-        </div>
-        <div className="flex items-start gap-1.5">
-          <TrendingUp className="h-3 w-3 mt-0.5 shrink-0 text-green-500" />
-          <span>UP wins if final trend score is above <span className="font-mono font-medium text-foreground">{formatScore(baselineScore)}</span></span>
-        </div>
-        <div className="flex items-start gap-1.5">
-          <TrendingDown className="h-3 w-3 mt-0.5 shrink-0 text-red-500" />
-          <span>DOWN wins if final trend score is below <span className="font-mono font-medium text-foreground">{formatScore(baselineScore)}</span></span>
-        </div>
-        <div className="flex items-start gap-1.5">
-          <RefreshCw className="h-3 w-3 mt-0.5 shrink-0" />
-          <span>Exact tie: {tieLabel.toLowerCase()}</span>
-        </div>
-        <div className="flex items-start gap-1.5">
-          <CheckCircle className="h-3 w-3 mt-0.5 shrink-0 text-violet-500" />
+        </Bullet>
+        {Bullets}
+        <Bullet icon={<CheckCircle className="h-3 w-3 text-violet-500" />}>
           <span>{resolutionLabel}</span>
-        </div>
+        </Bullet>
       </div>
     </Card>
+  );
+}
+
+function Bullet({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div className="flex items-start gap-1.5">
+      <span className="mt-0.5 shrink-0">{icon}</span>
+      {children}
+    </div>
   );
 }

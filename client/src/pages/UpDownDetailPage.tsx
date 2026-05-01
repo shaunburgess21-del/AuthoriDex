@@ -12,7 +12,7 @@ import { CategoryPill } from "@/components/CategoryPill";
 import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { OutcomePathChart } from "@/components/predict/OutcomePathChart";
 import { WhatNeedsToHappen } from "@/components/predict/WhatNeedsToHappen";
-import { WeeklyUpDownYourPositionPanel } from "@/components/predict/WeeklyUpDownYourPositionPanel";
+import { MyPositionCard } from "@/components/predict/MyPositionCard";
 import { MarketResolutionInfo } from "@/components/predict/MarketResolutionInfo";
 import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
 import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
@@ -390,18 +390,17 @@ export default function UpDownDetailPage() {
           </div>
         </Card>
 
-        {/* Your Position */}
-        {userBet && (
-          <WeeklyUpDownYourPositionPanel
-            variant="detail"
-            pick={userPick}
-            personName={hydrated.personName}
-            baselineScore={hydrated.baselineScore}
-            currentScore={hydrated.currentScore}
-            stakeAmount={Number(userBet.stakeAmount || 0)}
-            tieRule={hydrated.tieRule}
-          />
-        )}
+        {/* Your Position — unified across all detail pages so the "what
+            am I in for" panel feels the same on community, jackpot,
+            updown, h2h, and race. We hide the CTA on Up/Down because
+            the existing UI doesn't support adding to an open position;
+            the bespoke WeeklyUpDownYourPositionPanel previously had no
+            CTA either. */}
+        <MyPositionCard
+          marketId={marketId}
+          marketType="updown"
+          hideCta
+        />
 
         {/* Trend Score Chart */}
         <Card className="border-border/50">

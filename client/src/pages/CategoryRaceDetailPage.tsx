@@ -9,6 +9,9 @@ import { useXpBurst } from "@/components/XpBurstProvider";
 import { StakeModal, type StakeSelection } from "@/components/StakeModal";
 import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
 import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
+import { MarketResolutionInfo } from "@/components/predict/MarketResolutionInfo";
+import { MyPositionCard } from "@/components/predict/MyPositionCard";
+import { RaceWhatNeedsToHappen } from "@/components/predict/WhatNeedsToHappen";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { CategoryPill } from "@/components/CategoryPill";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
@@ -396,48 +399,33 @@ export default function CategoryRaceDetailPage() {
           </div>
         </Card>
 
-        {/* Your Position */}
-        {userPick && userBet && (
-          <Card className="border-green-500/40 dark:border-green-500/30 bg-green-500/8 dark:bg-green-500/5">
-            <div className="p-4">
-              <p className="text-xs font-semibold text-green-700 dark:text-green-500 uppercase tracking-wider mb-2">
-                Your Position
-              </p>
-              <div className="flex items-center gap-3">
-                <PersonAvatar
-                  name={userPick.name}
-                  avatar={userPick.avatar}
-                  className="h-14 w-14"
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-sm">{userPick.name}</p>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <Badge
-                      variant="outline"
-                      className={
-                        userPick.percentGain >= 0
-                          ? "text-green-700 dark:text-green-500 border-green-500/40 dark:border-green-500/30"
-                          : "text-red-700 dark:text-red-500 border-red-500/40 dark:border-red-500/30"
-                      }
-                    >
-                      {formatSignedPercent(userPick.percentGain)}
-                    </Badge>
-                    {userPickRank && (
-                      <span className="text-xs text-muted-foreground">
-                        Rank #{userPickRank} of {candidates.length}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs text-muted-foreground">Stake</p>
-                  <p className="font-semibold text-sm">
-                    {Number(userBet.amount || 0).toLocaleString("en-US")}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </Card>
+        {/* Your Position — unified across all detail pages. For Race
+            we wire the CTA to the candidate-search input so adding
+            another bet is a one-tap flow (Race natively supports
+            staking on multiple candidates, unlike UpDown / H2H). */}
+        <MyPositionCard
+          marketId={marketId}
+          marketType="race"
+          ctaLabel="Back another candidate"
+          onAddEntry={() => {
+            const input = candidateSearchRef.current;
+            if (input) {
+              input.scrollIntoView({ block: "center", behavior: "smooth" });
+              input.focus({ preventScroll: true });
+            }
+          }}
+        />
+
+        {/* Path-to-win callout — quantifies how far behind the leader
+            the user's pick is (in % gain points). Race resolves on the
+            biggest mover so this is the directly actionable number. */}
+        {userPick && candidates.length > 0 && (
+          <RaceWhatNeedsToHappen
+            myPickName={userPick.name}
+            myPickPercentGain={userPick.percentGain}
+            leaderName={candidates[0].name}
+            leaderPercentGain={candidates[0].percentGain}
+          />
         )}
 
         {/* Race Leaderboard */}
@@ -665,26 +653,12 @@ export default function CategoryRaceDetailPage() {
         </Card>
 
         {/* How This Resolves */}
-        <Card className="p-3 bg-muted/30 border-border/40 space-y-2">
-          <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
-            <Trophy className="h-3.5 w-3.5 text-violet-700 dark:text-violet-500" />
-            How this resolves
-          </div>
-          <div className="text-[11px] text-muted-foreground space-y-1.5 leading-snug">
-            <div className="flex items-start gap-1.5">
-              <TrendingUp className="h-3 w-3 mt-0.5 shrink-0 text-green-600 dark:text-green-500" />
-              <span>
-                Winner is whoever has the highest{" "}
-                <span className="font-medium text-foreground">% gain</span> in their
-                Trend Score by Sunday close.
-              </span>
-            </div>
-            <div className="flex items-start gap-1.5">
-              <Zap className="h-3 w-3 mt-0.5 shrink-0 text-amber-600 dark:text-amber-500" />
-              <span>Biggest mover wins — not the highest ranked.</span>
-            </div>
-          </div>
-        </Card>
+        <MarketResolutionInfo
+          mode="race"
+          bettingCutoff={serverCutoff}
+          closeTime={serverResolutionDeadline ? new Date(serverResolutionDeadline).toUTCString().replace(/ GMT$/, " UTC") : undefined}
+          categoryLabel={categoryLabel}
+        />
       </div>
 
       {/* Sticky Bottom CTA — lifted above the global mobile BottomNav
@@ -692,26 +666,40 @@ export default function CategoryRaceDetailPage() {
           isn't rendered. */}
       <div className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom))] md:bottom-0 left-0 right-0 z-40 border-t border-border/50 bg-background/95 backdrop-blur-md">
         <div className="max-w-3xl mx-auto px-4 py-3">
-          {userPick ? (
-            <div className="flex items-center gap-3">
-              <div className="flex-1 min-w-0">
-                <p className="text-xs text-muted-foreground">Your pick</p>
-                <p className="text-sm font-semibold truncate">{userPick.name}</p>
+          {userPick ? (() => {
+            // Race resolves on biggest mover, so the most useful "am I
+            // winning?" signal is leader-relative (mirrors H2H's
+            // Winning / Tied / Behind sticky badge). We derive the
+            // leader from the already-sorted candidates array.
+            const leader = candidates[0];
+            const isLeader = leader && leader.entryId === userPick.entryId;
+            const leaderStatusClass = isLeader
+              ? "bg-green-600/20 text-green-700 dark:text-green-500 border-green-500/40 dark:border-green-500/30"
+              : "bg-amber-600/20 text-amber-700 dark:text-amber-500 border-amber-500/40 dark:border-amber-500/30";
+            const leaderStatusLabel = isLeader ? "Leading" : "Behind leader";
+            return (
+              <div className="flex items-center gap-2">
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-muted-foreground">Your pick</p>
+                  <p className="text-sm font-semibold truncate">{userPick.name}</p>
+                </div>
+                <Badge className={leaderStatusClass}>{leaderStatusLabel}</Badge>
+                <Badge
+                  variant="outline"
+                  className={
+                    userPick.percentGain >= 0
+                      ? "text-green-700 dark:text-green-500 border-green-500/40 dark:border-green-500/30"
+                      : "text-red-700 dark:text-red-500 border-red-500/40 dark:border-red-500/30"
+                  }
+                >
+                  {formatSignedPercent(userPick.percentGain)}
+                </Badge>
+                <span className="text-xs text-muted-foreground hidden sm:inline">
+                  #{userPickRank}/{candidates.length}
+                </span>
               </div>
-              <Badge
-                className={
-                  userPick.percentGain >= 0
-                    ? "bg-green-600/20 text-green-700 dark:text-green-500 border-green-500/40 dark:border-green-500/30"
-                    : "bg-red-600/20 text-red-700 dark:text-red-500 border-red-500/40 dark:border-red-500/30"
-                }
-              >
-                {formatSignedPercent(userPick.percentGain)}
-              </Badge>
-              <span className="text-xs text-muted-foreground">
-                #{userPickRank}/{candidates.length}
-              </span>
-            </div>
-          ) : (
+            );
+          })() : (
             <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMarketMessage} side="top" align="center">
               <Button
                 className="w-full bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white py-3 h-auto text-base font-semibold"
