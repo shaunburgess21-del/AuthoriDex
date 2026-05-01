@@ -75,7 +75,8 @@ import { A11y } from "swiper/modules";
 import type { Swiper as SwiperType } from "swiper";
 import "swiper/css";
 import { motion, AnimatePresence } from "framer-motion";
-import { getFilterCategories, normalizeMarketCategory, type FilterCategory, CATEGORIES_WITH_FILTERS, CATEGORIES_LEADERBOARD, CATEGORIES_OPEN, OPINION_POLL_MIN_OPTIONS, OPINION_POLL_MAX_OPTIONS } from "@shared/constants";
+import { getMarketCategoryLabel, normalizeMarketCategory, type FilterCategory, CATEGORIES_LEADERBOARD, CATEGORIES_OPEN, OPINION_POLL_MIN_OPTIONS, OPINION_POLL_MAX_OPTIONS } from "@shared/constants";
+import { buildSectionCategoryOptions } from "@/lib/sectionCategoryFilters";
 import { CurateSection } from "@/components/curate";
 import { CurateProfileCard as CurateProfileCardComponent, type CuratePerson } from "@/components/curate/CurateProfileCard";
 import { UnderratedOverratedCard } from "@/components/UnderratedOverratedCard";
@@ -142,17 +143,6 @@ const VOTE_ONBOARDING_STEPS: readonly OnboardingStep[] = [
     glow: "shadow-amber-500/25",
   },
 ] as const;
-
-// Derived from CATEGORIES_WITH_FILTERS — all 15 entries (3 UI-only + 12 content).
-// Both VOTE_CATEGORIES and VOTE_CATEGORIES_WITH_CUSTOM are now equivalent since misc
-// is part of the canonical set. VOTE_CATEGORIES_WITH_CUSTOM is kept as an alias so
-// existing JSX prop sites don't need to change.
-const VOTE_CATEGORIES = CATEGORIES_WITH_FILTERS.map(c => ({
-  value: c.id,
-  label: c.id === "all" ? "All Categories" : c.label,
-}));
-
-const VOTE_CATEGORIES_WITH_CUSTOM = VOTE_CATEGORIES;
 
 interface InductionCandidate {
   id: string;
@@ -1124,7 +1114,10 @@ function FilterChip({
   };
 
   const getDisplayLabel = () => {
-    return CATEGORIES_WITH_FILTERS.find(c => c.id === category)?.label ?? category;
+    if (category === "all") return "All Categories";
+    if (category === "favorites") return "Favorites";
+    if (category === "trending") return "Trending";
+    return getMarketCategoryLabel(category);
   };
 
   const getTestId = () => {
@@ -1741,6 +1734,96 @@ export default function VotePage() {
       return matchesCategory && matchesSearch;
     });
   }, [curateTrendingCelebrities, curateCategoryFilter, curateSearchQuery]);
+
+  const topicsCategoryOptions = useMemo(
+    () =>
+      buildSectionCategoryOptions({
+        categories: dbPolls.map((t: any) => t.category),
+        includeFavorites: false,
+        includeTrending: true,
+        selectedCategory: topicsCategoryFilter,
+      }),
+    [dbPolls, topicsCategoryFilter],
+  );
+
+  const matchupsCategoryOptions = useMemo(
+    () =>
+      buildSectionCategoryOptions({
+        categories: matchups.filter((m) => m.isActive).map((m) => m.category),
+        includeFavorites: false,
+        includeTrending: true,
+        selectedCategory: matchupsCategoryFilter,
+      }),
+    [matchups, matchupsCategoryFilter],
+  );
+
+  const opinionCategoryOptions = useMemo(
+    () =>
+      buildSectionCategoryOptions({
+        categories: opinionPolls.map((p: any) => p.category),
+        includeFavorites: false,
+        includeTrending: true,
+        selectedCategory: opinionPollsCategoryFilter,
+      }),
+    [opinionPolls, opinionPollsCategoryFilter],
+  );
+
+  const valueCategoryOptions = useMemo(
+    () =>
+      buildSectionCategoryOptions({
+        categories: valueCelebrities.map((c) => c.category),
+        includeFavorites: true,
+        includeTrending: true,
+        selectedCategory: valuePerceptionCategoryFilter,
+      }),
+    [valueCelebrities, valuePerceptionCategoryFilter],
+  );
+
+  const inductionCategoryOptions = useMemo(
+    () =>
+      buildSectionCategoryOptions({
+        categories: enrichedCandidates.map((c) => c.category),
+        includeFavorites: true,
+        includeTrending: true,
+        selectedCategory: inductionCategoryFilter,
+      }),
+    [enrichedCandidates, inductionCategoryFilter],
+  );
+
+  const curateCategoryOptions = useMemo(
+    () =>
+      buildSectionCategoryOptions({
+        categories: curateTrendingCelebrities.map((p: any) => p.category),
+        includeFavorites: false,
+        includeTrending: true,
+        selectedCategory: curateCategoryFilter,
+      }),
+    [curateTrendingCelebrities, curateCategoryFilter],
+  );
+
+  useEffect(() => {
+    if (!topicsCategoryOptions.some((c) => c.value === topicsCategoryFilter)) setTopicsCategoryFilter("all");
+  }, [topicsCategoryFilter, topicsCategoryOptions]);
+
+  useEffect(() => {
+    if (!matchupsCategoryOptions.some((c) => c.value === matchupsCategoryFilter)) setMatchupsCategoryFilter("all");
+  }, [matchupsCategoryFilter, matchupsCategoryOptions]);
+
+  useEffect(() => {
+    if (!opinionCategoryOptions.some((c) => c.value === opinionPollsCategoryFilter)) setOpinionPollsCategoryFilter("all");
+  }, [opinionPollsCategoryFilter, opinionCategoryOptions]);
+
+  useEffect(() => {
+    if (!valueCategoryOptions.some((c) => c.value === valuePerceptionCategoryFilter)) setValuePerceptionCategoryFilter("all");
+  }, [valuePerceptionCategoryFilter, valueCategoryOptions]);
+
+  useEffect(() => {
+    if (!inductionCategoryOptions.some((c) => c.value === inductionCategoryFilter)) setInductionCategoryFilter("all");
+  }, [inductionCategoryFilter, inductionCategoryOptions]);
+
+  useEffect(() => {
+    if (!curateCategoryOptions.some((c) => c.value === curateCategoryFilter)) setCurateCategoryFilter("all");
+  }, [curateCategoryFilter, curateCategoryOptions]);
 
   const curateSnapItems: SnapItem[] = useMemo(
     () =>
@@ -2464,12 +2547,12 @@ export default function VotePage() {
               placeholder="Search topics..."
               testId="filter-topics-search"
             >
-              {getFilterCategories(true).map((cat) => (
+              {topicsCategoryOptions.map((opt) => (
                 <FilterChip
-                  key={cat}
-                  category={cat}
-                  isActive={topicsCategoryFilter === cat}
-                  onClick={() => setTopicsCategoryFilter(cat as FilterCategory)}
+                  key={opt.value}
+                  category={opt.value}
+                  isActive={topicsCategoryFilter === opt.value}
+                  onClick={() => setTopicsCategoryFilter(opt.value as FilterCategory)}
                   testIdPrefix="filter-topics"
                   user={user}
                   onAuthRequired={handleAuthRequired}
@@ -2568,12 +2651,12 @@ export default function VotePage() {
               placeholder="Search matchups..."
               testId="filter-matchups-search"
             >
-              {getFilterCategories(true).map((cat) => (
+              {matchupsCategoryOptions.map((opt) => (
                 <FilterChip
-                  key={cat}
-                  category={cat}
-                  isActive={matchupsCategoryFilter === cat}
-                  onClick={() => setMatchupsCategoryFilter(cat as FilterCategory)}
+                  key={opt.value}
+                  category={opt.value}
+                  isActive={matchupsCategoryFilter === opt.value}
+                  onClick={() => setMatchupsCategoryFilter(opt.value as FilterCategory)}
                   testIdPrefix="filter-matchups"
                   user={user}
                   onAuthRequired={handleAuthRequired}
@@ -2680,12 +2763,12 @@ export default function VotePage() {
               placeholder="Search opinion polls..."
               testId="filter-opinion-search"
             >
-              {getFilterCategories(true).map((cat) => (
+              {opinionCategoryOptions.map((opt) => (
                 <FilterChip
-                  key={cat}
-                  category={cat}
-                  isActive={opinionPollsCategoryFilter === cat}
-                  onClick={() => setOpinionPollsCategoryFilter(cat as FilterCategory)}
+                  key={opt.value}
+                  category={opt.value}
+                  isActive={opinionPollsCategoryFilter === opt.value}
+                  onClick={() => setOpinionPollsCategoryFilter(opt.value as FilterCategory)}
                   testIdPrefix="filter-opinion"
                   user={user}
                   onAuthRequired={handleAuthRequired}
@@ -2768,12 +2851,12 @@ export default function VotePage() {
               placeholder="Search celebrities..."
               testId="filter-value-search"
             >
-              {getFilterCategories(true).map((cat) => (
+              {valueCategoryOptions.map((opt) => (
                 <FilterChip
-                  key={cat}
-                  category={cat}
-                  isActive={valuePerceptionCategoryFilter === cat}
-                  onClick={() => setValuePerceptionCategoryFilter(cat as FilterCategory)}
+                  key={opt.value}
+                  category={opt.value}
+                  isActive={valuePerceptionCategoryFilter === opt.value}
+                  onClick={() => setValuePerceptionCategoryFilter(opt.value as FilterCategory)}
                   testIdPrefix="filter-value"
                   user={user}
                   onAuthRequired={handleAuthRequired}
@@ -2908,12 +2991,12 @@ export default function VotePage() {
               placeholder="Search candidates..."
               testId="filter-induction-search"
             >
-              {getFilterCategories(false).map((cat) => (
+              {inductionCategoryOptions.map((opt) => (
                 <FilterChip
-                  key={cat}
-                  category={cat}
-                  isActive={inductionCategoryFilter === cat}
-                  onClick={() => setInductionCategoryFilter(cat as FilterCategory)}
+                  key={opt.value}
+                  category={opt.value}
+                  isActive={inductionCategoryFilter === opt.value}
+                  onClick={() => setInductionCategoryFilter(opt.value as FilterCategory)}
                   testIdPrefix="filter-induction"
                   user={user}
                   onAuthRequired={handleAuthRequired}
@@ -3015,12 +3098,12 @@ export default function VotePage() {
               placeholder="Search profiles..."
               testId="filter-curate-search"
             >
-              {getFilterCategories(false).map((cat) => (
+              {curateCategoryOptions.map((opt) => (
                 <FilterChip
-                  key={cat}
-                  category={cat}
-                  isActive={curateCategoryFilter === cat}
-                  onClick={() => setCurateCategoryFilter(cat as FilterCategory)}
+                  key={opt.value}
+                  category={opt.value}
+                  isActive={curateCategoryFilter === opt.value}
+                  onClick={() => setCurateCategoryFilter(opt.value as FilterCategory)}
                   testIdPrefix="filter-curate"
                   user={user}
                   onAuthRequired={handleAuthRequired}
@@ -3579,7 +3662,7 @@ export default function VotePage() {
               onChange={(v) => setInductionCategoryFilter(v as FilterCategory)}
               searchValue={inductionSearchQuery}
               onSearchChange={setInductionSearchQuery}
-              categories={VOTE_CATEGORIES}
+              categories={inductionCategoryOptions}
               allValue="all"
               placeholder="Search..."
               testIdPrefix="overlay-induction"
@@ -3637,7 +3720,7 @@ export default function VotePage() {
               onChange={(v) => setTopicsCategoryFilter(v as FilterCategory)}
               searchValue={topicsSearchQuery}
               onSearchChange={setTopicsSearchQuery}
-              categories={VOTE_CATEGORIES_WITH_CUSTOM}
+              categories={topicsCategoryOptions}
               allValue="all"
               placeholder="Search..."
               testIdPrefix="overlay-topics"
@@ -3697,7 +3780,7 @@ export default function VotePage() {
               onChange={(v) => setMatchupsCategoryFilter(v as FilterCategory)}
               searchValue={matchupsSearchQuery}
               onSearchChange={setMatchupsSearchQuery}
-              categories={VOTE_CATEGORIES_WITH_CUSTOM}
+              categories={matchupsCategoryOptions}
               allValue="all"
               placeholder="Search..."
               testIdPrefix="overlay-matchups"
@@ -3759,7 +3842,7 @@ export default function VotePage() {
               onChange={(v) => setOpinionPollsCategoryFilter(v as FilterCategory)}
               searchValue={opinionPollsSearchQuery}
               onSearchChange={setOpinionPollsSearchQuery}
-              categories={VOTE_CATEGORIES_WITH_CUSTOM}
+              categories={opinionCategoryOptions}
               allValue="all"
               placeholder="Search..."
               testIdPrefix="overlay-opinion"
@@ -3820,7 +3903,7 @@ export default function VotePage() {
               onChange={(v) => setValuePerceptionCategoryFilter(v as FilterCategory)}
               searchValue={valuePerceptionSearchQuery}
               onSearchChange={setValuePerceptionSearchQuery}
-              categories={VOTE_CATEGORIES_WITH_CUSTOM}
+              categories={valueCategoryOptions}
               allValue="all"
               placeholder="Search..."
               testIdPrefix="overlay-value"

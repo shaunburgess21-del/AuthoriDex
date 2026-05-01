@@ -107,7 +107,8 @@ import { CardSection } from "@/components/CardSection";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { UserSocialAvatar } from "@/components/UserSocialAvatar";
 import { formatActivityAge } from "@/lib/formatDate";
-import { getMarketCategoryLabel, normalizeMarketCategory, CATEGORIES_WITH_FILTERS, CATEGORIES_OPEN, OPINION_POLL_MIN_OPTIONS, OPINION_POLL_MAX_OPTIONS } from "@shared/constants";
+import { getMarketCategoryLabel, normalizeMarketCategory, CATEGORIES_OPEN, OPINION_POLL_MIN_OPTIONS, OPINION_POLL_MAX_OPTIONS } from "@shared/constants";
+import { buildSectionCategoryOptions } from "@/lib/sectionCategoryFilters";
 import { SuggestCategorySelect, SuggestDurationPicker, OpinionOptionRow, type OpinionOptionInput } from "@/components/suggest";
 import { OnboardingDrawer, type OnboardingStep, type OnboardingDrawerHandle } from "@/components/OnboardingDrawer";
 import { UnifiedSectionHeader } from "@/components/UnifiedSectionHeader";
@@ -191,7 +192,7 @@ function FreshnessBadge({ market }: { market: any }) {
 
 // Prediction Type definitions
 type PredictionType = "all" | "jackpot" | "updown" | "h2h" | "gainer" | "community";
-type CategoryFilter = (typeof CATEGORIES_WITH_FILTERS)[number]["id"];
+type CategoryFilter = string;
 
 
 const mockMarkets: PredictionMarket[] = [
@@ -520,7 +521,7 @@ function SectionFilterBar({
   testIdPrefix,
   user,
   onAuthRequired,
-  includeCustomTopic = false
+  filters,
 }: {
   categoryFilter: CategoryFilter;
   onCategoryChange: (cat: CategoryFilter) => void;
@@ -530,7 +531,7 @@ function SectionFilterBar({
   testIdPrefix: string;
   user?: any;
   onAuthRequired?: () => void;
-  includeCustomTopic?: boolean;
+  filters: Array<{ id: string; label: string }>;
 }) {
   const handleCategoryClick = (catId: CategoryFilter) => {
     if (catId === "favorites" && !user) {
@@ -539,8 +540,6 @@ function SectionFilterBar({
     }
     onCategoryChange(catId);
   };
-
-  const filters = getPredictCategoryFilters(includeCustomTopic);
 
   return (
     <div>
@@ -551,7 +550,7 @@ function SectionFilterBar({
         testId={`${testIdPrefix}-search`}
       >
         {filters.map((cat) => {
-          const IconComponent = CATEGORY_ICONS[cat.id];
+          const IconComponent = CATEGORY_ICONS[cat.id] || LayoutGrid;
           return (
             <button
               key={cat.id}
@@ -573,9 +572,7 @@ function SectionFilterBar({
   );
 }
 
-const BASE_CATEGORY_FILTERS: { id: CategoryFilter; label: string }[] = CATEGORIES_WITH_FILTERS.map(c => ({ id: c.id as CategoryFilter, label: c.label }));
-
-const CATEGORY_ICONS: Record<CategoryFilter, LucideIcon> = {
+const CATEGORY_ICONS: Record<string, LucideIcon> = {
   all: LayoutGrid,
   favorites: Star,
   trending: Flame,
@@ -592,13 +589,6 @@ const CATEGORY_ICONS: Record<CategoryFilter, LucideIcon> = {
   lifestyle: Heart,
   misc: Sparkles,
 };
-
-const CATEGORY_FILTERS_WITH_CUSTOM = BASE_CATEGORY_FILTERS;
-
-const getPredictCategoryFilters = (includeCustomTopic: boolean) => 
-  includeCustomTopic ? CATEGORY_FILTERS_WITH_CUSTOM : BASE_CATEGORY_FILTERS;
-
-const CATEGORY_FILTERS = BASE_CATEGORY_FILTERS;
 
 
 
@@ -805,7 +795,8 @@ function FullScreenOverlay({
   onSearchChange,
   user,
   onAuthRequired,
-  overlayName
+  overlayName,
+  categories,
 }: {
   open: boolean;
   onClose: () => void;
@@ -818,6 +809,7 @@ function FullScreenOverlay({
   user?: any;
   onAuthRequired?: () => void;
   overlayName: string;
+  categories: Array<{ value: string; label: string }>;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -835,8 +827,6 @@ function FullScreenOverlay({
   }, [open, overlayName]);
   
   if (!open) return null;
-  
-  const predictCategories = CATEGORY_FILTERS.map((c) => ({ value: c.id, label: c.label }));
   
   return (
     <div ref={scrollRef} onScroll={(e) => saveOverlayScroll(overlayName, e.currentTarget.scrollTop)} className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-y-auto premium-scrollbar" data-testid="overlay-view-all">
@@ -856,7 +846,7 @@ function FullScreenOverlay({
             onChange={(v) => onCategoryChange(v as CategoryFilter)}
             searchValue={searchQuery}
             onSearchChange={onSearchChange}
-            categories={predictCategories}
+            categories={categories}
             allValue="all"
             placeholder="Search..."
             testIdPrefix="overlay-predict"
@@ -2255,12 +2245,100 @@ export default function PredictPage() {
         : "No Category Races are available right now";
 
   const filteredCommunity = openMarkets.filter((m: any) =>
-    (communityCategory === "all" || communityCategory === "trending" || m.category === communityCategory) &&
+    (communityCategory === "all" ||
+      communityCategory === "trending" ||
+      (communityCategory === "favorites"
+        ? !!m.personId && favoriteIds.has(m.personId)
+        : normalizeMarketCategory(m.category) === communityCategory)) &&
     (!communitySearch || m.title?.toLowerCase().includes(communitySearch.toLowerCase())) &&
     passesMyPositionsFilter(m.id)
   ).sort((a: any, b: any) => communityCategory === "trending"
     ? trendingCompare(a.totalBets, b.totalBets, Number(a.totalPool ?? a.seedVolume ?? 0), Number(b.totalPool ?? b.seedVolume ?? 0))
     : 0);
+
+  const updownCategoryFilters = useMemo(
+    () =>
+      buildSectionCategoryOptions({
+        categories: hydratedMarkets.map((m) => m.category),
+        includeFavorites: true,
+        includeTrending: true,
+        selectedCategory: updownCategory,
+      }).map((c) => ({ id: c.value, label: c.label })),
+    [hydratedMarkets, updownCategory],
+  );
+
+  const h2hCategoryFilters = useMemo(
+    () =>
+      buildSectionCategoryOptions({
+        categories: hydratedH2H.map((m) => m.category),
+        includeFavorites: true,
+        includeTrending: true,
+        selectedCategory: h2hCategory,
+      }).map((c) => ({ id: c.value, label: c.label })),
+    [hydratedH2H, h2hCategory],
+  );
+
+  const gainerCategoryFilters = useMemo(
+    () =>
+      buildSectionCategoryOptions({
+        categories: hydratedGainers.map((m) => m.category),
+        includeFavorites: true,
+        includeTrending: true,
+        selectedCategory: gainerCategory,
+      }).map((c) => ({ id: c.value, label: c.label })),
+    [hydratedGainers, gainerCategory],
+  );
+
+  const communityCategoryFilters = useMemo(
+    () =>
+      buildSectionCategoryOptions({
+        categories: openMarkets.map((m: any) => m.category),
+        includeFavorites: true,
+        includeTrending: true,
+        selectedCategory: communityCategory,
+      }).map((c) => ({ id: c.value, label: c.label })),
+    [openMarkets, communityCategory],
+  );
+
+  useEffect(() => {
+    if (!updownCategoryFilters.some((c) => c.id === updownCategory)) setUpdownCategory("all");
+  }, [updownCategory, updownCategoryFilters]);
+
+  useEffect(() => {
+    if (!h2hCategoryFilters.some((c) => c.id === h2hCategory)) setH2hCategory("all");
+  }, [h2hCategory, h2hCategoryFilters]);
+
+  useEffect(() => {
+    if (!gainerCategoryFilters.some((c) => c.id === gainerCategory)) setGainerCategory("all");
+  }, [gainerCategory, gainerCategoryFilters]);
+
+  useEffect(() => {
+    if (!communityCategoryFilters.some((c) => c.id === communityCategory)) setCommunityCategory("all");
+  }, [communityCategory, communityCategoryFilters]);
+
+  useEffect(() => {
+    const currentFilters =
+      viewAllCategory === "weekly"
+        ? updownCategoryFilters
+        : viewAllCategory === "h2h"
+          ? h2hCategoryFilters
+          : viewAllCategory === "gainers"
+            ? gainerCategoryFilters
+            : viewAllCategory === "community"
+              ? communityCategoryFilters
+              : null;
+    if (!currentFilters) return;
+    if (!currentFilters.some((c) => c.id === overlayCategoryFilter)) {
+      setOverlayCategoryFilter("all");
+    }
+  }, [
+    viewAllCategory,
+    overlayCategoryFilter,
+    updownCategoryFilters,
+    h2hCategoryFilters,
+    gainerCategoryFilters,
+    communityCategoryFilters,
+  ]);
 
   const showSection = (type: PredictionType) => selectedType === "all" || selectedType === type;
 
@@ -2523,7 +2601,7 @@ export default function PredictPage() {
                 testIdPrefix="community"
                 user={user}
                 onAuthRequired={() => navigateToLogin(setLocation)}
-                includeCustomTopic={true}
+                filters={communityCategoryFilters}
               />
             </UnifiedSectionHeader>
             {openMarketsError ? (
@@ -2757,6 +2835,7 @@ export default function PredictPage() {
                 testIdPrefix="updown"
                 user={user}
                 onAuthRequired={() => navigateToLogin(setLocation)}
+                filters={updownCategoryFilters}
               />
             </UnifiedSectionHeader>
             {updownError ? (
@@ -2840,6 +2919,7 @@ export default function PredictPage() {
                 testIdPrefix="h2h"
                 user={user}
                 onAuthRequired={() => navigateToLogin(setLocation)}
+                filters={h2hCategoryFilters}
               />
             </UnifiedSectionHeader>
             {h2hError ? (
@@ -2929,6 +3009,7 @@ export default function PredictPage() {
                 testIdPrefix="gainer"
                 user={user}
                 onAuthRequired={() => navigateToLogin(setLocation)}
+                filters={gainerCategoryFilters}
               />
             </UnifiedSectionHeader>
             {gainerError ? (
@@ -3007,10 +3088,11 @@ export default function PredictPage() {
         onSearchChange={setOverlaySearchQuery}
         user={user}
         onAuthRequired={() => navigateToLogin(setLocation)}
+        categories={updownCategoryFilters.map((c) => ({ value: c.id, label: c.label }))}
       >
         {hydratedMarkets
           .filter(m => 
-            (overlayCategoryFilter === "all" || overlayCategoryFilter === "trending" || m.category === overlayCategoryFilter) &&
+            matchesCategory(overlayCategoryFilter, m.category, m.personId) &&
             (!overlaySearchQuery || m.personName.toLowerCase().includes(overlaySearchQuery.toLowerCase()))
           )
           .sort((a, b) => overlayCategoryFilter === "trending"
@@ -3041,10 +3123,14 @@ export default function PredictPage() {
         onSearchChange={setOverlaySearchQuery}
         user={user}
         onAuthRequired={() => navigateToLogin(setLocation)}
+        categories={h2hCategoryFilters.map((c) => ({ value: c.id, label: c.label }))}
       >
         {hydratedH2H
           .filter(m => 
-            (overlayCategoryFilter === "all" || overlayCategoryFilter === "trending" || m.category === overlayCategoryFilter) &&
+            (overlayCategoryFilter === "all" || overlayCategoryFilter === "trending" ||
+              (overlayCategoryFilter === "favorites"
+                ? (favoriteIds.has(m.person1Id || "") || favoriteIds.has(m.person2Id || ""))
+                : normalizeMarketCategory(m.category) === overlayCategoryFilter)) &&
             (!overlaySearchQuery || m.title.toLowerCase().includes(overlaySearchQuery.toLowerCase()))
           )
           .sort((a, b) => overlayCategoryFilter === "trending"
@@ -3083,6 +3169,7 @@ export default function PredictPage() {
         onSearchChange={setOverlaySearchQuery}
         user={user}
         onAuthRequired={() => navigateToLogin(setLocation)}
+        categories={gainerCategoryFilters.map((c) => ({ value: c.id, label: c.label }))}
       >
         {filteredOverlayGainers.length > 0 ? (
           filteredOverlayGainers.map((market) => (
@@ -3117,10 +3204,14 @@ export default function PredictPage() {
         onSearchChange={setOverlaySearchQuery}
         user={user}
         onAuthRequired={() => navigateToLogin(setLocation)}
+        categories={communityCategoryFilters.map((c) => ({ value: c.id, label: c.label }))}
       >
         {openMarkets
           .filter((m: any) => 
-            (overlayCategoryFilter === "all" || overlayCategoryFilter === "trending" || m.category === overlayCategoryFilter) &&
+            (overlayCategoryFilter === "all" || overlayCategoryFilter === "trending" ||
+              (overlayCategoryFilter === "favorites"
+                ? !!m.personId && favoriteIds.has(m.personId)
+                : normalizeMarketCategory(m.category) === overlayCategoryFilter)) &&
             (!overlaySearchQuery || m.title?.toLowerCase().includes(overlaySearchQuery.toLowerCase()))
           )
           .sort((a: any, b: any) => overlayCategoryFilter === "trending"
