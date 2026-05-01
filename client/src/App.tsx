@@ -14,6 +14,7 @@ import { ScrollToTop } from "@/components/ScrollToTop";
 import { XpBurstProvider } from "@/components/XpBurstProvider";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useXpCelebration } from "@/hooks/useGamification";
+import { useNotificationsRealtime } from "@/hooks/useNotificationsRealtime";
 
 // If we got here the page loaded successfully -- clear any leftover retry
 // flag from a previous stale-chunk reload so the mechanism works on the
@@ -64,9 +65,11 @@ const VotesPage = lazyWithRetry(() => import("@/pages/me/VotesPage"));
 const PredictionsPage = lazyWithRetry(() => import("@/pages/me/PredictionsPage"));
 const FavoritesPage = lazyWithRetry(() => import("@/pages/me/FavoritesPage"));
 const SettingsPage = lazyWithRetry(() => import("@/pages/me/SettingsPage"));
+const NotificationsArchivePage = lazyWithRetry(() => import("@/pages/me/NotificationsPage"));
 const PublicProfilePage = lazyWithRetry(() => import("@/pages/PublicProfilePage"));
 const AdminDashboard = lazyWithRetry(() => import("@/pages/AdminDashboard"));
 const AdminSuggestionsPage = lazyWithRetry(() => import("@/pages/admin/AdminSuggestionsPage"));
+const AdminAnnouncementsPage = lazyWithRetry(() => import("@/pages/admin/AdminAnnouncementsPage"));
 const MarketDetailPage = lazyWithRetry(() => import("@/pages/MarketDetailPage"));
 const PollDetailPage = lazyWithRetry(() => import("@/pages/PollDetailPage"));
 const OpinionPollDetailPage = lazyWithRetry(() => import("@/pages/OpinionPollDetailPage"));
@@ -117,6 +120,7 @@ function Router() {
         <Route path="/me/predictions" component={PredictionsPage} />
         <Route path="/me/favorites" component={FavoritesPage} />
         <Route path="/me/settings" component={SettingsPage} />
+        <Route path="/me/notifications" component={NotificationsArchivePage} />
         <Route path="/u/:username" component={PublicProfilePage} />
         <Route path="/markets/:slug" component={MarketDetailPage} />
         <Route path="/polls/:slug" component={PollDetailPage} />
@@ -129,6 +133,7 @@ function Router() {
         <Route path="/predict/activity" component={TownSquarePage} />
         <Route path="/vote/value-ratings" component={ValueRatingsPage} />
         <Route path="/admin/suggestions" component={AdminSuggestionsPage} />
+        <Route path="/admin/announcements" component={AdminAnnouncementsPage} />
         <Route path="/admin" component={AdminDashboard} />
         <Route component={NotFound} />
       </Switch>
@@ -139,6 +144,18 @@ function Router() {
 function XpCelebrationWatcher() {
   const { isLoggedIn } = useAuth();
   useXpCelebration(isLoggedIn);
+  return null;
+}
+
+/**
+ * Mount the Supabase Realtime subscription that powers live in-app
+ * notifications. Lives inside <AuthProvider /> so the hook can read
+ * the current session, and inside <QueryClientProvider /> so it can
+ * invalidate the notification queries on insert. Hook itself is a
+ * no-op when logged out.
+ */
+function NotificationsRealtimeWatcher() {
+  useNotificationsRealtime();
   return null;
 }
 
@@ -199,6 +216,7 @@ function App() {
               />
               <PWAUpdatePrompt />
               <NewUserGate />
+              <NotificationsRealtimeWatcher />
               <XpBurstProvider>
                 {/* Watcher is inside XpBurstProvider so useXpCelebration can fire daily-login bursts via useXpBurst. */}
                 <XpCelebrationWatcher />

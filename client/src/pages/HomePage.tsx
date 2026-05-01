@@ -6,7 +6,7 @@ import { LeaderboardRow } from "@/components/LeaderboardRow";
 import { VotingModal } from "@/components/VotingModal";
 import { StakeModal, type StakeSelection } from "@/components/StakeModal";
 import { toast } from "sonner";
-import { UserMenu } from "@/components/UserMenu";
+import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { FilterDropdown } from "@/components/FilterDropdown";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { CategoryPill, getCategoryTextColor } from "@/components/CategoryPill";
@@ -1033,7 +1033,7 @@ export default function HomePage() {
                 Predict
               </Button>
             </div>
-            <UserMenu />
+            <HeaderUserActions />
           </div>
         </div>
       </header>

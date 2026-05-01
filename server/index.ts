@@ -10,6 +10,7 @@ import { initSentry, sentryErrorHandler, captureBackgroundError } from "./sentry
 import { serveStatic } from "./serve-static";
 import { runDataIngestion, hydrateTrendingPeopleFromSnapshots } from "./jobs/ingest";
 import { startLiveTickScheduler, setLastFullRefreshAt, applySnapBackDampening } from "./jobs/live-tick";
+import { startNotificationsDerivationScheduler } from "./jobs/notifications-derivation";
 import { startMarketResolverScheduler } from "./jobs/market-resolver";
 import { runSeedBatch } from "./jobs/seed-engine";
 import { startAgentRunnerScheduler } from "./agents/agentRunner";
@@ -718,6 +719,13 @@ async function startServer() {
     // Start live tick scheduler (re-ranks every 10 min using internal signals)
     if (!SERVERLESS_MODE) {
       startScheduler("LiveTick", startLiveTickScheduler);
+    }
+
+    // Notifications derivation: rank crossings, hot movers, market_closing_soon,
+    // streak milestones, low-credit reminders. Runs alongside LiveTick at the
+    // same 10-min cadence; advisory-locked so multiple processes are safe.
+    if (!SERVERLESS_MODE) {
+      startScheduler("NotificationsDerivation", startNotificationsDerivationScheduler);
     }
 
     startScheduler("Seed Engine", startSeedEngineScheduler);

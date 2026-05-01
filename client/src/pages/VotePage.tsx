@@ -12,7 +12,7 @@ import {
 import { AvatarHeightHeadline } from "@/components/AvatarHeightHeadline";
 import { useCategoryRaceMap } from "@/hooks/useCategoryRaceMap";
 import { useLeaderboardCategories } from "@/hooks/useLeaderboardCategories";
-import { UserMenu } from "@/components/UserMenu";
+import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { useXpBurst } from "@/components/XpBurstProvider";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { useAuth } from "@/contexts/AuthContext";
@@ -2432,7 +2432,7 @@ export default function VotePage() {
                 <Button variant="ghost" size="sm" className="md:text-sm" data-testid="link-nav-predict">Predict</Button>
               </Link>
             </div>
-            <UserMenu />
+            <HeaderUserActions />
           </div>
         </div>
       </header>

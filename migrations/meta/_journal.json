@@ -246,6 +246,20 @@
       "when": 1778448600000,
       "tag": "0034_fix_avatar_storage_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1778535000000,
+      "tag": "0035_notifications",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1778621400000,
+      "tag": "0036_notification_preferences",
+      "breakpoints": true
     }
   ]
 }

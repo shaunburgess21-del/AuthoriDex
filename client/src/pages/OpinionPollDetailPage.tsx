@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { sharePage } from "@/lib/share";
 import { goBack } from "@/lib/goBack";
-import { UserMenu } from "@/components/UserMenu";
+import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { CategoryPill } from "@/components/CategoryPill";
 import { Button } from "@/components/ui/button";
 import {
@@ -240,7 +240,7 @@ export default function OpinionPollDetailPage() {
             <VoteDetailNavCluster listType="opinion" slug={slug} />
           </div>
           <div className="flex justify-end min-w-0 justify-self-end col-start-3">
-            <UserMenu />
+            <HeaderUserActions />
           </div>
         </div>
       </header>

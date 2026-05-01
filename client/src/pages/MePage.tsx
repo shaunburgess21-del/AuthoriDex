@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { UserMenu } from "@/components/UserMenu";
+import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 import { ArrowLeft, User, Star, TrendingUp, Settings, LogOut, Vote, Wallet, Shield, Trophy, Sparkles, Eye, Lock, Flame, CreditCard } from "lucide-react";
 import { useLocation } from "wouter";
@@ -82,7 +82,7 @@ export default function MePage() {
                 Predict
               </Button>
             </div>
-            <UserMenu />
+            <HeaderUserActions />
           </div>
         </div>
       </header>

@@ -9,7 +9,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { UserMenu } from "@/components/UserMenu";
+import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
 import {
   CREDIT_PACKAGES,
@@ -66,7 +66,7 @@ export default function PricingPage() {
               <span className="font-serif text-xl font-bold">VoxDex</span>
             </Link>
           </div>
-          <UserMenu />
+          <HeaderUserActions />
         </div>
       </header>
 

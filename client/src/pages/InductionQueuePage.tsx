@@ -7,7 +7,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedApiError, signInToVoteToastOptions, signInToVoteTitle } from "@/lib/signInToVoteToast";
 import { navigateToLogin } from "@/lib/authReturn";
 import { goBack } from "@/lib/goBack";
-import { UserMenu } from "@/components/UserMenu";
+import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { useXpBurst } from "@/components/XpBurstProvider";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
@@ -68,7 +68,8 @@ const FILTER_CATEGORIES = CATEGORIES_WITH_FILTERS
   .map(c => ({ value: c.id, label: c.label }));
 
 export default function InductionQueuePage() {
-  const [, setLocation] = useLocation();  const queryClient = useQueryClient();
+  const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();
   const { user, isLoggedIn } = useAuth();
   const { trigger: triggerXpBurst } = useXpBurst();
   const raceMap = useCategoryRaceMap();
@@ -185,7 +186,7 @@ export default function InductionQueuePage() {
               <VoxDexLogo size={24} />
             </Link>
           </div>
-          <UserMenu />
+          <HeaderUserActions />
         </div>
       </header>
 

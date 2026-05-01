@@ -1483,3 +1483,92 @@ export const insertSuggestionSchema = createInsertSchema(suggestions).omit({
 
 export type Suggestion = typeof suggestions.$inferSelect;
 export type InsertSuggestion = z.infer<typeof insertSuggestionSchema>;
+
+// ============================================================================
+// IN-APP NOTIFICATIONS
+// ============================================================================
+//
+// One row per user-visible event. Inserts are server-side only (service role);
+// authenticated clients can SELECT/UPDATE their own rows via RLS in
+// migration 0035. (user_id, idempotency_key) is unique so derivation jobs
+// can re-run safely.
+export const notifications = pgTable("notifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
+  // See client/src/lib/notifications/registry.ts for the canonical list.
+  kind: text("kind").notNull(),
+  // 'predictions' | 'favorites' | 'social' | 'account' | 'system'
+  category: text("category").notNull(),
+  // Denormalized at write-time so historical strings stay stable across
+  // UX iterations (renaming a kind label later won't rewrite the past).
+  title: text("title").notNull(),
+  body: text("body"),
+  href: text("href"),
+  // Social fanout (replier, upvoter, etc.). Nullable for system-driven kinds.
+  actorUserId: varchar("actor_user_id"),
+  // Polymorphic ref to the originating entity (market, comment, person, ...).
+  entityType: text("entity_type"),
+  entityId: text("entity_id"),
+  // Structured payload (payout, deltaRank, milestone, etc.).
+  metadata: jsonb("metadata"),
+  // 0 = silent (bell only), 1 = high (auto-toast in-session).
+  priority: integer("priority").notNull().default(0),
+  // For batched kinds — e.g. "upvote-milestone:<commentId>:5".
+  groupKey: text("group_key"),
+  // Critical for derivation jobs: re-running the job must not duplicate.
+  idempotencyKey: text("idempotency_key").notNull(),
+  // seenAt clears the bell badge the moment the panel opens; readAt is
+  // set when the user actually clicks the row. Splitting them lets the
+  // badge feel snappy without prematurely visually marking rows as read.
+  seenAt: timestamp("seen_at"),
+  readAt: timestamp("read_at"),
+  dismissedAt: timestamp("dismissed_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  uniqueIdem: unique("notifications_user_idempotency_unique").on(table.userId, table.idempotencyKey),
+  userUnreadIdx: index("notifications_user_unread_idx").on(table.userId, table.readAt, table.createdAt),
+  userKindIdx: index("notifications_user_kind_idx").on(table.userId, table.kind, table.createdAt),
+  userCategoryIdx: index("notifications_user_category_idx").on(table.userId, table.category, table.createdAt),
+}));
+
+export const insertNotificationSchema = createInsertSchema(notifications).omit({
+  id: true,
+  createdAt: true,
+  seenAt: true,
+  readAt: true,
+  dismissedAt: true,
+});
+
+export type Notification = typeof notifications.$inferSelect;
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+
+// Per-user notification preferences. Lazy-created on first read. The
+// email/push columns are reserved for Phase 2 — the UI shows them as
+// disabled "Coming soon" today, but storing them now keeps the data
+// model multi-channel and avoids a follow-up migration later.
+export const notificationPreferences = pgTable("notification_preferences", {
+  userId: varchar("user_id").primaryKey().references(() => profiles.id, { onDelete: "cascade" }),
+
+  predictionsInApp: boolean("predictions_in_app").notNull().default(true),
+  favoritesInApp: boolean("favorites_in_app").notNull().default(true),
+  socialInApp: boolean("social_in_app").notNull().default(true),
+  accountInApp: boolean("account_in_app").notNull().default(true),
+  systemInApp: boolean("system_in_app").notNull().default(true),
+
+  predictionsEmail: boolean("predictions_email").notNull().default(false),
+  favoritesEmail: boolean("favorites_email").notNull().default(false),
+  socialEmail: boolean("social_email").notNull().default(false),
+  accountEmail: boolean("account_email").notNull().default(false),
+  systemEmail: boolean("system_email").notNull().default(false),
+
+  predictionsPush: boolean("predictions_push").notNull().default(false),
+  favoritesPush: boolean("favorites_push").notNull().default(false),
+  socialPush: boolean("social_push").notNull().default(false),
+  accountPush: boolean("account_push").notNull().default(false),
+  systemPush: boolean("system_push").notNull().default(false),
+
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export type NotificationPreferences = typeof notificationPreferences.$inferSelect;
+export type InsertNotificationPreferences = typeof notificationPreferences.$inferInsert;

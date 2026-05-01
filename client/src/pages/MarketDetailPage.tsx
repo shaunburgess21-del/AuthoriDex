@@ -4,7 +4,7 @@ import { useParams, useLocation, Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { sharePage } from "@/lib/share";
-import { UserMenu } from "@/components/UserMenu";
+import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { useXpBurst } from "@/components/XpBurstProvider";
 import { CategoryPill } from "@/components/CategoryPill";
 import { Button } from "@/components/ui/button";
@@ -798,7 +798,7 @@ export default function MarketDetailPage() {
                 </button>
               </Link>
             </div>
-            <UserMenu />
+            <HeaderUserActions />
           </div>
         </header>
         <div className="container mx-auto px-4 pt-20 pb-24 md:pb-6 text-center" data-testid="market-not-found">
@@ -858,7 +858,7 @@ export default function MarketDetailPage() {
               </button>
             </Link>
           </div>
-          <UserMenu />
+          <HeaderUserActions />
         </div>
       </header>
 

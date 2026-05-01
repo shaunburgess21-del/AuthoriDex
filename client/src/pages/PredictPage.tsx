@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
 import { useCategoryRaceMap } from "@/hooks/useCategoryRaceMap";
 import { useLeaderboardCategories } from "@/hooks/useLeaderboardCategories";
-import { UserMenu } from "@/components/UserMenu";
+import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { useXpBurst } from "@/components/XpBurstProvider";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -2409,7 +2409,13 @@ export default function PredictPage() {
             </button>
           </div>
           
-          <div className="flex items-center gap-3">
+          {/* Right cluster.
+              On md+ this is `[Leaderboard] [Vote] [Predict] [Bell] [UserMenu]`
+              with comfortable gap-3 spacing. On mobile, the dense
+              `[Credits][ScrollText][Bell][UserMenu]` row needs to fit at
+              ~360px, so we drop to gap-2 there and tighten the inner
+              mobile group accordingly. */}
+          <div className="flex items-center gap-2 md:gap-3">
             <div className="hidden md:flex items-center gap-4">
               <Link href="/#leaderboard">
                 <Button variant="ghost" size="sm" className="md:text-sm">Leaderboard</Button>
@@ -2424,16 +2430,19 @@ export default function PredictPage() {
             {/* TODO(phase1-revenue): wire both mobile and desktop Credits pills to
                 navigate to /me/credits (or similar) for credits insights + purchase
                 flow via Paystack. Plan in NOTES.md. */}
-            <div className="flex items-center gap-2.5 md:hidden">
-              <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/40 dark:border-violet-500/30">
-                <Wallet className="h-[14px] w-[14px] text-violet-700 dark:text-violet-500" />
+            <div className="flex items-center gap-1.5 md:hidden">
+              <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-md bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/40 dark:border-violet-500/30">
+                {/* Hide the Wallet glyph on the very narrowest viewports
+                    (<360px) so the credit number itself doesn't wrap. The
+                    pill background already telegraphs "wallet" on its own. */}
+                <Wallet className="hidden [@media(min-width:360px)]:inline-block h-[14px] w-[14px] text-violet-700 dark:text-violet-500" />
                 <span className="font-mono font-bold text-sm">{walletCredits.toLocaleString('en-US')}</span>
               </div>
               <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setRulesModalOpen("predictions")} aria-label="View predictions rules">
                 <ScrollText className="h-4 w-4 text-muted-foreground" />
               </Button>
             </div>
-            <UserMenu />
+            <HeaderUserActions bellSize="compact" className="gap-1.5 md:gap-2" />
           </div>
         </div>
       </header>

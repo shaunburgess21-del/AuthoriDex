@@ -6,6 +6,7 @@ import { calculateSettlementPayouts } from "./settlement-utils";
 import { scoreResolvedMarket } from "../agents/performanceUpdater";
 import { getAiModel, getChatCompletionTokenLimit } from "../config/ai-models";
 import { gamificationService } from "../services/gamification";
+import { createNotification } from "../services/notifications";
 import OpenAI from "openai";
 import { fetchTrendingNewsContext } from "../providers/serper";
 
@@ -384,6 +385,63 @@ export async function settleMarketBets(marketId: string, winnerEntryId: string, 
     }
   }
 
+  // Notification fanout: one row per affected user. Winners and losers
+  // both get a `market_resolved` notification — a "you lost" ping is far
+  // less spammy than it sounds and lets users close the loop on their
+  // open positions instead of repeatedly checking /me/predictions.
+  // Idempotency uses (marketId, betId) so re-runs of settleMarketBets
+  // (e.g. retries after a transient error) silently absorb.
+  if (!result.alreadySettled) {
+    try {
+      const settledBets = await db
+        .select({
+          id: marketBets.id,
+          userId: marketBets.userId,
+          status: marketBets.status,
+          payoutAmount: marketBets.payoutAmount,
+          stakeAmount: marketBets.stakeAmount,
+        })
+        .from(marketBets)
+        .where(and(
+          eq(marketBets.marketId, marketId),
+          inArray(marketBets.status, ["won", "lost"]),
+        ));
+
+      const [marketMeta] = await db
+        .select({ title: predictionMarkets.title, slug: predictionMarkets.slug })
+        .from(predictionMarkets)
+        .where(eq(predictionMarkets.id, marketId));
+
+      const marketTitle = marketMeta?.title ?? "your prediction";
+      const href = marketMeta?.slug ? `/markets/${marketMeta.slug}` : `/me/predictions`;
+
+      for (const bet of settledBets) {
+        const won = bet.status === "won";
+        const payout = bet.payoutAmount ?? 0;
+        const profit = won ? payout - bet.stakeAmount : -bet.stakeAmount;
+        const title = won
+          ? `You won ${payout.toLocaleString("en-US")} credits`
+          : `Your prediction didn't land`;
+        const body = won
+          ? `${marketTitle} resolved — net +${profit.toLocaleString("en-US")} credits.`
+          : `${marketTitle} resolved. Better luck next round.`;
+        await createNotification({
+          userId: bet.userId,
+          kind: "market_resolved",
+          title,
+          body,
+          href,
+          entityType: "market",
+          entityId: marketId,
+          metadata: { betId: bet.id, status: bet.status, payout, stake: bet.stakeAmount, profit },
+          idempotencyKey: `market_resolved:${marketId}:${bet.id}`,
+        });
+      }
+    } catch (err) {
+      log(`[Notifications] settleMarketBets fanout failed for ${marketId}: ${(err as Error)?.message ?? err}`);
+    }
+  }
+
   // Fire-and-forget AI resolution summary. Never block settlement on it.
   if (!result.alreadySettled) {
     generateResolutionSummary(marketId).catch(err =>
@@ -446,6 +504,42 @@ export async function voidMarketBets(marketId: string): Promise<number> {
   });
 
   log(`[MarketResolver] Void: market=${marketId}, refunded=${refundedCount} bets`);
+
+  // Fanout `market_void_refund` to every user who had an active bet.
+  // Best-effort, post-transaction; failures here must not undo the void.
+  if (refundedCount > 0) {
+    try {
+      const refundedBets = await db
+        .select({ id: marketBets.id, userId: marketBets.userId, stakeAmount: marketBets.stakeAmount })
+        .from(marketBets)
+        .where(and(eq(marketBets.marketId, marketId), eq(marketBets.status, "refunded")));
+
+      const [marketMeta] = await db
+        .select({ title: predictionMarkets.title, slug: predictionMarkets.slug })
+        .from(predictionMarkets)
+        .where(eq(predictionMarkets.id, marketId));
+
+      const marketTitle = marketMeta?.title ?? "A market you bet on";
+      const href = marketMeta?.slug ? `/markets/${marketMeta.slug}` : `/me/predictions`;
+
+      for (const bet of refundedBets) {
+        await createNotification({
+          userId: bet.userId,
+          kind: "market_void_refund",
+          title: `Market voided — ${bet.stakeAmount.toLocaleString("en-US")} credits refunded`,
+          body: `${marketTitle} was voided. Your stake is back in your wallet.`,
+          href,
+          entityType: "market",
+          entityId: marketId,
+          metadata: { betId: bet.id, refund: bet.stakeAmount },
+          idempotencyKey: `market_void_refund:${marketId}:${bet.id}`,
+        });
+      }
+    } catch (err) {
+      log(`[Notifications] voidMarketBets fanout failed for ${marketId}: ${(err as Error)?.message ?? err}`);
+    }
+  }
+
   return refundedCount;
 }
 
@@ -920,6 +1014,47 @@ async function resolveJackpot(market: any): Promise<"resolved" | "blocked"> {
         { marketId: market.id, betId: w.id }
       );
     } catch (e) { console.error("XP award for jackpot win failed:", e); }
+  }
+
+  // Notification fanout for jackpot. Same model as settleMarketBets but
+  // here `winners` and `losers` are already known by reference; no need
+  // to re-query market_bets. Idempotent on (marketId, betId).
+  try {
+    const href = `/markets/${market.slug ?? market.id}`;
+    const marketTitle = market.title ?? "Jackpot prediction";
+    const perWinnerShare = winners.length > 0 ? Math.floor(totalPool / winners.length) : 0;
+    for (let i = 0; i < winners.length; i++) {
+      const w = winners[i];
+      const share = i === winners.length - 1
+        ? totalPool - perWinnerShare * (winners.length - 1)
+        : perWinnerShare;
+      await createNotification({
+        userId: w.userId,
+        kind: "market_resolved",
+        title: `Jackpot — you won ${share.toLocaleString("en-US")} credits`,
+        body: `${marketTitle} closed at ${actualScore}. You predicted ${w.predictedScore} (off by ${w.diff}).`,
+        href,
+        entityType: "market",
+        entityId: market.id,
+        metadata: { betId: w.id, status: "won", payout: share, stake: w.stakeAmount, actualScore, predictedScore: w.predictedScore, margin: w.diff },
+        idempotencyKey: `market_resolved:${market.id}:${w.id}`,
+      });
+    }
+    for (const loser of losers) {
+      await createNotification({
+        userId: loser.userId,
+        kind: "market_resolved",
+        title: `Jackpot didn't land`,
+        body: `${marketTitle} closed at ${actualScore}.`,
+        href,
+        entityType: "market",
+        entityId: market.id,
+        metadata: { betId: loser.id, status: "lost", payout: 0, stake: loser.stakeAmount, actualScore },
+        idempotencyKey: `market_resolved:${market.id}:${loser.id}`,
+      });
+    }
+  } catch (err) {
+    log(`[Notifications] jackpot fanout failed for ${market.id}: ${(err as Error)?.message ?? err}`);
   }
 
   // Fire-and-forget resolution summary (jackpot settles outside settleMarketBets).

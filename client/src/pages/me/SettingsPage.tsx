@@ -33,6 +33,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { AvatarPicker } from "@/components/avatar/AvatarPicker";
+import { NotificationPreferences } from "@/components/notifications/NotificationPreferences";
 import { uploadAvatarFile, uploadGeneratedAvatar } from "@/lib/avatar/upload";
 import { PasswordCard } from "./PasswordCard";
 
@@ -394,54 +395,7 @@ export default function SettingsPage() {
           </div>
         </Card>
 
-        <Card className="p-6">
-          <div className="flex items-center gap-2 mb-6">
-            <Bell className="h-5 w-5 text-muted-foreground" />
-            <h2 className="font-semibold">Notifications</h2>
-          </div>
-          
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <div className="flex items-center gap-2">
-                  <Label>Email Notifications</Label>
-                  <Badge variant="outline" className="text-[10px] font-normal">
-                    Coming soon
-                  </Badge>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Receive updates about your predictions and votes
-                </p>
-              </div>
-              <Switch
-                checked={false}
-                disabled
-                aria-label="Email notifications (coming soon)"
-                data-testid="switch-email-notifications"
-              />
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <div className="flex items-center gap-2">
-                  <Label>Prediction Alerts</Label>
-                  <Badge variant="outline" className="text-[10px] font-normal">
-                    Coming soon
-                  </Badge>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Get notified when your predictions resolve
-                </p>
-              </div>
-              <Switch
-                checked={false}
-                disabled
-                aria-label="Prediction alerts (coming soon)"
-                data-testid="switch-prediction-alerts"
-              />
-            </div>
-          </div>
-        </Card>
+        <NotificationPreferences />
 
         <Card className="p-6 border-destructive/30">
           <div className="flex items-center gap-2 mb-6">

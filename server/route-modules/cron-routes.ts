@@ -158,6 +158,34 @@ export function registerCronRoutes(app: Express): void {
     }
   });
 
+  // Notifications derivation: rank crossings, hot movers, market_closing_soon,
+  // streak milestones, low-credit reminders. Mirrors the in-process scheduler
+  // started in server/index.ts so external cron / SERVERLESS_MODE deployments
+  // still get the passive notification stream. Advisory-locked job, so it's
+  // safe to call concurrently with the in-process scheduler.
+  app.post("/api/cron/notifications-derivation", verifyCronSecret, async (_req, res) => {
+    const startTime = Date.now();
+    try {
+      const { runNotificationsDerivation } = await import("../jobs/notifications-derivation");
+      const result = await runNotificationsDerivation();
+      res.json({
+        success: true,
+        message: "Notifications derivation completed",
+        result,
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error("[Cron] Notifications derivation error:", error);
+      res.status(500).json({
+        success: false,
+        error: error.message,
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  });
+
   app.post("/api/cron/retention-cleanup", verifyCronSecret, async (_req, res) => {
     const startTime = Date.now();
     try {

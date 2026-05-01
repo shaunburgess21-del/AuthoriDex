@@ -17,6 +17,7 @@ import { createHash, randomUUID } from "crypto";
 import multer, { MulterError } from "multer";
 import path from "path";
 import { gamificationService } from "./services/gamification";
+import { createNotification, createNotificationsBulk } from "./services/notifications";
 import { dispatchApproval, markSuggestionApproved, markSuggestionRejected } from "./services/suggestionApproval";
 import { JACKPOT_TICKET_COST, JACKPOT_MAX_PREDICTED_SCORE } from "./config/constants";
 import { isAdminRole } from "./utils/authz";
@@ -60,7 +61,7 @@ import { sendError, sendBadRequest, sendZodError } from "./utils/api-response";
 import { approveInductionCandidate } from "./services/induction-service";
 import { CANONICAL_MARKET_CATEGORIES, getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
 import { resolvePublicMatchupBySlugOrId } from "./utils/matchup-resolve";
-import { registerCronRoutes, registerPublicRoutes, registerGamificationRoutes, registerFavoritesRoutes } from "./route-modules";
+import { registerCronRoutes, registerPublicRoutes, registerGamificationRoutes, registerFavoritesRoutes, registerNotificationsRoutes } from "./route-modules";
 import { handleAuthHook } from "./emails/routes/auth-hook";
 import { sendEmail } from "./emails/send";
 import { WelcomeEmail, welcomeSubject } from "./emails/templates/lifecycle/Welcome";
@@ -242,6 +243,61 @@ async function resolveUnifiedCommentParent(input: {
     ))
     .limit(1);
   return market?.id ?? null;
+}
+
+/**
+ * Build the canonical client-side URL for a unified comment so we can
+ * deep-link from notifications. Falls back to `/me` if the parent has
+ * been deleted or its slug can't be resolved — better a soft landing
+ * than a 404.
+ */
+async function resolveUnifiedCommentHref(parentType: CommentParentType, parentId: string): Promise<string> {
+  try {
+    if (parentType === "community_insight") {
+      // Insights live on the person detail page; we need the personId.
+      const [row] = await db
+        .select({ personId: communityInsights.personId })
+        .from(communityInsights)
+        .where(eq(communityInsights.id, parentId))
+        .limit(1);
+      return row?.personId ? `/person/${row.personId}` : "/me";
+    }
+    if (parentType === "matchup") {
+      const [row] = await db
+        .select({ slug: matchups.slug })
+        .from(matchups)
+        .where(eq(matchups.id, parentId))
+        .limit(1);
+      return row?.slug ? `/vote/matchups/${row.slug}` : "/vote";
+    }
+    if (parentType === "trending_poll") {
+      const [row] = await db
+        .select({ slug: trendingPolls.slug })
+        .from(trendingPolls)
+        .where(eq(trendingPolls.id, parentId))
+        .limit(1);
+      return row?.slug ? `/polls/${row.slug}` : "/vote";
+    }
+    if (parentType === "opinion_poll") {
+      const [row] = await db
+        .select({ slug: opinionPolls.slug })
+        .from(opinionPolls)
+        .where(eq(opinionPolls.id, parentId))
+        .limit(1);
+      return row?.slug ? `/vote/opinion-polls/${row.slug}` : "/vote";
+    }
+    if (parentType === "open_market") {
+      const [row] = await db
+        .select({ slug: predictionMarkets.slug })
+        .from(predictionMarkets)
+        .where(eq(predictionMarkets.id, parentId))
+        .limit(1);
+      return row?.slug ? `/markets/${row.slug}` : "/predict";
+    }
+  } catch {
+    // Swallow — notifications fanout must never break the originating flow.
+  }
+  return "/me";
 }
 
 async function getCommentParentVoteLabelMap(input: {
@@ -843,6 +899,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerPublicRoutes(app);
   registerGamificationRoutes(app);
   registerFavoritesRoutes(app);
+  registerNotificationsRoutes(app);
 
   // ---- Supabase Send Email Auth Hook -------------------------------------
   // Receives webhooks from Supabase whenever an auth email needs sending.
@@ -4267,6 +4324,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .where(eq(profiles.id, userId))
         .limit(1);
 
+      // Notification fanout: if this is a reply (has parentCommentId),
+      // ping the parent comment's author. Skip self-replies (the most
+      // common cause of meaningless "you replied to yourself" pings).
+      // Best-effort; runs after we've already responded would be ideal,
+      // but the response payload doesn't depend on it and the cost is
+      // tiny, so we await for simpler error reporting.
+      if (newComment.parentCommentId) {
+        try {
+          const [parentRow] = await db
+            .select({
+              userId: unifiedComments.userId,
+              parentType: unifiedComments.parentType,
+              parentId: unifiedComments.parentId,
+              body: unifiedComments.body,
+              deletedAt: unifiedComments.deletedAt,
+            })
+            .from(unifiedComments)
+            .where(eq(unifiedComments.id, newComment.parentCommentId))
+            .limit(1);
+
+          if (parentRow && !parentRow.deletedAt && parentRow.userId !== userId) {
+            const replyAuthorName = profile?.authorUsername ?? "Someone";
+            const href = await resolveUnifiedCommentHref(
+              parentRow.parentType as CommentParentType,
+              parentRow.parentId,
+            );
+            const snippet = parsed.body.trim().slice(0, 140);
+            await createNotification({
+              userId: parentRow.userId,
+              kind: "comment_reply",
+              actorUserId: userId,
+              title: `${replyAuthorName} replied to your comment`,
+              body: snippet || undefined,
+              href: `${href}#comment-${newComment.id}`,
+              entityType: "comment",
+              entityId: newComment.id,
+              metadata: {
+                parentCommentId: newComment.parentCommentId,
+                parentType: parentRow.parentType,
+                parentId: parentRow.parentId,
+              },
+              idempotencyKey: `comment_reply:${newComment.id}`,
+            });
+          }
+        } catch (err) {
+          console.error("[notifications] comment_reply fanout failed:", err);
+        }
+      }
+
       res.status(201).json({
         ...toUnifiedCommentItem({
           id: newComment.id,
@@ -4343,7 +4449,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const [comment] = await db
         .select({
           id: unifiedComments.id,
+          userId: unifiedComments.userId,
           parentType: unifiedComments.parentType,
+          parentId: unifiedComments.parentId,
+          body: unifiedComments.body,
           upvotes: unifiedComments.upvotes,
           downvotes: unifiedComments.downvotes,
           deletedAt: unifiedComments.deletedAt,
@@ -4356,6 +4465,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const userId = req.userId!;
       const voteType = parsedVoteType.data;
+      const previousUpvotes = comment.upvotes;
       let nextVote: CommentVoteState = voteType;
       let isNewVote = false;
 
@@ -4441,6 +4551,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
             { commentId: id, voteType }
           );
         } catch (e) { console.error("XP award failed:", e); }
+      }
+
+      // comment_upvote_milestone fanout. We deliberately do NOT ping per
+      // upvote — that's exactly the kind of engagement spam the plan is
+      // trying to avoid. Instead we ping when the comment's upvote
+      // counter crosses one of [5, 10, 25, 100]. Idempotency is keyed
+      // on (commentId, milestone) so re-running the vote handler can't
+      // double-fire. Skips self-upvotes and own-comment milestones.
+      const newUpvotes = updated?.upvotes ?? comment.upvotes;
+      if (
+        comment.userId !== userId &&
+        voteType === "up" &&
+        isNewVote &&
+        newUpvotes > previousUpvotes
+      ) {
+        const COMMENT_UPVOTE_MILESTONES = [5, 10, 25, 100] as const;
+        const crossed = COMMENT_UPVOTE_MILESTONES.find(
+          (m) => previousUpvotes < m && newUpvotes >= m,
+        );
+        if (crossed) {
+          try {
+            const href = await resolveUnifiedCommentHref(
+              comment.parentType as CommentParentType,
+              comment.parentId,
+            );
+            const snippet = comment.body.trim().slice(0, 140);
+            await createNotification({
+              userId: comment.userId,
+              kind: "comment_upvote_milestone",
+              title: `Your comment hit ${crossed} upvotes`,
+              body: snippet || undefined,
+              href: `${href}#comment-${comment.id}`,
+              entityType: "comment",
+              entityId: comment.id,
+              metadata: { milestone: crossed, upvotes: newUpvotes },
+              groupKey: `upvote-milestone:${comment.id}:${crossed}`,
+              idempotencyKey: `comment_upvote_milestone:${comment.id}:${crossed}`,
+            });
+          } catch (err) {
+            console.error("[notifications] comment_upvote_milestone fanout failed:", err);
+          }
+        }
       }
 
       res.json({
@@ -8890,6 +9042,28 @@ Only return the JSON object.`;
         });
       });
       
+      // Notify the user when credits are granted (positive adjustment).
+      // We deliberately don't ping for deductions — those are usually
+      // moderation actions where a notification adds insult to injury;
+      // the user can still see the entry in their credit history.
+      if (appliedAmount > 0) {
+        try {
+          await createNotification({
+            userId,
+            kind: "credits_granted",
+            title: `+${appliedAmount.toLocaleString("en-US")} credits granted`,
+            body: reason ? `Reason: ${reason}` : "An admin added credits to your wallet.",
+            href: "/me",
+            entityType: "credit_ledger",
+            entityId: idempotencyKey,
+            metadata: { amount: appliedAmount, reason, source: "admin" },
+            idempotencyKey: `credits_granted:${idempotencyKey}`,
+          });
+        } catch (err) {
+          console.error("[notifications] credits_granted fanout failed:", err);
+        }
+      }
+
       res.json({ success: true, newBalance, appliedAmount, wasClamped });
     } catch (error: any) {
       console.error("Error adjusting credits:", error.message);
@@ -8936,6 +9110,85 @@ Only return the JSON object.`;
     } catch (error: any) {
       console.error("Error banning user:", error.message);
       res.status(500).json({ error: "Failed to ban user" });
+    }
+  });
+
+  // ── Admin: compose + broadcast an announcement notification ─────────
+  // Fans out an `announcement` kind to active users. Idempotency keyed
+  // on a server-generated batch id so re-clicking the form doesn't
+  // double-fan-out, and so individual user inserts don't collide if the
+  // admin tweaks targeting and re-runs (each batch is a distinct id).
+  //
+  // Audience filters in v1:
+  //   - 'all'    → every profile that has accepted ToS (excludes
+  //                shadow accounts that never finished onboarding)
+  //   - 'admins' → admin/moderator roles only (useful for ops dry-runs)
+  app.post("/api/admin/announcements", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const adminId = req.userId!;
+      const schema = z.object({
+        title: z.string().trim().min(3).max(140),
+        body: z.string().trim().max(500).optional(),
+        href: z.string().trim().max(500).optional(),
+        audience: z.enum(["all", "admins"]).default("all"),
+      });
+      const parsed = schema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        return sendZodError(res, parsed.error);
+      }
+      const { title, body, href, audience } = parsed.data;
+
+      let userQuery;
+      if (audience === "admins") {
+        userQuery = db
+          .select({ id: profiles.id })
+          .from(profiles)
+          .where(inArray(profiles.role, ["admin", "moderator"]));
+      } else {
+        userQuery = db
+          .select({ id: profiles.id })
+          .from(profiles)
+          .where(isNotNull(profiles.tosAcceptedAt));
+      }
+      const targets = await userQuery;
+
+      // Each batch gets its own random id so re-running creates a new
+      // fanout instead of a no-op. The admin-facing failure mode for
+      // accidental double-clicks is "same audience receives two
+      // announcements", which is mild — far better than silently
+      // dropping a re-broadcast that genuinely should fire again.
+      const batchId = randomUUID();
+      const userIds = targets.map((t) => t.id);
+
+      const inserted = await createNotificationsBulk(userIds, (userId) => ({
+        userId,
+        kind: "announcement",
+        title,
+        body,
+        href,
+        entityType: "announcement",
+        entityId: batchId,
+        metadata: { batchId, audience, sentBy: adminId },
+        idempotencyKey: `announcement:${batchId}:${userId}`,
+      }));
+
+      await db.insert(adminAuditLog).values({
+        adminId,
+        actionType: "broadcast_announcement",
+        targetTable: "notifications",
+        targetId: batchId,
+        metadata: { audience, title, recipients: userIds.length, inserted },
+      });
+
+      res.json({
+        success: true,
+        batchId,
+        recipients: userIds.length,
+        inserted,
+      });
+    } catch (error: any) {
+      console.error("Error broadcasting announcement:", error.message);
+      res.status(500).json({ error: "Failed to broadcast announcement" });
     }
   });
 

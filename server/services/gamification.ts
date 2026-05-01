@@ -12,6 +12,7 @@ import {
 import { eq, and, sql, gte, desc } from "drizzle-orm";
 import { canAccessCapability, computeCreditBalance, type Capability } from "./gamification-utils";
 import { resolveRankForXp } from "./gamification-ranks";
+import { createNotification } from "./notifications";
 
 interface AwardXpResult {
   success: boolean;
@@ -101,7 +102,19 @@ class GamificationService {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    return db.transaction(async (tx) => {
+    // Track rank promotion across the transaction so we can fire a
+    // `rank_up` notification after the DB commit. We only emit if the
+    // rank name actually changed AND the new tier is higher than the
+    // old one — this avoids spurious pings if a future code path ever
+    // recomputes rank with the same XP.
+    type RankUpFanout = { previousRank: string | null; newRank: string; newTotalXp: number };
+    // The closure-narrowing dance: TypeScript can't see assignments
+    // inside the transaction callback, so we hold the value in a
+    // single-element ref array instead of a `let`. This keeps the
+    // type wide enough that the post-commit branch type-checks.
+    const rankUpRef: { value: RankUpFanout | null } = { value: null };
+
+    const txResult = await db.transaction(async (tx) => {
       const [existingEntry] = await tx.select({
         id: xpLedger.id,
       })
@@ -202,6 +215,24 @@ class GamificationService {
         })
         .where(eq(profiles.id, userId));
 
+      if (nextRank && nextRank.name !== profile.rank) {
+        // resolveRankForXp() returns the public RankThreshold shape so
+        // we look up the full Rank row in the cache to get the tier
+        // ordering. A change is only a "promotion" (and worth a ping)
+        // if the new tier is strictly higher than the old one — guards
+        // against any future code path that recomputes rank with the
+        // same XP and accidentally regresses.
+        const newRankFull = this.ranksCache.find((r) => r.name === nextRank.name);
+        const oldTier = this.ranksCache.find((r) => r.name === profile.rank)?.tier ?? -Infinity;
+        if (newRankFull && newRankFull.tier > oldTier) {
+          rankUpRef.value = {
+            previousRank: profile.rank ?? null,
+            newRank: nextRank.name,
+            newTotalXp,
+          };
+        }
+      }
+
       return {
         success: true,
         xpAwarded: action.xpValue,
@@ -212,6 +243,37 @@ class GamificationService {
         message: `Awarded ${action.xpValue} XP for ${action.displayName}`
       };
     });
+
+    // Post-commit fanout. Best-effort; never throws back to the caller.
+    const rankUpFanout = rankUpRef.value;
+    if (rankUpFanout) {
+      try {
+        await createNotification({
+          userId,
+          kind: "rank_up",
+          title: `You're now ${rankUpFanout.newRank}`,
+          body: rankUpFanout.previousRank
+            ? `Promoted from ${rankUpFanout.previousRank}. Keep going.`
+            : `New rank unlocked. Keep going.`,
+          href: "/me",
+          entityType: "rank",
+          entityId: rankUpFanout.newRank,
+          metadata: {
+            previousRank: rankUpFanout.previousRank,
+            newRank: rankUpFanout.newRank,
+            xp: rankUpFanout.newTotalXp,
+          },
+          // Idempotent on (user, rank) — even if rank flips back and
+          // forth (which shouldn't happen for monotonic XP) we never
+          // fire two pings for the same promotion.
+          idempotencyKey: `rank_up:${userId}:${rankUpFanout.newRank}`,
+        });
+      } catch (err) {
+        console.error("[notifications] rank_up fanout failed:", err);
+      }
+    }
+
+    return txResult;
   }
 
   async adjustCredits(

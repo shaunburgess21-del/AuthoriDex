@@ -5,7 +5,7 @@ import { useParams, useLocation, Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { sharePage } from "@/lib/share";
-import { UserMenu } from "@/components/UserMenu";
+import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { useXpBurst } from "@/components/XpBurstProvider";
 import { CategoryPill } from "@/components/CategoryPill";
 import { Button } from "@/components/ui/button";
@@ -165,7 +165,7 @@ export default function MatchupDetailPage() {
               <VoteDetailNavCluster listType="matchup" slug={slug || undefined} />
             </div>
             <div className="justify-self-end col-start-3">
-              <UserMenu />
+              <HeaderUserActions />
             </div>
           </div>
         </header>
@@ -206,7 +206,7 @@ export default function MatchupDetailPage() {
             <VoteDetailNavCluster listType="matchup" slug={slug || undefined} />
           </div>
           <div className="justify-self-end col-start-3">
-            <UserMenu />
+            <HeaderUserActions />
           </div>
         </div>
       </header>

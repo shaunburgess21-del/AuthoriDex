@@ -9,7 +9,7 @@ import { useXpBurst } from "@/components/XpBurstProvider";
 import { StakeModal, type StakeSelection } from "@/components/StakeModal";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { CategoryPill } from "@/components/CategoryPill";
-import { UserMenu } from "@/components/UserMenu";
+import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { OutcomePathChart } from "@/components/predict/OutcomePathChart";
 import { WhatNeedsToHappen } from "@/components/predict/WhatNeedsToHappen";
 import { WeeklyUpDownYourPositionPanel } from "@/components/predict/WeeklyUpDownYourPositionPanel";
@@ -297,7 +297,7 @@ export default function UpDownDetailPage() {
             {pad(timeRemaining.days)}d {pad(timeRemaining.hours)}h{" "}
             {pad(timeRemaining.minutes)}m
           </Badge>
-          <UserMenu />
+          <HeaderUserActions />
         </div>
       </header>
 

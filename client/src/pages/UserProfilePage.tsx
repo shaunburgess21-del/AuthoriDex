@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
-import { UserMenu } from "@/components/UserMenu";
+import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { ArrowLeft, Star, TrendingUp, Calendar, Award, Lightbulb, ExternalLink } from "lucide-react";
 import { UserVote, UserFavourite } from "@shared/schema";
 import { format, formatDistanceToNow } from "date-fns";
@@ -243,7 +243,7 @@ export default function UserProfilePage() {
                 Predict
               </Button>
             </div>
-            <UserMenu />
+            <HeaderUserActions />
           </div>
         </div>
       </header>

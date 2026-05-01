@@ -3,7 +3,7 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
-import { UserMenu } from "@/components/UserMenu";
+import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -416,7 +416,7 @@ export default function UserLeaderboardPage() {
                 Top Predictors
               </Button>
             </div>
-            <UserMenu />
+            <HeaderUserActions />
           </div>
         </div>
       </header>
