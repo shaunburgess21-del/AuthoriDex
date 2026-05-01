@@ -43,10 +43,15 @@ export function computePrediction(
     agent.specialties.some(
       (s) => marketCategory.includes(s) || s.includes(marketCategory)
     );
+  // Off-domain skip was 0.70 which combined with the edge gate below crushed
+  // up/down volume to ~10-15% of jackpot's effective rate (which has no edge
+  // gate and only a 0.35 off-domain skip). Lowering to 0.50 keeps a real
+  // domain effect — a tech-specialist still skips half of all sports cards
+  // — while letting up/down feeds breathe across all 159 weekly cards.
   const skipProbability =
     domainMatch ? 0.15 :
     marketCategory === "trending" ? 0.4 :
-    0.70;
+    0.50;
   if (rng.nextFloat() < skipProbability) return abstain("domain");
 
   // Step 2: Activity gate
@@ -226,7 +231,13 @@ export function computePrediction(
   const chanceLevel = 1 / n;
   if (!isH2H) {
     const edge = rawProbability - chanceLevel;
-    const edgeThreshold = agent.riskAppetite * (0.5 / n);
+    // Halved from 0.5/n to 0.25/n. With the previous threshold an average
+    // riskAppetite=0.5 agent needed model probability ≥62.5% on every up/down
+    // (n=2) to bet — most weekly cards sit at 51-58%, so agents abstained on
+    // the majority. The simulation layer below applies a SECOND, persona-
+    // aware edge gate against the live pool, so we don't need a punishing
+    // chance-level gate here as well.
+    const edgeThreshold = agent.riskAppetite * (0.25 / n);
     if (edge < edgeThreshold) return abstain("low_edge");
   }
 
@@ -299,7 +310,12 @@ export function computeJackpotPrediction(
   const domainMatch =
     category !== "" &&
     agent.specialties.some((s) => category.includes(s) || s.includes(category));
-  const skipProbability = domainMatch ? 0.10 : 0.35;
+  // Off-domain bumped from 0.35 → 0.45 so jackpot's per-market effective
+  // scheduling rate sits closer to the new looser up/down rate. Without this,
+  // the activity feed kept skewing 4-5x toward jackpot. Once the top-20-only
+  // jackpot rule kicks in next Monday, only ~36% of agents will be eligible,
+  // which compounds the reduction further.
+  const skipProbability = domainMatch ? 0.10 : 0.45;
   if (rng.nextFloat() < skipProbability) return abstain("domain");
 
   // Final random abstain (10% — slightly lower than standard to ensure jackpot participation)
