@@ -7403,10 +7403,15 @@ Only return the JSON object.`;
         currentScore = person?.trendScore ?? null;
       }
 
-      // User's bets on this market with the entry label and metadata
-      // joined in. We include settled bets too so a user revisiting a
-      // resolved market can still see their position summary; the UI
-      // decides what to render based on `market.status`.
+      // User's ACTIVE bets on this market with entry label and metadata
+      // joined in. We deliberately exclude settled rows (won/lost/void)
+      // because:
+      //   - On an OPEN market every legitimate bet is `active`, so the
+      //     filter is a no-op for the common path.
+      //   - On a RESOLVED/VOID market the parent page already shows a
+      //     dedicated resolution-summary card; surfacing settled rows
+      //     here would render a misleading "Your Position" panel
+      //     above that summary.
       const myBets = await db
         .select({
           betId: marketBets.id,
@@ -7427,7 +7432,13 @@ Only return the JSON object.`;
         })
         .from(marketBets)
         .innerJoin(marketEntries, eq(marketBets.entryId, marketEntries.id))
-        .where(and(eq(marketBets.marketId, id), eq(marketBets.userId, userId)))
+        .where(
+          and(
+            eq(marketBets.marketId, id),
+            eq(marketBets.userId, userId),
+            eq(marketBets.status, "active"),
+          ),
+        )
         .orderBy(desc(marketBets.createdAt));
 
       const bets = myBets.map((b) => {

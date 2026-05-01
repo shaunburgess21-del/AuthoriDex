@@ -5,7 +5,6 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   Crown,
-  Loader2,
   Plus,
   Target,
   TrendingDown,
@@ -16,7 +15,6 @@ import {
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest } from "@/lib/queryClient";
@@ -114,7 +112,7 @@ export function MyPositionCard({
 }: MyPositionCardProps) {
   const { isLoggedIn } = useAuth();
 
-  const { data, isLoading, isError } = useQuery<MyPositionResponse>({
+  const { data, isError } = useQuery<MyPositionResponse>({
     queryKey: ["/api/markets", marketId, "my-position"],
     enabled: !!marketId && isLoggedIn,
     queryFn: async () => {
@@ -138,21 +136,12 @@ export function MyPositionCard({
 
   if (!isLoggedIn) return null;
   if (isError) return null;
-  if (isLoading) {
-    return (
-      <Card className={cn("p-4 mb-4 border-border/40 bg-muted/5", className)}>
-        <div className="flex items-center gap-3 mb-3">
-          <Skeleton className="h-9 w-9 rounded-full" />
-          <div className="flex-1 space-y-2">
-            <Skeleton className="h-4 w-32" />
-            <Skeleton className="h-3 w-48" />
-          </div>
-        </div>
-        <Skeleton className="h-16 w-full" />
-      </Card>
-    );
-  }
 
+  // Deliberately silent during the initial fetch: most market visits
+  // the user has zero bets on, so showing a skeleton would just flash a
+  // box that disappears half a second later. Returning null until we
+  // have data avoids that flicker; once data lands the card snaps in
+  // (or stays absent if betCount === 0).
   const position = data;
   if (!position || position.betCount === 0) return null;
 
@@ -247,35 +236,35 @@ function PositionHeader({
   const isDown = delta != null && delta < 0;
 
   return (
-    <div className="flex items-start justify-between gap-3">
-      <div className="flex items-center gap-3 min-w-0">
-        <div className="h-10 w-10 rounded-full bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/40 dark:border-violet-500/30 flex items-center justify-center shrink-0">
-          <Target className="h-5 w-5 text-violet-700 dark:text-violet-400" />
+    <div className="flex items-start justify-between gap-2">
+      <div className="flex items-center gap-2.5 min-w-0">
+        <div className="h-9 w-9 rounded-full bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/40 dark:border-violet-500/30 flex items-center justify-center shrink-0">
+          <Target className="h-[18px] w-[18px] text-violet-700 dark:text-violet-400" />
         </div>
         <div className="min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="font-semibold text-sm">Your Position</h3>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <h3 className="font-semibold text-sm leading-tight">Your Position</h3>
             <Badge variant="outline" className="text-[10px] py-0 px-1.5 font-mono leading-none">
               {betCount} {betCount === 1 ? "entry" : "entries"}
             </Badge>
           </div>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            <Wallet className="h-3 w-3 inline-block mr-1" />
-            <span className="font-mono tabular-nums">{totalStake.toLocaleString("en-US")}</span> credits staked
+          <p className="text-xs text-muted-foreground mt-0.5 truncate">
+            <Wallet className="h-3 w-3 inline-block mr-1 -mt-0.5" />
+            <span className="font-mono tabular-nums">{totalStake.toLocaleString("en-US")}</span> staked
           </p>
         </div>
       </div>
 
       {showScore && (
         <div className="text-right shrink-0">
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Current</p>
-          <p className="font-mono font-bold text-base tabular-nums">
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wide leading-none">Current</p>
+          <p className="font-mono font-bold text-sm sm:text-base tabular-nums leading-tight mt-0.5">
             {currentScore!.toLocaleString("en-US")}
           </p>
           {delta != null && pctDelta != null && (
             <p
               className={cn(
-                "text-[11px] font-medium tabular-nums inline-flex items-center gap-0.5",
+                "text-[11px] font-medium tabular-nums inline-flex items-center gap-0.5 leading-none mt-0.5",
                 isUp && "text-emerald-600 dark:text-emerald-400",
                 isDown && "text-red-600 dark:text-red-400",
                 !isUp && !isDown && "text-muted-foreground",
@@ -291,7 +280,8 @@ function PositionHeader({
               {delta > 0 ? "+" : ""}
               {Math.round(delta).toLocaleString("en-US")}
               {Number.isFinite(pctDelta) && Math.abs(pctDelta) >= 0.1 && (
-                <span className="opacity-70">
+                <span className="opacity-70 hidden sm:inline">
+                  {" "}
                   ({pctDelta > 0 ? "+" : ""}
                   {pctDelta.toFixed(1)}%)
                 </span>
@@ -340,7 +330,7 @@ function JackpotBody({ position }: { position: MyPositionResponse }) {
             )}
             data-testid={`row-jackpot-ticket-${bet.betId}`}
           >
-            <div className="flex items-center gap-2 min-w-0">
+            <div className="flex items-center gap-2 min-w-0 flex-wrap">
               {isClosest ? (
                 <Crown className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
               ) : (
@@ -352,13 +342,22 @@ function JackpotBody({ position }: { position: MyPositionResponse }) {
               {offBy != null && (
                 <span
                   className={cn(
-                    "text-[10px] tabular-nums px-1.5 py-0.5 rounded",
-                    isClosest && "bg-amber-500/20 text-amber-700 dark:text-amber-300",
-                    !isClosest && "bg-muted/60 text-muted-foreground",
+                    "text-[10px] tabular-nums px-1.5 py-0.5 rounded font-medium",
+                    direction === 0 && "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300",
+                    direction !== 0 && isClosest && "bg-amber-500/20 text-amber-700 dark:text-amber-300",
+                    direction !== 0 && !isClosest && "bg-muted/60 text-muted-foreground",
                   )}
+                  title={
+                    direction === 0
+                      ? "Exact match with current score"
+                      : direction > 0
+                        ? `Predicted ${Math.round(offBy).toLocaleString("en-US")} above current`
+                        : `Predicted ${Math.round(offBy).toLocaleString("en-US")} below current`
+                  }
                 >
-                  {direction === 0 ? "EXACT" : direction > 0 ? "+" : "−"}
-                  {Math.round(offBy).toLocaleString("en-US")}
+                  {direction === 0
+                    ? "EXACT"
+                    : `${direction > 0 ? "+" : "−"}${Math.round(offBy).toLocaleString("en-US")}`}
                 </span>
               )}
             </div>
@@ -369,8 +368,8 @@ function JackpotBody({ position }: { position: MyPositionResponse }) {
         );
       })}
       {current != null && sorted.length > 1 && (
-        <p className="text-[10px] text-muted-foreground pt-1 px-1">
-          Tickets sorted by closeness to current score. Closest wins on Sunday.
+        <p className="text-[10px] text-muted-foreground pt-1 px-1 leading-snug">
+          Sorted by distance from <span className="font-medium">today's</span> score. The winner is whoever's closest to the score at <span className="font-medium">Sunday's close</span> — these positions can shift before then.
         </p>
       )}
     </div>
@@ -513,27 +512,8 @@ function GenericBody({ position }: { position: MyPositionResponse }) {
 }
 
 /**
- * Tiny helper for parents that want to know whether MyPositionCard
- * rendered (so they can hide their own legacy "your prediction" pills
- * to avoid duplication). Reuses the same query under the hood.
- */
-export function useHasMyPosition(marketId: string | undefined): boolean {
-  const { isLoggedIn } = useAuth();
-  const { data } = useQuery<MyPositionResponse>({
-    queryKey: ["/api/markets", marketId, "my-position"],
-    enabled: !!marketId && isLoggedIn,
-    queryFn: async () => {
-      const res = await apiRequest("GET", `/api/markets/${marketId}/my-position`);
-      return res.json();
-    },
-    staleTime: 30_000,
-    retry: false,
-  });
-  return (data?.betCount ?? 0) > 0;
-}
-
-/**
  * Re-export the query key the parent should invalidate after placing
- * a new bet so the card refreshes immediately.
+ * a new bet so the card refreshes immediately. Kept as a function so
+ * we never typo the key shape across pages.
  */
 export const myPositionQueryKey = (marketId: string) => ["/api/markets", marketId, "my-position"] as const;

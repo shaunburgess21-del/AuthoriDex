@@ -22,7 +22,6 @@ import { computePayoutMultiplier, formatMultiplier } from "@/lib/parimutuel";
 import { MyPositionCard, myPositionQueryKey } from "@/components/predict/MyPositionCard";
 import {
   ArrowLeft,
-  Check,
   Star,
   Clock,
   Users,
