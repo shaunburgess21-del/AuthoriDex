@@ -2431,13 +2431,15 @@ export default function PredictPage() {
                 navigate to /me/credits (or similar) for credits insights + purchase
                 flow via Paystack. Plan in NOTES.md. */}
             <div className="flex items-center gap-1.5 md:hidden">
-              <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-md bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/40 dark:border-violet-500/30">
-                {/* Hide the Wallet glyph on the very narrowest viewports
-                    (<360px) so the credit number itself doesn't wrap. The
-                    pill background already telegraphs "wallet" on its own. */}
-                <Wallet className="hidden [@media(min-width:360px)]:inline-block h-[14px] w-[14px] text-violet-700 dark:text-violet-500" />
-                <span className="font-mono font-bold text-sm">{walletCredits.toLocaleString('en-US')}</span>
-              </div>
+              {user && (
+                <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-md bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/40 dark:border-violet-500/30">
+                  {/* Hide the Wallet glyph on the very narrowest viewports
+                      (<360px) so the credit number itself doesn't wrap. The
+                      pill background already telegraphs "wallet" on its own. */}
+                  <Wallet className="hidden [@media(min-width:360px)]:inline-block h-[14px] w-[14px] text-violet-700 dark:text-violet-500" />
+                  <span className="font-mono font-bold text-sm">{walletCredits.toLocaleString('en-US')}</span>
+                </div>
+              )}
               <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setRulesModalOpen("predictions")} aria-label="View predictions rules">
                 <ScrollText className="h-4 w-4 text-muted-foreground" />
               </Button>
@@ -2794,6 +2796,12 @@ export default function PredictPage() {
               <p className="text-muted-foreground text-sm mb-4">Please try again in a moment.</p>
               <Button onClick={() => refetchTrending()} data-testid="button-retry-trending">Retry</Button>
             </Card>
+          ) : jackpotError ? (
+            <Card className="p-8 text-center mb-8">
+              <p className="text-destructive mb-2">Couldn&apos;t load this week&apos;s Jackpot</p>
+              <p className="text-muted-foreground text-sm mb-4">Please try again in a moment.</p>
+              <Button onClick={() => refetchJackpot()} data-testid="button-retry-jackpot">Retry</Button>
+            </Card>
           ) : (
             <WeeklyJackpotHero 
               onEnterJackpot={handleEnterJackpot}
@@ -2875,7 +2883,24 @@ export default function PredictPage() {
               </CardSection>
             ) : (
               <div className="text-center py-8 text-muted-foreground">
-                No markets match your filters
+                {(updownCategory !== "all" || updownSearch.trim().length > 0) ? (
+                  <div className="space-y-3">
+                    <p>No markets match your filters</p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setUpdownCategory("all");
+                        setUpdownSearch("");
+                      }}
+                      data-testid="button-reset-updown-filters"
+                    >
+                      Reset filters
+                    </Button>
+                  </div>
+                ) : (
+                  <p>No Up/Down markets right now &mdash; check back soon.</p>
+                )}
               </div>
             )}
             <div className="text-center mt-2 md:mt-6">
@@ -2965,7 +2990,24 @@ export default function PredictPage() {
               </CardSection>
             ) : (
               <div className="text-center py-8 text-muted-foreground">
-                No matchups match your filters
+                {(h2hCategory !== "all" || h2hSearch.trim().length > 0) ? (
+                  <div className="space-y-3">
+                    <p>No matchups match your filters</p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setH2hCategory("all");
+                        setH2hSearch("");
+                      }}
+                      data-testid="button-reset-h2h-filters"
+                    >
+                      Reset filters
+                    </Button>
+                  </div>
+                ) : (
+                  <p>No Head-to-Head matchups right now &mdash; check back soon.</p>
+                )}
               </div>
             )}
             <div className="text-center mt-2 md:mt-6">

@@ -294,7 +294,7 @@ export default function H2HDetailPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background pb-24">
+    <div className="min-h-screen bg-background pb-[calc(9.5rem+env(safe-area-inset-bottom))] md:pb-24">
       {/* Sticky Header */}
       <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-md border-b border-border/50">
         <div className="max-w-3xl mx-auto px-4 h-14 flex items-center gap-3">
@@ -672,8 +672,10 @@ export default function H2HDetailPage() {
         </Card>
       </div>
 
-      {/* Sticky Bottom CTA */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-border/50 bg-background/95 backdrop-blur-md">
+      {/* Sticky Bottom CTA — lifted above the global mobile BottomNav
+          (h-16, z-50) on phones; back to bottom-0 on md+ where the nav
+          isn't rendered. */}
+      <div className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom))] md:bottom-0 left-0 right-0 z-40 border-t border-border/50 bg-background/95 backdrop-blur-md">
         <div className="max-w-3xl mx-auto px-4 py-3">
           {userPickSide ? (
             <div className="flex items-center gap-3">

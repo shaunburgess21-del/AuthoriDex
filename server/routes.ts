@@ -7383,6 +7383,7 @@ Only return the JSON object.`;
           endAt: predictionMarkets.endAt,
           closeAt: predictionMarkets.closeAt,
           personId: predictionMarkets.personId,
+          tieRule: predictionMarkets.tieRule,
         })
         .from(predictionMarkets)
         .where(eq(predictionMarkets.id, id))
@@ -7480,6 +7481,7 @@ Only return the JSON object.`;
           endAt: market.endAt,
           closeAt: market.closeAt,
           personId: market.personId,
+          tieRule: market.tieRule ?? "refund",
         },
         currentScore,
         totalStake,

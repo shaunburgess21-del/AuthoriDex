@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -64,6 +64,7 @@ export default function CategoryRaceDetailPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [stakeModalOpen, setStakeModalOpen] = useState(false);
   const [pendingSelection, setPendingSelection] = useState<StakeSelection | null>(null);
+  const candidateSearchRef = useRef<HTMLInputElement | null>(null);
 
   const { data: allGainerMarkets, isLoading } = useQuery<any[]>({
     queryKey: ["/api/native-markets/gainer"],
@@ -320,7 +321,7 @@ export default function CategoryRaceDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-24">
+    <div className="min-h-screen bg-background pb-[calc(9.5rem+env(safe-area-inset-bottom))] md:pb-24">
       {/* Sticky Header */}
       <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-md border-b border-border/50">
         <div className="max-w-3xl mx-auto px-4 h-14 flex items-center gap-3">
@@ -454,6 +455,7 @@ export default function CategoryRaceDetailPage() {
           <div className="relative mb-3">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
+              ref={candidateSearchRef}
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -685,8 +687,10 @@ export default function CategoryRaceDetailPage() {
         </Card>
       </div>
 
-      {/* Sticky Bottom CTA */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-border/50 bg-background/95 backdrop-blur-md">
+      {/* Sticky Bottom CTA — lifted above the global mobile BottomNav
+          (h-16, z-50) on phones; back to bottom-0 on md+ where the nav
+          isn't rendered. */}
+      <div className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom))] md:bottom-0 left-0 right-0 z-40 border-t border-border/50 bg-background/95 backdrop-blur-md">
         <div className="max-w-3xl mx-auto px-4 py-3">
           {userPick ? (
             <div className="flex items-center gap-3">
@@ -712,8 +716,11 @@ export default function CategoryRaceDetailPage() {
               <Button
                 className="w-full bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white py-3 h-auto text-base font-semibold"
                 onClick={() => {
-                  document.querySelector("input")?.focus();
-                  window.scrollTo({ top: 300, behavior: "smooth" });
+                  const input = candidateSearchRef.current;
+                  if (input) {
+                    input.scrollIntoView({ block: "center", behavior: "smooth" });
+                    input.focus({ preventScroll: true });
+                  }
                 }}
               >
                 <Trophy className="h-5 w-5 mr-2" />

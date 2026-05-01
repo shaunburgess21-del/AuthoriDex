@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest } from "@/lib/queryClient";
 import { formatTimeAgo } from "@/lib/formatDate";
+import { getUpDownWinningState, UP_DOWN_STATE_LABELS } from "@/lib/updownState";
 
 /**
  * Unified "My Position" card for every market detail page.
@@ -76,6 +77,7 @@ interface MyPositionResponse {
     endAt: string | null;
     closeAt: string | null;
     personId: string | null;
+    tieRule?: string | null;
   };
   currentScore: number | null;
   totalStake: number;
@@ -383,13 +385,20 @@ function UpDownBody({ position }: { position: MyPositionResponse }) {
   const pickLabel = (bet.entryLabel ?? "").toLowerCase();
   const isUp = pickLabel.includes("up");
   const isDown = pickLabel.includes("down");
+  const pick = isUp ? "up" : isDown ? "down" : null;
 
   const current = position.currentScore;
   const baseline = position.market.baselineScore;
-  const delta = current != null && baseline != null ? current - baseline : null;
-  const isWinning =
-    delta != null
-      ? (isUp && delta > 0) || (isDown && delta < 0)
+  const tieRule = position.market.tieRule ?? "refund";
+
+  const state =
+    pick != null && current != null && baseline != null
+      ? getUpDownWinningState({
+          pick,
+          currentScore: current,
+          baselineScore: baseline,
+          tieRule,
+        })
       : null;
 
   return (
@@ -406,15 +415,17 @@ function UpDownBody({ position }: { position: MyPositionResponse }) {
           {isUp ? <ArrowUpRight className="h-3 w-3" /> : isDown ? <ArrowDownRight className="h-3 w-3" /> : null}
           You picked {bet.entryLabel ?? "—"}
         </span>
-        {isWinning != null && delta != null && (
+        {state != null && (
           <Badge
             variant="outline"
             className={cn(
               "text-[10px]",
-              isWinning ? "border-emerald-500/40 text-emerald-700 dark:text-emerald-400" : "border-red-500/40 text-red-700 dark:text-red-400",
+              state === "winning" && "border-emerald-500/40 text-emerald-700 dark:text-emerald-400",
+              state === "behind" && "border-red-500/40 text-red-700 dark:text-red-400",
+              state === "tied" && "border-amber-500/40 text-amber-700 dark:text-amber-400",
             )}
           >
-            {isWinning ? "Winning" : "Behind"}
+            {UP_DOWN_STATE_LABELS[state]}
           </Badge>
         )}
       </div>

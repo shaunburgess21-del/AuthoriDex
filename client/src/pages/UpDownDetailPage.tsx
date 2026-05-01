@@ -26,6 +26,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { getMarketBaselineScore } from "@/lib/predict-market-baseline";
 import { computePayoutMultiplier } from "@/lib/parimutuel";
+import { getUpDownWinningState, UP_DOWN_STATE_LABELS } from "@/lib/updownState";
 import {
   ArrowLeft,
   TrendingUp,
@@ -276,7 +277,7 @@ export default function UpDownDetailPage() {
   const firstName = hydrated.personName.split(" ")[0];
 
   return (
-    <div className="min-h-screen bg-background pb-24">
+    <div className="min-h-screen bg-background pb-[calc(9.5rem+env(safe-area-inset-bottom))] md:pb-24">
       {/* Sticky Header */}
       <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-md border-b border-border/50">
         <div className="max-w-3xl mx-auto px-4 h-14 flex items-center gap-3">
@@ -398,6 +399,7 @@ export default function UpDownDetailPage() {
             baselineScore={hydrated.baselineScore}
             currentScore={hydrated.currentScore}
             stakeAmount={Number(userBet.stakeAmount || 0)}
+            tieRule={hydrated.tieRule}
           />
         )}
 
@@ -427,6 +429,7 @@ export default function UpDownDetailPage() {
             currentScore={hydrated.currentScore}
             personName={hydrated.personName}
             timeRemaining={`${pad(timeRemaining.days)}d ${pad(timeRemaining.hours)}h ${pad(timeRemaining.minutes)}m`}
+            tieRule={hydrated.tieRule}
           />
         )}
 
@@ -494,8 +497,10 @@ export default function UpDownDetailPage() {
         />
       </div>
 
-      {/* Sticky Bottom CTA */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-border/50 bg-background/95 backdrop-blur-md">
+      {/* Sticky Bottom CTA — lifted above the global mobile BottomNav
+          (h-16, z-50) on phones; back to bottom-0 on md+ where the nav
+          isn't rendered. */}
+      <div className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom))] md:bottom-0 left-0 right-0 z-40 border-t border-border/50 bg-background/95 backdrop-blur-md">
         <div className="max-w-3xl mx-auto px-4 py-3">
           {userBet && userPick ? (
             <div className="flex items-center gap-3">
@@ -518,19 +523,21 @@ export default function UpDownDetailPage() {
                   {userPick.toUpperCase()} on {firstName}
                 </p>
               </div>
-              <Badge
-                className={
-                  delta >= 0 && userPick === "up"
+              {(() => {
+                const state = getUpDownWinningState({
+                  pick: userPick,
+                  currentScore: hydrated.currentScore,
+                  baselineScore: hydrated.baselineScore,
+                  tieRule: hydrated.tieRule,
+                });
+                const className =
+                  state === "winning"
                     ? "bg-green-600/20 text-green-700 dark:text-green-500 border-green-500/40 dark:border-green-500/30"
-                    : delta < 0 && userPick === "down"
-                    ? "bg-green-600/20 text-green-700 dark:text-green-500 border-green-500/40 dark:border-green-500/30"
-                    : "bg-amber-600/20 text-amber-700 dark:text-amber-500 border-amber-500/40 dark:border-amber-500/30"
-                }
-              >
-                {(delta >= 0 && userPick === "up") || (delta < 0 && userPick === "down")
-                  ? "Winning"
-                  : "Behind"}
-              </Badge>
+                    : state === "behind"
+                    ? "bg-red-600/20 text-red-700 dark:text-red-500 border-red-500/40 dark:border-red-500/30"
+                    : "bg-amber-600/20 text-amber-700 dark:text-amber-500 border-amber-500/40 dark:border-amber-500/30";
+                return <Badge className={className}>{UP_DOWN_STATE_LABELS[state]}</Badge>;
+              })()}
             </div>
           ) : userBet && !userPick ? (
             <div className="flex items-center gap-3">

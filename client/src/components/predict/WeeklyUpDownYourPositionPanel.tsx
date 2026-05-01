@@ -29,6 +29,7 @@ export function WeeklyUpDownYourPositionPanel({
   variant = "detail",
   href,
   className,
+  tieRule,
 }: {
   pick: "up" | "down" | null;
   personName: string;
@@ -38,6 +39,7 @@ export function WeeklyUpDownYourPositionPanel({
   variant?: "detail" | "cardLink";
   href?: string;
   className?: string;
+  tieRule?: string | null;
 }) {
   const firstName = personName.split(" ")[0];
 
@@ -167,6 +169,7 @@ export function WeeklyUpDownYourPositionPanel({
                 currentScore={currentScore}
                 personName={personName}
                 compact
+                tieRule={tieRule}
               />
             </>
           ) : (

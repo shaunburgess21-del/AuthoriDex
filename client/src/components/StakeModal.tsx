@@ -233,7 +233,7 @@ export function StakeModal({
             <p className="text-sm font-semibold text-foreground">{selection.marketName}</p>
             {isUpDown ? (
               <p className="text-lg font-bold mt-1">
-                <span className="text-white">Trend Score </span>
+                <span className="text-foreground">Trend Score </span>
                 {isUp && <span className="text-[#00C853]">UP</span>}
                 {isDown && <span className="text-[#FF0000]">DOWN</span>}
               </p>
@@ -435,6 +435,7 @@ export function StakeModal({
               currentScore={selection.currentScore || 0}
               personName={selection.marketName}
               compact
+              tieRule={selection.tieRule}
             />
           )}
 
