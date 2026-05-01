@@ -80,20 +80,13 @@ export function Footer() {
           ))}
         </div>
 
-        {/* One-line disclaimer keeps the load-bearing legal copy
-            (entity + entertainment-only + not-financial-advice +
-            no-cash-value) without the visual heft of a paragraph
-            block. The "not financial advice" clause stays inline
-            on every page because VoxDex's visual language —
-            trend-score charts, prediction markets, leaderboards
-            ranking "predictors" — borrows from financial UI, and
-            disclaimer prominence is meaningful in case law. Terms
-            of Service carries the long-form equivalents; this row
-            is the at-a-glance reminder. */}
+        {/* Short footer disclaimer: entity, entertainment-only, and
+            virtual-credits / no redeemable cash value. Terms of Service
+            carries the long-form equivalents; this row is the at-a-glance
+            reminder. */}
         <p className="mx-auto mt-3 max-w-2xl text-center text-[11px] leading-relaxed text-muted-foreground/80">
-          VoxDex is operated by VoxDex (Pty) Ltd. Provided for
-          entertainment only — trend scores are not financial advice
-          and credits have no cash value.
+          VoxDex is operated by VoxDex (Pty) Ltd. Provided for entertainment
+          only — virtual credits have no redeemable cash value.
         </p>
       </div>
     </footer>

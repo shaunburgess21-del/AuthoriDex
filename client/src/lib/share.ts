@@ -16,7 +16,7 @@ export async function sharePage(title: string) {
 
   try {
     await navigator.clipboard.writeText(url);
-    toast.success("Link copied!", { duration: 2500 });
+    toast.success("Link copied!", { duration: 1500 });
   } catch {
     toast.error("Could not copy link");
   }
@@ -99,7 +99,7 @@ export async function shareImage(
       ]);
       toast.success("Image copied!", {
         description: "Paste it into X, Instagram, or anywhere else.",
-        duration: 3500,
+        duration: 2500,
       });
       return { status: "copied", via: "clipboard" };
     } catch {
@@ -123,7 +123,7 @@ export async function shareImage(
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     toast.success("Image downloaded", {
       description: "Find it in your downloads and share it wherever.",
-      duration: 3500,
+      duration: 2500,
     });
     return { status: "downloaded", via: "download" };
   } catch (err) {

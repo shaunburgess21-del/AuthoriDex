@@ -239,6 +239,13 @@
       "when": 1778362200000,
       "tag": "0033_lower_agent_comment_volume",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1778448600000,
+      "tag": "0034_fix_avatar_storage_rls",
+      "breakpoints": true
     }
   ]
 }

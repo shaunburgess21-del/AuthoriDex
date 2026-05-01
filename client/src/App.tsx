@@ -186,11 +186,17 @@ function App() {
           <AuthProvider>
             <TooltipProvider>
               <ScrollToTop />
-              {/* duration: Sonner default 4000ms felt too brief on slow
-                  reads, 6000ms felt slightly stuck, 5000ms is the sweet
-                  spot per real-device QA. closeButton lets impatient
-                  users dismiss early. */}
-              <Toaster richColors closeButton position="top-center" duration={5000} />
+              {/* duration: Sonner default 4000ms felt too brief on slow reads;
+                  5000ms was comfortable but a touch long — 4000ms matches the
+                  library default while staying readable. closeButton + swipe
+                  (see swipeDirections) let users dismiss early on desktop/touch. */}
+              <Toaster
+                richColors
+                closeButton
+                position="top-center"
+                duration={4000}
+                swipeDirections={["top", "left", "right"]}
+              />
               <PWAUpdatePrompt />
               <NewUserGate />
               <XpBurstProvider>

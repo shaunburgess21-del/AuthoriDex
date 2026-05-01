@@ -21,7 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Drawer, DrawerContent, DrawerDescription, DrawerFooter, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
-import { X, RefreshCw, TrendingUp, TrendingDown, Activity, ChevronRight, ChevronDown, LineChart, Vote, Trophy, Zap, Users, Sparkles, Target, Check, ThumbsDown, Minus, Star, Info, Crown, HelpCircle } from "lucide-react";
+import { X, RefreshCw, TrendingUp, TrendingDown, Activity, ChevronRight, ChevronDown, LineChart, Vote, Trophy, Users, Sparkles, Target, Check, ThumbsDown, Minus, Star, Info, Crown, HelpCircle } from "lucide-react";
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useDragScroll } from "@/hooks/use-drag-scroll";
 import { useQuery, useQueries, useInfiniteQuery, useMutation, keepPreviousData } from "@tanstack/react-query";
@@ -1116,23 +1116,12 @@ export default function HomePage() {
                       </div>
                       <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground/60 flex-wrap" data-testid="text-leaderboard-freshness">
                         <TouchTooltip
-                          content={<p>Fast-lane updates every 10 min using votes and profile views (no external API calls).</p>}
+                          content={<p>Full data refresh from Wikipedia, Mediastack, GDELT, and Google.</p>}
                           side="bottom"
                           className="text-xs max-w-[240px]"
                         >
                           <span className="inline-flex items-center gap-1 cursor-help">
-                            <Zap className="h-3 w-3 text-green-600 dark:text-green-400" />
-                            <span>Live: {systemFreshness?.liveUpdatedAtFormatted || "pending"}</span>
-                          </span>
-                        </TouchTooltip>
-                        <span className="text-muted-foreground/40">|</span>
-                        <TouchTooltip
-                          content={<p>Full data refresh from Wikipedia, GDELT, and Google using external APIs.</p>}
-                          side="bottom"
-                          className="text-xs max-w-[240px]"
-                        >
-                          <span className="inline-flex items-center gap-1 cursor-help">
-                            <RefreshCw className="h-3 w-3" />
+                            <RefreshCw className="h-3 w-3 shrink-0 full-refresh-icon-shine" aria-hidden />
                             <span>Full: {systemFreshness?.fullRefreshAtFormatted || systemFreshness?.lastScoredAtFormatted || "recently"}</span>
                           </span>
                         </TouchTooltip>
