@@ -2856,7 +2856,7 @@ export default function PredictPage() {
             ) : updownLoading ? (
               <CardGridSkeleton count={3} />
             ) : filteredUpDown.length > 0 ? (
-              <CardSection desktopLimit={9} gap="gap-4" testIdPrefix="section-updown" dotActiveColor="bg-violet-500" mobileSlideMinHeight="min-h-[420px]">
+              <CardSection desktopLimit={9} gap="gap-4" testIdPrefix="section-updown" dotActiveColor="bg-violet-500">
                 {filteredUpDown.map((market) => (
                   <div key={market.id} onClick={(e) => handleCardEmptyTap(e, "updown", String(market.id))}>
                     <WeeklyUpDownCard 

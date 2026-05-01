@@ -1430,6 +1430,9 @@ export default function VotePage() {
       underratedPct: number | null;
       overratedPct: number | null;
       fairlyRatedPct: number | null;
+      underratedCount?: number | null;
+      overratedCount?: number | null;
+      fairlyRatedCount?: number | null;
       userValueVote: 'underrated' | 'overrated' | 'fairly_rated' | null;
     }>;
   }
