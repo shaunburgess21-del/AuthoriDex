@@ -433,16 +433,21 @@ function sanitise(
   // Punctuation de-bot pass. Even with the prompt rule, GPT loves dropping
   // semicolons and em dashes into casual comments. Convert them to the
   // shapes a real human would use:
-  //   ;            -> .  (and capitalise next word)
-  //   — / – /  --  -> , (sentence-internal) or .  (when it acts as a break)
-  //   double-hyphen -> single hyphen
-  text = text.replace(/\s*;\s*/g, ". ");
+  //   ;          -> .  (and capitalise the very next letter — but ONLY
+  //                     for periods we ourselves insert, so we don't
+  //                     over-capitalise things like "U.S. economy" or
+  //                     casual lowercase-after-period the user typed)
+  //   — / –      -> , (when between words/spaces)
+  //   — / –      -> - (when joining a single word like "10–15")
+  //   --         -> ,
+  text = text.replace(/\s*;\s*(\S?)/g, (_m, next: string) => {
+    if (!next) return ".";
+    if (/[a-z]/.test(next)) return `. ${next.toUpperCase()}`;
+    return `. ${next}`;
+  });
   text = text.replace(/\s+[—–]\s+/g, ", ");
   text = text.replace(/(\w)[—–](\w)/g, "$1-$2");
   text = text.replace(/\s+--\s+/g, ", ");
-  // Capitalise the letter after every ". " we just inserted (or that was
-  // already there) so split sentences read naturally.
-  text = text.replace(/(\.\s+)([a-z])/g, (_m, prefix: string, ch: string) => prefix + ch.toUpperCase());
   text = text.trim();
   if (!text) return null;
 
