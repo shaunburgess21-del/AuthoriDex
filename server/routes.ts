@@ -4,6 +4,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { getBaselineDiagnostics } from "./utils/baseline";
 import { db } from "./db";
+import { syncWinningAvatarForPerson } from "./lib/curateAvatar";
 import { trendSnapshots, trackedPeople, communityInsights, insightVotes, comments as unifiedComments, commentVotes, matchups, votes, xpActions, xpLedger, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, contentCategories, insertCommunityInsightSchema, insertInsightVoteSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
 import { validateSuggestionPayload, SUGGESTION_TYPES } from "@shared/suggestionSchemas";
 import { normaliseSocialHandles } from "@shared/handleNormalise";
@@ -10297,6 +10298,7 @@ Only return the JSON object.`;
       let foldersMissing: string[] = [];
       let foldersEmpty: string[] = [];
       let alreadySynced: string[] = [];
+      const touchedPersonIds = new Set<string>();
       const sampleListResults: Array<{ name: string; slug: string; rawFiles: string[]; imageFiles: string[] }> = [];
 
       for (const person of people) {
@@ -10363,6 +10365,7 @@ Only return the JSON object.`;
         if (insertedForPerson > 0) {
           totalSynced += insertedForPerson;
           peopleProcessed++;
+          touchedPersonIds.add(person.id);
         } else if (imageFiles.length > 0) {
           alreadySynced.push(slug);
         }
@@ -10398,9 +10401,18 @@ Only return the JSON object.`;
           backfillList.push({ personId, imageUrl });
         });
         for (const row of backfillList) {
-          await db.update(trackedPeople).set({ avatar: row.imageUrl }).where(eq(trackedPeople.id, row.personId));
+          // Use the shared helper so BOTH tracked_people.avatar and
+          // trending_people.avatar are kept in sync with the curate winner.
+          await syncWinningAvatarForPerson(row.personId);
+          touchedPersonIds.add(row.personId);
           avatarsBackfilled++;
         }
+      }
+
+      // Re-sync the curate winner for every person we touched so both
+      // denormalized avatar columns stay aligned.
+      for (const personId of touchedPersonIds) {
+        await syncWinningAvatarForPerson(personId);
       }
 
       res.json({
@@ -10611,10 +10623,14 @@ Only return the JSON object.`;
       // Set the new primary
       await db.update(celebrityImages).set({ isPrimary: true }).where(eq(celebrityImages.id, imageId));
       
-      // Also update the main avatar on tracked_people
+      // Also update the main avatar on BOTH tracked_people and trending_people
+      // so every consumer surface (leaderboard, sentiment polls, opinion polls,
+      // predict cards, value cards) shows the same image. Without the
+      // trending_people update the two columns drift out of sync.
       const [image] = await db.select().from(celebrityImages).where(eq(celebrityImages.id, imageId));
       if (image) {
         await db.update(trackedPeople).set({ avatar: image.imageUrl }).where(eq(trackedPeople.id, id));
+        await db.update(trendingPeople).set({ avatar: image.imageUrl }).where(eq(trendingPeople.id, id));
       }
       
       // Audit log
@@ -11215,10 +11231,11 @@ Target length: about 90-150 words.`;
           status: trendingPolls.status,
           createdAt: trendingPolls.createdAt,
           personName: trackedPeople.name,
-          personAvatar: trackedPeople.avatar,
+          personAvatar: trendingPeople.avatar,
         })
         .from(trendingPolls)
         .leftJoin(trackedPeople, eq(trendingPolls.personId, trackedPeople.id))
+        .leftJoin(trendingPeople, eq(trendingPolls.personId, trendingPeople.id))
         .where(eq(trendingPolls.status, 'live'))
         .orderBy(desc(trendingPolls.createdAt));
 
@@ -11299,10 +11316,11 @@ Target length: about 90-150 words.`;
           seedOpposeCount: trendingPolls.seedOpposeCount,
           createdAt: trendingPolls.createdAt,
           personName: trackedPeople.name,
-          personAvatar: trackedPeople.avatar,
+          personAvatar: trendingPeople.avatar,
         })
         .from(trendingPolls)
         .leftJoin(trackedPeople, eq(trendingPolls.personId, trackedPeople.id))
+        .leftJoin(trendingPeople, eq(trendingPolls.personId, trendingPeople.id))
         .where(eq(trendingPolls.slug, slug))
         .limit(1);
 
@@ -12014,10 +12032,11 @@ Target length: about 90-150 words.`;
           orderIndex: opinionPollOptions.orderIndex,
           seedCount: opinionPollOptions.seedCount,
           personName: trackedPeople.name,
-          personAvatar: trackedPeople.avatar,
+          personAvatar: trendingPeople.avatar,
         })
         .from(opinionPollOptions)
         .leftJoin(trackedPeople, eq(opinionPollOptions.personId, trackedPeople.id))
+        .leftJoin(trendingPeople, eq(opinionPollOptions.personId, trendingPeople.id))
         .where(eq(opinionPollOptions.pollId, poll.id))
         .orderBy(asc(opinionPollOptions.orderIndex)),
       db
@@ -12095,10 +12114,11 @@ Target length: about 90-150 words.`;
             orderIndex: opinionPollOptions.orderIndex,
             seedCount: opinionPollOptions.seedCount,
             personName: trackedPeople.name,
-            personAvatar: trackedPeople.avatar,
+            personAvatar: trendingPeople.avatar,
           })
           .from(opinionPollOptions)
           .leftJoin(trackedPeople, eq(opinionPollOptions.personId, trackedPeople.id))
+          .leftJoin(trendingPeople, eq(opinionPollOptions.personId, trendingPeople.id))
           .where(inArray(opinionPollOptions.pollId, opPollIds))
           .orderBy(asc(opinionPollOptions.pollId), asc(opinionPollOptions.orderIndex)),
         db
@@ -12199,10 +12219,11 @@ Target length: about 90-150 words.`;
           orderIndex: opinionPollOptions.orderIndex,
           seedCount: opinionPollOptions.seedCount,
           personName: trackedPeople.name,
-          personAvatar: trackedPeople.avatar,
+          personAvatar: trendingPeople.avatar,
         })
         .from(opinionPollOptions)
         .leftJoin(trackedPeople, eq(opinionPollOptions.personId, trackedPeople.id))
+        .leftJoin(trendingPeople, eq(opinionPollOptions.personId, trendingPeople.id))
         .where(eq(opinionPollOptions.pollId, poll.id))
         .orderBy(asc(opinionPollOptions.orderIndex));
 
@@ -16685,26 +16706,6 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       res.status(500).json({ error: "Failed to fetch images" });
     }
   });
-
-  async function syncWinningAvatarForPerson(personId: string) {
-    const [topImage] = await db
-      .select()
-      .from(celebrityImages)
-      .where(eq(celebrityImages.personId, personId))
-      .orderBy(desc(celebrityImages.votesUp), asc(celebrityImages.addedAt))
-      .limit(1);
-
-    if (topImage) {
-      console.log(`[AvatarSync] Person ${personId}: winning image ${topImage.id} (votesUp=${topImage.votesUp}, votesDown=${topImage.votesDown}, url=${topImage.imageUrl.substring(0, 60)}...)`);
-      await db.update(celebrityImages).set({ isPrimary: false }).where(eq(celebrityImages.personId, personId));
-      await db.update(celebrityImages).set({ isPrimary: true }).where(eq(celebrityImages.id, topImage.id));
-      await db.update(trackedPeople).set({ avatar: topImage.imageUrl }).where(eq(trackedPeople.id, personId));
-      await db.update(trendingPeople).set({ avatar: topImage.imageUrl }).where(eq(trendingPeople.id, personId));
-    } else {
-      await db.update(trackedPeople).set({ avatar: null }).where(eq(trackedPeople.id, personId));
-      await db.update(trendingPeople).set({ avatar: null }).where(eq(trendingPeople.id, personId));
-    }
-  }
 
   // PATCH /api/admin/vote/curate-profile/images/:imageId/seed-votes - Set seed votes for an image
   app.patch("/api/admin/vote/curate-profile/images/:imageId/seed-votes", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
