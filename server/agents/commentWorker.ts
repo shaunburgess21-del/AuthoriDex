@@ -15,9 +15,12 @@ import {
   comments as unifiedComments,
   matchups,
   opinionPolls,
+  opinionPollVotes,
   predictionMarkets,
   profiles,
   trendingPolls,
+  trendingPollVotes,
+  votes,
 } from "@shared/schema";
 import { db } from "../db";
 import { log } from "../log";
@@ -142,27 +145,117 @@ async function getOpenParents(): Promise<EligibleCommentParent[]> {
   ];
 }
 
+/**
+ * Surfaces where the agent must have already cast a vote before being
+ * allowed to comment. Keeps comments tightly aligned with the agent's
+ * actual position. Open markets aren't in this set — placing a bet is a
+ * heavier commitment than a vote, and humans frequently comment on
+ * markets they haven't bet on.
+ */
+const VOTE_REQUIRED_SURFACES = new Set<CommentSurface>([
+  "matchup",
+  "trending_poll",
+  "opinion_poll",
+]);
+
+/**
+ * For the given agent, return the set of `${parentType}:${parentId}`
+ * keys (limited to the input parents) where the agent has already cast
+ * a vote. Used to enforce the vote-first rule on matchups + polls.
+ */
+async function getVotedParentKeys(
+  userId: string,
+  parents: EligibleCommentParent[],
+): Promise<Set<string>> {
+  const matchupIds = parents.filter((p) => p.parentType === "matchup").map((p) => p.parentId);
+  const trendingIds = parents.filter((p) => p.parentType === "trending_poll").map((p) => p.parentId);
+  const opinionIds = parents.filter((p) => p.parentType === "opinion_poll").map((p) => p.parentId);
+
+  const [matchupRows, trendingRows, opinionRows] = await Promise.all([
+    matchupIds.length > 0
+      ? db
+          .select({ id: votes.targetId })
+          .from(votes)
+          .where(
+            and(
+              eq(votes.userId, userId),
+              eq(votes.voteType, "face_off"),
+              inArray(votes.targetId, matchupIds),
+            ),
+          )
+      : Promise.resolve([] as Array<{ id: string }>),
+    trendingIds.length > 0
+      ? db
+          .select({ id: trendingPollVotes.pollId })
+          .from(trendingPollVotes)
+          .where(
+            and(
+              eq(trendingPollVotes.userId, userId),
+              inArray(trendingPollVotes.pollId, trendingIds),
+            ),
+          )
+      : Promise.resolve([] as Array<{ id: string }>),
+    opinionIds.length > 0
+      ? db
+          .select({ id: opinionPollVotes.pollId })
+          .from(opinionPollVotes)
+          .where(
+            and(
+              eq(opinionPollVotes.userId, userId),
+              inArray(opinionPollVotes.pollId, opinionIds),
+            ),
+          )
+      : Promise.resolve([] as Array<{ id: string }>),
+  ]);
+
+  const voted = new Set<string>();
+  for (const r of matchupRows) voted.add(`matchup:${r.id}`);
+  for (const r of trendingRows) voted.add(`trending_poll:${r.id}`);
+  for (const r of opinionRows) voted.add(`opinion_poll:${r.id}`);
+  return voted;
+}
+
+/**
+ * Apply the vote-first rule: drop any parent that requires a prior vote
+ * if the agent hasn't voted on it yet. Open markets always pass through.
+ */
+function filterByVoteRequirement(
+  parents: EligibleCommentParent[],
+  voted: Set<string>,
+): EligibleCommentParent[] {
+  return parents.filter((parent) => {
+    if (!VOTE_REQUIRED_SURFACES.has(parent.parentType)) return true;
+    return voted.has(`${parent.parentType}:${parent.parentId}`);
+  });
+}
+
 async function getEligibleParents(userId: string, allParents?: EligibleCommentParent[]): Promise<EligibleCommentParent[]> {
   const parents = allParents ?? (await getOpenParents());
   if (!parents.length) return [];
 
   const parentIds = parents.map((parent) => parent.parentId);
-  const existing = await db
-    .select({
-      parentType: unifiedComments.parentType,
-      parentId: unifiedComments.parentId,
-    })
-    .from(unifiedComments)
-    .where(
-      and(
-        eq(unifiedComments.userId, userId),
-        inArray(unifiedComments.parentId, parentIds),
-        sql`${unifiedComments.deletedAt} IS NULL`,
+  const [existing, voted] = await Promise.all([
+    db
+      .select({
+        parentType: unifiedComments.parentType,
+        parentId: unifiedComments.parentId,
+      })
+      .from(unifiedComments)
+      .where(
+        and(
+          eq(unifiedComments.userId, userId),
+          inArray(unifiedComments.parentId, parentIds),
+          sql`${unifiedComments.deletedAt} IS NULL`,
+        ),
       ),
-    );
+    getVotedParentKeys(userId, parents),
+  ]);
   const alreadyCommented = new Set(existing.map((row) => `${row.parentType}:${row.parentId}`));
 
-  return parents.filter((parent) => !alreadyCommented.has(`${parent.parentType}:${parent.parentId}`));
+  return filterByVoteRequirement(
+    parents.filter((parent) => !alreadyCommented.has(`${parent.parentType}:${parent.parentId}`)),
+    voted,
+  );
 }
 
 function chooseParent(parents: EligibleCommentParent[], profile: AgentSimulationProfile): EligibleCommentParent {
@@ -178,7 +271,8 @@ function chooseParent(parents: EligibleCommentParent[], profile: AgentSimulation
 
 /** Try to find a parent + reply target for the agent. We pick a small
  *  random sample of open parents and probe each for an eligible target —
- *  no point hammering findReplyTarget on every parent in the universe. */
+ *  no point hammering findReplyTarget on every parent in the universe.
+ *  Also enforces the vote-first rule on matchups + polls. */
 async function findReplyOpportunity(
   agent: { userId: string; displayName: string },
   allParents: EligibleCommentParent[],
@@ -186,11 +280,17 @@ async function findReplyOpportunity(
 ): Promise<{ parent: EligibleCommentParent; target: ReplyTarget } | null> {
   if (!allParents.length) return null;
 
+  // Vote-first filter — same as top-level path. Replying to a poll you
+  // haven't voted on still leaks the bot smell.
+  const voted = await getVotedParentKeys(agent.userId, allParents);
+  const allowed = filterByVoteRequirement(allParents, voted);
+  if (!allowed.length) return null;
+
   // Bias toward favoured categories first, then everything else.
-  const preferred = allParents.filter(
+  const preferred = allowed.filter(
     (p) => p.category && profile.favoriteCategories.includes(p.category),
   );
-  const ordered = [...preferred.sort(() => Math.random() - 0.5), ...allParents.sort(() => Math.random() - 0.5)];
+  const ordered = [...preferred.sort(() => Math.random() - 0.5), ...allowed.sort(() => Math.random() - 0.5)];
   const probed = new Set<string>();
 
   for (const parent of ordered) {
