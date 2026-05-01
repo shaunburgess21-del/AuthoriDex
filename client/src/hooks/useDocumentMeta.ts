@@ -36,6 +36,34 @@ function ensureMeta(selector: string, attr: "name" | "property", key: string): H
 }
 
 /**
+ * Open Graph + Twitter Cards specs both require image / url meta tags
+ * to be absolute. Browsers don't enforce this — `<meta og:image>` with
+ * a relative URL still renders fine when a human opens the tab — but
+ * non-browser scrapers (Twitter's card renderer, Google's second-pass
+ * indexer, Embedly, iframely) skip relative URLs silently and the
+ * preview falls back to nothing.
+ *
+ * We accept relative paths from callers (so a page can write
+ * `/api/og/image/...` without thinking about origin in dev/preview
+ * environments) and promote them to absolute against the live origin
+ * before pinning them into the head.
+ */
+function toAbsoluteUrl(value: string): string {
+  if (typeof window === "undefined") return value;
+  if (/^https?:\/\//i.test(value)) return value;
+  try {
+    return new URL(value, window.location.origin).toString();
+  } catch {
+    return value;
+  }
+}
+
+const ABSOLUTE_URL_KEYS: ReadonlySet<keyof DocumentMetaOptions> = new Set([
+  "image",
+  "url",
+]);
+
+/**
  * Update the document `<title>`, description, and OG / Twitter preview
  * tags from inside a React page component.
  *
@@ -73,8 +101,9 @@ export function useDocumentMeta(opts: DocumentMetaOptions): void {
     };
 
     for (const def of META_DEFINITIONS) {
-      const value = resolved[def.source];
-      if (!value) continue;
+      const raw = resolved[def.source];
+      if (!raw) continue;
+      const value = ABSOLUTE_URL_KEYS.has(def.source) ? toAbsoluteUrl(raw) : raw;
       const el = ensureMeta(def.selector, def.attr, def.key);
       previousValues.set(def.selector, el.getAttribute("content"));
       el.setAttribute("content", value);
