@@ -126,7 +126,7 @@ function OptionRow({
   const isSelected = mode === "result-selected";
   const rowClass = `flex items-stretch overflow-hidden rounded-lg border transition-all duration-300 ${
     isSelected
-      ? "border-cyan-500/30 border-l-4 border-l-cyan-500 bg-cyan-500/10 dark:bg-cyan-500/15"
+      ? "border-white/40 dark:border-white/50 border-l-4 border-l-cyan-500 bg-slate-200/60 dark:bg-black/30 ring-1 ring-cyan-500/20 dark:ring-cyan-400/15 ring-inset"
       : "border-border/30 bg-muted/20"
   }`;
   const contentColumn = (
@@ -204,7 +204,14 @@ export function OpinionPollCard({
   const [optionsDrawerOpen, setOptionsDrawerOpen] = useState(false);
   const [pendingChangeOption, setPendingChangeOption] = useState<typeof options[number] | null>(null);
   const options = poll.options || [];
-  const visibleOptions = options.slice(0, OPINION_POLL_PREVIEW_COUNT);
+  // Once the user has voted, sort options by leader -> trailing so positions
+  // update dynamically as votes come in. Pre-vote we keep the authored
+  // orderIndex so we don't telegraph popular picks before voting.
+  const sortedOptions = [...options].sort(
+    (a, b) => (b.votes ?? 0) - (a.votes ?? 0) || (a.orderIndex ?? 0) - (b.orderIndex ?? 0)
+  );
+  const displayOptions = voted ? sortedOptions : options;
+  const visibleOptions = displayOptions.slice(0, OPINION_POLL_PREVIEW_COUNT);
   const remainingCount = Math.max(0, options.length - OPINION_POLL_PREVIEW_COUNT);
   const categoryKey = poll.category ?? "";
 
@@ -546,7 +553,7 @@ export function OpinionPollCard({
               </button>
             </div>
             <div className="flex-1 overflow-y-auto px-4 pb-2 min-h-0 space-y-1.5">
-              {options.map((option, idx) => {
+              {displayOptions.map((option, idx) => {
                 const orderLabel = (option.orderIndex ?? idx) + 1;
                 if (!hasVoted) {
                   return (
