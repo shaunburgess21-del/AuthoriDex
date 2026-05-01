@@ -130,7 +130,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useScrollToHash } from "@/hooks/useScrollToHash";
 import { consumeCategoryPillBrowseIntent, isCategoryPillDrawerDismissSuppressed } from "@/components/InteractiveCategoryPill";
 
-type SnapOpenSource = "card-tap" | "browse-button";
+type SnapOpenSource = "card-tap" | "browse-button" | "header-icon";
 
 const PREDICT_ONBOARDING_STEPS: readonly OnboardingStep[] = [
   {
@@ -1300,7 +1300,7 @@ export default function PredictPage() {
     if (!isMobile) return;
     if (source === "browse-button") {
       if (!consumeCategoryPillBrowseIntent()) return;
-    } else if (isCategoryPillDrawerDismissSuppressed()) {
+    } else if (source !== "header-icon" && isCategoryPillDrawerDismissSuppressed()) {
       return;
     }
     savedSnapWindowScrollRef.current = window.scrollY;
@@ -2726,11 +2726,12 @@ export default function PredictPage() {
                   </Button>
                   <Button 
                     size="icon"
-                    onClick={() => openSuggestModal(() => setCreateModalOpen(true))}
-                    className="rounded-full bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/40 dark:border-violet-500/30 text-violet-600 dark:text-violet-400 hover:bg-violet-500/25 dark:hover:bg-violet-500/20 md:hidden"
-                    data-testid="button-start-prediction-mobile"
+                    onClick={() => openSnapScroll("world-markets", filteredCommunity[0]?.id ? String(filteredCommunity[0].id) : undefined, "header-icon")}
+                    variant="ghost"
+                    className="text-violet-600 dark:text-violet-400 hover:text-violet-500 dark:hover:text-violet-300 md:hidden"
+                    data-testid="button-snap-world-markets"
                   >
-                    <Plus className="h-4 w-4" />
+                    <svg viewBox="0 0 16 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-8 w-[21px]"><path d="M1 5V2a1 1 0 0 1 1-1h3" /><path d="M11 1h3a1 1 0 0 1 1 1v3" /><path d="M15 15v3a1 1 0 0 1-1 1h-3" /><path d="M5 19H2a1 1 0 0 1-1-1v-3" /></svg>
                   </Button>
                 </>
               }
@@ -2960,21 +2961,32 @@ export default function PredictPage() {
               accent="violet"
               testId="section-header-updown"
               actions={
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      onClick={() => setRulesModalOpen("updown")}
-                      className="text-violet-600 dark:text-violet-400 hover:text-violet-500 dark:hover:text-violet-300"
-                      aria-label="How it works"
-                      data-testid="button-rules-weekly-up-/-down"
-                    >
-                      <HelpCircle className="h-5 w-5" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent className="bg-popover dark:bg-slate-900/95 border-border dark:border-slate-700 text-popover-foreground dark:text-slate-200 text-xs">How it works</TooltipContent>
-                </Tooltip>
+                <>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        onClick={() => setRulesModalOpen("updown")}
+                        className="text-violet-600 dark:text-violet-400 hover:text-violet-500 dark:hover:text-violet-300"
+                        aria-label="How it works"
+                        data-testid="button-rules-weekly-up-/-down"
+                      >
+                        <HelpCircle className="h-5 w-5" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent className="bg-popover dark:bg-slate-900/95 border-border dark:border-slate-700 text-popover-foreground dark:text-slate-200 text-xs">How it works</TooltipContent>
+                  </Tooltip>
+                  <Button
+                    size="icon"
+                    onClick={() => openSnapScroll("updown", filteredUpDown[0]?.id ? String(filteredUpDown[0].id) : undefined, "header-icon")}
+                    variant="ghost"
+                    className="text-violet-600 dark:text-violet-400 hover:text-violet-500 dark:hover:text-violet-300 md:hidden"
+                    data-testid="button-snap-updown"
+                  >
+                    <svg viewBox="0 0 16 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-8 w-[21px]"><path d="M1 5V2a1 1 0 0 1 1-1h3" /><path d="M11 1h3a1 1 0 0 1 1 1v3" /><path d="M15 15v3a1 1 0 0 1-1 1h-3" /><path d="M5 19H2a1 1 0 0 1-1-1v-3" /></svg>
+                  </Button>
+                </>
               }
             >
               <SectionFilterBar
