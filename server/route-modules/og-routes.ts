@@ -6,6 +6,9 @@ import {
   predictionMarkets,
   marketEntries,
   trendingPeople,
+  trendingPolls,
+  opinionPolls,
+  matchups,
 } from "@shared/schema";
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -238,6 +241,66 @@ async function lookupNativeEntries(id: string) {
     .orderBy(marketEntries.displayOrder);
 }
 
+/* Vote-section lookups (sentiment polls / opinion polls / matchups).
+ *
+ * Each of the three vote surfaces ships its own detail page that's
+ * highly shareable on its own (each has a "Share" button in the
+ * header). To make those shares preview-rich on Slack/iMessage we
+ * read the smallest possible row to populate the OG title +
+ * description and avoid joining anything else. */
+async function lookupSentimentPoll(slug: string) {
+  const [p] = await db
+    .select({
+      id: trendingPolls.id,
+      headline: trendingPolls.headline,
+      subjectText: trendingPolls.subjectText,
+      description: trendingPolls.description,
+      imageUrl: trendingPolls.imageUrl,
+      category: trendingPolls.category,
+      slug: trendingPolls.slug,
+    })
+    .from(trendingPolls)
+    .where(eq(trendingPolls.slug, slug))
+    .limit(1);
+  return p ?? null;
+}
+
+async function lookupOpinionPoll(slug: string) {
+  const [p] = await db
+    .select({
+      id: opinionPolls.id,
+      title: opinionPolls.title,
+      summary: opinionPolls.summary,
+      description: opinionPolls.description,
+      imageUrl: opinionPolls.imageUrl,
+      category: opinionPolls.category,
+      slug: opinionPolls.slug,
+    })
+    .from(opinionPolls)
+    .where(eq(opinionPolls.slug, slug))
+    .limit(1);
+  return p ?? null;
+}
+
+async function lookupMatchup(slug: string) {
+  const [m] = await db
+    .select({
+      id: matchups.id,
+      title: matchups.title,
+      description: matchups.description,
+      optionAText: matchups.optionAText,
+      optionBText: matchups.optionBText,
+      optionAImage: matchups.optionAImage,
+      optionBImage: matchups.optionBImage,
+      category: matchups.category,
+      slug: matchups.slug,
+    })
+    .from(matchups)
+    .where(eq(matchups.slug, slug))
+    .limit(1);
+  return m ?? null;
+}
+
 async function lookupPersonName(personId: string | null): Promise<string | null> {
   if (!personId) return null;
   const [p] = await db
@@ -437,6 +500,157 @@ export function registerOgRoutes(app: Express): void {
     );
   });
 
+  /* ─────────────────────────────────────────────────── vote sections
+   *
+   * Sentiment polls (`/polls/:slug`), opinion polls
+   * (`/vote/opinion-polls/:slug`), and matchups
+   * (`/vote/matchups/:slug`) all expose a Share button. We mirror the
+   * market OG pattern so the preview cards in Slack/iMessage carry the
+   * actual headline + subject instead of "VoxDex" with a generic
+   * thumbnail. The image is the same dynamically-rendered SVG used
+   * for markets — keeps the brand visual language consistent across
+   * every shareable surface. */
+
+  app.get("/api/og/polls/:slug", async (req: Request, res: Response) => {
+    const slug = req.params.slug;
+    const canonicalUrl = `${SITE_URL}/polls/${encodeURIComponent(slug)}`;
+    try {
+      const poll = await lookupSentimentPoll(slug);
+      if (!poll) {
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        res.setHeader("Cache-Control", "public, max-age=300");
+        res.send(
+          renderOgHtml({
+            title: SITE_NAME,
+            description: DEFAULT_DESCRIPTION,
+            canonicalUrl,
+            imageUrl: `${SITE_URL}/api/og/image/default.png`,
+          }),
+        );
+        return;
+      }
+      const description =
+        poll.description ?? poll.subjectText ?? "Cast your vote on VoxDex.";
+      const imageUrl = `${SITE_URL}/api/og/image/market.png?title=${encodeURIComponent(poll.headline)}&subtitle=${encodeURIComponent("Sentiment poll • Cast your vote")}&badge=${encodeURIComponent("Sentiment poll")}`;
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader("Cache-Control", "public, max-age=600");
+      res.send(
+        renderOgHtml({
+          title: `${poll.headline} • VoxDex`,
+          description,
+          canonicalUrl,
+          imageUrl,
+        }),
+      );
+    } catch (err: any) {
+      console.error("[OG] Sentiment poll render failed:", err?.message);
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.send(
+        renderOgHtml({
+          title: SITE_NAME,
+          description: DEFAULT_DESCRIPTION,
+          canonicalUrl,
+          imageUrl: `${SITE_URL}/api/og/image/default.png`,
+        }),
+      );
+    }
+  });
+
+  app.get(
+    "/api/og/opinion-polls/:slug",
+    async (req: Request, res: Response) => {
+      const slug = req.params.slug;
+      const canonicalUrl = `${SITE_URL}/vote/opinion-polls/${encodeURIComponent(slug)}`;
+      try {
+        const poll = await lookupOpinionPoll(slug);
+        if (!poll) {
+          res.setHeader("Content-Type", "text/html; charset=utf-8");
+          res.setHeader("Cache-Control", "public, max-age=300");
+          res.send(
+            renderOgHtml({
+              title: SITE_NAME,
+              description: DEFAULT_DESCRIPTION,
+              canonicalUrl,
+              imageUrl: `${SITE_URL}/api/og/image/default.png`,
+            }),
+          );
+          return;
+        }
+        const description =
+          poll.summary ?? poll.description ?? "Cast your vote on VoxDex.";
+        const imageUrl = `${SITE_URL}/api/og/image/market.png?title=${encodeURIComponent(poll.title)}&subtitle=${encodeURIComponent("Opinion poll • Pick a side")}&badge=${encodeURIComponent("Opinion poll")}`;
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        res.setHeader("Cache-Control", "public, max-age=600");
+        res.send(
+          renderOgHtml({
+            title: `${poll.title} • VoxDex`,
+            description,
+            canonicalUrl,
+            imageUrl,
+          }),
+        );
+      } catch (err: any) {
+        console.error("[OG] Opinion poll render failed:", err?.message);
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        res.send(
+          renderOgHtml({
+            title: SITE_NAME,
+            description: DEFAULT_DESCRIPTION,
+            canonicalUrl,
+            imageUrl: `${SITE_URL}/api/og/image/default.png`,
+          }),
+        );
+      }
+    },
+  );
+
+  app.get("/api/og/matchups/:slug", async (req: Request, res: Response) => {
+    const slug = req.params.slug;
+    const canonicalUrl = `${SITE_URL}/vote/matchups/${encodeURIComponent(slug)}`;
+    try {
+      const m = await lookupMatchup(slug);
+      if (!m) {
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        res.setHeader("Cache-Control", "public, max-age=300");
+        res.send(
+          renderOgHtml({
+            title: SITE_NAME,
+            description: DEFAULT_DESCRIPTION,
+            canonicalUrl,
+            imageUrl: `${SITE_URL}/api/og/image/default.png`,
+          }),
+        );
+        return;
+      }
+      const subtitle = `${m.optionAText} vs ${m.optionBText}`;
+      const description =
+        m.description ??
+        `Pick a side: ${m.optionAText} or ${m.optionBText}. Vote on VoxDex.`;
+      const imageUrl = `${SITE_URL}/api/og/image/market.png?title=${encodeURIComponent(m.title)}&subtitle=${encodeURIComponent(subtitle)}&badge=${encodeURIComponent("Matchup")}`;
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader("Cache-Control", "public, max-age=600");
+      res.send(
+        renderOgHtml({
+          title: `${m.title} • VoxDex`,
+          description,
+          canonicalUrl,
+          imageUrl,
+        }),
+      );
+    } catch (err: any) {
+      console.error("[OG] Matchup render failed:", err?.message);
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.send(
+        renderOgHtml({
+          title: SITE_NAME,
+          description: DEFAULT_DESCRIPTION,
+          canonicalUrl,
+          imageUrl: `${SITE_URL}/api/og/image/default.png`,
+        }),
+      );
+    }
+  });
+
   /* ─────────────────────────────────────────────────── sitemap.xml
    *
    * Search engines (Google, Bing) use sitemap.xml as their preferred
@@ -544,12 +758,81 @@ export function registerOgRoutes(app: Express): void {
           } => Boolean(u),
         );
 
+      /* Vote-section URLs. We treat anything with `visibility = 'live'`
+       * as eligible — that's the same gate the public pages use to show
+       * a poll/matchup, so the sitemap and the UI stay in sync. We
+       * intentionally cap each table at 2000 to keep the document under
+       * the 50MB / 50k-URL limit even on extreme growth. */
+      const livePolls = await db
+        .select({
+          slug: trendingPolls.slug,
+          updatedAt: trendingPolls.updatedAt,
+        })
+        .from(trendingPolls)
+        .where(eq(trendingPolls.visibility, "live"))
+        .orderBy(desc(trendingPolls.updatedAt))
+        .limit(2000);
+
+      const liveOpinionPolls = await db
+        .select({
+          slug: opinionPolls.slug,
+          updatedAt: opinionPolls.updatedAt,
+        })
+        .from(opinionPolls)
+        .where(eq(opinionPolls.visibility, "live"))
+        .orderBy(desc(opinionPolls.updatedAt))
+        .limit(2000);
+
+      const liveMatchups = await db
+        .select({
+          slug: matchups.slug,
+          createdAt: matchups.createdAt,
+        })
+        .from(matchups)
+        .where(eq(matchups.visibility, "live"))
+        .orderBy(desc(matchups.createdAt))
+        .limit(2000);
+
+      const voteUrls: { loc: string; lastmod: string; changefreq: string; priority: string }[] =
+        [];
+      for (const p of livePolls) {
+        if (!p.slug) continue;
+        voteUrls.push({
+          loc: `${SITE_URL}/polls/${p.slug}`,
+          lastmod: (p.updatedAt ?? new Date()).toISOString(),
+          changefreq: "daily",
+          priority: "0.7",
+        });
+      }
+      for (const p of liveOpinionPolls) {
+        if (!p.slug) continue;
+        voteUrls.push({
+          loc: `${SITE_URL}/vote/opinion-polls/${p.slug}`,
+          lastmod: (p.updatedAt ?? new Date()).toISOString(),
+          changefreq: "daily",
+          priority: "0.7",
+        });
+      }
+      for (const m of liveMatchups) {
+        if (!m.slug) continue;
+        voteUrls.push({
+          loc: `${SITE_URL}/vote/matchups/${m.slug}`,
+          lastmod: (m.createdAt ?? new Date()).toISOString(),
+          changefreq: "daily",
+          priority: "0.7",
+        });
+      }
+
       const xmlEntries = [
         ...staticUrls.map(
           (u) =>
             `  <url><loc>${escapeHtml(u.loc)}</loc><changefreq>${u.changefreq}</changefreq><priority>${u.priority}</priority></url>`,
         ),
         ...marketUrls.map(
+          (u) =>
+            `  <url><loc>${escapeHtml(u.loc)}</loc><lastmod>${u.lastmod}</lastmod><changefreq>${u.changefreq}</changefreq><priority>${u.priority}</priority></url>`,
+        ),
+        ...voteUrls.map(
           (u) =>
             `  <url><loc>${escapeHtml(u.loc)}</loc><lastmod>${u.lastmod}</lastmod><changefreq>${u.changefreq}</changefreq><priority>${u.priority}</priority></url>`,
         ),

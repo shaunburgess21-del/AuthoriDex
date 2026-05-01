@@ -28,6 +28,7 @@ import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { VoteDetailNavCluster } from "@/components/vote/VoteDetailNavCluster";
 import { SwipeNavigator } from "@/components/vote/SwipeNavigator";
 import { useDetailNavigation } from "@/hooks/useDetailNavigation";
+import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import {
   ArrowLeft,
   Clock,
@@ -189,6 +190,19 @@ export default function OpinionPollDetailPage() {
   const handleShare = () => {
     sharePage(poll ? `${poll.title} on VoxDex` : "VoxDex");
   };
+
+  // Dynamic <title> + OG/Twitter meta. Crawlers without JS hit
+  // /api/og/opinion-polls/:slug via the vercel.json bot rewrite; this
+  // hook keeps the live document head accurate for everyone else.
+  useDocumentMeta({
+    title: poll ? `${poll.title} • VoxDex` : "Opinion poll • VoxDex",
+    description: poll
+      ? poll.summary ?? poll.description ?? "Cast your vote on VoxDex."
+      : null,
+    image: poll
+      ? `/api/og/image/market.png?title=${encodeURIComponent(poll.title)}&subtitle=${encodeURIComponent("Opinion poll • Pick a side")}&badge=${encodeURIComponent("Opinion poll")}`
+      : null,
+  });
 
   if (isLoading) {
     return (

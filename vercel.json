@@ -76,6 +76,39 @@
       "destination": "https://authoridex-production.up.railway.app/api/og/site"
     },
     {
+      "source": "/polls/:slug",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": "(?i).*(facebookexternalhit|twitterbot|linkedinbot|slackbot|discordbot|whatsapp|telegrambot|skypeuripreview|pinterest|redditbot|embedly|quora link preview|iframely|mastodon|nuzzel|vkshare|tumblr).*"
+        }
+      ],
+      "destination": "https://authoridex-production.up.railway.app/api/og/polls/:slug"
+    },
+    {
+      "source": "/vote/opinion-polls/:slug",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": "(?i).*(facebookexternalhit|twitterbot|linkedinbot|slackbot|discordbot|whatsapp|telegrambot|skypeuripreview|pinterest|redditbot|embedly|quora link preview|iframely|mastodon|nuzzel|vkshare|tumblr).*"
+        }
+      ],
+      "destination": "https://authoridex-production.up.railway.app/api/og/opinion-polls/:slug"
+    },
+    {
+      "source": "/vote/matchups/:slug",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": "(?i).*(facebookexternalhit|twitterbot|linkedinbot|slackbot|discordbot|whatsapp|telegrambot|skypeuripreview|pinterest|redditbot|embedly|quora link preview|iframely|mastodon|nuzzel|vkshare|tumblr).*"
+        }
+      ],
+      "destination": "https://authoridex-production.up.railway.app/api/og/matchups/:slug"
+    },
+    {
       "source": "/((?!api/|attached_assets/|.*\\.).*)",
       "destination": "/index.html"
     }

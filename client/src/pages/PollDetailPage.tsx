@@ -22,6 +22,7 @@ import { useDetailNavigation } from "@/hooks/useDetailNavigation";
 import { navigateToLogin } from "@/lib/authReturn";
 import { goBack } from "@/lib/goBack";
 import { CardComments, useCommentCount } from "@/components/comments/CardComments";
+import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import {
   ArrowLeft,
   Clock,
@@ -132,6 +133,21 @@ export default function PollDetailPage() {
   const handleShare = () => {
     sharePage(poll ? `${poll.headline} on VoxDex` : "VoxDex");
   };
+
+  // Dynamic <title> + OG/Twitter meta. Slack/iMessage previews come
+  // from the server-side /api/og/polls/:slug rewrite (see vercel.json),
+  // but human shares (browser tab → AirDrop, copy/paste, Save as
+  // bookmark, JS-aware crawlers) all read the live document head, so
+  // we keep this in sync with the server payload.
+  useDocumentMeta({
+    title: poll ? `${poll.headline} • VoxDex` : "Sentiment poll • VoxDex",
+    description: poll
+      ? poll.description ?? poll.subjectText ?? "Cast your vote on VoxDex."
+      : null,
+    image: poll
+      ? `/api/og/image/market.png?title=${encodeURIComponent(poll.headline)}&subtitle=${encodeURIComponent("Sentiment poll • Cast your vote")}&badge=${encodeURIComponent("Sentiment poll")}`
+      : null,
+  });
 
   if (pollLoading) {
     return (

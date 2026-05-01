@@ -19,6 +19,7 @@ import { SwipeNavigator } from "@/components/vote/SwipeNavigator";
 import { useDetailNavigation } from "@/hooks/useDetailNavigation";
 import { navigateToLogin } from "@/lib/authReturn";
 import { CardComments, useCommentCount } from "@/components/comments/CardComments";
+import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import {
   ArrowLeft,
   Clock,
@@ -135,6 +136,20 @@ export default function MatchupDetailPage() {
   const handleShare = () => {
     sharePage(matchup ? `${matchup.title} on VoxDex` : "VoxDex");
   };
+
+  // Dynamic <title> + OG/Twitter meta. The "A vs B" framing is the
+  // most legible subtitle for previews — it answers "what am I picking
+  // between?" before the user has to click through.
+  useDocumentMeta({
+    title: matchup ? `${matchup.title} • VoxDex` : "Matchup • VoxDex",
+    description: matchup
+      ? matchup.description ??
+        `Pick a side: ${matchup.optionAText} or ${matchup.optionBText}. Vote on VoxDex.`
+      : null,
+    image: matchup
+      ? `/api/og/image/market.png?title=${encodeURIComponent(matchup.title)}&subtitle=${encodeURIComponent(`${matchup.optionAText} vs ${matchup.optionBText}`)}&badge=${encodeURIComponent("Matchup")}`
+      : null,
+  });
 
   if (isLoading) {
     return (
