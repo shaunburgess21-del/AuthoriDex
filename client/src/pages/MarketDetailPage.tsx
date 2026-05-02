@@ -19,6 +19,7 @@ import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { CardComments, useCommentCount } from "@/components/comments/CardComments";
 import { CommentsBottomSheet } from "@/components/snap-scroll/CommentsBottomSheet";
 import { computePayoutMultiplier, formatMultiplier } from "@/lib/parimutuel";
+import { resolveMarketHeadlineImageUrl } from "@/lib/predictMarketImage";
 import { MyPositionCard, myPositionQueryKey } from "@/components/predict/MyPositionCard";
 import { MarketDetailSkeleton } from "@/components/predict/MarketDetailSkeleton";
 import { RelatedMarkets } from "@/components/predict/RelatedMarkets";
@@ -105,6 +106,7 @@ interface MarketData {
   category?: string | null;
   tags?: string[] | null;
   coverImageUrl?: string | null;
+  personId?: string | null;
   sourceUrl?: string | null;
   featured?: boolean;
   timezone?: string | null;
@@ -842,6 +844,7 @@ export default function MarketDetailPage() {
   const resultActualScore = market.resolutionSummary?.actualScore ?? null;
   const resultWinningPrediction = market.resolutionSummary?.winningPrediction ?? null;
   const resultResolvedAt = market.resolutionSummary?.closeSnapshotAt || market.resolvedAt || null;
+  const headlineImageUrl = resolveMarketHeadlineImageUrl(market);
 
   // Status-driven copy lives in lib/marketClosedMessaging so every
   // "this market isn't open" surface (weekly, community, jackpot,
@@ -892,15 +895,13 @@ export default function MarketDetailPage() {
           </div>
 
           <div className="flex items-start gap-4 mb-4">
-            {!headerImgError && (market.coverImageUrl || market.linkedPersonAvatar) && (
+            {!headerImgError && headlineImageUrl && (
               <div
                 className="w-20 h-20 rounded-lg overflow-hidden shrink-0 bg-slate-800 cursor-pointer"
-                onClick={() =>
-                  setExpandedImage((market.coverImageUrl || market.linkedPersonAvatar)!)
-                }
+                onClick={() => setExpandedImage(headlineImageUrl)}
               >
                 <img
-                  src={(market.coverImageUrl || market.linkedPersonAvatar)!}
+                  src={headlineImageUrl}
                   alt={market.title}
                   className="w-full h-full object-cover"
                   onError={() => setHeaderImgError(true)}

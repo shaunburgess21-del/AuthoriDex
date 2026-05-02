@@ -11,9 +11,10 @@ import { ParticipantAvatarStack } from "@/components/predict/ParticipantAvatarSt
 import { Link, useLocation } from "wouter";
 import { Check, ChevronRight, Clock, Lock, Trophy, XCircle, RotateCcw, X, ExternalLink } from "lucide-react";
 import { computePayoutMultiplier, formatMultiplier } from "@/lib/parimutuel";
+import { resolveMarketHeadlineImageUrl } from "@/lib/predictMarketImage";
 
 function MarketAvatar({ market }: { market: any }) {
-  const imgUrl = market.coverImageUrl || market.linkedPersonAvatar;
+  const imgUrl = resolveMarketHeadlineImageUrl(market);
   if (!imgUrl) return null;
   return (
     <Avatar className="h-20 w-20 shrink-0 rounded-md md:h-16 md:w-16">
@@ -24,7 +25,7 @@ function MarketAvatar({ market }: { market: any }) {
 }
 
 function MarketAvatarOrSpacer({ market }: { market: any }) {
-  const imgUrl = market.coverImageUrl || market.linkedPersonAvatar;
+  const imgUrl = resolveMarketHeadlineImageUrl(market);
   if (!imgUrl) {
     return <div className="h-20 w-20 shrink-0 rounded-md md:h-16 md:w-16 bg-muted/25" aria-hidden />;
   }
