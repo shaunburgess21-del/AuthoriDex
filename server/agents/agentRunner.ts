@@ -254,9 +254,15 @@ async function runAgentBatchOnce(): Promise<{
   const nativeSlice = nativeMarkets.slice(0, MARKETS_PER_SWEEP - worldSlice.length);
   const sweepMarkets = [...worldSlice, ...nativeSlice];
 
-  // Update rotation memory with this sweep's native picks (cap at the
-  // configured size so older entries naturally drop off).
+  // Update rotation memory with this sweep's native picks. Delete-then-add
+  // refreshes insertion order in JavaScript Sets — without the delete, a
+  // market that was first sampled long ago and keeps getting re-encountered
+  // would still be the "oldest" by insertion order and get evicted while
+  // never-resampled markets stay in. With the delete, a re-encountered
+  // market moves to the back of the memory and the genuinely-stale ones
+  // get evicted first, which is what we want.
   for (const market of nativeSlice) {
+    recentNativeMarketIds.delete(market.id);
     recentNativeMarketIds.add(market.id);
   }
   if (recentNativeMarketIds.size > NATIVE_ROTATION_MEMORY) {
@@ -279,40 +285,46 @@ async function runAgentBatchOnce(): Promise<{
 
   // Pre-pass for the LLM sharp-ranker. Fetches entries + signals for the
   // native markets in this sweep so the ranker has live data to reason
-  // over. The DB cost is bounded (20 markets × 1 entries query + ~1
-  // signals query each ≈ 40 queries per sweep, not per agent), and the
-  // results are reused implicitly by getTrendSignals' internal caching
-  // when sharp agents re-evaluate the same markets seconds later.
+  // over. Parallelised so the whole pre-pass takes the time of a single
+  // round-trip (~200ms) instead of ~3-5s of sequential queries.
+  // getTrendSignals is internally idempotent for the same person within a
+  // sweep, so sharp agents re-evaluating the same markets seconds later
+  // don't re-pay the DB cost.
   const nativeForRanker = sweepMarkets.filter((m) => m.marketType !== "community");
-  const rankerInputs: { market: MarketWithEntries; signals: TrendSignals | null; entrySignals?: Map<string, TrendSignals> }[] = [];
-  for (const m of nativeForRanker) {
-    const entries = await db
-      .select({
-        id: marketEntries.id,
-        label: marketEntries.label,
-        totalStake: marketEntries.totalStake,
-        noStake: marketEntries.noStake,
-        personId: marketEntries.personId,
-      })
-      .from(marketEntries)
-      .where(eq(marketEntries.marketId, m.id));
-    if (entries.length === 0) continue;
+  const rankerInputs = (
+    await Promise.all(
+      nativeForRanker.map(async (m): Promise<
+        | { market: MarketWithEntries; signals: TrendSignals | null; entrySignals?: Map<string, TrendSignals> }
+        | null
+      > => {
+        const entries = await db
+          .select({
+            id: marketEntries.id,
+            label: marketEntries.label,
+            totalStake: marketEntries.totalStake,
+            noStake: marketEntries.noStake,
+            personId: marketEntries.personId,
+          })
+          .from(marketEntries)
+          .where(eq(marketEntries.marketId, m.id));
+        if (entries.length === 0) return null;
 
-    const marketData: MarketWithEntries = { ...m, entries };
-    const personSignals = m.personId ? await getTrendSignals(m.personId) : null;
+        const marketData: MarketWithEntries = { ...m, entries };
+        const [personSignals, entrySignalsMap] = await Promise.all([
+          m.personId ? getTrendSignals(m.personId) : Promise.resolve(null),
+          (m.marketType === "h2h" || m.marketType === "gainer")
+            ? Promise.all(
+                entries
+                  .filter((e) => e.personId)
+                  .map(async (e) => [e.id, await getTrendSignals(e.personId!)] as const),
+              ).then((pairs) => new Map(pairs))
+            : Promise.resolve(undefined),
+        ]);
 
-    let entrySignals: Map<string, TrendSignals> | undefined;
-    if (m.marketType === "h2h" || m.marketType === "gainer") {
-      entrySignals = new Map();
-      for (const entry of entries) {
-        if (entry.personId) {
-          entrySignals.set(entry.id, await getTrendSignals(entry.personId));
-        }
-      }
-    }
-
-    rankerInputs.push({ market: marketData, signals: personSignals, entrySignals });
-  }
+        return { market: marketData, signals: personSignals, entrySignals: entrySignalsMap };
+      }),
+    )
+  ).filter((r): r is NonNullable<typeof r> => r !== null);
 
   // Fire the LLM ranker (cached, deduped). Sharps will skip their random
   // abstain on any market that lands in this snapshot's picks.

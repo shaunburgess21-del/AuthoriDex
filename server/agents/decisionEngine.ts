@@ -214,12 +214,18 @@ export function computePrediction(
   }
 
   // Step 4: Select entry
-  // For multi-outcome community markets (3+ entries) and H2H pairings, use
-  // weighted random selection so agents distribute across options in
-  // proportion to their conviction instead of all piling onto the top pick
-  // (or abstaining together on near-coin-flip H2Hs). Up/Down still uses
-  // deterministic top-1 because the signal there is directional, not a
-  // comparison between two subjects.
+  // - Multi-outcome community markets (3+ entries) and H2H pairings always
+  //   use weighted random selection so agents distribute across options in
+  //   proportion to their conviction instead of all piling onto the top
+  //   pick (or abstaining together on near-coin-flip H2Hs).
+  // - Binary up/down uses weighted random for STANDARD-band agents when
+  //   the top score is below 0.65 (moderate conviction) — this prevents
+  //   the entire cohort from piling onto the same side on borderline
+  //   reads (the Theo Von Down problem from 2026-05-01).
+  // - Sharps ALWAYS use deterministic top-pick on binary up/down. The
+  //   whole point of the sharp band is to read the model accurately;
+  //   randomly picking the lower-conviction side just to spread variety
+  //   would erode their P&L and defeat the leaderboard differentiation.
   const sorted = Object.entries(scores).sort((a, b) => b[1] - a[1]);
   let chosenEntryId: string;
   let rawProbability: number;
@@ -229,15 +235,8 @@ export function computePrediction(
     market.openMarketType === "multi" &&
     n >= 3;
 
-  // Weighted-random selection threshold for binary up/down: when the model's
-  // top score is below this (i.e. conviction is moderate), agents distribute
-  // proportionally instead of all piling onto the same side. This is what
-  // killed the variety on weekly cards before — Theo Von's signals barely
-  // edged Down, so every agent picked Down with no spread. ≥0.65 keeps the
-  // pile-on for genuinely strong signals (which is correct: a real market
-  // would pile on too); below 0.65 it splits the cohort like real humans.
   const isBinaryUpDown = !isH2H && !isMultiCommunity && n === 2;
-  const useWeightedUpDown = isBinaryUpDown && sorted[0][1] < 0.65;
+  const useWeightedUpDown = isBinaryUpDown && !sharp && sorted[0][1] < 0.65;
 
   if (isMultiCommunity) {
     const candidates = sorted.slice(0, Math.min(3, n));
