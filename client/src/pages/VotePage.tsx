@@ -28,7 +28,6 @@ import {
   Clock,
   Sparkles,
   Camera,
-  Zap,
   Crown,
   MessageSquare,
   ThumbsDown,
@@ -937,9 +936,26 @@ function DiscourseCard({
           </div>
           
           <div className="flex items-center justify-between mt-2 pt-3 border-t border-white/10">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Zap className="h-3.5 w-3.5" />
-              <span>{topic.totalVotes.toLocaleString('en-US')} total votes</span>
+            <div className="min-w-0">
+              {topic.slug &&
+                (onNavigateToPollDetail ? (
+                  <button
+                    type="button"
+                    onClick={onNavigateToPollDetail}
+                    className="text-xs text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors underline-offset-4 hover:underline text-left"
+                    data-testid={`link-poll-view-more-${topic.id}`}
+                  >
+                    View more details
+                  </button>
+                ) : (
+                  <Link
+                    href={`/polls/${topic.slug}`}
+                    className="text-xs text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors underline-offset-4 hover:underline inline-block"
+                    data-testid={`link-poll-view-more-${topic.id}`}
+                  >
+                    View more details
+                  </Link>
+                ))}
             </div>
             <div 
               className={`px-2 py-0.5 rounded-full text-xs font-medium border ${

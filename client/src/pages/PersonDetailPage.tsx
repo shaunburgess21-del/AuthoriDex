@@ -27,7 +27,6 @@ import {
   Users,
   MessageSquare,
   Trophy,
-  Zap,
   Camera,
   Check,
   X,
@@ -565,9 +564,16 @@ function FeaturedPollCard({
             </div>
 
             <div className="flex items-center justify-between mt-2 pt-3 border-t border-white/10">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Zap className="h-3.5 w-3.5" />
-                <span>{poll.totalVotes.toLocaleString("en-US")} total votes</span>
+              <div className="min-w-0">
+                {pollDetailHref && (
+                  <Link
+                    href={pollDetailHref}
+                    className="text-xs text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors underline-offset-4 hover:underline inline-block"
+                    data-testid={`link-poll-view-more-${poll.id}`}
+                  >
+                    View more details
+                  </Link>
+                )}
               </div>
               <div
                 className={`px-2 py-0.5 rounded-full text-xs font-medium border ${
