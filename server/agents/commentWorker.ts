@@ -31,6 +31,12 @@ import {
 } from "./simulationProfile";
 import { fetchCommentContext, findReplyTarget, type CommentSurface, type ReplyTarget } from "./commentContext";
 import { generateAgentComment, type AgentForComment } from "./llmCommentGenerator";
+import {
+  castMatchupVoteForUser,
+  castOpinionPollVoteForUser,
+  castSentimentPollVoteForUser,
+  countAgentVotesThisWeek,
+} from "./voteWorker";
 
 /**
  * Probability that an agent's daily comment becomes a reply to someone
@@ -233,35 +239,91 @@ async function getEligibleParents(userId: string, allParents?: EligibleCommentPa
   const parents = allParents ?? (await getOpenParents());
   if (!parents.length) return [];
 
+  // We deliberately do NOT apply the vote-first filter here anymore.
+  // The vote-first rule used to drop every poll/matchup the agent hadn't
+  // already voted on, which combined with the daily vote sweep's "1 vote
+  // per agent per day" cap meant ~80% of poll/matchup parents were
+  // permanently invisible to the comment worker — pushing essentially all
+  // comment volume onto open markets. We now keep all not-yet-commented
+  // parents in the pool and cast a vote inline (in the main sweep loop)
+  // before posting the comment whenever the parent requires one. The
+  // vote-first principle is preserved (vote always lands first), but the
+  // bottleneck is gone.
   const parentIds = parents.map((parent) => parent.parentId);
-  const [existing, voted] = await Promise.all([
-    db
-      .select({
-        parentType: unifiedComments.parentType,
-        parentId: unifiedComments.parentId,
-      })
-      .from(unifiedComments)
-      .where(
-        and(
-          eq(unifiedComments.userId, userId),
-          inArray(unifiedComments.parentId, parentIds),
-          sql`${unifiedComments.deletedAt} IS NULL`,
-        ),
+  const existing = await db
+    .select({
+      parentType: unifiedComments.parentType,
+      parentId: unifiedComments.parentId,
+    })
+    .from(unifiedComments)
+    .where(
+      and(
+        eq(unifiedComments.userId, userId),
+        inArray(unifiedComments.parentId, parentIds),
+        sql`${unifiedComments.deletedAt} IS NULL`,
       ),
-    getVotedParentKeys(userId, parents),
-  ]);
+    );
   const alreadyCommented = new Set(existing.map((row) => `${row.parentType}:${row.parentId}`));
 
-  return filterByVoteRequirement(
-    parents.filter((parent) => !alreadyCommented.has(`${parent.parentType}:${parent.parentId}`)),
-    voted,
-  );
+  return parents.filter((parent) => !alreadyCommented.has(`${parent.parentType}:${parent.parentId}`));
 }
 
 function chooseParent(parents: EligibleCommentParent[], profile: AgentSimulationProfile): EligibleCommentParent {
   const preferred = parents.filter((parent) => parent.category && profile.favoriteCategories.includes(parent.category));
   const pool = preferred.length > 0 && Math.random() < 0.7 ? preferred : parents;
   return pool[Math.floor(Math.random() * pool.length)];
+}
+
+/**
+ * Honour the vote-first rule by casting a vote inline before commenting on
+ * a poll/matchup the agent hasn't voted on yet. Returns true if the agent
+ * either already had a vote on this parent or successfully cast one now.
+ * Returns false when the agent is blocked (over weekly vote cap, or the
+ * underlying insert no-opped due to a race) — the caller should then skip
+ * this parent rather than comment without a vote.
+ *
+ * Open markets always pass through immediately because they don't require
+ * a vote (a bet is the heavier commitment, and humans frequently comment
+ * on markets they haven't bet on).
+ */
+async function ensureVoteBeforeComment(
+  agent: { userId: string; displayName: string; contrarianism: unknown; specialties: string[] | null },
+  parent: EligibleCommentParent,
+  simulation: AgentSimulationProfile,
+): Promise<boolean> {
+  if (!VOTE_REQUIRED_SURFACES.has(parent.parentType)) return true;
+
+  const voted = await getVotedParentKeys(agent.userId, [parent]);
+  if (voted.has(`${parent.parentType}:${parent.parentId}`)) return true;
+
+  // Respect the persona's weekly vote cap — without this an agent could
+  // blow past their cap by commenting on lots of polls in one sweep.
+  const weeklyVotes = await countAgentVotesThisWeek(agent.userId);
+  if (weeklyVotes >= simulation.weeklyVoteCap) {
+    log(`[CommentWorker] ${agent.displayName} at weekly vote cap (${weeklyVotes}/${simulation.weeklyVoteCap}), can't vote inline on ${parent.parentType}:${parent.parentId}`);
+    return false;
+  }
+
+  const contrarianism = Number(agent.contrarianism ?? 0.3);
+  const specialties = agent.specialties ?? [];
+
+  let ok = false;
+  switch (parent.parentType) {
+    case "matchup":
+      ok = await castMatchupVoteForUser(agent.userId, parent.parentId, contrarianism, specialties);
+      break;
+    case "trending_poll":
+      ok = await castSentimentPollVoteForUser(agent.userId, parent.parentId, contrarianism);
+      break;
+    case "opinion_poll":
+      ok = await castOpinionPollVoteForUser(agent.userId, parent.parentId, contrarianism);
+      break;
+  }
+
+  if (ok) {
+    log(`[CommentWorker] ${agent.displayName} voted inline on ${parent.parentType}:${parent.parentId} before commenting`);
+  }
+  return ok;
 }
 
 // Templates have been removed in favour of the LLM generator. The previous
@@ -280,17 +342,13 @@ async function findReplyOpportunity(
 ): Promise<{ parent: EligibleCommentParent; target: ReplyTarget } | null> {
   if (!allParents.length) return null;
 
-  // Vote-first filter — same as top-level path. Replying to a poll you
-  // haven't voted on still leaks the bot smell.
-  const voted = await getVotedParentKeys(agent.userId, allParents);
-  const allowed = filterByVoteRequirement(allParents, voted);
-  if (!allowed.length) return null;
-
+  // No vote-first filter here either — the main sweep loop will cast a
+  // vote inline before posting the reply if the parent requires one.
   // Bias toward favoured categories first, then everything else.
-  const preferred = allowed.filter(
+  const preferred = allParents.filter(
     (p) => p.category && profile.favoriteCategories.includes(p.category),
   );
-  const ordered = [...preferred.sort(() => Math.random() - 0.5), ...allowed.sort(() => Math.random() - 0.5)];
+  const ordered = [...preferred.sort(() => Math.random() - 0.5), ...allParents.sort(() => Math.random() - 0.5)];
   const probed = new Set<string>();
 
   for (const parent of ordered) {
@@ -388,6 +446,21 @@ export async function runCommentSweep(): Promise<{
         continue;
       }
       parent = chooseParent(eligible, simulation);
+    }
+
+    // Vote-first: if this is a poll/matchup the agent hasn't voted on, cast
+    // a vote inline now so the LLM can pick it up via fetchCommentContext
+    // and align the comment to the chosen side. Skip the agent if the
+    // inline vote can't land (over weekly cap, race-conflict, etc) rather
+    // than post a comment that contradicts no stated position.
+    const voteReady = await ensureVoteBeforeComment(
+      { userId: agent.userId, displayName: agent.displayName, contrarianism: agent.contrarianism, specialties: agent.specialties },
+      parent,
+      simulation,
+    );
+    if (!voteReady) {
+      skipped++;
+      continue;
     }
 
     const context = await fetchCommentContext(

@@ -454,6 +454,180 @@ function decideApprovalRating(
   return Math.max(1, Math.min(5, Math.round(raw)));
 }
 
+// ── Per-parent vote helpers (used inline by commentWorker) ─────────────
+
+/**
+ * Cast a vote on a SPECIFIC matchup. Used by the comment worker to honour
+ * the vote-first rule without depending on the daily vote sweep happening
+ * to land on this matchup. Returns true on a fresh insert, false if the
+ * agent has already voted (race), the matchup wasn't found, or anything
+ * threw. Mirrors the matchup branch in runVoteSweep so behaviour is
+ * consistent across the two callers.
+ */
+export async function castMatchupVoteForUser(
+  userId: string,
+  matchupId: string,
+  contrarianism: number,
+  specialties: string[],
+): Promise<boolean> {
+  try {
+    const [matchup] = await db
+      .select({
+        id: matchups.id,
+        category: matchups.category,
+        optionAText: matchups.optionAText,
+        optionBText: matchups.optionBText,
+        seedVotesA: matchups.seedVotesA,
+        seedVotesB: matchups.seedVotesB,
+      })
+      .from(matchups)
+      .where(eq(matchups.id, matchupId))
+      .limit(1);
+    if (!matchup) return false;
+
+    const crowd = await getMatchupCrowdSplit(matchup.id);
+    const choice = decideMatchup({ contrarianism, specialties }, matchup, crowd);
+
+    return await db.transaction(async (tx) => {
+      const [row] = await tx
+        .insert(votes)
+        .values({
+          userId,
+          voteType: "face_off",
+          targetType: "face_off",
+          targetId: matchup.id,
+          value: choice,
+          weight: 1.0,
+        })
+        .onConflictDoNothing()
+        .returning({ id: votes.id });
+      if (!row) return false;
+      await tx
+        .update(profiles)
+        .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
+        .where(eq(profiles.id, userId));
+      try {
+        await gamificationService.awardXp(
+          userId,
+          "vote_face_off",
+          `face_off_${matchup.id}_${userId}`,
+          { matchupId: matchup.id, votedOption: choice, agent: true, source: "comment_worker" },
+        );
+      } catch {
+        /* XP failure is non-fatal — the vote is what matters */
+      }
+      return true;
+    });
+  } catch (err) {
+    log(`[VoteWorker:inline] castMatchupVoteForUser failed (user=${userId}, matchup=${matchupId}): ${err}`);
+    return false;
+  }
+}
+
+export async function castSentimentPollVoteForUser(
+  userId: string,
+  pollId: string,
+  contrarianism: number,
+): Promise<boolean> {
+  try {
+    const [poll] = await db
+      .select({
+        id: trendingPolls.id,
+        category: trendingPolls.category,
+        headline: trendingPolls.headline,
+        seedSupportCount: trendingPolls.seedSupportCount,
+        seedNeutralCount: trendingPolls.seedNeutralCount,
+        seedOpposeCount: trendingPolls.seedOpposeCount,
+      })
+      .from(trendingPolls)
+      .where(eq(trendingPolls.id, pollId))
+      .limit(1);
+    if (!poll) return false;
+
+    const crowd = await getPollCrowdSplit(poll.id);
+    const choice = decideSentimentPoll({ contrarianism }, poll, crowd);
+
+    return await db.transaction(async (tx) => {
+      const [row] = await tx
+        .insert(trendingPollVotes)
+        .values({ pollId: poll.id, userId, choice })
+        .onConflictDoNothing()
+        .returning({ id: trendingPollVotes.id });
+      if (!row) return false;
+      await tx
+        .update(profiles)
+        .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
+        .where(eq(profiles.id, userId));
+      try {
+        await gamificationService.awardXp(
+          userId,
+          "vote_sentiment",
+          `sentiment_poll_${poll.id}_${userId}`,
+          { pollId: poll.id, choice, agent: true, source: "comment_worker" },
+        );
+      } catch {
+        /* non-fatal */
+      }
+      return true;
+    });
+  } catch (err) {
+    log(`[VoteWorker:inline] castSentimentPollVoteForUser failed (user=${userId}, poll=${pollId}): ${err}`);
+    return false;
+  }
+}
+
+export async function castOpinionPollVoteForUser(
+  userId: string,
+  pollId: string,
+  contrarianism: number,
+): Promise<boolean> {
+  try {
+    const options = await db
+      .select({
+        id: opinionPollOptions.id,
+        pollId: opinionPollOptions.pollId,
+        name: opinionPollOptions.name,
+        seedCount: opinionPollOptions.seedCount,
+      })
+      .from(opinionPollOptions)
+      .where(eq(opinionPollOptions.pollId, pollId));
+    if (!options.length) return false;
+
+    const choice = decideOpinionPoll({ contrarianism }, options);
+
+    return await db.transaction(async (tx) => {
+      const [row] = await tx
+        .insert(opinionPollVotes)
+        .values({ pollId, optionId: choice.id, userId })
+        .onConflictDoNothing()
+        .returning({ id: opinionPollVotes.id });
+      if (!row) return false;
+      await tx
+        .update(profiles)
+        .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
+        .where(eq(profiles.id, userId));
+      try {
+        await gamificationService.awardXp(
+          userId,
+          "vote_opinion",
+          `opinion_poll_${pollId}_${userId}`,
+          { pollId, optionId: choice.id, agent: true, source: "comment_worker" },
+        );
+      } catch {
+        /* non-fatal */
+      }
+      return true;
+    });
+  } catch (err) {
+    log(`[VoteWorker:inline] castOpinionPollVoteForUser failed (user=${userId}, poll=${pollId}): ${err}`);
+    return false;
+  }
+}
+
+// Re-export the weekly vote counter so callers can respect simulation
+// caps without duplicating the union query.
+export { countAgentVotesThisWeek };
+
 // ── Main sweep ─────────────────────────────────────────────────────────
 
 export async function runVoteSweep(): Promise<AgentVoteResult[]> {
