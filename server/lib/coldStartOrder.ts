@@ -53,8 +53,6 @@ import type { AuthRequest } from "../auth-middleware";
 export const PERSONALISED_FRESHNESS_BOOST_DAYS = 1.5;
 export const PERSONALISED_INDUCTION_VOTE_BOOST = 5;
 
-export const COLD_START_DEPRIORITISED = ["politics"] as const;
-
 // ── Per-request memoisation ─────────────────────────────────────────
 //
 // Both helpers (cold-start and personalised) need the same thing: the
@@ -128,25 +126,6 @@ export async function shouldUseColdStart(req: AuthRequest): Promise<boolean> {
 }
 
 // ── Personalised helpers (Phase 2) ──────────────────────────────────
-
-/**
- * Whether the personalised ORDER BY should apply for this request.
- * True only when the user is authenticated AND has at least one stated
- * interest. Exclusive with shouldUseColdStart.
- */
-export async function shouldUsePersonalisedOrder(req: AuthRequest): Promise<boolean> {
-  const state = await resolveInterestsState(req);
-  return state.authenticated && state.interests.length > 0;
-}
-
-/**
- * Returns the user's stated interests, or an empty array. Memoised
- * alongside the booleans above so callers can pull the array cheaply.
- */
-export async function getStatedInterests(req: AuthRequest): Promise<string[]> {
-  const state = await resolveInterestsState(req);
-  return state.interests;
-}
 
 /**
  * SQL ORDER BY expression for recency-ranked feeds with a personalised

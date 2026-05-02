@@ -6063,16 +6063,11 @@ Only return the JSON object.`;
           cleaned.length === 0 && dismissed ? new Date() : null,
       };
 
-      let updated;
-      try {
-        updated = await db
-          .update(profiles)
-          .set(updateData)
-          .where(eq(profiles.id, userId))
-          .returning();
-      } catch (dbErr: any) {
-        throw dbErr;
-      }
+      const updated = await db
+        .update(profiles)
+        .set(updateData)
+        .where(eq(profiles.id, userId))
+        .returning();
 
       if (updated.length === 0) {
         return res.status(404).json({ error: "Profile not found" });
