@@ -17731,122 +17731,136 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
       // Single SQL union pulls comments + votes (3 tables) + likes + bets
-      // for is_agent profiles, then orders by created_at across all
-      // sources. Per-source LIMITs keep each leg cheap; the outer LIMIT
-      // takes the final top-N. Cheaper and easier than 6 Drizzle queries
-      // merged in JS.
+      // for is_agent profiles, then orders by event_at across all sources.
+      // CRITICAL: each UNION ALL leg is wrapped in parens. Without them
+      // Postgres binds the per-leg ORDER BY/LIMIT to the union as a whole
+      // and rejects the trailing UNION ALL clauses. Column names differ
+      // per table — comments/poll-votes use created_at, votes/comment_votes
+      // use voted_at, market_bets uses created_at.
       const rows = await db.execute(sql`
         WITH recent AS (
-          SELECT
-            'comment'::text AS kind,
-            c.id::text AS event_id,
-            c.user_id AS user_id,
-            c.created_at AS event_at,
-            c.parent_type::text AS surface,
-            c.parent_id::text AS target_id,
-            c.body AS detail,
-            CASE WHEN c.parent_comment_id IS NOT NULL THEN 'reply' ELSE 'top' END AS sub_kind
-          FROM comments c
-          INNER JOIN profiles p ON p.id = c.user_id
-          WHERE p.is_agent = true
-            AND c.deleted_at IS NULL
-            AND c.created_at >= ${cutoff}
-          ORDER BY c.created_at DESC
-          LIMIT ${limit}
+          (
+            SELECT
+              'comment'::text AS kind,
+              c.id::text AS event_id,
+              c.user_id AS user_id,
+              c.created_at AS event_at,
+              c.parent_type::text AS surface,
+              c.parent_id::text AS target_id,
+              c.body AS detail,
+              CASE WHEN c.parent_comment_id IS NOT NULL THEN 'reply' ELSE 'top' END AS sub_kind
+            FROM comments c
+            INNER JOIN profiles p ON p.id = c.user_id
+            WHERE p.is_agent = true
+              AND c.deleted_at IS NULL
+              AND c.created_at >= ${cutoff}
+            ORDER BY c.created_at DESC
+            LIMIT ${limit}
+          )
 
           UNION ALL
 
-          SELECT
-            'vote'::text AS kind,
-            v.id::text AS event_id,
-            v.user_id AS user_id,
-            v.voted_at AS event_at,
-            v.vote_type::text AS surface,
-            v.target_id::text AS target_id,
-            v.value AS detail,
-            NULL::text AS sub_kind
-          FROM votes v
-          INNER JOIN profiles p ON p.id = v.user_id
-          WHERE p.is_agent = true
-            AND v.voted_at >= ${cutoff}
-          ORDER BY v.voted_at DESC
-          LIMIT ${limit}
+          (
+            SELECT
+              'vote'::text AS kind,
+              v.id::text AS event_id,
+              v.user_id AS user_id,
+              v.voted_at AS event_at,
+              v.vote_type::text AS surface,
+              v.target_id::text AS target_id,
+              v.value AS detail,
+              NULL::text AS sub_kind
+            FROM votes v
+            INNER JOIN profiles p ON p.id = v.user_id
+            WHERE p.is_agent = true
+              AND v.voted_at >= ${cutoff}
+            ORDER BY v.voted_at DESC
+            LIMIT ${limit}
+          )
 
           UNION ALL
 
-          SELECT
-            'vote'::text AS kind,
-            tpv.id::text AS event_id,
-            tpv.user_id AS user_id,
-            tpv.created_at AS event_at,
-            'sentiment_poll'::text AS surface,
-            tpv.poll_id::text AS target_id,
-            tpv.choice AS detail,
-            NULL::text AS sub_kind
-          FROM trending_poll_votes tpv
-          INNER JOIN profiles p ON p.id = tpv.user_id
-          WHERE p.is_agent = true
-            AND tpv.created_at >= ${cutoff}
-          ORDER BY tpv.created_at DESC
-          LIMIT ${limit}
+          (
+            SELECT
+              'vote'::text AS kind,
+              tpv.id::text AS event_id,
+              tpv.user_id AS user_id,
+              tpv.created_at AS event_at,
+              'sentiment_poll'::text AS surface,
+              tpv.poll_id::text AS target_id,
+              tpv.choice AS detail,
+              NULL::text AS sub_kind
+            FROM trending_poll_votes tpv
+            INNER JOIN profiles p ON p.id = tpv.user_id
+            WHERE p.is_agent = true
+              AND tpv.created_at >= ${cutoff}
+            ORDER BY tpv.created_at DESC
+            LIMIT ${limit}
+          )
 
           UNION ALL
 
-          SELECT
-            'vote'::text AS kind,
-            opv.id::text AS event_id,
-            opv.user_id AS user_id,
-            opv.created_at AS event_at,
-            'opinion_poll'::text AS surface,
-            opv.poll_id::text AS target_id,
-            COALESCE(po.name, opv.option_id::text) AS detail,
-            NULL::text AS sub_kind
-          FROM opinion_poll_votes opv
-          INNER JOIN profiles p ON p.id = opv.user_id
-          LEFT JOIN opinion_poll_options po ON po.id = opv.option_id
-          WHERE p.is_agent = true
-            AND opv.created_at >= ${cutoff}
-          ORDER BY opv.created_at DESC
-          LIMIT ${limit}
+          (
+            SELECT
+              'vote'::text AS kind,
+              opv.id::text AS event_id,
+              opv.user_id AS user_id,
+              opv.created_at AS event_at,
+              'opinion_poll'::text AS surface,
+              opv.poll_id::text AS target_id,
+              COALESCE(po.name, opv.option_id::text) AS detail,
+              NULL::text AS sub_kind
+            FROM opinion_poll_votes opv
+            INNER JOIN profiles p ON p.id = opv.user_id
+            LEFT JOIN opinion_poll_options po ON po.id = opv.option_id
+            WHERE p.is_agent = true
+              AND opv.created_at >= ${cutoff}
+            ORDER BY opv.created_at DESC
+            LIMIT ${limit}
+          )
 
           UNION ALL
 
-          SELECT
-            'like'::text AS kind,
-            cv.id::text AS event_id,
-            cv.user_id AS user_id,
-            cv.created_at AS event_at,
-            'comment_vote'::text AS surface,
-            cv.comment_id::text AS target_id,
-            cv.vote_type::text AS detail,
-            NULL::text AS sub_kind
-          FROM comment_votes cv
-          INNER JOIN profiles p ON p.id = cv.user_id
-          WHERE p.is_agent = true
-            AND cv.created_at >= ${cutoff}
-          ORDER BY cv.created_at DESC
-          LIMIT ${limit}
+          (
+            SELECT
+              'like'::text AS kind,
+              cv.id::text AS event_id,
+              cv.user_id AS user_id,
+              cv.voted_at AS event_at,
+              'comment_vote'::text AS surface,
+              cv.comment_id::text AS target_id,
+              cv.vote_type::text AS detail,
+              NULL::text AS sub_kind
+            FROM comment_votes cv
+            INNER JOIN profiles p ON p.id = cv.user_id
+            WHERE p.is_agent = true
+              AND cv.voted_at >= ${cutoff}
+            ORDER BY cv.voted_at DESC
+            LIMIT ${limit}
+          )
 
           UNION ALL
 
-          SELECT
-            'bet'::text AS kind,
-            mb.id::text AS event_id,
-            mb.user_id AS user_id,
-            mb.placed_at AS event_at,
-            COALESCE(pm.market_type::text, 'market') AS surface,
-            mb.market_id::text AS target_id,
-            CONCAT(mb.direction::text, ' on ', COALESCE(me.label, '?'), ' for ', mb.stake_amount, ' credits') AS detail,
-            NULL::text AS sub_kind
-          FROM market_bets mb
-          INNER JOIN profiles p ON p.id = mb.user_id
-          LEFT JOIN prediction_markets pm ON pm.id = mb.market_id
-          LEFT JOIN market_entries me ON me.id = mb.entry_id
-          WHERE p.is_agent = true
-            AND mb.agent_id IS NOT NULL
-            AND mb.placed_at >= ${cutoff}
-          ORDER BY mb.placed_at DESC
-          LIMIT ${limit}
+          (
+            SELECT
+              'bet'::text AS kind,
+              mb.id::text AS event_id,
+              mb.user_id AS user_id,
+              mb.created_at AS event_at,
+              COALESCE(pm.market_type::text, 'market') AS surface,
+              mb.market_id::text AS target_id,
+              CONCAT(mb.direction::text, ' on ', COALESCE(me.label, '?'), ' for ', mb.stake_amount, ' credits') AS detail,
+              NULL::text AS sub_kind
+            FROM market_bets mb
+            INNER JOIN profiles p ON p.id = mb.user_id
+            LEFT JOIN prediction_markets pm ON pm.id = mb.market_id
+            LEFT JOIN market_entries me ON me.id = mb.entry_id
+            WHERE p.is_agent = true
+              AND mb.agent_id IS NOT NULL
+              AND mb.created_at >= ${cutoff}
+            ORDER BY mb.created_at DESC
+            LIMIT ${limit}
+          )
         )
         SELECT
           r.kind,
