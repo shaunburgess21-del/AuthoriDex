@@ -1900,7 +1900,11 @@ export default function VotePage() {
     // without matching the wrapper's own role="button" attribute.
     let node: HTMLElement | null = target;
     while (node && node !== wrapper) {
-      if (node.matches('button, a, input, textarea, select, [role="button"], [data-interactive]')) {
+      if (
+        node.matches(
+          'button, a, input, textarea, select, [role="button"], [data-interactive], [data-vaul-overlay]',
+        )
+      ) {
         return;
       }
       node = node.parentElement;

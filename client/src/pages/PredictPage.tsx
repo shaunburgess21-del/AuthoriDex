@@ -1332,7 +1332,11 @@ export default function PredictPage() {
     const wrapper = e.currentTarget as HTMLElement;
     let node: HTMLElement | null = target;
     while (node && node !== wrapper) {
-      if (node.matches('button, a, input, textarea, select, [role="button"], [data-interactive]')) {
+      if (
+        node.matches(
+          'button, a, input, textarea, select, [role="button"], [data-interactive], [data-vaul-overlay]',
+        )
+      ) {
         return;
       }
       node = node.parentElement;
