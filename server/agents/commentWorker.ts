@@ -390,10 +390,14 @@ async function ensureVoteBeforeComment(
 // the actual prompt or vote context — we now pass full surface context to
 // the model on every comment.
 
-/** Try to find a parent + reply target for the agent. We pick a small
- *  random sample of open parents and probe each for an eligible target —
- *  no point hammering findReplyTarget on every parent in the universe.
- *  Also enforces the vote-first rule on matchups + polls. */
+/** Try to find a parent + reply target for the agent. We probe a small
+ *  random sample of open parents (≤6) for an eligible target — no point
+ *  hammering findReplyTarget on every parent in the universe. The probe
+ *  order is weighted by SURFACE_PICK_WEIGHTS (same distribution as the
+ *  top-level picker) so replies don't accidentally drift onto whichever
+ *  surface happens to have the most parents — without this the world-
+ *  market surface (typically the largest) would dominate replies even
+ *  when polls/matchups have rich active threads. */
 async function findReplyOpportunity(
   agent: { userId: string; displayName: string },
   allParents: EligibleCommentParent[],
@@ -401,20 +405,62 @@ async function findReplyOpportunity(
 ): Promise<{ parent: EligibleCommentParent; target: ReplyTarget } | null> {
   if (!allParents.length) return null;
 
-  // No vote-first filter here either — the main sweep loop will cast a
-  // vote inline before posting the reply if the parent requires one.
-  // Bias toward favoured categories first, then everything else.
-  const preferred = allParents.filter(
-    (p) => p.category && profile.favoriteCategories.includes(p.category),
-  );
-  const ordered = [...preferred.sort(() => Math.random() - 0.5), ...allParents.sort(() => Math.random() - 0.5)];
-  const probed = new Set<string>();
+  // Build per-surface buckets so we can weight the probe order.
+  const bySurface = new Map<CommentSurface, EligibleCommentParent[]>();
+  for (const p of allParents) {
+    if (!bySurface.has(p.parentType)) bySurface.set(p.parentType, []);
+    bySurface.get(p.parentType)!.push(p);
+  }
 
-  for (const parent of ordered) {
+  // Within each bucket, prefer the agent's favourite categories first
+  // (same bias the top-level path applies), then shuffle the rest.
+  const preparedBuckets = new Map<CommentSurface, EligibleCommentParent[]>();
+  for (const [surface, parents] of bySurface.entries()) {
+    const preferred = parents.filter(
+      (p) => p.category && profile.favoriteCategories.includes(p.category),
+    );
+    const others = parents.filter((p) => !preferred.includes(p));
+    preparedBuckets.set(surface, [
+      ...preferred.sort(() => Math.random() - 0.5),
+      ...others.sort(() => Math.random() - 0.5),
+    ]);
+  }
+
+  // Generate a weighted probe order: pick up to 6 parents by sampling
+  // surface-by-weight, then taking the next unconsumed parent from that
+  // surface's prepared queue. This mirrors chooseParent's distribution
+  // while staying probe-cheap.
+  const probed = new Set<string>();
+  const cursors = new Map<CommentSurface, number>();
+  const surfaces = Array.from(preparedBuckets.keys());
+
+  while (probed.size < 6) {
+    const availableSurfaces = surfaces.filter(
+      (s) => (cursors.get(s) ?? 0) < (preparedBuckets.get(s)?.length ?? 0),
+    );
+    if (availableSurfaces.length === 0) break;
+
+    const totalWeight = availableSurfaces.reduce(
+      (sum, s) => sum + SURFACE_PICK_WEIGHTS[s],
+      0,
+    );
+    let roll = Math.random() * totalWeight;
+    let chosen: CommentSurface = availableSurfaces[0];
+    for (const s of availableSurfaces) {
+      roll -= SURFACE_PICK_WEIGHTS[s];
+      if (roll <= 0) {
+        chosen = s;
+        break;
+      }
+    }
+
+    const cursor = cursors.get(chosen) ?? 0;
+    const parent = preparedBuckets.get(chosen)![cursor];
+    cursors.set(chosen, cursor + 1);
+
     const key = `${parent.parentType}:${parent.parentId}`;
     if (probed.has(key)) continue;
     probed.add(key);
-    if (probed.size > 6) break;
 
     const target = await findReplyTarget(parent.parentType, parent.parentId, agent.userId);
     if (target) return { parent, target };
@@ -440,6 +486,11 @@ export async function runCommentSweep(): Promise<{
    *  (no open markets and no already-voted polls/matchups left to comment
    *  on). When this stays high, the cap needs to go up. */
   voteCapBlocked: number;
+  /** Per-surface count of comments actually posted in this sweep.
+   *  Single most useful signal for confirming the surface distribution
+   *  matches SURFACE_PICK_WEIGHTS — if this is 100% open_market the
+   *  picker filter is broken regardless of what other counters say. */
+  bySurface: Record<CommentSurface, number>;
 }> {
   const agents = await db
     .select()
@@ -459,6 +510,12 @@ export async function runCommentSweep(): Promise<{
   let capReached = false;
   let voteCapDeflections = 0;
   let voteCapBlocked = 0;
+  const bySurface: Record<CommentSurface, number> = {
+    matchup: 0,
+    trending_poll: 0,
+    opinion_poll: 0,
+    open_market: 0,
+  };
 
   const allParents = await getOpenParents();
 
@@ -637,6 +694,7 @@ export async function runCommentSweep(): Promise<{
       });
       posted++;
       if (replyTarget) replies++;
+      bySurface[parent.parentType]++;
       log(
         `[CommentWorker] ${agent.displayName} ${replyTarget ? `replied to @${replyTarget.authorUsername ?? "user"}` : "commented"} on ${parent.parentType}:${parent.parentId} — "${body.slice(0, 80)}${body.length > 80 ? "…" : ""}"`,
       );
@@ -646,7 +704,17 @@ export async function runCommentSweep(): Promise<{
     }
   }
 
-  return { posted, replies, replyFallbacks, skipped, llmRejected, capReached, voteCapDeflections, voteCapBlocked };
+  return {
+    posted,
+    replies,
+    replyFallbacks,
+    skipped,
+    llmRejected,
+    capReached,
+    voteCapDeflections,
+    voteCapBlocked,
+    bySurface,
+  };
 }
 
 /**
@@ -675,7 +743,11 @@ function scheduleNextSweep(): void {
   setTimeout(async () => {
     try {
       const result = await runCommentSweep();
-      log(`[CommentWorker] Sweep complete: ${result.posted} posted (${result.replies} replies, ${result.voteCapDeflections} vote-cap deflections, ${result.voteCapBlocked} vote-cap blocked), ${result.skipped} skipped`);
+      log(
+        `[CommentWorker] Sweep complete: ${result.posted} posted ` +
+          `[matchup:${result.bySurface.matchup}, sentiment:${result.bySurface.trending_poll}, opinion:${result.bySurface.opinion_poll}, world:${result.bySurface.open_market}] ` +
+          `(${result.replies} replies, ${result.voteCapDeflections} vote-cap deflections, ${result.voteCapBlocked} vote-cap blocked), ${result.skipped} skipped`,
+      );
     } catch (err) {
       console.error("[CommentWorker] Sweep failed:", err);
     }
@@ -688,7 +760,11 @@ export function startCommentWorkerScheduler(): void {
   setTimeout(async () => {
     try {
       const result = await runCommentSweep();
-      log(`[CommentWorker] Initial sweep: ${result.posted} posted (${result.replies} replies, ${result.voteCapDeflections} vote-cap deflections, ${result.voteCapBlocked} vote-cap blocked), ${result.skipped} skipped`);
+      log(
+        `[CommentWorker] Initial sweep: ${result.posted} posted ` +
+          `[matchup:${result.bySurface.matchup}, sentiment:${result.bySurface.trending_poll}, opinion:${result.bySurface.opinion_poll}, world:${result.bySurface.open_market}] ` +
+          `(${result.replies} replies, ${result.voteCapDeflections} vote-cap deflections, ${result.voteCapBlocked} vote-cap blocked), ${result.skipped} skipped`,
+      );
     } catch (err) {
       console.error("[CommentWorker] Initial sweep failed:", err);
     }

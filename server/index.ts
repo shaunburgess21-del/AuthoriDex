@@ -746,7 +746,21 @@ async function startServer() {
       log("[MarketGenerator] Skipped - serverless mode enabled. Use /api/cron/generate-weekly-markets.");
     }
 
-    // Start AI agent prediction system
+    // Refresh agent simulation profiles on startup so cap/persona tuning
+    // changes in agentSeeder.ts apply automatically without requiring an
+    // admin to manually click "Refresh simulation profiles". Idempotent —
+    // skips rows where the stored profile already matches the seeder.
+    // Best-effort: never block boot if it fails.
+    void (async () => {
+      try {
+        const { refreshAgentSimulationProfiles } = await import("./agents/agentSeeder");
+        const result = await refreshAgentSimulationProfiles();
+        log(`[BOOT] Agent simulation profiles: ${result.refreshed} refreshed, ${result.unchanged} unchanged${result.missingSeed.length ? `, ${result.missingSeed.length} missing seed` : ""}`);
+      } catch (err) {
+        log(`[BOOT] Agent simulation profile refresh failed (non-fatal): ${err instanceof Error ? err.message : err}`);
+      }
+    })();
+
     startScheduler("AgentRunner", startAgentRunnerScheduler);
     startScheduler("ActionWorker", startActionWorkerScheduler);
 
