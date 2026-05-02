@@ -43,16 +43,18 @@ import type { AuthRequest } from "../auth-middleware";
 //
 // PERSONALISED_FRESHNESS_BOOST_DAYS: how much "younger" an interest-match
 // card pretends to be when sorting recency-based feeds. Larger value =
-// interests lead more aggressively. 5 days = "thumb on the scale": a
-// fresh non-interest card created within ~5 days of the newest interest
-// card can still break the top, so the feed reads as interleaved rather
-// than walled off. Linear: 1 day boost = 1 day of pretend-younger.
+// interests lead more aggressively. 14 days = "two-week thumb on the
+// scale": comfortably bridges the natural age gap between freshly-seeded
+// non-interest content and older interest content (~7 days in current
+// seed data) so interests reliably lead, while still leaving room for a
+// genuinely fresh non-interest card (within ~2 weeks of newest interest)
+// to crack the top. Linear: 1 day boost = 1 day of pretend-younger.
 //
 // PERSONALISED_INDUCTION_VOTE_BOOST: equivalent thumb for the induction
 // feed which is ranked by seedVotes (not recency). ~5 votes lifts a
 // candidate inside the user's interests above an evenly-matched one
 // outside, but the genuine vote leader still wins.
-export const PERSONALISED_FRESHNESS_BOOST_DAYS = 5;
+export const PERSONALISED_FRESHNESS_BOOST_DAYS = 14;
 export const PERSONALISED_INDUCTION_VOTE_BOOST = 5;
 
 // ── Per-request memoisation ─────────────────────────────────────────
@@ -147,14 +149,15 @@ export async function shouldUseColdStart(req: AuthRequest): Promise<boolean> {
  * thumb. Returns "effective age in days minus boost" — sort ASC for the
  * standard "freshest first" reading.
  *
- * Worked example with default 5-day boost:
- *   * 1-day-old   non-interest card -> 1.0 days
- *   * 50-day-old  interest     card -> 50 - 5 = 45 days
+ * Worked example with default 14-day boost:
+ *   * 1-day-old   non-interest card -> 1.0  days
+ *   * 50-day-old  interest     card -> 50 - 14 = 36 days
  *   * 50-day-old  non-interest card -> 50 days
- *   * 55-day-old  interest     card -> 50 days  (tied with above)
+ *   * 64-day-old  interest     card -> 50 days  (tied with above)
  * → Sort ASC produces: fresh non-interest first, then interest cluster,
  *   then stale non-interest. Newer non-interest can outrank older
- *   interest — that's the "thumb on scale, not a wall" interleaving.
+ *   interest, but only when the age gap is bigger than the boost — that's
+ *   the "thumb on scale, not a wall" interleaving.
  */
 export function personalisedRecencyOrder(
   createdAtCol: AnyColumn | SQL,
