@@ -42,6 +42,7 @@ import {
   AGENT_CREDIT_TOPUP_TARGET,
   MARKETS_PER_SWEEP,
   WORLD_MARKET_RESERVE_PER_SWEEP,
+  NATIVE_ROTATION_MEMORY,
   CONVICTION_SCORE_THRESHOLD_PCT,
   CONVICTION_MAX_PER_MARKET,
   AGENT_STAKE_OVERRIDES,
@@ -53,6 +54,14 @@ import {
 } from "./constants";
 
 const AGENT_RUNNER_LOCK_KEY = 5_201;
+
+// Process-local rotation memory for native market sampling. Insertion order
+// is preserved by Set, so we can drop the oldest entries when the buffer
+// exceeds NATIVE_ROTATION_MEMORY. Survives a single Railway deploy lifetime,
+// which is exactly what we want — fresh deploys reset the rotation, and
+// across a single uptime window agents cycle through the full 159-celeb
+// catalogue instead of clustering on the same handful.
+const recentNativeMarketIds = new Set<string>();
 
 async function runAgentBatchOnce(): Promise<{
   scheduled: number;
@@ -226,9 +235,37 @@ async function runAgentBatchOnce(): Promise<{
     [nativeMarkets[i], nativeMarkets[j]] = [nativeMarkets[j], nativeMarkets[i]];
   }
 
+  // Rotation memory: push markets sampled in recent sweeps to the back of
+  // the queue so the catalogue actually cycles. Without this, the random
+  // shuffle has no memory and the same handful of markets keep landing in
+  // the slice. Markets seen in the last NATIVE_ROTATION_MEMORY sweeps move
+  // to the tail, fresh markets float to the head.
+  const recentlySampled = recentNativeMarketIds;
+  if (recentlySampled.size > 0) {
+    nativeMarkets.sort((a, b) => {
+      const aRecent = recentlySampled.has(a.id) ? 1 : 0;
+      const bRecent = recentlySampled.has(b.id) ? 1 : 0;
+      return aRecent - bRecent;
+    });
+  }
+
   const worldSlice = worldMarkets.slice(0, WORLD_MARKET_RESERVE_PER_SWEEP);
   const nativeSlice = nativeMarkets.slice(0, MARKETS_PER_SWEEP - worldSlice.length);
   const sweepMarkets = [...worldSlice, ...nativeSlice];
+
+  // Update rotation memory with this sweep's native picks (cap at the
+  // configured size so older entries naturally drop off).
+  for (const market of nativeSlice) {
+    recentNativeMarketIds.add(market.id);
+  }
+  if (recentNativeMarketIds.size > NATIVE_ROTATION_MEMORY) {
+    const overflow = recentNativeMarketIds.size - NATIVE_ROTATION_MEMORY;
+    const iter = recentNativeMarketIds.values();
+    for (let i = 0; i < overflow; i++) {
+      const oldest = iter.next().value;
+      if (oldest) recentNativeMarketIds.delete(oldest);
+    }
+  }
 
   const marketSummary = sweepMarkets.map(m => ({
     id: m.id.slice(0, 8),
@@ -972,11 +1009,22 @@ function computeAgentStakeAmount(
   const confidence = decision.confidence ?? 0.5;
   const edge = Math.max(0, decision.edge ?? 0);
   const edgeBoost = 1 + Math.min(edge, 0.35) * 2.5;
-  const variance = 0.85 + Math.random() * 0.35;
+  // Widened from 0.85-1.20 → 0.70-1.30. Town Square was showing the same
+  // stakes (220, 300, 209) appearing 5+ times in a row because the narrow
+  // variance + persona maxStake clamp produced clusters at the cap. Wider
+  // variance plus the soft cap below spreads numbers out so the feed
+  // reads like a real cohort instead of identical bot output.
+  const variance = 0.70 + Math.random() * 0.60;
   const base = computeStakeAmount(confidence);
   const stake = Math.round(base * simulation.stakeMultiplier * edgeBoost * variance);
 
-  return Math.max(simulation.minStake, Math.min(simulation.maxStake, stake));
+  // Soft cap: instead of a hard clamp at the persona maxStake (which made
+  // every casual band hit 220 exactly when they wanted to bet big), allow
+  // ±8% per-agent jitter on the cap so high-stake bets land at varied
+  // numbers like 213, 218, 221, 226, etc.
+  const capJitter = 1 + (Math.random() * 0.16 - 0.08);
+  const softMax = Math.round(simulation.maxStake * capJitter);
+  return Math.max(simulation.minStake, Math.min(softMax, stake));
 }
 
 function isOtherStyleOutcome(label: string | null): boolean {

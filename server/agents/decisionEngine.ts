@@ -101,7 +101,14 @@ export function computePrediction(
   }
 
   // Step 3a: Trend signal adjustments
-  const signalBoost = computeSignalBoost(signals, agent);
+  // Per-agent jitter (±0.06) breaks the lock-step "every agent reads the
+  // same Wiki+News signals → all pick Down" pattern that was producing 60+
+  // identical Theo Von "Down" bets per week. Each agent's interpretation of
+  // the same signals now varies by ~one notch, which still keeps the
+  // dominant view dominant on high-conviction markets but lets ~15-25% of
+  // the cohort lean the other way on borderline reads.
+  const jitter = (rng.nextFloat() * 2 - 1) * 0.06;
+  const signalBoost = computeSignalBoost(signals, agent) + jitter;
 
   entries.forEach((entry) => {
     const label = (entry.label ?? "").toLowerCase();
@@ -196,6 +203,16 @@ export function computePrediction(
     market.openMarketType === "multi" &&
     n >= 3;
 
+  // Weighted-random selection threshold for binary up/down: when the model's
+  // top score is below this (i.e. conviction is moderate), agents distribute
+  // proportionally instead of all piling onto the same side. This is what
+  // killed the variety on weekly cards before — Theo Von's signals barely
+  // edged Down, so every agent picked Down with no spread. ≥0.65 keeps the
+  // pile-on for genuinely strong signals (which is correct: a real market
+  // would pile on too); below 0.65 it splits the cohort like real humans.
+  const isBinaryUpDown = !isH2H && !isMultiCommunity && n === 2;
+  const useWeightedUpDown = isBinaryUpDown && sorted[0][1] < 0.65;
+
   if (isMultiCommunity) {
     const candidates = sorted.slice(0, Math.min(3, n));
     const totalWeight = candidates.reduce((s, [, v]) => s + v, 0);
@@ -207,7 +224,7 @@ export function computePrediction(
       if (roll <= cumulative) { picked = candidate; break; }
     }
     [chosenEntryId, rawProbability] = picked;
-  } else if (isH2H) {
+  } else if (isH2H || useWeightedUpDown) {
     const totalWeight = sorted.reduce((s, [, v]) => s + v, 0) || 1;
     const roll = rng.nextFloat() * totalWeight;
     let cumulative = 0;
@@ -227,9 +244,18 @@ export function computePrediction(
   // sit at ~50/50), so the standard "must beat chance by X" gate would force
   // agents to abstain on nearly every pairing. Since we use weighted random
   // selection for H2H above, the pool naturally splits in proportion to
-  // conviction — the edge check would just starve the section.
+  // conviction — the edge check would just starve the section. Same logic
+  // applies to weighted up/down picks (added below for variety): the agent
+  // may have intentionally picked the lower-scoring side, so we instead
+  // gate on whether EITHER side has any conviction at all.
   const chanceLevel = 1 / n;
-  if (!isH2H) {
+  if (isH2H || useWeightedUpDown) {
+    // Sanity floor: only abstain when both sides are essentially a coin
+    // flip with no model signal at all (max < 52%). Otherwise honour the
+    // weighted draw — that's the whole point of the spread.
+    const topScore = sorted[0][1];
+    if (topScore < 0.52) return abstain("low_edge");
+  } else {
     const edge = rawProbability - chanceLevel;
     // Halved from 0.5/n to 0.25/n. With the previous threshold an average
     // riskAppetite=0.5 agent needed model probability ≥62.5% on every up/down

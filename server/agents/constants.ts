@@ -54,8 +54,22 @@ export const AGENT_RUNNER_INTERVAL_MS = 30 * 60 * 1000;
 export const AGENT_RUNNER_STARTUP_DELAY_MS = 3 * 60 * 1000;
 
 // Stagger: only evaluate this many markets per sweep (rest deferred to next sweep)
-export const MARKETS_PER_SWEEP = 15;
+// Bumped 15→30 (2026-05-02). With WORLD_MARKET_RESERVE_PER_SWEEP=10, the
+// native pool was getting only 5 markets per sweep — out of 159 weekly
+// up/down cards plus jackpot/h2h/gainer. That's why agents kept piling on
+// the same handful of celebrities (Theo Von, Peter Thiel, etc.) instead of
+// spreading across the catalogue. 20 native per sweep × 48 sweeps/day = 960
+// evaluations, which gives every up/down market multiple chances to be
+// sampled per day even with the rotation memory below.
+export const MARKETS_PER_SWEEP = 30;
 export const WORLD_MARKET_RESERVE_PER_SWEEP = 10;
+
+// Rotation memory: how many recently-sampled native markets to push to the
+// back of the next sweep's shuffle. Without this, the random shuffle has no
+// memory and the same markets keep landing in the slice. With a buffer of
+// 40 (2 sweeps' worth of native picks), we guarantee fresh markets every
+// sweep until the catalogue cycles through.
+export const NATIVE_ROTATION_MEMORY = 40;
 
 // World Market boost mode (toggle via env WORLD_MARKET_BOOST_ENABLED).
 // SAFETY: Default flipped to OFF (2026-05-01). When enabled, drops the
