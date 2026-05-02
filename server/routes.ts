@@ -17698,6 +17698,24 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
     })();
   });
 
+  // GET /api/admin/agents/sharp-ranker - Returns the latest LLM
+  // sharp-ranker snapshot. Used by the admin "Sharp Picks" tile so we
+  // can see which markets the LLM is flagging as high-edge each sweep
+  // and verify the sharp cohort is actually concentrating on those.
+  app.get("/api/admin/agents/sharp-ranker", requireAuth, requireAdmin, async (_req: AuthRequest, res) => {
+    try {
+      const { getCachedSharpRanking, isSharpRankerEnabled } = await import("./agents/sharpRanker");
+      const snapshot = getCachedSharpRanking();
+      res.json({
+        enabled: isSharpRankerEnabled(),
+        snapshot,
+      });
+    } catch (err: any) {
+      console.error("[AgentAdmin] sharp-ranker fetch failed:", err);
+      res.status(500).json({ enabled: false, error: err?.message ?? "Unknown error" });
+    }
+  });
+
   // POST /api/admin/agents/refresh-simulation-profiles - Re-applies the
   // current seeder's per-persona simulation profile (cap, chance, edge,
   // stake) to all existing V2 agents. Use after tuning seeder values so

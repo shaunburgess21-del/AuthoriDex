@@ -15,7 +15,7 @@ import {
   profiles,
   creditLedger,
 } from "@shared/schema";
-import { eq, and, sql, gte, desc, inArray } from "drizzle-orm";
+import { eq, and, sql, gte, lte, desc, inArray } from "drizzle-orm";
 import { log } from "../log";
 import { computePrediction, computeJackpotPrediction } from "./decisionEngine";
 import { computeWorldMarketPrediction } from "./worldMarketEngine";
@@ -29,6 +29,7 @@ import type {
   PredictionDecision,
 } from "./types";
 import { getSimulationProfile } from "./simulationProfile";
+import { getSharpRanking } from "./sharpRanker";
 import {
   ARCHETYPE_DELAY_RANGES,
   WORLD_MARKET_DELAY_RANGES,
@@ -276,6 +277,54 @@ async function runAgentBatchOnce(): Promise<{
   }));
   log(`[AgentRunner] Sweep subset: ${sweepMarkets.length} of ${markets.length} markets: ${JSON.stringify(marketSummary)}`);
 
+  // Pre-pass for the LLM sharp-ranker. Fetches entries + signals for the
+  // native markets in this sweep so the ranker has live data to reason
+  // over. The DB cost is bounded (20 markets × 1 entries query + ~1
+  // signals query each ≈ 40 queries per sweep, not per agent), and the
+  // results are reused implicitly by getTrendSignals' internal caching
+  // when sharp agents re-evaluate the same markets seconds later.
+  const nativeForRanker = sweepMarkets.filter((m) => m.marketType !== "community");
+  const rankerInputs: { market: MarketWithEntries; signals: TrendSignals | null; entrySignals?: Map<string, TrendSignals> }[] = [];
+  for (const m of nativeForRanker) {
+    const entries = await db
+      .select({
+        id: marketEntries.id,
+        label: marketEntries.label,
+        totalStake: marketEntries.totalStake,
+        noStake: marketEntries.noStake,
+        personId: marketEntries.personId,
+      })
+      .from(marketEntries)
+      .where(eq(marketEntries.marketId, m.id));
+    if (entries.length === 0) continue;
+
+    const marketData: MarketWithEntries = { ...m, entries };
+    const personSignals = m.personId ? await getTrendSignals(m.personId) : null;
+
+    let entrySignals: Map<string, TrendSignals> | undefined;
+    if (m.marketType === "h2h" || m.marketType === "gainer") {
+      entrySignals = new Map();
+      for (const entry of entries) {
+        if (entry.personId) {
+          entrySignals.set(entry.id, await getTrendSignals(entry.personId));
+        }
+      }
+    }
+
+    rankerInputs.push({ market: marketData, signals: personSignals, entrySignals });
+  }
+
+  // Fire the LLM ranker (cached, deduped). Sharps will skip their random
+  // abstain on any market that lands in this snapshot's picks.
+  const rankerSnapshot = await getSharpRanking(rankerInputs).catch((err) => {
+    log(`[AgentRunner] sharp ranker failed: ${err instanceof Error ? err.message : err}`);
+    return { picks: [], generatedAt: Date.now(), marketsConsidered: 0, source: "fallback" as const, costEstimateUsd: 0 };
+  });
+  const sharpPickedMarketIds = new Set(rankerSnapshot.picks.map((p) => p.marketId));
+  if (sharpPickedMarketIds.size > 0) {
+    log(`[AgentRunner] Sharp ranker picks (${rankerSnapshot.source}): ${Array.from(sharpPickedMarketIds).map((id) => id.slice(0, 8)).join(", ")}`);
+  }
+
   let scheduled = 0;
   let abstained = 0;
   let skipped = 0;
@@ -499,7 +548,8 @@ async function runAgentBatchOnce(): Promise<{
       if (isCommunity) {
         decision = await computeWorldMarketPrediction(agentData, marketData, entries);
       } else {
-        const signals = await getTrendSignals(market.personId);
+        const sharpFetch = getSimulationProfile(agent.simulationProfile).personaBand === "sharp";
+        const signals = await getTrendSignals(market.personId, { includeMultiWindow: sharpFetch });
         const crowd = computeCrowdSplit(entries);
 
         let entrySignals: Map<string, TrendSignals> | undefined;
@@ -507,12 +557,19 @@ async function runAgentBatchOnce(): Promise<{
           entrySignals = new Map();
           for (const entry of entries) {
             if (entry.personId) {
-              entrySignals.set(entry.id, await getTrendSignals(entry.personId));
+              entrySignals.set(entry.id, await getTrendSignals(entry.personId, { includeMultiWindow: sharpFetch }));
             }
           }
         }
 
-        decision = computePrediction(agentData, marketData, signals, crowd, undefined, entrySignals);
+        // High-priority signal for sharps: the LLM market-ranker has flagged
+        // this market as one of the top-edge markets for the current sweep.
+        // computePrediction will skip its random abstain so the sharp cohort
+        // reliably engages with the LLM's picks (model gates still apply).
+        const priority: "high" | "normal" =
+          sharpFetch && sharpPickedMarketIds.has(market.id) ? "high" : "normal";
+
+        decision = computePrediction(agentData, marketData, signals, crowd, undefined, entrySignals, { priority });
       }
 
       decision = applySimulationDecisionLayer(agentData, marketData, decision);
@@ -797,7 +854,8 @@ function toAgentData(row: typeof agentConfigs.$inferSelect): AgentConfigData {
 }
 
 async function getTrendSignals(
-  personId: string | null
+  personId: string | null,
+  options: { includeMultiWindow?: boolean } = {},
 ): Promise<TrendSignals> {
   if (!personId) {
     return {
@@ -826,6 +884,8 @@ async function getTrendSignals(
       wikiDelta: trendSnapshots.wikiDelta,
       newsDelta: trendSnapshots.newsDelta,
       fameIndex: trendSnapshots.fameIndex,
+      trendScore: trendSnapshots.trendScore,
+      timestamp: trendSnapshots.timestamp,
     })
     .from(trendSnapshots)
     .where(eq(trendSnapshots.personId, personId))
@@ -847,7 +907,7 @@ async function getTrendSignals(
   if (newsDelta > 0.3) newsLevel = "red";
   else if (newsDelta < -0.1) newsLevel = "green";
 
-  return {
+  const result: TrendSignals = {
     trendScore,
     fameIndex,
     scoreBaseline: snap?.fameIndex ?? fameIndex,
@@ -855,6 +915,60 @@ async function getTrendSignals(
     wikiPulse,
     newsLevel,
   };
+
+  // Multi-window momentum for sharps. Two extra ranged queries — kept off
+  // the hot path for non-sharp evaluations because it would otherwise add
+  // ~120 queries per sweep across the whole cohort. Sharps eat the cost
+  // because their decisions actually use the data.
+  if (options.includeMultiWindow && snap?.trendScore != null) {
+    const cached = multiWindowCache.get(personId);
+    const ttlOk = cached && Date.now() - cached.fetchedAt < MULTI_WINDOW_TTL_MS;
+    if (ttlOk && cached) {
+      if (cached.delta14d != null) result.scoreDelta14d = cached.delta14d;
+      if (cached.delta30d != null) result.scoreDelta30d = cached.delta30d;
+    } else {
+      const [snap14, snap30] = await Promise.all([
+        loadHistoricalSnapshot(personId, 14),
+        loadHistoricalSnapshot(personId, 30),
+      ]);
+      const delta14d = snap14 != null ? snap.trendScore - snap14 : null;
+      const delta30d = snap30 != null ? snap.trendScore - snap30 : null;
+      multiWindowCache.set(personId, {
+        delta14d,
+        delta30d,
+        fetchedAt: Date.now(),
+      });
+      if (delta14d != null) result.scoreDelta14d = delta14d;
+      if (delta30d != null) result.scoreDelta30d = delta30d;
+    }
+  }
+
+  return result;
+}
+
+const MULTI_WINDOW_TTL_MS = 6 * 60 * 60 * 1000;
+const multiWindowCache = new Map<
+  string,
+  { delta14d: number | null; delta30d: number | null; fetchedAt: number }
+>();
+
+async function loadHistoricalSnapshot(
+  personId: string,
+  daysBack: number,
+): Promise<number | null> {
+  const cutoff = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000);
+  const [row] = await db
+    .select({ trendScore: trendSnapshots.trendScore })
+    .from(trendSnapshots)
+    .where(
+      and(
+        eq(trendSnapshots.personId, personId),
+        lte(trendSnapshots.timestamp, cutoff),
+      ),
+    )
+    .orderBy(desc(trendSnapshots.timestamp))
+    .limit(1);
+  return row?.trendScore ?? null;
 }
 
 function computeCrowdSplit(
@@ -1006,9 +1120,19 @@ function computeAgentStakeAmount(
   decision: PredictionDecision,
 ): number {
   const simulation = getSimulationProfile(agent.simulationProfile);
+  const isSharp = simulation.personaBand === "sharp";
   const confidence = decision.confidence ?? 0.5;
   const edge = Math.max(0, decision.edge ?? 0);
-  const edgeBoost = 1 + Math.min(edge, 0.35) * 2.5;
+
+  // Edge-aware stake sizing. Sharps use a steeper curve so genuine value
+  // bets (edge > 0.15) get pushed materially higher, and marginal-edge
+  // bets get a smaller boost — they bet to confidence the way real sharps
+  // do (Kelly-ish, not flat-stake). Non-sharps keep the flatter curve so
+  // their stake distribution feels more "casual punter".
+  const edgeBoost = isSharp
+    ? 1 + Math.min(edge, 0.35) * 4.0
+    : 1 + Math.min(edge, 0.35) * 2.5;
+
   // Widened from 0.85-1.20 → 0.70-1.30. Town Square was showing the same
   // stakes (220, 300, 209) appearing 5+ times in a row because the narrow
   // variance + persona maxStake clamp produced clusters at the cap. Wider

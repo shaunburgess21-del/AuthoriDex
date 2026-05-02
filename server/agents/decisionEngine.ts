@@ -20,6 +20,18 @@ import {
 } from "./constants";
 import { JACKPOT_MAX_PREDICTED_SCORE } from "../config/constants";
 import { productionRNG, type RNG } from "./prng";
+import { getSimulationProfile } from "./simulationProfile";
+
+/**
+ * Sharp-band detection. Sharps get tighter edge gates, lower random
+ * abstain, multi-window momentum weighting, and stronger value-bet stake
+ * boosts — they're the cohort that should sit near the top of the weekly
+ * leaderboard most of the time. Rest of the cohort uses the standard path.
+ */
+function isSharpAgent(agent: AgentConfigData): boolean {
+  const sim = getSimulationProfile(agent.simulationProfile);
+  return sim.personaBand === "sharp";
+}
 
 export function computePrediction(
   agent: AgentConfigData,
@@ -27,7 +39,8 @@ export function computePrediction(
   signals: TrendSignals,
   crowd: CrowdSplit,
   rng: RNG = productionRNG,
-  entrySignals?: Map<string, TrendSignals>
+  entrySignals?: Map<string, TrendSignals>,
+  options: { priority?: "high" | "normal" } = {},
 ): PredictionDecision {
   const abstain = (
     reason: PredictionDecision["abstainReason"]
@@ -36,6 +49,8 @@ export function computePrediction(
   const entries = market.entries;
   if (!entries.length) return abstain("low_edge");
 
+  const sharp = isSharpAgent(agent);
+
   // Step 1: Domain filter
   const marketCategory = market.category?.toLowerCase() ?? "";
   const domainMatch =
@@ -43,15 +58,13 @@ export function computePrediction(
     agent.specialties.some(
       (s) => marketCategory.includes(s) || s.includes(marketCategory)
     );
-  // Off-domain skip was 0.70 which combined with the edge gate below crushed
-  // up/down volume to ~10-15% of jackpot's effective rate (which has no edge
-  // gate and only a 0.35 off-domain skip). Lowering to 0.50 keeps a real
-  // domain effect — a tech-specialist still skips half of all sports cards
-  // — while letting up/down feeds breathe across all 159 weekly cards.
-  const skipProbability =
-    domainMatch ? 0.15 :
-    marketCategory === "trending" ? 0.4 :
-    0.50;
+  // Sharps get a much shallower off-domain skip — they're the cohort that
+  // hunts edge anywhere it shows up, regardless of category. Standard band
+  // still skips 50% of off-domain markets so specialty actually means
+  // something for everyone else.
+  const skipProbability = sharp
+    ? (domainMatch ? 0.05 : marketCategory === "trending" ? 0.20 : 0.25)
+    : (domainMatch ? 0.15 : marketCategory === "trending" ? 0.40 : 0.50);
   if (rng.nextFloat() < skipProbability) return abstain("domain");
 
   // Step 2: Activity gate
@@ -107,8 +120,21 @@ export function computePrediction(
   // the same signals now varies by ~one notch, which still keeps the
   // dominant view dominant on high-conviction markets but lets ~15-25% of
   // the cohort lean the other way on borderline reads.
-  const jitter = (rng.nextFloat() * 2 - 1) * 0.06;
-  const signalBoost = computeSignalBoost(signals, agent) + jitter;
+  //
+  // Sharps get HALF the jitter — they're supposed to read the signals
+  // accurately and consistently. The smaller jitter still avoids two sharps
+  // making identical decisions but doesn't bury their edge in noise.
+  const jitterRange = sharp ? 0.03 : 0.06;
+  const jitter = (rng.nextFloat() * 2 - 1) * jitterRange;
+  const baseSignalBoost = computeSignalBoost(signals, agent);
+  // Multi-window momentum bonus: only sharps get this. When 7d and 14d
+  // disagree (e.g. 7d falling but 14d still strongly rising), the agent
+  // assumes mean-reversion is in play and dampens the short-window signal.
+  // When 7d, 14d, and 30d all agree, the agent gets confidence — the trend
+  // is real, not noise. This is the single most useful "sharp tell" we can
+  // add without external data: noticing trend persistence vs reversal.
+  const multiWindowAdjust = sharp ? computeMultiWindowAdjust(signals, agent) : 0;
+  const signalBoost = baseSignalBoost + multiWindowAdjust + jitter;
 
   entries.forEach((entry) => {
     const label = (entry.label ?? "").toLowerCase();
@@ -277,8 +303,19 @@ export function computePrediction(
     Math.min(0.97, confidence)
   );
 
-  // Step 7: Final random abstain (15% chance — spreads decisions across more sweeps)
-  if (rng.nextFloat() < 0.15) return abstain("random");
+  // Step 7: Final random abstain. Sharps abstain less because the whole
+  // point of the band is they show up consistently when the model has
+  // anything resembling a view. Standard band keeps the wider random gate
+  // so the activity feed doesn't become just sharps + jackpot noise.
+  // If the LLM market-ranker flagged this as a high-priority market for
+  // a sharp, the random abstain is skipped entirely — the whole point of
+  // the ranker is to make sure sharps don't randomly walk away from the
+  // markets the LLM identified as high-edge.
+  const isHighPriority = options.priority === "high" && sharp;
+  if (!isHighPriority) {
+    const finalAbstainRate = sharp ? 0.05 : 0.15;
+    if (rng.nextFloat() < finalAbstainRate) return abstain("random");
+  }
 
   return {
     abstain: false,
@@ -310,6 +347,57 @@ function computeSignalBoost(
   boost += normalizedDelta * 0.1 * agent.recencyWeight;
 
   return boost;
+}
+
+/**
+ * Multi-window momentum adjustment for sharp-band agents.
+ *
+ * Reads 7d / 14d / 30d trend deltas (when populated by the sharp signal
+ * fetcher) and returns an additional boost that captures one of three
+ * patterns:
+ *
+ * • All three windows agree on direction → trend persistence. Add a
+ *   confidence bump in the same direction (the move is real, not noise).
+ * • 7d disagrees with 14d/30d → mean-reversion candidate. Dampen the
+ *   short-window signal (the recent move is likely noise around a
+ *   longer-term level).
+ * • 7d agrees with 14d but disagrees with 30d → momentum acceleration.
+ *   Modest bump in the short-window direction (the trend is fresh).
+ *
+ * Magnitudes are intentionally smaller than the base signal boost so this
+ * adjusts rather than overrides — it's the kind of "second-order read" a
+ * sharp punter does after looking at the chart.
+ */
+function computeMultiWindowAdjust(
+  signals: TrendSignals,
+  agent: AgentConfigData,
+): number {
+  const d7 = signals.scoreDelta7d ?? 0;
+  const d14 = signals.scoreDelta14d;
+  const d30 = signals.scoreDelta30d;
+
+  if (d14 == null && d30 == null) return 0;
+
+  const sign = (n: number): number => (n > 0.5 ? 1 : n < -0.5 ? -1 : 0);
+  const s7 = sign(d7);
+  const s14 = d14 != null ? sign(d14) : null;
+  const s30 = d30 != null ? sign(d30) : null;
+
+  const recency = agent.recencyWeight;
+
+  if (s14 != null && s30 != null && s7 !== 0 && s7 === s14 && s7 === s30) {
+    return 0.06 * s7 * recency;
+  }
+
+  if (s14 != null && s30 != null && s7 !== 0 && s7 !== s14 && s14 === s30) {
+    return -0.05 * s7 * recency;
+  }
+
+  if (s14 != null && s7 !== 0 && s7 === s14 && (s30 == null || s30 !== s7)) {
+    return 0.03 * s7 * recency;
+  }
+
+  return 0;
 }
 
 /**

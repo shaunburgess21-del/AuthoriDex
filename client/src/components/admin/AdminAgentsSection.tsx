@@ -960,6 +960,8 @@ export function AdminAgentsSection() {
         </CardContent>
       </Card>
 
+      <SharpRankerCard />
+
       <ActivityStreamCard />
 
       {/* Legacy agents */}
@@ -1183,6 +1185,104 @@ function ActivityStreamCard() {
               </div>
             ))}
           </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+interface SharpRankerPick {
+  marketId: string;
+  side: string;
+  reasoning: string;
+}
+
+interface SharpRankerSnapshotPayload {
+  picks: SharpRankerPick[];
+  generatedAt: number;
+  marketsConsidered: number;
+  source: "llm" | "fallback" | "disabled" | "cache";
+  costEstimateUsd: number | null;
+}
+
+interface SharpRankerResponse {
+  enabled: boolean;
+  snapshot: SharpRankerSnapshotPayload | null;
+}
+
+function SharpRankerCard() {
+  const { data, isLoading, refetch, isFetching } = useQuery<SharpRankerResponse>({
+    queryKey: ["/api/admin/agents/sharp-ranker"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/admin/agents/sharp-ranker");
+      return res.json();
+    },
+    refetchInterval: 60_000,
+  });
+
+  const snapshot = data?.snapshot ?? null;
+  const enabled = data?.enabled ?? false;
+  const ageSec = snapshot ? Math.round((Date.now() - snapshot.generatedAt) / 1000) : null;
+
+  return (
+    <Card data-testid="card-sharp-ranker">
+      <CardHeader className="flex flex-row items-start justify-between gap-4">
+        <div>
+          <CardTitle className="flex items-center gap-2">
+            <Bot className="h-5 w-5" />
+            Sharp LLM Ranker
+          </CardTitle>
+          <CardDescription>
+            Latest LLM market-edge snapshot. Sharps preferentially evaluate these picks each sweep (random abstain bypassed).
+          </CardDescription>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
+          {isFetching ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+          Refresh
+        </Button>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {isLoading ? (
+          <div className="text-sm text-muted-foreground">Loading…</div>
+        ) : !enabled ? (
+          <div className="text-sm text-amber-500">
+            Disabled. Set <code className="text-xs">SHARP_RANKER_LLM_ENABLED=true</code> in Railway and redeploy.
+          </div>
+        ) : !snapshot ? (
+          <div className="text-sm text-muted-foreground">
+            No snapshot yet — the next agent sweep will generate one.
+          </div>
+        ) : (
+          <>
+            <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+              <Badge variant="outline">source: {snapshot.source}</Badge>
+              <Badge variant="outline">{snapshot.marketsConsidered} markets considered</Badge>
+              <Badge variant="outline">{snapshot.picks.length} picks</Badge>
+              {ageSec != null && <Badge variant="outline">{ageSec < 60 ? `${ageSec}s` : `${Math.round(ageSec / 60)}m`} ago</Badge>}
+              {snapshot.costEstimateUsd != null && (
+                <Badge variant="outline">≈ ${snapshot.costEstimateUsd.toFixed(4)}</Badge>
+              )}
+            </div>
+            {snapshot.picks.length === 0 ? (
+              <div className="text-sm text-muted-foreground">
+                Ranker returned no picks for the last sweep — model saw no edge worth highlighting.
+              </div>
+            ) : (
+              <ul className="space-y-2">
+                {snapshot.picks.map((p) => (
+                  <li key={p.marketId} className="rounded-md border border-border/40 p-2.5">
+                    <div className="flex flex-wrap items-center gap-2 text-sm">
+                      <code className="text-xs text-muted-foreground">{p.marketId.slice(0, 8)}</code>
+                      {p.side && <Badge variant="secondary">{p.side}</Badge>}
+                    </div>
+                    {p.reasoning && (
+                      <div className="text-xs text-muted-foreground mt-1.5">{p.reasoning}</div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
         )}
       </CardContent>
     </Card>

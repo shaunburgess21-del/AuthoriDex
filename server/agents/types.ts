@@ -49,6 +49,14 @@ export interface TrendSignals {
   fameIndex: number;
   scoreBaseline: number;
   scoreDelta7d: number;
+  /**
+   * Multi-window momentum — populated for sharp-band agents only (extra DB
+   * query per market). Used to detect trend reversals (e.g. 7d falling but
+   * 30d still rising = mean-reversion candidate) which the single-window
+   * delta can't see.
+   */
+  scoreDelta14d?: number;
+  scoreDelta30d?: number;
   wikiPulse: "rising" | "falling" | "stable";
   newsLevel: "red" | "amber" | "green";
 }
