@@ -267,6 +267,27 @@
       "when": 1778894400000,
       "tag": "0037_notification_market_mutes",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1778980800000,
+      "tag": "0038_rls_initplan_fix",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1779067200000,
+      "tag": "0039_fk_covering_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1779153600000,
+      "tag": "0040_disable_rls_on_server_only_tables",
+      "breakpoints": true
     }
   ]
 }
