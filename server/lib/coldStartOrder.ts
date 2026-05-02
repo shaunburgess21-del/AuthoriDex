@@ -105,6 +105,19 @@ async function resolveInterestsState(req: AuthRequest): Promise<InterestsState> 
   }
 }
 
+// ── Casing contract ─────────────────────────────────────────────────
+//
+// `profiles.stated_interests` is stored lowercase (the Interests Picker
+// emits canonical ids: 'politics', 'tech', 'music', ...). The category
+// column on content tables (`trending_polls`, `opinion_polls`,
+// `matchups`, `prediction_markets`, `induction_candidates`) is mixed
+// Title Case / lowercase depending on when and how it was inserted
+// (e.g. 'Politics', 'Tech', but 'misc'). Until we structurally normalise
+// categories (canonical id + UI lookup; tracked separately), all
+// category comparisons in this file MUST lowercase BOTH SIDES — column
+// via SQL `LOWER()`, interests array via `.map(i => i.toLowerCase())`.
+// Add a new helper? Follow the same pattern.
+
 // ── Cold-start helpers (unchanged from Phase 1) ─────────────────────
 
 /**
@@ -113,7 +126,7 @@ async function resolveInterestsState(req: AuthRequest): Promise<InterestsState> 
  * the tiebreaker within each bucket.
  */
 export function coldStartCategoryRank(col: AnyColumn | SQL): SQL {
-  return sql`CASE WHEN ${col} = 'politics' THEN 1 ELSE 0 END`;
+  return sql`CASE WHEN LOWER(${col}) = 'politics' THEN 1 ELSE 0 END`;
 }
 
 /**
@@ -147,8 +160,9 @@ export function personalisedRecencyTier(
   interests: string[],
   trendingHours: number = PERSONALISED_TRENDING_OVERRIDE_HOURS,
 ): SQL {
+  const lcInterests = interests.map((i) => i.toLowerCase());
   return sql`CASE
-    WHEN ${inArray(sql`${categoryCol}`, interests)} THEN 0
+    WHEN ${inArray(sql`LOWER(${categoryCol})`, lcInterests)} THEN 0
     WHEN ${createdAtCol} > NOW() - (${trendingHours} || ' hours')::interval THEN 0
     ELSE 1
   END`;
@@ -165,8 +179,9 @@ export function personalisedSeedVotesScore(
   interests: string[],
   voteBoost: number = PERSONALISED_INDUCTION_VOTE_BOOST,
 ): SQL {
+  const lcInterests = interests.map((i) => i.toLowerCase());
   return sql`${seedVotesCol}
-             + CASE WHEN ${inArray(sql`${categoryCol}`, interests)} THEN ${voteBoost} ELSE 0 END`;
+             + CASE WHEN ${inArray(sql`LOWER(${categoryCol})`, lcInterests)} THEN ${voteBoost} ELSE 0 END`;
 }
 
 /**
@@ -180,7 +195,8 @@ export function personalisedInterestBucket(
   categoryCol: AnyColumn | SQL,
   interests: string[],
 ): SQL {
-  return sql`CASE WHEN ${inArray(sql`${categoryCol}`, interests)} THEN 0 ELSE 1 END`;
+  const lcInterests = interests.map((i) => i.toLowerCase());
+  return sql`CASE WHEN ${inArray(sql`LOWER(${categoryCol})`, lcInterests)} THEN 0 ELSE 1 END`;
 }
 
 // ── Higher-level "build the right ORDER BY for this user" wrappers ──
