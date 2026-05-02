@@ -92,6 +92,7 @@ import {
   UtensilsCrossed,
   Heart,
   Laugh,
+  Maximize2,
   MessageSquare,
   type LucideIcon
 } from "lucide-react";
@@ -2724,15 +2725,15 @@ export default function PredictPage() {
                     <Plus className="h-4 w-4 mr-2" />
                     Suggest
                   </Button>
-                  <Button 
-                    size="icon"
+                  <button
+                    type="button"
                     onClick={() => openSnapScroll("world-markets", filteredCommunity[0]?.id ? String(filteredCommunity[0].id) : undefined, "header-icon")}
-                    variant="ghost"
-                    className="text-violet-600 dark:text-violet-400 hover:text-violet-500 dark:hover:text-violet-300 md:hidden"
+                    className="md:hidden inline-flex shrink-0 items-center justify-center rounded-md p-1 text-violet-600 dark:text-violet-400 transition-colors hover:text-violet-500 dark:hover:text-violet-300 hover:bg-muted/40 active:opacity-80"
+                    aria-label="Open immersive browse"
                     data-testid="button-snap-world-markets"
                   >
-                    <svg viewBox="0 0 16 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-8 w-[21px]"><path d="M1 5V2a1 1 0 0 1 1-1h3" /><path d="M11 1h3a1 1 0 0 1 1 1v3" /><path d="M15 15v3a1 1 0 0 1-1 1h-3" /><path d="M5 19H2a1 1 0 0 1-1-1v-3" /></svg>
-                  </Button>
+                    <Maximize2 className="h-5 w-5" aria-hidden />
+                  </button>
                 </>
               }
             >
@@ -2977,15 +2978,15 @@ export default function PredictPage() {
                     </TooltipTrigger>
                     <TooltipContent className="bg-popover dark:bg-slate-900/95 border-border dark:border-slate-700 text-popover-foreground dark:text-slate-200 text-xs">How it works</TooltipContent>
                   </Tooltip>
-                  <Button
-                    size="icon"
+                  <button
+                    type="button"
                     onClick={() => openSnapScroll("updown", filteredUpDown[0]?.id ? String(filteredUpDown[0].id) : undefined, "header-icon")}
-                    variant="ghost"
-                    className="text-violet-600 dark:text-violet-400 hover:text-violet-500 dark:hover:text-violet-300 md:hidden"
+                    className="md:hidden inline-flex shrink-0 items-center justify-center rounded-md p-1 text-violet-600 dark:text-violet-400 transition-colors hover:text-violet-500 dark:hover:text-violet-300 hover:bg-muted/40 active:opacity-80"
+                    aria-label="Open immersive browse"
                     data-testid="button-snap-updown"
                   >
-                    <svg viewBox="0 0 16 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-8 w-[21px]"><path d="M1 5V2a1 1 0 0 1 1-1h3" /><path d="M11 1h3a1 1 0 0 1 1 1v3" /><path d="M15 15v3a1 1 0 0 1-1 1h-3" /><path d="M5 19H2a1 1 0 0 1-1-1v-3" /></svg>
-                  </Button>
+                    <Maximize2 className="h-5 w-5" aria-hidden />
+                  </button>
                 </>
               }
             >

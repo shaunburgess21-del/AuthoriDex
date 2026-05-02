@@ -59,6 +59,7 @@ import {
   UtensilsCrossed,
   Heart,
   Laugh,
+  Maximize2,
   type LucideIcon
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -2533,15 +2534,15 @@ export default function VotePage() {
                   <Plus className="h-4 w-4 mr-2" />
                   Suggest
                 </Button>
-                <Button
-                  size="icon"
+                <button
+                  type="button"
                   onClick={() => openSnapScroll("sentiment", displayTopics[0]?.id, "header-icon")}
-                  variant="ghost"
-                  className="text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300 md:hidden"
+                  className="md:hidden inline-flex shrink-0 items-center justify-center rounded-md p-1 text-cyan-600 dark:text-cyan-400 transition-colors hover:text-cyan-500 dark:hover:text-cyan-300 hover:bg-muted/40 active:opacity-80"
+                  aria-label="Open immersive browse"
                   data-testid="button-snap-sentiment"
                 >
-                  <svg viewBox="0 0 16 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-8 w-[21px]"><path d="M1 5V2a1 1 0 0 1 1-1h3" /><path d="M11 1h3a1 1 0 0 1 1 1v3" /><path d="M15 15v3a1 1 0 0 1-1 1h-3" /><path d="M5 19H2a1 1 0 0 1-1-1v-3" /></svg>
-                </Button>
+                  <Maximize2 className="h-5 w-5" aria-hidden />
+                </button>
               </>
             }
           >
@@ -2638,15 +2639,15 @@ export default function VotePage() {
                   <Plus className="h-4 w-4 mr-2" />
                   Suggest
                 </Button>
-                <Button
-                  size="icon"
+                <button
+                  type="button"
                   onClick={() => openSnapScroll("matchups", displayMatchups[0]?.id, "header-icon")}
-                  variant="ghost"
-                  className="text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300 md:hidden"
+                  className="md:hidden inline-flex shrink-0 items-center justify-center rounded-md p-1 text-cyan-600 dark:text-cyan-400 transition-colors hover:text-cyan-500 dark:hover:text-cyan-300 hover:bg-muted/40 active:opacity-80"
+                  aria-label="Open immersive browse"
                   data-testid="button-snap-matchups"
                 >
-                  <svg viewBox="0 0 16 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-8 w-[21px]"><path d="M1 5V2a1 1 0 0 1 1-1h3" /><path d="M11 1h3a1 1 0 0 1 1 1v3" /><path d="M15 15v3a1 1 0 0 1-1 1h-3" /><path d="M5 19H2a1 1 0 0 1-1-1v-3" /></svg>
-                </Button>
+                  <Maximize2 className="h-5 w-5" aria-hidden />
+                </button>
               </>
             }
           >
@@ -2751,15 +2752,15 @@ export default function VotePage() {
                   <Plus className="h-4 w-4 mr-2" />
                   Suggest
                 </Button>
-                <Button
-                  size="icon"
+                <button
+                  type="button"
                   onClick={() => openSnapScroll("opinion", displayOpinionPolls[0]?.id, "header-icon")}
-                  variant="ghost"
-                  className="text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300 md:hidden"
+                  className="md:hidden inline-flex shrink-0 items-center justify-center rounded-md p-1 text-cyan-600 dark:text-cyan-400 transition-colors hover:text-cyan-500 dark:hover:text-cyan-300 hover:bg-muted/40 active:opacity-80"
+                  aria-label="Open immersive browse"
                   data-testid="button-snap-opinion"
                 >
-                  <svg viewBox="0 0 16 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-8 w-[21px]"><path d="M1 5V2a1 1 0 0 1 1-1h3" /><path d="M11 1h3a1 1 0 0 1 1 1v3" /><path d="M15 15v3a1 1 0 0 1-1 1h-3" /><path d="M5 19H2a1 1 0 0 1-1-1v-3" /></svg>
-                </Button>
+                  <Maximize2 className="h-5 w-5" aria-hidden />
+                </button>
               </>
             }
           >
@@ -2850,15 +2851,15 @@ export default function VotePage() {
                     How it works
                   </TooltipContent>
                 </Tooltip>
-                <Button
-                  size="icon"
+                <button
+                  type="button"
                   onClick={() => openSnapScroll("value", filteredValueCelebrities[0]?.id, "header-icon")}
-                  variant="ghost"
-                  className="text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300 md:hidden"
+                  className="md:hidden inline-flex shrink-0 items-center justify-center rounded-md p-1 text-cyan-600 dark:text-cyan-400 transition-colors hover:text-cyan-500 dark:hover:text-cyan-300 hover:bg-muted/40 active:opacity-80"
+                  aria-label="Open immersive browse"
                   data-testid="button-snap-value"
                 >
-                  <svg viewBox="0 0 16 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-8 w-[21px]"><path d="M1 5V2a1 1 0 0 1 1-1h3" /><path d="M11 1h3a1 1 0 0 1 1 1v3" /><path d="M15 15v3a1 1 0 0 1-1 1h-3" /><path d="M5 19H2a1 1 0 0 1-1-1v-3" /></svg>
-                </Button>
+                  <Maximize2 className="h-5 w-5" aria-hidden />
+                </button>
               </>
             }
           >
@@ -2979,15 +2980,15 @@ export default function VotePage() {
                   <Plus className="h-4 w-4 mr-2" />
                   Suggest
                 </Button>
-                <Button
-                  size="icon"
+                <button
+                  type="button"
                   onClick={() => openSnapScroll("induction", filteredCandidates[0]?.id, "header-icon")}
-                  variant="ghost"
-                  className="text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300 md:hidden"
+                  className="md:hidden inline-flex shrink-0 items-center justify-center rounded-md p-1 text-cyan-600 dark:text-cyan-400 transition-colors hover:text-cyan-500 dark:hover:text-cyan-300 hover:bg-muted/40 active:opacity-80"
+                  aria-label="Open immersive browse"
                   data-testid="button-snap-induction"
                 >
-                  <svg viewBox="0 0 16 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-8 w-[21px]"><path d="M1 5V2a1 1 0 0 1 1-1h3" /><path d="M11 1h3a1 1 0 0 1 1 1v3" /><path d="M15 15v3a1 1 0 0 1-1 1h-3" /><path d="M5 19H2a1 1 0 0 1-1-1v-3" /></svg>
-                </Button>
+                  <Maximize2 className="h-5 w-5" aria-hidden />
+                </button>
               </>
             }
             meta={
@@ -3099,15 +3100,15 @@ export default function VotePage() {
                   <Plus className="h-4 w-4 mr-2" />
                   Suggest
                 </Button>
-                <Button
-                  size="icon"
+                <button
+                  type="button"
                   onClick={() => openSnapScroll("curate", undefined, "header-icon")}
-                  variant="ghost"
-                  className="text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300 md:hidden"
+                  className="md:hidden inline-flex shrink-0 items-center justify-center rounded-md p-1 text-cyan-600 dark:text-cyan-400 transition-colors hover:text-cyan-500 dark:hover:text-cyan-300 hover:bg-muted/40 active:opacity-80"
+                  aria-label="Open immersive browse"
                   data-testid="button-snap-curate"
                 >
-                  <svg viewBox="0 0 16 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-8 w-[21px]"><path d="M1 5V2a1 1 0 0 1 1-1h3" /><path d="M11 1h3a1 1 0 0 1 1 1v3" /><path d="M15 15v3a1 1 0 0 1-1 1h-3" /><path d="M5 19H2a1 1 0 0 1-1-1v-3" /></svg>
-                </Button>
+                  <Maximize2 className="h-5 w-5" aria-hidden />
+                </button>
               </>
             }
           >
