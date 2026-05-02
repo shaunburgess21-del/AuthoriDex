@@ -295,6 +295,13 @@
       "when": 1779240000000,
       "tag": "0041_profile_stated_interests",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1779326400000,
+      "tag": "0042_vote_world_markets_manual_order",
+      "breakpoints": true
     }
   ]
 }

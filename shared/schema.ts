@@ -643,6 +643,7 @@ export const trendingPolls = pgTable("trending_polls", {
   slug: text("slug"),
   featured: boolean("featured").default(false),
   visibility: text("visibility").default("draft"),
+  displayOrder: integer("display_order").notNull().default(0),
   createdBy: varchar("created_by"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
@@ -935,6 +936,8 @@ export const predictionMarkets = pgTable("prediction_markets", {
   cadence: text("cadence").default("weekly"), // 'daily' | 'weekly' | 'custom'
   baselineScore: integer("baseline_score"), // Denormalized from metadata.openingScore for easy API access
   resolutionSummary: text("resolution_summary"), // AI-generated one-sentence summary of the resolution; null until generated
+  /** Manual ordering in admin / Vote page for world (community) markets; other market types stay 0. */
+  cmsDisplayOrder: integer("cms_display_order").notNull().default(0),
 }, (table) => ({
   statusEndIdx: index("prediction_markets_status_end_idx").on(table.status, table.endAt),
   personIdx: index("prediction_markets_person_idx").on(table.personId),
@@ -1268,6 +1271,7 @@ export const opinionPolls = pgTable("opinion_polls", {
   imageUrl: text("image_url"),
   featured: boolean("featured").default(false),
   visibility: text("visibility").default("draft"),
+  displayOrder: integer("display_order").notNull().default(0),
   createdBy: varchar("created_by"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),

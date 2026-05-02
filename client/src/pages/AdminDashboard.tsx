@@ -71,6 +71,7 @@ import { AdminLeaderboardDiff } from "@/components/admin/AdminLeaderboardDiff";
 import { AdminCategoriesSection } from "@/components/admin/AdminCategoriesSection";
 import { AdminScoreInspector } from "@/components/admin/AdminScoreInspector";
 import { AdminAgentsSection } from "@/components/admin/AdminAgentsSection";
+import { AdminSortableCardList } from "@/components/admin/AdminSortableCardList";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -1371,7 +1372,7 @@ export default function AdminDashboard() {
   const [rwCatFilter, setRwCatFilter] = useState("all");
   const [rwStatusFilter, setRwStatusFilter] = useState("all");
   const [rwTypeFilter, setRwTypeFilter] = useState("all");
-  const [rwSortBy, setRwSortBy] = useState<"created" | "endAt">("endAt");
+  const [rwSortBy, setRwSortBy] = useState<"manual" | "created" | "endAt">("manual");
   const [rwSelectedIds, setRwSelectedIds] = useState<Set<string>>(new Set());
   const [rwBatchPublishing, setRwBatchPublishing] = useState(false);
   const [h2hMarketSearch, setH2hMarketSearch] = useState("");
@@ -2626,6 +2627,19 @@ export default function AdminDashboard() {
     return true;
   }), [matchups, matchupVisFilter, matchupSearchQuery]);
 
+  const canReorderSentimentPolls =
+    pollFilter === "all" && pollCategoryFilter === "all" && !pollSearchQuery.trim();
+  const canReorderOpinionPolls =
+    opinionPollFilter === "all" && opinionPollCategoryFilter === "all" && !opinionPollSearchQuery.trim();
+  const canReorderMatchups = matchupVisFilter === "all" && !matchupSearchQuery.trim();
+  const canReorderWorldMarkets =
+    rwVisFilter === "all" &&
+    rwCatFilter === "all" &&
+    rwStatusFilter === "all" &&
+    rwTypeFilter === "all" &&
+    !rwMarketSearch.trim() &&
+    rwSortBy === "manual";
+
   const filteredCelebrities = useMemo(() => celebrities?.filter(c =>
     celebritySearch === "" ||
     c.name.toLowerCase().includes(celebritySearch.toLowerCase()) ||
@@ -2640,6 +2654,12 @@ export default function AdminDashboard() {
     if (rwTypeFilter !== "all") list = list.filter(m => m.openMarketType === rwTypeFilter);
     if (rwMarketSearch) list = list.filter(m => m.title?.toLowerCase().includes(rwMarketSearch.toLowerCase()));
     list.sort((a, b) => {
+      if (rwSortBy === "manual") {
+        const ao = (a as PredictionMarket).cmsDisplayOrder ?? 0;
+        const bo = (b as PredictionMarket).cmsDisplayOrder ?? 0;
+        if (ao !== bo) return ao - bo;
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      }
       if (rwSortBy === "endAt") return new Date(a.endAt).getTime() - new Date(b.endAt).getTime();
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
@@ -3844,9 +3864,10 @@ export default function AdminDashboard() {
                           <SelectItem value="updown">Up/Down</SelectItem>
                         </SelectContent>
                       </Select>
-                      <Select value={rwSortBy} onValueChange={(v) => setRwSortBy(v as "created" | "endAt")}>
+                      <Select value={rwSortBy} onValueChange={(v) => setRwSortBy(v as "manual" | "created" | "endAt")}>
                         <SelectTrigger className="w-[140px]"><SelectValue placeholder="Sort" /></SelectTrigger>
                         <SelectContent>
+                          <SelectItem value="manual">Manual order</SelectItem>
                           <SelectItem value="endAt">Resolution date</SelectItem>
                           <SelectItem value="created">Newest first</SelectItem>
                         </SelectContent>
@@ -3871,132 +3892,160 @@ export default function AdminDashboard() {
                             />
                             <span className="text-xs text-muted-foreground">Select all</span>
                           </div>
-                          {rwMarkets.map((market) => {
-                            const daysUntilEnd = Math.ceil((new Date(market.endAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-                            const resolvesSoon = daysUntilEnd >= 0 && daysUntilEnd <= 7 && market.status === "OPEN";
-                            const overdue = daysUntilEnd < 0 && (market.status === "OPEN" || market.status === "CLOSED_PENDING");
-                            const vis = (market as any).visibility;
-                            return (
-                            <div
-                              key={market.id}
-                              className="flex items-center justify-between p-3 rounded-lg border gap-3"
-                              data-testid={`market-row-${market.id}`}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={rwSelectedIds.has(market.id)}
-                                onChange={(e) => {
-                                  const next = new Set(rwSelectedIds);
-                                  e.target.checked ? next.add(market.id) : next.delete(market.id);
-                                  setRwSelectedIds(next);
-                                }}
-                                className="rounded shrink-0"
-                              />
-                              <div className="min-w-0 flex-1">
-                                <p className="font-medium truncate">{market.title}</p>
-                                <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                  {market.openMarketType && (
-                                    <Badge variant="outline" className="text-xs">
-                                      {market.openMarketType === "binary" ? "Yes/No" : 
-                                       market.openMarketType === "multi" ? "Multi" : "Up/Down"}
-                                    </Badge>
-                                  )}
-                                  <Badge
-                                    variant={
-                                      market.status === "OPEN" ? "default" :
-                                      market.status === "RESOLVED" ? "secondary" : "destructive"
-                                    }
-                                  >
-                                    {market.status}
-                                  </Badge>
-                                  {market.category && (
-                                    <Badge variant="outline" className="text-xs capitalize">{market.category}</Badge>
-                                  )}
-                                  {vis === "draft" && (
-                                    <Badge variant="outline" className="text-xs border-yellow-500/40 dark:border-yellow-500/30 text-yellow-500">Draft</Badge>
-                                  )}
-                                  {vis === "live" && (
-                                    <Badge variant="outline" className="text-xs border-green-500/40 dark:border-green-500/30 text-green-500">Live</Badge>
-                                  )}
-                                  {vis === "inactive" && (
-                                    <Badge variant="outline" className="text-xs border-orange-500/40 dark:border-orange-500/30 text-orange-500">Inactive</Badge>
-                                  )}
-                                  {vis === "archived" && (
-                                    <Badge variant="outline" className="text-xs border-red-500/40 dark:border-red-500/30 text-red-500">Archived</Badge>
-                                  )}
-                                  {market.featured && (
-                                    <Badge variant="outline" className="text-xs border-yellow-500/40 dark:border-yellow-500/30 text-yellow-500">
-                                      <Star className="h-3 w-3 mr-1" />Featured
-                                    </Badge>
-                                  )}
-                                  {resolvesSoon && (
-                                    <Badge variant="outline" className="text-xs border-amber-500/40 dark:border-amber-500/30 text-amber-500">
-                                      <Clock className="h-3 w-3 mr-1" />Resolves soon
-                                    </Badge>
-                                  )}
-                                  {overdue && (
-                                    <Badge variant="outline" className="text-xs border-red-500/40 dark:border-red-500/30 text-red-600 dark:text-red-400">
-                                      <AlertTriangle className="h-3 w-3 mr-1" />Overdue
-                                    </Badge>
-                                  )}
-                                  {market.personId && (
-                                    <Badge variant="outline" className="text-xs border-purple-500/40 dark:border-purple-500/30 text-purple-600 dark:text-purple-400">
-                                      Linked
-                                    </Badge>
-                                  )}
-                                  <span className="text-xs text-muted-foreground">
-                                    {daysUntilEnd >= 0
-                                      ? `Resolves in ${daysUntilEnd}d`
-                                      : `Ended ${Math.abs(daysUntilEnd)}d ago`}
-                                    {" · "}{new Date(market.endAt).toLocaleDateString()}
-                                  </span>
+                          <AdminSortableCardList
+                            items={rwMarkets}
+                            disabled={!canReorderWorldMarkets}
+                            disabledReason={
+                              !canReorderWorldMarkets
+                                ? "Choose \"Manual order\" in Sort and clear all filters and search to drag rows into your preferred order."
+                                : undefined
+                            }
+                            listClassName="space-y-2"
+                            onReorder={async (orderedIds) => {
+                              const res = await fetchWithAuth("/api/admin/open-markets/reorder", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ orderedIds }),
+                              });
+                              if (!res.ok) {
+                                const err = await res.json().catch(() => ({}));
+                                const msg = (err as { error?: string }).error || res.statusText;
+                                toast.error("Could not save order", { description: msg });
+                                throw new Error(msg || "Reorder failed");
+                              }
+                              toast.success("World market order saved");
+                              queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
+                              queryClient.invalidateQueries({ queryKey: ["/api/open-markets"] });
+                            }}
+                            renderItem={(market, { dragHandle }) => {
+                              const daysUntilEnd = Math.ceil((new Date(market.endAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                              const resolvesSoon = daysUntilEnd >= 0 && daysUntilEnd <= 7 && market.status === "OPEN";
+                              const overdue = daysUntilEnd < 0 && (market.status === "OPEN" || market.status === "CLOSED_PENDING");
+                              const vis = (market as PredictionMarket).visibility;
+                              return (
+                                <div
+                                  className="flex items-center justify-between p-3 rounded-lg border gap-3"
+                                  data-testid={`market-row-${market.id}`}
+                                >
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    {dragHandle}
+                                    <input
+                                      type="checkbox"
+                                      checked={rwSelectedIds.has(market.id)}
+                                      onChange={(e) => {
+                                        const next = new Set(rwSelectedIds);
+                                        e.target.checked ? next.add(market.id) : next.delete(market.id);
+                                        setRwSelectedIds(next);
+                                      }}
+                                      className="rounded shrink-0"
+                                    />
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <p className="font-medium truncate">{market.title}</p>
+                                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                      {market.openMarketType && (
+                                        <Badge variant="outline" className="text-xs">
+                                          {market.openMarketType === "binary" ? "Yes/No" :
+                                           market.openMarketType === "multi" ? "Multi" : "Up/Down"}
+                                        </Badge>
+                                      )}
+                                      <Badge
+                                        variant={
+                                          market.status === "OPEN" ? "default" :
+                                          market.status === "RESOLVED" ? "secondary" : "destructive"
+                                        }
+                                      >
+                                        {market.status}
+                                      </Badge>
+                                      {market.category && (
+                                        <Badge variant="outline" className="text-xs capitalize">{market.category}</Badge>
+                                      )}
+                                      {vis === "draft" && (
+                                        <Badge variant="outline" className="text-xs border-yellow-500/40 dark:border-yellow-500/30 text-yellow-500">Draft</Badge>
+                                      )}
+                                      {vis === "live" && (
+                                        <Badge variant="outline" className="text-xs border-green-500/40 dark:border-green-500/30 text-green-500">Live</Badge>
+                                      )}
+                                      {vis === "inactive" && (
+                                        <Badge variant="outline" className="text-xs border-orange-500/40 dark:border-orange-500/30 text-orange-500">Inactive</Badge>
+                                      )}
+                                      {vis === "archived" && (
+                                        <Badge variant="outline" className="text-xs border-red-500/40 dark:border-red-500/30 text-red-500">Archived</Badge>
+                                      )}
+                                      {market.featured && (
+                                        <Badge variant="outline" className="text-xs border-yellow-500/40 dark:border-yellow-500/30 text-yellow-500">
+                                          <Star className="h-3 w-3 mr-1" />Featured
+                                        </Badge>
+                                      )}
+                                      {resolvesSoon && (
+                                        <Badge variant="outline" className="text-xs border-amber-500/40 dark:border-amber-500/30 text-amber-500">
+                                          <Clock className="h-3 w-3 mr-1" />Resolves soon
+                                        </Badge>
+                                      )}
+                                      {overdue && (
+                                        <Badge variant="outline" className="text-xs border-red-500/40 dark:border-red-500/30 text-red-600 dark:text-red-400">
+                                          <AlertTriangle className="h-3 w-3 mr-1" />Overdue
+                                        </Badge>
+                                      )}
+                                      {market.personId && (
+                                        <Badge variant="outline" className="text-xs border-purple-500/40 dark:border-purple-500/30 text-purple-600 dark:text-purple-400">
+                                          Linked
+                                        </Badge>
+                                      )}
+                                      <span className="text-xs text-muted-foreground">
+                                        {daysUntilEnd >= 0
+                                          ? `Resolves in ${daysUntilEnd}d`
+                                          : `Ended ${Math.abs(daysUntilEnd)}d ago`}
+                                        {" · "}{new Date(market.endAt).toLocaleDateString()}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => setEditMarketId(market.id)}
+                                      aria-label="Edit"
+                                      data-testid={`button-edit-market-${market.id}`}
+                                    >
+                                      <Pencil className="h-4 w-4" />
+                                    </Button>
+                                    {market.status === "OPEN" && (
+                                      <>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          onClick={() => setSettleMarketId(market.id)}
+                                          aria-label="Settle"
+                                          data-testid={`button-settle-${market.id}`}
+                                        >
+                                          <Gavel className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          onClick={() => setVoidMarketId(market.id)}
+                                          aria-label="Void"
+                                          data-testid={`button-void-${market.id}`}
+                                        >
+                                          <XCircle className="h-4 w-4 text-destructive" />
+                                        </Button>
+                                      </>
+                                    )}
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => setDeleteWorldMarket({ id: market.id, title: market.title })}
+                                      aria-label="Delete permanently"
+                                      data-testid={`button-delete-world-market-${market.id}`}
+                                    >
+                                      <Trash2 className="h-4 w-4 text-destructive" />
+                                    </Button>
+                                  </div>
                                 </div>
-                              </div>
-                              <div className="flex items-center gap-1 shrink-0">
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon"
-                                  onClick={() => setEditMarketId(market.id)}
-                                  aria-label="Edit"
-                                  data-testid={`button-edit-market-${market.id}`}
-                                >
-                                  <Pencil className="h-4 w-4" />
-                                </Button>
-                                {market.status === "OPEN" && (
-                                  <>
-                                    <Button 
-                                      variant="ghost" 
-                                      size="icon"
-                                      onClick={() => setSettleMarketId(market.id)}
-                                      aria-label="Settle"
-                                      data-testid={`button-settle-${market.id}`}
-                                    >
-                                      <Gavel className="h-4 w-4" />
-                                    </Button>
-                                    <Button 
-                                      variant="ghost" 
-                                      size="icon"
-                                      onClick={() => setVoidMarketId(market.id)}
-                                      aria-label="Void"
-                                      data-testid={`button-void-${market.id}`}
-                                    >
-                                      <XCircle className="h-4 w-4 text-destructive" />
-                                    </Button>
-                                  </>
-                                )}
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => setDeleteWorldMarket({ id: market.id, title: market.title })}
-                                  aria-label="Delete permanently"
-                                  data-testid={`button-delete-world-market-${market.id}`}
-                                >
-                                  <Trash2 className="h-4 w-4 text-destructive" />
-                                </Button>
-                              </div>
-                            </div>
-                            );
-                          })}
+                              );
+                            }}
+                          />
                         </div>
                       ) : (
                         <div className="text-center py-8 text-muted-foreground">
@@ -4750,98 +4799,124 @@ export default function AdminDashboard() {
                         </table>
                       </div>
                       ) : (
-                      <div className="space-y-3" data-testid="poll-list">
-                        {filteredPolls.map((poll) => (
-                          <div
-                            key={poll.id}
-                            className="flex items-center justify-between p-3 rounded-lg border"
-                            data-testid={`poll-row-${poll.id}`}
-                          >
-                            <div className="flex-1">
-                              <p className="font-medium">{poll.headline}</p>
-                              <p className="text-sm text-muted-foreground mt-0.5 line-clamp-1">{poll.subjectText}</p>
-                              <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                <Badge variant="outline" className="text-xs">{poll.category}</Badge>
-                                <Badge
-                                  variant={
-                                    (poll.visibility || poll.status) === "live"
-                                      ? "default"
-                                      : (poll.visibility || poll.status) === "draft"
-                                      ? "secondary"
-                                      : (poll.visibility || poll.status) === "inactive"
-                                      ? "outline"
-                                      : "outline"
-                                  }
-                                  className="text-xs"
-                                >
-                                  {poll.visibility || poll.status}
-                                </Badge>
-                                {poll.personId && (
-                                  <Badge variant="outline" className="text-xs">
-                                    <Users className="h-3 w-3 mr-1" />
-                                    Linked
-                                  </Badge>
-                                )}
-                                {!poll.personId && !poll.imageUrl && poll.status === "draft" && (
-                                  <Badge variant="destructive" className="text-xs">
-                                    <AlertCircle className="h-3 w-3 mr-1" />
-                                    No Image
-                                  </Badge>
-                                )}
-                                {poll.deadlineAt && (
-                                  <span className="text-xs text-muted-foreground">
-                                    <Clock className="h-3 w-3 inline mr-1" />
-                                    {new Date(poll.deadlineAt).toLocaleDateString()}
-                                  </span>
-                                )}
+                      <div data-testid="poll-list">
+                        <AdminSortableCardList
+                          items={filteredPolls}
+                          disabled={!canReorderSentimentPolls}
+                          disabledReason={
+                            !canReorderSentimentPolls
+                              ? "Clear search and set status and category to \"All\" to drag rows into your preferred order."
+                              : undefined
+                          }
+                          onReorder={async (orderedIds) => {
+                            const res = await fetchWithAuth("/api/admin/trending-polls/reorder", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ orderedIds }),
+                            });
+                            if (!res.ok) {
+                              const err = await res.json().catch(() => ({}));
+                              const msg = (err as { error?: string }).error || res.statusText;
+                              toast.error("Could not save order", { description: msg });
+                              throw new Error(msg || "Reorder failed");
+                            }
+                            toast.success("Poll order saved");
+                            queryClient.invalidateQueries({ queryKey: ["/api/admin/trending-polls"] });
+                          }}
+                          renderItem={(poll, { dragHandle }) => (
+                            <div
+                              className="flex items-center justify-between gap-2 p-3 rounded-lg border"
+                              data-testid={`poll-row-${poll.id}`}
+                            >
+                              <div className="flex items-start gap-2 min-w-0 flex-1">
+                                {dragHandle}
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-medium">{poll.headline}</p>
+                                  <p className="text-sm text-muted-foreground mt-0.5 line-clamp-1">{poll.subjectText}</p>
+                                  <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                    <Badge variant="outline" className="text-xs">{poll.category}</Badge>
+                                    <Badge
+                                      variant={
+                                        (poll.visibility || poll.status) === "live"
+                                          ? "default"
+                                          : (poll.visibility || poll.status) === "draft"
+                                          ? "secondary"
+                                          : (poll.visibility || poll.status) === "inactive"
+                                          ? "outline"
+                                          : "outline"
+                                      }
+                                      className="text-xs"
+                                    >
+                                      {poll.visibility || poll.status}
+                                    </Badge>
+                                    {poll.personId && (
+                                      <Badge variant="outline" className="text-xs">
+                                        <Users className="h-3 w-3 mr-1" />
+                                        Linked
+                                      </Badge>
+                                    )}
+                                    {!poll.personId && !poll.imageUrl && poll.status === "draft" && (
+                                      <Badge variant="destructive" className="text-xs">
+                                        <AlertCircle className="h-3 w-3 mr-1" />
+                                        No Image
+                                      </Badge>
+                                    )}
+                                    {poll.deadlineAt && (
+                                      <span className="text-xs text-muted-foreground">
+                                        <Clock className="h-3 w-3 inline mr-1" />
+                                        {new Date(poll.deadlineAt).toLocaleDateString()}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
                               </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {poll.status !== "archived" && (
+                              <div className="flex items-center gap-2 shrink-0">
+                                {poll.status !== "archived" && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => {
+                                      fetchWithAuth(`/api/admin/trending-polls/${poll.id}`, {
+                                        method: "PATCH",
+                                        body: JSON.stringify({ status: "archived" }),
+                                      }).then(() => {
+                                        toast("Poll Archived");
+                                        queryClient.invalidateQueries({ queryKey: ["/api/admin/trending-polls"] });
+                                      });
+                                    }}
+                                    title="Archive"
+                                    aria-label="Archive"
+                                    data-testid={`button-archive-poll-${poll.id}`}
+                                  >
+                                    <Ban className="h-4 w-4" />
+                                  </Button>
+                                )}
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  onClick={() => {
-                                    fetchWithAuth(`/api/admin/trending-polls/${poll.id}`, {
-                                      method: "PATCH",
-                                      body: JSON.stringify({ status: "archived" }),
-                                    }).then(() => {
-                                      toast("Poll Archived");
-                                      queryClient.invalidateQueries({ queryKey: ["/api/admin/trending-polls"] });
-                                    });
-                                  }}
-                                  title="Archive"
-                                  aria-label="Archive"
-                                  data-testid={`button-archive-poll-${poll.id}`}
+                                  onClick={() => openEditPoll(poll)}
+                                  aria-label="Edit"
+                                  data-testid={`button-edit-poll-${poll.id}`}
                                 >
-                                  <Ban className="h-4 w-4" />
+                                  <Edit className="h-4 w-4" />
                                 </Button>
-                              )}
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => openEditPoll(poll)}
-                                aria-label="Edit"
-                                data-testid={`button-edit-poll-${poll.id}`}
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="text-destructive hover:text-destructive"
-                                onClick={() => {
-                                  setDeleteTarget({ type: "poll", id: poll.id, name: poll.headline });
-                                  setShowDeleteConfirm(true);
-                                }}
-                                aria-label="Delete"
-                                data-testid={`button-delete-poll-${poll.id}`}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="text-destructive hover:text-destructive"
+                                  onClick={() => {
+                                    setDeleteTarget({ type: "poll", id: poll.id, name: poll.headline });
+                                    setShowDeleteConfirm(true);
+                                  }}
+                                  aria-label="Delete"
+                                  data-testid={`button-delete-poll-${poll.id}`}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          )}
+                        />
                       </div>
                       )
                     ) : (
@@ -5039,54 +5114,80 @@ export default function AdminDashboard() {
                         </table>
                       </div>
                       ) : (
-                      <div className="space-y-3" data-testid="opinion-poll-list">
-                        {filteredOpinionPolls.map((poll: any) => (
-                          <div
-                            key={poll.id}
-                            className="flex items-center justify-between p-3 rounded-lg border"
-                            data-testid={`opinion-poll-row-${poll.id}`}
-                          >
-                            <div className="flex-1">
-                              <p className="font-medium">{poll.title}</p>
-                              <p className="text-sm text-muted-foreground mt-0.5 line-clamp-1">{poll.description}</p>
-                              <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                <Badge variant="outline" className="text-xs">{poll.category}</Badge>
-                                <Badge
-                                  variant={poll.visibility === "live" ? "default" : poll.visibility === "draft" ? "secondary" : "outline"}
-                                  className="text-xs"
+                      <div data-testid="opinion-poll-list">
+                        <AdminSortableCardList
+                          items={filteredOpinionPolls}
+                          disabled={!canReorderOpinionPolls}
+                          disabledReason={
+                            !canReorderOpinionPolls
+                              ? "Clear search and set status and category to \"All\" to drag rows into your preferred order."
+                              : undefined
+                          }
+                          onReorder={async (orderedIds) => {
+                            const res = await fetchWithAuth("/api/admin/opinion-polls/reorder", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ orderedIds }),
+                            });
+                            if (!res.ok) {
+                              const err = await res.json().catch(() => ({}));
+                              const msg = (err as { error?: string }).error || res.statusText;
+                              toast.error("Could not save order", { description: msg });
+                              throw new Error(msg || "Reorder failed");
+                            }
+                            toast.success("Opinion poll order saved");
+                            queryClient.invalidateQueries({ queryKey: ["/api/admin/opinion-polls"] });
+                          }}
+                          renderItem={(poll: any, { dragHandle }) => (
+                            <div
+                              className="flex items-center justify-between gap-2 p-3 rounded-lg border"
+                              data-testid={`opinion-poll-row-${poll.id}`}
+                            >
+                              <div className="flex items-start gap-2 min-w-0 flex-1">
+                                {dragHandle}
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-medium">{poll.title}</p>
+                                  <p className="text-sm text-muted-foreground mt-0.5 line-clamp-1">{poll.description}</p>
+                                  <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                    <Badge variant="outline" className="text-xs">{poll.category}</Badge>
+                                    <Badge
+                                      variant={poll.visibility === "live" ? "default" : poll.visibility === "draft" ? "secondary" : "outline"}
+                                      className="text-xs"
+                                    >
+                                      {poll.visibility}
+                                    </Badge>
+                                    <span className="text-xs text-muted-foreground">{poll.options?.length || 0} options</span>
+                                    <span className="text-xs text-muted-foreground">{poll.totalVotes || 0} votes</span>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => openEditOpinionPoll(poll)}
+                                  aria-label="Edit"
+                                  data-testid={`button-edit-opinion-poll-${poll.id}`}
                                 >
-                                  {poll.visibility}
-                                </Badge>
-                                <span className="text-xs text-muted-foreground">{poll.options?.length || 0} options</span>
-                                <span className="text-xs text-muted-foreground">{poll.totalVotes || 0} votes</span>
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="text-destructive hover:text-destructive"
+                                  onClick={() => {
+                                    setDeleteTarget({ type: "opinion-poll", id: poll.id, name: poll.title });
+                                    setShowDeleteConfirm(true);
+                                  }}
+                                  aria-label="Delete"
+                                  data-testid={`button-delete-opinion-poll-${poll.id}`}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
                               </div>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => openEditOpinionPoll(poll)}
-                                aria-label="Edit"
-                                data-testid={`button-edit-opinion-poll-${poll.id}`}
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="text-destructive hover:text-destructive"
-                                onClick={() => {
-                                  setDeleteTarget({ type: "opinion-poll", id: poll.id, name: poll.title });
-                                  setShowDeleteConfirm(true);
-                                }}
-                                aria-label="Delete"
-                                data-testid={`button-delete-opinion-poll-${poll.id}`}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
+                          )}
+                        />
                       </div>
                       )
                     ) : (
@@ -5278,55 +5379,81 @@ export default function AdminDashboard() {
                         </table>
                       </div>
                       ) : (
-                      <div className="space-y-3" data-testid="matchup-list">
-                        {filteredMatchups.map((matchup) => (
-                          <div
-                            key={matchup.id}
-                            className="flex items-center justify-between p-3 rounded-lg border"
-                            data-testid={`matchup-row-${matchup.id}`}
-                          >
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                {matchup.featured && <Star className="h-4 w-4 text-yellow-500 fill-yellow-500 shrink-0" />}
-                                <p className="font-medium truncate">{matchup.title || `${matchup.optionAText} vs ${matchup.optionBText}`}</p>
+                      <div data-testid="matchup-list">
+                        <AdminSortableCardList
+                          items={filteredMatchups}
+                          disabled={!canReorderMatchups}
+                          disabledReason={
+                            !canReorderMatchups
+                              ? "Clear search and set visibility to \"All\" to drag rows into your preferred order."
+                              : undefined
+                          }
+                          onReorder={async (orderedIds) => {
+                            const res = await fetchWithAuth("/api/admin/matchups/reorder", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ orderedIds }),
+                            });
+                            if (!res.ok) {
+                              const err = await res.json().catch(() => ({}));
+                              const msg = (err as { error?: string }).error || res.statusText;
+                              toast.error("Could not save order", { description: msg });
+                              throw new Error(msg || "Reorder failed");
+                            }
+                            toast.success("Matchup order saved");
+                            queryClient.invalidateQueries({ queryKey: ["/api/admin/matchups"] });
+                          }}
+                          renderItem={(matchup, { dragHandle }) => (
+                            <div
+                              className="flex items-center justify-between gap-2 p-3 rounded-lg border"
+                              data-testid={`matchup-row-${matchup.id}`}
+                            >
+                              <div className="flex items-start gap-2 min-w-0 flex-1">
+                                {dragHandle}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    {matchup.featured && <Star className="h-4 w-4 text-yellow-500 fill-yellow-500 shrink-0" />}
+                                    <p className="font-medium truncate">{matchup.title || `${matchup.optionAText} vs ${matchup.optionBText}`}</p>
+                                  </div>
+                                  <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                    <Badge variant="outline" className="text-xs">{matchup.category}</Badge>
+                                    {matchup.title && <span className="text-sm text-muted-foreground">{matchup.optionAText} vs {matchup.optionBText}</span>}
+                                    {matchup.slug && (
+                                      <span className="text-xs text-muted-foreground font-mono">/{matchup.slug}</span>
+                                    )}
+                                  </div>
+                                </div>
                               </div>
-                              <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                <Badge variant="outline" className="text-xs">{matchup.category}</Badge>
-                                {matchup.title && <span className="text-sm text-muted-foreground">{matchup.optionAText} vs {matchup.optionBText}</span>}
-                                {matchup.slug && (
-                                  <span className="text-xs text-muted-foreground font-mono">/{matchup.slug}</span>
-                                )}
+                              <div className="flex items-center gap-2 shrink-0">
+                                <Badge variant={matchup.visibility === 'live' ? 'default' : matchup.visibility === 'draft' ? 'outline' : 'secondary'}>
+                                  {matchup.visibility || 'live'}
+                                </Badge>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => openEditMatchup(matchup)}
+                                  aria-label="Edit"
+                                  data-testid={`button-edit-matchup-${matchup.id}`}
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="text-destructive"
+                                  onClick={() => {
+                                    setDeleteTarget({ type: "matchup", id: matchup.id, name: matchup.title || `${matchup.optionAText} vs ${matchup.optionBText}` });
+                                    setShowDeleteConfirm(true);
+                                  }}
+                                  aria-label="Delete"
+                                  data-testid={`button-delete-matchup-${matchup.id}`}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
                               </div>
                             </div>
-                            <div className="flex items-center gap-2 shrink-0">
-                              <Badge variant={matchup.visibility === 'live' ? 'default' : matchup.visibility === 'draft' ? 'outline' : 'secondary'}>
-                                {matchup.visibility || 'live'}
-                              </Badge>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => openEditMatchup(matchup)}
-                                aria-label="Edit"
-                                data-testid={`button-edit-matchup-${matchup.id}`}
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="text-destructive"
-                                onClick={() => {
-                                  setDeleteTarget({ type: "matchup", id: matchup.id, name: matchup.title || `${matchup.optionAText} vs ${matchup.optionBText}` });
-                                  setShowDeleteConfirm(true);
-                                }}
-                                aria-label="Delete"
-                                data-testid={`button-delete-matchup-${matchup.id}`}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
+                          )}
+                        />
                       </div>
                       )
                     ) : (

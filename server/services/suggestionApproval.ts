@@ -458,6 +458,8 @@ export async function dispatchApproval(
     case "sentiment_poll": {
       const p = translateSentimentPollPayload(userPayload, adminOverrides);
       const effectiveStatus = p.visibility === "inactive" ? "draft" : p.visibility;
+      const [tpMax] = await db.select({ max: sql<number>`COALESCE(MAX(display_order), 0)` }).from(trendingPolls);
+      const nextTpOrder = (tpMax?.max || 0) + 1;
 
       const [created] = await db
         .insert(trendingPolls)
@@ -477,6 +479,7 @@ export async function dispatchApproval(
           slug: p.slug,
           featured: p.featured,
           visibility: p.visibility,
+          displayOrder: nextTpOrder,
           createdBy: adminId,
         })
         .returning();
@@ -496,6 +499,8 @@ export async function dispatchApproval(
 
     case "opinion_poll": {
       const p = translateOpinionPollPayload(userPayload, adminOverrides);
+      const [opMax] = await db.select({ max: sql<number>`COALESCE(MAX(display_order), 0)` }).from(opinionPolls);
+      const nextOpOrder = (opMax?.max || 0) + 1;
 
       const [created] = await db
         .insert(opinionPolls)
@@ -508,6 +513,7 @@ export async function dispatchApproval(
           imageUrl: p.imageUrl,
           featured: p.featured,
           visibility: p.visibility,
+          displayOrder: nextOpOrder,
           createdBy: adminId,
         })
         .returning();

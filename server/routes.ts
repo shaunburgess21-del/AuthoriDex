@@ -62,8 +62,6 @@ import { approveInductionCandidate } from "./services/induction-service";
 import { CANONICAL_MARKET_CATEGORIES, getMarketCategoryLabel, normalizeMarketCategory, CANONICAL_CATEGORIES } from "@shared/constants";
 import {
   shouldUseColdStart,
-  orderRecencyForUser,
-  orderFeaturedRecencyForUser,
   orderSeedVotesForUser,
   orderFeaturedCategoryForUser,
 } from "./lib/coldStartOrder";
@@ -5223,17 +5221,12 @@ Only return the JSON object.`;
   app.get("/api/matchups", optionalAuth, async (req: AuthRequest, res) => {
     try {
       const { category } = req.query;
-      const orderTerms = await orderRecencyForUser(
-        req,
-        matchups.createdAt,
-        matchups.category,
-      );
 
       // Get all matchups
       let matchupList = await db
         .select()
         .from(matchups)
-        .orderBy(...orderTerms);
+        .orderBy(asc(matchups.displayOrder), desc(matchups.createdAt));
       
       // Filter by category if provided
       if (category && category !== 'All') {
@@ -9527,7 +9520,10 @@ Only return the JSON object.`;
   // Get prediction markets (for admin CMS)
   app.get("/api/admin/markets", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const markets = await db.select().from(predictionMarkets).orderBy(desc(predictionMarkets.createdAt));
+      const markets = await db
+        .select()
+        .from(predictionMarkets)
+        .orderBy(asc(predictionMarkets.cmsDisplayOrder), desc(predictionMarkets.createdAt));
       res.json(markets);
     } catch (error: any) {
       console.error("Error fetching markets:", error.message);
@@ -11718,11 +11714,6 @@ Target length: about 90-150 words.`;
   app.get("/api/trending-polls", optionalAuth, async (req, res) => {
     try {
       const userId = (req as AuthRequest).userId || null;
-      const orderTerms = await orderRecencyForUser(
-        req as AuthRequest,
-        trendingPolls.createdAt,
-        trendingPolls.category,
-      );
 
       const polls = await db
         .select({
@@ -11746,7 +11737,7 @@ Target length: about 90-150 words.`;
         .leftJoin(trackedPeople, eq(trendingPolls.personId, trackedPeople.id))
         .leftJoin(trendingPeople, eq(trendingPolls.personId, trendingPeople.id))
         .where(eq(trendingPolls.status, 'live'))
-        .orderBy(...orderTerms);
+        .orderBy(asc(trendingPolls.displayOrder), desc(trendingPolls.createdAt));
 
       const pollIds = polls.map(p => p.id);
       const relatedMap = await getRelatedPeopleForCards("sentiment_poll", pollIds);
@@ -11970,7 +11961,10 @@ Target length: about 90-150 words.`;
 
   app.get("/api/admin/trending-polls", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const pollList = await db.select().from(trendingPolls).orderBy(desc(trendingPolls.createdAt));
+      const pollList = await db
+        .select()
+        .from(trendingPolls)
+        .orderBy(asc(trendingPolls.displayOrder), desc(trendingPolls.createdAt));
       res.json(pollList);
     } catch (error: any) {
       console.error("Error fetching trending polls:", error.message);
@@ -11989,6 +11983,8 @@ Target length: about 90-150 words.`;
 
       const effectiveVisibility = visibility || status || "draft";
       const effectiveStatus = (effectiveVisibility === "inactive") ? "draft" : effectiveVisibility;
+      const [maxOrd] = await db.select({ max: sql<number>`COALESCE(MAX(display_order), 0)` }).from(trendingPolls);
+      const nextDisplayOrder = (maxOrd?.max || 0) + 1;
       const [created] = await db.insert(trendingPolls).values({
         status: effectiveStatus,
         category,
@@ -12005,6 +12001,7 @@ Target length: about 90-150 words.`;
         slug: slug || null,
         featured: featured ?? false,
         visibility: effectiveVisibility,
+        displayOrder: nextDisplayOrder,
         createdBy: adminId,
       }).returning();
 
@@ -12043,7 +12040,7 @@ Target length: about 90-150 words.`;
         return res.status(404).json({ error: "Trending poll not found" });
       }
 
-      const { status, category, headline, subjectText, personId, description, timeline, deadlineAt, imageUrl, seedSupportCount, seedNeutralCount, seedOpposeCount, slug, featured, visibility, relatedPersonIds } = req.body;
+      const { status, category, headline, subjectText, personId, description, timeline, deadlineAt, imageUrl, seedSupportCount, seedNeutralCount, seedOpposeCount, slug, featured, visibility, displayOrder, relatedPersonIds } = req.body;
 
       const updates: any = { updatedAt: new Date() };
       if (visibility !== undefined) {
@@ -12065,6 +12062,7 @@ Target length: about 90-150 words.`;
       if (seedOpposeCount !== undefined) updates.seedOpposeCount = seedOpposeCount;
       if (slug !== undefined) updates.slug = slug || null;
       if (featured !== undefined) updates.featured = featured;
+      if (displayOrder !== undefined) updates.displayOrder = displayOrder;
 
       if ((slug !== undefined || headline !== undefined) && imageUrl === undefined) {
         if (isConventionImageUrl(existing.imageUrl)) {
@@ -12125,6 +12123,35 @@ Target length: about 90-150 words.`;
     } catch (error: any) {
       console.error("Error deleting trending poll:", error.message);
       res.status(500).json({ error: "Failed to delete trending poll" });
+    }
+  });
+
+  app.post("/api/admin/trending-polls/reorder", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { orderedIds } = req.body;
+      const adminId = req.userId!;
+      if (!Array.isArray(orderedIds)) {
+        return res.status(400).json({ error: "orderedIds must be an array" });
+      }
+      if (orderedIds.length > 0) {
+        await Promise.all(
+          orderedIds.map((id: string, i: number) =>
+            db.update(trendingPolls).set({ displayOrder: i + 1, updatedAt: new Date() }).where(eq(trendingPolls.id, id)),
+          ),
+        );
+      }
+      await db.insert(adminAuditLog).values({
+        adminId,
+        adminEmail: null,
+        actionType: "reorder_trending_polls",
+        targetTable: "trending_polls",
+        targetId: "bulk",
+        newData: { orderedIds },
+      });
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error reordering trending polls:", error.message);
+      res.status(500).json({ error: "Failed to reorder trending polls" });
     }
   });
 
@@ -12442,6 +12469,8 @@ Target length: about 90-150 words.`;
 
       let inserted = 0;
       let skipped = 0;
+      const [seedMaxOrd] = await db.select({ max: sql<number>`COALESCE(MAX(display_order), 0)` }).from(trendingPolls);
+      let nextDisplayOrder = (seedMaxOrd?.max || 0) + 1;
 
       for (const topic of SEED_TOPICS) {
         const [existing] = await db
@@ -12482,8 +12511,10 @@ Target length: about 90-150 words.`;
           seedSupportCount,
           seedNeutralCount,
           seedOpposeCount,
+          displayOrder: nextDisplayOrder,
           createdBy: req.userId || null,
         });
+        nextDisplayOrder += 1;
 
         inserted++;
       }
@@ -12599,20 +12630,12 @@ Target length: about 90-150 words.`;
     try {
       const authContext = await resolveAuthContextFromHeader(req.headers.authorization);
       const userId = authContext?.userId ?? null;
-      // Reuse the per-user ordering helper by stamping userId on the request
-      // shape it expects (this route resolves auth manually rather than
-      // through optionalAuth, but the helper only reads req.userId).
-      const orderTerms = await orderRecencyForUser(
-        { ...(req as AuthRequest), userId: userId ?? undefined } as AuthRequest,
-        opinionPolls.createdAt,
-        opinionPolls.category,
-      );
 
       const polls = await db
         .select()
         .from(opinionPolls)
         .where(eq(opinionPolls.visibility, 'live'))
-        .orderBy(...orderTerms);
+        .orderBy(asc(opinionPolls.displayOrder), desc(opinionPolls.createdAt));
 
       const opPollIds = polls.map(p => p.id);
       if (opPollIds.length === 0) {
@@ -12927,7 +12950,10 @@ Target length: about 90-150 words.`;
 
   app.get("/api/admin/opinion-polls", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const polls = await db.select().from(opinionPolls).orderBy(desc(opinionPolls.createdAt));
+      const polls = await db
+        .select()
+        .from(opinionPolls)
+        .orderBy(asc(opinionPolls.displayOrder), desc(opinionPolls.createdAt));
       const result = await Promise.all(polls.map(async (poll) => {
         const options = await db
           .select({
@@ -12971,6 +12997,8 @@ Target length: about 90-150 words.`;
         return res.status(400).json({ error: "Between 3 and 20 options are required" });
       }
 
+      const [maxOrd] = await db.select({ max: sql<number>`COALESCE(MAX(display_order), 0)` }).from(opinionPolls);
+      const nextDisplayOrder = (maxOrd?.max || 0) + 1;
       const [created] = await db.insert(opinionPolls).values({
         title,
         slug,
@@ -12980,6 +13008,7 @@ Target length: about 90-150 words.`;
         imageUrl: imageUrl || null,
         featured: featured ?? false,
         visibility: visibility || 'draft',
+        displayOrder: nextDisplayOrder,
         createdBy: adminId,
       }).returning();
 
@@ -13025,7 +13054,7 @@ Target length: about 90-150 words.`;
     try {
       const { id } = req.params;
       const adminId = req.userId!;
-      const { title, slug, category, description, summary, imageUrl, featured, visibility, options, relatedPersonIds } = req.body;
+      const { title, slug, category, description, summary, imageUrl, featured, visibility, displayOrder, options, relatedPersonIds } = req.body;
 
       const [existing] = await db.select().from(opinionPolls).where(eq(opinionPolls.id, id));
       if (!existing) {
@@ -13041,6 +13070,7 @@ Target length: about 90-150 words.`;
       if (imageUrl !== undefined) updates.imageUrl = imageUrl || null;
       if (featured !== undefined) updates.featured = featured;
       if (visibility !== undefined) updates.visibility = visibility;
+      if (displayOrder !== undefined) updates.displayOrder = displayOrder;
 
       const [updated] = await db.update(opinionPolls).set(updates).where(eq(opinionPolls.id, id)).returning();
 
@@ -13107,6 +13137,35 @@ Target length: about 90-150 words.`;
     } catch (error: any) {
       console.error("Error deleting opinion poll:", error.message);
       res.status(500).json({ error: "Failed to delete opinion poll" });
+    }
+  });
+
+  app.post("/api/admin/opinion-polls/reorder", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { orderedIds } = req.body;
+      const adminId = req.userId!;
+      if (!Array.isArray(orderedIds)) {
+        return res.status(400).json({ error: "orderedIds must be an array" });
+      }
+      if (orderedIds.length > 0) {
+        await Promise.all(
+          orderedIds.map((id: string, i: number) =>
+            db.update(opinionPolls).set({ displayOrder: i + 1, updatedAt: new Date() }).where(eq(opinionPolls.id, id)),
+          ),
+        );
+      }
+      await db.insert(adminAuditLog).values({
+        adminId,
+        adminEmail: null,
+        actionType: "reorder_opinion_polls",
+        targetTable: "opinion_polls",
+        targetId: "bulk",
+        newData: { orderedIds },
+      });
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error reordering opinion polls:", error.message);
+      res.status(500).json({ error: "Failed to reorder opinion polls" });
     }
   });
 
@@ -13425,12 +13484,6 @@ Target length: about 90-150 words.`;
   app.get("/api/open-markets", optionalAuth, async (req: AuthRequest, res) => {
     try {
       const { category, featured, limit } = req.query;
-      const orderTerms = await orderFeaturedRecencyForUser(
-        req,
-        predictionMarkets.featured,
-        predictionMarkets.createdAt,
-        predictionMarkets.category,
-      );
 
       const conditions = [
         eq(predictionMarkets.marketType, "community"),
@@ -13450,7 +13503,7 @@ Target length: about 90-150 words.`;
         .select()
         .from(predictionMarkets)
         .where(and(...conditions))
-        .orderBy(...orderTerms)
+        .orderBy(asc(predictionMarkets.cmsDisplayOrder), desc(predictionMarkets.createdAt))
         .limit(limit && typeof limit === "string" ? parseInt(limit, 10) || 50 : 50);
 
       const marketIds = markets.map((m) => m.id);
@@ -13674,6 +13727,12 @@ Target length: about 90-150 words.`;
         }
       }
 
+      const [cmsMax] = await db
+        .select({ max: sql<number>`COALESCE(MAX(cms_display_order), 0)` })
+        .from(predictionMarkets)
+        .where(eq(predictionMarkets.marketType, "community"));
+      const nextCmsOrder = (cmsMax?.max || 0) + 1;
+
       const [createdMarket] = await db
         .insert(predictionMarkets)
         .values({
@@ -13709,6 +13768,7 @@ Target length: about 90-150 words.`;
           isLive: isLive !== false,
           visibility: ["draft", "live", "inactive", "archived"].includes(visibility) ? visibility : "live",
           inactiveMessage: inactiveMessage || null,
+          cmsDisplayOrder: nextCmsOrder,
         })
         .returning();
 
@@ -14031,6 +14091,38 @@ Target length: about 90-150 words.`;
     }
   });
 
+  app.post("/api/admin/open-markets/reorder", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { orderedIds } = req.body;
+      const adminId = req.userId!;
+      if (!Array.isArray(orderedIds)) {
+        return res.status(400).json({ error: "orderedIds must be an array" });
+      }
+      if (orderedIds.length > 0) {
+        await Promise.all(
+          orderedIds.map((id: string, i: number) =>
+            db
+              .update(predictionMarkets)
+              .set({ cmsDisplayOrder: i + 1, updatedAt: new Date() })
+              .where(and(eq(predictionMarkets.id, id), eq(predictionMarkets.marketType, "community"))),
+          ),
+        );
+      }
+      await db.insert(adminAuditLog).values({
+        adminId,
+        adminEmail: null,
+        actionType: "reorder_world_markets",
+        targetTable: "prediction_markets",
+        targetId: "bulk",
+        metadata: { marketType: "community", orderedIds },
+      });
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("[Open Markets] Reorder error:", error);
+      res.status(500).json({ error: "Failed to reorder world markets" });
+    }
+  });
+
   // ── Bulk import World Markets ──────────────────────────────────────
   app.post("/api/admin/open-markets/import", requireAuth, requireAdmin, async (req, res) => {
     try {
@@ -14066,6 +14158,11 @@ Target length: about 90-150 words.`;
 
       const results: RowResult[] = [];
       const seenSlugs = new Set<string>();
+      const [impCmsStart] = await db
+        .select({ max: sql<number>`COALESCE(MAX(cms_display_order), 0)` })
+        .from(predictionMarkets)
+        .where(eq(predictionMarkets.marketType, "community"));
+      let nextImportCmsOrder = (impCmsStart?.max || 0) + 1;
 
       for (let i = 0; i < importRows.length; i++) {
         const row = importRows[i];
@@ -14203,7 +14300,9 @@ Target length: about 90-150 words.`;
             createdBy: authReq.userId,
             seedParticipants: 0,
             seedVolume: "0",
+            cmsDisplayOrder: nextImportCmsOrder,
           }).returning();
+          nextImportCmsOrder += 1;
 
           await db.insert(marketEntries).values(
             entries.map((e, idx) => ({

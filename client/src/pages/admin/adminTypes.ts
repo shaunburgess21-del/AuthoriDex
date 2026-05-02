@@ -97,6 +97,8 @@ export interface PredictionMarket {
   inactiveMessage: string | null;
   seedConfig: any;
   weekNumber: number | null;
+  /** Admin drag-order for World Markets (community); 0 for other market types. */
+  cmsDisplayOrder?: number;
 }
 
 export interface MarketEntryForm {
