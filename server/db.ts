@@ -9,7 +9,7 @@ if (!process.env.DATABASE_URL) {
   );
 }
 
-const DB_POOL_MAX = parseInt(process.env.DB_POOL_MAX || "5", 10);
+const DB_POOL_MAX = parseInt(process.env.DB_POOL_MAX || "10", 10);
 
 /**
  * Default: `rejectUnauthorized: false` (common for Neon/Railway-style TLS without bundling CA).

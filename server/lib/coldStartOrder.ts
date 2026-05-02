@@ -41,16 +41,17 @@ import type { AuthRequest } from "../auth-middleware";
 
 // ── Tunable constants ────────────────────────────────────────────────
 //
-// PERSONALISED_FRESHNESS_BOOST_DAYS: how much "younger" an interest-match
-// row pretends to be when sorting recency-based feeds. ~1.5 days =
-// "thumb on scale": comfortably visible reordering, not enough to bury a
-// fresh non-interest card.
+// PERSONALISED_TRENDING_OVERRIDE_HOURS: a "very fresh" non-interest card
+// younger than this still earns the top tier alongside interest cards,
+// so genuinely hot/breaking content surfaces even when it's outside the
+// user's stated interests. Beyond this window, non-interest cards drop
+// to the second tier.
 //
-// PERSONALISED_INDUCTION_VOTE_BOOST: equivalent thumb for the induction
+// PERSONALISED_INDUCTION_VOTE_BOOST: thumb on the scale for the induction
 // feed which is ranked by seedVotes (not recency). ~5 votes lifts a
 // candidate inside the user's interests above an evenly-matched one
 // outside, but the genuine vote leader still wins.
-export const PERSONALISED_FRESHNESS_BOOST_DAYS = 1.5;
+export const PERSONALISED_TRENDING_OVERRIDE_HOURS = 24;
 export const PERSONALISED_INDUCTION_VOTE_BOOST = 5;
 
 // ── Per-request memoisation ─────────────────────────────────────────
@@ -128,29 +129,29 @@ export async function shouldUseColdStart(req: AuthRequest): Promise<boolean> {
 // ── Personalised helpers (Phase 2) ──────────────────────────────────
 
 /**
- * SQL ORDER BY expression for recency-ranked feeds with a personalised
- * thumb. Returns "effective age in days minus boost" — sort ASC for the
- * standard "freshest first" reading.
+ * SQL tier-rank fragment for recency-ranked feeds. Returns 0 for the
+ * "top" tier (interest matches OR genuinely fresh content) and 1 for
+ * everything else. Use as the **first** ORDER BY term, then desc(created_at)
+ * as the within-tier tiebreaker.
  *
- * Worked example with default 1.5-day boost:
- *   * 1-hour-old non-interest card  -> 0.04 days
- *   * 5-day-old   interest     card -> 5 - 1.5 = 3.5 days
- *   * 5-day-old   non-interest card -> 5 days
- * → Sort ASC produces: hot card first, interest card second, stale
- *   non-interest card last. Trending override preserved.
+ * Worked example with default 24-hour trending window:
+ *   * 1-hour-old non-interest card  -> tier 0 (trending override)
+ *   * 5-day-old  interest     card  -> tier 0 (interest match)
+ *   * 5-day-old  non-interest card  -> tier 1
+ * → Top tier sorted by recency wins; bottom tier sorted by recency
+ *   trails. Interest cards always lead, hot cards still surface.
  */
-export function personalisedRecencyOrder(
+export function personalisedRecencyTier(
   createdAtCol: AnyColumn | SQL,
   categoryCol: AnyColumn | SQL,
   interests: string[],
-  boostDays: number = PERSONALISED_FRESHNESS_BOOST_DAYS,
+  trendingHours: number = PERSONALISED_TRENDING_OVERRIDE_HOURS,
 ): SQL {
-  // Cast boostDays to float8 so Postgres unifies the CASE branches as
-  // float, not integer. Without the cast, the ELSE 0 (integer literal)
-  // forces $boostDays to be inferred as integer, and a fractional value
-  // (e.g. 1.5) fails with "invalid input syntax for type integer".
-  return sql`EXTRACT(EPOCH FROM (NOW() - ${createdAtCol})) / 86400.0
-             - CASE WHEN ${inArray(sql`${categoryCol}`, interests)} THEN ${boostDays}::float8 ELSE 0 END`;
+  return sql`CASE
+    WHEN ${inArray(sql`${categoryCol}`, interests)} THEN 0
+    WHEN ${createdAtCol} > NOW() - (${trendingHours} || ' hours')::interval THEN 0
+    ELSE 1
+  END`;
 }
 
 /**
@@ -200,7 +201,10 @@ export async function orderRecencyForUser(
 ): Promise<SQL[]> {
   const state = await resolveInterestsState(req);
   if (state.interests.length > 0) {
-    return [personalisedRecencyOrder(createdAtCol, categoryCol, state.interests)];
+    return [
+      personalisedRecencyTier(createdAtCol, categoryCol, state.interests),
+      desc(createdAtCol),
+    ];
   }
   // Cold-start: politics-soft-deprioritised, then recency.
   return [coldStartCategoryRank(categoryCol), desc(createdAtCol)];
@@ -219,11 +223,12 @@ export async function orderFeaturedRecencyForUser(
   const state = await resolveInterestsState(req);
   if (state.interests.length > 0) {
     // Featured items still float to the top (editorial signal trumps
-    // personalisation); within each featured group, recency-with-boost
-    // does the interleaving.
+    // personalisation); within each featured group, the tier expression
+    // interleaves interests + trending overrides above stale others.
     return [
       desc(featuredCol),
-      personalisedRecencyOrder(createdAtCol, categoryCol, state.interests),
+      personalisedRecencyTier(createdAtCol, categoryCol, state.interests),
+      desc(createdAtCol),
     ];
   }
   return [

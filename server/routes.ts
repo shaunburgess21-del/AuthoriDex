@@ -11,7 +11,7 @@ import { normaliseSocialHandles } from "@shared/handleNormalise";
 import { eq, desc, and, gt, sql, count, gte, lte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull, isNull } from "drizzle-orm";
 import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
-import { requireAuth, requireAdmin, optionalAuth, resolveAuthContextFromHeader, type AuthRequest } from "./auth-middleware";
+import { requireAuth, requireAdmin, optionalAuth, type AuthRequest } from "./auth-middleware";
 import OpenAI from "openai";
 import { createHash, randomUUID } from "crypto";
 import multer, { MulterError } from "multer";
@@ -5235,7 +5235,7 @@ Only return the JSON object.`;
       let matchupList = await db
         .select()
         .from(matchups)
-        .orderBy(...orderTerms, asc(matchups.displayOrder), desc(matchups.createdAt));
+        .orderBy(...orderTerms, asc(matchups.displayOrder));
       
       // Filter by category if provided
       if (category && category !== 'All') {
@@ -5245,13 +5245,27 @@ Only return the JSON object.`;
       // Public API: Only show live and inactive matchups (not draft/hidden/archived)
       matchupList = matchupList.filter(f => f.visibility === 'live' || f.visibility === 'inactive');
       
-      // Build lookup maps for celebrity avatars (by ID and by name)
-      const celebrities = await db.select({
-        id: trackedPeople.id,
-        name: trackedPeople.name,
-        avatar: trackedPeople.avatar,
-      }).from(trackedPeople);
-      
+      // Build lookup maps for celebrity avatars (by ID and by name).
+      // Only fetch the rows actually referenced by this matchup batch
+      // instead of scanning the full tracked_people table on every call.
+      const personIds = Array.from(
+        new Set(
+          matchupList
+            .flatMap((m) => [m.personAId, m.personBId])
+            .filter((x): x is string => Boolean(x)),
+        ),
+      );
+      const celebrities = personIds.length === 0
+        ? []
+        : await db
+            .select({
+              id: trackedPeople.id,
+              name: trackedPeople.name,
+              avatar: trackedPeople.avatar,
+            })
+            .from(trackedPeople)
+            .where(inArray(trackedPeople.id, personIds));
+
       const avatarByName: Record<string, string | null> = {};
       const avatarById: Record<string, string | null> = {};
       for (const celeb of celebrities) {
@@ -11747,7 +11761,7 @@ Target length: about 90-150 words.`;
         .leftJoin(trackedPeople, eq(trendingPolls.personId, trackedPeople.id))
         .leftJoin(trendingPeople, eq(trendingPolls.personId, trendingPeople.id))
         .where(eq(trendingPolls.status, 'live'))
-        .orderBy(...orderTerms, asc(trendingPolls.displayOrder), desc(trendingPolls.createdAt));
+        .orderBy(...orderTerms, asc(trendingPolls.displayOrder));
 
       const pollIds = polls.map(p => p.id);
       const relatedMap = await getRelatedPeopleForCards("sentiment_poll", pollIds);
@@ -12638,12 +12652,11 @@ Target length: about 90-150 words.`;
 
   app.get("/api/opinion-polls", async (req, res) => {
     try {
-      const authContext = await resolveAuthContextFromHeader(req.headers.authorization);
-      const userId = authContext?.userId ?? null;
+      // Global /api/* middleware already populates req.userId from the
+      // Authorization header (best-effort), so we read it directly instead
+      // of paying for a duplicate Supabase getUser() round-trip.
+      const userId = (req as AuthRequest).userId ?? null;
 
-      // This endpoint resolves auth manually (not via `optionalAuth`
-      // middleware), so seed `req.userId` for the cold-start helper.
-      (req as AuthRequest).userId = userId ?? undefined;
       const orderTerms = await orderRecencyForUser(
         req as AuthRequest,
         opinionPolls.createdAt,
@@ -12654,7 +12667,7 @@ Target length: about 90-150 words.`;
         .select()
         .from(opinionPolls)
         .where(eq(opinionPolls.visibility, 'live'))
-        .orderBy(...orderTerms, asc(opinionPolls.displayOrder), desc(opinionPolls.createdAt));
+        .orderBy(...orderTerms, asc(opinionPolls.displayOrder));
 
       const opPollIds = polls.map(p => p.id);
       if (opPollIds.length === 0) {
@@ -13532,7 +13545,6 @@ Target length: about 90-150 words.`;
         .orderBy(
           ...orderTerms,
           asc(predictionMarkets.cmsDisplayOrder),
-          desc(predictionMarkets.createdAt),
         )
         .limit(limit && typeof limit === "string" ? parseInt(limit, 10) || 50 : 50);
 
