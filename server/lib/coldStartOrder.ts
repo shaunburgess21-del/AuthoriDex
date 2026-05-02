@@ -1,65 +1,85 @@
-// Phase 1 of the Interest Picker: cold-start ORDER BY helper.
+// Interest-aware ORDER BY helpers shared by the Vote and Predict list
+// endpoints.
 //
-// "Cold-start" = the requester has no signal of their own preferences yet.
-// That covers two populations:
+// Two complementary modes live here:
 //
-//   1. Anonymous visitors (no userId on the request).
-//   2. Signed-in users who have not yet picked any interests in the modal
-//      (statedInterests is empty). This includes "skipped" users until they
-//      eventually opt in via Settings or the soft re-prompt.
+//   * Cold-start (Phase 1) — for users with no preference signal yet:
+//     anonymous visitors, and signed-in users who haven't picked any
+//     interests (incl. "skipped" until they opt back in). We soft-
+//     deprioritise contentious categories so default "All" feeds don't
+//     lead with politics. Soft = bucket, not filter; nothing is hidden.
 //
-// For these users we softly deprioritise contentious categories so the
-// default "All" feeds don't lead with politics. Soft = sort matching rows
-// AFTER non-matching rows but keep the existing tiebreaker (createdAt,
-// featured, valueScore, etc.) within each bucket. No content is hidden,
-// just reshuffled.
+//   * Personalised (Phase 2) — for signed-in users with at least one
+//     stated interest. We boost their interests as a "thumb on the
+//     scale", deliberately small (~1.5 days of recency, or ~5 induction
+//     votes) so a clearly hot non-interest card still surfaces ahead of
+//     a stale interest card. This preserves the trending-override the
+//     user explicitly asked for: stated interests must reorder the feed,
+//     never become a hard filter on it.
 //
-// Phase 2 will replace this with a personalised ranker keyed off
-// statedInterests. The cold-start helper stays in place for users who
-// haven't picked yet, so this file remains useful long-term.
+// Scope (Phase 2): Vote and Predict card feeds only. The Value
+// leaderboard, Fame leaderboard, and induction queue rankings live
+// outside this scope — leaderboards are governed by their own canonical
+// scoring and shouldn't be personalised. The Phase 1 cold-start hook on
+// `/api/leaderboard?tab=value` is intentionally left as-is for that
+// surface (politics-deprioritised default for cold users); Phase 2
+// reranking does NOT touch it.
+//
+// Design constraints (from product owner):
+//   * Interleave, never wall. Boost is small enough to not bury hot
+//     non-interest cards.
+//   * Trending override. A high-momentum recent card outside stated
+//     interests must still surface in "All".
+//   * Politics picked explicitly = boosted normally (overrides the
+//     cold-start politics rule for that specific user).
 
 import type { AnyColumn, SQL } from "drizzle-orm";
-import { sql } from "drizzle-orm";
-import { eq } from "drizzle-orm";
+import { desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db";
 import { profiles } from "@shared/schema";
 import type { AuthRequest } from "../auth-middleware";
 
+// ── Tunable constants ────────────────────────────────────────────────
+//
+// PERSONALISED_FRESHNESS_BOOST_DAYS: how much "younger" an interest-match
+// row pretends to be when sorting recency-based feeds. ~1.5 days =
+// "thumb on scale": comfortably visible reordering, not enough to bury a
+// fresh non-interest card.
+//
+// PERSONALISED_INDUCTION_VOTE_BOOST: equivalent thumb for the induction
+// feed which is ranked by seedVotes (not recency). ~5 votes lifts a
+// candidate inside the user's interests above an evenly-matched one
+// outside, but the genuine vote leader still wins.
+export const PERSONALISED_FRESHNESS_BOOST_DAYS = 1.5;
+export const PERSONALISED_INDUCTION_VOTE_BOOST = 5;
+
 export const COLD_START_DEPRIORITISED = ["politics"] as const;
 
-/**
- * SQL fragment producing 1 for deprioritised categories and 0 for everything
- * else. Use as the **first** ORDER BY term so the existing ordering becomes
- * the tiebreaker within each bucket.
- *
- *   .orderBy(coldStartCategoryRank(table.category), desc(table.createdAt))
- */
-export function coldStartCategoryRank(col: AnyColumn | SQL): SQL {
-  return sql`CASE WHEN ${col} = 'politics' THEN 1 ELSE 0 END`;
-}
+// ── Per-request memoisation ─────────────────────────────────────────
+//
+// Both helpers (cold-start and personalised) need the same thing: the
+// signed-in user's stated interests. We resolve once per request and
+// stash on the request object so a route that composes multiple ordered
+// queries doesn't pay for the lookup twice.
+type InterestsState = {
+  authenticated: boolean;
+  /** Stated interests, possibly empty. Always an array. */
+  interests: string[];
+};
 
-/**
- * Decide whether the cold-start ORDER BY should apply for the given request.
- *
- * - No userId      -> always cold-start (anonymous).
- * - userId set     -> read statedInterests once, cold-start when empty/null.
- *
- * Per-request memoisation: each Express request is a fresh object, so we
- * stash the resolved boolean on the request itself to avoid hitting the DB
- * twice if a single endpoint composes multiple ordered queries.
- */
-type ColdStartCacheBag = AuthRequest & { __coldStart?: boolean };
+type InterestsCacheBag = AuthRequest & { __interestsState?: InterestsState };
 
-export async function shouldUseColdStart(req: AuthRequest): Promise<boolean> {
-  const bag = req as ColdStartCacheBag;
-  if (typeof bag.__coldStart === "boolean") {
-    return bag.__coldStart;
+async function resolveInterestsState(req: AuthRequest): Promise<InterestsState> {
+  const bag = req as InterestsCacheBag;
+  if (bag.__interestsState) {
+    return bag.__interestsState;
   }
 
   const userId = req.userId;
   if (!userId) {
-    bag.__coldStart = true;
-    return true;
+    const state: InterestsState = { authenticated: false, interests: [] };
+    bag.__interestsState = state;
+    return state;
   }
 
   try {
@@ -69,16 +89,211 @@ export async function shouldUseColdStart(req: AuthRequest): Promise<boolean> {
       .where(eq(profiles.id, userId))
       .limit(1);
 
-    const interests = row?.statedInterests ?? [];
-    const cold = !Array.isArray(interests) || interests.length === 0;
-    bag.__coldStart = cold;
-    return cold;
+    const interests = Array.isArray(row?.statedInterests)
+      ? (row!.statedInterests as string[])
+      : [];
+    const state: InterestsState = { authenticated: true, interests };
+    bag.__interestsState = state;
+    return state;
   } catch (err) {
-    // If the lookup fails (e.g. a transient DB blip) prefer the cold-start
-    // ordering — it's the safer "least surprising" feed for both user
-    // populations and avoids leaking politics-heavy content on errors.
-    console.error("[coldStartOrder] shouldUseColdStart lookup failed:", err);
-    bag.__coldStart = true;
-    return true;
+    // Transient DB blip — fall back to "anonymous-equivalent" so we use
+    // the cold-start ordering. Safer default than leaking unranked
+    // politics-heavy content on errors.
+    console.error("[interestOrder] resolveInterestsState failed:", err);
+    const state: InterestsState = { authenticated: false, interests: [] };
+    bag.__interestsState = state;
+    return state;
   }
+}
+
+// ── Cold-start helpers (unchanged from Phase 1) ─────────────────────
+
+/**
+ * SQL fragment producing 1 for deprioritised categories and 0 for everything
+ * else. Use as the **first** ORDER BY term so the existing ordering becomes
+ * the tiebreaker within each bucket.
+ */
+export function coldStartCategoryRank(col: AnyColumn | SQL): SQL {
+  return sql`CASE WHEN ${col} = 'politics' THEN 1 ELSE 0 END`;
+}
+
+/**
+ * Whether the cold-start ORDER BY should apply for this request.
+ * True for anonymous users and signed-in users with no stated interests.
+ * False once a user picks at least one interest (those use personalised).
+ */
+export async function shouldUseColdStart(req: AuthRequest): Promise<boolean> {
+  const state = await resolveInterestsState(req);
+  return state.interests.length === 0;
+}
+
+// ── Personalised helpers (Phase 2) ──────────────────────────────────
+
+/**
+ * Whether the personalised ORDER BY should apply for this request.
+ * True only when the user is authenticated AND has at least one stated
+ * interest. Exclusive with shouldUseColdStart.
+ */
+export async function shouldUsePersonalisedOrder(req: AuthRequest): Promise<boolean> {
+  const state = await resolveInterestsState(req);
+  return state.authenticated && state.interests.length > 0;
+}
+
+/**
+ * Returns the user's stated interests, or an empty array. Memoised
+ * alongside the booleans above so callers can pull the array cheaply.
+ */
+export async function getStatedInterests(req: AuthRequest): Promise<string[]> {
+  const state = await resolveInterestsState(req);
+  return state.interests;
+}
+
+/**
+ * SQL ORDER BY expression for recency-ranked feeds with a personalised
+ * thumb. Returns "effective age in days minus boost" — sort ASC for the
+ * standard "freshest first" reading.
+ *
+ * Worked example with default 1.5-day boost:
+ *   * 1-hour-old non-interest card  -> 0.04 days
+ *   * 5-day-old   interest     card -> 5 - 1.5 = 3.5 days
+ *   * 5-day-old   non-interest card -> 5 days
+ * → Sort ASC produces: hot card first, interest card second, stale
+ *   non-interest card last. Trending override preserved.
+ */
+export function personalisedRecencyOrder(
+  createdAtCol: AnyColumn | SQL,
+  categoryCol: AnyColumn | SQL,
+  interests: string[],
+  boostDays: number = PERSONALISED_FRESHNESS_BOOST_DAYS,
+): SQL {
+  // Cast boostDays to float8 so Postgres unifies the CASE branches as
+  // float, not integer. Without the cast, the ELSE 0 (integer literal)
+  // forces $boostDays to be inferred as integer, and a fractional value
+  // (e.g. 1.5) fails with "invalid input syntax for type integer".
+  return sql`EXTRACT(EPOCH FROM (NOW() - ${createdAtCol})) / 86400.0
+             - CASE WHEN ${inArray(sql`${categoryCol}`, interests)} THEN ${boostDays}::float8 ELSE 0 END`;
+}
+
+/**
+ * SQL expression for seedVotes-ranked feeds (induction). Adds a small
+ * vote-equivalent boost when a candidate's category is in the user's
+ * interests — sort DESC so the boosted score wins ties.
+ */
+export function personalisedSeedVotesScore(
+  seedVotesCol: AnyColumn | SQL,
+  categoryCol: AnyColumn | SQL,
+  interests: string[],
+  voteBoost: number = PERSONALISED_INDUCTION_VOTE_BOOST,
+): SQL {
+  return sql`${seedVotesCol}
+             + CASE WHEN ${inArray(sql`${categoryCol}`, interests)} THEN ${voteBoost} ELSE 0 END`;
+}
+
+/**
+ * SQL fragment "is this row's category in my interests?" as 0 (yes,
+ * sorts first ASC) / 1 (no). Used by feeds that don't have a recency
+ * dimension (e.g. native-markets/updown which is featured + alphabetical
+ * by category) so we can bucket interests above non-interests within an
+ * existing tier.
+ */
+export function personalisedInterestBucket(
+  categoryCol: AnyColumn | SQL,
+  interests: string[],
+): SQL {
+  return sql`CASE WHEN ${inArray(sql`${categoryCol}`, interests)} THEN 0 ELSE 1 END`;
+}
+
+// ── Higher-level "build the right ORDER BY for this user" wrappers ──
+//
+// These return an array of ORDER BY terms ready to splat into Drizzle's
+// `.orderBy(...)`. Each route picks the wrapper matching its existing
+// sort shape and passes the relevant columns. This keeps route code
+// untouched apart from one helper call instead of an inline ternary.
+
+/**
+ * Recency-ranked "All" feed (createdAt DESC).
+ * Used by trending-polls, matchups, opinion-polls.
+ */
+export async function orderRecencyForUser(
+  req: AuthRequest,
+  createdAtCol: AnyColumn | SQL,
+  categoryCol: AnyColumn | SQL,
+): Promise<SQL[]> {
+  const state = await resolveInterestsState(req);
+  if (state.interests.length > 0) {
+    return [personalisedRecencyOrder(createdAtCol, categoryCol, state.interests)];
+  }
+  // Cold-start: politics-soft-deprioritised, then recency.
+  return [coldStartCategoryRank(categoryCol), desc(createdAtCol)];
+}
+
+/**
+ * Featured-then-recency feed (featured DESC, createdAt DESC).
+ * Used by open-markets.
+ */
+export async function orderFeaturedRecencyForUser(
+  req: AuthRequest,
+  featuredCol: AnyColumn | SQL,
+  createdAtCol: AnyColumn | SQL,
+  categoryCol: AnyColumn | SQL,
+): Promise<SQL[]> {
+  const state = await resolveInterestsState(req);
+  if (state.interests.length > 0) {
+    // Featured items still float to the top (editorial signal trumps
+    // personalisation); within each featured group, recency-with-boost
+    // does the interleaving.
+    return [
+      desc(featuredCol),
+      personalisedRecencyOrder(createdAtCol, categoryCol, state.interests),
+    ];
+  }
+  return [
+    coldStartCategoryRank(categoryCol),
+    desc(featuredCol),
+    desc(createdAtCol),
+  ];
+}
+
+/**
+ * SeedVotes-ranked feed (seedVotes DESC).
+ * Used by vote/induction.
+ */
+export async function orderSeedVotesForUser(
+  req: AuthRequest,
+  seedVotesCol: AnyColumn | SQL,
+  categoryCol: AnyColumn | SQL,
+): Promise<SQL[]> {
+  const state = await resolveInterestsState(req);
+  if (state.interests.length > 0) {
+    return [
+      desc(personalisedSeedVotesScore(seedVotesCol, categoryCol, state.interests)),
+    ];
+  }
+  return [coldStartCategoryRank(categoryCol), desc(seedVotesCol)];
+}
+
+/**
+ * Featured-then-category feed (featured DESC, category alphabetical).
+ * Used by native-markets/updown — there's no per-row recency to thumb
+ * since weekly markets are all created at week start, so we bucket
+ * interests above non-interests within each featured tier.
+ */
+export async function orderFeaturedCategoryForUser(
+  req: AuthRequest,
+  featuredCol: AnyColumn | SQL,
+  categoryCol: AnyColumn | SQL,
+): Promise<SQL[]> {
+  const state = await resolveInterestsState(req);
+  if (state.interests.length > 0) {
+    return [
+      desc(featuredCol),
+      personalisedInterestBucket(categoryCol, state.interests),
+      categoryCol as SQL,
+    ];
+  }
+  return [
+    coldStartCategoryRank(categoryCol),
+    desc(featuredCol),
+    categoryCol as SQL,
+  ];
 }

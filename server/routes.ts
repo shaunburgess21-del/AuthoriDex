@@ -60,7 +60,13 @@ import { z, ZodError } from "zod";
 import { sendError, sendBadRequest, sendZodError } from "./utils/api-response";
 import { approveInductionCandidate } from "./services/induction-service";
 import { CANONICAL_MARKET_CATEGORIES, getMarketCategoryLabel, normalizeMarketCategory, CANONICAL_CATEGORIES } from "@shared/constants";
-import { coldStartCategoryRank, shouldUseColdStart } from "./lib/coldStartOrder";
+import {
+  shouldUseColdStart,
+  orderRecencyForUser,
+  orderFeaturedRecencyForUser,
+  orderSeedVotesForUser,
+  orderFeaturedCategoryForUser,
+} from "./lib/coldStartOrder";
 import { resolvePublicMatchupBySlugOrId } from "./utils/matchup-resolve";
 import { registerCronRoutes, registerPublicRoutes, registerGamificationRoutes, registerFavoritesRoutes, registerNotificationsRoutes, registerOgRoutes } from "./route-modules";
 import { handleAuthHook } from "./emails/routes/auth-hook";
@@ -5217,17 +5223,17 @@ Only return the JSON object.`;
   app.get("/api/matchups", optionalAuth, async (req: AuthRequest, res) => {
     try {
       const { category } = req.query;
-      const coldStart = await shouldUseColdStart(req);
+      const orderTerms = await orderRecencyForUser(
+        req,
+        matchups.createdAt,
+        matchups.category,
+      );
 
       // Get all matchups
       let matchupList = await db
         .select()
         .from(matchups)
-        .orderBy(
-          ...(coldStart
-            ? [coldStartCategoryRank(matchups.category), desc(matchups.createdAt)]
-            : [desc(matchups.createdAt)]),
-        );
+        .orderBy(...orderTerms);
       
       // Filter by category if provided
       if (category && category !== 'All') {
@@ -6064,11 +6070,16 @@ Only return the JSON object.`;
           cleaned.length === 0 && dismissed ? new Date() : null,
       };
 
-      const updated = await db
-        .update(profiles)
-        .set(updateData)
-        .where(eq(profiles.id, userId))
-        .returning();
+      let updated;
+      try {
+        updated = await db
+          .update(profiles)
+          .set(updateData)
+          .where(eq(profiles.id, userId))
+          .returning();
+      } catch (dbErr: any) {
+        throw dbErr;
+      }
 
       if (updated.length === 0) {
         return res.status(404).json({ error: "Profile not found" });
@@ -11707,7 +11718,11 @@ Target length: about 90-150 words.`;
   app.get("/api/trending-polls", optionalAuth, async (req, res) => {
     try {
       const userId = (req as AuthRequest).userId || null;
-      const coldStart = await shouldUseColdStart(req as AuthRequest);
+      const orderTerms = await orderRecencyForUser(
+        req as AuthRequest,
+        trendingPolls.createdAt,
+        trendingPolls.category,
+      );
 
       const polls = await db
         .select({
@@ -11731,11 +11746,7 @@ Target length: about 90-150 words.`;
         .leftJoin(trackedPeople, eq(trendingPolls.personId, trackedPeople.id))
         .leftJoin(trendingPeople, eq(trendingPolls.personId, trendingPeople.id))
         .where(eq(trendingPolls.status, 'live'))
-        .orderBy(
-          ...(coldStart
-            ? [coldStartCategoryRank(trendingPolls.category), desc(trendingPolls.createdAt)]
-            : [desc(trendingPolls.createdAt)]),
-        );
+        .orderBy(...orderTerms);
 
       const pollIds = polls.map(p => p.id);
       const relatedMap = await getRelatedPeopleForCards("sentiment_poll", pollIds);
@@ -12588,20 +12599,20 @@ Target length: about 90-150 words.`;
     try {
       const authContext = await resolveAuthContextFromHeader(req.headers.authorization);
       const userId = authContext?.userId ?? null;
-      // Reuse shouldUseColdStart by stamping userId on the request shape it expects.
-      const coldStart = await shouldUseColdStart(
+      // Reuse the per-user ordering helper by stamping userId on the request
+      // shape it expects (this route resolves auth manually rather than
+      // through optionalAuth, but the helper only reads req.userId).
+      const orderTerms = await orderRecencyForUser(
         { ...(req as AuthRequest), userId: userId ?? undefined } as AuthRequest,
+        opinionPolls.createdAt,
+        opinionPolls.category,
       );
 
       const polls = await db
         .select()
         .from(opinionPolls)
         .where(eq(opinionPolls.visibility, 'live'))
-        .orderBy(
-          ...(coldStart
-            ? [coldStartCategoryRank(opinionPolls.category), desc(opinionPolls.createdAt)]
-            : [desc(opinionPolls.createdAt)]),
-        );
+        .orderBy(...orderTerms);
 
       const opPollIds = polls.map(p => p.id);
       if (opPollIds.length === 0) {
@@ -13414,7 +13425,12 @@ Target length: about 90-150 words.`;
   app.get("/api/open-markets", optionalAuth, async (req: AuthRequest, res) => {
     try {
       const { category, featured, limit } = req.query;
-      const coldStart = await shouldUseColdStart(req);
+      const orderTerms = await orderFeaturedRecencyForUser(
+        req,
+        predictionMarkets.featured,
+        predictionMarkets.createdAt,
+        predictionMarkets.category,
+      );
 
       const conditions = [
         eq(predictionMarkets.marketType, "community"),
@@ -13434,15 +13450,7 @@ Target length: about 90-150 words.`;
         .select()
         .from(predictionMarkets)
         .where(and(...conditions))
-        .orderBy(
-          ...(coldStart
-            ? [
-                coldStartCategoryRank(predictionMarkets.category),
-                desc(predictionMarkets.featured),
-                desc(predictionMarkets.createdAt),
-              ]
-            : [desc(predictionMarkets.featured), desc(predictionMarkets.createdAt)]),
-        )
+        .orderBy(...orderTerms)
         .limit(limit && typeof limit === "string" ? parseInt(limit, 10) || 50 : 50);
 
       const marketIds = markets.map((m) => m.id);
@@ -15350,9 +15358,15 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
 
       // Only the Weekly Up/Down feed renders as a card stack on the Predict
       // page; the others are leaderboard-driven and reordering them would
-      // confuse rank semantics. Cold-start ordering therefore only applies
-      // to type === 'updown'.
-      const coldStart = type === 'updown' && (await shouldUseColdStart(req));
+      // confuse rank semantics. Personalised + cold-start ordering therefore
+      // only applies to type === 'updown'.
+      const orderTerms = type === 'updown'
+        ? await orderFeaturedCategoryForUser(
+            req,
+            predictionMarkets.featured,
+            predictionMarkets.category,
+          )
+        : [desc(predictionMarkets.featured), predictionMarkets.category];
 
       const nowForCutoff = new Date();
       const fetchOpenNativeMarkets = async () =>
@@ -15366,15 +15380,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
               gt(predictionMarkets.endAt, nowForCutoff),
             )
           )
-          .orderBy(
-            ...(coldStart
-              ? [
-                  coldStartCategoryRank(predictionMarkets.category),
-                  desc(predictionMarkets.featured),
-                  predictionMarkets.category,
-                ]
-              : [desc(predictionMarkets.featured), predictionMarkets.category]),
-          );
+          .orderBy(...orderTerms);
 
       let markets = await fetchOpenNativeMarkets();
       if (markets.length === 0) {
@@ -17412,16 +17418,16 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
   // GET /api/vote/induction - Public: list active induction candidates
   app.get("/api/vote/induction", optionalAuth, async (req: AuthRequest, res) => {
     try {
-      const coldStart = await shouldUseColdStart(req);
+      const orderTerms = await orderSeedVotesForUser(
+        req,
+        inductionCandidates.seedVotes,
+        inductionCandidates.category,
+      );
       const candidates = await db
         .select()
         .from(inductionCandidates)
         .where(eq(inductionCandidates.isActive, true))
-        .orderBy(
-          ...(coldStart
-            ? [coldStartCategoryRank(inductionCandidates.category), desc(inductionCandidates.seedVotes)]
-            : [desc(inductionCandidates.seedVotes)]),
-        );
+        .orderBy(...orderTerms);
       res.json({ data: candidates, totalCount: candidates.length });
     } catch (error: any) {
       console.error("Error fetching induction candidates:", error);
