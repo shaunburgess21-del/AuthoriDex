@@ -1131,7 +1131,14 @@ function FilterChip({
   };
 
   const getDisplayLabel = () => {
-    if (category === "all") return "All Categories";
+    if (category === "all") {
+      return (
+        <>
+          <span className="hidden md:inline">All Categories</span>
+          <span className="md:hidden">All</span>
+        </>
+      );
+    }
     if (category === "favorites") return "Favorites";
     if (category === "trending") return "Trending";
     return getMarketCategoryLabel(category);

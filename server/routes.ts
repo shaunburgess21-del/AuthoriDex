@@ -62,6 +62,8 @@ import { approveInductionCandidate } from "./services/induction-service";
 import { CANONICAL_MARKET_CATEGORIES, getMarketCategoryLabel, normalizeMarketCategory, CANONICAL_CATEGORIES } from "@shared/constants";
 import {
   shouldUseColdStart,
+  orderRecencyForUser,
+  orderFeaturedRecencyForUser,
   orderSeedVotesForUser,
   orderFeaturedCategoryForUser,
 } from "./lib/coldStartOrder";
@@ -5222,11 +5224,18 @@ Only return the JSON object.`;
     try {
       const { category } = req.query;
 
-      // Get all matchups
+      // Cold-start / personalised primary, admin manual order as
+      // within-bucket tiebreaker, recency last.
+      const orderTerms = await orderRecencyForUser(
+        req,
+        matchups.createdAt,
+        matchups.category,
+      );
+
       let matchupList = await db
         .select()
         .from(matchups)
-        .orderBy(asc(matchups.displayOrder), desc(matchups.createdAt));
+        .orderBy(...orderTerms, asc(matchups.displayOrder), desc(matchups.createdAt));
       
       // Filter by category if provided
       if (category && category !== 'All') {
@@ -11710,6 +11719,12 @@ Target length: about 90-150 words.`;
     try {
       const userId = (req as AuthRequest).userId || null;
 
+      const orderTerms = await orderRecencyForUser(
+        req as AuthRequest,
+        trendingPolls.createdAt,
+        trendingPolls.category,
+      );
+
       const polls = await db
         .select({
           id: trendingPolls.id,
@@ -11732,7 +11747,7 @@ Target length: about 90-150 words.`;
         .leftJoin(trackedPeople, eq(trendingPolls.personId, trackedPeople.id))
         .leftJoin(trendingPeople, eq(trendingPolls.personId, trendingPeople.id))
         .where(eq(trendingPolls.status, 'live'))
-        .orderBy(asc(trendingPolls.displayOrder), desc(trendingPolls.createdAt));
+        .orderBy(...orderTerms, asc(trendingPolls.displayOrder), desc(trendingPolls.createdAt));
 
       const pollIds = polls.map(p => p.id);
       const relatedMap = await getRelatedPeopleForCards("sentiment_poll", pollIds);
@@ -12626,11 +12641,20 @@ Target length: about 90-150 words.`;
       const authContext = await resolveAuthContextFromHeader(req.headers.authorization);
       const userId = authContext?.userId ?? null;
 
+      // This endpoint resolves auth manually (not via `optionalAuth`
+      // middleware), so seed `req.userId` for the cold-start helper.
+      (req as AuthRequest).userId = userId ?? undefined;
+      const orderTerms = await orderRecencyForUser(
+        req as AuthRequest,
+        opinionPolls.createdAt,
+        opinionPolls.category,
+      );
+
       const polls = await db
         .select()
         .from(opinionPolls)
         .where(eq(opinionPolls.visibility, 'live'))
-        .orderBy(asc(opinionPolls.displayOrder), desc(opinionPolls.createdAt));
+        .orderBy(...orderTerms, asc(opinionPolls.displayOrder), desc(opinionPolls.createdAt));
 
       const opPollIds = polls.map(p => p.id);
       if (opPollIds.length === 0) {
@@ -13494,11 +13518,22 @@ Target length: about 90-150 words.`;
         conditions.push(eq(predictionMarkets.featured, true));
       }
 
+      const orderTerms = await orderFeaturedRecencyForUser(
+        req,
+        predictionMarkets.featured,
+        predictionMarkets.createdAt,
+        predictionMarkets.category,
+      );
+
       const markets = await db
         .select()
         .from(predictionMarkets)
         .where(and(...conditions))
-        .orderBy(asc(predictionMarkets.cmsDisplayOrder), desc(predictionMarkets.createdAt))
+        .orderBy(
+          ...orderTerms,
+          asc(predictionMarkets.cmsDisplayOrder),
+          desc(predictionMarkets.createdAt),
+        )
         .limit(limit && typeof limit === "string" ? parseInt(limit, 10) || 50 : 50);
 
       const marketIds = markets.map((m) => m.id);

@@ -565,7 +565,14 @@ function SectionFilterBar({
               data-testid={cat.id === "misc" ? `${testIdPrefix}-category-custom-topic` : `${testIdPrefix}-category-${cat.id}`}
             >
               <IconComponent className="h-3.5 w-3.5" />
-              {cat.label}
+              {cat.id === "all" ? (
+                <>
+                  <span className="hidden md:inline">All Categories</span>
+                  <span className="md:hidden">All</span>
+                </>
+              ) : (
+                cat.label
+              )}
             </button>
           );
         })}
