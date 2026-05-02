@@ -41,9 +41,13 @@ type VoteType =
 // without shifting leaderboard averages.
 const APPROVAL_RATING_TRIGGER_CHANCE = 0.2;
 
-// Limit candidate celebrities to the top of the leaderboard so agent ratings
-// land on relevant figures, not obscure long-tail people.
-const APPROVAL_RATING_CANDIDATE_LIMIT = 120;
+// Cap candidate celebrities so the rating sweep stays bounded if the
+// catalogue ever grows past a few hundred. With the current ~159 curated
+// people, 200 covers everyone — there's no genuine "long tail" here, every
+// seeded celebrity deserves a shot at receiving agent ratings. (Was 120
+// before, which structurally locked the bottom ~39 out of the rating
+// rotation; same blind-spot pattern as the comment worker had at limit 30.)
+const APPROVAL_RATING_CANDIDATE_LIMIT = 200;
 
 interface AgentVoteResult {
   agentName: string;
@@ -322,6 +326,11 @@ function decideSentimentPoll(
 async function getEligiblePeopleForSentiment(userId: string) {
   const today = new Date().toISOString().split("T")[0];
 
+  // Was limit 50 — locked the bottom ~109 of the 159-person catalogue
+  // out of any agent sentiment vote forever, regardless of how popular
+  // those celebs were on the actual product. 200 covers the entire
+  // curated catalogue with headroom; the per-agent already-voted-today
+  // filter below keeps daily volume controlled.
   const people = await db
     .select({
       id: trendingPeople.id,
@@ -331,7 +340,7 @@ async function getEligiblePeopleForSentiment(userId: string) {
     })
     .from(trendingPeople)
     .orderBy(desc(trendingPeople.trendScore))
-    .limit(50);
+    .limit(200);
 
   const alreadyVoted = await db
     .select({ personId: sentimentVotes.personId })
