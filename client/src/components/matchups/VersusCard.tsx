@@ -127,7 +127,9 @@ export function VersusCard({
           <div className="flex items-center mb-3 gap-2 px-4">
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
-              <span>{matchup.totalVotes.toLocaleString("en-US")} votes</span>
+              <span className={hasVoted ? "" : "text-slate-600"}>
+                {hasVoted ? `${matchup.totalVotes.toLocaleString("en-US")} votes` : "Votes"}
+              </span>
             </div>
           </div>
 

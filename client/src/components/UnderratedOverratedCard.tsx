@@ -144,7 +144,9 @@ export function UnderratedOverratedCard({
       
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
         <Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
-        <span>{totalVotes.toLocaleString('en-US')} votes</span>
+        <span className={localVote ? "" : "text-slate-600"}>
+          {localVote ? `${totalVotes.toLocaleString('en-US')} votes` : "Votes"}
+        </span>
       </div>
       
       <div 

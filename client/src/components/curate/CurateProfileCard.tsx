@@ -242,8 +242,8 @@ export function CurateProfileCard({
             <PersonAvatar name={person.name} avatar={winningAvatar} size="md" />
             <div className="flex-1 min-w-0 flex flex-col justify-center">
               <h3 className="font-semibold text-base truncate">{person.name}</h3>
-              <span className="text-xs text-muted-foreground">
-                {totalVotes.toLocaleString('en-US')} votes
+              <span className={`text-xs ${hasVoted ? "text-muted-foreground" : "text-slate-600"}`}>
+                {hasVoted ? `${totalVotes.toLocaleString('en-US')} votes` : "Votes"}
               </span>
             </div>
           </div>

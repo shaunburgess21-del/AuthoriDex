@@ -425,7 +425,9 @@ function InductionCandidateCard({
           />
         </div>
         <div className="mt-1.5 text-xs text-muted-foreground">
-          <span className="text-slate-400">{candidate.votes.toLocaleString('en-US')} votes</span>
+          <span className="text-slate-400">
+            {isVoted ? `${candidate.votes.toLocaleString('en-US')} votes` : "Votes"}
+          </span>
         </div>
       </div>
       
@@ -811,7 +813,9 @@ function DiscourseCard({
       </div>
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
         <Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
-        <span>{topic.totalVotes.toLocaleString('en-US')} votes</span>
+        <span className={voted ? "" : "text-slate-600"}>
+          {voted ? `${topic.totalVotes.toLocaleString('en-US')} votes` : "Votes"}
+        </span>
       </div>
       <AvatarHeightHeadline
         className="mb-3"
