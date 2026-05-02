@@ -127,9 +127,10 @@ function PickerBody({
 
   const handleSave = useCallback(async () => {
     setSaving(true);
+    const selectedArr = Array.from(selected);
     try {
       await apiRequest("PATCH", "/api/profile/me/interests", {
-        interests: Array.from(selected),
+        interests: selectedArr,
       });
       await refreshProfile();
       if (mode === "settings") {
@@ -137,7 +138,7 @@ function PickerBody({
       }
       onSaved?.();
       onClose?.();
-    } catch (err) {
+    } catch (err: any) {
       console.error("[InterestsPicker] save failed:", err);
       toast.error("Couldn't save your interests", {
         description: "Please try again in a moment.",
@@ -282,10 +283,13 @@ export function InterestsPicker({
   return (
     <Dialog open={!!open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-w-md gap-0 p-0 sm:max-w-lg"
-        // Hide the default Radix close X — we render our own Skip button
-        // inside PickerBody so the action is explicit (and routes through
-        // the dismissed PATCH instead of just closing).
+        // [&>button]:hidden hides the default Radix close X (rendered as a
+        // direct-child <button> by shadcn's DialogContent). We render our
+        // own "Skip" button inside PickerBody so the action is explicit
+        // and routes through the dismissed PATCH instead of just closing.
+        // Skip is nested inside PickerBody's <div>, so it isn't matched
+        // by the direct-child selector.
+        className="max-w-md gap-0 p-0 sm:max-w-lg [&>button]:hidden"
       >
         <DialogTitle className="sr-only">{MODE_COPY[mode].title}</DialogTitle>
         <DialogDescription className="sr-only">
