@@ -19,6 +19,12 @@ export interface UserProfile {
   winRate: number;
   lastActiveAt: string | null;
   tosAcceptedAt: string | null;
+  // Phase 1 Interest Picker fields. statedInterests is the user's selected
+  // category ids (empty until they pick). interestsPromptDismissedAt is set
+  // when they skip the picker; the InterestsGate uses both to decide when
+  // to show the modal and when to soft re-prompt.
+  statedInterests: string[];
+  interestsPromptDismissedAt: string | null;
   createdAt: string;
 }
 

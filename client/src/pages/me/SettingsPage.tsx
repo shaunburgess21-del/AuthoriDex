@@ -36,6 +36,7 @@ import { AvatarPicker } from "@/components/avatar/AvatarPicker";
 import { NotificationPreferences } from "@/components/notifications/NotificationPreferences";
 import { uploadAvatarFile, uploadGeneratedAvatar } from "@/lib/avatar/upload";
 import { PasswordCard } from "./PasswordCard";
+import { InterestsPicker } from "@/components/interests/InterestsPicker";
 
 export default function SettingsPage() {
   const { user, profile, profileLoading, refreshProfile, signOut } = useAuth();
@@ -331,6 +332,13 @@ export default function SettingsPage() {
               )}
             </div>
           </div>
+        </Card>
+
+        <Card className="overflow-hidden">
+          <InterestsPicker
+            mode="settings"
+            defaultValue={profile?.statedInterests ?? []}
+          />
         </Card>
 
         <PasswordCard />

@@ -799,6 +799,14 @@ export const profiles = pgTable("profiles", {
   // Set when the user accepts ToS + Privacy on /login/welcome. NULL means not
   // yet captured — used by the welcome screen to decide whether to show.
   tosAcceptedAt: timestamp("tos_accepted_at"),
+  // Categories the user explicitly selected via the InterestsPicker. Empty
+  // array means "not yet picked" (treated as cold-start). Stored as text[] of
+  // canonical category ids (see shared/constants.ts CANONICAL_CATEGORIES).
+  statedInterests: text("stated_interests").array().notNull().default(sql`'{}'`),
+  // Set when the user dismissed/skipped the InterestsPicker. Used by the
+  // re-prompt gate together with totalVotes / totalPredictions and time
+  // elapsed so we soft-nudge engaged users instead of nagging on every visit.
+  interestsPromptDismissedAt: timestamp("interests_prompt_dismissed_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

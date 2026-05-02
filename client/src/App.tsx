@@ -1,5 +1,6 @@
-import { lazy, Suspense, useEffect, type ComponentType } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, type ComponentType } from "react";
 import { Switch, Route, useLocation } from "wouter";
+import { InterestsPicker } from "@/components/interests/InterestsPicker";
 import { MotionConfig } from "framer-motion";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -195,6 +196,91 @@ function NewUserGate() {
   return null;
 }
 
+/**
+ * Interest Picker — Phase 1 prompt + soft re-prompt gate.
+ *
+ * Shows the InterestsPicker modal exactly when the user is on a
+ * personalised-feed surface (/, /vote, /predict) AND we have a clear reason
+ * to ask:
+ *
+ *   * First-time prompt:
+ *       tosAcceptedAt set, statedInterests empty, never dismissed.
+ *
+ *   * Soft re-prompt (skippers only — once per browser tab):
+ *       tosAcceptedAt set, statedInterests still empty, dismissed AT LEAST
+ *       once, AND any of:
+ *         - >= 2 days have passed since dismissal, OR
+ *         - totalVotes >= 20, OR
+ *         - totalPredictions >= 20.
+ *
+ * The "once per session" check uses an in-memory ref so we don't nag a user
+ * who chose "Not now" again in the same tab; refreshing the tab is fine —
+ * if the dismissed clock has rolled over again or they crossed an
+ * engagement threshold, we earn another nudge.
+ */
+const INTERESTS_GATE_ROUTES = new Set(["/", "/vote", "/predict"]);
+const REPROMPT_DAYS = 2;
+const REPROMPT_VOTE_THRESHOLD = 20;
+const REPROMPT_PREDICT_THRESHOLD = 20;
+const MS_PER_DAY = 86_400_000;
+
+function InterestsGate() {
+  const { user, profile, profileLoading, loading } = useAuth();
+  const [location] = useLocation();
+  const [open, setOpen] = useState(false);
+  // Once-per-session re-prompt latch: prevents the modal from popping back up
+  // immediately after the user closes it via Save / Skip in the same tab.
+  const repromptShownThisSession = useRef(false);
+
+  useEffect(() => {
+    if (loading || profileLoading) return;
+    if (!user || !profile) return;
+    if (!profile.tosAcceptedAt) return;
+    if (!INTERESTS_GATE_ROUTES.has(location)) return;
+    const interests = profile.statedInterests ?? [];
+    if (interests.length > 0) return;
+
+    const dismissedAt = profile.interestsPromptDismissedAt
+      ? new Date(profile.interestsPromptDismissedAt).getTime()
+      : null;
+
+    // First-time path: never dismissed, never picked. Open immediately.
+    if (dismissedAt === null) {
+      setOpen(true);
+      return;
+    }
+
+    if (repromptShownThisSession.current) return;
+
+    const daysSince = (Date.now() - dismissedAt) / MS_PER_DAY;
+    const meetsTime = daysSince >= REPROMPT_DAYS;
+    const meetsVotes = (profile.totalVotes ?? 0) >= REPROMPT_VOTE_THRESHOLD;
+    const meetsPredictions =
+      (profile.totalPredictions ?? 0) >= REPROMPT_PREDICT_THRESHOLD;
+
+    if (meetsTime || meetsVotes || meetsPredictions) {
+      repromptShownThisSession.current = true;
+      setOpen(true);
+    }
+  }, [loading, profileLoading, user, profile, location]);
+
+  if (!user || !profile || !profile.tosAcceptedAt) return null;
+
+  // Mode flips between onboarding (never dismissed) and reprompt (skipper).
+  const mode: "onboarding" | "reprompt" = profile.interestsPromptDismissedAt
+    ? "reprompt"
+    : "onboarding";
+
+  return (
+    <InterestsPicker
+      mode={mode}
+      open={open}
+      onOpenChange={setOpen}
+      defaultValue={profile.statedInterests ?? []}
+    />
+  );
+}
+
 function App() {
   return (
     <ErrorBoundary>
@@ -216,6 +302,7 @@ function App() {
               />
               <PWAUpdatePrompt />
               <NewUserGate />
+              <InterestsGate />
               <NotificationsRealtimeWatcher />
               <XpBurstProvider>
                 {/* Watcher is inside XpBurstProvider so useXpCelebration can fire daily-login bursts via useXpBurst. */}

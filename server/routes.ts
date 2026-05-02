@@ -59,7 +59,8 @@ import { recomputeCelebrityMetrics } from "./services/celebrity-metrics-recomput
 import { z, ZodError } from "zod";
 import { sendError, sendBadRequest, sendZodError } from "./utils/api-response";
 import { approveInductionCandidate } from "./services/induction-service";
-import { CANONICAL_MARKET_CATEGORIES, getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
+import { CANONICAL_MARKET_CATEGORIES, getMarketCategoryLabel, normalizeMarketCategory, CANONICAL_CATEGORIES } from "@shared/constants";
+import { coldStartCategoryRank, shouldUseColdStart } from "./lib/coldStartOrder";
 import { resolvePublicMatchupBySlugOrId } from "./utils/matchup-resolve";
 import { registerCronRoutes, registerPublicRoutes, registerGamificationRoutes, registerFavoritesRoutes, registerNotificationsRoutes, registerOgRoutes } from "./route-modules";
 import { handleAuthHook } from "./emails/routes/auth-hook";
@@ -3912,10 +3913,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
             break;
         }
 
-        if (sortDir === 'asc') {
-          query = query.orderBy(sql`${orderByColumn} ASC NULLS LAST, ${trendingPeople.name} ASC`) as typeof query;
+        // Cold-start: only the Value tab is rendered as a card feed on the
+        // Vote page (the Fame tab is the canonical leaderboard ranking, where
+        // reordering would mislead users about who is #1). For Value we
+        // prepend a soft politics-deprioritisation so the "All" card stack
+        // mirrors the other vote sections.
+        const coldStart = tab === 'value' && (await shouldUseColdStart(req));
+        const direction = sortDir === 'asc' ? 'ASC' : 'DESC';
+        if (coldStart) {
+          query = query.orderBy(
+            sql`CASE WHEN ${trendingPeople.category} = 'politics' THEN 1 ELSE 0 END ASC, ${orderByColumn} ${sql.raw(direction)} NULLS LAST, ${trendingPeople.name} ASC`,
+          ) as typeof query;
         } else {
-          query = query.orderBy(sql`${orderByColumn} DESC NULLS LAST, ${trendingPeople.name} ASC`) as typeof query;
+          query = query.orderBy(
+            sql`${orderByColumn} ${sql.raw(direction)} NULLS LAST, ${trendingPeople.name} ASC`,
+          ) as typeof query;
         }
       }
 
@@ -5202,12 +5214,20 @@ Only return the JSON object.`;
   }
 
   // Get all matchups with vote counts (with dynamic avatar lookup from tracked_people)
-  app.get("/api/matchups", async (req, res) => {
+  app.get("/api/matchups", optionalAuth, async (req: AuthRequest, res) => {
     try {
       const { category } = req.query;
-      
+      const coldStart = await shouldUseColdStart(req);
+
       // Get all matchups
-      let matchupList = await db.select().from(matchups).orderBy(desc(matchups.createdAt));
+      let matchupList = await db
+        .select()
+        .from(matchups)
+        .orderBy(
+          ...(coldStart
+            ? [coldStartCategoryRank(matchups.category), desc(matchups.createdAt)]
+            : [desc(matchups.createdAt)]),
+        );
       
       // Filter by category if provided
       if (category && category !== 'All') {
@@ -5992,6 +6012,75 @@ Only return the JSON object.`;
     } catch (error: any) {
       console.error("Error setting username:", error.message);
       res.status(500).json({ error: "Failed to set username" });
+    }
+  });
+
+  // Interest Picker — Phase 1.
+  //
+  // Stores the user's stated category interests. Two body shapes are accepted:
+  //
+  //   { interests: string[] }            -> save selection, clear dismissed flag
+  //   { interests: [], dismissed: true } -> user skipped/dismissed, stamp
+  //                                         interestsPromptDismissedAt = now()
+  //
+  // The dismissed timestamp drives the soft re-prompt logic in App.tsx
+  // (InterestsGate). Saving a non-empty selection always clears the dismissed
+  // flag so the re-prompt doesn't fire for users who picked something.
+  app.patch("/api/profile/me/interests", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.userId!;
+      const body = (req.body ?? {}) as { interests?: unknown; dismissed?: unknown };
+
+      if (!Array.isArray(body.interests)) {
+        return res.status(400).json({ error: "interests_required" });
+      }
+
+      const validIds = new Set<string>(CANONICAL_CATEGORIES.map((c) => c.id));
+      const cleaned: string[] = [];
+      const seen = new Set<string>();
+      for (const raw of body.interests) {
+        if (typeof raw !== "string") {
+          return res.status(400).json({ error: "invalid_interest_type" });
+        }
+        if (!validIds.has(raw)) {
+          return res.status(400).json({ error: "invalid_interest", value: raw });
+        }
+        if (seen.has(raw)) continue;
+        seen.add(raw);
+        cleaned.push(raw);
+      }
+
+      const dismissed = body.dismissed === true;
+
+      // Skip path: empty array + dismissed=true -> stamp dismissed timestamp.
+      // Save path: non-empty array -> persist + clear dismissed timestamp so
+      // a user who picks at least one interest never gets re-prompted.
+      // Empty array without dismissed flag is treated as a "clear all" save
+      // (used by the Settings card) and also clears the dismissed timestamp
+      // so the cold-start ordering applies again.
+      const updateData: Partial<Profile> = {
+        statedInterests: cleaned,
+        interestsPromptDismissedAt:
+          cleaned.length === 0 && dismissed ? new Date() : null,
+      };
+
+      const updated = await db
+        .update(profiles)
+        .set(updateData)
+        .where(eq(profiles.id, userId))
+        .returning();
+
+      if (updated.length === 0) {
+        return res.status(404).json({ error: "Profile not found" });
+      }
+
+      res.json({
+        statedInterests: updated[0].statedInterests ?? [],
+        interestsPromptDismissedAt: updated[0].interestsPromptDismissedAt,
+      });
+    } catch (error: any) {
+      console.error("Error updating interests:", error.message);
+      res.status(500).json({ error: "Failed to update interests" });
     }
   });
 
@@ -11618,6 +11707,7 @@ Target length: about 90-150 words.`;
   app.get("/api/trending-polls", optionalAuth, async (req, res) => {
     try {
       const userId = (req as AuthRequest).userId || null;
+      const coldStart = await shouldUseColdStart(req as AuthRequest);
 
       const polls = await db
         .select({
@@ -11641,7 +11731,11 @@ Target length: about 90-150 words.`;
         .leftJoin(trackedPeople, eq(trendingPolls.personId, trackedPeople.id))
         .leftJoin(trendingPeople, eq(trendingPolls.personId, trendingPeople.id))
         .where(eq(trendingPolls.status, 'live'))
-        .orderBy(desc(trendingPolls.createdAt));
+        .orderBy(
+          ...(coldStart
+            ? [coldStartCategoryRank(trendingPolls.category), desc(trendingPolls.createdAt)]
+            : [desc(trendingPolls.createdAt)]),
+        );
 
       const pollIds = polls.map(p => p.id);
       const relatedMap = await getRelatedPeopleForCards("sentiment_poll", pollIds);
@@ -12494,12 +12588,20 @@ Target length: about 90-150 words.`;
     try {
       const authContext = await resolveAuthContextFromHeader(req.headers.authorization);
       const userId = authContext?.userId ?? null;
+      // Reuse shouldUseColdStart by stamping userId on the request shape it expects.
+      const coldStart = await shouldUseColdStart(
+        { ...(req as AuthRequest), userId: userId ?? undefined } as AuthRequest,
+      );
 
       const polls = await db
         .select()
         .from(opinionPolls)
         .where(eq(opinionPolls.visibility, 'live'))
-        .orderBy(desc(opinionPolls.createdAt));
+        .orderBy(
+          ...(coldStart
+            ? [coldStartCategoryRank(opinionPolls.category), desc(opinionPolls.createdAt)]
+            : [desc(opinionPolls.createdAt)]),
+        );
 
       const opPollIds = polls.map(p => p.id);
       if (opPollIds.length === 0) {
@@ -13309,9 +13411,10 @@ Target length: about 90-150 words.`;
     };
   }
 
-  app.get("/api/open-markets", async (req, res) => {
+  app.get("/api/open-markets", optionalAuth, async (req: AuthRequest, res) => {
     try {
       const { category, featured, limit } = req.query;
+      const coldStart = await shouldUseColdStart(req);
 
       const conditions = [
         eq(predictionMarkets.marketType, "community"),
@@ -13331,7 +13434,15 @@ Target length: about 90-150 words.`;
         .select()
         .from(predictionMarkets)
         .where(and(...conditions))
-        .orderBy(desc(predictionMarkets.featured), desc(predictionMarkets.createdAt))
+        .orderBy(
+          ...(coldStart
+            ? [
+                coldStartCategoryRank(predictionMarkets.category),
+                desc(predictionMarkets.featured),
+                desc(predictionMarkets.createdAt),
+              ]
+            : [desc(predictionMarkets.featured), desc(predictionMarkets.createdAt)]),
+        )
         .limit(limit && typeof limit === "string" ? parseInt(limit, 10) || 50 : 50);
 
       const marketIds = markets.map((m) => m.id);
@@ -15229,13 +15340,19 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
 
   // ============ NATIVE PREDICTION MARKET ENDPOINTS ============
 
-  app.get("/api/native-markets/:type", async (req, res) => {
+  app.get("/api/native-markets/:type", optionalAuth, async (req: AuthRequest, res) => {
     try {
       const { type } = req.params;
       const validTypes = ['jackpot', 'updown', 'h2h', 'gainer'];
       if (!validTypes.includes(type)) {
         return res.status(400).json({ error: "Invalid market type" });
       }
+
+      // Only the Weekly Up/Down feed renders as a card stack on the Predict
+      // page; the others are leaderboard-driven and reordering them would
+      // confuse rank semantics. Cold-start ordering therefore only applies
+      // to type === 'updown'.
+      const coldStart = type === 'updown' && (await shouldUseColdStart(req));
 
       const nowForCutoff = new Date();
       const fetchOpenNativeMarkets = async () =>
@@ -15249,7 +15366,15 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
               gt(predictionMarkets.endAt, nowForCutoff),
             )
           )
-          .orderBy(desc(predictionMarkets.featured), predictionMarkets.category);
+          .orderBy(
+            ...(coldStart
+              ? [
+                  coldStartCategoryRank(predictionMarkets.category),
+                  desc(predictionMarkets.featured),
+                  predictionMarkets.category,
+                ]
+              : [desc(predictionMarkets.featured), predictionMarkets.category]),
+          );
 
       let markets = await fetchOpenNativeMarkets();
       if (markets.length === 0) {
@@ -17285,13 +17410,18 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
   // ============ ADMIN: INDUCTION QUEUE MANAGEMENT ============
 
   // GET /api/vote/induction - Public: list active induction candidates
-  app.get("/api/vote/induction", async (req, res) => {
+  app.get("/api/vote/induction", optionalAuth, async (req: AuthRequest, res) => {
     try {
+      const coldStart = await shouldUseColdStart(req);
       const candidates = await db
         .select()
         .from(inductionCandidates)
         .where(eq(inductionCandidates.isActive, true))
-        .orderBy(desc(inductionCandidates.seedVotes));
+        .orderBy(
+          ...(coldStart
+            ? [coldStartCategoryRank(inductionCandidates.category), desc(inductionCandidates.seedVotes)]
+            : [desc(inductionCandidates.seedVotes)]),
+        );
       res.json({ data: candidates, totalCount: candidates.length });
     } catch (error: any) {
       console.error("Error fetching induction candidates:", error);

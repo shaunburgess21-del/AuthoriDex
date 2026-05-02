@@ -288,6 +288,13 @@
       "when": 1779153600000,
       "tag": "0040_disable_rls_on_server_only_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1779240000000,
+      "tag": "0041_profile_stated_interests",
+      "breakpoints": true
     }
   ]
 }
