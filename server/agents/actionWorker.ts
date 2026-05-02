@@ -21,6 +21,7 @@ import {
   JACKPOT_AGENT_COLLISION_RANGE,
 } from "./constants";
 import { JACKPOT_TICKET_COST } from "../config/constants";
+import { WORLD_MARKETS_LLM_ENABLED } from "./constants";
 import type { PredictionDecision } from "./types";
 import { buildAgentActionStakeIdempotencyKey, buildAgentBetMetadata } from "./actionWorker-utils";
 import { getWeeklyBettingCutoff } from "../jobs/market-generator";
@@ -154,6 +155,21 @@ async function executeAction(action: {
         .set({
           status: "skipped",
           errorMessage: "Market past end time",
+          executedAt: new Date(),
+        })
+        .where(eq(scheduledAgentActions.id, action.id));
+      return;
+    }
+
+    // Honour the world-markets kill switch even for actions queued BEFORE
+    // the switch was flipped. Without this, agents keep executing pending
+    // community-market bets for hours after the operator pauses LLM spend.
+    if (!WORLD_MARKETS_LLM_ENABLED && market.marketType === "community") {
+      await db
+        .update(scheduledAgentActions)
+        .set({
+          status: "skipped",
+          errorMessage: "World markets paused (WORLD_MARKETS_LLM_ENABLED=false)",
           executedAt: new Date(),
         })
         .where(eq(scheduledAgentActions.id, action.id));
