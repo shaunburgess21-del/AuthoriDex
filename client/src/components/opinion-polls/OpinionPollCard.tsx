@@ -316,25 +316,11 @@ export function OpinionPollCard({
         data-testid={`opinion-poll-card-${poll.id}`}
       >
         <div className="flex items-center justify-between gap-2 mb-3">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground min-w-0">
-            <div className="flex items-center gap-1.5 shrink-0">
-              <Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
-              <span className={hasVoted ? "" : "text-slate-600"}>
-                {hasVoted ? `${totalVotes.toLocaleString("en-US")} votes` : "Votes"}
-              </span>
-            </div>
-            {hasVoted && (
-              <button
-                type="button"
-                onClick={handleRemoveVote}
-                aria-label="Remove vote"
-                className="group/pill inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-medium border bg-white/[0.06] border-[#EFEFEF]/35 text-foreground/90 cursor-pointer transition-[opacity,transform] hover:opacity-90 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#EFEFEF]/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background dark:focus-visible:ring-white/30 shrink-0"
-                data-testid={`badge-voted-opinion-${poll.id}`}
-              >
-                <span className="group-hover/pill:hidden">You voted</span>
-                <span className="hidden group-hover/pill:inline text-red-600/90 dark:text-red-400/90">Remove vote</span>
-              </button>
-            )}
+          <div className="flex items-center gap-1.5 shrink-0 text-xs text-muted-foreground">
+            <Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
+            <span className={hasVoted ? "" : "text-slate-600"}>
+              {hasVoted ? `${totalVotes.toLocaleString("en-US")} votes` : "Votes"}
+            </span>
           </div>
           <InteractiveCategoryPill
             category={categoryKey}
@@ -408,20 +394,6 @@ export function OpinionPollCard({
                 />
               );
             })}
-            {remainingCount > 0 && (
-              <button
-                type="button"
-                onClick={() => setOptionsDrawerOpen(true)}
-                className="w-full"
-              >
-                <p
-                  className="text-xs text-cyan-600 dark:text-cyan-400 text-center cursor-pointer hover:underline mt-2.5"
-                  data-testid={`link-more-options-${poll.id}`}
-                >
-                  +{remainingCount} more options
-                </p>
-              </button>
-            )}
           </div>
         ) : (
           <div className="space-y-1.5">
@@ -445,20 +417,45 @@ export function OpinionPollCard({
                 />
               );
             })}
-            {remainingCount > 0 && (
-              <button
-                type="button"
-                onClick={() => setOptionsDrawerOpen(true)}
-                className="w-full"
-              >
-                <p
-                  className="text-xs text-cyan-600 dark:text-cyan-400 text-center cursor-pointer hover:underline mt-2.5"
+          </div>
+        )}
+
+        {(hasVoted || remainingCount > 0) && (
+          <div className="mt-2.5 flex items-center gap-2">
+            <div className="flex-1 min-w-0">
+              {hasVoted && (
+                <button
+                  type="button"
+                  onClick={handleRemoveVote}
+                  className="text-xs text-muted-foreground hover:text-red-600 dark:hover:text-red-400 transition-colors underline-offset-4 hover:underline truncate"
+                  data-testid={`button-remove-vote-opinion-${poll.id}`}
+                >
+                  Remove vote
+                </button>
+              )}
+            </div>
+            <div className="flex-1 min-w-0 text-center">
+              {remainingCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setOptionsDrawerOpen(true)}
+                  className="text-xs text-cyan-600 dark:text-cyan-400 hover:underline truncate"
                   data-testid={`link-more-options-${poll.id}`}
                 >
                   +{remainingCount} more options
-                </p>
-              </button>
-            )}
+                </button>
+              )}
+            </div>
+            <div className="flex-1 min-w-0 flex justify-end">
+              {hasVoted && (
+                <span
+                  className="px-2 py-0.5 rounded-full text-xs font-medium border bg-white/[0.06] border-[#EFEFEF]/35 text-foreground/90 shrink-0"
+                  data-testid={`badge-voted-opinion-${poll.id}`}
+                >
+                  Voted
+                </span>
+              )}
+            </div>
           </div>
         )}
       </Card>
