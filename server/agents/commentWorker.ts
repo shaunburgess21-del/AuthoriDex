@@ -268,9 +268,57 @@ async function getEligibleParents(userId: string, allParents?: EligibleCommentPa
   return parents.filter((parent) => !alreadyCommented.has(`${parent.parentType}:${parent.parentId}`));
 }
 
+/**
+ * Per-surface target distribution. Without this, world markets dominate
+ * because the pool typically has ~30 of them vs ~10-15 of each poll/matchup
+ * surface — uniform random picks against count would route most comments
+ * to world markets. These weights match the user's ask: roughly equal
+ * representation across the four commentable surfaces with a slight tilt
+ * toward polls/matchups (the more talkative surfaces on similar sites).
+ */
+const SURFACE_PICK_WEIGHTS: Record<CommentSurface, number> = {
+  matchup: 0.30,
+  trending_poll: 0.30,
+  opinion_poll: 0.25,
+  open_market: 0.15,
+};
+
 function chooseParent(parents: EligibleCommentParent[], profile: AgentSimulationProfile): EligibleCommentParent {
-  const preferred = parents.filter((parent) => parent.category && profile.favoriteCategories.includes(parent.category));
-  const pool = preferred.length > 0 && Math.random() < 0.7 ? preferred : parents;
+  // First pick a surface (weighted), then a parent within that surface.
+  // Falls back to a uniform pick across all eligible parents only if the
+  // chosen surface has nothing to offer for this agent — preserving
+  // engagement when one surface temporarily has no eligible parents.
+  const bySurface = new Map<CommentSurface, EligibleCommentParent[]>();
+  for (const p of parents) {
+    if (!bySurface.has(p.parentType)) bySurface.set(p.parentType, []);
+    bySurface.get(p.parentType)!.push(p);
+  }
+
+  const availableSurfaces = (Object.keys(SURFACE_PICK_WEIGHTS) as CommentSurface[])
+    .filter((s) => (bySurface.get(s)?.length ?? 0) > 0);
+
+  if (availableSurfaces.length === 0) {
+    return parents[Math.floor(Math.random() * parents.length)];
+  }
+
+  const totalWeight = availableSurfaces.reduce((sum, s) => sum + SURFACE_PICK_WEIGHTS[s], 0);
+  let roll = Math.random() * totalWeight;
+  let chosenSurface: CommentSurface = availableSurfaces[0];
+  for (const s of availableSurfaces) {
+    roll -= SURFACE_PICK_WEIGHTS[s];
+    if (roll <= 0) { chosenSurface = s; break; }
+  }
+
+  const surfacePool = bySurface.get(chosenSurface)!;
+
+  // Within the chosen surface, prefer parents in the agent's favourite
+  // categories 70% of the time (when any are available). Same idea as the
+  // previous chooseParent but now scoped to the picked surface so it
+  // can't accidentally drag the comment back onto a world market.
+  const preferred = surfacePool.filter(
+    (p) => p.category && profile.favoriteCategories.includes(p.category),
+  );
+  const pool = preferred.length > 0 && Math.random() < 0.7 ? preferred : surfacePool;
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
@@ -523,12 +571,24 @@ export async function runCommentSweep(): Promise<{
   return { posted, replies, replyFallbacks, skipped, llmRejected, capReached };
 }
 
+/**
+ * Comment sweep cadence: every ~4 hours (with ±20 min jitter to avoid
+ * predictable bursts). Previously this fired once per day at a random
+ * hour, which combined with the per-agent dailyCommentChance of ~8% gave
+ * the entire 56-agent cohort a 4-5 daily attempt budget — most of which
+ * burned on agents already past their weekly cap. Sweeping 6x/day with
+ * the new weekly cap of 3-4 produces ~10-15 visible comments/day while
+ * still respecting per-persona budgets.
+ *
+ * dailyCommentChance is now effectively a per-sweep chance; we accept
+ * that rename-by-behaviour because it gives noisy bands the volume they
+ * need (0.14 × 6 = ~58% daily) without changing the field everywhere.
+ */
+const COMMENT_SWEEP_INTERVAL_MS = 4 * 60 * 60_000;
+
 function msUntilNextSweep(): number {
-  const now = new Date();
-  const tomorrow = new Date(now);
-  tomorrow.setUTCDate(now.getUTCDate() + 1);
-  tomorrow.setUTCHours(9 + Math.floor(Math.random() * 10), Math.floor(Math.random() * 60), 0, 0);
-  return Math.max(60_000, tomorrow.getTime() - now.getTime());
+  const jitter = Math.floor(Math.random() * 40 - 20) * 60_000;
+  return Math.max(60_000, COMMENT_SWEEP_INTERVAL_MS + jitter);
 }
 
 function scheduleNextSweep(): void {

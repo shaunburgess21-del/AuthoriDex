@@ -38,7 +38,12 @@ const DEFAULT_SIMULATION_PROFILE: AgentSimulationProfile = {
   minStake: 75,
   maxStake: 250,
   weeklyVoteCap: 4,
-  weeklyCommentCap: 1,
+  // Bumped from 1 to 3. With the previous cap of 1, ~95% of agents were
+  // locked out of commenting by mid-week and the entire cohort produced
+  // 1-2 comments per day total. 3 still keeps engaged personas under
+  // "Polymarket regular" volume but lets the activity stream actually
+  // breathe across all four surfaces.
+  weeklyCommentCap: 3,
   dailyVoteChance: 0.55,
   dailyCommentChance: 0.08,
   commentStyle: "casual",

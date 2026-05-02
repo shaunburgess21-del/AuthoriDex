@@ -17568,6 +17568,193 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
     })();
   });
 
+  // POST /api/admin/agents/refresh-simulation-profiles - Re-applies the
+  // current seeder's per-persona simulation profile (cap, chance, edge,
+  // stake) to all existing V2 agents. Use after tuning seeder values so
+  // changes take effect WITHOUT wiping P&L history. Idempotent.
+  app.post("/api/admin/agents/refresh-simulation-profiles", requireAuth, requireAdmin, async (_req: AuthRequest, res) => {
+    try {
+      const { refreshAgentSimulationProfiles } = await import("./agents/agentSeeder");
+      const result = await refreshAgentSimulationProfiles();
+      res.json({ ok: true, ...result });
+    } catch (err: any) {
+      console.error("[AgentAdmin] refresh-simulation-profiles failed:", err);
+      res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
+    }
+  });
+
+  // GET /api/admin/agents/activity-stream - Chronological union of recent
+  // agent activity across comments, votes (face_off/sentiment/opinion/
+  // approval), and comment-likes. Used by the admin "Recent Agent
+  // Activity" panel so my brother and I can watch the simulation breathe
+  // in real time without having to dig through three separate tables.
+  // ?limit=N (default 50, max 200), ?since=ISO (optional cutoff).
+  app.get("/api/admin/agents/activity-stream", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "50"), 10) || 50, 1), 200);
+      const sinceParam = typeof req.query.since === "string" ? req.query.since : null;
+      const sinceDate = sinceParam ? new Date(sinceParam) : null;
+      // Default cutoff: last 7 days. Keeps the union row-count manageable
+      // even on the busiest cohort settings without losing recent history.
+      const cutoff = sinceDate && !Number.isNaN(sinceDate.getTime())
+        ? sinceDate
+        : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+      // Single SQL union pulls comments + votes (3 tables) + likes + bets
+      // for is_agent profiles, then orders by created_at across all
+      // sources. Per-source LIMITs keep each leg cheap; the outer LIMIT
+      // takes the final top-N. Cheaper and easier than 6 Drizzle queries
+      // merged in JS.
+      const rows = await db.execute(sql`
+        WITH recent AS (
+          SELECT
+            'comment'::text AS kind,
+            c.id::text AS event_id,
+            c.user_id AS user_id,
+            c.created_at AS event_at,
+            c.parent_type::text AS surface,
+            c.parent_id::text AS target_id,
+            c.body AS detail,
+            CASE WHEN c.parent_comment_id IS NOT NULL THEN 'reply' ELSE 'top' END AS sub_kind
+          FROM comments c
+          INNER JOIN profiles p ON p.id = c.user_id
+          WHERE p.is_agent = true
+            AND c.deleted_at IS NULL
+            AND c.created_at >= ${cutoff}
+          ORDER BY c.created_at DESC
+          LIMIT ${limit}
+
+          UNION ALL
+
+          SELECT
+            'vote'::text AS kind,
+            v.id::text AS event_id,
+            v.user_id AS user_id,
+            v.voted_at AS event_at,
+            v.vote_type::text AS surface,
+            v.target_id::text AS target_id,
+            v.value AS detail,
+            NULL::text AS sub_kind
+          FROM votes v
+          INNER JOIN profiles p ON p.id = v.user_id
+          WHERE p.is_agent = true
+            AND v.voted_at >= ${cutoff}
+          ORDER BY v.voted_at DESC
+          LIMIT ${limit}
+
+          UNION ALL
+
+          SELECT
+            'vote'::text AS kind,
+            tpv.id::text AS event_id,
+            tpv.user_id AS user_id,
+            tpv.created_at AS event_at,
+            'sentiment_poll'::text AS surface,
+            tpv.poll_id::text AS target_id,
+            tpv.choice AS detail,
+            NULL::text AS sub_kind
+          FROM trending_poll_votes tpv
+          INNER JOIN profiles p ON p.id = tpv.user_id
+          WHERE p.is_agent = true
+            AND tpv.created_at >= ${cutoff}
+          ORDER BY tpv.created_at DESC
+          LIMIT ${limit}
+
+          UNION ALL
+
+          SELECT
+            'vote'::text AS kind,
+            opv.id::text AS event_id,
+            opv.user_id AS user_id,
+            opv.created_at AS event_at,
+            'opinion_poll'::text AS surface,
+            opv.poll_id::text AS target_id,
+            COALESCE(po.name, opv.option_id::text) AS detail,
+            NULL::text AS sub_kind
+          FROM opinion_poll_votes opv
+          INNER JOIN profiles p ON p.id = opv.user_id
+          LEFT JOIN opinion_poll_options po ON po.id = opv.option_id
+          WHERE p.is_agent = true
+            AND opv.created_at >= ${cutoff}
+          ORDER BY opv.created_at DESC
+          LIMIT ${limit}
+
+          UNION ALL
+
+          SELECT
+            'like'::text AS kind,
+            cv.id::text AS event_id,
+            cv.user_id AS user_id,
+            cv.created_at AS event_at,
+            'comment_vote'::text AS surface,
+            cv.comment_id::text AS target_id,
+            cv.vote_type::text AS detail,
+            NULL::text AS sub_kind
+          FROM comment_votes cv
+          INNER JOIN profiles p ON p.id = cv.user_id
+          WHERE p.is_agent = true
+            AND cv.created_at >= ${cutoff}
+          ORDER BY cv.created_at DESC
+          LIMIT ${limit}
+
+          UNION ALL
+
+          SELECT
+            'bet'::text AS kind,
+            mb.id::text AS event_id,
+            mb.user_id AS user_id,
+            mb.placed_at AS event_at,
+            COALESCE(pm.market_type::text, 'market') AS surface,
+            mb.market_id::text AS target_id,
+            CONCAT(mb.direction::text, ' on ', COALESCE(me.label, '?'), ' for ', mb.stake_amount, ' credits') AS detail,
+            NULL::text AS sub_kind
+          FROM market_bets mb
+          INNER JOIN profiles p ON p.id = mb.user_id
+          LEFT JOIN prediction_markets pm ON pm.id = mb.market_id
+          LEFT JOIN market_entries me ON me.id = mb.entry_id
+          WHERE p.is_agent = true
+            AND mb.agent_id IS NOT NULL
+            AND mb.placed_at >= ${cutoff}
+          ORDER BY mb.placed_at DESC
+          LIMIT ${limit}
+        )
+        SELECT
+          r.kind,
+          r.event_id,
+          r.user_id,
+          r.event_at,
+          r.surface,
+          r.target_id,
+          r.detail,
+          r.sub_kind,
+          p.username AS username,
+          p.avatar_url AS avatar_url
+        FROM recent r
+        LEFT JOIN profiles p ON p.id = r.user_id
+        ORDER BY r.event_at DESC
+        LIMIT ${limit}
+      `);
+
+      const events = (rows.rows as Array<Record<string, any>>).map((row) => ({
+        kind: row.kind as "comment" | "vote" | "like" | "bet",
+        eventId: String(row.event_id),
+        userId: String(row.user_id),
+        username: row.username ?? "(unknown)",
+        avatarUrl: row.avatar_url ?? null,
+        createdAt: row.event_at instanceof Date ? row.event_at.toISOString() : String(row.event_at),
+        surface: row.surface ? String(row.surface) : null,
+        targetId: row.target_id ? String(row.target_id) : null,
+        detail: row.detail ? String(row.detail) : null,
+        subKind: row.sub_kind ? String(row.sub_kind) : null,
+      }));
+
+      res.json({ ok: true, events, count: events.length });
+    } catch (err: any) {
+      console.error("[AgentAdmin] activity-stream failed:", err);
+      res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
+    }
+  });
+
   // POST /api/admin/agents/:agentId/toggle-active - Pause or resume a single
   // agent's simulation activity without banning their profile.
   // Body: { active: boolean }. Setting active=false also skips any pending

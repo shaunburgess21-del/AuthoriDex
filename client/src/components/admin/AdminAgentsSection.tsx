@@ -306,6 +306,20 @@ export function AdminAgentsSection() {
     onError: (err: Error) => toast.error("Could not start likes sweep", { description: err.message }),
   });
 
+  const refreshProfilesMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/agents/refresh-simulation-profiles");
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      toast("Simulation profiles refreshed", {
+        description: `${data?.refreshed ?? 0} updated, ${data?.unchanged ?? 0} unchanged. New caps and chances are live.`,
+      });
+      refresh();
+    },
+    onError: (err: Error) => toast.error("Refresh failed", { description: err.message }),
+  });
+
   const dryRunMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("GET", "/api/admin/agents/dry-run?agents=12&markets=8");
@@ -631,6 +645,16 @@ export function AdminAgentsSection() {
             </Button>
             <Button
               variant="outline"
+              onClick={() => refreshProfilesMutation.mutate()}
+              disabled={refreshProfilesMutation.isPending}
+              title="Re-applies the seeder's current persona caps/chances/edges to existing agents (idempotent, no P&L loss)"
+              data-testid="button-refresh-profiles"
+            >
+              {refreshProfilesMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+              Refresh Persona Caps
+            </Button>
+            <Button
+              variant="outline"
               onClick={() => dryRunMutation.mutate()}
               disabled={dryRunMutation.isPending}
               data-testid="button-agents-dry-run"
@@ -936,6 +960,8 @@ export function AdminAgentsSection() {
         </CardContent>
       </Card>
 
+      <ActivityStreamCard />
+
       {/* Legacy agents */}
       {legacyAgents.length > 0 && (
         <Card data-testid="card-legacy-agents">
@@ -973,5 +999,192 @@ function SummaryStat({
       <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</div>
       <div className={`text-2xl font-bold tabular-nums ${tone ?? ""}`}>{value ?? "-"}</div>
     </div>
+  );
+}
+
+interface ActivityEvent {
+  kind: "comment" | "vote" | "like" | "bet";
+  eventId: string;
+  userId: string;
+  username: string;
+  avatarUrl: string | null;
+  createdAt: string;
+  surface: string | null;
+  targetId: string | null;
+  detail: string | null;
+  subKind: string | null;
+}
+
+interface ActivityStreamResponse {
+  ok: boolean;
+  events: ActivityEvent[];
+  count: number;
+}
+
+const ACTIVITY_KIND_ICON: Record<ActivityEvent["kind"], string> = {
+  comment: "💬",
+  vote: "🗳️",
+  like: "👍",
+  bet: "💰",
+};
+
+const ACTIVITY_KIND_TONE: Record<ActivityEvent["kind"], string> = {
+  comment: "bg-purple-500/10 text-purple-300 border-purple-500/30",
+  vote: "bg-blue-500/10 text-blue-300 border-blue-500/30",
+  like: "bg-emerald-500/10 text-emerald-300 border-emerald-500/30",
+  bet: "bg-amber-500/10 text-amber-300 border-amber-500/30",
+};
+
+function formatRelativeTime(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return iso;
+  const diffMs = Date.now() - then;
+  const sec = Math.round(diffMs / 1000);
+  if (sec < 60) return `${sec}s ago`;
+  const min = Math.round(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.round(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const day = Math.round(hr / 24);
+  return `${day}d ago`;
+}
+
+function formatSurface(surface: string | null): string {
+  if (!surface) return "";
+  const map: Record<string, string> = {
+    matchup: "matchup",
+    trending_poll: "sentiment poll",
+    opinion_poll: "opinion poll",
+    open_market: "world market",
+    community: "world market",
+    face_off: "matchup",
+    sentiment_poll: "sentiment poll",
+    comment_vote: "comment",
+    jackpot: "jackpot",
+    updown: "up/down",
+    h2h: "head-to-head",
+    gainer: "gainer",
+  };
+  return map[surface] ?? surface.replace(/_/g, " ");
+}
+
+function ActivityStreamCard() {
+  const [filter, setFilter] = useState<"all" | ActivityEvent["kind"]>("all");
+  const { data, isLoading, refetch, isFetching } = useQuery<ActivityStreamResponse>({
+    queryKey: ["/api/admin/agents/activity-stream"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/admin/agents/activity-stream?limit=80");
+      return res.json();
+    },
+    // Auto-refresh every 30s so the panel feels alive without hammering
+    // the DB. Manual refresh button covers the impatient case.
+    refetchInterval: 30_000,
+  });
+
+  const events = data?.events ?? [];
+  const filtered = filter === "all" ? events : events.filter((e) => e.kind === filter);
+
+  const counts = useMemo(() => {
+    return {
+      all: events.length,
+      comment: events.filter((e) => e.kind === "comment").length,
+      vote: events.filter((e) => e.kind === "vote").length,
+      like: events.filter((e) => e.kind === "like").length,
+      bet: events.filter((e) => e.kind === "bet").length,
+    };
+  }, [events]);
+
+  return (
+    <Card data-testid="card-agent-activity-stream">
+      <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+        <div>
+          <CardTitle className="flex items-center gap-2">
+            <Activity className="h-5 w-5 text-emerald-400" />
+            Recent Agent Activity
+          </CardTitle>
+          <CardDescription>
+            Live feed of comments, votes, likes, and bets across the V2 cohort. Auto-refreshes every 30 seconds.
+          </CardDescription>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => refetch()}
+          disabled={isFetching}
+          data-testid="button-activity-refresh"
+        >
+          {isFetching ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-1" />}
+          Refresh
+        </Button>
+      </CardHeader>
+      <CardContent>
+        <div className="flex flex-wrap gap-2 mb-4">
+          {(["all", "comment", "vote", "like", "bet"] as const).map((k) => (
+            <Button
+              key={k}
+              variant={filter === k ? "default" : "outline"}
+              size="sm"
+              onClick={() => setFilter(k)}
+              data-testid={`button-activity-filter-${k}`}
+            >
+              {k === "all" ? "All" : `${ACTIVITY_KIND_ICON[k]} ${k.charAt(0).toUpperCase()}${k.slice(1)}s`}
+              <span className="ml-2 text-[10px] opacity-70">{counts[k]}</span>
+            </Button>
+          ))}
+        </div>
+
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : filtered.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-8">
+            No agent activity in the last 7 days for this filter.
+          </p>
+        ) : (
+          <div className="divide-y divide-border max-h-[480px] overflow-y-auto">
+            {filtered.map((event) => (
+              <div
+                key={`${event.kind}:${event.eventId}`}
+                className="py-3 flex items-start gap-3"
+                data-testid={`activity-row-${event.kind}-${event.eventId}`}
+              >
+                {event.avatarUrl ? (
+                  <img
+                    src={event.avatarUrl}
+                    alt={event.username}
+                    className="h-8 w-8 rounded-full bg-muted flex-shrink-0"
+                  />
+                ) : (
+                  <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-xs flex-shrink-0">
+                    {event.username.slice(0, 2).toUpperCase()}
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <span className="font-semibold">@{event.username}</span>
+                    <Badge variant="outline" className={ACTIVITY_KIND_TONE[event.kind]}>
+                      {ACTIVITY_KIND_ICON[event.kind]} {event.kind}
+                      {event.subKind ? ` · ${event.subKind}` : ""}
+                    </Badge>
+                    {event.surface && (
+                      <span className="text-xs text-muted-foreground">on {formatSurface(event.surface)}</span>
+                    )}
+                    <span className="text-xs text-muted-foreground ml-auto">{formatRelativeTime(event.createdAt)}</span>
+                  </div>
+                  {event.detail && (
+                    <div className="mt-1 text-sm text-muted-foreground line-clamp-2 break-words">
+                      {event.kind === "comment" || event.kind === "bet"
+                        ? event.detail
+                        : <>chose <span className="text-foreground">{event.detail}</span></>}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

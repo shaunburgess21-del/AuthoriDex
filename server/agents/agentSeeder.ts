@@ -197,10 +197,18 @@ function buildSimulationProfile(seed: typeof V2_HANDLES[number]): AgentSimulatio
     minStake: large ? 200 : band === "liquidity" ? 40 : 75,
     maxStake: large ? 950 : band === "sharp" ? 380 : band === "noisy" ? 300 : 220,
     weeklyVoteCap: band === "liquidity" ? 7 : band === "noisy" ? 6 : band === "sharp" ? 3 : 5,
-    // Comment caps deliberately conservative — agents post one comment per
-    // week max in this cohort. We're optimising for quality (LLM-generated,
-    // context-aware) over volume.
-    weeklyCommentCap: 1,
+    // Comment caps lifted from 1 to a band-aware range. With cap=1 the
+    // cohort produced only 1-2 comments per day platform-wide because
+    // every engaged agent hit the wall by mid-week. Noisy/casual now get
+    // 4 per week, sharp/whale stay at 2 (they're the "lurker" bands),
+    // liquidity stays at 1 (they really are short-and-rare). Combined
+    // with sweeping every 4h instead of once daily, this lifts expected
+    // daily volume to ~10-15 platform-wide while keeping persona texture.
+    weeklyCommentCap:
+      band === "noisy" ? 4 :
+      band === "casual" ? 4 :
+      band === "liquidity" ? 1 :
+      2, // sharp + whale
     dailyVoteChance: band === "liquidity" ? 0.78 : band === "noisy" ? 0.72 : band === "sharp" ? 0.38 : 0.56,
     dailyCommentChance: band === "noisy" ? 0.14 : band === "casual" ? 0.08 : 0.05,
     commentStyle: band === "sharp" ? "analytical" : band === "noisy" ? "skeptical" : band === "liquidity" ? "short" : "casual",
@@ -313,6 +321,59 @@ export async function archiveLegacyAgents(options: { hideProfiles?: boolean } = 
     skippedV2: activeAgents.length - legacyIds.length,
     skippedActions: skipped.length,
   };
+}
+
+/**
+ * Re-runs `buildSimulationProfile` for every existing V2 agent and writes
+ * the result back to `agent_configs.simulation_profile`. Use this after
+ * tuning persona caps/chances in the seeder so existing agents pick up
+ * the new values without having to delete + reseed (which would wipe
+ * P&L history). Idempotent: if the stored profile already equals what
+ * the seeder would produce, the row is left untouched.
+ */
+export async function refreshAgentSimulationProfiles(): Promise<{
+  refreshed: number;
+  unchanged: number;
+  missingSeed: string[];
+}> {
+  const seedByUsername = new Map(AGENT_SEEDS.map((seed) => [seed.username, seed]));
+  const agents = await db
+    .select({
+      id: agentConfigs.id,
+      username: agentConfigs.username,
+      simulationProfile: agentConfigs.simulationProfile,
+    })
+    .from(agentConfigs)
+    .where(eq(agentConfigs.isActive, true));
+
+  let refreshed = 0;
+  let unchanged = 0;
+  const missingSeed: string[] = [];
+  const now = new Date();
+
+  for (const agent of agents) {
+    const seed = seedByUsername.get(agent.username);
+    if (!seed) {
+      missingSeed.push(agent.username);
+      continue;
+    }
+
+    const next = seed.simulationProfile;
+    const prev = agent.simulationProfile;
+    if (prev && JSON.stringify(prev) === JSON.stringify(next)) {
+      unchanged++;
+      continue;
+    }
+
+    await db
+      .update(agentConfigs)
+      .set({ simulationProfile: next, updatedAt: now })
+      .where(eq(agentConfigs.id, agent.id));
+    refreshed++;
+  }
+
+  log(`[AgentSeeder] refreshAgentSimulationProfiles: ${refreshed} refreshed, ${unchanged} unchanged, ${missingSeed.length} missing seed`);
+  return { refreshed, unchanged, missingSeed };
 }
 
 export async function seedAgents(): Promise<{
