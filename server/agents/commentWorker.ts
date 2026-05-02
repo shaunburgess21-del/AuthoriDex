@@ -431,14 +431,21 @@ export async function runCommentSweep(): Promise<{
   skipped: number;
   llmRejected: number;
   capReached: boolean;
+  /** Number of agents whose first-pick parent failed the vote-first rule
+   *  (vote cap reached or inline vote couldn't land), but who recovered by
+   *  re-rolling onto a vote-friendly parent. Surfaces tuning signal for
+   *  weekly vote cap headroom. */
+  voteCapDeflections: number;
+  /** Number of agents whose entire eligible pool was vote-blocked
+   *  (no open markets and no already-voted polls/matchups left to comment
+   *  on). When this stays high, the cap needs to go up. */
+  voteCapBlocked: number;
 }> {
   const agents = await db
     .select()
     .from(agentConfigs)
     .where(eq(agentConfigs.isActive, true));
 
-  // Shuffle so the same agents don't always go first and dominate the
-  // small daily eligibility pool.
   for (let i = agents.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [agents[i], agents[j]] = [agents[j], agents[i]];
@@ -450,9 +457,9 @@ export async function runCommentSweep(): Promise<{
   let skipped = 0;
   let llmRejected = 0;
   let capReached = false;
+  let voteCapDeflections = 0;
+  let voteCapBlocked = 0;
 
-  // One shared parent universe per sweep — cheaper than re-querying for
-  // every agent. Each agent then derives their own eligible subset.
   const allParents = await getOpenParents();
 
   for (const agent of agents) {
@@ -479,16 +486,47 @@ export async function runCommentSweep(): Promise<{
       continue;
     }
 
+    // ── Vote-cap-aware parent filtering ────────────────────────────────
+    // Previously: when the surface picker landed on a poll/matchup the
+    // agent hadn't voted on AND the agent was at their weekly vote cap,
+    // ensureVoteBeforeComment returned false and the agent was silently
+    // skipped for the entire sweep. With ~75% of pick weight on vote-
+    // required surfaces and uniform random within each surface, this
+    // funnelled almost all comment volume onto open markets once agents
+    // hit their vote cap mid-week (which happens by Wed-Thu).
+    //
+    // Fix: pre-compute voted parents and weekly vote count, then if the
+    // agent is at vote cap restrict the candidate pool to "vote-cap
+    // friendly" parents only — open markets (no vote needed) plus polls/
+    // matchups they've already voted on. The picker then always lands on
+    // something that will pass ensureVoteBeforeComment, preserving
+    // surface distribution even under cap pressure.
+    const votedSet = await getVotedParentKeys(agent.userId, allParents);
+    const weeklyVotes = await countAgentVotesThisWeek(agent.userId);
+    const atVoteCap = weeklyVotes >= simulation.weeklyVoteCap;
+
+    const candidatePool = atVoteCap
+      ? allParents.filter(
+          (p) =>
+            !VOTE_REQUIRED_SURFACES.has(p.parentType) ||
+            votedSet.has(`${p.parentType}:${p.parentId}`),
+        )
+      : allParents;
+
+    if (atVoteCap && candidatePool.length === 0) {
+      voteCapBlocked++;
+      skipped++;
+      continue;
+    }
+
     let parent: EligibleCommentParent | null = null;
     let replyTarget: ReplyTarget | null = null;
     const wantedReply = Math.random() < REPLY_PROBABILITY;
 
-    // Reply path — try first when the dice say so. If no eligible target
-    // exists, fall back to top-level rather than burn the agent's slot.
     if (wantedReply) {
       const opp = await findReplyOpportunity(
         { userId: agent.userId, displayName: agent.displayName },
-        allParents,
+        candidatePool,
         simulation,
       );
       if (opp) {
@@ -499,7 +537,7 @@ export async function runCommentSweep(): Promise<{
 
     if (!parent) {
       if (wantedReply) replyFallbacks++;
-      const eligible = await getEligibleParents(agent.userId, allParents);
+      const eligible = await getEligibleParents(agent.userId, candidatePool);
       if (!eligible.length) {
         skipped++;
         continue;
@@ -507,19 +545,48 @@ export async function runCommentSweep(): Promise<{
       parent = chooseParent(eligible, simulation);
     }
 
-    // Vote-first: if this is a poll/matchup the agent hasn't voted on, cast
-    // a vote inline now so the LLM can pick it up via fetchCommentContext
-    // and align the comment to the chosen side. Skip the agent if the
-    // inline vote can't land (over weekly cap, race-conflict, etc) rather
-    // than post a comment that contradicts no stated position.
-    const voteReady = await ensureVoteBeforeComment(
+    // Vote-first: cast inline vote on poll/matchup parents the agent
+    // hasn't voted on yet. With the candidatePool filter above, this
+    // should now only fire when the agent has vote budget — but we
+    // still re-roll once on race-condition failure (e.g. someone else
+    // bumped their vote count between the cap check and the cast)
+    // before giving up on the agent.
+    let voteReady = await ensureVoteBeforeComment(
       { userId: agent.userId, displayName: agent.displayName, contrarianism: agent.contrarianism, specialties: agent.specialties },
       parent,
       simulation,
     );
     if (!voteReady) {
-      skipped++;
-      continue;
+      // Parent's vote couldn't land (cap reached mid-sweep or DB race).
+      // Try once more from the vote-cap-friendly pool — open markets and
+      // already-voted polls — rather than silently dropping the agent.
+      const safePool = allParents.filter(
+        (p) =>
+          !VOTE_REQUIRED_SURFACES.has(p.parentType) ||
+          votedSet.has(`${p.parentType}:${p.parentId}`),
+      );
+      const safeEligible = await getEligibleParents(agent.userId, safePool);
+      if (safeEligible.length === 0) {
+        voteCapBlocked++;
+        skipped++;
+        continue;
+      }
+      parent = chooseParent(safeEligible, simulation);
+      replyTarget = null; // reply target was tied to original parent
+      voteReady = await ensureVoteBeforeComment(
+        { userId: agent.userId, displayName: agent.displayName, contrarianism: agent.contrarianism, specialties: agent.specialties },
+        parent,
+        simulation,
+      );
+      if (!voteReady) {
+        // Should be unreachable — safePool only contains parents that
+        // either don't need a vote or already have one. If we land here
+        // it's a real bug worth surfacing.
+        log(`[CommentWorker] ${agent.displayName}: vote-safe re-roll still failed on ${parent.parentType}:${parent.parentId}`);
+        skipped++;
+        continue;
+      }
+      voteCapDeflections++;
     }
 
     const context = await fetchCommentContext(
@@ -579,7 +646,7 @@ export async function runCommentSweep(): Promise<{
     }
   }
 
-  return { posted, replies, replyFallbacks, skipped, llmRejected, capReached };
+  return { posted, replies, replyFallbacks, skipped, llmRejected, capReached, voteCapDeflections, voteCapBlocked };
 }
 
 /**
@@ -608,7 +675,7 @@ function scheduleNextSweep(): void {
   setTimeout(async () => {
     try {
       const result = await runCommentSweep();
-      log(`[CommentWorker] Sweep complete: ${result.posted} posted (${result.replies} replies), ${result.skipped} skipped`);
+      log(`[CommentWorker] Sweep complete: ${result.posted} posted (${result.replies} replies, ${result.voteCapDeflections} vote-cap deflections, ${result.voteCapBlocked} vote-cap blocked), ${result.skipped} skipped`);
     } catch (err) {
       console.error("[CommentWorker] Sweep failed:", err);
     }
@@ -621,7 +688,7 @@ export function startCommentWorkerScheduler(): void {
   setTimeout(async () => {
     try {
       const result = await runCommentSweep();
-      log(`[CommentWorker] Initial sweep: ${result.posted} posted (${result.replies} replies), ${result.skipped} skipped`);
+      log(`[CommentWorker] Initial sweep: ${result.posted} posted (${result.replies} replies, ${result.voteCapDeflections} vote-cap deflections, ${result.voteCapBlocked} vote-cap blocked), ${result.skipped} skipped`);
     } catch (err) {
       console.error("[CommentWorker] Initial sweep failed:", err);
     }

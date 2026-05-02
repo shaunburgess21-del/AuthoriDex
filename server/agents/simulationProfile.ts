@@ -37,7 +37,10 @@ const DEFAULT_SIMULATION_PROFILE: AgentSimulationProfile = {
   stakeMultiplier: 1,
   minStake: 75,
   maxStake: 250,
-  weeklyVoteCap: 4,
+  // Half this cap is consumed by inline voting (vote-first rule in
+  // commentWorker) — the rest funds the standalone vote sweep. Tight caps
+  // here exhaust mid-week and silently drop poll/matchup comments.
+  weeklyVoteCap: 8,
   // Bumped from 1 to 3. With the previous cap of 1, ~95% of agents were
   // locked out of commenting by mid-week and the entire cohort produced
   // 1-2 comments per day total. 3 still keeps engaged personas under

@@ -196,7 +196,13 @@ function buildSimulationProfile(seed: typeof V2_HANDLES[number]): AgentSimulatio
     stakeMultiplier: large ? 2.6 : band === "liquidity" ? 0.65 : band === "sharp" ? 1.25 : band === "noisy" ? 1.05 : 0.9,
     minStake: large ? 200 : band === "liquidity" ? 40 : 75,
     maxStake: large ? 950 : band === "sharp" ? 380 : band === "noisy" ? 300 : 220,
-    weeklyVoteCap: band === "liquidity" ? 7 : band === "noisy" ? 6 : band === "sharp" ? 3 : 5,
+    // Cap headroom: half the cap is consumed by inline voting in the
+    // comment sweep (vote-first rule on polls/matchups), the other half
+    // funds the standalone vote sweep. Old caps (3-7) left ~0 budget for
+    // the daily vote sweep by Wed-Thu and produced 100% world-market
+    // commenting + zero standalone votes by Sat. New caps roughly double
+    // the headroom so both surfaces stay active across the full week.
+    weeklyVoteCap: band === "liquidity" ? 12 : band === "noisy" ? 10 : band === "sharp" ? 6 : 8,
     // Comment caps lifted from 1 to a band-aware range. With cap=1 the
     // cohort produced only 1-2 comments per day platform-wide because
     // every engaged agent hit the wall by mid-week. Noisy/casual now get
