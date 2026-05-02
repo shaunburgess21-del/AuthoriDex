@@ -95,6 +95,17 @@ async function countAgentCommentsThisWeek(userId: string): Promise<number> {
  *  is normal). */
 async function getOpenParents(): Promise<EligibleCommentParent[]> {
   const now = new Date();
+  // Limits raised from 30 → 200 per surface. The previous 30-newest cap
+  // meant agents were structurally blind to anything older — with 159
+  // celebrities driving sentiment/opinion volume, the older two-thirds
+  // of the catalogue never received a single agent comment regardless
+  // of quality. 200 covers the realistic active set without flooding
+  // the picker (chooseParent samples uniformly within the picked surface
+  // so older items now get equal odds of being chosen). The order is
+  // still desc(createdAt) so that if you DO have more than 200 items in
+  // a surface, the most recent are kept (oldest legacy items drop off
+  // gracefully).
+  const PER_SURFACE_LIMIT = 200;
   const [faceOffs, trendPolls, opinion, markets] = await Promise.all([
     db
       .select({
@@ -105,7 +116,7 @@ async function getOpenParents(): Promise<EligibleCommentParent[]> {
       .from(matchups)
       .where(and(eq(matchups.isActive, true), eq(matchups.visibility, "live")))
       .orderBy(desc(matchups.createdAt))
-      .limit(30),
+      .limit(PER_SURFACE_LIMIT),
     db
       .select({
         parentId: trendingPolls.id,
@@ -115,7 +126,7 @@ async function getOpenParents(): Promise<EligibleCommentParent[]> {
       .from(trendingPolls)
       .where(eq(trendingPolls.visibility, "live"))
       .orderBy(desc(trendingPolls.createdAt))
-      .limit(30),
+      .limit(PER_SURFACE_LIMIT),
     db
       .select({
         parentId: opinionPolls.id,
@@ -125,7 +136,7 @@ async function getOpenParents(): Promise<EligibleCommentParent[]> {
       .from(opinionPolls)
       .where(eq(opinionPolls.visibility, "live"))
       .orderBy(desc(opinionPolls.createdAt))
-      .limit(30),
+      .limit(PER_SURFACE_LIMIT),
     db
       .select({
         parentId: predictionMarkets.id,
@@ -140,7 +151,7 @@ async function getOpenParents(): Promise<EligibleCommentParent[]> {
         gt(predictionMarkets.endAt, now),
       ))
       .orderBy(desc(predictionMarkets.createdAt))
-      .limit(30),
+      .limit(PER_SURFACE_LIMIT),
   ]);
 
   return [

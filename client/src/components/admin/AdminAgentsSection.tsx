@@ -1195,6 +1195,8 @@ interface SharpRankerPick {
   marketId: string;
   side: string;
   reasoning: string;
+  marketTitle?: string;
+  marketType?: string;
 }
 
 interface SharpRankerSnapshotPayload {
@@ -1272,11 +1274,21 @@ function SharpRankerCard() {
                 {snapshot.picks.map((p) => (
                   <li key={p.marketId} className="rounded-md border border-border/40 p-2.5">
                     <div className="flex flex-wrap items-center gap-2 text-sm">
-                      <code className="text-xs text-muted-foreground">{p.marketId.slice(0, 8)}</code>
+                      {p.marketTitle ? (
+                        <span className="font-medium">{p.marketTitle}</span>
+                      ) : (
+                        <code className="text-xs text-muted-foreground">{p.marketId.slice(0, 8)}</code>
+                      )}
+                      {p.marketType && p.marketType !== "community" && (
+                        <Badge variant="outline" className="text-xs">{p.marketType}</Badge>
+                      )}
                       {p.side && <Badge variant="secondary">{p.side}</Badge>}
                     </div>
                     {p.reasoning && (
                       <div className="text-xs text-muted-foreground mt-1.5">{p.reasoning}</div>
+                    )}
+                    {p.marketTitle && (
+                      <code className="text-[10px] text-muted-foreground/60 mt-1 inline-block">{p.marketId.slice(0, 8)}</code>
                     )}
                   </li>
                 ))}

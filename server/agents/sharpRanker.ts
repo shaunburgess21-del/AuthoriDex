@@ -38,6 +38,10 @@ export interface SharpRankerPick {
   marketId: string;
   side: string;
   reasoning: string;
+  /** Stored at generation time so the admin tile can show a readable
+   * label without re-querying the markets table on every refresh. */
+  marketTitle?: string;
+  marketType?: string;
 }
 
 export interface SharpRankerSnapshot {
@@ -217,21 +221,26 @@ function parseRankerResponse(
   try {
     const parsed = JSON.parse(raw);
     const picks = Array.isArray(parsed?.picks) ? parsed.picks : [];
-    const validIds = new Set(eligible.map((e) => e.market.id));
+    const byId = new Map(eligible.map((e) => [e.market.id, e.market] as const));
     return picks
       .filter(
         (p: unknown): p is SharpRankerPick =>
           typeof p === "object" &&
           p !== null &&
           typeof (p as SharpRankerPick).marketId === "string" &&
-          validIds.has((p as SharpRankerPick).marketId),
+          byId.has((p as SharpRankerPick).marketId),
       )
       .slice(0, SHARP_RANKER_TOP_N)
-      .map((p: SharpRankerPick) => ({
-        marketId: String(p.marketId),
-        side: typeof p.side === "string" ? p.side.slice(0, 60) : "",
-        reasoning: typeof p.reasoning === "string" ? p.reasoning.slice(0, 240) : "",
-      }));
+      .map((p: SharpRankerPick): SharpRankerPick => {
+        const market = byId.get(p.marketId)!;
+        return {
+          marketId: String(p.marketId),
+          side: typeof p.side === "string" ? p.side.slice(0, 60) : "",
+          reasoning: typeof p.reasoning === "string" ? p.reasoning.slice(0, 240) : "",
+          marketTitle: market.title?.slice(0, 120) ?? undefined,
+          marketType: market.marketType,
+        };
+      });
   } catch (err) {
     log(`[SharpRanker] failed to parse response: ${err instanceof Error ? err.message : err}`);
     return [];
