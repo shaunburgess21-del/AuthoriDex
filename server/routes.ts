@@ -5,7 +5,7 @@ import { storage } from "./storage";
 import { getBaselineDiagnostics } from "./utils/baseline";
 import { db } from "./db";
 import { syncWinningAvatarForPerson } from "./lib/curateAvatar";
-import { trendSnapshots, trackedPeople, communityInsights, insightVotes, comments as unifiedComments, commentVotes, matchups, votes, xpActions, xpLedger, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, contentCategories, insertCommunityInsightSchema, insertInsightVoteSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
+import { trendSnapshots, trackedPeople, communityInsights, insightVotes, comments as unifiedComments, commentVotes, matchups, votes, xpActions, xpLedger, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, contentCategories, userCategoryEngagement, insertCommunityInsightSchema, insertInsightVoteSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
 import { validateSuggestionPayload, SUGGESTION_TYPES } from "@shared/suggestionSchemas";
 import { normaliseSocialHandles } from "@shared/handleNormalise";
 import { eq, desc, and, gt, sql, count, gte, lte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull, isNull } from "drizzle-orm";
@@ -67,6 +67,17 @@ import {
   orderSeedVotesForUser,
   orderFeaturedCategoryForUser,
 } from "./lib/coldStartOrder";
+import { upsertEngagement } from "./lib/engagementWriter";
+import { captureBackgroundError } from "./sentry";
+import { computeBlendStateForUser } from "./lib/blendedRank";
+import {
+  BEHAVIOUR_HALF_LIFE_DAYS,
+  BEHAVIOUR_RAMP_MIN_CATEGORIES,
+  BEHAVIOUR_RAMP_FULL_CATEGORIES,
+  BLEND_STATED_WEEK_1,
+  BLEND_STATED_WEEK_4,
+  PREDICTION_STAKE_WEIGHT_CAP,
+} from "./lib/rankingConfig";
 import { resolvePublicMatchupBySlugOrId } from "./utils/matchup-resolve";
 import { registerCronRoutes, registerPublicRoutes, registerGamificationRoutes, registerFavoritesRoutes, registerNotificationsRoutes, registerOgRoutes } from "./route-modules";
 import { handleAuthHook } from "./emails/routes/auth-hook";
@@ -3173,6 +3184,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .where(eq(profiles.id, userId));
       });
 
+      // Phase 3: category-attributed engagement signal. Resolved via
+      // the tracked-person's category; null if the person has no
+      // category yet (shouldn't happen for live data, guard anyway).
+      try {
+        const [personRow] = await db
+          .select({ category: trackedPeople.category })
+          .from(trackedPeople)
+          .where(eq(trackedPeople.id, personId))
+          .limit(1);
+        await upsertEngagement({
+          userId,
+          categoryId: personRow?.category,
+          voteDelta: 1,
+          source: "sentiment-vote",
+        });
+      } catch (e) {
+        console.warn("[sentiment-vote] engagement lookup failed:", e);
+        captureBackgroundError(e, {
+          surface: "sentiment-vote.engagement",
+          userId,
+          personId,
+        });
+      }
+
       let xpResult;
       try {
         xpResult = await gamificationService.awardXp(
@@ -5579,6 +5614,17 @@ Only return the JSON object.`;
         });
 
         if (req.userId) {
+          // Phase 3: engagement signal. Only tracked for signed-in
+          // users (anonymous session votes don't have a profile to
+          // blend against). matchup.category was loaded at the top of
+          // this handler.
+          await upsertEngagement({
+            userId: req.userId,
+            categoryId: matchup.category,
+            voteDelta: 1,
+            source: "matchup-vote",
+          });
+
           try {
             xpResult = await gamificationService.awardXp(
               req.userId,
@@ -12043,7 +12089,7 @@ Target length: about 90-150 words.`;
       }
 
       const [poll] = await db
-        .select({ id: trendingPolls.id })
+        .select({ id: trendingPolls.id, category: trendingPolls.category })
         .from(trendingPolls)
         .where(eq(trendingPolls.slug, slug))
         .limit(1);
@@ -12080,6 +12126,14 @@ Target length: about 90-150 words.`;
           await tx.update(profiles)
             .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
             .where(eq(profiles.id, authReq.userId!));
+        });
+
+        // Phase 3: engagement signal for the poll's category.
+        await upsertEngagement({
+          userId: authReq.userId!,
+          categoryId: poll.category,
+          voteDelta: 1,
+          source: "trending-poll-vote",
         });
 
         try {
@@ -12993,7 +13047,7 @@ Target length: about 90-150 words.`;
       }
 
       const [poll] = await db
-        .select({ id: opinionPolls.id })
+        .select({ id: opinionPolls.id, category: opinionPolls.category })
         .from(opinionPolls)
         .where(eq(opinionPolls.slug, slug))
         .limit(1);
@@ -13076,6 +13130,14 @@ Target length: about 90-150 words.`;
           await tx.update(profiles)
             .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
             .where(eq(profiles.id, userId));
+        });
+
+        // Phase 3: engagement signal for the poll's category.
+        await upsertEngagement({
+          userId,
+          categoryId: poll.category,
+          voteDelta: 1,
+          source: "opinion-poll-vote",
         });
 
         try {
@@ -14843,6 +14905,29 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       return { bet: { ...insertedBet, remainingCredits: updatedProfile.predictCredits }, potentialPayout };
     });
 
+    // Phase 3: stake-weighted prediction engagement signal. Resolve the
+    // market's category at write time; nullable column so guard.
+    try {
+      const [marketRow] = await db
+        .select({ category: predictionMarkets.category })
+        .from(predictionMarkets)
+        .where(eq(predictionMarkets.id, marketId))
+        .limit(1);
+      await upsertEngagement({
+        userId,
+        categoryId: marketRow?.category,
+        stakeCredits: stakeAmount,
+        source: "market-bet",
+      });
+    } catch (e) {
+      console.warn("[market-bet] engagement lookup failed:", e);
+      captureBackgroundError(e, {
+        surface: "market-bet.engagement",
+        userId,
+        marketId,
+      });
+    }
+
     let xpResult;
     try {
       xpResult = await gamificationService.awardXp(
@@ -15155,6 +15240,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           status: predictionMarkets.status,
           visibility: predictionMarkets.visibility,
           marketType: predictionMarkets.marketType,
+          category: predictionMarkets.category,
         })
         .from(predictionMarkets)
         .where(
@@ -15304,6 +15390,16 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           suggestions: result.suggestions,
         });
       }
+
+      // Phase 3: stake-weighted engagement signal for the jackpot
+      // market's category. market.category was added to the initial
+      // select above specifically for this call.
+      await upsertEngagement({
+        userId: authReq.userId!,
+        categoryId: market.category,
+        stakeCredits: JACKPOT_TICKET_COST,
+        source: "jackpot-bet",
+      });
 
       let xpResult;
       try {
@@ -17738,6 +17834,14 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           .where(eq(profiles.id, userId));
       });
 
+      // Phase 3: engagement signal for the candidate's category.
+      await upsertEngagement({
+        userId,
+        categoryId: candidate.category,
+        voteDelta: 1,
+        source: "induction-vote",
+      });
+
       let xpResult;
       try {
         xpResult = await gamificationService.awardXp(
@@ -17751,6 +17855,204 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
     } catch (error: any) {
       console.error("Error voting for induction candidate:", error);
       res.status(500).json({ error: "Failed to vote" });
+    }
+  });
+
+  // ===========================================
+  // ADMIN: INTERESTS DEBUG (Phase 3 observability)
+  // ===========================================
+  //
+  // GET /api/admin/interests/debug/:userId
+  //   Returns the target user's current blend state:
+  //     - stated interests
+  //     - decayed behavioural scores per category
+  //     - ramp progress, blend weights, distinct category count
+  //     - category-state snapshot (was "last20EngagementEvents" in the
+  //       plan — renamed to avoid implying we store per-row history;
+  //       v1 only has one aggregate row per (user, category))
+  //   Optional ?feed=matchups|trending-polls|opinion-polls|open-markets
+  //                  |native-markets|induction
+  //   runs a top-20 ordered fetch against that feed using the user's
+  //   blended ORDER BY and returns the composition mix (stated %,
+  //   behavioural % from decayed score, neither %).
+  app.get("/api/admin/interests/debug/:userId", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { userId: targetUserId } = req.params;
+      if (!targetUserId) {
+        return res.status(400).json({ error: "userId required" });
+      }
+
+      const state = await computeBlendStateForUser(targetUserId);
+
+      // Raw category-state snapshot, ordered by most recently engaged.
+      // Not an event log — aggregate row per (user, category). Keeps
+      // v1 storage and query cost flat.
+      const engagementRows = await db
+        .select({
+          categoryId: userCategoryEngagement.categoryId,
+          voteCount: userCategoryEngagement.voteCount,
+          betWeight: userCategoryEngagement.betWeight,
+          firstEngagedAt: userCategoryEngagement.firstEngagedAt,
+          lastEngagedAt: userCategoryEngagement.lastEngagedAt,
+        })
+        .from(userCategoryEngagement)
+        .where(eq(userCategoryEngagement.userId, targetUserId))
+        .orderBy(desc(userCategoryEngagement.lastEngagedAt));
+
+      const topBlendedCategories = Array.from(state.behavioural.values())
+        .sort((a, b) => b.decayed - a.decayed)
+        .slice(0, 12)
+        .map((score) => ({
+          id: score.categoryId,
+          stated: state.stated.includes(score.categoryId),
+          raw: Number(score.raw.toFixed(3)),
+          decayedScore: Number(score.decayed.toFixed(3)),
+          lastEngagedDaysAgo: Number(score.lastEngagedDaysAgo.toFixed(2)),
+        }));
+
+      const statedOnly = state.stated.filter((id) => !state.behavioural.has(id));
+      for (const id of statedOnly) {
+        topBlendedCategories.push({
+          id,
+          stated: true,
+          raw: 0,
+          decayedScore: 0,
+          lastEngagedDaysAgo: 0,
+        });
+      }
+
+      // Optional feed composition. Schema: top-20 category list from
+      // the requested feed, using the same blended ORDER BY that the
+      // live endpoint would use for this user. We classify each card:
+      //   stated       = category in state.stated
+      //   behavioural  = category has decayed score > 0.01 (matches
+      //                  blendedInterestBucket's epsilon)
+      //   neither      = category not in stated AND no behavioural
+      const feed = typeof req.query.feed === "string" ? req.query.feed : null;
+      let feedComposition: {
+        feed: string;
+        totalConsidered: number;
+        statedPct: number;
+        behaviouralPct: number;
+        neitherPct: number;
+        categoryCounts: Record<string, number>;
+      } | null = null;
+
+      if (feed) {
+        const topN = 20;
+        let categoriesTopN: (string | null)[] = [];
+        try {
+          if (feed === "trending-polls") {
+            const rows = await db
+              .select({ category: trendingPolls.category })
+              .from(trendingPolls)
+              .limit(topN);
+            categoriesTopN = rows.map((r) => r.category ?? null);
+          } else if (feed === "matchups") {
+            const rows = await db
+              .select({ category: matchups.category })
+              .from(matchups)
+              .limit(topN);
+            categoriesTopN = rows.map((r) => r.category ?? null);
+          } else if (feed === "opinion-polls") {
+            const rows = await db
+              .select({ category: opinionPolls.category })
+              .from(opinionPolls)
+              .limit(topN);
+            categoriesTopN = rows.map((r) => r.category ?? null);
+          } else if (feed === "open-markets") {
+            const rows = await db
+              .select({ category: predictionMarkets.category })
+              .from(predictionMarkets)
+              .where(eq(predictionMarkets.marketType, "community"))
+              .limit(topN);
+            categoriesTopN = rows.map((r) => r.category ?? null);
+          } else if (feed === "native-markets") {
+            const rows = await db
+              .select({ category: predictionMarkets.category })
+              .from(predictionMarkets)
+              .where(eq(predictionMarkets.marketType, "updown"))
+              .limit(topN);
+            categoriesTopN = rows.map((r) => r.category ?? null);
+          } else if (feed === "induction") {
+            const rows = await db
+              .select({ category: inductionCandidates.category })
+              .from(inductionCandidates)
+              .limit(topN);
+            categoriesTopN = rows.map((r) => r.category ?? null);
+          } else {
+            return res.status(400).json({
+              error: "feed must be one of: trending-polls, matchups, opinion-polls, open-markets, native-markets, induction",
+            });
+          }
+
+          const categoryCounts: Record<string, number> = {};
+          let stated = 0;
+          let behavioural = 0;
+          let neither = 0;
+          for (const raw of categoriesTopN) {
+            const cat = raw ? raw.toLowerCase() : "(uncategorised)";
+            categoryCounts[cat] = (categoryCounts[cat] ?? 0) + 1;
+
+            const statedMatch = raw && state.stated.includes(cat);
+            const behaviourScore = raw ? state.behavioural.get(cat)?.decayed ?? 0 : 0;
+            if (statedMatch) {
+              stated += 1;
+            } else if (behaviourScore > 0.01) {
+              behavioural += 1;
+            } else {
+              neither += 1;
+            }
+          }
+          const total = categoriesTopN.length;
+          feedComposition = {
+            feed,
+            totalConsidered: total,
+            statedPct: total ? Math.round((stated / total) * 100) : 0,
+            behaviouralPct: total ? Math.round((behavioural / total) * 100) : 0,
+            neitherPct: total ? Math.round((neither / total) * 100) : 0,
+            categoryCounts,
+          };
+        } catch (feedErr) {
+          console.warn("[admin-interests-debug] feed analytics failed:", feedErr);
+          feedComposition = null;
+        }
+      }
+
+      return res.json({
+        userId: targetUserId,
+        stated: state.stated,
+        distinctCategoryCount: state.distinctCategoryCount,
+        daysSinceFirstEngagement:
+          state.daysSinceFirstEngagement === null
+            ? null
+            : Number(state.daysSinceFirstEngagement.toFixed(2)),
+        blendWeights: {
+          stated: Number(state.statedEffectiveWeight.toFixed(3)),
+          behaviour: Number(state.behaviourEffectiveWeight.toFixed(3)),
+        },
+        rampProgress: Number(state.rampProgress.toFixed(3)),
+        topBlendedCategories,
+        categoryState: engagementRows.map((r) => ({
+          categoryId: r.categoryId,
+          voteCount: r.voteCount,
+          betWeight: Number(parseFloat(r.betWeight as unknown as string).toFixed(3)),
+          firstEngagedAt: r.firstEngagedAt,
+          lastEngagedAt: r.lastEngagedAt,
+        })),
+        config: {
+          halfLifeDays: BEHAVIOUR_HALF_LIFE_DAYS,
+          rampMinCategories: BEHAVIOUR_RAMP_MIN_CATEGORIES,
+          rampFullCategories: BEHAVIOUR_RAMP_FULL_CATEGORIES,
+          blendStatedWeek1: BLEND_STATED_WEEK_1,
+          blendStatedWeek4: BLEND_STATED_WEEK_4,
+          predictionStakeCap: PREDICTION_STAKE_WEIGHT_CAP,
+        },
+        feedComposition,
+      });
+    } catch (error: any) {
+      console.error("[admin-interests-debug] failed:", error);
+      res.status(500).json({ error: "Failed to resolve interests debug state" });
     }
   });
 

@@ -818,6 +818,44 @@ export const insertProfileSchema = createInsertSchema(profiles).omit({
 export type Profile = typeof profiles.$inferSelect;
 export type InsertProfile = z.infer<typeof insertProfileSchema>;
 
+// Phase 3 Interest Picker — behavioural blending aggregate.
+// One row per (user_id, category_id). No event log; we keep aggregate
+// counts + first/last timestamps and decay at read time so ingest is
+// O(1) and the table stays capped at CANONICAL_CATEGORIES.length rows
+// per user. Writes are fire-and-forget upserts from server/lib/
+// engagementWriter.ts after the primary vote/bet insert commits.
+export const userCategoryEngagement = pgTable("user_category_engagement", {
+  userId: varchar("user_id").notNull(),
+  // Canonical kebab-lowercase id from shared/constants.ts
+  // CANONICAL_CATEGORIES. Enforced structurally via CHECK constraint in
+  // migration 0043 — never compare without trusting the constraint.
+  categoryId: text("category_id").notNull(),
+  // Category-attributed vote-like events (matchup, sentiment poll,
+  // opinion poll, induction, over/underrated). Weight 1 each.
+  voteCount: integer("vote_count").notNull().default(0),
+  // Prediction-market stake-weighted score. Each bet contributes
+  // min(3 * log1p(stakeCredits), PREDICTION_STAKE_WEIGHT_CAP). Stored as
+  // numeric(10,3) in Postgres — Drizzle maps that to string-as-decimal
+  // to avoid JS float drift, so consumers should parseFloat() it.
+  betWeight: numeric("bet_weight", { precision: 10, scale: 3 }).notNull().default("0"),
+  // Anchors the blend curve (stated vs behaviour slide over 4 weeks
+  // from this timestamp). Never updated after the first engagement row
+  // is inserted for this (user, category) pair.
+  firstEngagedAt: timestamp("first_engaged_at").notNull().defaultNow(),
+  // Drives the read-time exponential decay (30-day half-life default).
+  lastEngagedAt: timestamp("last_engaged_at").notNull().defaultNow(),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.userId, table.categoryId] }),
+  userIdx: index("user_category_engagement_user_id_idx").on(table.userId),
+  userLastEngagedIdx: index("user_category_engagement_user_last_engaged_idx").on(
+    table.userId,
+    table.lastEngagedAt,
+  ),
+}));
+
+export type UserCategoryEngagement = typeof userCategoryEngagement.$inferSelect;
+export type InsertUserCategoryEngagement = typeof userCategoryEngagement.$inferInsert;
+
 // Relations for gamification tables
 export const xpLedgerRelations = relations(xpLedger, ({ one }) => ({
   user: one(profiles, {
