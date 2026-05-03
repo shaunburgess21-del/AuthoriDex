@@ -38,6 +38,7 @@ import { colors, radius, spacing, typography } from "../theme";
 interface WelcomeEmailProps {
   baseUrl?: string;
   creditAmount?: number;
+  unsubscribeUrl?: string;
 }
 
 const DEFAULT_BASE_URL = "https://voxdex.com";
@@ -69,13 +70,16 @@ export const WELCOME_SUBJECT = welcomeSubject();
 export function WelcomeEmail({
   baseUrl = DEFAULT_BASE_URL,
   creditAmount = DEFAULT_CREDIT_AMOUNT,
+  unsubscribeUrl,
 }: WelcomeEmailProps) {
   const creditsLabel = `${formatCredits(creditAmount)} credits`;
 
   return (
     <Layout
-      preview={`You're in. ${creditsLabel} are waiting — go back your first prediction.`}
+      preview="Your VoxDex account was created successfully."
       footerContext="You're receiving this because you just created a VoxDex account."
+      baseUrl={baseUrl}
+      unsubscribeUrl={unsubscribeUrl}
     >
       <Heading style={typography.h1}>Welcome to VoxDex.</Heading>
 

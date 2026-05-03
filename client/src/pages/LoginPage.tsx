@@ -190,6 +190,15 @@ export default function LoginPage() {
           setLocation("/login/verify");
           return;
         }
+
+        // Defensive fallback: some anti-enumeration configurations can return
+        // no explicit error and no new user/session on duplicate signup.
+        setFieldError({
+          field: "form",
+          message: "This email is already registered. Sign in to continue.",
+          code: "user_already_registered",
+        });
+        return;
       }
     } catch (error: unknown) {
       const mapped = mapAuthError(error);

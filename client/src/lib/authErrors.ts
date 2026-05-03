@@ -73,8 +73,8 @@ export function mapAuthError(err: unknown): MappedAuthError {
   ) {
     return {
       code: "user_already_registered",
-      message: "An account with that email already exists.",
-      suggestion: "Sign in instead, or reset via an email code.",
+      message: "This email is already registered. Sign in to continue.",
+      suggestion: "Sign in, or use an email code if you forgot your password.",
     };
   }
 

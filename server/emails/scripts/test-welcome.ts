@@ -20,13 +20,11 @@ import {
   WelcomeEmail,
   WELCOME_SUBJECT,
 } from "../templates/lifecycle/Welcome";
+import { buildUnsubscribeUrl } from "../unsubscribe";
 
 const RECIPIENT = "andrewdburgess001@gmail.com";
 
-// Override base URL for local testing - if you want the links in
-// the test email to point at Railway prod instead of voxdex.com
-// (which isn't live yet), set this to the Railway URL.
-const TEST_BASE_URL = "https://authoridex-production.up.railway.app";
+const TEST_BASE_URL = process.env.PUBLIC_APP_URL || process.env.APP_URL || "https://voxdex.com";
 
 async function main() {
   console.log(`[test-welcome] Sending welcome email to ${RECIPIENT}...`);
@@ -37,6 +35,7 @@ async function main() {
     category: "lifecycle",
     template: React.createElement(WelcomeEmail, {
       baseUrl: TEST_BASE_URL,
+      unsubscribeUrl: buildUnsubscribeUrl("test-user", TEST_BASE_URL),
     }),
     tags: [{ name: "type", value: "welcome-email-test" }],
   });

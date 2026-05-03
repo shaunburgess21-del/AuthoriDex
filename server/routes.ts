@@ -72,6 +72,7 @@ import { registerCronRoutes, registerPublicRoutes, registerGamificationRoutes, r
 import { handleAuthHook } from "./emails/routes/auth-hook";
 import { sendEmail } from "./emails/send";
 import { WelcomeEmail, welcomeSubject } from "./emails/templates/lifecycle/Welcome";
+import { buildUnsubscribeUrl } from "./emails/unsubscribe";
 // React is needed (not TSX) to construct the welcome email element via
 // React.createElement, since routes.ts is a .ts file and can't use JSX.
 // Mirrors how server/emails/routes/auth-hook.ts builds VerifyEmail.
@@ -82,6 +83,7 @@ import { getAiModel, getChatCompletionTokenLimit } from "./config/ai-models";
 const VIEW_DEDUPE_WINDOW_MS = 10 * 60 * 1000;
 const VIEW_IP_RATE_LIMIT = 30;
 const COMMENT_MAX_LENGTH = 5000;
+const DEFAULT_PUBLIC_APP_URL = "https://voxdex.com";
 type CommentVoteState = "up" | "down" | null;
 type ParentVoteLabel =
   | { type: "trending_poll"; choice: string }
@@ -119,6 +121,22 @@ const commentVoteTypeSchema = z.enum(["up", "down"]);
 
 function isCommentVoteState(value: unknown): value is Exclude<CommentVoteState, null> {
   return value === "up" || value === "down";
+}
+
+function resolvePublicAppUrl(req: Request): string {
+  const envUrl = process.env.PUBLIC_APP_URL || process.env.APP_URL;
+  if (envUrl) {
+    return envUrl.replace(/\/+$/, "");
+  }
+
+  if (process.env.NODE_ENV === "production") {
+    console.warn(
+      `[email-links] PUBLIC_APP_URL/APP_URL missing in production. Falling back to ${DEFAULT_PUBLIC_APP_URL}.`,
+    );
+    return DEFAULT_PUBLIC_APP_URL;
+  }
+
+  return `${req.protocol}://${req.get("host")}`;
 }
 
 function uniqueStrings(values: Array<string | null | undefined>): string[] {
@@ -5867,6 +5885,19 @@ Only return the JSON object.`;
         await tx.insert(creditLedger).values(initialGrantEntry).onConflictDoNothing();
       });
 
+      await createNotification({
+        userId,
+        kind: "credits_granted",
+        title: "Welcome to VoxDex",
+        body: "You've received 10,000 credits. Make your first prediction.",
+        href: "/predict",
+        idempotencyKey: `signup_welcome:${userId}`,
+        metadata: {
+          source: "signup_welcome",
+          creditsGranted: SIGNUP_CREDIT_GRANT,
+        },
+      });
+
       res.json({ profile: newProfile, created: true });
     } catch (error: any) {
       console.error("Error syncing profile:", error.message);
@@ -6000,10 +6031,8 @@ Only return the JSON object.`;
       // why we dropped the personal greeting.
       if (isFirstAcceptance && req.userEmail) {
         const creditAmount = updated[0].predictCredits ?? 0;
-        const baseUrl =
-          process.env.PUBLIC_APP_URL ||
-          process.env.APP_URL ||
-          `${req.protocol}://${req.get("host")}`;
+        const baseUrl = resolvePublicAppUrl(req);
+        const unsubscribeUrl = buildUnsubscribeUrl(userId, baseUrl);
 
         void (async () => {
           try {
@@ -6014,6 +6043,7 @@ Only return the JSON object.`;
               template: React.createElement(WelcomeEmail, {
                 baseUrl,
                 creditAmount,
+                unsubscribeUrl,
               }),
               idempotencyKey: `welcome:${userId}`,
               tags: [

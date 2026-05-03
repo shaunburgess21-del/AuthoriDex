@@ -49,6 +49,8 @@ interface LayoutProps {
    * to the Weekly Wrap.")
    */
   footerContext?: string;
+  baseUrl?: string;
+  unsubscribeUrl?: string;
 
   children: React.ReactNode;
 }
@@ -56,8 +58,12 @@ interface LayoutProps {
 export function Layout({
   preview,
   footerContext = "You're receiving this because you have a VoxDex account.",
+  baseUrl = "https://voxdex.com",
+  unsubscribeUrl,
   children,
 }: LayoutProps) {
+  const canonicalBaseUrl = baseUrl.replace(/\/+$/, "");
+
   return (
     <Html lang="en">
       <Head>
@@ -82,23 +88,17 @@ export function Layout({
             <Text style={footerContextStyle}>{footerContext}</Text>
 
             <Text style={footerLinksStyle}>
-              <Link href="https://voxdex.com" style={footerLinkStyle}>
+              <Link href={canonicalBaseUrl} style={footerLinkStyle}>
                 voxdex.com
               </Link>
-              {"  ·  "}
-              <Link
-                href="https://voxdex.com/settings/notifications"
-                style={footerLinkStyle}
-              >
-                Email preferences
-              </Link>
-              {"  ·  "}
-              <Link
-                href="https://voxdex.com/unsubscribe"
-                style={footerLinkStyle}
-              >
-                Unsubscribe
-              </Link>
+              {unsubscribeUrl ? (
+                <>
+                  {"  ·  "}
+                  <Link href={unsubscribeUrl} style={footerLinkStyle}>
+                    Unsubscribe
+                  </Link>
+                </>
+              ) : null}
             </Text>
 
             {/* Mailing address line removed pre-launch — required by

@@ -57,6 +57,7 @@ const RefundPolicyPage = lazyWithRetry(() => import("@/pages/RefundPolicyPage"))
 const PricingPage = lazyWithRetry(() => import("@/pages/PricingPage"));
 const CheckoutPage = lazyWithRetry(() => import("@/pages/CheckoutPage"));
 const ContactPage = lazyWithRetry(() => import("@/pages/ContactPage"));
+const UnsubscribePage = lazyWithRetry(() => import("@/pages/UnsubscribePage"));
 const UserProfilePage = lazyWithRetry(() => import("@/pages/UserProfilePage"));
 const PredictPage = lazyWithRetry(() => import("@/pages/PredictPage"));
 const VotePage = lazyWithRetry(() => import("@/pages/VotePage"));
@@ -111,6 +112,7 @@ function Router() {
         <Route path="/pricing" component={PricingPage} />
         <Route path="/checkout/:packageId" component={CheckoutPage} />
         <Route path="/contact" component={ContactPage} />
+        <Route path="/unsubscribe" component={UnsubscribePage} />
         <Route path="/profile" component={UserProfilePage} />
         <Route path="/predict" component={PredictPage} />
         <Route path="/vote/value-rankings" component={ValueRankingsPage} />

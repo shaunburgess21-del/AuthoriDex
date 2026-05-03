@@ -1,7 +1,8 @@
 import type { Express } from "express";
 import { eq } from "drizzle-orm";
 import { db } from "../db";
-import { profiles } from "@shared/schema";
+import { notificationPreferences, profiles } from "@shared/schema";
+import { verifyUnsubscribeToken } from "../emails/unsubscribe";
 
 const USERNAME_PATTERN = /^[A-Za-z0-9_]{3,20}$/;
 
@@ -19,6 +20,49 @@ export function registerPublicRoutes(app: Express): void {
       status: "ok",
       uptimeSeconds: Math.floor(process.uptime()),
     });
+  });
+
+  // One-click unsubscribe endpoint for marketing/lifecycle email links.
+  // Auth/OTP transactional messages remain unaffected.
+  app.get("/api/email/unsubscribe", async (req, res) => {
+    const token = typeof req.query.token === "string" ? req.query.token : "";
+    if (!token) {
+      return res.status(400).json({ error: "Missing unsubscribe token" });
+    }
+
+    const verified = verifyUnsubscribeToken(token);
+    if (!verified.valid) {
+      return res.status(400).json({ error: "Invalid or expired unsubscribe token" });
+    }
+
+    try {
+      const userId = verified.userId;
+      const updates = {
+        predictionsEmail: false,
+        favoritesEmail: false,
+        socialEmail: false,
+        accountEmail: false,
+        systemEmail: false,
+        updatedAt: new Date(),
+      };
+
+      await db
+        .insert(notificationPreferences)
+        .values({ userId, ...updates })
+        .onConflictDoUpdate({
+          target: notificationPreferences.userId,
+          set: updates,
+        });
+
+      return res.json({
+        ok: true,
+        unsubscribed: true,
+        scope: "marketing_lifecycle",
+      });
+    } catch (error: any) {
+      console.error("Error processing unsubscribe request:", error?.message);
+      return res.status(500).json({ error: "Failed to process unsubscribe request" });
+    }
   });
 
   // Username availability check used by /login/welcome. Public + rate-limited
