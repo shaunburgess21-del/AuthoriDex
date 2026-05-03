@@ -16,6 +16,7 @@ import { XpBurstProvider } from "@/components/XpBurstProvider";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useXpCelebration } from "@/hooks/useGamification";
 import { useNotificationsRealtime } from "@/hooks/useNotificationsRealtime";
+import { initGoogleAnalytics, trackGooglePageView } from "@/lib/analytics";
 
 // If we got here the page loaded successfully -- clear any leftover retry
 // flag from a previous stale-chunk reload so the mechanism works on the
@@ -168,6 +169,17 @@ function NotificationsRealtimeWatcher() {
   return null;
 }
 
+function AnalyticsWatcher() {
+  const [location] = useLocation();
+
+  useEffect(() => {
+    initGoogleAnalytics();
+    trackGooglePageView(location);
+  }, [location]);
+
+  return null;
+}
+
 /**
  * Force first-time users (no `tosAcceptedAt`) through /login/welcome before
  * they can land anywhere else. Catches the Google-OAuth signup path, which
@@ -312,6 +324,7 @@ function App() {
               <NewUserGate />
               <InterestsGate />
               <NotificationsRealtimeWatcher />
+              <AnalyticsWatcher />
               <XpBurstProvider>
                 {/* Watcher is inside XpBurstProvider so useXpCelebration can fire daily-login bursts via useXpBurst. */}
                 <XpCelebrationWatcher />
