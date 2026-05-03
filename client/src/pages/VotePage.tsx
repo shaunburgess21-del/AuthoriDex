@@ -1315,11 +1315,13 @@ export default function VotePage() {
   const [topicsCategoryFilter, setTopicsCategoryFilter] = useState<FilterCategory>("all");
   const [topicsSearchQuery, setTopicsSearchQuery] = useState("");
   const [topicsOverlayOpen, setTopicsOverlayOpen] = useState(() => window.history.state?.overlay === "topics");
+  const prevTopicsOverlayOpenRef = useRef(topicsOverlayOpen);
   const [startPollModalOpen, setStartPollModalOpen] = useState(false);
   
   const [matchupsCategoryFilter, setMatchupsCategoryFilter] = useState<FilterCategory>("all");
   const [matchupsSearchQuery, setMatchupsSearchQuery] = useState("");
   const [matchupsOverlayOpen, setMatchupsOverlayOpen] = useState(() => window.history.state?.overlay === "matchups");
+  const prevMatchupsOverlayOpenRef = useRef(matchupsOverlayOpen);
   const [pollHeadline, setPollHeadline] = useState("");
   const [sentimentCategory, setSentimentCategory] = useState("misc");
   const [pollDescription, setPollDescription] = useState("");
@@ -1351,6 +1353,7 @@ export default function VotePage() {
   }, []);
   
   const [valuePerceptionOverlayOpen, setValuePerceptionOverlayOpen] = useState(() => window.history.state?.overlay === "value-perception");
+  const prevValuePerceptionOverlayOpenRef = useRef(valuePerceptionOverlayOpen);
   const [valuePerceptionCategoryFilter, setValuePerceptionCategoryFilter] = useState<FilterCategory>("all");
   const [valuePerceptionSearchQuery, setValuePerceptionSearchQuery] = useState("");
 
@@ -1358,6 +1361,7 @@ export default function VotePage() {
   const [opinionPollsCategoryFilter, setOpinionPollsCategoryFilter] = useState<FilterCategory>("all");
   const [opinionPollsSearchQuery, setOpinionPollsSearchQuery] = useState("");
   const [opinionPollsOverlayOpen, setOpinionPollsOverlayOpen] = useState(() => window.history.state?.overlay === "opinion-polls");
+  const prevOpinionPollsOverlayOpenRef = useRef(opinionPollsOverlayOpen);
   const [opinionSuggestOpen, setOpinionSuggestOpen] = useState(false);
   const [opinionSuggestTitle, setOpinionSuggestTitle] = useState("");
   const [opinionSuggestDescription, setOpinionSuggestDescription] = useState("");
@@ -1930,6 +1934,34 @@ export default function VotePage() {
     }
     prevInductionOverlayOpenRef.current = inductionOverlayOpen;
   }, [inductionOverlayOpen]);
+
+  useEffect(() => {
+    if (prevTopicsOverlayOpenRef.current && !topicsOverlayOpen) {
+      setTopicsSearchQuery("");
+    }
+    prevTopicsOverlayOpenRef.current = topicsOverlayOpen;
+  }, [topicsOverlayOpen]);
+
+  useEffect(() => {
+    if (prevMatchupsOverlayOpenRef.current && !matchupsOverlayOpen) {
+      setMatchupsSearchQuery("");
+    }
+    prevMatchupsOverlayOpenRef.current = matchupsOverlayOpen;
+  }, [matchupsOverlayOpen]);
+
+  useEffect(() => {
+    if (prevOpinionPollsOverlayOpenRef.current && !opinionPollsOverlayOpen) {
+      setOpinionPollsSearchQuery("");
+    }
+    prevOpinionPollsOverlayOpenRef.current = opinionPollsOverlayOpen;
+  }, [opinionPollsOverlayOpen]);
+
+  useEffect(() => {
+    if (prevValuePerceptionOverlayOpenRef.current && !valuePerceptionOverlayOpen) {
+      setValuePerceptionSearchQuery("");
+    }
+    prevValuePerceptionOverlayOpenRef.current = valuePerceptionOverlayOpen;
+  }, [valuePerceptionOverlayOpen]);
 
   useEffect(() => {
     if (inductionOverlayOpen || topicsOverlayOpen || startPollModalOpen || matchupsOverlayOpen || inductionSuggestOpen || matchupSuggestOpen || curateSuggestOpen || opinionSuggestOpen || valuePerceptionOverlayOpen || opinionPollsOverlayOpen || snapScrollOpen) {
