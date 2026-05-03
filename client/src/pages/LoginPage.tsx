@@ -109,6 +109,14 @@ export default function LoginPage() {
     await sendOtp(email);
   };
 
+  const isObfuscatedExistingSignup = (
+    signupData: { user?: { identities?: unknown } | null; session?: unknown | null } | null | undefined,
+  ): boolean => {
+    if (signupData?.session) return false;
+    const identities = signupData?.user?.identities;
+    return Array.isArray(identities) && identities.length === 0;
+  };
+
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setFieldError(null);
@@ -177,6 +185,17 @@ export default function LoginPage() {
             return;
           }
           throw error;
+        }
+
+        // Supabase anti-enumeration behavior: duplicate signups can return a
+        // user object with empty identities and no error.
+        if (isObfuscatedExistingSignup(data)) {
+          setFieldError({
+            field: "form",
+            message: "This email is already registered. Sign in to continue.",
+            code: "user_already_registered",
+          });
+          return;
         }
 
         // Supabase will return user + null session when email confirmation is on.
