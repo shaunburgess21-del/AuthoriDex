@@ -11,8 +11,8 @@ export type NotificationBellTriggerProps = {
   cap: number;
   /**
    * Render size. `compact` matches the existing 8x8 ScrollText icon used
-   * on the dense PredictPage mobile header; `default` matches the 9x9
-   * UserMenu avatar size on every other page.
+   * on the dense PredictPage mobile header; `default` runs larger to
+   * better match the Polymarket-style touch target in the main header.
    */
   size?: "default" | "compact";
   className?: string;
@@ -57,8 +57,8 @@ export const NotificationBellTrigger = React.forwardRef<
   }, [hasNew]);
 
   const Icon = unreadCount > 0 ? BellRing : Bell;
-  const sizeClass = size === "compact" ? "h-8 w-8" : "h-9 w-9";
-  const iconSize = size === "compact" ? "h-4 w-4" : "h-[18px] w-[18px]";
+  const sizeClass = size === "compact" ? "h-8 w-8" : "h-11 w-11";
+  const iconSize = size === "compact" ? "h-4 w-4" : "h-[22px] w-[22px]";
   const badgeText = unreadCount > 9 ? `${cap > 9 ? "9+" : String(cap)}` : String(unreadCount);
 
   return (
@@ -89,7 +89,7 @@ export const NotificationBellTrigger = React.forwardRef<
           <span
             aria-hidden="true"
             className={cn(
-              "absolute -top-0.5 -right-0.5 inline-flex items-center justify-center rounded-full",
+              "absolute -top-0.5 right-0 inline-flex items-center justify-center rounded-full",
               "bg-red-500 text-white text-[10px] leading-none font-semibold",
               "min-w-[16px] h-[16px] px-[3px] ring-2 ring-background",
             )}
@@ -102,7 +102,7 @@ export const NotificationBellTrigger = React.forwardRef<
           {showPulse && (
             <span
               aria-hidden="true"
-              className="absolute -top-0.5 -right-0.5 inline-block min-w-[16px] h-[16px] rounded-full attention-pulse-once"
+              className="absolute -top-0.5 right-0 inline-block min-w-[16px] h-[16px] rounded-full attention-pulse-once"
             />
           )}
         </>

@@ -32,7 +32,7 @@ interface HeaderUserActionsProps {
  */
 export function HeaderUserActions({ bellSize = "default", className }: HeaderUserActionsProps) {
   return (
-    <div className={cn("flex items-center gap-2", className)}>
+    <div className={cn("flex items-center gap-3", className)}>
       <NotificationBell size={bellSize} />
       <UserMenu />
     </div>

@@ -56,6 +56,23 @@ export default function SettingsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const hash = window.location.hash;
+    if (!hash) return;
+    const targetId = decodeURIComponent(hash.replace(/^#/, ""));
+    if (!targetId) return;
+
+    // Wait a frame so the section exists after navigation/mount.
+    const scrollToHash = () => {
+      const target = document.getElementById(targetId);
+      if (!target) return;
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+    };
+    const raf = window.requestAnimationFrame(scrollToHash);
+    return () => window.cancelAnimationFrame(raf);
+  }, []);
+
+  useEffect(() => {
     if (!profile || hasLocalChanges) {
       return;
     }

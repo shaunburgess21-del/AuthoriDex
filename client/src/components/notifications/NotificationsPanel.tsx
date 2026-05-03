@@ -78,7 +78,14 @@ export function NotificationsPanel({ onClose, variant = "popover" }: Notificatio
       )}
     >
       {/* Header */}
-      <div className="px-4 pt-4 pb-2 border-b">
+      <div
+        className={cn(
+          "px-4 pt-4 pb-2 border-b",
+          // SheetContent renders its own absolute top-right close button.
+          // Reserve space so it does not overlap Settings on mobile.
+          variant === "sheet" && "pr-14",
+        )}
+      >
         <div className="flex items-center justify-between gap-2">
           <h2 className="font-semibold text-base">Notifications</h2>
           <div className="flex items-center gap-1">
