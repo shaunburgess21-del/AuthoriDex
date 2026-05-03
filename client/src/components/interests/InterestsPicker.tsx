@@ -19,6 +19,7 @@
 // so cold-start ordering kicks back in.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { toast } from "sonner";
 import { Drawer, DrawerContent, DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
@@ -93,6 +94,22 @@ function PickerBody({
 }) {
   const { refreshProfile } = useAuth();
   const copy = MODE_COPY[mode];
+  const { data: categoryRegistry } = useQuery<Array<{ id: string; label: string; sortOrder: number }>>({
+    queryKey: ["/api/categories"],
+    queryFn: async () => {
+      const res = await fetch("/api/categories", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch categories");
+      return res.json();
+    },
+  });
+  const interestCategories = useMemo(() => {
+    if (Array.isArray(categoryRegistry) && categoryRegistry.length > 0) {
+      return [...categoryRegistry]
+        .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.id.localeCompare(b.id))
+        .map((row) => ({ id: row.id, label: row.label }));
+    }
+    return CANONICAL_CATEGORIES;
+  }, [categoryRegistry]);
   const initialSet = useMemo(() => new Set(defaultValue), [defaultValue]);
   const [selected, setSelected] = useState<Set<string>>(() => new Set(initialSet));
   const [saving, setSaving] = useState(false);
@@ -200,7 +217,7 @@ function PickerBody({
         className="flex flex-wrap gap-2"
         data-testid="interests-pill-grid"
       >
-        {CANONICAL_CATEGORIES.map((cat) => {
+        {interestCategories.map((cat) => {
           const isSelected = selected.has(cat.id);
           const style = getCategoryStyle(cat.id);
           return (

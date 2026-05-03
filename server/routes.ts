@@ -6037,6 +6037,32 @@ Only return the JSON object.`;
     }
   });
 
+  // Public category registry (used by onboarding/settings pickers).
+  app.get("/api/categories", async (_req, res) => {
+    try {
+      const rows = await db
+        .select({ id: contentCategories.id, label: contentCategories.label, sortOrder: contentCategories.sortOrder })
+        .from(contentCategories)
+        .orderBy(asc(contentCategories.sortOrder), asc(contentCategories.id));
+
+      if (rows.length > 0) {
+        return res.json(rows);
+      }
+
+      // Fallback for environments that haven't run the category registry migration yet.
+      res.json(
+        CANONICAL_CATEGORIES.map((c, idx) => ({
+          id: c.id,
+          label: c.label,
+          sortOrder: (idx + 1) * 10,
+        })),
+      );
+    } catch (error: any) {
+      console.error("Error fetching category registry:", error.message);
+      res.status(500).json({ error: "Failed to fetch categories" });
+    }
+  });
+
   // Interest Picker — Phase 1.
   //
   // Stores the user's stated category interests. Two body shapes are accepted:
@@ -6057,19 +6083,28 @@ Only return the JSON object.`;
         return res.status(400).json({ error: "interests_required" });
       }
 
-      const validIds = new Set<string>(CANONICAL_CATEGORIES.map((c) => c.id));
+      const registryRows = await db
+        .select({ id: contentCategories.id })
+        .from(contentCategories);
+      const validIds = new Set<string>(
+        (registryRows.length > 0
+          ? registryRows.map((r) => r.id)
+          : CANONICAL_CATEGORIES.map((c) => c.id)
+        ).map((id) => id.toLowerCase()),
+      );
       const cleaned: string[] = [];
       const seen = new Set<string>();
       for (const raw of body.interests) {
         if (typeof raw !== "string") {
           return res.status(400).json({ error: "invalid_interest_type" });
         }
-        if (!validIds.has(raw)) {
+        const normalized = raw.trim().toLowerCase();
+        if (!validIds.has(normalized)) {
           return res.status(400).json({ error: "invalid_interest", value: raw });
         }
-        if (seen.has(raw)) continue;
-        seen.add(raw);
-        cleaned.push(raw);
+        if (seen.has(normalized)) continue;
+        seen.add(normalized);
+        cleaned.push(normalized);
       }
 
       const dismissed = body.dismissed === true;
