@@ -203,20 +203,24 @@ function buildSimulationProfile(seed: typeof V2_HANDLES[number]): AgentSimulatio
     // commenting + zero standalone votes by Sat. New caps roughly double
     // the headroom so both surfaces stay active across the full week.
     weeklyVoteCap: band === "liquidity" ? 12 : band === "noisy" ? 10 : band === "sharp" ? 6 : 8,
-    // Comment caps lifted from 1 to a band-aware range. With cap=1 the
-    // cohort produced only 1-2 comments per day platform-wide because
-    // every engaged agent hit the wall by mid-week. Noisy/casual now get
-    // 4 per week, sharp/whale stay at 2 (they're the "lurker" bands),
-    // liquidity stays at 1 (they really are short-and-rare). Combined
-    // with sweeping every 4h instead of once daily, this lifts expected
-    // daily volume to ~10-15 platform-wide while keeping persona texture.
+    // Comment frequency dialled down ~50% from the post-fix volume after
+    // the cohort started commenting "hard and fast" across all surfaces.
+    // Both knobs are halved so volume and pacing both come down: halving
+    // only the chance would front-load comments early in the week and
+    // then go silent once caps hit; halving only the cap would still
+    // burn through the budget at the same rate just for fewer days.
+    //   noisy/casual: 4 -> 2 weekly comments
+    //   sharp/whale:  2 -> 1
+    //   liquidity:    1 -> 1 (already minimum)
     weeklyCommentCap:
-      band === "noisy" ? 4 :
-      band === "casual" ? 4 :
+      band === "noisy" ? 2 :
+      band === "casual" ? 2 :
       band === "liquidity" ? 1 :
-      2, // sharp + whale
+      1, // sharp + whale
     dailyVoteChance: band === "liquidity" ? 0.78 : band === "noisy" ? 0.72 : band === "sharp" ? 0.38 : 0.56,
-    dailyCommentChance: band === "noisy" ? 0.14 : band === "casual" ? 0.08 : 0.05,
+    // Per-sweep dice roll (sweep runs every 4h = 6x/day). Halved from
+    // 0.14/0.08/0.05 -> 0.07/0.04/0.025.
+    dailyCommentChance: band === "noisy" ? 0.07 : band === "casual" ? 0.04 : 0.025,
     commentStyle: band === "sharp" ? "analytical" : band === "noisy" ? "skeptical" : band === "liquidity" ? "short" : "casual",
     bankrollProfile: large ? "large" : band === "liquidity" ? "small" : "normal",
   };

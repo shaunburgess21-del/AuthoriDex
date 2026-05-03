@@ -41,14 +41,12 @@ const DEFAULT_SIMULATION_PROFILE: AgentSimulationProfile = {
   // commentWorker) — the rest funds the standalone vote sweep. Tight caps
   // here exhaust mid-week and silently drop poll/matchup comments.
   weeklyVoteCap: 8,
-  // Bumped from 1 to 3. With the previous cap of 1, ~95% of agents were
-  // locked out of commenting by mid-week and the entire cohort produced
-  // 1-2 comments per day total. 3 still keeps engaged personas under
-  // "Polymarket regular" volume but lets the activity stream actually
-  // breathe across all four surfaces.
-  weeklyCommentCap: 3,
+  // Dialled down ~50% from the post-fix default (3) once the cohort
+  // started commenting hard and fast across all surfaces. Pairs with
+  // halved dailyCommentChance below so volume and pacing both ease.
+  weeklyCommentCap: 2,
   dailyVoteChance: 0.55,
-  dailyCommentChance: 0.08,
+  dailyCommentChance: 0.04,
   commentStyle: "casual",
   bankrollProfile: "normal",
 };
