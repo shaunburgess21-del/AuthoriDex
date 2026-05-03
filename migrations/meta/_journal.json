@@ -302,6 +302,13 @@
       "when": 1779326400000,
       "tag": "0042_vote_world_markets_manual_order",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1779412800000,
+      "tag": "0043_user_category_engagement",
+      "breakpoints": true
     }
   ]
 }

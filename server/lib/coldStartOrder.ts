@@ -41,21 +41,18 @@ import type { AuthRequest } from "../auth-middleware";
 
 // ── Tunable constants ────────────────────────────────────────────────
 //
-// PERSONALISED_FRESHNESS_BOOST_DAYS: how much "younger" an interest-match
-// card pretends to be when sorting recency-based feeds. Larger value =
-// interests lead more aggressively. 14 days = "two-week thumb on the
-// scale": comfortably bridges the natural age gap between freshly-seeded
-// non-interest content and older interest content (~7 days in current
-// seed data) so interests reliably lead, while still leaving room for a
-// genuinely fresh non-interest card (within ~2 weeks of newest interest)
-// to crack the top. Linear: 1 day boost = 1 day of pretend-younger.
-//
-// PERSONALISED_INDUCTION_VOTE_BOOST: equivalent thumb for the induction
-// feed which is ranked by seedVotes (not recency). ~5 votes lifts a
-// candidate inside the user's interests above an evenly-matched one
-// outside, but the genuine vote leader still wins.
-export const PERSONALISED_FRESHNESS_BOOST_DAYS = 14;
-export const PERSONALISED_INDUCTION_VOTE_BOOST = 5;
+// Defaults and env overrides now live in server/lib/rankingConfig.ts
+// (Phase 3). These re-exports preserve the Phase 1/2 import surface so
+// nothing in the wider codebase had to change when the config module
+// was introduced.
+export {
+  PERSONALISED_FRESHNESS_BOOST_DAYS,
+  PERSONALISED_INDUCTION_VOTE_BOOST,
+} from "./rankingConfig";
+import {
+  PERSONALISED_FRESHNESS_BOOST_DAYS,
+  PERSONALISED_INDUCTION_VOTE_BOOST,
+} from "./rankingConfig";
 
 // ── Per-request memoisation ─────────────────────────────────────────
 //
@@ -211,6 +208,24 @@ export function personalisedInterestBucket(
 // `.orderBy(...)`. Each route picks the wrapper matching its existing
 // sort shape and passes the relevant columns. This keeps route code
 // untouched apart from one helper call instead of an inline ternary.
+//
+// Phase 3 layering (no breaking changes to call sites):
+//   1. resolveBlendState → unified stated + behavioural state.
+//   2. hasBlendSignal() → if true, use the blended SQL helpers (per-
+//      category CASE bias that combines stated + decayed behaviour).
+//   3. otherwise → cold-start (politics soft-deprioritised, recency).
+//
+// Phase 2's personalised* helpers are kept only as an implementation
+// detail of blendedRecencyOrder etc.; no wrapper routes through them
+// directly anymore. Call sites in routes.ts are unchanged.
+
+import {
+  resolveBlendState,
+  hasBlendSignal,
+  blendedRecencyOrder,
+  blendedSeedVotesScore,
+  blendedInterestBucket,
+} from "./blendedRank";
 
 /**
  * Recency-ranked "All" feed (createdAt DESC).
@@ -221,9 +236,9 @@ export async function orderRecencyForUser(
   createdAtCol: AnyColumn | SQL,
   categoryCol: AnyColumn | SQL,
 ): Promise<SQL[]> {
-  const state = await resolveInterestsState(req);
-  if (state.interests.length > 0) {
-    return [personalisedRecencyOrder(createdAtCol, categoryCol, state.interests)];
+  const state = await resolveBlendState(req);
+  if (hasBlendSignal(state)) {
+    return [blendedRecencyOrder(createdAtCol, categoryCol, state)];
   }
   // Cold-start: politics-soft-deprioritised, then recency.
   return [coldStartCategoryRank(categoryCol), desc(createdAtCol)];
@@ -239,14 +254,15 @@ export async function orderFeaturedRecencyForUser(
   createdAtCol: AnyColumn | SQL,
   categoryCol: AnyColumn | SQL,
 ): Promise<SQL[]> {
-  const state = await resolveInterestsState(req);
-  if (state.interests.length > 0) {
+  const state = await resolveBlendState(req);
+  if (hasBlendSignal(state)) {
     // Featured items still float to the top (editorial signal trumps
-    // personalisation); within each featured group, the soft-weight
-    // recency expression interleaves interests with non-interests.
+    // personalisation); within each featured group, the blended
+    // recency expression interleaves preferred (stated + behavioural)
+    // categories with the rest.
     return [
       desc(featuredCol),
-      personalisedRecencyOrder(createdAtCol, categoryCol, state.interests),
+      blendedRecencyOrder(createdAtCol, categoryCol, state),
     ];
   }
   return [
@@ -265,11 +281,9 @@ export async function orderSeedVotesForUser(
   seedVotesCol: AnyColumn | SQL,
   categoryCol: AnyColumn | SQL,
 ): Promise<SQL[]> {
-  const state = await resolveInterestsState(req);
-  if (state.interests.length > 0) {
-    return [
-      desc(personalisedSeedVotesScore(seedVotesCol, categoryCol, state.interests)),
-    ];
+  const state = await resolveBlendState(req);
+  if (hasBlendSignal(state)) {
+    return [desc(blendedSeedVotesScore(seedVotesCol, categoryCol, state))];
   }
   return [coldStartCategoryRank(categoryCol), desc(seedVotesCol)];
 }
@@ -278,18 +292,19 @@ export async function orderSeedVotesForUser(
  * Featured-then-category feed (featured DESC, category alphabetical).
  * Used by native-markets/updown — there's no per-row recency to thumb
  * since weekly markets are all created at week start, so we bucket
- * interests above non-interests within each featured tier.
+ * preferred categories (stated ∪ decayed-behavioural) above the rest
+ * within each featured tier.
  */
 export async function orderFeaturedCategoryForUser(
   req: AuthRequest,
   featuredCol: AnyColumn | SQL,
   categoryCol: AnyColumn | SQL,
 ): Promise<SQL[]> {
-  const state = await resolveInterestsState(req);
-  if (state.interests.length > 0) {
+  const state = await resolveBlendState(req);
+  if (hasBlendSignal(state)) {
     return [
       desc(featuredCol),
-      personalisedInterestBucket(categoryCol, state.interests),
+      blendedInterestBucket(categoryCol, state),
       categoryCol as SQL,
     ];
   }
