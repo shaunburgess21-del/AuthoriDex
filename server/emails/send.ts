@@ -60,6 +60,17 @@ export interface SendEmailArgs {
    * campaign, user segment, etc.
    */
   tags?: Array<{ name: string; value: string }>;
+
+  /**
+   * Optional per-send Reply-To override. If omitted we fall back to
+   * the category default in `senders`/`replyTo` (hello@voxdex.com).
+   *
+   * Used by the contact-form pipeline to set Reply-To to the
+   * visitor's email so hitting Reply in the team inbox replies
+   * straight to them — without changing the From address (which
+   * has to stay on a verified domain for deliverability).
+   */
+  replyTo?: string;
 }
 
 export type SendEmailResult =
@@ -104,8 +115,17 @@ const isDryRun = process.env.EMAIL_DRY_RUN === "true";
 export async function sendEmail(
   args: SendEmailArgs,
 ): Promise<SendEmailResult> {
-  const { to, subject, category, template, idempotencyKey, text, tags } =
-    args;
+  const {
+    to,
+    subject,
+    category,
+    template,
+    idempotencyKey,
+    text,
+    tags,
+    replyTo: replyToOverride,
+  } = args;
+  const effectiveReplyTo = replyToOverride ?? replyTo;
 
   // ---- Idempotency check ----
   if (idempotencyKey) {
@@ -137,7 +157,7 @@ export async function sendEmail(
       subject,
       react: template,
       ...(text ? { text } : {}),
-      ...(replyTo ? { replyTo } : {}),
+      ...(effectiveReplyTo ? { replyTo: effectiveReplyTo } : {}),
       ...(tags && tags.length > 0 ? { tags } : {}),
     });
 

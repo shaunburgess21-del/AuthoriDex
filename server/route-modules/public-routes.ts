@@ -1,4 +1,5 @@
 import type { Express } from "express";
+import * as React from "react";
 import { createHash } from "crypto";
 import { eq } from "drizzle-orm";
 import { db } from "../db";
@@ -7,9 +8,18 @@ import {
   notificationPreferences,
   profiles,
 } from "@shared/schema";
+import { contactSubmissionSchema } from "@shared/contact";
 import { verifyUnsubscribeToken } from "../emails/unsubscribe";
+import { sendEmail } from "../emails/send";
+import {
+  ContactSubmissionEmail,
+  contactSubmissionSubject,
+} from "../emails/templates/lifecycle/ContactSubmission";
+import type { AuthRequest } from "../auth-middleware";
 
 const USERNAME_PATTERN = /^[A-Za-z0-9_]{3,20}$/;
+
+const CONTACT_INBOX = "team@voxdex.com";
 
 /** Small public API surface kept out of the main routes module. */
 export function registerPublicRoutes(app: Express): void {
@@ -120,5 +130,80 @@ export function registerPublicRoutes(app: Express): void {
       console.error("Error checking username availability:", error?.message);
       res.status(500).json({ error: "Failed to check username availability" });
     }
+  });
+
+  // Public contact form. Posts a structured payload, server validates,
+  // and sends a notification email to the team inbox via Resend with
+  // the visitor's address as Reply-To. Rate limiting is handled by the
+  // global writeLimiter in server/index.ts (15/min anon, 60/min authed).
+  app.post("/api/contact", async (req: AuthRequest, res) => {
+    const parsed = contactSubmissionSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const firstIssue = parsed.error.issues[0];
+      return res.status(400).json({
+        error: firstIssue?.message ?? "Invalid contact submission",
+        field: firstIssue?.path?.join(".") ?? null,
+      });
+    }
+
+    const { name, email, topic, subject, message, website } = parsed.data;
+
+    // Honeypot — silently accept so bots don't learn they were caught.
+    // No email is sent.
+    if (website && website.length > 0) {
+      console.log(
+        `[contact] Honeypot triggered. ip=${req.ip} email=${email}`,
+      );
+      return res.json({ ok: true });
+    }
+
+    const submittedAt = new Date().toISOString();
+    const ipAddress = req.ip;
+    const userAgentRaw = req.get("user-agent") ?? undefined;
+    // Truncate so a pathological UA can't bloat the email body.
+    const userAgent = userAgentRaw?.slice(0, 300);
+    const userId = req.userId;
+
+    const dedupeBasis = `${email.toLowerCase()}|${subject}|${message}`;
+    const idempotencyKey = `contact:${createHash("sha256")
+      .update(dedupeBasis)
+      .digest("hex")}`;
+
+    const result = await sendEmail({
+      to: CONTACT_INBOX,
+      subject: contactSubmissionSubject(topic, subject),
+      category: "lifecycle",
+      replyTo: email,
+      idempotencyKey,
+      tags: [
+        { name: "purpose", value: "contact_form" },
+        { name: "topic", value: topic },
+      ],
+      template: React.createElement(ContactSubmissionEmail, {
+        topic,
+        subject,
+        message,
+        fromEmail: email,
+        fromName: name || undefined,
+        ipAddress,
+        userAgent,
+        userId,
+        submittedAt,
+      }),
+    });
+
+    if (!result.ok) {
+      console.error(
+        `[contact] Failed to send. email=${email} topic=${topic} ` +
+          `error=${result.error}`,
+      );
+      return res.status(502).json({
+        error:
+          "We couldn't deliver your message right now. Please try again " +
+          "in a moment, or email team@voxdex.com directly.",
+      });
+    }
+
+    return res.json({ ok: true });
   });
 }
