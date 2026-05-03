@@ -3,13 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { motion, LayoutGroup } from "framer-motion";
 import {
-  Zap, ThumbsUp, TrendingUp, TrendingDown,
-  Play, Pause, Info, ChevronDown, LayoutGrid,
+  Zap, TrendingUp, TrendingDown,
+  Play, Pause, ChevronDown, LayoutGrid,
 } from "lucide-react";
 import { PersonAvatar } from "@/components/PersonAvatar";
-import { TouchTooltip } from "@/components/ui/touch-tooltip";
-import { TrendScoreInfoContent } from "@/components/TrendScoreInfo";
-import { ApprovalRatingInfoContent } from "@/components/ApprovalRatingInfo";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Drawer, DrawerContent, DrawerDescription, DrawerTitle } from "@/components/ui/drawer";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -63,14 +60,13 @@ interface ApprovalBreakdown {
 // --------------- Constants ---------------
 
 type PulseMode = "trend" | "approval";
-type TimeRange = "48h" | "7D" | "14D" | "30D" | "90D";
+type TimeRange = "48h" | "7D" | "14D" | "30D";
 
 const TIME_RANGES: { key: TimeRange; days: number }[] = [
   { key: "48h", days: 2 },
   { key: "7D", days: 7 },
   { key: "14D", days: 14 },
   { key: "30D", days: 30 },
-  { key: "90D", days: 90 },
 ];
 
 const CATEGORIES = [
@@ -483,7 +479,7 @@ interface VoxDexPulseProps {
 export function VoxDexPulse({ collapsed, onToggle }: VoxDexPulseProps) {
   const [, navigate] = useLocation();
   const isMobile = useIsMobile();
-  const [mode, setMode] = useState<PulseMode>("trend");
+  const [mode] = useState<PulseMode>("trend");
   const [timeRange, setTimeRange] = useState<TimeRange>("48h");
   const [category, setCategory] = useState<typeof CATEGORIES[number]>("All");
   const [isPlaying, setIsPlaying] = useState(false);
@@ -779,9 +775,7 @@ export function VoxDexPulse({ collapsed, onToggle }: VoxDexPulseProps) {
             </div>
             <div className="flex-1">
               <h3 className="text-sm font-semibold text-foreground dark:text-slate-100">Vox Pulse</h3>
-              <p className="text-[10px] text-muted-foreground dark:text-slate-500 uppercase tracking-wider">
-                {mode === "trend" ? "Trend Score Timeline" : "Approval Rating"}
-              </p>
+              <p className="text-[10px] text-muted-foreground dark:text-slate-500 uppercase tracking-wider">Trend Score Timeline</p>
             </div>
             <div className={`h-6 w-6 rounded-md flex items-center justify-center bg-muted/50 dark:bg-slate-700/30 transition-transform duration-200 ${collapsed ? '' : 'rotate-180'}`}>
               <ChevronDown className="h-4 w-4 text-muted-foreground dark:text-slate-400 group-hover:text-foreground dark:group-hover:text-slate-200 transition-colors" />
@@ -811,47 +805,10 @@ export function VoxDexPulse({ collapsed, onToggle }: VoxDexPulseProps) {
           </div>
         )}
 
-        {/* Single row on desktop (Speed right of Pause); wraps on mobile so Top sits left of 48h */}
+        {/* Timeframe row under header */}
         <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-3">
-          <div className="inline-flex items-center rounded-lg bg-muted/50 p-0.5 shrink-0">
-            <button
-              onClick={() => setMode("trend")}
-              className={`relative flex items-center gap-1.5 whitespace-nowrap px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
-                mode === "trend" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"
-              }`}
-            >
-              {mode === "trend" && <span className="absolute bottom-0 left-1 right-1 h-[2px] rounded-full bg-[#3C83F6]" />}
-              <Zap className={`h-3.5 w-3.5 ${mode === "trend" ? "text-[#3C83F6]" : ""}`} />
-              Trend Score
-            </button>
-            <button
-              onClick={() => setMode("approval")}
-              className={`relative flex items-center gap-1.5 whitespace-nowrap px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
-                mode === "approval" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"
-              }`}
-            >
-              {mode === "approval" && <span className="absolute bottom-0 left-1 right-1 h-[2px] rounded-full bg-[#22D3EE]" />}
-              <ThumbsUp className={`h-3.5 w-3.5 ${mode === "approval" ? "text-[#22D3EE]" : ""}`} />
-              Approval Rating
-            </button>
-          </div>
-          <TouchTooltip
-            content={mode === "trend" ? <TrendScoreInfoContent /> : <ApprovalRatingInfoContent />}
-            side="bottom"
-            align="end"
-            contentClassName="max-w-[280px]"
-            showCloseButton
-          >
-            <span className="inline-flex shrink-0">
-              <Info
-                className={`h-4 w-4 cursor-help shrink-0 ${mode === "trend" ? "text-[#3C83F6]/60" : "text-[#22D3EE]/60"}`}
-                data-testid="icon-pulse-info"
-              />
-            </span>
-          </TouchTooltip>
-
           {mode === "trend" && (
-            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <div className="flex flex-nowrap items-center gap-2 sm:gap-3">
               {TIME_RANGES.map(r => {
                 const isActive = timeRange === r.key;
                 return (
