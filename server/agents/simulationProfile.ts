@@ -37,15 +37,16 @@ const DEFAULT_SIMULATION_PROFILE: AgentSimulationProfile = {
   stakeMultiplier: 1,
   minStake: 75,
   maxStake: 250,
-  // Half this cap is consumed by inline voting (vote-first rule in
-  // commentWorker) — the rest funds the standalone vote sweep. Tight caps
-  // here exhaust mid-week and silently drop poll/matchup comments.
-  weeklyVoteCap: 8,
+  // Halved from 8 -> 4 alongside the band-specific tunes once vote
+  // volume stabilised at a healthy pace. Half is still reserved for
+  // inline voting from the comment sweep (vote-first rule), the rest
+  // funds the standalone vote sweep.
+  weeklyVoteCap: 4,
   // Dialled down ~50% from the post-fix default (3) once the cohort
   // started commenting hard and fast across all surfaces. Pairs with
   // halved dailyCommentChance below so volume and pacing both ease.
   weeklyCommentCap: 2,
-  dailyVoteChance: 0.55,
+  dailyVoteChance: 0.28,
   dailyCommentChance: 0.04,
   commentStyle: "casual",
   bankrollProfile: "normal",

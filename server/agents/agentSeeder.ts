@@ -198,11 +198,13 @@ function buildSimulationProfile(seed: typeof V2_HANDLES[number]): AgentSimulatio
     maxStake: large ? 950 : band === "sharp" ? 380 : band === "noisy" ? 300 : 220,
     // Cap headroom: half the cap is consumed by inline voting in the
     // comment sweep (vote-first rule on polls/matchups), the other half
-    // funds the standalone vote sweep. Old caps (3-7) left ~0 budget for
-    // the daily vote sweep by Wed-Thu and produced 100% world-market
-    // commenting + zero standalone votes by Sat. New caps roughly double
-    // the headroom so both surfaces stay active across the full week.
-    weeklyVoteCap: band === "liquidity" ? 12 : band === "noisy" ? 10 : band === "sharp" ? 6 : 8,
+    // funds the standalone vote sweep. Halved from the post-unblock
+    // values (12/10/6/8 -> 6/5/3/4) once vote volume stabilised at a
+    // healthy pace and the user asked for it dialled down ~50%. Inline
+    // voting from the comment sweep is also already halved (because
+    // commentCap was halved in the previous tune), so this keeps the
+    // half/half split between inline and standalone votes intact.
+    weeklyVoteCap: band === "liquidity" ? 6 : band === "noisy" ? 5 : band === "sharp" ? 3 : 4,
     // Comment frequency dialled down ~50% from the post-fix volume after
     // the cohort started commenting "hard and fast" across all surfaces.
     // Both knobs are halved so volume and pacing both come down: halving
@@ -217,7 +219,10 @@ function buildSimulationProfile(seed: typeof V2_HANDLES[number]): AgentSimulatio
       band === "casual" ? 2 :
       band === "liquidity" ? 1 :
       1, // sharp + whale
-    dailyVoteChance: band === "liquidity" ? 0.78 : band === "noisy" ? 0.72 : band === "sharp" ? 0.38 : 0.56,
+    // Halved from 0.78/0.72/0.38/0.56 -> 0.39/0.36/0.19/0.28 alongside
+    // the cap halving. Per-sweep dice roll (vote sweep cadence is daily,
+    // so this is the daily probability the agent attempts to vote).
+    dailyVoteChance: band === "liquidity" ? 0.39 : band === "noisy" ? 0.36 : band === "sharp" ? 0.19 : 0.28,
     // Per-sweep dice roll (sweep runs every 4h = 6x/day). Halved from
     // 0.14/0.08/0.05 -> 0.07/0.04/0.025.
     dailyCommentChance: band === "noisy" ? 0.07 : band === "casual" ? 0.04 : 0.025,

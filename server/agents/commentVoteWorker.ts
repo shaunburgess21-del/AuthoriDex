@@ -34,21 +34,28 @@ import {
 } from "./simulationProfile";
 
 const COMMENT_VOTE_WORKER_BOOT_DELAY_MS = 9 * 60_000;
-const MAX_LIKES_PER_SWEEP = 60;
+// Halved from 60 -> 30 alongside the per-persona dial-down so a single
+// sweep can't overshoot the new platform-wide pace even if the dice
+// roll heavy.
+const MAX_LIKES_PER_SWEEP = 30;
 const RECENT_WINDOW_DAYS = 7;
 
 /** Per-persona behaviour. liquidity/noisy are clicky; whale/sharp are
  *  picky. The {chance} is the daily probability of liking ANYTHING; the
- *  {max} is the upper bound on likes that day if they're active. */
+ *  {max} is the upper bound on likes that day if they're active.
+ *
+ *  Halved from the original (chance + max both ~50%) once like volume
+ *  stabilised and the user asked for engagement signals dialled down.
+ *  Whale stays at min=max=1 since it was already at the floor. */
 const PERSONA_LIKE_BEHAVIOUR: Record<
   SimulationPersonaBand,
   { chance: number; min: number; max: number }
 > = {
-  liquidity: { chance: 0.70, min: 1, max: 3 },
-  noisy:     { chance: 0.55, min: 1, max: 3 },
-  casual:    { chance: 0.40, min: 1, max: 2 },
-  sharp:     { chance: 0.30, min: 1, max: 2 },
-  whale:     { chance: 0.20, min: 1, max: 1 },
+  liquidity: { chance: 0.35, min: 1, max: 2 },
+  noisy:     { chance: 0.28, min: 1, max: 2 },
+  casual:    { chance: 0.20, min: 1, max: 1 },
+  sharp:     { chance: 0.15, min: 1, max: 1 },
+  whale:     { chance: 0.10, min: 1, max: 1 },
 };
 
 /** 10% of the time, a like flips to a dislike. Matches the realistic
