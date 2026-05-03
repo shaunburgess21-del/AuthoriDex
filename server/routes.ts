@@ -3329,12 +3329,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Celebrity not found" });
       }
 
-      await db.transaction(async (tx) => {
-        const [existingValVote] = await tx.select({ id: celebrityValueVotes.id })
-          .from(celebrityValueVotes)
-          .where(and(eq(celebrityValueVotes.userId, userId), eq(celebrityValueVotes.celebrityId, celebrityId)))
-          .limit(1);
+      // Snapshot before upsert — first vote per user/celebrity drives profiles.totalVotes
+      // bump and behavioural engagement hooks; changing Underrated/O/Fairly Rated later
+      // is refinement, not new engagement signal.
+      const [priorValVote] = await db
+        .select({ id: celebrityValueVotes.id })
+        .from(celebrityValueVotes)
+        .where(and(eq(celebrityValueVotes.userId, userId), eq(celebrityValueVotes.celebrityId, celebrityId)))
+        .limit(1);
+      const firstValueVote = !priorValVote;
 
+      await db.transaction(async (tx) => {
         // Upsert the vote (1 vote per user per celebrity, no daily limit)
         await tx
           .insert(celebrityValueVotes)
@@ -3351,12 +3356,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
             },
           });
 
-        if (!existingValVote) {
+        if (firstValueVote) {
           await tx.update(profiles)
             .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
             .where(eq(profiles.id, userId));
         }
       });
+
+      // Phase 3: behavioural engagement — first value vote only, outside the primary tx.
+      if (firstValueVote) {
+        try {
+          const [personRow] = await db
+            .select({ category: trackedPeople.category })
+            .from(trackedPeople)
+            .where(eq(trackedPeople.id, celebrityId))
+            .limit(1);
+          await upsertEngagement({
+            userId,
+            categoryId: personRow?.category,
+            voteDelta: 1,
+            source: "value-vote",
+          });
+        } catch (e) {
+          console.warn("[value-vote] engagement lookup failed:", e);
+          captureBackgroundError(e, {
+            surface: "value-vote.engagement",
+            userId,
+            celebrityId,
+          });
+        }
+      }
 
       let xpResult;
       try {
@@ -3490,6 +3519,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Celebrity not found" });
       }
 
+      // Snapshot before upsert — behavioural engagement counts the first 1–5
+      // rating per (user, person) only; edits are refinement, same as value-vote.
+      const [priorApprovalRow] = await db
+        .select({ id: userVotes.id })
+        .from(userVotes)
+        .where(and(eq(userVotes.userId, userId), eq(userVotes.personId, celebrityId)))
+        .limit(1);
+      const firstApprovalRating = !priorApprovalRow;
+
       await db
         .insert(userVotes)
         .values({
@@ -3506,6 +3544,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
             votedAt: new Date(),
           },
         });
+
+      if (firstApprovalRating) {
+        try {
+          const [personRow] = await db
+            .select({ category: trackedPeople.category })
+            .from(trackedPeople)
+            .where(eq(trackedPeople.id, celebrityId))
+            .limit(1);
+          await upsertEngagement({
+            userId,
+            categoryId: personRow?.category,
+            voteDelta: 1,
+            source: "approval-rating",
+          });
+        } catch (e) {
+          console.warn("[approval-rating] engagement lookup failed:", e);
+          captureBackgroundError(e, {
+            surface: "approval-rating.engagement",
+            userId,
+            celebrityId,
+          });
+        }
+      }
 
       await recomputeCelebrityMetrics(celebrityId);
 
