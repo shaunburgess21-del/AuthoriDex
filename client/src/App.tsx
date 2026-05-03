@@ -72,6 +72,7 @@ const PublicProfilePage = lazyWithRetry(() => import("@/pages/PublicProfilePage"
 const AdminDashboard = lazyWithRetry(() => import("@/pages/AdminDashboard"));
 const AdminSuggestionsPage = lazyWithRetry(() => import("@/pages/admin/AdminSuggestionsPage"));
 const AdminAnnouncementsPage = lazyWithRetry(() => import("@/pages/admin/AdminAnnouncementsPage"));
+const AdminNotificationsPage = lazyWithRetry(() => import("@/pages/admin/AdminNotificationsPage"));
 const MarketDetailPage = lazyWithRetry(() => import("@/pages/MarketDetailPage"));
 const PollDetailPage = lazyWithRetry(() => import("@/pages/PollDetailPage"));
 const OpinionPollDetailPage = lazyWithRetry(() => import("@/pages/OpinionPollDetailPage"));
@@ -136,7 +137,12 @@ function Router() {
         <Route path="/predict/activity" component={TownSquarePage} />
         <Route path="/vote/value-ratings" component={ValueRatingsPage} />
         <Route path="/admin/suggestions" component={AdminSuggestionsPage} />
-        <Route path="/admin/announcements" component={AdminAnnouncementsPage} />
+        {/* Notifications hub (compose + history + per-user inspector). */}
+        <Route path="/admin/notifications" component={AdminNotificationsPage} />
+        {/* Legacy alias for the older "/admin/announcements" link — same
+            page so existing bookmarks and audit-log entries still resolve. */}
+        <Route path="/admin/announcements" component={AdminNotificationsPage} />
+        <Route path="/admin/announcements/legacy" component={AdminAnnouncementsPage} />
         <Route path="/admin" component={AdminDashboard} />
         <Route component={NotFound} />
       </Switch>

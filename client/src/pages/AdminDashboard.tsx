@@ -61,6 +61,7 @@ import {
   Download,
   ExternalLink,
   Bot,
+  Bell,
 } from "lucide-react";
 import { AdminUnderratedOverrated } from "@/components/admin/AdminUnderratedOverrated";
 import { AdminCurateProfile } from "@/components/admin/AdminCurateProfile";
@@ -3256,6 +3257,14 @@ export default function AdminDashboard() {
             </button>
           ))}
           <button
+            onClick={() => setLocation("/admin/notifications")}
+            data-testid="nav-notifications"
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <Megaphone className="h-4 w-4" />
+            Notifications
+          </button>
+          <button
             onClick={() => setLocation("/admin/suggestions")}
             data-testid="nav-suggestions"
             className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -5981,6 +5990,18 @@ export default function AdminDashboard() {
                           >
                             <Coins className="h-4 w-4 mr-1" />
                             Credits
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="min-h-11 sm:min-h-8"
+                            onClick={() =>
+                              setLocation(`/admin/notifications?inspect=${user.id}`)
+                            }
+                            data-testid={`button-inspect-notifications-${user.id}`}
+                          >
+                            <Bell className="h-4 w-4 mr-1" />
+                            Notifs
                           </Button>
                           <Button
                             variant="outline"

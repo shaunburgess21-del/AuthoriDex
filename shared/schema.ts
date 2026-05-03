@@ -1666,3 +1666,60 @@ export const notificationMarketMutes = pgTable(
 
 export type NotificationMarketMute = typeof notificationMarketMutes.$inferSelect;
 export type InsertNotificationMarketMute = typeof notificationMarketMutes.$inferInsert;
+
+/**
+ * Admin-authored broadcast notifications.
+ *
+ * Sits ABOVE the per-user `notifications` table — one broadcast row
+ * fans out to N notification rows via `createNotificationsBulk`. The
+ * link is the stable idempotency key pattern `broadcast:<id>:<userId>`,
+ * so we can compute analytics (seen/read/click rates) by joining
+ * `notifications.idempotencyKey LIKE 'broadcast:<id>:%'` rather than
+ * snapshotting them here and risking drift.
+ */
+export const adminBroadcasts = pgTable("admin_broadcasts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  createdBy: varchar("created_by").references(() => profiles.id, {
+    onDelete: "set null",
+  }),
+  title: text("title").notNull(),
+  body: text("body"),
+  href: text("href"),
+  priority: integer("priority").notNull().default(1),
+  category: text("category").notNull().default("system"),
+  // Audience filter. See migration 0045 for the V1 shape.
+  audience: jsonb("audience").notNull(),
+  targetCount: integer("target_count").notNull().default(0),
+  deliveredCount: integer("delivered_count").notNull().default(0),
+  // 'draft' | 'scheduled' | 'sending' | 'sent' | 'cancelled' | 'failed'
+  status: text("status").notNull().default("draft"),
+  scheduledFor: timestamp("scheduled_for"),
+  sentAt: timestamp("sent_at"),
+  cancelledAt: timestamp("cancelled_at"),
+  idempotencyKey: text("idempotency_key").notNull().unique(),
+  lastError: text("last_error"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  createdAtIdx: index("idx_admin_broadcasts_created_at").on(table.createdAt),
+  statusIdx: index("idx_admin_broadcasts_status").on(table.status),
+}));
+
+export type AdminBroadcast = typeof adminBroadcasts.$inferSelect;
+export type InsertAdminBroadcast = typeof adminBroadcasts.$inferInsert;
+
+export type BroadcastAudienceKind =
+  | "everyone"
+  | "active_30d"
+  | "placed_bet"
+  | "category_subscribers"
+  | "single_user"
+  | "test_self";
+
+export interface BroadcastAudience {
+  kind: BroadcastAudienceKind;
+  /** When kind === 'category_subscribers'. */
+  category?: string;
+  /** When kind === 'single_user'. */
+  userId?: string;
+}
