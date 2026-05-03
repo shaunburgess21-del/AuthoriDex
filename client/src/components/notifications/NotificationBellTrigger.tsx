@@ -1,24 +1,14 @@
+import * as React from "react";
 import { useEffect, useRef, useState } from "react";
 import { Bell, BellRing } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-interface NotificationBellTriggerProps {
+export type NotificationBellTriggerProps = {
   unreadCount: number;
   /** True when there are notifications the user hasn't seen since last bell-open. */
   hasNew: boolean;
   /** Caps at 9+; rendered as the badge. */
   cap: number;
-  /**
-   * Optional click handler. Intentionally optional: when this trigger is
-   * wrapped in a Radix `<DropdownMenuTrigger asChild>` the parent supplies
-   * the open/close click via Slot, and adding our own `onClick` would
-   * double-toggle the state in the same React batch (Radix sets open=true,
-   * then our handler computes !true → open=false → panel never opens).
-   *
-   * Pass an explicit handler when rendering OUTSIDE a Radix trigger
-   * (e.g. the mobile Sheet variant).
-   */
-  onClick?: () => void;
   /**
    * Render size. `compact` matches the existing 8x8 ScrollText icon used
    * on the dense PredictPage mobile header; `default` matches the 9x9
@@ -26,12 +16,16 @@ interface NotificationBellTriggerProps {
    */
   size?: "default" | "compact";
   className?: string;
-}
+} & Omit<React.ComponentPropsWithoutRef<"button">, "children">;
 
 /**
  * The bell icon button itself. Stateless w.r.t. data fetching — receives
  * count + hasNew as props so it stays trivially testable and the parent
  * (NotificationBell) owns the wiring to TanStack Query / Realtime.
+ *
+ * Must use `forwardRef` and forward unknown DOM/Radix props (e.g. `onClick`,
+ * `ref`) to the underlying `<button>` so `DropdownMenuTrigger asChild` works
+ * on desktop. Mobile passes `onClick` in those props to open the Sheet.
  *
  * Visual rules (from design_guidelines.md):
  *   - No unread → outline `Bell`, no badge.
@@ -43,14 +37,13 @@ interface NotificationBellTriggerProps {
  * user can't visually "miss" a notification arriving while the panel
  * is closed.
  */
-export function NotificationBellTrigger({
-  unreadCount,
-  hasNew,
-  cap,
-  onClick,
-  size = "default",
-  className,
-}: NotificationBellTriggerProps) {
+export const NotificationBellTrigger = React.forwardRef<
+  HTMLButtonElement,
+  NotificationBellTriggerProps
+>(function NotificationBellTrigger(
+  { unreadCount, hasNew, cap, size = "default", className, type = "button", ...rest },
+  ref,
+) {
   const previousHasNewRef = useRef(false);
   const [showPulse, setShowPulse] = useState(false);
 
@@ -70,8 +63,9 @@ export function NotificationBellTrigger({
 
   return (
     <button
-      type="button"
-      onClick={onClick}
+      ref={ref}
+      type={type}
+      {...rest}
       className={cn(
         "relative inline-flex items-center justify-center rounded-full transition-colors",
         "hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
@@ -79,18 +73,14 @@ export function NotificationBellTrigger({
         className,
       )}
       aria-label={
-        unreadCount > 0
-          ? `Notifications, ${unreadCount} unread`
-          : "Notifications"
+        unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"
       }
       data-testid="button-notifications-bell"
     >
       <Icon
         className={cn(
           iconSize,
-          unreadCount > 0
-            ? "text-foreground"
-            : "text-muted-foreground",
+          unreadCount > 0 ? "text-foreground" : "text-muted-foreground",
         )}
         aria-hidden="true"
       />
@@ -128,4 +118,6 @@ export function NotificationBellTrigger({
       )}
     </button>
   );
-}
+});
+
+NotificationBellTrigger.displayName = "NotificationBellTrigger";
