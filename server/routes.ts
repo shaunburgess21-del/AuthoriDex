@@ -5,7 +5,7 @@ import { storage } from "./storage";
 import { getBaselineDiagnostics } from "./utils/baseline";
 import { db } from "./db";
 import { syncWinningAvatarForPerson } from "./lib/curateAvatar";
-import { trendSnapshots, trackedPeople, communityInsights, insightVotes, comments as unifiedComments, commentVotes, matchups, votes, xpActions, xpLedger, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, contentCategories, userCategoryEngagement, insertCommunityInsightSchema, insertInsightVoteSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
+import { trendSnapshots, trackedPeople, communityInsights, insightVotes, comments as unifiedComments, commentVotes, matchups, votes, xpActions, xpLedger, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, contentCategories, userCategoryEngagement, emailUnsubscribeState, insertCommunityInsightSchema, insertInsightVoteSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
 import { validateSuggestionPayload, SUGGESTION_TYPES } from "@shared/suggestionSchemas";
 import { normaliseSocialHandles } from "@shared/handleNormalise";
 import { eq, desc, and, gt, sql, count, gte, lte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull, isNull } from "drizzle-orm";
@@ -17220,6 +17220,16 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       const ledgerSum = allEntries.reduce((s, h) => s + h.amount, 0);
       const drift = profile.predictCredits - ledgerSum;
       const authEmail = await getSupabaseAuthEmail(id);
+      const [unsubscribeState] = await db
+        .select({
+          channel: emailUnsubscribeState.channel,
+          source: emailUnsubscribeState.source,
+          unsubscribedAt: emailUnsubscribeState.unsubscribedAt,
+          updatedAt: emailUnsubscribeState.updatedAt,
+        })
+        .from(emailUnsubscribeState)
+        .where(eq(emailUnsubscribeState.userId, id))
+        .limit(1);
 
       res.json({
         profile: {
@@ -17234,6 +17244,9 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           totalPredictions: profile.totalPredictions,
           winRate: profile.winRate,
           createdAt: profile.createdAt,
+          emailMarketingUnsubscribed: Boolean(unsubscribeState),
+          emailMarketingUnsubscribedAt: unsubscribeState?.unsubscribedAt ?? null,
+          emailMarketingUnsubscribeSource: unsubscribeState?.source ?? null,
         },
         ledgerSum,
         drift,

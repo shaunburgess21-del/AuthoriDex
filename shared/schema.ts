@@ -1623,6 +1623,23 @@ export const notificationPreferences = pgTable("notification_preferences", {
 export type NotificationPreferences = typeof notificationPreferences.$inferSelect;
 export type InsertNotificationPreferences = typeof notificationPreferences.$inferInsert;
 
+// Durable one-row state for marketing/lifecycle email unsubscribe. We keep
+// this separate from channel preference placeholders so admin tooling can
+// explicitly show whether a user clicked an unsubscribe link.
+export const emailUnsubscribeState = pgTable("email_unsubscribe_state", {
+  userId: varchar("user_id")
+    .primaryKey()
+    .references(() => profiles.id, { onDelete: "cascade" }),
+  channel: text("channel").notNull().default("marketing_lifecycle"),
+  source: text("source").notNull().default("email_link"),
+  tokenHash: text("token_hash"),
+  unsubscribedAt: timestamp("unsubscribed_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export type EmailUnsubscribeState = typeof emailUnsubscribeState.$inferSelect;
+export type InsertEmailUnsubscribeState = typeof emailUnsubscribeState.$inferInsert;
+
 /**
  * Per-(user, market) mute. Composes with the category-level toggles in
  * `notificationPreferences`: a notification is delivered only if (a) the

@@ -1,7 +1,12 @@
 import type { Express } from "express";
+import { createHash } from "crypto";
 import { eq } from "drizzle-orm";
 import { db } from "../db";
-import { notificationPreferences, profiles } from "@shared/schema";
+import {
+  emailUnsubscribeState,
+  notificationPreferences,
+  profiles,
+} from "@shared/schema";
 import { verifyUnsubscribeToken } from "../emails/unsubscribe";
 
 const USERNAME_PATTERN = /^[A-Za-z0-9_]{3,20}$/;
@@ -37,13 +42,15 @@ export function registerPublicRoutes(app: Express): void {
 
     try {
       const userId = verified.userId;
+      const now = new Date();
+      const tokenHash = createHash("sha256").update(token).digest("hex");
       const updates = {
         predictionsEmail: false,
         favoritesEmail: false,
         socialEmail: false,
         accountEmail: false,
         systemEmail: false,
-        updatedAt: new Date(),
+        updatedAt: now,
       };
 
       await db
@@ -52,6 +59,27 @@ export function registerPublicRoutes(app: Express): void {
         .onConflictDoUpdate({
           target: notificationPreferences.userId,
           set: updates,
+        });
+
+      await db
+        .insert(emailUnsubscribeState)
+        .values({
+          userId,
+          channel: "marketing_lifecycle",
+          source: "email_link",
+          tokenHash,
+          unsubscribedAt: now,
+          updatedAt: now,
+        })
+        .onConflictDoUpdate({
+          target: emailUnsubscribeState.userId,
+          set: {
+            channel: "marketing_lifecycle",
+            source: "email_link",
+            tokenHash,
+            unsubscribedAt: now,
+            updatedAt: now,
+          },
         });
 
       return res.json({

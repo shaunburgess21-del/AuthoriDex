@@ -309,6 +309,13 @@
       "when": 1779412800000,
       "tag": "0043_user_category_engagement",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1779499200000,
+      "tag": "0044_email_unsubscribe_state",
+      "breakpoints": true
     }
   ]
 }

@@ -58,6 +58,9 @@ interface CreditHistoryResponse {
     totalPredictions: number;
     winRate: number;
     createdAt: string;
+    emailMarketingUnsubscribed: boolean;
+    emailMarketingUnsubscribedAt: string | null;
+    emailMarketingUnsubscribeSource: string | null;
   };
   ledgerSum: number;
   drift: number;
@@ -141,6 +144,26 @@ export function AdminUserCreditHistory({
               <p className="text-sm text-muted-foreground" data-testid="text-user-email">
                 {data.profile.email || "No email available"}
               </p>
+              <div
+                className={`inline-flex items-center gap-2 rounded-md border px-2.5 py-1 text-xs ${
+                  data.profile.emailMarketingUnsubscribed
+                    ? "border-amber-500/40 bg-amber-500/10 text-amber-300"
+                    : "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
+                }`}
+                data-testid="text-user-email-subscription-state"
+              >
+                <span className="font-medium">
+                  Email marketing:
+                </span>
+                <span>
+                  {data.profile.emailMarketingUnsubscribed ? "Unsubscribed" : "Subscribed"}
+                </span>
+                {data.profile.emailMarketingUnsubscribedAt ? (
+                  <span className="text-muted-foreground">
+                    ({formatDate(data.profile.emailMarketingUnsubscribedAt)})
+                  </span>
+                ) : null}
+              </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
                 <div className="p-3 rounded-md bg-muted/50">
                   <p className="text-muted-foreground text-xs">Credits</p>

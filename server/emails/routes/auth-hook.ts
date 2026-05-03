@@ -53,6 +53,15 @@ interface SupabaseAuthHookPayload {
   };
 }
 
+function sanitizeOtpToken(rawToken: string): string {
+  const trimmed = rawToken.trim();
+  const sixDigits = trimmed.match(/\d{6}/)?.[0];
+  if (sixDigits) {
+    return sixDigits;
+  }
+  return trimmed.replace(/<end>/gi, "").trim();
+}
+
 // ---- Webhook verifier -----------------------------------------------------
 
 function getWebhookVerifier(): Webhook {
@@ -114,6 +123,7 @@ export async function handleAuthHook(
 
   const { user, email_data } = payload;
   const { token, token_hash, email_action_type } = email_data;
+  const cleanToken = sanitizeOtpToken(token);
 
   console.log(
     `[auth-hook] Verified. action=${email_action_type} to=${user.email}`,
@@ -125,14 +135,14 @@ export async function handleAuthHook(
       case "magiclink": {
         const subject =
           email_action_type === "signup"
-            ? `Your VoxDex code: ${token}`
-            : `Your VoxDex sign-in code: ${token}`;
+            ? `Your VoxDex code: ${cleanToken}`
+            : `Your VoxDex sign-in code: ${cleanToken}`;
 
         const result = await sendEmail({
           to: user.email,
           subject,
           category: "auth",
-          template: React.createElement(VerifyEmail, { code: token }),
+          template: React.createElement(VerifyEmail, { code: cleanToken }),
           idempotencyKey: `auth:${email_action_type}:${token_hash}`,
           tags: [
             { name: "source", value: "supabase-auth-hook" },
@@ -150,9 +160,9 @@ export async function handleAuthHook(
         // TODO: dedicated PasswordResetEmail template.
         const result = await sendEmail({
           to: user.email,
-          subject: `Your VoxDex password reset code: ${token}`,
+          subject: `Your VoxDex password reset code: ${cleanToken}`,
           category: "auth",
-          template: React.createElement(VerifyEmail, { code: token }),
+          template: React.createElement(VerifyEmail, { code: cleanToken }),
           idempotencyKey: `auth:recovery:${token_hash}`,
           tags: [
             { name: "source", value: "supabase-auth-hook" },
