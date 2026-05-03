@@ -82,10 +82,11 @@ const CATEGORY_HEX: Record<string, string> = {
 
 const APPROVAL_COLORS = ["#FF0000", "#FF6D00", "#FFC400", "#76FF03", "#00C853"];
 
-const MIN_SPEED = 1000;
-const MAX_SPEED = 3000;
-/** Default centered on the slider (50% between Fast and Slow) */
-const DEFAULT_SPEED = Math.round((MIN_SPEED + MAX_SPEED) / 2);
+type SpeedMultiplier = 1 | 1.5 | 2;
+const SPEED_CYCLE: SpeedMultiplier[] = [1, 1.5, 2];
+const BASE_FRAME_INTERVAL_MS = 2000;
+const speedMsFor = (mult: SpeedMultiplier) => Math.round(BASE_FRAME_INTERVAL_MS / mult);
+const formatSpeedLabel = (mult: SpeedMultiplier) => `${mult}x`;
 const MAX_FRAMES = 100;
 
 // --------------- Helpers ---------------
@@ -194,71 +195,6 @@ function MiniSparkline({ data }: { data: number[] }) {
         fill={color}
       />
     </svg>
-  );
-}
-
-// --------------- SpeedSlider ---------------
-
-function SpeedSlider({
-  speed,
-  onChange,
-  accentColor,
-}: {
-  speed: number;
-  onChange: (ms: number) => void;
-  accentColor: string;
-}) {
-  const trackRef = useRef<HTMLDivElement>(null);
-  const dragging = useRef(false);
-
-  const pct = ((MAX_SPEED - speed) / (MAX_SPEED - MIN_SPEED)) * 100;
-
-  const updateFromPointer = useCallback((clientX: number) => {
-    const track = trackRef.current;
-    if (!track) return;
-    const rect = track.getBoundingClientRect();
-    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    const newSpeed = MAX_SPEED - ratio * (MAX_SPEED - MIN_SPEED);
-    onChange(Math.round(newSpeed));
-  }, [onChange]);
-
-  const handlePointerDown = useCallback((e: React.PointerEvent) => {
-    dragging.current = true;
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    updateFromPointer(e.clientX);
-  }, [updateFromPointer]);
-
-  const handlePointerMove = useCallback((e: React.PointerEvent) => {
-    if (!dragging.current) return;
-    updateFromPointer(e.clientX);
-  }, [updateFromPointer]);
-
-  const handlePointerUp = useCallback(() => {
-    dragging.current = false;
-  }, []);
-
-  return (
-    <div className="flex items-center gap-2 shrink-0">
-      <span className="text-[9px] text-muted-foreground uppercase tracking-wider">Slow</span>
-      <div
-        ref={trackRef}
-        className="relative w-20 sm:w-24 h-5 flex items-center cursor-pointer touch-none"
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-      >
-        <div className="absolute inset-x-0 h-1 rounded-full bg-muted/40" />
-        <div
-          className="absolute left-0 h-1 rounded-full"
-          style={{ width: `${pct}%`, backgroundColor: accentColor }}
-        />
-        <div
-          className="absolute w-3.5 h-3.5 rounded-full border-2 shadow-md -translate-x-1/2"
-          style={{ left: `${pct}%`, backgroundColor: accentColor, borderColor: "rgba(255,255,255,0.9)" }}
-        />
-      </div>
-      <span className="text-[9px] text-muted-foreground uppercase tracking-wider">Fast</span>
-    </div>
   );
 }
 
@@ -484,7 +420,17 @@ export function VoxDexPulse({ collapsed, onToggle }: VoxDexPulseProps) {
   const [category, setCategory] = useState<typeof CATEGORIES[number]>("All");
   const [isPlaying, setIsPlaying] = useState(false);
   const [frameIndex, setFrameIndex] = useState(0);
-  const [speed, setSpeed] = useState(DEFAULT_SPEED);
+  const [speedMultiplier, setSpeedMultiplier] = useState<SpeedMultiplier>(1);
+  const speed = speedMsFor(speedMultiplier);
+  const cycleSpeed = useCallback(() => {
+    setSpeedMultiplier((prev) => {
+      const idx = SPEED_CYCLE.indexOf(prev);
+      return SPEED_CYCLE[(idx + 1) % SPEED_CYCLE.length];
+    });
+  }, []);
+  const nextSpeedLabel = formatSpeedLabel(
+    SPEED_CYCLE[(SPEED_CYCLE.indexOf(speedMultiplier) + 1) % SPEED_CYCLE.length]
+  );
   const [limit, setLimit] = useState(10);
   const [autoStarted, setAutoStarted] = useState(false);
   const [approvalBreakdownCache, setApprovalBreakdownCache] = useState<Record<string, ApprovalBreakdown>>({});
@@ -654,7 +600,7 @@ export function VoxDexPulse({ collapsed, onToggle }: VoxDexPulseProps) {
   useEffect(() => {
     if (mode === "trend" && hasFrames && !autoStarted && !trendLoading) {
       setAutoStarted(true);
-      setSpeed(DEFAULT_SPEED);
+      setSpeedMultiplier(1);
       setFrameIndex(0);
       setIsPlaying(true);
     }
@@ -834,11 +780,18 @@ export function VoxDexPulse({ collapsed, onToggle }: VoxDexPulseProps) {
                   {isPlaying ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5 ml-0.5" />}
                 </button>
               )}
-            </div>
-          )}
-          {mode === "trend" && isTimelapse && (
-            <div className="hidden sm:flex min-w-[140px] max-w-[200px] shrink-0 basis-[180px]">
-              <SpeedSlider speed={speed} onChange={setSpeed} accentColor={accentColor} />
+              {isTimelapse && (
+                <button
+                  type="button"
+                  onClick={cycleSpeed}
+                  className="flex items-center justify-center h-7 min-w-[2.5rem] px-2 rounded-lg bg-blue-500/25 dark:bg-blue-500/20 border border-blue-400/50 text-blue-600 dark:text-blue-400 hover:bg-blue-500/30 transition-all shadow-[0_0_8px_rgba(59,130,246,0.15)] shrink-0 text-xs font-semibold tabular-nums"
+                  aria-label="Playback speed"
+                  title={`Switch to ${nextSpeedLabel}`}
+                  data-testid="button-pulse-speed"
+                >
+                  {formatSpeedLabel(speedMultiplier)}
+                </button>
+              )}
             </div>
           )}
         </div>
