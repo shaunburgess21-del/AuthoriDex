@@ -34,7 +34,7 @@ interface ExtendedPerson extends TrendingPerson {
 interface LeaderboardRowProps {
   person: ExtendedPerson;
   activeTab?: LeaderboardTab;
-  onVisitProfile: () => void;
+  onOpenInsight: () => void;
   onVoteClick?: () => void;
   onPredictUp?: () => void;
   onPredictDown?: () => void;
@@ -63,7 +63,7 @@ function markEverVoted() {
 export function LeaderboardRow({
   person,
   activeTab = "fame",
-  onVisitProfile,
+  onOpenInsight,
   onVoteClick,
   onPredictUp,
   onPredictDown,
@@ -157,7 +157,7 @@ export function LeaderboardRow({
     <div className="border-b">
       <div
         className="flex items-center gap-3 sm:gap-4 lg:gap-5 pl-2 pr-2 py-4 sm:pl-3 sm:pr-3 sm:py-5 hover-elevate active-elevate-2 cursor-pointer"
-        onClick={onVisitProfile}
+        onClick={onOpenInsight}
         data-testid={`row-person-${person.id}`}
       >
         <div

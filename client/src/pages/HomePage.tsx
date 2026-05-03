@@ -19,8 +19,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Drawer, DrawerContent, DrawerDescription, DrawerFooter, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { X, RefreshCw, TrendingUp, TrendingDown, Activity, ChevronRight, ChevronDown, LineChart, Vote, Trophy, Users, Sparkles, Target, Check, ThumbsDown, Minus, Star, Info, Crown, HelpCircle } from "lucide-react";
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useDragScroll } from "@/hooks/use-drag-scroll";
@@ -52,7 +52,7 @@ function MarketPulseCard({
   icon: Icon, 
   people, 
   type,
-  onPersonClick,
+  onOpenInsight,
   collapsed,
   onToggle
 }: { 
@@ -60,7 +60,7 @@ function MarketPulseCard({
   icon: typeof TrendingUp; 
   people: TrendingPerson[]; 
   type: "daily" | "gainer" | "dropper";
-  onPersonClick: (id: string) => void;
+  onOpenInsight: (person: TrendingPerson) => void;
   collapsed: boolean;
   onToggle: () => void;
 }) {
@@ -125,7 +125,7 @@ function MarketPulseCard({
                   <div
                     key={person.id}
                     className="flex items-center gap-2.5 p-2 rounded-lg hover-elevate cursor-pointer bg-muted/40 dark:bg-slate-800/30 border border-border/50 dark:border-slate-700/30 transition-colors hover:border-foreground/20 dark:hover:border-slate-600/50"
-                    onClick={() => onPersonClick(person.id)}
+                    onClick={() => onOpenInsight(person)}
                     data-testid={`pulse-item-${person.id}`}
                   >
                     <div className="relative flex items-center rounded-md overflow-hidden shrink-0">
@@ -516,12 +516,156 @@ interface TrendingResponse {
   };
 }
 
+interface InsightPerson {
+  id: string;
+  name: string;
+  avatar: string | null;
+  category: string | null;
+  rank: number | null;
+  change24h: number | null;
+  rankChange: number | null;
+}
+
 interface PersonMomentumResponse {
   signals?: {
     news?: { deltaPct?: number };
     wiki?: { deltaPct?: number };
     momentum?: { deltaPct?: number };
   };
+}
+
+interface InsightSignal {
+  label: "Wiki" | "News" | "Momentum";
+  deltaPct: number;
+}
+
+function InsightPanelContent({
+  person,
+  loading,
+  error,
+  growthSignals,
+  coolingSignals,
+  onClose,
+  onViewProfile,
+}: {
+  person: InsightPerson;
+  loading: boolean;
+  error: boolean;
+  growthSignals: InsightSignal[];
+  coolingSignals: InsightSignal[];
+  onClose: () => void;
+  onViewProfile: () => void;
+}) {
+  const formatPct = (value: number) => `${value > 0 ? "+" : ""}${value.toFixed(1).replace(/\.0$/, "")}%`;
+  const currentRank = typeof person.rank === "number" ? person.rank : null;
+  const previousRank = currentRank != null && typeof person.rankChange === "number"
+    ? currentRank + person.rankChange
+    : null;
+  const showRankShift = currentRank != null && previousRank != null;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/40 border border-border/50">
+        <PersonAvatar
+          name={person.name}
+          avatar={person.avatar}
+          size="md"
+          className="h-12 w-12"
+        />
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold text-sm truncate">{person.name}</p>
+          {person.category && (
+            <p className={`text-xs ${getCategoryTextColor(person.category)}`}>{person.category}</p>
+          )}
+        </div>
+        {typeof person.change24h === "number" && (
+          <span className={`px-2 py-0.5 rounded text-xs font-mono font-medium tabular-nums ${
+            person.change24h > 0
+              ? "bg-green-500/15 text-green-600 dark:text-green-400"
+              : "bg-red-500/15 text-red-600 dark:text-red-400"
+          }`}>
+            {person.change24h > 0 ? "+" : ""}
+            {person.change24h.toFixed(1)}%
+          </span>
+        )}
+      </div>
+
+      <div className="rounded-lg border border-border/60 p-3 bg-background/60">
+        <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1.5">RANK SHIFT</p>
+        {showRankShift ? (
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-medium">
+              Was #{previousRank} {"\u2192"} Now #{currentRank}
+            </p>
+            <span className={`px-2 py-0.5 rounded text-xs font-mono font-semibold ${
+              (person.rankChange ?? 0) > 0
+                ? "bg-green-500/15 text-green-600 dark:text-green-400"
+                : (person.rankChange ?? 0) < 0
+                  ? "bg-red-500/15 text-red-600 dark:text-red-400"
+                  : "bg-muted text-muted-foreground"
+            }`}>
+              {(person.rankChange ?? 0) > 0 ? "+" : ""}
+              {person.rankChange ?? 0}
+            </span>
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">Rank movement unavailable</p>
+        )}
+      </div>
+
+      {loading ? (
+        <div className="rounded-lg border border-border/60 p-3 bg-background/60">
+          <p className="text-sm text-muted-foreground">Loading signal insights...</p>
+        </div>
+      ) : error ? (
+        <div className="rounded-lg border border-border/60 p-3 bg-background/60">
+          <p className="text-sm text-muted-foreground">Unable to load signal insights right now</p>
+        </div>
+      ) : (
+        <>
+          {growthSignals.length > 0 && (
+            <div className="rounded-lg border border-border/60 p-3 bg-background/60">
+              <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">GROWTH SIGNALS</p>
+              <div className="flex flex-wrap gap-2">
+                {growthSignals.map((signal) => (
+                  <span
+                    key={signal.label}
+                    className="px-2.5 py-1 rounded-md text-xs font-medium bg-green-500/15 text-green-600 dark:text-green-400"
+                  >
+                    {signal.label} {formatPct(signal.deltaPct)}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {coolingSignals.length > 0 && (
+            <div className="rounded-lg border border-border/60 p-3 bg-background/60">
+              <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">COOLING SIGNALS</p>
+              <div className="flex flex-wrap gap-2">
+                {coolingSignals.map((signal) => (
+                  <span
+                    key={signal.label}
+                    className="px-2.5 py-1 rounded-md text-xs font-medium bg-red-500/15 text-red-600 dark:text-red-400"
+                  >
+                    {signal.label} {formatPct(signal.deltaPct)}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
+        <Button variant="outline" onClick={onClose}>
+          Close
+        </Button>
+        <Button onClick={onViewProfile}>
+          View full profile
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 type LeaderboardTab = "fame" | "approval";
@@ -717,7 +861,7 @@ export default function HomePage() {
     try { localStorage.setItem('trending_now_collapsed', String(next)); } catch {}
   };
 
-  const [selectedHotMover, setSelectedHotMover] = useState<HotMover | null>(null);
+  const [selectedInsightPerson, setSelectedInsightPerson] = useState<InsightPerson | null>(null);
 
   const [pulseCollapsed, setPulseCollapsed] = useState(() => {
     try {
@@ -835,17 +979,17 @@ export default function HomePage() {
   });
 
   const {
-    data: selectedHotMoverMomentum,
-    isLoading: selectedHotMoverMomentumLoading,
-    isError: selectedHotMoverMomentumError,
+    data: selectedInsightMomentum,
+    isLoading: selectedInsightMomentumLoading,
+    isError: selectedInsightMomentumError,
   } = useQuery<PersonMomentumResponse>({
-    queryKey: ["/api/people", selectedHotMover?.id, "momentum"],
+    queryKey: ["/api/people", selectedInsightPerson?.id, "momentum"],
     queryFn: async () => {
-      const response = await fetch(`/api/people/${selectedHotMover!.id}/momentum`);
+      const response = await fetch(`/api/people/${selectedInsightPerson!.id}/momentum`);
       if (!response.ok) throw new Error("Failed to fetch momentum insights");
       return response.json();
     },
-    enabled: !!selectedHotMover?.id,
+    enabled: !!selectedInsightPerson?.id,
     staleTime: 60_000,
   });
 
@@ -880,18 +1024,38 @@ export default function HomePage() {
     setLocation(`/person/${personId}`);
   };
 
-  const handleOpenHotMoverInsight = (person: HotMover) => {
-    setSelectedHotMover(person);
+  const openInsightFromHotMover = (person: HotMover) => {
+    setSelectedInsightPerson({
+      id: person.id,
+      name: person.name,
+      avatar: person.avatar,
+      category: person.category,
+      rank: person.rank ?? null,
+      change24h: person.change24h ?? null,
+      rankChange: person.rankChange ?? null,
+    });
   };
 
-  const handleCloseHotMoverInsight = () => {
-    setSelectedHotMover(null);
+  const openInsightFromTrendingPerson = (person: TrendingPerson) => {
+    setSelectedInsightPerson({
+      id: person.id,
+      name: person.name,
+      avatar: person.avatar ?? null,
+      category: person.category ?? null,
+      rank: ((person as any).liveRank ?? person.rank ?? null) as number | null,
+      change24h: person.change24h ?? null,
+      rankChange: ((person as any).rankChange ?? null) as number | null,
+    });
   };
 
-  const handleViewHotMoverProfile = () => {
-    if (!selectedHotMover) return;
-    handleVisitProfile(selectedHotMover.id);
-    setSelectedHotMover(null);
+  const handleCloseInsightPanel = () => {
+    setSelectedInsightPerson(null);
+  };
+
+  const handleViewInsightProfile = () => {
+    if (!selectedInsightPerson) return;
+    handleVisitProfile(selectedInsightPerson.id);
+    setSelectedInsightPerson(null);
   };
 
   const handleClearFilters = () => {
@@ -938,17 +1102,24 @@ export default function HomePage() {
     return getMarketCategoryLabel(category);
   }, [category]);
 
-  const selectedHotMoverPositiveSignals = useMemo(() => {
-    if (!selectedHotMoverMomentum?.signals) return [];
-    const items = [
-      { label: "Wiki", deltaPct: selectedHotMoverMomentum.signals.wiki?.deltaPct ?? 0 },
-      { label: "News", deltaPct: selectedHotMoverMomentum.signals.news?.deltaPct ?? 0 },
-      { label: "Momentum", deltaPct: selectedHotMoverMomentum.signals.momentum?.deltaPct ?? 0 },
+  const insightSignals = useMemo<InsightSignal[]>(() => {
+    if (!selectedInsightMomentum?.signals) return [];
+    return [
+      { label: "Wiki" as const, deltaPct: selectedInsightMomentum.signals.wiki?.deltaPct ?? 0 },
+      { label: "News" as const, deltaPct: selectedInsightMomentum.signals.news?.deltaPct ?? 0 },
+      { label: "Momentum" as const, deltaPct: selectedInsightMomentum.signals.momentum?.deltaPct ?? 0 },
     ];
-    return items.filter((item) => Number.isFinite(item.deltaPct) && item.deltaPct > 0);
-  }, [selectedHotMoverMomentum]);
+  }, [selectedInsightMomentum]);
 
-  const formatPositivePct = (value: number) => `+${value.toFixed(1).replace(/\.0$/, "")}%`;
+  const insightGrowthSignals = useMemo<InsightSignal[]>(
+    () => insightSignals.filter((item) => Number.isFinite(item.deltaPct) && item.deltaPct > 0),
+    [insightSignals]
+  );
+
+  const insightCoolingSignals = useMemo<InsightSignal[]>(
+    () => insightSignals.filter((item) => Number.isFinite(item.deltaPct) && item.deltaPct < 0),
+    [insightSignals]
+  );
 
   if (isLoading) {
     return (
@@ -1074,7 +1245,7 @@ export default function HomePage() {
                   icon={Activity} 
                   people={dailyMovers} 
                   type="daily"
-                  onPersonClick={handleVisitProfile}
+                  onOpenInsight={openInsightFromTrendingPerson}
                   collapsed={moversCollapsed}
                   onToggle={() => setMoversCollapsed(!moversCollapsed)}
                 />
@@ -1083,7 +1254,7 @@ export default function HomePage() {
                   icon={TrendingUp} 
                   people={topGainers} 
                   type="gainer"
-                  onPersonClick={handleVisitProfile}
+                  onOpenInsight={openInsightFromTrendingPerson}
                   collapsed={moversCollapsed}
                   onToggle={() => setMoversCollapsed(!moversCollapsed)}
                 />
@@ -1092,7 +1263,7 @@ export default function HomePage() {
                   icon={TrendingDown} 
                   people={topDroppers} 
                   type="dropper"
-                  onPersonClick={handleVisitProfile}
+                  onOpenInsight={openInsightFromTrendingPerson}
                   collapsed={moversCollapsed}
                   onToggle={() => setMoversCollapsed(!moversCollapsed)}
                 />
@@ -1100,7 +1271,7 @@ export default function HomePage() {
 
               <div className="mb-6">
                 <TrendingNowFeed
-                  onOpenInsight={handleOpenHotMoverInsight}
+                  onOpenInsight={openInsightFromHotMover}
                   collapsed={trendingNowCollapsed}
                   onToggle={handleTrendingNowToggle}
                 />
@@ -1304,7 +1475,7 @@ export default function HomePage() {
                         key={person.id}
                         person={person}
                         activeTab={leaderboardTab}
-                        onVisitProfile={() => handleVisitProfile(person.id)}
+                        onOpenInsight={() => openInsightFromTrendingPerson(person)}
                         onVoteClick={() => handleVoteClick(person.id)}
                         onPredictUp={() => handleLeaderboardPredict(person.id, "up")}
                         onPredictDown={() => handleLeaderboardPredict(person.id, "down")}
@@ -1403,190 +1574,45 @@ export default function HomePage() {
         )}
       </AnimatePresence>
       {isMobile ? (
-        <Drawer open={!!selectedHotMover} onOpenChange={(open) => { if (!open) handleCloseHotMoverInsight(); }}>
+        <Drawer open={!!selectedInsightPerson} onOpenChange={(open) => { if (!open) handleCloseInsightPanel(); }}>
           <DrawerContent>
-            {selectedHotMover && (
+            {selectedInsightPerson && (
               <>
                 <DrawerHeader className="text-left">
                   <DrawerTitle className="text-lg">24h Rank Movement</DrawerTitle>
-                  <DrawerDescription>
-                    Exceptional movement context for this Hot Mover
-                  </DrawerDescription>
                 </DrawerHeader>
-                <div className="px-4 pb-2 space-y-4">
-                  <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/40 border border-border/50">
-                    <PersonAvatar
-                      name={selectedHotMover.name}
-                      avatar={selectedHotMover.avatar}
-                      size="sm"
-                      className="h-10 w-10"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <p className="font-semibold text-sm truncate">{selectedHotMover.name}</p>
-                      {selectedHotMover.category && (
-                        <p className={`text-xs ${getCategoryTextColor(selectedHotMover.category)}`}>{selectedHotMover.category}</p>
-                      )}
-                    </div>
-                    {typeof selectedHotMover.change24h === "number" && (
-                      <span className={`px-2 py-0.5 rounded text-xs font-mono font-medium tabular-nums ${
-                        selectedHotMover.change24h > 0
-                          ? "bg-green-500/15 text-green-600 dark:text-green-400"
-                          : "bg-red-500/15 text-red-600 dark:text-red-400"
-                      }`}>
-                        {selectedHotMover.change24h > 0 ? "+" : ""}
-                        {selectedHotMover.change24h.toFixed(1)}%
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="rounded-lg border border-border/60 p-3 bg-background/60">
-                    <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1.5">Rank Shift</p>
-                    {typeof selectedHotMover.rankChange === "number" ? (
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-sm font-medium">
-                          Was #{selectedHotMover.rank + selectedHotMover.rankChange} {"\u2192"} Now #{selectedHotMover.rank}
-                        </p>
-                        <span className={`px-2 py-0.5 rounded text-xs font-mono font-semibold ${
-                          selectedHotMover.rankChange > 0
-                            ? "bg-green-500/15 text-green-600 dark:text-green-400"
-                            : selectedHotMover.rankChange < 0
-                              ? "bg-red-500/15 text-red-600 dark:text-red-400"
-                              : "bg-muted text-muted-foreground"
-                        }`}>
-                          {selectedHotMover.rankChange > 0 ? "+" : ""}
-                          {selectedHotMover.rankChange}
-                        </span>
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">Rank movement unavailable</p>
-                    )}
-                  </div>
-
-                  <div className="rounded-lg border border-border/60 p-3 bg-background/60">
-                    <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">Positive Signals</p>
-                    {selectedHotMoverMomentumLoading ? (
-                      <p className="text-sm text-muted-foreground">Loading signal insights...</p>
-                    ) : selectedHotMoverMomentumError ? (
-                      <p className="text-sm text-muted-foreground">Unable to load signal insights right now</p>
-                    ) : selectedHotMoverPositiveSignals.length > 0 ? (
-                      <div className="flex flex-wrap gap-2">
-                        {selectedHotMoverPositiveSignals.map((signal) => (
-                          <span
-                            key={signal.label}
-                            className="px-2.5 py-1 rounded-md text-xs font-medium bg-green-500/15 text-green-600 dark:text-green-400"
-                          >
-                            {signal.label} {formatPositivePct(signal.deltaPct)}
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">No positive signal spikes in the last 24h</p>
-                    )}
-                  </div>
+                <div className="px-4 pb-2">
+                  <InsightPanelContent
+                    person={selectedInsightPerson}
+                    loading={selectedInsightMomentumLoading}
+                    error={selectedInsightMomentumError}
+                    growthSignals={insightGrowthSignals}
+                    coolingSignals={insightCoolingSignals}
+                    onClose={handleCloseInsightPanel}
+                    onViewProfile={handleViewInsightProfile}
+                  />
                 </div>
-                <DrawerFooter>
-                  <Button onClick={handleViewHotMoverProfile} data-testid="button-hot-mover-view-profile-mobile">
-                    View full profile
-                  </Button>
-                  <Button variant="outline" onClick={handleCloseHotMoverInsight}>
-                    Close
-                  </Button>
-                </DrawerFooter>
               </>
             )}
           </DrawerContent>
         </Drawer>
       ) : (
-        <Dialog open={!!selectedHotMover} onOpenChange={(open) => { if (!open) handleCloseHotMoverInsight(); }}>
+        <Dialog open={!!selectedInsightPerson} onOpenChange={(open) => { if (!open) handleCloseInsightPanel(); }}>
           <DialogContent className="sm:max-w-md">
-            {selectedHotMover && (
+            {selectedInsightPerson && (
               <>
                 <DialogHeader>
                   <DialogTitle>24h Rank Movement</DialogTitle>
-                  <DialogDescription>
-                    Exceptional movement context for this Hot Mover
-                  </DialogDescription>
                 </DialogHeader>
-                <div className="space-y-4">
-                  <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/40 border border-border/50">
-                    <PersonAvatar
-                      name={selectedHotMover.name}
-                      avatar={selectedHotMover.avatar}
-                      size="sm"
-                      className="h-10 w-10"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <p className="font-semibold text-sm truncate">{selectedHotMover.name}</p>
-                      {selectedHotMover.category && (
-                        <p className={`text-xs ${getCategoryTextColor(selectedHotMover.category)}`}>{selectedHotMover.category}</p>
-                      )}
-                    </div>
-                    {typeof selectedHotMover.change24h === "number" && (
-                      <span className={`px-2 py-0.5 rounded text-xs font-mono font-medium tabular-nums ${
-                        selectedHotMover.change24h > 0
-                          ? "bg-green-500/15 text-green-600 dark:text-green-400"
-                          : "bg-red-500/15 text-red-600 dark:text-red-400"
-                      }`}>
-                        {selectedHotMover.change24h > 0 ? "+" : ""}
-                        {selectedHotMover.change24h.toFixed(1)}%
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="rounded-lg border border-border/60 p-3 bg-background/60">
-                    <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1.5">Rank Shift</p>
-                    {typeof selectedHotMover.rankChange === "number" ? (
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-sm font-medium">
-                          Was #{selectedHotMover.rank + selectedHotMover.rankChange} {"\u2192"} Now #{selectedHotMover.rank}
-                        </p>
-                        <span className={`px-2 py-0.5 rounded text-xs font-mono font-semibold ${
-                          selectedHotMover.rankChange > 0
-                            ? "bg-green-500/15 text-green-600 dark:text-green-400"
-                            : selectedHotMover.rankChange < 0
-                              ? "bg-red-500/15 text-red-600 dark:text-red-400"
-                              : "bg-muted text-muted-foreground"
-                        }`}>
-                          {selectedHotMover.rankChange > 0 ? "+" : ""}
-                          {selectedHotMover.rankChange}
-                        </span>
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">Rank movement unavailable</p>
-                    )}
-                  </div>
-
-                  <div className="rounded-lg border border-border/60 p-3 bg-background/60">
-                    <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">Positive Signals</p>
-                    {selectedHotMoverMomentumLoading ? (
-                      <p className="text-sm text-muted-foreground">Loading signal insights...</p>
-                    ) : selectedHotMoverMomentumError ? (
-                      <p className="text-sm text-muted-foreground">Unable to load signal insights right now</p>
-                    ) : selectedHotMoverPositiveSignals.length > 0 ? (
-                      <div className="flex flex-wrap gap-2">
-                        {selectedHotMoverPositiveSignals.map((signal) => (
-                          <span
-                            key={signal.label}
-                            className="px-2.5 py-1 rounded-md text-xs font-medium bg-green-500/15 text-green-600 dark:text-green-400"
-                          >
-                            {signal.label} {formatPositivePct(signal.deltaPct)}
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">No positive signal spikes in the last 24h</p>
-                    )}
-                  </div>
-
-                  <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
-                    <Button variant="outline" onClick={handleCloseHotMoverInsight}>
-                      Close
-                    </Button>
-                    <Button onClick={handleViewHotMoverProfile} data-testid="button-hot-mover-view-profile-desktop">
-                      View full profile
-                    </Button>
-                  </div>
-                </div>
+                <InsightPanelContent
+                  person={selectedInsightPerson}
+                  loading={selectedInsightMomentumLoading}
+                  error={selectedInsightMomentumError}
+                  growthSignals={insightGrowthSignals}
+                  coolingSignals={insightCoolingSignals}
+                  onClose={handleCloseInsightPanel}
+                  onViewProfile={handleViewInsightProfile}
+                />
               </>
             )}
           </DialogContent>
