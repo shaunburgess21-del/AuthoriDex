@@ -213,4 +213,4 @@ Legal & privacy: [legal@voxdex.com](mailto:legal@voxdex.com)
 
 ---
 
-*VoxDex (Pty) Ltd is a private company registered in the Republic of South Africa. Company registration number: [TO BE ADDED ONCE REGISTERED].*
+*VoxDex (Pty) Ltd is a private company registered in the Republic of South Africa. Company registration number: 2026/350989/07.*

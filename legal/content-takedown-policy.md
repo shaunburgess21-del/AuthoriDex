@@ -153,4 +153,4 @@ We aim to respond to all takedown requests within 14 days of receiving a complet
 
 ---
 
-*VoxDex (Pty) Ltd is a private company registered in the Republic of South Africa. Company registration number: [TO BE ADDED ONCE REGISTERED].*
+*VoxDex (Pty) Ltd is a private company registered in the Republic of South Africa. Company registration number: 2026/350989/07.*
