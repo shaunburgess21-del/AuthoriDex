@@ -505,6 +505,12 @@ const BOT_UA_PATTERNS = /bot|crawl|spider|slurp|wget|curl|fetch|headless|phantom
 const PREFETCH_HEADERS = ['purpose', 'sec-purpose', 'x-purpose'];
 const SESSION_COOKIE_NAME = 'fdx_sid';
 const BOT_UA_SQL_PATTERN = "bot|crawl|spider|slurp|wget|curl|fetch|headless|phantom|puppet|selenium|lighthouse|preview|embed|scrape";
+const INTERNAL_REFERRER_HOSTS = new Set([
+  "voxdex.com",
+  "www.voxdex.com",
+  "authoridex-production.up.railway.app",
+  "localhost",
+]);
 const LEADERBOARD_DEFAULT_LIMIT = 100;
 const LEADERBOARD_MAX_LIMIT = Math.max(
   LEADERBOARD_DEFAULT_LIMIT,
@@ -544,6 +550,17 @@ function isPrefetch(req: Request): boolean {
     if (val && /prefetch/i.test(String(val))) return true;
   }
   return false;
+}
+
+function normalizeReferrerHost(referrer: string | null | undefined): string | null {
+  if (!referrer) return null;
+  try {
+    const host = new URL(referrer).hostname.toLowerCase();
+    if (host.startsWith("www.")) return host.slice(4);
+    return host;
+  } catch {
+    return null;
+  }
 }
 
 function shouldCountView(req: Request, personId: string): boolean {
@@ -918,11 +935,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (geo?.country) country = geo.country;
     }
 
+    let sessionId = getSessionId(req);
+    if (!sessionId) {
+      sessionId = randomUUID();
+      res.cookie(SESSION_COOKIE_NAME, sessionId, {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+        path: "/",
+        maxAge: 1000 * 60 * 60 * 24 * 365,
+      });
+    }
+
     const pageData = {
       path: req.path,
       userAgent: userAgent || null,
       referrer: req.headers['referer'] || null,
-      sessionId: (req as any).sessionID || null,
+      sessionId,
       country,
     };
     
@@ -8795,6 +8824,10 @@ Only return the JSON object.`;
           WHERE ${pageViews.createdAt} >= ${thirtyDaysAgo}
             AND COALESCE(${pageViews.userAgent}, '') ~* ${BOT_UA_SQL_PATTERN}
         )`,
+        uniqueHumanLikeSessions30Days: sql<number>`count(DISTINCT NULLIF(${pageViews.sessionId}, '')) FILTER (
+          WHERE ${pageViews.createdAt} >= ${thirtyDaysAgo}
+            AND COALESCE(${pageViews.userAgent}, '') !~* ${BOT_UA_SQL_PATTERN}
+        )`,
       }).from(pageViews);
       
       // Top pages (last 7 days) - separate query with limit
@@ -8810,6 +8843,7 @@ Only return the JSON object.`;
 
       // Top countries (last 30 days)
       let topCountries: Array<{ country: string | null; views: number }> = [];
+      let topReferrerDomains: Array<{ domain: string; views: number }> = [];
       try {
         topCountries = await db.select({
           country: pageViews.country,
@@ -8824,6 +8858,32 @@ Only return the JSON object.`;
           .groupBy(pageViews.country)
           .orderBy(sql`count(*) DESC`)
           .limit(10);
+
+        const referrerRows = await db.select({
+          referrer: pageViews.referrer,
+          views: sql<number>`count(*)`,
+        })
+          .from(pageViews)
+          .where(and(
+            gte(pageViews.createdAt, thirtyDaysAgo),
+            isNotNull(pageViews.referrer),
+            sql`COALESCE(${pageViews.userAgent}, '') !~* ${BOT_UA_SQL_PATTERN}`,
+          ))
+          .groupBy(pageViews.referrer)
+          .orderBy(sql`count(*) DESC`)
+          .limit(500);
+
+        const referrerMap = new Map<string, number>();
+        for (const row of referrerRows) {
+          const host = normalizeReferrerHost(row.referrer);
+          if (!host) continue;
+          if (INTERNAL_REFERRER_HOSTS.has(host)) continue;
+          referrerMap.set(host, (referrerMap.get(host) || 0) + Number(row.views));
+        }
+        topReferrerDomains = Array.from(referrerMap.entries())
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 10)
+          .map(([domain, views]) => ({ domain, views }));
       } catch (countryError: any) {
         const code = String(countryError?.code ?? "");
         const message = String(countryError?.message ?? "");
@@ -8839,8 +8899,10 @@ Only return the JSON object.`;
         last30Days: Number(stats?.last30Days || 0),
         humanLikeLast30Days: Number(stats?.humanLikeLast30Days || 0),
         botLikeLast30Days: Number(stats?.botLikeLast30Days || 0),
+        uniqueHumanLikeSessions30Days: Number(stats?.uniqueHumanLikeSessions30Days || 0),
         topPages: topPages.map(p => ({ path: p.path, views: Number(p.views) })),
         topCountries: topCountries.map(c => ({ country: c.country, views: Number(c.views) })),
+        topReferrerDomains,
       });
     } catch (error: any) {
       console.error("Error fetching traffic stats:", error.message);

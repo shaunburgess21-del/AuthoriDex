@@ -39,8 +39,10 @@ export interface TrafficStats {
   last30Days: number;
   humanLikeLast30Days?: number;
   botLikeLast30Days?: number;
+  uniqueHumanLikeSessions30Days?: number;
   topPages: { path: string; views: number }[];
   topCountries?: { country: string; views: number }[];
+  topReferrerDomains?: { domain: string; views: number }[];
 }
 
 export interface UserProfile {

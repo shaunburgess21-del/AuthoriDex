@@ -3499,6 +3499,9 @@ export default function AdminDashboard() {
                     <Badge variant="outline">
                       Bot-like (30d): {trafficLoading ? "..." : trafficStats?.botLikeLast30Days || 0}
                     </Badge>
+                    <Badge variant="outline">
+                      Unique human-like sessions (30d): {trafficLoading ? "..." : trafficStats?.uniqueHumanLikeSessions30Days || 0}
+                    </Badge>
                   </div>
                 )}
                 
@@ -3540,6 +3543,20 @@ export default function AdminDashboard() {
                     </div>
                   );
                 })()}
+
+                {trafficStats?.topReferrerDomains && trafficStats.topReferrerDomains.length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-border">
+                    <h4 className="text-sm font-medium mb-2">Top Referrer Domains (30 days, human-like)</h4>
+                    <div className="space-y-2">
+                      {trafficStats.topReferrerDomains.map((entry) => (
+                        <div key={entry.domain} className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground truncate max-w-[280px]">{entry.domain}</span>
+                          <Badge variant="secondary">{entry.views} views</Badge>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
