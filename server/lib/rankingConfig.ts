@@ -103,6 +103,28 @@ export const PREDICTION_STAKE_WEIGHT_CAP = readNumberEnv(
   8,
 );
 
+// ── Phase 4 constants (anonymous voting budget) ────────────────────
+
+/**
+ * Cumulative anonymous-vote budget per `fdx_sid` cookie. No time window —
+ * once a user consumes N units across the 5 vote-budget surfaces, every
+ * further attempt redirects them to /login?reason=vote_limit_reached.
+ * Re-votes on a previously-voted (surface_type, target_id) are upserts
+ * and consume zero additional units. Default 8 ties to the Phase 3
+ * BEHAVIOUR_RAMP_FULL_CATEGORIES threshold (per the implementation
+ * brief's "matches the personalisation full-blend threshold" framing).
+ */
+export const ANON_VOTE_BUDGET = readNumberEnv("ANON_VOTE_BUDGET", 8);
+
+/**
+ * Per-IP secondary cap on anonymous vote-write attempts in any 24h
+ * window. Defence-in-depth above the per-fdx_sid budget — catches
+ * "open 50 incognito windows from one machine" abuse without punishing
+ * normal household sharing. Counts only requests where req.userId is
+ * undefined; authenticated traffic is unaffected. Returns 429 when hit.
+ */
+export const ANON_VOTE_IP_DAILY_CAP = readNumberEnv("ANON_VOTE_IP_DAILY_CAP", 40);
+
 // ── Derived helpers ────────────────────────────────────────────────
 
 /**
