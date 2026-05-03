@@ -11428,6 +11428,90 @@ Only return the JSON object.`;
     }
   });
 
+  // PATCH /api/admin/moderation/comments/:id — admin edits a comment body.
+  // Restricted to AGENT-authored comments only. Editing real users' words
+  // would be a serious trust/integrity issue (and arguably defamation
+  // exposure); the use case here is purely cleaning up early-generation
+  // artifacts on simulated content (em-dashes, etc.) before launch.
+  // Always writes a full audit-log row capturing the previous body.
+  app.patch("/api/admin/moderation/comments/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const { body, reason } = req.body ?? {};
+      const adminId = req.userId!;
+
+      if (typeof body !== "string") {
+        return res.status(400).json({ error: "body must be a string" });
+      }
+      const trimmed = body.trim();
+      if (trimmed.length === 0) {
+        return res.status(400).json({ error: "body cannot be empty (use delete instead)" });
+      }
+      // Same upper bound as the user-facing comment composer (see schema —
+      // we don't enforce a hard cap on the column, but 2000 chars matches
+      // what the LLM generator targets and keeps the moderation row
+      // visually scannable).
+      if (trimmed.length > 2000) {
+        return res.status(400).json({ error: "body cannot exceed 2000 characters" });
+      }
+
+      // Pull the comment + author in one query so we can check is_agent.
+      const [existing] = await db
+        .select({
+          comment: unifiedComments,
+          authorIsAgent: profiles.isAgent,
+        })
+        .from(unifiedComments)
+        .leftJoin(profiles, eq(unifiedComments.userId, profiles.id))
+        .where(eq(unifiedComments.id, id));
+
+      if (!existing || !existing.comment) {
+        return res.status(404).json({ error: "Comment not found" });
+      }
+      if (existing.comment.deletedAt) {
+        return res.status(410).json({ error: "Comment has been deleted" });
+      }
+      if (!existing.authorIsAgent) {
+        // Hard guard. We do not allow admins to silently rewrite
+        // human-authored content from the moderation panel.
+        return res.status(403).json({ error: "Only agent-authored comments can be edited" });
+      }
+      if (existing.comment.body === trimmed) {
+        // No-op edit — return current row without touching the DB or
+        // polluting the audit log.
+        return res.json({ success: true, comment: existing.comment, unchanged: true });
+      }
+
+      const previousBody = existing.comment.body;
+      const [updated] = await db
+        .update(unifiedComments)
+        .set({ body: trimmed, updatedAt: new Date() })
+        .where(eq(unifiedComments.id, id))
+        .returning();
+
+      await db.insert(adminAuditLog).values({
+        adminId,
+        adminEmail: null,
+        actionType: 'edit_agent_comment',
+        targetTable: 'comments',
+        targetId: id,
+        previousData: { body: previousBody },
+        newData: { body: trimmed },
+        metadata: {
+          reason: typeof reason === "string" ? reason : null,
+          authorUserId: existing.comment.userId,
+          parentType: existing.comment.parentType,
+          parentId: existing.comment.parentId,
+        },
+      });
+
+      res.json({ success: true, comment: updated });
+    } catch (error: any) {
+      console.error("Error editing comment:", error?.message ?? error);
+      res.status(500).json({ error: "Failed to edit comment" });
+    }
+  });
+
   // Matchups CRUD
   app.get("/api/admin/matchups", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {

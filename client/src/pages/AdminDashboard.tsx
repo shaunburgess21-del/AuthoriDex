@@ -2564,6 +2564,41 @@ export default function AdminDashboard() {
     },
   });
 
+  // Inline edit state for the moderation comments list. Only one comment
+  // can be in edit mode at a time; opening another cancels the first.
+  // Edits are restricted server-side to agent-authored comments — the UI
+  // mirrors that by only rendering the pencil button for is_agent rows.
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editingCommentDraft, setEditingCommentDraft] = useState<string>("");
+
+  const editCommentMutation = useMutation({
+    mutationFn: async ({ id, body }: { id: string; body: string }) => {
+      const res = await fetchWithAuth(`/api/admin/moderation/comments/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body }),
+      });
+      if (!res.ok) {
+        const errPayload = await res.json().catch(() => ({}));
+        throw new Error(errPayload?.error ?? "Failed to edit comment");
+      }
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      if (data?.unchanged) {
+        toast("No Changes", { description: "Comment body was unchanged" });
+      } else {
+        toast("Comment Updated", { description: "Agent comment edited successfully" });
+      }
+      setEditingCommentId(null);
+      setEditingCommentDraft("");
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/moderation/comments"] });
+    },
+    onError: (error: Error) => {
+      toast.error("Edit Failed", { description: error.message });
+    },
+  });
+
   const runEntityDiagnostics = useCallback(async (personIds?: string[]) => {
     setEntityDiagLoading(true);
     try {
@@ -5709,26 +5744,95 @@ export default function AdminDashboard() {
                                     </Badge>
                                   )}
                                 </div>
-                                {/* Comment body */}
-                                <p className="text-sm whitespace-pre-wrap break-words text-foreground">{comment.body}</p>
+                                {/* Comment body — edit mode for agents, read-only otherwise */}
+                                {editingCommentId === comment.id ? (
+                                  <div className="space-y-2">
+                                    <Textarea
+                                      value={editingCommentDraft}
+                                      onChange={(e) => setEditingCommentDraft(e.target.value)}
+                                      rows={Math.min(10, Math.max(3, editingCommentDraft.split("\n").length + 1))}
+                                      maxLength={2000}
+                                      className="text-sm font-normal resize-y"
+                                      autoFocus
+                                      data-testid={`textarea-edit-comment-${comment.id}`}
+                                    />
+                                    <div className="flex items-center gap-2">
+                                      <Button
+                                        size="sm"
+                                        onClick={() => {
+                                          const trimmed = editingCommentDraft.trim();
+                                          if (trimmed.length === 0) {
+                                            toast.error("Comment cannot be empty");
+                                            return;
+                                          }
+                                          editCommentMutation.mutate({ id: comment.id, body: trimmed });
+                                        }}
+                                        disabled={editCommentMutation.isPending}
+                                        data-testid={`button-save-comment-${comment.id}`}
+                                      >
+                                        {editCommentMutation.isPending && editCommentMutation.variables?.id === comment.id ? (
+                                          <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                                        ) : null}
+                                        Save
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => {
+                                          setEditingCommentId(null);
+                                          setEditingCommentDraft("");
+                                        }}
+                                        disabled={editCommentMutation.isPending}
+                                        data-testid={`button-cancel-edit-${comment.id}`}
+                                      >
+                                        Cancel
+                                      </Button>
+                                      <span className="text-xs text-muted-foreground ml-auto">
+                                        {editingCommentDraft.length}/2000
+                                      </span>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <p className="text-sm whitespace-pre-wrap break-words text-foreground">{comment.body}</p>
+                                )}
                                 {/* Timestamp */}
                                 <div className="text-xs text-muted-foreground">
                                   {new Date(comment.createdAt).toLocaleString()}
                                 </div>
                               </div>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="text-destructive hover:text-destructive flex-shrink-0"
-                                onClick={() => {
-                                  setDeleteTarget({ type: "comment", id: comment.id, name: "this comment" });
-                                  setShowDeleteConfirm(true);
-                                }}
-                                aria-label="Delete"
-                                data-testid={`button-delete-comment-${comment.id}`}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
+                              <div className="flex flex-col gap-1 flex-shrink-0">
+                                {/* Edit button — agent-authored comments only.
+                                    Server enforces this guard regardless of UI state. */}
+                                {comment.isAgent && editingCommentId !== comment.id && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="text-muted-foreground hover:text-foreground"
+                                    onClick={() => {
+                                      setEditingCommentId(comment.id);
+                                      setEditingCommentDraft(comment.body);
+                                    }}
+                                    aria-label="Edit agent comment"
+                                    title="Edit agent comment"
+                                    data-testid={`button-edit-comment-${comment.id}`}
+                                  >
+                                    <Pencil className="h-4 w-4" />
+                                  </Button>
+                                )}
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="text-destructive hover:text-destructive"
+                                  onClick={() => {
+                                    setDeleteTarget({ type: "comment", id: comment.id, name: "this comment" });
+                                    setShowDeleteConfirm(true);
+                                  }}
+                                  aria-label="Delete"
+                                  data-testid={`button-delete-comment-${comment.id}`}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
                             </div>
                           );
                         })}
