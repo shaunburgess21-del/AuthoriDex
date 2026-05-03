@@ -49,7 +49,7 @@ The Mediastack source is in OUTAGE. Investigate the ingestion code and suggest a
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `AUTHORIDEX_API_URL` | `https://authoridex-production.up.railway.app` | Production API base URL |
+| `AUTHORIDEX_API_URL` | `https://voxdex.com` | Production API base URL |
 
 Override if needed:
 ```bash

@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 
 FRESHNESS_URL = os.environ.get(
     "AUTHORIDEX_API_URL",
-    "https://authoridex-production.up.railway.app"
+    "https://voxdex.com"
 ) + "/api/system/freshness"
 
 def main():

@@ -11,7 +11,7 @@ import urllib.request
 
 BASE_URL = os.environ.get(
     "AUTHORIDEX_API_URL",
-    "https://authoridex-production.up.railway.app"
+    "https://voxdex.com"
 )
 
 SOURCE_LABELS = {
