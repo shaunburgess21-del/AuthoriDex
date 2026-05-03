@@ -1,15 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
-import {
-  ArrowLeft,
-  CheckCircle2,
-  Clock,
-  Loader2,
-  Mail,
-  MessageSquare,
-  Send,
-  Shield,
-} from "lucide-react";
+import { ArrowLeft, CheckCircle2, Loader2, Send } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -35,7 +26,6 @@ import {
   type ContactTopic,
 } from "@shared/contact";
 
-const SUPPORT_EMAIL = "team@voxdex.com";
 const MESSAGE_MAX = 4000;
 const SUBJECT_MAX = 120;
 
@@ -97,12 +87,11 @@ export default function ContactPage() {
 
       <main className="container mx-auto px-4 py-10 md:py-14">
         <ContactHero />
-        <div className="mx-auto grid max-w-5xl gap-6 md:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="mx-auto max-w-2xl">
           <ContactForm
             initialEmail={user?.email ?? ""}
             initialName={profile?.username ?? ""}
           />
-          <ContactSidebar />
         </div>
       </main>
     </div>
@@ -123,96 +112,6 @@ function ContactHero() {
         topic, drop us a note, and we'll reply soon.
       </p>
     </section>
-  );
-}
-
-function ContactSidebar() {
-  return (
-    <aside className="space-y-4">
-      <Card className="p-5">
-        <div className="mb-3 flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-violet-500/15 dark:bg-violet-500/10">
-            <Mail className="h-4 w-4 text-violet-600 dark:text-violet-400" />
-          </div>
-          <h2 className="text-sm font-semibold">Prefer email?</h2>
-        </div>
-        <p className="mb-3 text-xs text-muted-foreground">
-          Reach us directly at the address below — same inbox.
-        </p>
-        <a
-          href={`mailto:${SUPPORT_EMAIL}`}
-          className="block break-all text-sm font-medium text-violet-600 hover:underline dark:text-violet-400"
-          data-testid="link-contact-mailto"
-        >
-          {SUPPORT_EMAIL}
-        </a>
-      </Card>
-
-      <Card className="p-5">
-        <div className="mb-3 flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/15 dark:bg-emerald-500/10">
-            <Clock className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-          </div>
-          <h2 className="text-sm font-semibold">Response time</h2>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          We're a small team and aim to reply within{" "}
-          <strong className="text-foreground">2 business days</strong>.
-          Urgent billing issues are usually faster.
-        </p>
-      </Card>
-
-      <Card className="p-5">
-        <div className="mb-3 flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-500/15 dark:bg-amber-500/10">
-            <MessageSquare className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-          </div>
-          <h2 className="text-sm font-semibold">Quick links</h2>
-        </div>
-        <ul className="space-y-2 text-sm">
-          <li>
-            <Link
-              href="/pricing"
-              className="text-muted-foreground hover:text-foreground hover:underline"
-            >
-              Pricing & credits
-            </Link>
-          </li>
-          <li>
-            <Link
-              href="/refund-policy"
-              className="text-muted-foreground hover:text-foreground hover:underline"
-            >
-              Refund policy
-            </Link>
-          </li>
-          <li>
-            <Link
-              href="/terms"
-              className="text-muted-foreground hover:text-foreground hover:underline"
-            >
-              Terms of service
-            </Link>
-          </li>
-          <li>
-            <Link
-              href="/privacy"
-              className="text-muted-foreground hover:text-foreground hover:underline"
-            >
-              Privacy policy
-            </Link>
-          </li>
-        </ul>
-      </Card>
-
-      <p className="flex items-start gap-2 px-1 text-xs text-muted-foreground">
-        <Shield className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-        <span>
-          Your message goes straight to the VoxDex team. We don't share
-          contact details with third parties.
-        </span>
-      </p>
-    </aside>
   );
 }
 
