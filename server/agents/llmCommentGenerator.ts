@@ -101,7 +101,7 @@ const SURFACE_LENGTH_WEIGHTS: Record<CommentSurface, Record<LengthTier, number>>
   matchup:       { tiny: 40, short: 35, medium: 20, long: 5 },
   trending_poll: { tiny: 25, short: 30, medium: 30, long: 15 },
   opinion_poll:  { tiny: 25, short: 30, medium: 30, long: 15 },
-  open_market:   { tiny: 15, short: 25, medium: 35, long: 25 },
+  open_market:   { tiny: 15, short: 30, medium: 35, long: 20 },
 };
 
 /** Reply distribution — replies are almost always shorter than top-level
