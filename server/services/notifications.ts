@@ -254,6 +254,126 @@ export async function createNotificationsBulk(
 }
 
 /**
+ * Fast path for admin-authored broadcasts that need to fan out to
+ * thousands of users in one request.
+ *
+ * `createNotificationsBulk` is fine for derivation jobs that produce
+ * tens of insertions per event but does N round-trips for N users —
+ * a 10k-user broadcast through it would take ~50s and stall the
+ * Express request.
+ *
+ * This helper trades the per-user pref/market-mute lookups for two
+ * batched ones, plus chunked multi-row INSERTs:
+ *   1. ONE select on notification_preferences for the full userId list
+ *      → drop opted-out users client-side.
+ *   2. ONE select on profiles to drop deleted users (FK guard).
+ *   3. INSERT ... VALUES (...), (...), ... ON CONFLICT DO NOTHING in
+ *      500-row chunks; the existing `(user_id, idempotency_key)` unique
+ *      constraint absorbs retries safely.
+ *
+ * Market-mutes don't apply (broadcasts have no `marketId`), so we
+ * don't read that table. Returns the count of rows actually inserted.
+ */
+export interface BroadcastFanoutInput {
+  userIds: string[];
+  kind: NotificationKind;
+  title: string;
+  body?: string;
+  href?: string;
+  priority?: 0 | 1;
+  metadata?: Record<string, unknown>;
+  /**
+   * Builds the per-user idempotency key. Required so re-running the
+   * same broadcast (e.g. retry after a 502) cleanly no-ops.
+   */
+  buildIdempotencyKey: (userId: string) => string;
+}
+
+export async function createBroadcastFanout(
+  input: BroadcastFanoutInput,
+): Promise<number> {
+  if (input.userIds.length === 0) return 0;
+
+  const meta = KIND_REGISTRY[input.kind];
+  if (!meta) {
+    logger.warn({ kind: input.kind }, "[notifications] unknown kind in fanout");
+    return 0;
+  }
+
+  const priority = input.priority ?? meta.priority;
+  const inAppColumn = CATEGORY_TO_IN_APP_COLUMN[meta.category];
+
+  // 1. FK guard — drop ids that no longer exist (deleted accounts).
+  const existing = await db
+    .select({ id: profiles.id })
+    .from(profiles)
+    .where(inArray(profiles.id, input.userIds));
+  let eligible = existing.map((r) => r.id);
+  if (eligible.length === 0) return 0;
+
+  // 2. Pref lookup — drop ids whose <category>InApp is explicitly false.
+  // Users without a prefs row default to enabled (we don't auto-create
+  // here; first read of /api/me/notification-preferences does that).
+  const prefRows = await db
+    .select({
+      userId: notificationPreferences.userId,
+      flag: notificationPreferences[inAppColumn] as unknown as typeof notificationPreferences.systemInApp,
+    })
+    .from(notificationPreferences)
+    .where(inArray(notificationPreferences.userId, eligible));
+  const optedOut = new Set(
+    prefRows.filter((r) => r.flag === false).map((r) => r.userId),
+  );
+  if (optedOut.size > 0) {
+    eligible = eligible.filter((id) => !optedOut.has(id));
+  }
+  if (eligible.length === 0) return 0;
+
+  // 3. Chunked bulk insert. 500 rows/INSERT keeps each statement under
+  // typical query-size limits (Postgres default `max_stack_depth` and
+  // `extended-query-protocol` can choke on > ~32k parameters, and we
+  // emit ~10 columns per row → 5000 params per statement is comfortable).
+  const CHUNK = 500;
+  let inserted = 0;
+  for (let i = 0; i < eligible.length; i += CHUNK) {
+    const chunk = eligible.slice(i, i + CHUNK);
+    const values = chunk.map((userId) => ({
+      userId,
+      kind: input.kind,
+      category: meta.category,
+      title: input.title,
+      body: input.body ?? null,
+      href: input.href ?? null,
+      priority,
+      metadata: (input.metadata ?? null) as Record<string, unknown> | null,
+      idempotencyKey: input.buildIdempotencyKey(userId),
+    }));
+
+    try {
+      const result = await db
+        .insert(notifications)
+        .values(values)
+        .onConflictDoNothing({
+          target: [notifications.userId, notifications.idempotencyKey],
+        })
+        .returning({ id: notifications.id });
+      inserted += result.length;
+    } catch (err) {
+      // Per-chunk failure tolerance: log and continue. This is rarely
+      // the right call for transactional writes, but a notification
+      // fanout that partially succeeds is strictly better than one
+      // that aborts mid-broadcast.
+      logger.warn(
+        { err, chunkSize: chunk.length, kind: input.kind },
+        "[notifications] broadcast chunk insert failed; continuing",
+      );
+    }
+  }
+
+  return inserted;
+}
+
+/**
  * Read-side helpers (route handlers use these).
  */
 export async function markNotificationRead(userId: string, notificationId: string): Promise<boolean> {

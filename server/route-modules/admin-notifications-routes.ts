@@ -11,7 +11,7 @@ import {
   type BroadcastAudienceKind,
 } from "@shared/schema";
 import { requireAuth, requireAdmin, type AuthRequest } from "../auth-middleware";
-import { createNotificationsBulk } from "../services/notifications";
+import { createBroadcastFanout } from "../services/notifications";
 import { logger } from "../log";
 
 /**
@@ -24,8 +24,9 @@ import { logger } from "../log";
  *   POST   /api/admin/notifications/broadcast
  *      → create + fan out a broadcast. Audience is resolved server-side
  *        (NEVER trust a userId list from the client) and dispatched via
- *        createNotificationsBulk so the existing dedup / preference /
- *        market-mute pipeline applies. Idempotent at two levels:
+ *        createBroadcastFanout, which honours the user's category
+ *        preference and uses chunked multi-row INSERTs so even 50k-user
+ *        broadcasts finish inside the request window. Idempotent at two levels:
  *          1. The broadcast row carries a unique idempotency_key, so
  *             retrying the same UI submission with the same key won't
  *             duplicate the broadcast itself.
@@ -68,9 +69,11 @@ const broadcastBodySchema = z.object({
   // Reuse the existing 'announcement' notification kind's priority
   // semantics: 0 = silent (bell only), 1 = high (auto-toast).
   priority: z.union([z.literal(0), z.literal(1)]).default(1),
-  category: z
-    .enum(["predictions", "favorites", "social", "account", "system"])
-    .default("system"),
+  // NOTE: category is intentionally NOT user-selectable. Broadcasts
+  // always ride the 'announcement' kind which is hard-wired to the
+  // 'system' category in KIND_REGISTRY. Allowing an override here
+  // would silently no-op (createNotification looks up the category
+  // from the kind, not the input), so we drop the field entirely.
   audience: audienceSchema,
   /** Optional client-supplied stable submission key. We append a
    *  millisecond suffix server-side so a user clicking "Send" twice
@@ -133,10 +136,9 @@ async function resolveAudience(
   }
 
   if (kind === "placed_bet") {
-    // Distinct human users who have ever placed a bet. Bot bets are
-    // filtered out via the agentId IS NULL check on market_bets — but
-    // we also re-filter by isAgent = false on the join to be safe in
-    // case a human profile is later flagged as an agent.
+    // Distinct human users who have ever placed a bet. We filter on
+    // profiles.isAgent = false on the join, which excludes simulated
+    // agent accounts even if they have rows in market_bets.
     const rows = await db
       .selectDistinct({ id: profiles.id })
       .from(profiles)
@@ -285,7 +287,9 @@ export function registerAdminNotificationsRoutes(app: Express): void {
           .json({ error: "Invalid broadcast", details: parsed.error.flatten() });
       }
       const adminId = req.userId!;
-      const { title, body, href, priority, category, audience } = parsed.data;
+      const { title, body, href, priority, audience } = parsed.data;
+      // Broadcasts always ride the 'announcement' kind → 'system' category.
+      const category = "system" as const;
 
       // Per-broadcast idempotency. Prefer a client-supplied submission
       // key; otherwise fall back to a server-generated random — admins
@@ -333,24 +337,21 @@ export function registerAdminNotificationsRoutes(app: Express): void {
           return res.status(500).json({ error: "Failed to create broadcast" });
         }
 
-        // Synchronous fanout. For our user base this is well under
-        // a second; we'll move to a background job when audiences
-        // routinely cross 50k. createNotificationsBulk respects the
-        // user's category preference and per-market mutes (mutes
-        // don't apply here because broadcasts have no marketId).
-        const inserted = await createNotificationsBulk(userIds, (userId) => ({
-          userId,
-          // Re-use the canonical 'announcement' kind so the existing
-          // bell UI, system-category preferences, and Megaphone icon
-          // all light up with no client changes.
+        // Synchronous fanout via the bulk helper — chunked multi-row
+        // INSERTs keep even a 50k-user broadcast inside the request
+        // window. Re-uses the canonical 'announcement' kind so the
+        // existing bell UI, 'system' category preferences, and
+        // Megaphone icon all light up with no client changes.
+        const inserted = await createBroadcastFanout({
+          userIds,
           kind: "announcement",
           title,
           body,
           href: href ?? undefined,
           priority,
           metadata: { broadcastId: broadcast.id },
-          idempotencyKey: `broadcast:${broadcast.id}:${userId}`,
-        }));
+          buildIdempotencyKey: (userId) => `broadcast:${broadcast.id}:${userId}`,
+        });
 
         await db
           .update(adminBroadcasts)

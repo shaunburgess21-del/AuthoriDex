@@ -39,6 +39,16 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { CANONICAL_CATEGORIES } from "@shared/constants";
 import { getAdminAccessBlock } from "./AdminAccessGate";
 
@@ -201,6 +211,7 @@ export default function AdminNotificationsPage() {
   // history without us threading shared state through the giant
   // AdminDashboard component.
   const [inspectorUserId, setInspectorUserId] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
@@ -260,7 +271,6 @@ export default function AdminNotificationsPage() {
         body: body.trim() || undefined,
         href: href.trim() || undefined,
         priority: priority === "1" ? 1 : 0,
-        category: "system",
         audience: overrideAudience ?? effectiveAudience,
       };
       const res = await apiRequest(
@@ -560,12 +570,7 @@ export default function AdminNotificationsPage() {
                   <Button
                     className="w-full"
                     disabled={composerInvalid || audienceInvalid}
-                    onClick={() => {
-                      if (!confirm(
-                        `Send "${trimmedTitle}" to ${previewQuery.data?.count ?? "?"} users? This cannot be undone.`,
-                      )) return;
-                      send.mutate(undefined);
-                    }}
+                    onClick={() => setConfirmOpen(true)}
                     data-testid="button-broadcast-send"
                   >
                     {send.isPending && send.variables?.kind !== "test_self" ? (
@@ -704,6 +709,40 @@ export default function AdminNotificationsPage() {
         userId={inspectorUserId}
         onClose={() => setInspectorUserId(null)}
       />
+
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent data-testid="dialog-confirm-broadcast">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Send broadcast?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will deliver{" "}
+              <span className="font-semibold text-foreground">
+                "{trimmedTitle}"
+              </span>{" "}
+              to{" "}
+              <span className="font-semibold text-foreground">
+                {previewQuery.data?.count.toLocaleString() ?? "?"} users
+              </span>
+              . Notifications can't be recalled after sending. Consider running
+              a test send first.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-confirm-cancel">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmOpen(false);
+                send.mutate(undefined);
+              }}
+              data-testid="button-confirm-send"
+            >
+              Send to {previewQuery.data?.count.toLocaleString() ?? "?"} users
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
