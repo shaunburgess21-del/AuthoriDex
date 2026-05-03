@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { normalizeMarketCategory, MARKET_CATEGORY_OPTIONS } from "@shared/constants";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,20 +23,40 @@ interface InductionCandidate {
   isActive: boolean;
 }
 
-const CATEGORIES = ["Tech", "Music", "Creator", "Sports", "Business", "Politics"];
+type AdminCategoryRow = { id: string; label: string; sortOrder: number };
 
-export function AdminInductionQueue() {  const [searchQuery, setSearchQuery] = useState("");
+export function AdminInductionQueue() {
+  const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [editCandidate, setEditCandidate] = useState<InductionCandidate | null>(null);
 
   const [formData, setFormData] = useState({
     displayName: "",
-    category: "Tech",
+    category: "tech",
     imageSlug: "",
     wikiSlug: "",
     seedVotes: 0,
   });
+
+  const { data: adminCategoryRows } = useQuery<AdminCategoryRow[]>({
+    queryKey: ["/api/admin/categories"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/admin/categories");
+      if (!res.ok) throw new Error("Failed to fetch categories");
+      return res.json();
+    },
+  });
+
+  const categorySelectOptions = useMemo(() => {
+    const rows = adminCategoryRows ?? [];
+    if (rows.length > 0) {
+      return [...rows]
+        .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.id.localeCompare(b.id))
+        .map((r) => ({ value: r.id, label: r.label }));
+    }
+    return MARKET_CATEGORY_OPTIONS.map((c) => ({ value: c.value, label: c.label }));
+  }, [adminCategoryRows]);
 
   const { data, isLoading } = useQuery<{ data: InductionCandidate[]; totalCount: number }>({
     queryKey: ['/api/admin/induction'],
@@ -96,13 +117,14 @@ export function AdminInductionQueue() {  const [searchQuery, setSearchQuery] = 
     onError: () => toast.error("Failed to delete candidate"),
   });
 
-  const resetForm = () => setFormData({ displayName: "", category: "Tech", imageSlug: "", wikiSlug: "", seedVotes: 0 });
+  const resetForm = () =>
+    setFormData({ displayName: "", category: "tech", imageSlug: "", wikiSlug: "", seedVotes: 0 });
 
   const openEdit = (c: InductionCandidate) => {
     setEditCandidate(c);
     setFormData({
       displayName: c.displayName,
-      category: c.category,
+      category: normalizeMarketCategory(c.category),
       imageSlug: c.imageSlug || "",
       wikiSlug: c.wikiSlug || "",
       seedVotes: c.seedVotes,
@@ -287,8 +309,10 @@ export function AdminInductionQueue() {  const [searchQuery, setSearchQuery] = 
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
-                  {CATEGORIES.map(cat => (
-                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                  {categorySelectOptions.map((cat) => (
+                    <SelectItem key={cat.value} value={cat.value}>
+                      {cat.label}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>

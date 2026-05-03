@@ -104,10 +104,8 @@ import { PersonAvatar } from "@/components/PersonAvatar";
 import { getAdminAccessBlock } from "@/pages/admin/AdminAccessGate";
 import * as Flags from "country-flag-icons/react/3x2";
 import type { TrendingPoll } from "@shared/schema";
-import { normalizeMarketCategory, type CanonicalMarketCategory } from "@shared/constants";
+import { normalizeMarketCategory, MARKET_CATEGORY_OPTIONS } from "@shared/constants";
 import {
-  MARKET_CATEGORIES,
-  GAINER_MARKET_CATEGORIES,
   EMPTY_CELEBRITY_FORM,
   DEFAULT_SEED_APPROVAL_COUNTS,
   type AdminSection,
@@ -257,12 +255,20 @@ function RelatedCelebritiesField({
   );
 }
 
-function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: { 
-  open: boolean; 
-  onClose: () => void; 
+function CreateMarketModal({
+  open,
+  onClose,
+  onSubmit,
+  isPending,
+  editMarket,
+  categoryOptions,
+}: {
+  open: boolean;
+  onClose: () => void;
   onSubmit: (data: any) => void;
   isPending: boolean;
   editMarket?: any;
+  categoryOptions: Array<{ value: string; label: string }>;
 }) {
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
@@ -377,7 +383,7 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
       setOpenMarketType(editMarket.openMarketType || "binary");
       setTeaser(editMarket.teaser || "");
       setSummary(editMarket.summary || "");
-      setCategory(editMarket.category || "misc");
+      setCategory(normalizeMarketCategory(editMarket.category) || "misc");
       setEndAt(editMarket.endAt ? new Date(editMarket.endAt).toISOString().slice(0, 16) : "");
       setCloseAt(editMarket.closeAt ? new Date(editMarket.closeAt).toISOString().slice(0, 16) : "");
       setFeatured(editMarket.featured || false);
@@ -620,8 +626,6 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
     });
   };
 
-  const CATEGORIES = MARKET_CATEGORIES;
-
   const titlePlaceholders: Record<string, string> = {
     binary: "Will the Save America Act require voter ID by Dec 2026?",
     multi: "Who will be the Republican nominee for the next presidential election?",
@@ -750,8 +754,10 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {CATEGORIES.map(c => (
-                    <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                  {categoryOptions.map((c) => (
+                    <SelectItem key={c.value} value={c.value}>
+                      {c.label}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -1295,7 +1301,7 @@ export default function AdminDashboard() {
   const [editingMatchup, setEditingMatchup] = useState<Matchup | null>(null);
   const [matchupForm, setMatchupForm] = useState({
     title: "",
-    category: "Tech",
+    category: "tech",
     optionAText: "",
     optionBText: "",
     optionAImage: "",
@@ -1323,7 +1329,7 @@ export default function AdminDashboard() {
   const pollCsvInputRef = useRef<HTMLInputElement>(null);
   const [pollForm, setPollForm] = useState({
     status: "draft" as "draft" | "live" | "archived",
-    category: "Tech",
+    category: "tech",
     headline: "",
     subjectText: "",
     personId: "",
@@ -1388,7 +1394,7 @@ export default function AdminDashboard() {
   const [h2hPersonAId, setH2hPersonAId] = useState("");
   const [h2hPersonBId, setH2hPersonBId] = useState("");
   const [h2hCategory, setH2hCategory] = useState("misc");
-  const [gainerCategory, setGainerCategory] = useState<CanonicalMarketCategory>("tech");
+  const [gainerCategory, setGainerCategory] = useState<string>("tech");
   const [gainerPersonIds, setGainerPersonIds] = useState<string[]>([]);
   const [gainerPersonSearch, setGainerPersonSearch] = useState("");
   const [showOpinionPollModal, setShowOpinionPollModal] = useState(false);
@@ -1399,7 +1405,7 @@ export default function AdminDashboard() {
   const [opinionPollForm, setOpinionPollForm] = useState({
     title: "",
     slug: "",
-    category: "Tech",
+    category: "tech",
     description: "",
     summary: "",
     imageUrl: "",
@@ -1541,6 +1547,17 @@ export default function AdminDashboard() {
     if (celebrityForm.category?.trim()) set.add(celebrityForm.category.trim());
     return Array.from(set);
   }, [adminCategoryRows, celebrityForm.category]);
+
+  /** Registry-backed { value: id, label } for admin selects; falls back to static list while loading. */
+  const adminCategorySelectOptions = useMemo(() => {
+    const rows = adminCategoryRows ?? [];
+    if (rows.length > 0) {
+      return [...rows]
+        .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.id.localeCompare(b.id))
+        .map((r) => ({ value: r.id, label: r.label }));
+    }
+    return MARKET_CATEGORY_OPTIONS.map((c) => ({ value: c.value, label: c.label }));
+  }, [adminCategoryRows]);
 
   const gainerCategoryCelebrities = useMemo(
     () => (celebrities || []).filter((celebrity) => normalizeMarketCategory(celebrity.category) === gainerCategory),
@@ -2094,7 +2111,7 @@ export default function AdminDashboard() {
       toast("Matchup Created", { description: "New matchup added successfully" });
       setShowMatchupModal(false);
       setEditingMatchup(null);
-      setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", description: "", isActive: true, visibility: "live", featured: false, slug: "", seedVotesA: 0, seedVotesB: 0 });
+      setMatchupForm({ title: "", category: "tech", optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", description: "", isActive: true, visibility: "live", featured: false, slug: "", seedVotesA: 0, seedVotesB: 0 });
       setMatchupSearchA(""); setMatchupSearchB(""); setMatchupRelatedPeople([]);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/matchups"] });
     },
@@ -2116,7 +2133,7 @@ export default function AdminDashboard() {
       toast("Matchup Updated", { description: "Matchup updated successfully" });
       setShowMatchupModal(false);
       setEditingMatchup(null);
-      setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", description: "", isActive: true, visibility: "live", featured: false, slug: "", seedVotesA: 0, seedVotesB: 0 });
+      setMatchupForm({ title: "", category: "tech", optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", description: "", isActive: true, visibility: "live", featured: false, slug: "", seedVotesA: 0, seedVotesB: 0 });
       setMatchupSearchA(""); setMatchupSearchB(""); setMatchupRelatedPeople([]);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/matchups"] });
     },
@@ -2638,7 +2655,11 @@ export default function AdminDashboard() {
 
   const filteredOpinionPolls = useMemo(() => (opinionPollsList || []).filter((poll: any) => {
     if (opinionPollFilter !== "all" && poll.visibility !== opinionPollFilter) return false;
-    if (opinionPollCategoryFilter !== "all" && poll.category !== opinionPollCategoryFilter) return false;
+    if (
+      opinionPollCategoryFilter !== "all" &&
+      normalizeMarketCategory(poll.category) !== opinionPollCategoryFilter
+    )
+      return false;
     if (opinionPollSearchQuery && !poll.title?.toLowerCase().includes(opinionPollSearchQuery.toLowerCase())) return false;
     return true;
   }), [opinionPollsList, opinionPollFilter, opinionPollCategoryFilter, opinionPollSearchQuery]);
@@ -2648,7 +2669,8 @@ export default function AdminDashboard() {
       return poll.status === "draft" && !poll.personId && !poll.imageUrl;
     }
     if (pollFilter !== "all" && poll.status !== pollFilter) return false;
-    if (pollCategoryFilter !== "all" && poll.category !== pollCategoryFilter) return false;
+    if (pollCategoryFilter !== "all" && normalizeMarketCategory(poll.category) !== pollCategoryFilter)
+      return false;
     if (pollSearchQuery && !poll.headline?.toLowerCase().includes(pollSearchQuery.toLowerCase()) && !poll.subjectText?.toLowerCase().includes(pollSearchQuery.toLowerCase())) return false;
     return true;
   }) ?? [], [trendingPollsList, pollFilter, pollCategoryFilter, pollSearchQuery]);
@@ -2684,7 +2706,9 @@ export default function AdminDashboard() {
   const rwMarkets = useMemo(() => {
     let list = (markets || []).filter(m => m.marketType === "community");
     if (rwVisFilter !== "all") list = list.filter(m => (m as any).visibility === rwVisFilter);
-    if (rwCatFilter !== "all") list = list.filter(m => m.category === rwCatFilter);
+    if (rwCatFilter !== "all") {
+      list = list.filter((m) => normalizeMarketCategory(m.category) === rwCatFilter);
+    }
     if (rwStatusFilter !== "all") list = list.filter(m => m.status === rwStatusFilter);
     if (rwTypeFilter !== "all") list = list.filter(m => m.openMarketType === rwTypeFilter);
     if (rwMarketSearch) list = list.filter(m => m.title?.toLowerCase().includes(rwMarketSearch.toLowerCase()));
@@ -2829,7 +2853,7 @@ export default function AdminDashboard() {
     setEditingMatchup(matchup);
     setMatchupForm({
       title: matchup.title,
-      category: matchup.category,
+      category: normalizeMarketCategory(matchup.category),
       optionAText: matchup.optionAText,
       optionBText: matchup.optionBText,
       optionAImage: matchup.optionAImage || "",
@@ -2888,7 +2912,7 @@ export default function AdminDashboard() {
   const resetPollForm = () => {
     setPollForm({
       status: "draft",
-      category: "Tech",
+      category: "tech",
       headline: "",
       subjectText: "",
       personId: "",
@@ -2944,7 +2968,7 @@ export default function AdminDashboard() {
     const vis = (poll.visibility || poll.status || "draft") as "draft" | "live" | "inactive" | "archived";
     setPollForm({
       status: poll.status as "draft" | "live" | "archived",
-      category: poll.category,
+      category: normalizeMarketCategory(poll.category),
       headline: poll.headline,
       subjectText: poll.subjectText,
       personId: poll.personId || "",
@@ -3072,7 +3096,7 @@ export default function AdminDashboard() {
     setOpinionPollForm({
       title: "",
       slug: "",
-      category: "Tech",
+      category: "tech",
       description: "",
       summary: "",
       imageUrl: "",
@@ -3098,7 +3122,7 @@ export default function AdminDashboard() {
     setOpinionPollForm({
       title: poll.title || "",
       slug: poll.slug || "",
-      category: poll.category || "Tech",
+      category: normalizeMarketCategory(poll.category || "tech"),
       description: poll.description || "",
       summary: poll.summary || "",
       imageUrl: poll.imageUrl || "",
@@ -3887,7 +3911,11 @@ export default function AdminDashboard() {
                         <SelectTrigger className="w-[120px]"><SelectValue placeholder="Category" /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="all">All Categories</SelectItem>
-                          {MARKET_CATEGORIES.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
+                          {adminCategorySelectOptions.map((c) => (
+                            <SelectItem key={c.value} value={c.value}>
+                              {c.label}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                       <Select value={rwTypeFilter} onValueChange={setRwTypeFilter}>
@@ -4206,12 +4234,11 @@ export default function AdminDashboard() {
                         <SelectTrigger className="w-[140px]" data-testid="select-updown-cat-filter"><SelectValue placeholder="Category" /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="all">All Categories</SelectItem>
-                          <SelectItem value="tech">Tech</SelectItem>
-                          <SelectItem value="music">Music</SelectItem>
-                          <SelectItem value="sports">Sports</SelectItem>
-                          <SelectItem value="politics">Politics</SelectItem>
-                          <SelectItem value="business">Business</SelectItem>
-                          <SelectItem value="creator">Creator</SelectItem>
+                          {adminCategorySelectOptions.map((c) => (
+                            <SelectItem key={c.value} value={c.value}>
+                              {c.label}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                       <Input placeholder="Search celebrities..." value={nativeSearchQuery} onChange={(e) => setNativeSearchQuery(e.target.value)} className="w-[200px]" data-testid="input-updown-search" />
@@ -4222,7 +4249,11 @@ export default function AdminDashboard() {
                     ) : (() => {
                       const filtered = (markets || []).filter(m => m.marketType === "updown").filter(m => {
                         if (nativeVisFilter !== "all" && m.visibility !== nativeVisFilter) return false;
-                        if (nativeCatFilter !== "all" && m.category !== nativeCatFilter) return false;
+                        if (
+                          nativeCatFilter !== "all" &&
+                          normalizeMarketCategory(m.category) !== nativeCatFilter
+                        )
+                          return false;
                         if (nativeSearchQuery && !m.title?.toLowerCase().includes(nativeSearchQuery.toLowerCase())) return false;
                         return true;
                       });
@@ -4461,13 +4492,11 @@ export default function AdminDashboard() {
                     <Select value={h2hCategory} onValueChange={setH2hCategory}>
                       <SelectTrigger data-testid="select-h2h-category"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="tech">Tech</SelectItem>
-                        <SelectItem value="music">Music</SelectItem>
-                        <SelectItem value="sports">Sports</SelectItem>
-                        <SelectItem value="politics">Politics</SelectItem>
-                        <SelectItem value="business">Business</SelectItem>
-                        <SelectItem value="creator">Creator</SelectItem>
-                        <SelectItem value="misc">Misc</SelectItem>
+                        {adminCategorySelectOptions.map((c) => (
+                          <SelectItem key={c.value} value={c.value}>
+                            {c.label}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -4492,10 +4521,10 @@ export default function AdminDashboard() {
                 <div className="space-y-4">
                   <div>
                     <Label>Category</Label>
-                    <Select value={gainerCategory} onValueChange={(value) => setGainerCategory(value as CanonicalMarketCategory)}>
+                    <Select value={gainerCategory} onValueChange={setGainerCategory}>
                       <SelectTrigger data-testid="select-gainer-category"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {GAINER_MARKET_CATEGORIES.map((category) => (
+                        {adminCategorySelectOptions.map((category) => (
                           <SelectItem key={category.value} value={category.value}>
                             {category.label}
                           </SelectItem>
@@ -4669,17 +4698,11 @@ export default function AdminDashboard() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="all">All Categories</SelectItem>
-                          <SelectItem value="Tech">Tech</SelectItem>
-                          <SelectItem value="Music">Music</SelectItem>
-                          <SelectItem value="Sports">Sports</SelectItem>
-                          <SelectItem value="Politics">Politics</SelectItem>
-                          <SelectItem value="Business">Business</SelectItem>
-                          <SelectItem value="Film & TV">Film & TV</SelectItem>
-                          <SelectItem value="Gaming">Gaming</SelectItem>
-                          <SelectItem value="Creator">Creator</SelectItem>
-                          <SelectItem value="misc">Misc</SelectItem>
-                          <SelectItem value="Food & Drink">Food & Drink</SelectItem>
-                          <SelectItem value="Lifestyle">Lifestyle</SelectItem>
+                          {adminCategorySelectOptions.map((c) => (
+                            <SelectItem key={c.value} value={c.value}>
+                              {c.label}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                       <Input
@@ -5015,17 +5038,11 @@ export default function AdminDashboard() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="all">All Categories</SelectItem>
-                          <SelectItem value="Tech">Tech</SelectItem>
-                          <SelectItem value="Music">Music</SelectItem>
-                          <SelectItem value="Sports">Sports</SelectItem>
-                          <SelectItem value="Politics">Politics</SelectItem>
-                          <SelectItem value="Business">Business</SelectItem>
-                          <SelectItem value="Film & TV">Film & TV</SelectItem>
-                          <SelectItem value="Gaming">Gaming</SelectItem>
-                          <SelectItem value="Creator">Creator</SelectItem>
-                          <SelectItem value="misc">Misc</SelectItem>
-                          <SelectItem value="Food & Drink">Food & Drink</SelectItem>
-                          <SelectItem value="Lifestyle">Lifestyle</SelectItem>
+                          {adminCategorySelectOptions.map((c) => (
+                            <SelectItem key={c.value} value={c.value}>
+                              {c.label}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                       <Input
@@ -5258,7 +5275,7 @@ export default function AdminDashboard() {
                       size="sm"
                       onClick={() => {
                         setEditingMatchup(null);
-                        setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", description: "", isActive: true, visibility: "live", featured: false, slug: "", seedVotesA: 0, seedVotesB: 0 });
+                        setMatchupForm({ title: "", category: "tech", optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", description: "", isActive: true, visibility: "live", featured: false, slug: "", seedVotesA: 0, seedVotesB: 0 });
                         setMatchupSearchA(""); setMatchupSearchB(""); setMatchupRelatedPeople([]);
                         setShowMatchupModal(true);
                       }}
@@ -5500,7 +5517,7 @@ export default function AdminDashboard() {
                             className="mt-4" 
                             onClick={() => {
                               setEditingMatchup(null);
-                              setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", description: "", isActive: true, visibility: "live", featured: false, slug: "", seedVotesA: 0, seedVotesB: 0 });
+                              setMatchupForm({ title: "", category: "tech", optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", description: "", isActive: true, visibility: "live", featured: false, slug: "", seedVotesA: 0, seedVotesB: 0 });
                               setMatchupSearchA(""); setMatchupSearchB(""); setMatchupRelatedPeople([]);
                               setShowMatchupModal(true);
                             }}
@@ -8337,17 +8354,11 @@ export default function AdminDashboard() {
                     <SelectValue placeholder="Select category" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Tech">Tech</SelectItem>
-                    <SelectItem value="Music">Music</SelectItem>
-                    <SelectItem value="Sports">Sports</SelectItem>
-                    <SelectItem value="Politics">Politics</SelectItem>
-                    <SelectItem value="Business">Business</SelectItem>
-                  <SelectItem value="Film & TV">Film & TV</SelectItem>
-                  <SelectItem value="Gaming">Gaming</SelectItem>
-                    <SelectItem value="Creator">Creator</SelectItem>
-                    <SelectItem value="misc">Misc</SelectItem>
-                    <SelectItem value="Food & Drink">Food & Drink</SelectItem>
-                    <SelectItem value="Lifestyle">Lifestyle</SelectItem>
+                    {adminCategorySelectOptions.map((c) => (
+                      <SelectItem key={c.value} value={c.value}>
+                        {c.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -8702,17 +8713,11 @@ export default function AdminDashboard() {
                     <SelectValue placeholder="Select category" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Tech">Tech</SelectItem>
-                    <SelectItem value="Music">Music</SelectItem>
-                    <SelectItem value="Sports">Sports</SelectItem>
-                    <SelectItem value="Politics">Politics</SelectItem>
-                    <SelectItem value="Business">Business</SelectItem>
-                  <SelectItem value="Film & TV">Film & TV</SelectItem>
-                  <SelectItem value="Gaming">Gaming</SelectItem>
-                    <SelectItem value="Creator">Creator</SelectItem>
-                    <SelectItem value="misc">Misc</SelectItem>
-                    <SelectItem value="Food & Drink">Food & Drink</SelectItem>
-                    <SelectItem value="Lifestyle">Lifestyle</SelectItem>
+                    {adminCategorySelectOptions.map((c) => (
+                      <SelectItem key={c.value} value={c.value}>
+                        {c.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -9009,17 +9014,11 @@ export default function AdminDashboard() {
                     <SelectValue placeholder="Select category" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Tech">Tech</SelectItem>
-                    <SelectItem value="Music">Music</SelectItem>
-                    <SelectItem value="Sports">Sports</SelectItem>
-                    <SelectItem value="Politics">Politics</SelectItem>
-                    <SelectItem value="Business">Business</SelectItem>
-                    <SelectItem value="Film & TV">Film & TV</SelectItem>
-                    <SelectItem value="Gaming">Gaming</SelectItem>
-                    <SelectItem value="Creator">Creator</SelectItem>
-                    <SelectItem value="misc">Misc</SelectItem>
-                    <SelectItem value="Food & Drink">Food & Drink</SelectItem>
-                    <SelectItem value="Lifestyle">Lifestyle</SelectItem>
+                    {adminCategorySelectOptions.map((c) => (
+                      <SelectItem key={c.value} value={c.value}>
+                        {c.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -9318,6 +9317,7 @@ export default function AdminDashboard() {
           }
         }}
         isPending={createMarketMutation.isPending || updateMarketMutation.isPending}
+        categoryOptions={adminCategorySelectOptions}
         editMarket={editMarketId ? (() => {
           const m = (markets || []).find((mk: any) => mk.id === editMarketId);
           if (!m) return undefined;

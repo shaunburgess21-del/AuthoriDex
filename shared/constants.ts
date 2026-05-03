@@ -11,9 +11,16 @@ export function getMarketTypeLabel(marketType: string): string {
 }
 
 /**
- * CANONICAL_CATEGORIES — the single source of truth for all content categories.
- * ID is kebab-lowercase (stored in DB, sent over the wire).
- * Label is Title Case (used for display only — never compared against).
+ * CANONICAL_CATEGORIES — default seed set and normalization baseline (not the full admin registry).
+ *
+ * The **authoritative** list of category ids an operator can add/remove lives in Postgres
+ * (`content_categories`) and is exposed to admin as `GET /api/admin/categories`. Admin
+ * create/edit UIs for polls, markets, matchups, induction, etc. must use that API so new
+ * categories appear without code changes. This array stays in sync with the initial
+ * migration seed and powers `MARKET_CATEGORY_OPTIONS`, filter helpers, and
+ * `normalizeMarketCategory` (which maps legacy display text and slugs to kebab-case ids).
+ *
+ * ID is kebab-lowercase (typical storage on the wire). Label is for display only.
  *
  * Rules for consumers:
  *   - Filter bars on Vote / Predict / Leaderboard / Induction: use CATEGORIES_WITH_FILTERS
@@ -21,8 +28,8 @@ export function getMarketTypeLabel(marketType: string): string {
  *   - Suggest modals for types that REQUIRE a real person from the leaderboard
  *     (induction, profile_image): use CATEGORIES_LEADERBOARD (excludes "misc").
  *   - Suggest modals for types that can be about anything
- *     (matchup, sentiment_poll, opinion_poll, open_market): use CATEGORIES_OPEN (all 12).
- *   - Admin create modals: use CATEGORIES_OPEN (admin can always pick any category).
+ *     (matchup, sentiment_poll, opinion_poll, open_market): use CATEGORIES_OPEN (all 12)
+ *     as a baseline; prefer registry-backed lists where the UX allows dynamic categories.
  *
  * Note: only the World/Open Markets prediction type has a user-facing suggest flow.
  * The other prediction types (Weekly Up/Down, Head-to-Head, Category Races) are
