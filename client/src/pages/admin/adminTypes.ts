@@ -37,6 +37,8 @@ export interface TrafficStats {
   today: number;
   last7Days: number;
   last30Days: number;
+  humanLikeLast30Days?: number;
+  botLikeLast30Days?: number;
   topPages: { path: string; views: number }[];
   topCountries?: { country: string; views: number }[];
 }

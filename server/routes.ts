@@ -504,6 +504,7 @@ function toUnifiedCommentItem(row: {
 const BOT_UA_PATTERNS = /bot|crawl|spider|slurp|wget|curl|fetch|headless|phantom|puppet|selenium|lighthouse|preview|embed|scrape/i;
 const PREFETCH_HEADERS = ['purpose', 'sec-purpose', 'x-purpose'];
 const SESSION_COOKIE_NAME = 'fdx_sid';
+const BOT_UA_SQL_PATTERN = "bot|crawl|spider|slurp|wget|curl|fetch|headless|phantom|puppet|selenium|lighthouse|preview|embed|scrape";
 const LEADERBOARD_DEFAULT_LIMIT = 100;
 const LEADERBOARD_MAX_LIMIT = Math.max(
   LEADERBOARD_DEFAULT_LIMIT,
@@ -901,6 +902,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         req.path === '/favicon.ico') {
       return next();
     }
+
+    // Ignore obvious non-human traffic for analytics quality.
+    const userAgent = String(req.headers['user-agent'] || '');
+    if (isPrefetch(req) || BOT_UA_PATTERNS.test(userAgent)) {
+      return next();
+    }
     
     // Resolve country from IP before the request object is recycled
     const forwarded = req.headers['x-forwarded-for'];
@@ -913,7 +920,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     const pageData = {
       path: req.path,
-      userAgent: req.headers['user-agent'] || null,
+      userAgent: userAgent || null,
       referrer: req.headers['referer'] || null,
       sessionId: (req as any).sessionID || null,
       country,
@@ -8780,6 +8787,14 @@ Only return the JSON object.`;
         today: sql<number>`count(*) FILTER (WHERE ${pageViews.createdAt} >= ${today})`,
         last7Days: sql<number>`count(*) FILTER (WHERE ${pageViews.createdAt} >= ${sevenDaysAgo})`,
         last30Days: sql<number>`count(*) FILTER (WHERE ${pageViews.createdAt} >= ${thirtyDaysAgo})`,
+        humanLikeLast30Days: sql<number>`count(*) FILTER (
+          WHERE ${pageViews.createdAt} >= ${thirtyDaysAgo}
+            AND COALESCE(${pageViews.userAgent}, '') !~* ${BOT_UA_SQL_PATTERN}
+        )`,
+        botLikeLast30Days: sql<number>`count(*) FILTER (
+          WHERE ${pageViews.createdAt} >= ${thirtyDaysAgo}
+            AND COALESCE(${pageViews.userAgent}, '') ~* ${BOT_UA_SQL_PATTERN}
+        )`,
       }).from(pageViews);
       
       // Top pages (last 7 days) - separate query with limit
@@ -8804,6 +8819,7 @@ Only return the JSON object.`;
           .where(and(
             gte(pageViews.createdAt, thirtyDaysAgo),
             isNotNull(pageViews.country),
+            sql`COALESCE(${pageViews.userAgent}, '') !~* ${BOT_UA_SQL_PATTERN}`,
           ))
           .groupBy(pageViews.country)
           .orderBy(sql`count(*) DESC`)
@@ -8821,6 +8837,8 @@ Only return the JSON object.`;
         today: Number(stats?.today || 0),
         last7Days: Number(stats?.last7Days || 0),
         last30Days: Number(stats?.last30Days || 0),
+        humanLikeLast30Days: Number(stats?.humanLikeLast30Days || 0),
+        botLikeLast30Days: Number(stats?.botLikeLast30Days || 0),
         topPages: topPages.map(p => ({ path: p.path, views: Number(p.views) })),
         topCountries: topCountries.map(c => ({ country: c.country, views: Number(c.views) })),
       });

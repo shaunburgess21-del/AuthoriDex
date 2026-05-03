@@ -3490,6 +3490,17 @@ export default function AdminDashboard() {
                     <p className="text-xs text-muted-foreground">All Time</p>
                   </div>
                 </div>
+
+                {(trafficStats?.humanLikeLast30Days !== undefined || trafficStats?.botLikeLast30Days !== undefined) && (
+                  <div className="mt-4 flex flex-wrap items-center gap-2">
+                    <Badge variant="outline">
+                      Human-like (30d): {trafficLoading ? "..." : trafficStats?.humanLikeLast30Days || 0}
+                    </Badge>
+                    <Badge variant="outline">
+                      Bot-like (30d): {trafficLoading ? "..." : trafficStats?.botLikeLast30Days || 0}
+                    </Badge>
+                  </div>
+                )}
                 
                 {trafficStats?.topPages && trafficStats.topPages.length > 0 && (
                   <div className="mt-4 pt-4 border-t border-border">
@@ -3511,7 +3522,7 @@ export default function AdminDashboard() {
                   const regionNames = new Intl.DisplayNames(['en'], { type: 'region' });
                   return (
                     <div className="mt-4 pt-4 border-t border-border">
-                      <h4 className="text-sm font-medium mb-2">Top Countries (30 days)</h4>
+                      <h4 className="text-sm font-medium mb-2">Top Countries (30 days, human-like)</h4>
                       <div className="space-y-2">
                         {trafficStats.topCountries.map((entry) => {
                           const FlagComponent = (Flags as any)[entry.country];
