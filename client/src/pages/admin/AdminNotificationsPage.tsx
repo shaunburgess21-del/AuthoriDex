@@ -200,7 +200,10 @@ export default function AdminNotificationsPage() {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [href, setHref] = useState("");
-  const [priority, setPriority] = useState<"0" | "1">("1");
+  // Default to "silent" so the bell increments without auto-toasting
+  // every recipient. Admins flip to "high" intentionally for things
+  // like outage alerts.
+  const [priority, setPriority] = useState<"0" | "1">("0");
   const [audience, setAudience] = useState<AudienceFilter>({ kind: "active_30d" });
   const [singleUserId, setSingleUserId] = useState("");
   const [categoryAudience, setCategoryAudience] = useState<string>("sports");
@@ -212,6 +215,13 @@ export default function AdminNotificationsPage() {
   // AdminDashboard component.
   const [inspectorUserId, setInspectorUserId] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [maxConfirmText, setMaxConfirmText] = useState("");
+
+  // Reset the MAX-confirmation phrase whenever the dialog opens or
+  // closes so a previous "MAX" doesn't carry over to the next send.
+  useEffect(() => {
+    if (!confirmOpen) setMaxConfirmText("");
+  }, [confirmOpen]);
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
@@ -265,14 +275,17 @@ export default function AdminNotificationsPage() {
   });
 
   const send = useMutation({
-    mutationFn: async (overrideAudience?: AudienceFilter) => {
-      const payload = {
+    mutationFn: async (
+      args?: { overrideAudience?: AudienceFilter; bypassCap?: boolean },
+    ) => {
+      const payload: Record<string, unknown> = {
         title: title.trim(),
         body: body.trim() || undefined,
         href: href.trim() || undefined,
         priority: priority === "1" ? 1 : 0,
-        audience: overrideAudience ?? effectiveAudience,
+        audience: args?.overrideAudience ?? effectiveAudience,
       };
+      if (args?.bypassCap) payload.bypassCap = true;
       const res = await apiRequest(
         "POST",
         "/api/admin/notifications/broadcast",
@@ -281,7 +294,8 @@ export default function AdminNotificationsPage() {
       return (await res.json()) as BroadcastResponse;
     },
     onSuccess: (data, variables) => {
-      const isTest = (variables ?? effectiveAudience)?.kind === "test_self";
+      const isTest =
+        (variables?.overrideAudience ?? effectiveAudience)?.kind === "test_self";
       toast.success(
         isTest
           ? `Test sent. Check your bell (${data.delivered} of ${data.target}).`
@@ -312,6 +326,10 @@ export default function AdminNotificationsPage() {
     (effectiveAudience.kind === "category_subscribers" &&
       !effectiveAudience.category) ||
     previewQuery.data?.count === 0;
+  // Mirrors the server SOFT_CAP. When true the confirmation dialog
+  // demands a typed "MAX" before allowing the send to proceed with
+  // bypassCap=true.
+  const oversizeAudience = (previewQuery.data?.count ?? 0) > 100_000;
 
   return (
     <div className="min-h-screen pb-20 md:pb-0">
@@ -468,13 +486,20 @@ export default function AdminNotificationsPage() {
                   )}
 
                   {audience.kind === "single_user" && (
-                    <Input
-                      className="mt-2"
-                      value={singleUserId}
-                      onChange={(e) => setSingleUserId(e.target.value)}
-                      placeholder="User ID (UUID from profiles.id)"
-                      data-testid="input-broadcast-single-user"
-                    />
+                    <>
+                      <Input
+                        className="mt-2"
+                        value={singleUserId}
+                        onChange={(e) => setSingleUserId(e.target.value)}
+                        placeholder="@username or user UUID"
+                        data-testid="input-broadcast-single-user"
+                      />
+                      <p className="text-[11px] text-muted-foreground mt-1">
+                        Type the username (with or without @) or paste a
+                        profile UUID. The audience preview will show "1"
+                        once the user is found.
+                      </p>
+                    </>
                   )}
                 </div>
               </Card>
@@ -553,33 +578,53 @@ export default function AdminNotificationsPage() {
                 </div>
 
                 <div className="grid gap-2">
+                  {/* "Send test to me" ALWAYS overrides the audience to
+                      test_self — useful for sanity-checking copy + links
+                      regardless of which audience is selected. The
+                      "Send broadcast" button respects the dropdown
+                      audience, so when "Just me" is selected it ALSO
+                      goes only to the admin (the buttons converge here
+                      by design). We hide the redundant button in that
+                      case to keep the surface clean. */}
                   <Button
-                    variant="outline"
+                    variant={
+                      effectiveAudience.kind === "test_self"
+                        ? "default"
+                        : "outline"
+                    }
                     className="w-full"
                     disabled={composerInvalid || send.isPending}
-                    onClick={() => send.mutate({ kind: "test_self" })}
+                    onClick={() =>
+                      send.mutate({ overrideAudience: { kind: "test_self" } })
+                    }
                     data-testid="button-broadcast-test"
                   >
-                    {send.isPending && send.variables?.kind === "test_self" ? (
+                    {send.isPending &&
+                    send.variables?.overrideAudience?.kind === "test_self" ? (
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                     ) : (
                       <CheckCircle2 className="h-4 w-4 mr-2" />
                     )}
-                    Send test to me
+                    {effectiveAudience.kind === "test_self"
+                      ? "Send to me"
+                      : "Send test to me"}
                   </Button>
-                  <Button
-                    className="w-full"
-                    disabled={composerInvalid || audienceInvalid}
-                    onClick={() => setConfirmOpen(true)}
-                    data-testid="button-broadcast-send"
-                  >
-                    {send.isPending && send.variables?.kind !== "test_self" ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <Send className="h-4 w-4 mr-2" />
-                    )}
-                    Send broadcast
-                  </Button>
+                  {effectiveAudience.kind !== "test_self" && (
+                    <Button
+                      className="w-full"
+                      disabled={composerInvalid || audienceInvalid}
+                      onClick={() => setConfirmOpen(true)}
+                      data-testid="button-broadcast-send"
+                    >
+                      {send.isPending &&
+                      send.variables?.overrideAudience?.kind !== "test_self" ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Send className="h-4 w-4 mr-2" />
+                      )}
+                      Send broadcast
+                    </Button>
+                  )}
                 </div>
 
                 {effectiveAudience.kind !== "test_self" &&
@@ -713,7 +758,9 @@ export default function AdminNotificationsPage() {
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent data-testid="dialog-confirm-broadcast">
           <AlertDialogHeader>
-            <AlertDialogTitle>Send broadcast?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {oversizeAudience ? "Bypass safety cap?" : "Send broadcast?"}
+            </AlertDialogTitle>
             <AlertDialogDescription>
               This will deliver{" "}
               <span className="font-semibold text-foreground">
@@ -727,18 +774,41 @@ export default function AdminNotificationsPage() {
               a test send first.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {oversizeAudience && (
+            <div className="space-y-2">
+              <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-2.5 text-xs text-amber-700 dark:text-amber-300">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                <div>
+                  This audience exceeds the 100,000-user safety cap. Type{" "}
+                  <span className="font-mono font-bold">MAX</span> below to
+                  confirm you really want to broadcast to everyone.
+                </div>
+              </div>
+              <Input
+                value={maxConfirmText}
+                onChange={(e) => setMaxConfirmText(e.target.value)}
+                placeholder='Type "MAX" to confirm'
+                autoFocus
+                data-testid="input-max-confirm"
+              />
+            </div>
+          )}
           <AlertDialogFooter>
             <AlertDialogCancel data-testid="button-confirm-cancel">
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction
+              disabled={oversizeAudience && maxConfirmText.trim() !== "MAX"}
               onClick={() => {
+                if (oversizeAudience && maxConfirmText.trim() !== "MAX") return;
                 setConfirmOpen(false);
-                send.mutate(undefined);
+                send.mutate({ bypassCap: oversizeAudience });
               }}
               data-testid="button-confirm-send"
             >
-              Send to {previewQuery.data?.count.toLocaleString() ?? "?"} users
+              {oversizeAudience
+                ? `Override & send to ${previewQuery.data?.count.toLocaleString() ?? "?"} users`
+                : `Send to ${previewQuery.data?.count.toLocaleString() ?? "?"} users`}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

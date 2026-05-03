@@ -81,6 +81,11 @@ const broadcastBodySchema = z.object({
    *  constraint, but legitimate retries with the same submission
    *  string within 60s are caught at the API layer below. */
   submissionKey: z.string().min(1).max(128).optional(),
+  /** Explicit acknowledgement that the admin wants to bypass the
+   *  100k safety cap. Required when the audience exceeds the cap;
+   *  ignored otherwise. The client gates this behind a "type MAX
+   *  to confirm" prompt for parity with credit adjustments. */
+  bypassCap: z.boolean().optional(),
 });
 
 const previewBodySchema = z.object({
@@ -105,10 +110,17 @@ async function resolveAudience(
 
   if (kind === "single_user") {
     if (!audience.userId) return [];
+    // Accept either a UUID (profiles.id) or a @username — admins
+    // shouldn't have to copy/paste raw IDs. Strip a leading '@' if
+    // the admin pasted in display form.
+    const raw = audience.userId.trim().replace(/^@+/, "");
+    if (!raw) return [];
     const [row] = await db
       .select({ id: profiles.id })
       .from(profiles)
-      .where(eq(profiles.id, audience.userId))
+      .where(
+        sql`${profiles.id} = ${raw} OR LOWER(${profiles.username}) = LOWER(${raw})`,
+      )
       .limit(1);
     return row ? [row.id] : [];
   }
@@ -168,9 +180,9 @@ async function resolveAudience(
 }
 
 /**
- * Same audience resolution as above but ALSO returns up to 5 sample
+ * Same audience resolution as above but ALSO returns up to 10 sample
  * usernames so the composer preview reads like
- * "Will reach 4,213 users (incl. @alice, @bob, +4,211 more)".
+ * "Will reach 4,213 users (incl. @alice, @bob, +4,203 more)".
  */
 async function resolveAudiencePreview(
   audience: BroadcastAudience,
@@ -178,7 +190,7 @@ async function resolveAudiencePreview(
 ): Promise<{ count: number; sample: { id: string; username: string | null }[] }> {
   const ids = await resolveAudience(audience, selfUserId);
   if (ids.length === 0) return { count: 0, sample: [] };
-  const sampleIds = ids.slice(0, 5);
+  const sampleIds = ids.slice(0, 10);
   const rows = await db
     .select({ id: profiles.id, username: profiles.username })
     .from(profiles)
@@ -287,7 +299,7 @@ export function registerAdminNotificationsRoutes(app: Express): void {
           .json({ error: "Invalid broadcast", details: parsed.error.flatten() });
       }
       const adminId = req.userId!;
-      const { title, body, href, priority, audience } = parsed.data;
+      const { title, body, href, priority, audience, bypassCap } = parsed.data;
       // Broadcasts always ride the 'announcement' kind → 'system' category.
       const category = "system" as const;
 
@@ -308,12 +320,17 @@ export function registerAdminNotificationsRoutes(app: Express): void {
           });
         }
 
-        // Hard cap the broadcast size to protect against accidental
-        // ALL-USER blasts during early ops. 100k is well above our
-        // current user base; tune up later if needed.
-        if (userIds.length > 100_000) {
+        // Soft cap the broadcast size to protect against accidental
+        // ALL-USER blasts during early ops. Admins can bypass with
+        // an explicit `bypassCap: true` (gated client-side behind a
+        // "type MAX to confirm" prompt — same pattern as the
+        // credit-adjustment dialog).
+        const SOFT_CAP = 100_000;
+        if (userIds.length > SOFT_CAP && !bypassCap) {
           return res.status(400).json({
-            error: `Audience too large (${userIds.length}). Hard cap is 100,000 to prevent accidents.`,
+            error: `Audience too large (${userIds.length.toLocaleString()}). Soft cap is ${SOFT_CAP.toLocaleString()} — re-send with bypassCap=true to override.`,
+            requiresBypass: true,
+            count: userIds.length,
           });
         }
 
