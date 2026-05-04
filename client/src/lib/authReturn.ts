@@ -14,6 +14,39 @@ export interface VoteResumePayload {
   savedWindowScrollY?: number;
 }
 
+/**
+ * Phase 4 — reason a user was redirected to /login. Surfaced as the `?reason=`
+ * query param on the login URL and consumed by the SignupReasonModal (Stage 6)
+ * to render the variant-A / variant-B copy. Also stashed in sessionStorage as
+ * part of the snapshot so post-login flows can branch on it.
+ */
+export type AuthReason = "vote_limit_reached" | "predict_signup";
+
+/**
+ * Phase 4 — resumable action payload. When an anonymous user hits the vote
+ * budget gate (or any future gate), the page captures enough context here for
+ * the post-signup flow to land them back on the same card with the same vote
+ * primed. Fields:
+ *   - surfaceType: one of the 5 anon-eligible surfaces (matchup_poll,
+ *     trending_poll, opinion_poll, induction, celebrity_person).
+ *   - targetId: the matchupId / pollId / candidateId / personId.
+ *   - cardRoute (optional): canonical client route for the card, e.g.
+ *     /matchup/<id> or /people/<id>. Stage 7 uses this to navigate.
+ *   - pendingVote (optional): the vote payload the user attempted, in
+ *     surface-specific shape (option string, optionId, rating, etc.).
+ *     `any` matches the brief; callers narrow at use site.
+ *
+ * `voteGate.checkVoteGate` returns the (surfaceType, targetId) skeleton on
+ * gate-failure; calling pages fill in cardRoute and pendingVote before
+ * handing the full payload to navigateToLogin.
+ */
+export interface ResumeAction {
+  surfaceType: string;
+  targetId: string;
+  cardRoute?: string;
+  pendingVote?: any;
+}
+
 const AUTH_RETURN_SNAPSHOT_KEY = "voxdex_auth_return_snapshot";
 
 /** VotePage reads this once after auth to reopen overlays / snap. */
@@ -31,6 +64,12 @@ const SNAPSHOT_TTL_MS = 60 * 60 * 1000;
 interface StoredSnapshot {
   returnPath: string;
   voteUi?: VoteResumePayload | null;
+  /**
+   * Phase 4 — resumable vote action. Set when navigateToLogin is called with
+   * a resumeAction payload; consumed by Stage 7's redirectAfterLogin
+   * extension which navigates to cardRoute and auto-opens the original action.
+   */
+  resumeAction?: ResumeAction;
   ts: number;
 }
 
@@ -57,7 +96,10 @@ export function sanitizeReturnPath(input: string | null | undefined): string | n
   return p;
 }
 
-export function stashAuthReturnSnapshot(opts?: { voteUi?: VoteResumePayload | null }): void {
+export function stashAuthReturnSnapshot(opts?: {
+  voteUi?: VoteResumePayload | null;
+  resumeAction?: ResumeAction;
+}): void {
   let returnPath =
     window.location.pathname + window.location.search + window.location.hash;
   if (window.location.pathname === "/login") {
@@ -67,6 +109,7 @@ export function stashAuthReturnSnapshot(opts?: { voteUi?: VoteResumePayload | nu
     returnPath,
     ts: Date.now(),
     ...(opts?.voteUi != null ? { voteUi: opts.voteUi } : {}),
+    ...(opts?.resumeAction != null ? { resumeAction: opts.resumeAction } : {}),
   };
   try {
     sessionStorage.setItem(AUTH_RETURN_SNAPSHOT_KEY, JSON.stringify(snap));
@@ -155,17 +198,37 @@ export function clearStaleAuthReturnSnapshotOnDirectVisit(): void {
 }
 
 /**
- * Stash current URL (+ optional Vote UI) then navigate to login.
+ * Stash current URL (+ optional Vote UI / resumeAction) then navigate to login.
  * Supabase redirect allowlist must include `${origin}/login` if using Google OAuth with this flow.
+ *
+ * Phase 4 additions:
+ *   - `reason`: serialised to the `?reason=` URL query param so SignupReasonModal
+ *     (Stage 6) can render the matching variant. Also stashed in the snapshot
+ *     for any post-login flow that wants to branch on it.
+ *   - `resumeAction`: serialised to sessionStorage via the snapshot. Stage 7's
+ *     redirectAfterLogin extension consumes this to land the user back on the
+ *     original card with their original action primed.
+ *
+ * The `?reason=` query string format is the contract Stage 6 reads from —
+ * don't change values without updating the modal in lockstep.
  */
 export function navigateToLogin(
   setLocation: AuthSetLocation,
-  opts?: { mode?: "signup"; voteUi?: VoteResumePayload | null },
+  opts?: {
+    mode?: "signup";
+    voteUi?: VoteResumePayload | null;
+    reason?: AuthReason;
+    resumeAction?: ResumeAction;
+  },
 ): void {
-  stashAuthReturnSnapshot(opts?.voteUi != null ? { voteUi: opts.voteUi } : {});
+  stashAuthReturnSnapshot({
+    ...(opts?.voteUi != null ? { voteUi: opts.voteUi } : {}),
+    ...(opts?.resumeAction != null ? { resumeAction: opts.resumeAction } : {}),
+  });
   markAuthNavIntent();
   const qs = new URLSearchParams();
   if (opts?.mode === "signup") qs.set("mode", "signup");
+  if (opts?.reason) qs.set("reason", opts.reason);
   const q = qs.toString();
   setLocation(q ? `/login?${q}` : "/login");
 }
