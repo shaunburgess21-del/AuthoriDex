@@ -1,4 +1,4 @@
-import { Info, Star, Users } from "lucide-react";
+import { Info, Star } from "lucide-react";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
 
 interface ApprovalRatingInfoContentProps {
@@ -16,10 +16,6 @@ export function ApprovalRatingInfoContent({ onRateNow }: ApprovalRatingInfoConte
         <li className="flex items-center gap-2 text-xs">
           <Star className="h-3.5 w-3.5 text-cyan-700 dark:text-cyan-500 shrink-0" />
           <span className="font-medium">Rate 1–5</span>
-        </li>
-        <li className="flex items-center gap-2 text-xs">
-          <Users className="h-3.5 w-3.5 text-cyan-700 dark:text-cyan-500 shrink-0" />
-          <span><span className="font-medium">One vote</span> per user, per person, per day</span>
         </li>
       </ul>
       <p className="text-[10px] text-muted-foreground/60 pt-1 border-t border-border/50">

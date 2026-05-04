@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
 import { Popover, PopoverTrigger, PopoverContent, PopoverClose } from "@/components/ui/popover";
 import { useState, useEffect, useRef } from "react";
-import { compactNumber, formatDelta, compactVotes, getApprovalColor } from "@/lib/formatNumber";
+import { formatDelta, compactVotes, getApprovalColor } from "@/lib/formatNumber";
 import { ThumbsUp, Star, Zap, TrendingUp, TrendingDown, Check, X } from "lucide-react";
 import { getCategoryTextColor } from "@/components/CategoryPill";
 import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
@@ -193,11 +193,10 @@ export function LeaderboardRow({
           <p className="md:hidden text-[11px] text-muted-foreground leading-tight truncate">
             {activeTab === "fame" && (
               <span className="font-mono">
-                {compactNumber(fameScore)}
+                {fameScore.toLocaleString('en-US')}
                 {showDelta && (
                   <span className={person.change24h! > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}>
                     {' '}{delta24h}
-                    <span className="text-muted-foreground ml-0.5">24h</span>
                   </span>
                 )}
               </span>
