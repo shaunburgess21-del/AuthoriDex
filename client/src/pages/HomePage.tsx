@@ -1294,7 +1294,7 @@ export default function HomePage() {
                         >
                           <span className="inline-flex items-center gap-1 cursor-help">
                             <RefreshCw className="h-3 w-3 shrink-0 full-refresh-icon-shine" aria-hidden />
-                            <span>Full: {systemFreshness?.fullRefreshAtFormatted || systemFreshness?.lastScoredAtFormatted || "recently"}</span>
+                            <span>Data refresh: {systemFreshness?.fullRefreshAtFormatted || systemFreshness?.lastScoredAtFormatted || "recently"}</span>
                           </span>
                         </TouchTooltip>
                       </div>

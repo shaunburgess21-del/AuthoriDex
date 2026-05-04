@@ -2567,7 +2567,7 @@ export default function VotePage() {
         <section className="mb-10 mt-[5px]">
           <UnifiedSectionHeader
             title="Sentiment Polls"
-            subtitle="Weigh in on current events"
+            subtitle="Weigh in on current topics"
             icon={<MessageSquare className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />}
             accent="cyan"
             testId="section-header-sentiment"
