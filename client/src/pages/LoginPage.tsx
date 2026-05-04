@@ -27,6 +27,14 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Mail, Chrome } from "lucide-react";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
+import type { AuthReason } from "@/lib/authReturn";
+import { SignupReasonModal } from "@/components/auth/SignupReasonModal";
+
+function parseReason(value: string | null): AuthReason | null {
+  return value === "vote_limit_reached" || value === "predict_signup"
+    ? value
+    : null;
+}
 
 export default function LoginPage() {
   const [, setLocation] = useLocation();
@@ -35,6 +43,9 @@ export default function LoginPage() {
   const [isLogin, setIsLogin] = useState(params.get("mode") !== "signup");
   const [email, setEmail] = useState(params.get("email") ?? "");
   const [password, setPassword] = useState("");
+  const [reason, setReason] = useState<AuthReason | null>(
+    parseReason(params.get("reason")),
+  );
   const [loading, setLoading] = useState(false);
   const [otpSending, setOtpSending] = useState(false);
   const [fieldError, setFieldError] = useState<{
@@ -44,6 +55,8 @@ export default function LoginPage() {
   } | null>(null);
   /** Prevents OAuth redirect effect from consuming snapshot while any email-flow submit is in flight. */
   const emailAuthInProgressRef = useRef(false);
+  /** Refocus target after SignupReasonModal dismissal. */
+  const emailInputRef = useRef<HTMLInputElement>(null);
 
   // On direct /login visit (bookmark, refresh, external link) drop any stale snapshot so
   // a successful sign-in doesn't kick the user to an unrelated prior-session page.
@@ -69,6 +82,7 @@ export default function LoginPage() {
       setIsLogin(next.get("mode") !== "signup");
       const qsEmail = next.get("email");
       if (qsEmail) setEmail(qsEmail);
+      setReason(parseReason(next.get("reason")));
     };
     window.addEventListener("popstate", handler);
     return () => window.removeEventListener("popstate", handler);
@@ -254,6 +268,32 @@ export default function LoginPage() {
     }
   };
 
+  const dismissReason = () => {
+    // Strip ?reason= but preserve mode/email/etc. so the URL stays a
+    // valid deep link to the LoginPage and a refresh doesn't re-show
+    // the modal.
+    const next = new URLSearchParams(window.location.search);
+    next.delete("reason");
+    const q = next.toString();
+    const newUrl =
+      window.location.pathname + (q ? `?${q}` : "") + window.location.hash;
+    window.history.replaceState(null, "", newUrl);
+    setReason(null);
+    // Defer focus to next tick so the modal unmounts and Radix
+    // releases its focus trap before we move focus to the email input.
+    setTimeout(() => emailInputRef.current?.focus(), 0);
+  };
+
+  const handleContinueToSignUp = () => {
+    setIsLogin(false);
+    dismissReason();
+  };
+
+  const handleSwitchToSignIn = () => {
+    setIsLogin(true);
+    dismissReason();
+  };
+
   const submitDisabled = loading || otpSending;
 
   return (
@@ -302,6 +342,7 @@ export default function LoginPage() {
                 <Label htmlFor="email">Email</Label>
                 <Input
                   id="email"
+                  ref={emailInputRef}
                   type="email"
                   autoComplete="email"
                   placeholder="you@example.com"
@@ -447,6 +488,14 @@ export default function LoginPage() {
           </CardContent>
         </Card>
       </div>
+      {reason !== null ? (
+        <SignupReasonModal
+          reason={reason}
+          onDismiss={dismissReason}
+          onContinueToSignUp={handleContinueToSignUp}
+          onSwitchToSignIn={handleSwitchToSignIn}
+        />
+      ) : null}
     </div>
   );
 }
