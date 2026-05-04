@@ -1,4 +1,4 @@
-# Phase 4 Stage 6 — SignupReasonModal manual test checklist
+# Phase 4 — Manual test checklist (Stages 6 & 7)
 
 Run before Stage 7 kickoff. Pre-deploy confidence pass on the pre-signup
 context modal across both variants, all three dismissal paths, popstate
@@ -162,9 +162,276 @@ to `reduce`.
 
 ---
 
-## Sign-off
+## Stage 6 Sign-off
 
 - [ ] All 11 sections passed
 - [ ] Any noted issues filed as Phase 4a follow-ups in
       `docs/investigations/anonymous-voting-implementation.md` under
       "Phase 4a follow-ups" rather than blocking Stage 7
+
+---
+
+## Stage 7 — End-to-end gate flow + redirectAfterLogin
+
+Run after the Stage 6 checklist passes. Verifies the per-surface
+voteGate wiring + redirectAfterLogin's resumeAction consumption end-
+to-end: gate triggers correctly at the budget cap, modal renders
+contextually, post-signup return lands on the originally-attempted
+card.
+
+**Phase 4a deferred items (do NOT test as failures):**
+
+- Per-surface auto-open consumers (the "trigger the originally-
+  attempted action on mount" half of D9) are NOT wired in Stage 7.
+  After signup, the user lands on the right cardRoute but must
+  re-click the vote button. This is expected.
+- Embedded widget gating (`UnderratedOverratedCard`,
+  `OverratedUnderratedWidget`, `ValueVoteModal`,
+  `InductionLeaderboardSlice`) was skipped — host pages gate the
+  entry. Flagged here for sanity check during testing.
+
+### Setup (Stage 7)
+
+- [ ] Use a fresh incognito / private browser window for each surface
+      to start with a clean fdx_sid (no prior anon-budget state). Or
+      clear cookies + sessionStorage between surfaces.
+- [ ] Test with `ANON_VOTE_BUDGET=8` (default).
+- [ ] Have the network tab open to verify GET /api/anon-budget and
+      vote POSTs.
+
+### Locked 5-step pattern (per gated surface)
+
+**Step 1 — Anon, no prior votes:** Trigger vote → succeeds, response
+budget shows `used: 1`.
+
+**Step 2 — Anon at 7/8 budget:** One more vote on this surface →
+succeeds, response shows `used: 8 / remaining: 0 / exhausted: true`.
+
+**Step 3 — Anon at 8/8 (exhausted):** One more attempt → no POST,
+redirect to `/login?mode=signup&reason=vote_limit_reached`, Variant A
+modal renders.
+
+**Step 4 — Sign up from modal:** Complete flow → land on `cardRoute`.
+Phase 4a deferred: vote button is NOT auto-pressed (expected).
+
+**Step 5 — Authed user:** Vote always proceeds, response `budget: null`.
+
+### Per-surface gate flow — 11 surfaces
+
+#### Surface 1 — VotePage induction
+
+- **Trigger:** Click "Vote to Induct" on a candidate card (induction
+  overlay or snap-scroll section).
+- **cardRoute:** `/vote`
+- **pendingVote payload:** `{ intent: "induct" }`
+- [ ] Step 1 passes.
+- [ ] Step 2 passes.
+- [ ] Step 3 passes.
+- [ ] Step 4 passes (lands on `/vote`, vote NOT auto-pressed).
+- [ ] Step 5 passes.
+
+#### Surface 2 — VotePage matchup
+
+- **Trigger:** Click `option_a` / `option_b` / `neutral` on a Matchup
+  card on `/vote`.
+- **cardRoute:** `/vote`
+- **pendingVote payload:** `{ matchupId, option }`
+- [ ] All 5 steps pass.
+
+#### Surface 3 — VotePage discourse (trending poll)
+
+- **Trigger:** Click `support` / `neutral` / `oppose` on a discourse
+  topic card on `/vote`.
+- **cardRoute:** `/vote`
+- **pendingVote payload:** `{ choice }`
+- [ ] All 5 steps pass.
+
+#### Surface 4 — VoteDeckView induction (home deck)
+
+- **Trigger:** Click "Vote to Induct" on a home-deck induction card
+  (HomePage `/`).
+- **cardRoute:** `/`
+- **pendingVote payload:** `{ intent: "induct" }`
+- [ ] All 5 steps pass.
+- [ ] Verify pre-Stage-7 anon-block has been removed: anon users with
+      budget remaining can vote without redirect (Stage 4 anon-vote
+      feature was previously inaccessible from this surface).
+
+#### Surface 5 — VoteDeckView value-vote (home deck)
+
+- **Trigger:** Click "Underrated" / "Overrated" on a home-deck Value
+  card (HomePage `/`).
+- **cardRoute:** `/`
+- **pendingVote payload:** `{ vote: "underrated" | "overrated" }`
+- [ ] All 5 steps pass.
+
+#### Surface 6 — AnimatedSentimentVotingWidget (approval-rating)
+
+- **Trigger:** Click "Submit Your Vote" with a 1-5 rating selected,
+  on a person profile (`/person/<slug>`).
+- **cardRoute:** `/person/<slug>`
+- **pendingVote payload:** `{ rating: 1..5 }`
+- [ ] All 5 steps pass.
+- [ ] Verify pre-Stage-7 anon-localStorage-only flow has been
+      removed: anon votes now persist server-side (within budget).
+      Optimistic localStorage update still fires via onMutate.
+
+#### Surface 7 — MatchupDetailPage matchup
+
+- **Trigger:** Click `option_a` / `option_b` / `neutral` button on
+  the matchup detail page (`/matchup/<slug>`).
+- **cardRoute:** `/matchup/<slug>`
+- **pendingVote payload:** `{ option }`
+- [ ] All 5 steps pass.
+- [ ] Bonus: anon user with prior vote remove path — succeeds (anon
+      removes are allowed per Stage 4 server behaviour).
+
+#### Surface 8 — PersonDetailPage matchup
+
+- **Trigger:** Click matchup vote button on the Person detail page's
+  Vote tab (`/person/<slug>`, embedded matchups featuring this
+  person).
+- **cardRoute:** `/person/<slug>`
+- **pendingVote payload:** `{ matchupId, option }` (page hosts
+  multiple matchups, both fields needed).
+- [ ] All 5 steps pass.
+- [ ] Bonus: anon user remove path — succeeds (Stage 7 dropped the
+      auth-block on `handleMatchupRemoveVote`).
+
+#### Surface 9 — PollDetailPage trending poll
+
+- **Trigger:** Click `support` / `neutral` / `oppose` button on the
+  poll detail page (`/polls/<slug>`).
+- **cardRoute:** `/polls/<slug>`
+- **pendingVote payload:** `{ choice }`
+- [ ] All 5 steps pass.
+
+#### Surface 10 — OpinionPollDetailPage opinion poll (3 sub-flows)
+
+- **Trigger location:** `/opinion-polls/<slug>`
+- **cardRoute:** `/opinion-polls/<slug>`
+
+**10a. Fresh-vote (no prior vote on this poll):**
+
+- **pendingVote payload:** `{ kind: "vote", optionId }`
+- [ ] All 5 steps pass.
+
+**10b. Change-vote (prior vote exists):**
+
+- [ ] Anon with prior vote, within budget: click a different option →
+      confirmation dialog opens → confirm → vote changes successfully
+      (free upsert under D3). No gate needed.
+- [ ] Anon at exhausted budget changing vote: same flow succeeds (D3
+      upsert is always free; gate is bypassed for change-vote per
+      Stage 7's auth-block drop).
+
+**10c. Remove-vote:**
+
+- [ ] Anon with prior vote: click "Remove vote" → succeeds (no budget
+      cost, auth-block dropped).
+
+#### Surface 11 — InductionQueuePage induction
+
+- **Trigger:** Click vote button on a candidate card on the induction
+  queue page (`/induction-queue` or similar entry).
+- **cardRoute:** `/induction-queue`
+- **pendingVote payload:** `{ intent: "induct" }`
+- [ ] All 5 steps pass.
+
+### PredictPage signup prompts (no budget gate)
+
+PredictPage has no anon-budget surface. All 13 auth-required entry
+points should redirect with `reason=predict_signup` and render the
+**Variant B** modal (violet accent, "Predicting needs an account.").
+
+#### Mutation handlers (5 toast-replacement sites)
+
+For each, while signed out, trigger the action:
+
+- [ ] `handleEnterJackpot` — click "Enter Jackpot" with a person
+      selected.
+- [ ] `handleCommunityPickEntry` — click yes/no on a community
+      market entry.
+- [ ] `handleUpDownSelect` — click up/down on a weekly UpDown card.
+- [ ] `handleH2HSelect` — click a person on a Head-to-Head card.
+- [ ] `handleGainerSelect` — click a candidate on a Top Gainer card.
+
+For each: redirects to `/login?mode=signup&reason=predict_signup`,
+Variant B modal renders, **no toast**.
+
+#### onAuthRequired callbacks (8 sites)
+
+While signed out, hit each entry point that triggers `onAuthRequired`:
+
+- [ ] community section header (line ~2759)
+- [ ] updown section header (line ~3012)
+- [ ] section header (line ~3113)
+- [ ] section header (line ~3220)
+- [ ] FullScreenOverlay community (line ~3299)
+- [ ] FullScreenOverlay updown (line ~3334)
+- [ ] FullScreenOverlay h2h (line ~3380)
+- [ ] FullScreenOverlay gainers (line ~3415)
+
+For each: redirects to `/login?mode=signup&reason=predict_signup`,
+Variant B modal renders.
+
+### Cross-cutting checks
+
+#### D2 unification (celebrity_person)
+
+Anon user with fresh budget:
+
+- [ ] Cast approval-rating on Person X (consumes 1 budget unit).
+- [ ] Then cast value-vote on same Person X (different surface
+      action, same celebrity_person target_id).
+- [ ] Server response on second action: `consumed: false`,
+      `budget.used: 1` (unchanged).
+- [ ] Budget cache reflects 1 unit consumed total, not 2.
+
+#### Browser back from /login
+
+Anon user hits gate → redirects to /login → user dismisses without
+signing up:
+
+- [ ] Modal renders.
+- [ ] Click X / ESC / click outside to dismiss.
+- [ ] URL clears `?reason=` (page stays at /login).
+- [ ] Click browser back button.
+- [ ] Browser returns to the original surface URL.
+- [ ] Vote button is in the same state (clickable, not stuck in a
+      submitted state).
+- [ ] Clicking the vote button again re-triggers the gate.
+
+#### Phase 4a deferred (per-surface auto-open)
+
+For each detail page (matchup, person, opinion-poll, induction-queue,
+poll), after post-signup return:
+
+- [ ] User is on the correct cardRoute URL.
+- [ ] Vote button is in default state (NOT auto-pressed).
+- [ ] User can click it manually to complete the vote.
+- [ ] This is the **expected** Phase 4a deferral state.
+
+#### Embedded widget sanity check
+
+These were skipped during Stage 7 (host page covers the entry):
+
+- [ ] `UnderratedOverratedCard` — only renders inside pages that
+      already gate. Verify no anon-vote attempt reaches the server
+      bypassing the host page's gate.
+- [ ] `OverratedUnderratedWidget` — same.
+- [ ] `ValueVoteModal` — same.
+- [ ] `InductionLeaderboardSlice` — same.
+
+If any embedded widget triggers a vote that bypasses the host's gate,
+flag as a Stage 8 manual-verification finding for Phase 4a inclusion.
+
+## Stage 7 Sign-off
+
+- [ ] All 11 per-surface gate flows passed (Surfaces 1-11).
+- [ ] PredictPage signup-prompt flows passed (5 mutation handlers +
+      8 onAuthRequired callbacks = 13 sites).
+- [ ] D2 unification verified.
+- [ ] Browser-back behaviour verified.
+- [ ] Phase 4a deferred items confirmed expected (not blocking).
+- [ ] Embedded widget sanity check passed.
