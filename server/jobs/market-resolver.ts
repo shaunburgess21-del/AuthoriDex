@@ -419,12 +419,24 @@ export async function settleMarketBets(marketId: string, winnerEntryId: string, 
         const won = bet.status === "won";
         const payout = bet.payoutAmount ?? 0;
         const profit = won ? payout - bet.stakeAmount : -bet.stakeAmount;
-        const title = won
-          ? `You won ${payout.toLocaleString("en-US")} credits`
-          : `Your prediction didn't land`;
-        const body = won
-          ? `${marketTitle} resolved — net +${profit.toLocaleString("en-US")} credits.`
-          : `${marketTitle} resolved. Better luck next round.`;
+        // Title and body are split by sign of profit so a "won" with
+        // profit=0 (only one bet on the winning entry, payout equals
+        // stake) doesn't read like a celebratory windfall. Body always
+        // names the title, the payout, and the signed net so the row
+        // and the result page agree once the user clicks through.
+        const signedProfit = `${profit >= 0 ? "+" : ""}${profit.toLocaleString("en-US")}`;
+        let title: string;
+        let body: string;
+        if (won && profit > 0) {
+          title = `Your prediction won — ${signedProfit} credits`;
+          body = `${marketTitle} resolved. Payout ${payout.toLocaleString("en-US")} credits (net ${signedProfit}).`;
+        } else if (won) {
+          title = `Stake returned — ${payout.toLocaleString("en-US")} credits`;
+          body = `${marketTitle} resolved. Payout matched your stake (net ${signedProfit}).`;
+        } else {
+          title = `Your prediction didn't land`;
+          body = `${marketTitle} resolved. Lost ${bet.stakeAmount.toLocaleString("en-US")} credits — better luck next round.`;
+        }
         await createNotification({
           userId: bet.userId,
           kind: "market_resolved",
@@ -1030,16 +1042,21 @@ async function resolveJackpot(market: any): Promise<"resolved" | "blocked"> {
       const share = i === winners.length - 1
         ? totalPool - perWinnerShare * (winners.length - 1)
         : perWinnerShare;
+      const profit = share - w.stakeAmount;
+      const signedProfit = `${profit >= 0 ? "+" : ""}${profit.toLocaleString("en-US")}`;
+      const title = profit > 0
+        ? `Jackpot win — ${signedProfit} credits`
+        : `Jackpot — stake returned (${share.toLocaleString("en-US")} credits)`;
       await createNotification({
         userId: w.userId,
         kind: "market_resolved",
-        title: `Jackpot — you won ${share.toLocaleString("en-US")} credits`,
-        body: `${marketTitle} closed at ${actualScore}. You predicted ${w.predictedScore} (off by ${w.diff}).`,
+        title,
+        body: `${marketTitle} closed at ${actualScore}. You predicted ${w.predictedScore} (off by ${w.diff}). Payout ${share.toLocaleString("en-US")} (net ${signedProfit}).`,
         href,
         entityType: "market",
         entityId: market.id,
         marketId: market.id,
-        metadata: { betId: w.id, status: "won", payout: share, stake: w.stakeAmount, actualScore, predictedScore: w.predictedScore, margin: w.diff },
+        metadata: { betId: w.id, status: "won", payout: share, stake: w.stakeAmount, profit, actualScore, predictedScore: w.predictedScore, margin: w.diff },
         idempotencyKey: `market_resolved:${market.id}:${w.id}`,
       });
     }
@@ -1048,12 +1065,12 @@ async function resolveJackpot(market: any): Promise<"resolved" | "blocked"> {
         userId: loser.userId,
         kind: "market_resolved",
         title: `Jackpot didn't land`,
-        body: `${marketTitle} closed at ${actualScore}.`,
+        body: `${marketTitle} closed at ${actualScore}. Lost ${loser.stakeAmount.toLocaleString("en-US")} credits.`,
         href,
         entityType: "market",
         entityId: market.id,
         marketId: market.id,
-        metadata: { betId: loser.id, status: "lost", payout: 0, stake: loser.stakeAmount, actualScore },
+        metadata: { betId: loser.id, status: "lost", payout: 0, stake: loser.stakeAmount, profit: -loser.stakeAmount, actualScore },
         idempotencyKey: `market_resolved:${market.id}:${loser.id}`,
       });
     }

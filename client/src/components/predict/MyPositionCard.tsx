@@ -6,6 +6,7 @@ import {
   ArrowUpRight,
   Crown,
   Plus,
+  RotateCcw,
   Target,
   TrendingDown,
   TrendingUp,
@@ -90,6 +91,14 @@ export interface MyPositionCardProps {
   /** Hint for body rendering. Falls back to the response's marketType. */
   marketType?: string;
   /**
+   * Hint for the rendering mode. Falls back to the response's status.
+   * Threaded through so the parent can render the result variant
+   * synchronously (without waiting for /my-position to resolve), which
+   * matters when the user lands on a deep-linked resolved page from a
+   * notification — they shouldn't see the open-state header flash.
+   */
+  marketStatus?: string;
+  /**
    * Click handler for the per-kind primary CTA. Parent owns the
    * actual flow (opens StakeModal / focuses jackpot input / etc.) so
    * this card stays presentational.
@@ -107,6 +116,7 @@ const FRESH_INTERVAL_MS = 60_000;
 export function MyPositionCard({
   marketId,
   marketType: marketTypeHint,
+  marketStatus: marketStatusHint,
   onAddEntry,
   ctaLabel,
   hideCta,
@@ -148,29 +158,46 @@ export function MyPositionCard({
   if (!position || position.betCount === 0) return null;
 
   const marketType = marketTypeHint ?? position.market.marketType;
-  const isOpen = position.market.status === "OPEN";
+  const status = marketStatusHint ?? position.market.status;
+  const isOpen = status === "OPEN";
+  const isResolved = status === "RESOLVED";
+  const isVoid = status === "VOID";
+  const showResult = isResolved || isVoid;
   const showCta = !hideCta && isOpen && onAddEntry;
 
+  // Resolved/void markets share a single "Your Result" surface across
+  // every market type. The per-kind bodies above are tuned for the
+  // open-state UX (live score deltas, jackpot ticket distance, etc.)
+  // and would mislead once the result is in.
   return (
     <Card
       className={cn(
-        "p-4 mb-4 border-violet-500/30 dark:border-violet-500/20 bg-violet-500/5 dark:bg-violet-500/[0.04]",
+        "p-4 mb-4",
+        showResult
+          ? "border-amber-500/30 dark:border-amber-500/20 bg-amber-500/5 dark:bg-amber-500/[0.04]"
+          : "border-violet-500/30 dark:border-violet-500/20 bg-violet-500/5 dark:bg-violet-500/[0.04]",
         className,
       )}
       data-testid="card-my-position"
     >
-      {/* Header: live score + delta */}
+      {/* Header: live score + delta (open) OR aggregated result (resolved). */}
       <PositionHeader
         currentScore={position.currentScore}
         baselineScore={position.market.baselineScore}
         marketType={marketType}
         betCount={position.betCount}
         totalStake={position.totalStake}
+        bets={position.bets}
+        showResult={showResult}
+        isVoid={isVoid}
       />
 
-      {/* Body: per-kind details */}
+      {/* Body: per-kind details for open markets, settled summary for
+          resolved/void. */}
       <div className="mt-4">
-        {marketType === "jackpot" ? (
+        {showResult ? (
+          <ResultBody position={position} isVoid={isVoid} />
+        ) : marketType === "jackpot" ? (
           <JackpotBody position={position} />
         ) : marketType === "updown" ? (
           <UpDownBody position={position} />
@@ -218,6 +245,9 @@ interface PositionHeaderProps {
   marketType: string;
   betCount: number;
   totalStake: number;
+  bets?: MyPositionBet[];
+  showResult?: boolean;
+  isVoid?: boolean;
 }
 
 function PositionHeader({
@@ -226,8 +256,40 @@ function PositionHeader({
   marketType,
   betCount,
   totalStake,
+  bets,
+  showResult,
+  isVoid,
 }: PositionHeaderProps) {
-  const showScore = currentScore != null && marketType !== "race" && marketType !== "gainer";
+  // Aggregate per-bet payout/profit across the user's settled bets
+  // for the right-aligned summary on resolved markets. For active
+  // markets we keep the original live-score block intact.
+  const settled = useMemo(() => {
+    if (!showResult || !bets || bets.length === 0) {
+      return null;
+    }
+    let payout = 0;
+    let profit = 0;
+    let wonCount = 0;
+    let lostCount = 0;
+    let refundCount = 0;
+    for (const bet of bets) {
+      const stake = bet.stakeAmount ?? 0;
+      const betPayout = bet.payoutAmount ?? 0;
+      payout += betPayout;
+      if (bet.status === "won") {
+        profit += betPayout - stake;
+        wonCount += 1;
+      } else if (bet.status === "lost") {
+        profit += -stake;
+        lostCount += 1;
+      } else if (bet.status === "refunded") {
+        refundCount += 1;
+      }
+    }
+    return { payout, profit, wonCount, lostCount, refundCount };
+  }, [bets, showResult]);
+
+  const showScore = !showResult && currentScore != null && marketType !== "race" && marketType !== "gainer";
   const delta = showScore && baselineScore != null && currentScore != null
     ? currentScore - baselineScore
     : null;
@@ -237,15 +299,38 @@ function PositionHeader({
   const isUp = delta != null && delta > 0;
   const isDown = delta != null && delta < 0;
 
+  // Result-aware accent: amber for resolved, violet for open. Mirrors
+  // the card border/background switch in MyPositionCard so the icon
+  // chip doesn't visually fight the surrounding card.
+  const iconChipClass = showResult
+    ? "bg-amber-500/15 dark:bg-amber-500/10 border border-amber-500/40 dark:border-amber-500/30"
+    : "bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/40 dark:border-violet-500/30";
+  const iconColor = showResult
+    ? "text-amber-600 dark:text-amber-400"
+    : "text-violet-700 dark:text-violet-400";
+  const heading = showResult
+    ? isVoid
+      ? "Your Refund"
+      : "Your Result"
+    : "Your Position";
+
   return (
     <div className="flex items-start justify-between gap-2">
       <div className="flex items-center gap-2.5 min-w-0">
-        <div className="h-9 w-9 rounded-full bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/40 dark:border-violet-500/30 flex items-center justify-center shrink-0">
-          <Target className="h-[18px] w-[18px] text-violet-700 dark:text-violet-400" />
+        <div className={cn("h-9 w-9 rounded-full flex items-center justify-center shrink-0", iconChipClass)}>
+          {showResult ? (
+            isVoid ? (
+              <RotateCcw className={cn("h-[18px] w-[18px]", iconColor)} />
+            ) : (
+              <Trophy className={cn("h-[18px] w-[18px]", iconColor)} />
+            )
+          ) : (
+            <Target className={cn("h-[18px] w-[18px]", iconColor)} />
+          )}
         </div>
         <div className="min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
-            <h3 className="font-semibold text-sm leading-tight">Your Position</h3>
+            <h3 className="font-semibold text-sm leading-tight">{heading}</h3>
             <Badge variant="outline" className="text-[10px] py-0 px-1.5 font-mono leading-none">
               {betCount} {betCount === 1 ? "entry" : "entries"}
             </Badge>
@@ -256,6 +341,32 @@ function PositionHeader({
           </p>
         </div>
       </div>
+
+      {showResult && settled && (
+        <div className="text-right shrink-0">
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wide leading-none">
+            {isVoid ? "Refunded" : "Net"}
+          </p>
+          <p
+            className={cn(
+              "font-mono font-bold text-sm sm:text-base tabular-nums leading-tight mt-0.5",
+              !isVoid && settled.profit > 0 && "text-emerald-600 dark:text-emerald-400",
+              !isVoid && settled.profit < 0 && "text-red-600 dark:text-red-400",
+              (isVoid || settled.profit === 0) && "text-muted-foreground",
+            )}
+            data-testid="text-my-position-net"
+          >
+            {isVoid
+              ? `${settled.payout.toLocaleString("en-US")} cr`
+              : `${settled.profit > 0 ? "+" : ""}${settled.profit.toLocaleString("en-US")} cr`}
+          </p>
+          {!isVoid && (
+            <p className="text-[11px] text-muted-foreground tabular-nums leading-none mt-0.5">
+              Payout {settled.payout.toLocaleString("en-US")}
+            </p>
+          )}
+        </div>
+      )}
 
       {showScore && (
         <div className="text-right shrink-0">
@@ -291,6 +402,104 @@ function PositionHeader({
             </p>
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+// One settled summary body for every market type. Per-kind nuance
+// stops mattering once the bet has settled — what the user wants is
+// "did I win/lose, what was my pick, what did each entry pay out".
+function ResultBody({
+  position,
+  isVoid,
+}: {
+  position: MyPositionResponse;
+  isVoid?: boolean;
+}) {
+  const bets = position.bets;
+  return (
+    <div className="space-y-1.5">
+      {bets.map((bet) => {
+        const stake = bet.stakeAmount ?? 0;
+        const payout = bet.payoutAmount ?? 0;
+        const status = bet.status;
+        const isWon = status === "won";
+        const isLost = status === "lost";
+        const isRefund = status === "refunded";
+        const profit = isWon ? payout - stake : isLost ? -stake : 0;
+        const signedProfit = `${profit >= 0 ? "+" : ""}${profit.toLocaleString("en-US")}`;
+        // Jackpot bets carry their predicted score in metadata; the
+        // entry label for jackpot is just "Jackpot" so we surface the
+        // predicted number instead to keep rows distinguishable.
+        const isJackpot = position.market.marketType === "jackpot";
+        const titleLabel = isJackpot && bet.predictedScore != null
+          ? bet.predictedScore.toLocaleString("en-US")
+          : (bet.entryLabel ?? "—");
+        const directionPrefix =
+          !isJackpot && bet.direction
+            ? bet.direction === "no"
+              ? "No on "
+              : bet.direction === "yes"
+                ? "Yes on "
+                : ""
+            : "";
+        return (
+          <div
+            key={bet.betId}
+            className={cn(
+              "flex items-center justify-between gap-2 rounded-md px-2.5 py-2 text-sm border",
+              isWon && "bg-emerald-500/8 dark:bg-emerald-500/5 border-emerald-500/30",
+              isLost && "bg-background/40 border-border/40 opacity-90",
+              isRefund && "bg-muted/30 border-border/40",
+              !isWon && !isLost && !isRefund && "bg-background/40 border-border/40",
+            )}
+            data-testid={`row-my-position-result-${bet.betId}`}
+          >
+            <div className="flex items-center gap-2 min-w-0 flex-wrap">
+              <span
+                className={cn(
+                  "text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide",
+                  isWon && "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300",
+                  isLost && "bg-red-500/15 text-red-700 dark:text-red-300",
+                  isRefund && "bg-muted text-muted-foreground",
+                  !isWon && !isLost && !isRefund && "bg-muted text-muted-foreground",
+                )}
+              >
+                {isWon ? "Won" : isLost ? "Lost" : isRefund ? "Refund" : status}
+              </span>
+              <span className="text-sm font-medium truncate">
+                {directionPrefix}
+                {titleLabel}
+              </span>
+            </div>
+            <span className="text-[11px] text-muted-foreground tabular-nums shrink-0 text-right">
+              <span className="block">
+                Stake {stake.toLocaleString("en-US")}
+                {(isWon || isLost) && (
+                  <span className="ml-1 opacity-70">→ {payout.toLocaleString("en-US")}</span>
+                )}
+              </span>
+              {(isWon || isLost) && (
+                <span
+                  className={cn(
+                    "block font-mono",
+                    profit > 0 && "text-emerald-600 dark:text-emerald-400",
+                    profit < 0 && "text-red-600 dark:text-red-400",
+                    profit === 0 && "text-muted-foreground",
+                  )}
+                >
+                  Net {signedProfit}
+                </span>
+              )}
+            </span>
+          </div>
+        );
+      })}
+      {isVoid && (
+        <p className="text-[11px] text-muted-foreground italic pt-1">
+          Market voided — your stake was refunded.
+        </p>
       )}
     </div>
   );

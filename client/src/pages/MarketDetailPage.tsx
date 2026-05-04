@@ -90,7 +90,26 @@ interface ResolutionSummary {
   winningPrediction?: number | null;
   margin?: number | null;
   closeSnapshotAt?: string | null;
+  jackpotTotalPool?: number | null;
+  jackpotTotalEntries?: number | null;
+  jackpotPayout?: number | null;
+  jackpotTiedWinners?: number | null;
   notesText?: string | null;
+}
+
+interface JackpotWinnerRow {
+  userId: string;
+  username: string | null;
+  avatarUrl: string | null;
+  predictedScore: number | null;
+  payout: number | null;
+  margin: number | null;
+}
+
+interface JackpotWinners {
+  visibleWinners: JackpotWinnerRow[];
+  hiddenWinnerCount: number;
+  totalWinners: number;
 }
 
 interface MarketData {
@@ -127,6 +146,7 @@ interface MarketData {
   voidReason?: string | null;
   resolutionNotes?: string | null;
   resolutionSummary?: ResolutionSummary | null;
+  jackpotWinners?: JackpotWinners | null;
   createdAt: string;
   entries: MarketEntry[];
   comments?: MarketComment[];
@@ -297,12 +317,20 @@ function BinaryOutcomes({
   selectedEntry,
   onSelect,
   disabled,
+  isResolved,
 }: {
   entries: (MarketEntry & { percentage: number; displayStake: number })[];
   selectedEntry: string | null;
   onSelect: (id: string) => void;
   disabled: boolean;
+  isResolved?: boolean;
 }) {
+  // Once a market is resolved, binary outcomes always render in
+  // displayOrder so Yes is on the left and No on the right. We rely
+  // on the Winner/Lost tone badge (set further down) to highlight the
+  // official outcome rather than reordering the row, since admins
+  // sometimes use these as Above/Below pairs where the visual order
+  // is meaningful.
   const sorted = [...entries].sort((a, b) => a.displayOrder - b.displayOrder);
   const yesEntry = sorted[0];
   const noEntry = sorted[1];
@@ -334,6 +362,9 @@ function BinaryOutcomes({
             <span className="font-semibold text-green-600 dark:text-green-400">{yesEntry.label}</span>
           </div>
           <div className="text-3xl font-bold text-green-600 dark:text-green-400 font-mono">{yesEntry.percentage}%</div>
+          {isResolved && (
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground mt-0.5">of pool</div>
+          )}
           <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
             <span>{formatNumber(yesEntry.displayStake)} staked</span>
             <span>{yesEntry.betCount} bets</span>
@@ -363,6 +394,9 @@ function BinaryOutcomes({
             <span className="font-semibold text-[#FF0000]">{noEntry.label}</span>
           </div>
           <div className="text-3xl font-bold text-[#FF0000] font-mono">{noEntry.percentage}%</div>
+          {isResolved && (
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground mt-0.5">of pool</div>
+          )}
           <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
             <span>{formatNumber(noEntry.displayStake)} staked</span>
             <span>{noEntry.betCount} bets</span>
@@ -378,13 +412,27 @@ function MultiOutcomes({
   selectedEntry,
   onSelect,
   disabled,
+  isResolved,
 }: {
   entries: (MarketEntry & { percentage: number; displayStake: number })[];
   selectedEntry: string | null;
   onSelect: (id: string) => void;
   disabled: boolean;
+  isResolved?: boolean;
 }) {
-  const sorted = [...entries].sort((a, b) => b.percentage - a.percentage);
+  // While the market is open we sort by popularity (largest pool share
+  // first) so the favourite leads. Once it's resolved we instead pin
+  // winners to the top and break ties on pool share — this avoids the
+  // confusing case from the bug report where a popular but losing
+  // outcome sits visually above the official winner.
+  const sorted = [...entries].sort((a, b) => {
+    if (isResolved) {
+      const aWin = a.resolutionStatus === "winner" ? 1 : 0;
+      const bWin = b.resolutionStatus === "winner" ? 1 : 0;
+      if (aWin !== bWin) return bWin - aWin;
+    }
+    return b.percentage - a.percentage;
+  });
   const maxPercentage = Math.max(...sorted.map((e) => e.percentage), 0);
 
   return (
@@ -427,11 +475,15 @@ function MultiOutcomes({
               />
             </div>
             <span
-              className={`text-sm font-mono font-bold shrink-0 w-[48px] text-right ${
+              className={`text-sm font-mono font-bold shrink-0 ${isResolved ? "w-[78px]" : "w-[48px]"} text-right ${
                 tone?.textClass ?? (isLeading ? "text-violet-500 dark:text-violet-300" : "text-blue-500 dark:text-blue-300")
               }`}
             >
-              {entry.percentage}%
+              {entry.percentage}%{isResolved && (
+                <span className="ml-1 text-[10px] uppercase tracking-wide text-muted-foreground font-medium">
+                  of pool
+                </span>
+              )}
             </span>
             {tone && (
               <span className={`hidden sm:inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide shrink-0 ${tone.labelClass}`}>
@@ -457,6 +509,7 @@ function UpDownOutcomes({
   metric,
   strike,
   unit,
+  isResolved,
 }: {
   entries: (MarketEntry & { percentage: number; displayStake: number })[];
   selectedEntry: string | null;
@@ -466,20 +519,31 @@ function UpDownOutcomes({
   metric: string;
   strike: string;
   unit: string;
+  isResolved?: boolean;
 }) {
   const sorted = [...entries].sort((a, b) => a.displayOrder - b.displayOrder);
+  // Strike defaults to "0" when the field was never populated. Hiding
+  // the card in that case avoids the misleading "Strike Price 0" tile
+  // that was showing on every native Up/Down resolved page (see bug
+  // report). On resolved markets the card is also redundant with the
+  // Open / Close score tiles in the result-summary section above.
+  const strikeNumber = Number(strike);
+  const hasStrike = !!strike && Number.isFinite(strikeNumber) && strikeNumber !== 0;
+  const showStrikeCard = hasStrike && !isResolved;
 
   return (
     <div className="space-y-4">
-      <Card className="p-4 bg-muted/10 border-border/40">
-        <div className="text-center">
-          <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">{underlying} {metric}</p>
-          <p className="text-3xl font-bold font-mono text-violet-600 dark:text-violet-400">
-            {unit}{Number(strike).toLocaleString('en-US')}
-          </p>
-          <p className="text-xs text-muted-foreground mt-1">Strike Price</p>
-        </div>
-      </Card>
+      {showStrikeCard && (
+        <Card className="p-4 bg-muted/10 border-border/40">
+          <div className="text-center">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">{underlying} {metric}</p>
+            <p className="text-3xl font-bold font-mono text-violet-600 dark:text-violet-400">
+              {unit}{strikeNumber.toLocaleString('en-US')}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">Strike Price</p>
+          </div>
+        </Card>
+      )}
       <div className="grid grid-cols-2 gap-3">
         {sorted.map((entry) => {
           const isAbove = entry.label.toLowerCase().includes("above") || entry.label.toLowerCase().includes("yes") || entry.displayOrder === 0;
@@ -520,6 +584,9 @@ function UpDownOutcomes({
               <div className={`text-3xl font-bold font-mono ${isAbove ? "text-green-600 dark:text-green-400" : "text-[#FF0000]"}`}>
                 {entry.percentage}%
               </div>
+              {isResolved && (
+                <div className="text-[10px] uppercase tracking-wide text-muted-foreground mt-0.5">of pool</div>
+              )}
               <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
                 <span>{formatNumber(entry.displayStake)} staked</span>
                 <span>{entry.betCount} bets</span>
@@ -839,6 +906,7 @@ export default function MarketDetailPage() {
   const isOpen = market.status === "OPEN";
   const isInactive = (market as any).visibility === "inactive";
   const isClosedMarket = market.status !== "OPEN";
+  const isResolved = market.status === "RESOLVED";
   const resultOpenScore = market.resolutionSummary?.openScore ?? market.baselineScore ?? null;
   const resultCloseScore = market.resolutionSummary?.closeScore ?? null;
   const resultActualScore = market.resolutionSummary?.actualScore ?? null;
@@ -985,16 +1053,19 @@ export default function MarketDetailPage() {
           )}
         </div>
 
-        {/* Live "My Position" card. Renders only when the user has at
-            least one active bet on this market. Replaces the inline
-            "Your Prediction" pill panel that used to live inside the
-            place-prediction card so users can see live current score,
-            distance from each entry, and jump back into the entry
-            flow without scrolling. */}
-        {isOpen && !isInactive && market.id && (
+        {/* Live "My Position" / "Your Result" card. Renders for both
+            open and resolved markets — open shows current standing and
+            adds an "Add another entry" CTA, resolved shows what the
+            user took home (payout + signed net) so the page answers
+            "how did I do?" alongside the official outcome. Hidden when
+            the user has no bets on the market (the card returns null
+            internally). */}
+        {!isInactive && market.id && (
           <MyPositionCard
             marketId={market.id}
             marketType={market.marketType}
+            marketStatus={market.status}
+            hideCta={!isOpen}
             onAddEntry={() => {
               // Scroll the place-prediction section into view, then
               // focus the appropriate input. setTimeout 250ms lets the
@@ -1376,21 +1447,127 @@ export default function MarketDetailPage() {
                 </Card>
               )}
             </div>
+
+            {/* Jackpot winner block — only renders for resolved jackpot
+                markets. The endpoint already filters out winners whose
+                profile is private or who hid their winning bet, so we
+                just need to express the resulting state in copy:
+                  - 1+ visible winners, no hidden ones → list usernames
+                  - mix of visible + hidden → list visible, then a note
+                  - all hidden / no rows → privacy-respecting fallback
+                Tied jackpots get a "split between N players" line so
+                the per-winner share isn't mistaken for the full pool. */}
+            {isJackpotMarket && market.status === "RESOLVED" && (() => {
+              const wp = market.jackpotWinners ?? null;
+              const visible = wp?.visibleWinners ?? [];
+              const hiddenCount = wp?.hiddenWinnerCount ?? 0;
+              const totalWinners = wp?.totalWinners ?? (visible.length + hiddenCount);
+              const totalPool = market.resolutionSummary?.jackpotTotalPool ?? null;
+              const totalEntries = market.resolutionSummary?.jackpotTotalEntries ?? null;
+              const tied = market.resolutionSummary?.jackpotTiedWinners ?? totalWinners;
+              const hasAnyWinnerInfo = visible.length > 0 || hiddenCount > 0 || totalWinners > 0;
+              if (!hasAnyWinnerInfo && totalPool === null && totalEntries === null) {
+                return null;
+              }
+              return (
+                <div
+                  className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/8 dark:bg-amber-500/5 px-4 py-3"
+                  data-testid="section-jackpot-winners"
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <Trophy className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                    <p className="text-sm font-semibold text-amber-700 dark:text-amber-300">
+                      {totalWinners > 1 ? "Jackpot winners" : "Jackpot winner"}
+                    </p>
+                  </div>
+                  {visible.length > 0 ? (
+                    <div className="space-y-1.5">
+                      {visible.map((w) => (
+                        <div key={w.userId} className="flex items-center justify-between gap-2 text-sm">
+                          <span className="font-semibold text-amber-700 dark:text-amber-300 truncate">
+                            {w.username ? `@${w.username}` : "Anonymous"}
+                          </span>
+                          <span className="text-xs text-muted-foreground tabular-nums shrink-0">
+                            {w.predictedScore != null && (
+                              <span className="mr-2">
+                                guessed {w.predictedScore.toLocaleString("en-US")}
+                              </span>
+                            )}
+                            {w.payout != null && (
+                              <span className="font-mono font-semibold text-amber-700 dark:text-amber-300">
+                                {w.payout.toLocaleString("en-US")} cr
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                      ))}
+                      {hiddenCount > 0 && (
+                        <p className="text-xs text-muted-foreground italic">
+                          {hiddenCount === 1
+                            ? "1 winner hidden by their profile settings"
+                            : `${hiddenCount} winners hidden by their profile settings`}
+                        </p>
+                      )}
+                    </div>
+                  ) : hiddenCount > 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      {hiddenCount === 1
+                        ? "Winning user hidden by profile settings"
+                        : `${hiddenCount} winning users hidden by profile settings`}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No entries this round.</p>
+                  )}
+                  {(totalPool != null || totalEntries != null || (tied != null && tied > 1)) && (
+                    <p className="text-[11px] text-muted-foreground mt-2">
+                      {totalEntries != null && (
+                        <span className="mr-2">
+                          {totalEntries} {totalEntries === 1 ? "entry" : "entries"}
+                        </span>
+                      )}
+                      {totalPool != null && (
+                        <span className="mr-2">
+                          Pool {totalPool.toLocaleString("en-US")} cr
+                        </span>
+                      )}
+                      {tied != null && tied > 1 && (
+                        <span>Split {tied} ways</span>
+                      )}
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
           </Card>
         )}
 
         {!isJackpotMarket && (
         <Card className="p-5 mb-6" data-testid="section-outcomes">
-          <h2 className="text-lg font-serif font-bold mb-4 flex items-center gap-2">
+          {/* On open markets the percentages are an investing signal
+              (live crowd odds). Once resolved they're a historical
+              record of how credits ended up split, not your payout.
+              The heading + helper text + per-row "of pool" suffix all
+              flip together so the page can't be skim-read as "winning
+              outcomes ranked by likelihood". */}
+          <h2 className="text-lg font-serif font-bold mb-1 flex items-center gap-2">
             <Target className="h-5 w-5 text-violet-700 dark:text-violet-500" />
-            Outcomes
+            {isClosedMarket ? "Final pool split" : "Outcomes"}
           </h2>
+          {isClosedMarket ? (
+            <p className="text-xs text-muted-foreground mb-4">
+              These percentages show how the crowd staked their credits before close — not the official outcome or your payout.
+              {isResolved ? " Official winners are pinned to the top." : ""}
+            </p>
+          ) : (
+            <div className="mb-4" />
+          )}
           {effectiveOpenMarketType === "binary" && (
             <BinaryOutcomes
               entries={entriesWithPercentages}
               selectedEntry={selectedEntry}
               onSelect={setSelectedEntry}
               disabled={!isOpen}
+              isResolved={isResolved}
             />
           )}
           {effectiveOpenMarketType === "multi" && (
@@ -1399,6 +1576,7 @@ export default function MarketDetailPage() {
               selectedEntry={selectedEntry}
               onSelect={setSelectedEntry}
               disabled={!isOpen}
+              isResolved={isResolved}
             />
           )}
           {effectiveOpenMarketType === "updown" && (
@@ -1411,6 +1589,7 @@ export default function MarketDetailPage() {
               metric={market.metric || ""}
               strike={market.strike || "0"}
               unit={market.unit || ""}
+              isResolved={isResolved}
             />
           )}
         </Card>

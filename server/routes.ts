@@ -885,6 +885,13 @@ function buildMarketResolutionSummary(resolutionNotes: string | null | undefined
       winningPrediction: typeof parsed.winningPrediction === "number" ? parsed.winningPrediction : null,
       margin: typeof parsed.margin === "number" ? parsed.margin : null,
       closeSnapshotAt: typeof parsed.closeSnapshotAt === "string" ? parsed.closeSnapshotAt : null,
+      // Jackpot-only fields. Carrying them on the shared shape keeps the
+      // detail-page result card a single render path; non-jackpot
+      // markets simply leave these null.
+      jackpotTotalPool: typeof parsed.totalPool === "number" ? parsed.totalPool : null,
+      jackpotTotalEntries: typeof parsed.totalEntries === "number" ? parsed.totalEntries : null,
+      jackpotPayout: typeof parsed.payout === "number" ? parsed.payout : null,
+      jackpotTiedWinners: typeof parsed.tiedWinners === "number" ? parsed.tiedWinners : null,
       notesText: null,
     };
   } catch {
@@ -896,9 +903,118 @@ function buildMarketResolutionSummary(resolutionNotes: string | null | undefined
       winningPrediction: null,
       margin: null,
       closeSnapshotAt: null,
+      jackpotTotalPool: null,
+      jackpotTotalEntries: null,
+      jackpotPayout: null,
+      jackpotTiedWinners: null,
       notesText: resolutionNotes,
     };
   }
+}
+
+/**
+ * Privacy-aware lookup for jackpot winners, used by the open-markets
+ * detail page and the WeeklyJackpotHero "last winner" tile.
+ *
+ * Privacy rules (must respect both):
+ *  1. `profiles.is_public = false` — owner has globally hidden their
+ *     profile, so we never reveal their username on a public surface.
+ *  2. `profile_item_privacy` row with `item_type = 'market_bet'` and
+ *     `item_id = market_bets.id` — owner has hidden this specific bet.
+ *
+ * Returns visible winners in display order plus a `hiddenWinnerCount`
+ * so the UI can say "Winning user hidden by profile settings" instead
+ * of silently dropping a public ribbon. Falls back to the IDs in
+ * `resolution_notes.winnerUserId` when there is no winning bet row
+ * (e.g. legacy data) so we don't regress the existing "last week"
+ * tile when the bet rows are missing.
+ */
+async function getVisibleJackpotWinners(
+  marketId: string,
+): Promise<{
+  visibleWinners: Array<{
+    userId: string;
+    username: string | null;
+    avatarUrl: string | null;
+    predictedScore: number | null;
+    payout: number | null;
+    margin: number | null;
+  }>;
+  hiddenWinnerCount: number;
+  totalWinners: number;
+}> {
+  // Source of truth: winning `market_bets` rows joined to profiles.
+  // The resolver writes status='won' for the closest predictor(s) with
+  // the per-winner payout already split, so this query gives us
+  // payout per visible winner without re-deriving anything.
+  const winnerRows = await db
+    .select({
+      betId: marketBets.id,
+      userId: marketBets.userId,
+      betMetadata: marketBets.betMetadata,
+      payoutAmount: marketBets.payoutAmount,
+      username: profiles.username,
+      avatarUrl: profiles.avatarUrl,
+      isPublic: profiles.isPublic,
+    })
+    .from(marketBets)
+    .innerJoin(profiles, eq(profiles.id, marketBets.userId))
+    .where(and(
+      eq(marketBets.marketId, marketId),
+      eq(marketBets.status, "won"),
+    ));
+
+  if (winnerRows.length === 0) {
+    return { visibleWinners: [], hiddenWinnerCount: 0, totalWinners: 0 };
+  }
+
+  // Per-bet hidden overrides — one query keyed by all the winning bet
+  // IDs is faster than N round-trips. We treat presence of a row in
+  // profile_item_privacy as "hide" (matching the rest of the app).
+  const hiddenBetRows = await db
+    .select({ itemId: profileItemPrivacy.itemId })
+    .from(profileItemPrivacy)
+    .where(and(
+      eq(profileItemPrivacy.itemType, "market_bet"),
+      inArray(profileItemPrivacy.itemId, winnerRows.map((r) => r.betId)),
+    ));
+  const hiddenBetIds = new Set(hiddenBetRows.map((r) => r.itemId));
+
+  let hiddenWinnerCount = 0;
+  const visibleWinners: Array<{
+    userId: string;
+    username: string | null;
+    avatarUrl: string | null;
+    predictedScore: number | null;
+    payout: number | null;
+    margin: number | null;
+  }> = [];
+
+  for (const row of winnerRows) {
+    const betHiddenByOwner = hiddenBetIds.has(row.betId);
+    const profileHidden = row.isPublic === false;
+    if (betHiddenByOwner || profileHidden) {
+      hiddenWinnerCount += 1;
+      continue;
+    }
+    const meta = (row.betMetadata as Record<string, any> | null) ?? null;
+    const predictedScore = typeof meta?.predictedScore === "number" ? meta.predictedScore : null;
+    const margin = typeof meta?.margin === "number" ? meta.margin : null;
+    visibleWinners.push({
+      userId: row.userId,
+      username: row.username ?? null,
+      avatarUrl: row.avatarUrl ?? null,
+      predictedScore,
+      payout: row.payoutAmount ?? null,
+      margin,
+    });
+  }
+
+  return {
+    visibleWinners,
+    hiddenWinnerCount,
+    totalWinners: winnerRows.length,
+  };
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -7728,15 +7844,12 @@ Only return the JSON object.`;
         currentScore = person?.trendScore ?? null;
       }
 
-      // User's ACTIVE bets on this market with entry label and metadata
-      // joined in. We deliberately exclude settled rows (won/lost/void)
-      // because:
-      //   - On an OPEN market every legitimate bet is `active`, so the
-      //     filter is a no-op for the common path.
-      //   - On a RESOLVED/VOID market the parent page already shows a
-      //     dedicated resolution-summary card; surfacing settled rows
-      //     here would render a misleading "Your Position" panel
-      //     above that summary.
+      // User's bets on this market with entry label and metadata
+      // joined in. We include both active and settled rows so the same
+      // card can show "Your Position" while the market is open and
+      // "Your Result" once it's been resolved/voided. The client picks
+      // the right rendering path based on `market.status` rather than
+      // requesting different shapes.
       const myBets = await db
         .select({
           betId: marketBets.id,
@@ -7761,7 +7874,7 @@ Only return the JSON object.`;
           and(
             eq(marketBets.marketId, id),
             eq(marketBets.userId, userId),
-            eq(marketBets.status, "active"),
+            inArray(marketBets.status, ["active", "won", "lost", "refunded"]),
           ),
         )
         .orderBy(desc(marketBets.createdAt));
@@ -14061,6 +14174,30 @@ Target length: about 90-150 words.`;
 
       const resolutionSummary = buildMarketResolutionSummary(market.resolutionNotes);
 
+      // Jackpot resolved markets get an additional winner block so the
+      // detail page can render "@username won 1,000 credits" while still
+      // honouring profiles.isPublic and per-bet profile_item_privacy.
+      // Skipped for non-jackpot or non-resolved markets (no extra query).
+      let jackpotWinners: {
+        visibleWinners: Array<{
+          userId: string;
+          username: string | null;
+          avatarUrl: string | null;
+          predictedScore: number | null;
+          payout: number | null;
+          margin: number | null;
+        }>;
+        hiddenWinnerCount: number;
+        totalWinners: number;
+      } | null = null;
+      if (market.marketType === "jackpot" && market.status === "RESOLVED") {
+        try {
+          jackpotWinners = await getVisibleJackpotWinners(market.id);
+        } catch (err) {
+          console.error("[Open Markets] Jackpot winner lookup failed:", err);
+        }
+      }
+
       res.json({
         ...market,
         entries: entriesWithCounts,
@@ -14070,6 +14207,7 @@ Target length: about 90-150 words.`;
         linkedPersonName,
         linkedPersonAvatar,
         resolutionSummary,
+        jackpotWinners,
       });
     } catch (error) {
       console.error("[Open Markets] Detail error:", error);
@@ -15723,17 +15861,23 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         return res.json({ hasResult: false });
       }
 
+      // Privacy-aware winner lookup (matches the open-markets detail
+      // page surface). The previous implementation pulled usernames
+      // straight from `profiles` without checking `is_public` or any
+      // per-bet hide override, which leaked private winners on the
+      // public WeeklyJackpotHero. We share the same helper here so the
+      // two surfaces never drift again.
       let winnerUsername: string | null = null;
-      const winnerIds = Array.isArray(notes.winnerUserId) ? notes.winnerUserId : notes.winnerUserId ? [notes.winnerUserId] : [];
-      if (winnerIds.length > 0) {
-        const winnerProfiles = await db
-          .select({ id: profiles.id, username: profiles.username })
-          .from(profiles)
-          .where(inArray(profiles.id, winnerIds));
-        const names = winnerProfiles
-          .map(p => p.username)
-          .filter(Boolean);
+      let hiddenWinnerCount = 0;
+      try {
+        const { visibleWinners, hiddenWinnerCount: hidden } = await getVisibleJackpotWinners(resolved.id);
+        const names = visibleWinners
+          .map((w) => w.username)
+          .filter((u): u is string => !!u);
         winnerUsername = names.length > 0 ? names.join(", ") : null;
+        hiddenWinnerCount = hidden;
+      } catch (err) {
+        console.error("[Jackpot] Visible winner lookup failed:", err);
       }
 
       return res.json({
@@ -15744,6 +15888,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         payout: notes.payout,
         totalEntries: notes.totalEntries,
         winnerUsername,
+        hiddenWinnerCount,
         resolvedAt: resolved.resolvedAt?.toISOString() ?? null,
       });
     } catch (error: any) {
