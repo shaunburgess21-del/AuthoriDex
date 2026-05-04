@@ -23,7 +23,8 @@
     "db:ensure-induction-cols": "tsx --env-file=.env server/scripts/ensure-induction-candidate-columns.ts",
     "db:ensure": "tsx --env-file=.env server/scripts/run-ensure-schema.ts",
     "eval:profiles": "tsx --env-file=.env server/scripts/evaluate-profile-models.ts",
-    "validate:induction-post-import": "tsx --env-file=.env server/scripts/validate-induction-post-import.ts"
+    "validate:induction-post-import": "tsx --env-file=.env server/scripts/validate-induction-post-import.ts",
+    "backfill:curate-seed-votes": "tsx --env-file=.env server/scripts/backfill-curate-seed-votes.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
