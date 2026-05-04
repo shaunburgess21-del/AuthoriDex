@@ -40,7 +40,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { Loader2 } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, type PanInfo } from "framer-motion";
 import { LineChart as RechartsLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
 
@@ -1278,8 +1278,9 @@ export default function HomePage() {
               </div>
 
               <div id="leaderboard" className="scroll-mt-24" />
-              <Card>
-                <CardHeader className="flex flex-col gap-4 space-y-0 pb-4">
+              <Card className="overflow-hidden">
+                <CardHeader className="relative flex flex-col gap-4 space-y-0 overflow-hidden rounded-t-xl bg-card/95 pb-4 pt-5">
+                  <span className="pointer-events-none absolute left-0 right-0 top-0 h-[3px] bg-[linear-gradient(90deg,transparent_0%,rgb(59,130,246)_50%,transparent_100%)]" />
                   <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                     <div className="flex-1">
                       <div className="flex items-center justify-between gap-2">
@@ -1301,62 +1302,48 @@ export default function HomePage() {
                   </div>
                   
                 </CardHeader>
-                <div className="sticky top-16 z-30 border-b border-border/60 px-4 sm:px-6 py-2 bg-card/95 backdrop-blur-md">
-                  <div className="flex items-center gap-2">
-                    <div className="inline-flex items-center rounded-lg bg-muted/50 p-0.5" data-testid="toggle-leaderboard-tabs">
-                      <button
-                        onClick={() => handleTabClick("fame")}
-                        className={`relative flex items-center gap-2 whitespace-nowrap px-4 py-1.5 rounded-md text-[15px] font-medium transition-all ${
-                          leaderboardTab === "fame"
-                            ? "bg-background shadow-sm text-foreground"
-                            : "text-muted-foreground"
-                        }`}
-                        data-testid="tab-leaderboard-fame"
-                      >
-                        {leaderboardTab === "fame" && (
-                          <span className="absolute bottom-0 left-1 right-1 h-[2px] rounded-full bg-[#3C83F6]" />
-                        )}
-                        <Crown className={`h-[18px] w-[18px] ${leaderboardTab === "fame" ? "text-[#3C83F6]" : "text-muted-foreground/60"}`} />
-                        Trending
-                        {leaderboardTab === "fame" && (
-                          <span className="text-[13px] text-muted-foreground/70">{sortDirection === "desc" ? "↓" : "↑"}</span>
-                        )}
-                      </button>
-                      <button
-                        onClick={() => handleTabClick("approval")}
-                        className={`relative flex items-center gap-2 whitespace-nowrap px-4 py-1.5 rounded-md text-[15px] font-medium transition-all ${
-                          leaderboardTab === "approval"
-                            ? "bg-background shadow-sm text-foreground"
-                            : "text-muted-foreground"
-                        }`}
-                        data-testid="tab-leaderboard-approval"
-                      >
-                        {leaderboardTab === "approval" && (
-                          <span className="absolute bottom-0 left-1 right-1 h-[2px] rounded-full bg-[#22D3EE]" />
-                        )}
-                        <Star className={`h-[18px] w-[18px] ${leaderboardTab === "approval" ? "text-[#22D3EE]" : "text-muted-foreground/60"}`} />
-                        Approval
-                        {leaderboardTab === "approval" && (
-                          <span className="text-[13px] text-muted-foreground/70">{sortDirection === "desc" ? "↓" : "↑"}</span>
-                        )}
-                      </button>
-                    </div>
-                    <TouchTooltip
-                      content={leaderboardTab === "fame" ? <TrendScoreInfoContent /> : <ApprovalRatingInfoContent />}
-                      side="bottom"
-                      align="end"
-                      contentClassName="max-w-[280px]"
-                      showCloseButton
+                <div className="sticky top-16 z-30 border-b border-border/60 px-3 py-2.5 bg-card/95 backdrop-blur-md">
+                  <div className="flex min-h-10 w-full items-stretch rounded-lg bg-muted/50 p-0.5" data-testid="toggle-leaderboard-tabs">
+                    <button
+                      onClick={() => handleTabClick("fame")}
+                      className={`relative flex flex-1 items-center justify-center gap-2 whitespace-nowrap px-4 py-1.5 rounded-md text-[15px] font-medium transition-all ${
+                        leaderboardTab === "fame"
+                          ? "bg-background shadow-sm text-foreground"
+                          : "text-muted-foreground"
+                      }`}
+                      data-testid="tab-leaderboard-fame"
                     >
-                      <Info
-                        className={`h-4 w-4 cursor-help shrink-0 ${leaderboardTab === "fame" ? "text-[#3C83F6]/60" : "text-[#22D3EE]/60"}`}
-                        data-testid="icon-leaderboard-info"
-                      />
-                    </TouchTooltip>
+                      {leaderboardTab === "fame" && (
+                        <span className="pointer-events-none absolute bottom-0 left-1 right-1 h-[2px] rounded-full bg-[#3C83F6]" />
+                      )}
+                      <Crown className={`h-[18px] w-[18px] ${leaderboardTab === "fame" ? "text-[#3C83F6]" : "text-muted-foreground/60"}`} />
+                      Trending
+                      {leaderboardTab === "fame" && (
+                        <span className="text-[13px] text-muted-foreground/70">{sortDirection === "desc" ? "↓" : "↑"}</span>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => handleTabClick("approval")}
+                      className={`relative flex flex-1 items-center justify-center gap-2 whitespace-nowrap px-4 py-1.5 rounded-md text-[15px] font-medium transition-all ${
+                        leaderboardTab === "approval"
+                          ? "bg-background shadow-sm text-foreground"
+                          : "text-muted-foreground"
+                      }`}
+                      data-testid="tab-leaderboard-approval"
+                    >
+                      {leaderboardTab === "approval" && (
+                        <span className="pointer-events-none absolute bottom-0 left-1 right-1 h-[2px] rounded-full bg-[#22D3EE]" />
+                      )}
+                      <Star className={`h-[18px] w-[18px] ${leaderboardTab === "approval" ? "text-[#22D3EE]" : "text-muted-foreground/60"}`} />
+                      Approval
+                      {leaderboardTab === "approval" && (
+                        <span className="text-[13px] text-muted-foreground/70">{sortDirection === "desc" ? "↓" : "↑"}</span>
+                      )}
+                    </button>
                   </div>
                 </div>
                 <CardContent className="p-0">
-                  <div className="px-6 py-4 border-b bg-muted/30">
+                  <div className="pl-3 pr-4 sm:pr-6 py-4 border-b bg-muted/30">
                     <div className="space-y-3">
                       <div className="flex items-center gap-2">
                         <FilterDropdown
@@ -1364,12 +1351,24 @@ export default function HomePage() {
                           onChange={setCategory}
                           categories={leaderboardFilterCategories}
                         />
-                        <div className="flex-1">
+                        <div className="flex-1 min-w-0">
                           <SearchBar 
                             onSearch={setSearchQuery} 
                             placeholder="Search..."
                           />
                         </div>
+                        <TouchTooltip
+                          content={leaderboardTab === "fame" ? <TrendScoreInfoContent /> : <ApprovalRatingInfoContent />}
+                          side="bottom"
+                          align="end"
+                          contentClassName="max-w-[280px]"
+                          showCloseButton
+                        >
+                          <Info
+                            className={`h-4 w-4 cursor-help shrink-0 transition-colors ${leaderboardTab === "fame" ? "text-[#3C83F6]/70" : "text-[#22D3EE]/70"}`}
+                            data-testid="icon-leaderboard-info"
+                          />
+                        </TouchTooltip>
                       </div>
                       {hasActiveFilters && (
                         <div className="flex items-center gap-2 flex-wrap">
@@ -1454,7 +1453,27 @@ export default function HomePage() {
                       </div>
                     </div>
                   )}
-                  <div>
+                  <motion.div
+                    {...(isMobile
+                      ? {
+                          drag: "x" as const,
+                          dragConstraints: { left: 0, right: 0 },
+                          dragElastic: 0.15,
+                          onDragEnd: (_: unknown, info: PanInfo) => {
+                            const SWIPE_THRESHOLD = 60;
+                            if (info.offset.x < -SWIPE_THRESHOLD && leaderboardTab === "fame") {
+                              setLeaderboardTab("approval");
+                              setSortDirection("desc");
+                              hapticSuccess();
+                            } else if (info.offset.x > SWIPE_THRESHOLD && leaderboardTab === "approval") {
+                              setLeaderboardTab("fame");
+                              setSortDirection("desc");
+                              hapticSuccess();
+                            }
+                          },
+                        }
+                      : {})}
+                  >
                     {displayPeople.length === 0 && !isLoading && (
                       <div className="p-8 text-center">
                         <p className="text-muted-foreground mb-3">
@@ -1484,7 +1503,7 @@ export default function HomePage() {
                         approvalShowResults={approvalShowResults}
                       />
                     ))}
-                  </div>
+                  </motion.div>
                   
                   {/* Infinite scroll trigger element */}
                   {hasNextPage && (
