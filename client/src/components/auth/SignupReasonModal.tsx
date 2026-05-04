@@ -55,7 +55,7 @@ const SIGNUP_REASON_VARIANTS: Record<AuthReason, VariantCopy> = {
     body: "Create a free account to keep voting and start contributing to the rankings.",
     primaryCta: "Create account",
     secondaryCta: "Already have an account? Sign in.",
-    primaryCtaSubtext: "Free forever. No credit card.",
+    primaryCtaSubtext: "Free to sign up. No credit card.",
     primaryAccentClass:
       "bg-cyan-500 hover:bg-cyan-600 text-white border-cyan-600",
   },
@@ -64,7 +64,7 @@ const SIGNUP_REASON_VARIANTS: Record<AuthReason, VariantCopy> = {
     body: "Create a free account to start predicting and build your track record.",
     primaryCta: "Create account",
     secondaryCta: "Already have an account? Sign in.",
-    primaryCtaSubtext: "Free forever. No credit card.",
+    primaryCtaSubtext: "Free to sign up. No credit card.",
     primaryAccentClass:
       "bg-violet-500 hover:bg-violet-600 text-white border-violet-600",
   },
