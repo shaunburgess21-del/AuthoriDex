@@ -53,6 +53,19 @@ const AUTH_RETURN_SNAPSHOT_KEY = "voxdex_auth_return_snapshot";
 export const AUTH_APPLY_VOTE_UI_ONCE_KEY = "voxdex_apply_vote_ui_once";
 
 /**
+ * Phase 4 — set by redirectAfterLogin when the consumed snapshot carried a
+ * resumeAction. Destination card pages (matchup / person / poll / induction
+ * detail) read this once on mount and clear it; per-surface auto-open
+ * consumers are Phase 4a follow-ups.
+ *
+ * Payload shape: Omit<ResumeAction, "cardRoute"> — cardRoute is consumed by
+ * redirectAfterLogin to override the navigation target, so destination
+ * pages don't need it (they already know their own route).
+ */
+export const AUTH_APPLY_RESUME_ACTION_ONCE_KEY =
+  "voxdex_apply_resume_action_once";
+
+/**
  * Ephemeral flag set by `navigateToLogin` (and pre-OAuth) to indicate the current /login
  * visit is part of an intentional auth flow. LoginPage consumes this on mount to decide
  * whether a pending snapshot is fresh (keep) or stale from an earlier session (clear).
@@ -150,16 +163,53 @@ export function redirectAfterLogin(setLocation: AuthSetLocation): void {
     setLocation("/", { replace: true });
     return;
   }
-  const sanitized = sanitizeReturnPath(snap.returnPath);
-  const target =
-    !sanitized || /^\/login(?:[/?#]|$)/.test(sanitized) ? "/" : sanitized;
+
+  // Default target: the path the user was on before being redirected.
+  // /login-prefixed paths collapse to "/" to prevent post-auth loops.
+  const sanitizedReturn = sanitizeReturnPath(snap.returnPath);
+  let target =
+    !sanitizedReturn || /^\/login(?:[/?#]|$)/.test(sanitizedReturn)
+      ? "/"
+      : sanitizedReturn;
+
+  // Phase 4 — resumeAction.cardRoute overrides target so the user lands
+  // on the originally-attempted card (D9). Falls through to returnPath
+  // default if cardRoute is missing or fails sanitisation.
+  if (snap.resumeAction?.cardRoute) {
+    const sanitizedCard = sanitizeReturnPath(snap.resumeAction.cardRoute);
+    if (sanitizedCard && !/^\/login(?:[/?#]|$)/.test(sanitizedCard)) {
+      target = sanitizedCard;
+    }
+  }
+
   if (snap.voteUi && target.startsWith("/vote")) {
     try {
-      sessionStorage.setItem(AUTH_APPLY_VOTE_UI_ONCE_KEY, JSON.stringify(snap.voteUi));
+      sessionStorage.setItem(
+        AUTH_APPLY_VOTE_UI_ONCE_KEY,
+        JSON.stringify(snap.voteUi),
+      );
     } catch {
       /* ignore */
     }
   }
+
+  // Phase 4 — stash resumeAction payload (sans cardRoute, already consumed)
+  // for the destination card's mount-time consumer. Per-surface auto-open
+  // consumers are Phase 4a follow-ups; this commit preserves the payload
+  // so a later commit can wire each card's auto-open behaviour without
+  // re-touching the redirect path.
+  if (snap.resumeAction) {
+    try {
+      const { cardRoute: _consumed, ...payload } = snap.resumeAction;
+      sessionStorage.setItem(
+        AUTH_APPLY_RESUME_ACTION_ONCE_KEY,
+        JSON.stringify(payload),
+      );
+    } catch {
+      /* ignore */
+    }
+  }
+
   setLocation(target, { replace: true });
 }
 

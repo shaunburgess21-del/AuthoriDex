@@ -60,6 +60,8 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { profileSectionGridClass } from "@/lib/profileSectionGridClass";
 import { isUnauthorizedApiError, signInToVoteToastOptions, signInToVoteTitle } from "@/lib/signInToVoteToast";
 import { navigateToLogin } from "@/lib/authReturn";
+import { useAnonBudget, applyBudgetFromVoteResponse } from "@/hooks/useAnonBudget";
+import { checkVoteGate } from "@/lib/voteGate";
 import { parseVoteError } from "@/lib/voteErrors";
 import { ViewAllOverlayHeader } from "@/components/ViewAllOverlayHeader";
 import { AvatarHeightHeadline } from "@/components/AvatarHeightHeadline";
@@ -861,6 +863,8 @@ export default function PersonDetailPage() {
     [mergedMatchupVotes]
   );
 
+  const budget = useAnonBudget();
+
   const matchupVoteMutation = useMutation({
     mutationFn: async ({ matchupId, option }: { matchupId: string; option: "option_a" | "option_b" | "neutral"; previousVote?: string | null }) => {
       const response = await apiRequest("POST", `/api/matchups/${matchupId}/vote`, { option });
@@ -869,7 +873,10 @@ export default function PersonDetailPage() {
     onMutate: ({ matchupId, option }) => {
       setLocalMatchupVotes((prev) => ({ ...prev, [matchupId]: option }));
     },
-    onSuccess: (_data, variables) => {
+    onSuccess: (data, variables) => {
+      // Phase 4 — sync the anon-budget cache from the server-authoritative
+      // snapshot in the response.
+      applyBudgetFromVoteResponse(queryClient, data);
       queryClient.invalidateQueries({ queryKey: ['/api/matchups'] });
       queryClient.invalidateQueries({ queryKey: ['/api/matchups/user-votes'] });
       const isChange = !!variables.previousVote;
@@ -902,7 +909,10 @@ export default function PersonDetailPage() {
     onMutate: ({ matchupId }) => {
       setLocalMatchupVotes((prev) => ({ ...prev, [matchupId]: "__removed__" }));
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      // Phase 4 — sync budget cache. Remove paths return budget: null
+      // server-side (no budget delta) but the helper handles that correctly.
+      applyBudgetFromVoteResponse(queryClient, data);
       queryClient.invalidateQueries({ queryKey: ['/api/matchups'] });
       queryClient.invalidateQueries({ queryKey: ['/api/matchups/user-votes'] });
       toast("Vote removed", { description: "Your matchup vote has been removed." });
@@ -927,19 +937,32 @@ export default function PersonDetailPage() {
   });
 
   const handleMatchupVote = (matchupId: string, option: "option_a" | "option_b" | "neutral") => {
-    if (!user || !session?.access_token) {
-      toast(signInToVoteTitle, signInToVoteToastOptions(() => navigateToLogin(setLocation)));
+    // Phase 4 — anon-budget gate. The pre-Stage-7 anon-block (toast +
+    // navigateToLogin) has been removed; anon users with remaining budget
+    // now hit the server, exhausted users redirect via the gate. Upsert
+    // path (re-vote on same target) proceeds even at exhaustion.
+    const previousVote = matchupUserVotes[matchupId] || null;
+    const isUpsert = previousVote !== null;
+    const decision = checkVoteGate(budget, "matchup_poll", matchupId, isUpsert);
+    if (!decision.proceed) {
+      navigateToLogin(setLocation, {
+        mode: "signup",
+        reason: "vote_limit_reached",
+        resumeAction: {
+          ...decision.resumeAction,
+          cardRoute: window.location.pathname,
+          pendingVote: { matchupId, option },
+        },
+      });
       return;
     }
-    const previousVote = matchupUserVotes[matchupId] || null;
     matchupVoteMutation.mutate({ matchupId, option, previousVote });
   };
 
   const handleMatchupRemoveVote = (matchupId: string) => {
-    if (!user || !session?.access_token) {
-      toast(signInToVoteTitle, signInToVoteToastOptions(() => navigateToLogin(setLocation)));
-      return;
-    }
+    // Phase 4 — no budget cost on remove (per Stage 4 server behaviour).
+    // Anon users with a previous vote on this matchup can remove it. The
+    // `if (!previousVote) return` guard below handles the no-vote case.
     const previousVote = matchupUserVotes[matchupId];
     if (!previousVote) return;
     matchupRemoveVoteMutation.mutate({ matchupId, previousVote });
