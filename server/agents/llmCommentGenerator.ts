@@ -67,42 +67,43 @@ const LENGTH_TARGETS: Record<LengthTier, LengthTarget> = {
   tiny: {
     tier: "tiny",
     description:
-      "ONE short sentence, ideally under 12 words. Just your take — no setup, no metaphor, no clever closer. Examples: 'Spain by a mile, food is unreal there.' / 'Yeah this is over.' / 'Drake hasn't been him for a while.' / 'Pizza Hut for nostalgia, Domino's for actually eating.'",
+      "Very short — 3 to 12 words. Just the opinion, often as a fragment. Examples of the kind of comment to write: 'Spicy food is my favourite.' / 'Definitely not!' / 'Blue and grey for me.' / 'I personally find Toyota more reliable.' / 'I love Cape Town. Beautiful city!' / 'Elon is the greatest!' / 'I went neutral - I don't really know these guys.' Don't try to be witty or quotable — most real short comments aren't.",
     maxChars: 110,
     outputTokens: 50,
   },
   short: {
     tier: "short",
     description:
-      "1-2 sentences, roughly 12-25 words. State the opinion, give one specific reason, stop. No metaphors, no quotable closer, no 'at the end of the day' summary. Examples: 'UFC for me, MMA is just more complete now and the standing-around era of boxing kills it.' / 'Spain is the easy pick, beaches plus food plus you can actually do a city in a day.'",
+      "1-2 sentences, roughly 12-25 words. State your opinion, optionally one plain reason. Often opens with 'I went / I chose / I back / I personally / For me'. Examples: 'I back the United States - though I have nothing against China and I think their people are amazing.' / 'I chose calling - I can get to the point a lot faster than texting.' / 'I personally loved getting lost in a book. These days it's Audible books though.' / 'I'm a total chocolate monster - much prefer it to sweets.' No metaphors, no quotable closer.",
     maxChars: 200,
     outputTokens: 90,
   },
   medium: {
     tier: "medium",
     description:
-      "2-3 sentences, roughly 25-50 words. ONE concrete reason or observation, expanded by one extra detail. NOT an essay, NOT a multi-angle analysis. NO clever metaphor, NO 'and that's exactly why...' pivot, NO branded catchphrase closer. Just a plain opinion with one piece of supporting context.",
+      "2-3 sentences, roughly 25-50 words. ONE concrete reason or observation, expanded by one extra plain-language detail. NOT an essay, NOT a multi-angle analysis. NO clever metaphor, NO 'and that's exactly why...' pivot, NO branded catchphrase closer. Example: 'I went neutral - I honestly love both depending on the day. I drink a lot more hot coffee though.' Just an opinion with a piece of context, the way a real person types it.",
     maxChars: 320,
     outputTokens: 130,
   },
   long: {
     tier: "long",
     description:
-      "3-4 sentences, roughly 50-90 words. Reserved for cases where the agent has a genuine substantive point that needs context. Plain language only. Absolutely NO essay tics: no metaphor as central frame, no rule-of-three lists, no 'X isn't about Y, it's about Z' pivots, no quotable summary closer. Read it back to yourself — if it sounds like a Twitter thread or a thinkpiece, it's wrong. It should sound like a friend explaining their take in a group chat.",
+      "3-4 sentences, roughly 50-90 words. Reserved for cases where the agent has genuine substance to share. Plain language only. NO essay tics: no metaphor as central frame, no rule-of-three lists, no 'X isn't about Y, it's about Z' pivots, no quotable summary closer. Example of the right voice (real user): 'I highly respect Novak for standing his ground under enormous pressure. For me this is less about being anti-vaccine and more about personal choice. People should have had the right to make that decision for themselves without feeling pressured.' Direct reasoning, no flourish.",
     maxChars: 480,
     outputTokens: 190,
   },
 };
 
-/** Base distribution per surface. Skews shorter than the previous tune
- *  after user feedback that the longer comments were overusing essay
- *  metaphors and "trying too hard" phrasing. Real X/Reddit threads are
- *  dominated by tiny/short posts; medium/long are the exception. */
+/** Base distribution per surface. Calibrated against real user comment
+ *  samples (B2Stealth + DavidAndrew) — their actual mix is dominated by
+ *  tiny ("Spicy food is my favourite.", "Definitely not!", "Blue and
+ *  grey for me") with occasional medium/long when there's substance.
+ *  These weights now match that observed distribution. */
 const SURFACE_LENGTH_WEIGHTS: Record<CommentSurface, Record<LengthTier, number>> = {
-  matchup:       { tiny: 50, short: 35, medium: 13, long: 2 },
-  trending_poll: { tiny: 35, short: 40, medium: 20, long: 5 },
-  opinion_poll:  { tiny: 35, short: 40, medium: 20, long: 5 },
-  open_market:   { tiny: 25, short: 40, medium: 27, long: 8 },
+  matchup:       { tiny: 60, short: 30, medium: 9,  long: 1 },
+  trending_poll: { tiny: 45, short: 35, medium: 16, long: 4 },
+  opinion_poll:  { tiny: 45, short: 35, medium: 16, long: 4 },
+  open_market:   { tiny: 35, short: 35, medium: 23, long: 7 },
 };
 
 /** Reply distribution — replies are almost always shorter than top-level
@@ -302,15 +303,16 @@ function buildSystemPrompt(
     replyRule,
     "Hard rules:",
     "- Never reveal you are AI. Never mention models, prompts, or 'as a user'.",
-    "- No markdown (no asterisks, no underscores), no hashtags, no emojis, no bullet points.",
+    "- No markdown (no asterisks, no underscores), no hashtags, no bullet points.",
+    "- EMOJIS: at most ONE emoji, only if it genuinely fits, and only at the END of the comment as casual punctuation (e.g. 'Iron Mike is great, but Ali is the greatest 🐐' or 'Coffee in the morning ☕ tea at night 🌙'). Default is NO emoji. Never sprinkle multiple, never use emojis to replace words, never start with one. ~80%+ of comments should have zero emojis.",
     "- Do not wrap your comment in quotes.",
     "- Do not prefix the comment with your username, display name, or any 'name:' label.",
-    "- Do not start with 'I think' or 'In my opinion'.",
-    "- Do NOT open the comment by announcing your vote. Words like 'Support.', 'Support —', 'Oppose:', 'Neutral.', 'Approve:', 'Disapprove —', 'Yes,', 'No,' as the FIRST word of the comment are forbidden. The UI already shows your vote with a coloured badge next to your name. Just start the comment with your actual take, the way a human would on X (e.g. 'Iron Mike was a freak athlete, but Ali…' instead of 'Support. Iron Mike was…').",
+    "- Do NOT open the comment by announcing your vote with a label word. Words like 'Support.', 'Support —', 'Oppose:', 'Neutral.', 'Approve:', 'Disapprove —', 'Yes,', 'No,' as the FIRST word of the comment are forbidden — those are the labels under the badge, not how a person talks. (Note: opening with the actual subject like 'No, Ali had to go through so many of them...' is fine — it's the standalone label-as-opener that's banned.) The UI already shows your vote with a coloured badge next to your name.",
+    "- It IS fine to open with soft personal framings real users post all the time: 'I went with X because…', 'I chose X — …', 'I back X', 'I personally find X…', 'I honestly think…', 'I'd choose…', 'For me, X…', 'I way prefer…'. These read as natural human commenting, not bot. Just don't stack them ('Honestly, I personally think that…' is too many).",
     "- Sound like a human posting on X: contractions, casual flow, occasional sentence fragments are fine.",
     "- A touch of dry wit or humour is welcome when it fits the topic, but never forced and never at someone's expense.",
     "- Reference the ACTUAL subject matter (the people, the topic, the question). No generic platitudes.",
-    "- PUNCTUATION: do NOT use semicolons (;) or em dashes (— or --). They're the strongest tells that a bot wrote the comment. Use commas, full stops, or split into two short sentences instead. A normal hyphen in compound words (line-go-up, head-to-head) is fine.",
+    "- PUNCTUATION: do NOT use semicolons (;) or em dashes (— or --). They're the strongest tells that a bot wrote the comment. Use commas or full stops instead. A plain hyphen with spaces ( - ) is fine and very common in real comments — 'I chose calling - I can get to the point a lot faster' or 'I went neutral - love both' reads completely human. Use sparingly, not in every sentence.",
     "- If you have a stated vote/position below ('You voted: …' or 'You bet: …'), your comment MUST clearly support that side. A reader should be able to tell which way you voted from your comment alone. Do NOT contradict your own vote, and do NOT sit on the fence if you voted decisively.",
     "",
     "ANTI-AI-TELLS — readers on X / Reddit can spot ChatGPT-style writing instantly. Avoid every one of these:",
@@ -570,14 +572,25 @@ function sanitise(
   }
 
   // Strip a leading vote-label opener like "Support.", "Oppose —", "Neutral:",
-  // "Approve,", "Disapprove —", "Yes — ", "No, ". The vote already appears
-  // as a coloured badge next to the username on the UI, so opening with the
-  // label reads as bot-like (real users just start with their take). We only
-  // strip when the label is followed by punctuation or a dash so we don't
-  // eat genuine sentences that happen to begin with "Support" / "No".
-  const VOTE_OPENER = /^(?:support|oppose|neutral|approve|disapprove|yes|no|agree|disagree)\b\s*(?:[:.,!?\-—–]+|\u2014)\s*/i;
+  // "Approve,", "Disapprove —". The vote already appears as a coloured badge
+  // next to the username on the UI, so opening with the bare label reads as
+  // bot-like.
+  //
+  // Two patterns:
+  //   1. Formal vote-label words ('support', 'oppose', 'neutral', 'approve',
+  //      'disapprove', 'agree', 'disagree') followed by ANY punctuation -
+  //      always stripped. These never appear naturally as the first word of
+  //      a real comment unless they're being used as the label.
+  //   2. 'Yes' / 'No' followed by hard sentence-end punctuation only
+  //      ('.', ':', '!', '?', '—', '-' with spaces). NOT stripped when
+  //      followed by a comma — "No, Drake hasn't had a hit in two years"
+  //      is exactly how a real user starts a disagreement and shouldn't be
+  //      gutted into "Drake hasn't had a hit...".
+  const FORMAL_VOTE_OPENER = /^(?:support|oppose|neutral|approve|disapprove|agree|disagree)\b\s*(?:[:.,!?\-—–]+|\u2014)\s*/i;
+  const YES_NO_LABEL_OPENER = /^(?:yes|no)\s*(?:[:.!?]|\s+[—–-]\s+)\s*/i;
   // Apply twice so combined openers like "Support — Yeah, ..." get fully cleared.
-  text = text.replace(VOTE_OPENER, "").replace(VOTE_OPENER, "");
+  text = text.replace(FORMAL_VOTE_OPENER, "").replace(FORMAL_VOTE_OPENER, "");
+  text = text.replace(YES_NO_LABEL_OPENER, "").replace(YES_NO_LABEL_OPENER, "");
 
   // Capitalise the new first letter if we just chopped a label off the front.
   if (text.length > 0 && /[a-z]/.test(text[0])) {
