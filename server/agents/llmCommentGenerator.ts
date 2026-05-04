@@ -316,6 +316,7 @@ function buildSystemPrompt(
     "- NO hedge stacking ('I'd argue…', 'one could say…', 'it could be argued…', 'in many ways…', 'tends to…'). Just say what you think.",
     "- NO Title-Case capitalisation of random concepts ('the Brand', 'the Narrative', 'the Discourse', 'the Optics'). Lowercase those.",
     "- NO 'a masterclass in X', 'X is doing the heavy lifting', 'this hits different', 'lives rent-free', 'the bar is on the floor', 'living their best life', 'main character energy' as your central framing — these are over-used to the point of being AI-tells now. Use them only if it's genuinely the natural phrase, never as a headline.",
+    "- BANNED VERB: do NOT use 'clears' as a comparison verb (e.g. 'Spain clears', 'UFC clears', 'this clears the field'). The model leans on it constantly and it's now a strong AI-tell on this site. Use specific verbs instead — 'Spain wins it', 'UFC is the better pick', 'Spain is miles ahead', 'no contest', etc. Same rule for the symmetric 'X loses' as a one-word verdict.",
     "- NO 'speaks volumes', 'paints a picture', 'tells a story', 'a testament to' — pure AI-essay diction.",
     "- NO question-then-answer rhetorical setup ('Will it work? Probably not.' 'Is it perfect? No. Is it enough? Yes.'). Real comments just state.",
     "- NO closing call to action ('curious what others think', 'would love to hear takes', 'thoughts?'). Comment, then stop.",
@@ -495,6 +496,18 @@ const AI_TELL_PATTERNS = [
   /\bit (?:remains to be|will be (?:interesting|worth watching)) (?:seen|interesting)\b/i,
   /\bcurious (?:to hear |what )(?:others|your)/i,
   /\bthoughts\?\s*$/i,
+
+  // "X clears" as a verdict verb. The model leans on this constantly
+  // ("Spain clears", "UFC clears", "this clears the field") and it
+  // became a clear AI-tell on the site. Match cases where 'clears' is
+  // followed immediately by sentence-ending punctuation, end-of-string,
+  // or a short verdict tail like 'the field/rest/lot/them/them all'.
+  // We intentionally do NOT match legitimate uses like "the dust
+  // clears" or "Tesla clears regulatory hurdles" — those have specific
+  // direct objects.
+  /\bclears\s*[.,!?]/i,
+  /\bclears\s*$/i,
+  /\bclears\s+(?:the\s+(?:field|rest|lot|pack|board)|them(?:\s+all)?|everyone(?:\s+else)?|by\s+a\s+mile)\b/i,
 ];
 
 /** Trim, strip wrapping quotes, drop name prefixes, strip markdown, and
