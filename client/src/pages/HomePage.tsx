@@ -1278,7 +1278,7 @@ export default function HomePage() {
               </div>
 
               <div id="leaderboard" className="scroll-mt-24" />
-              <Card className="overflow-hidden">
+              <Card>
                 <CardHeader className="relative flex flex-col gap-4 space-y-0 overflow-hidden rounded-t-xl bg-card/95 pb-4 pt-5">
                   <span className="pointer-events-none absolute left-0 right-0 top-0 h-[3px] bg-[linear-gradient(90deg,transparent_0%,rgb(59,130,246)_50%,transparent_100%)]" />
                   <div className="flex flex-col sm:flex-row sm:items-center gap-4">
