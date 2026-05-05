@@ -123,11 +123,13 @@ If you believe content on the Service infringes your intellectual property right
 
 ## 10. Purchases
 
-You may purchase additional Credits through the Service. All purchases are processed by a third-party payment provider acting as a Merchant of Record on our behalf. The Merchant of Record is the legal seller for tax and consumer-rights purposes.
+You may purchase additional Credits through the Service. All purchases are processed by a third-party payment provider acting as a Merchant of Record on our behalf. The Merchant of Record is the seller of record for tax and consumer-protection purposes.
 
 Pricing may be displayed in your local currency for convenience. The actual transaction may be processed in a different currency, and your payment provider may apply foreign-exchange fees that VoxDex does not control.
 
-**All Credit purchases are final and non-refundable**, except where refunds are required by applicable consumer-protection law. If you believe you are entitled to a refund, contact us at [hello@voxdex.com](mailto:hello@voxdex.com) within 14 days of purchase, with details of your transaction. Refund eligibility is determined by the Merchant of Record's policies and applicable law.
+Refunds for Credit purchases are processed by our Merchant of Record in line with its applicable refund policy and consumer-law obligations. Where required by applicable law, you may have statutory rights that provide cancellation or refund remedies.
+
+If you need help with a refund request, use the Merchant of Record links in your transaction email, or contact us at [hello@voxdex.com](mailto:hello@voxdex.com) and we will help direct your request.
 
 We reserve the right to change prices, introduce new credit packages, or discontinue purchases at any time.
 

@@ -348,8 +348,10 @@ function PricingFaq() {
       q: "Are refunds available?",
       a: (
         <p>
-          Generally, all credit purchases are final. Refunds may be
-          available in specific circumstances — see our{" "}
+          Refunds are processed by Paddle, our Merchant of Record, in line
+          with Paddle's policy and applicable consumer law. For VoxDex-side
+          technical billing issues, contact us and we'll help route your
+          request. See our{" "}
           <Link
             href="/refund-policy"
             className="text-primary underline underline-offset-2"
