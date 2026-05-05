@@ -1288,13 +1288,13 @@ export default function HomePage() {
                       </div>
                       <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground/60 flex-wrap" data-testid="text-leaderboard-freshness">
                         <TouchTooltip
-                          content={<p>Full data refresh from Wikipedia, Mediastack, GDELT, and Google.</p>}
+                          content={<p>Fast lane leaderboard refresh from internal activity. External-source refresh runs separately.</p>}
                           side="bottom"
                           className="text-xs max-w-[240px]"
                         >
                           <span className="inline-flex items-center gap-1 cursor-help">
                             <RefreshCw className="h-3 w-3 shrink-0 full-refresh-icon-shine" aria-hidden />
-                            <span>Data refresh: {systemFreshness?.fullRefreshAtFormatted || systemFreshness?.lastScoredAtFormatted || "recently"}</span>
+                            <span>Data refresh: {systemFreshness?.liveUpdatedAtFormatted || systemFreshness?.fullRefreshAtFormatted || systemFreshness?.lastScoredAtFormatted || "recently"}</span>
                           </span>
                         </TouchTooltip>
                       </div>
@@ -1303,10 +1303,10 @@ export default function HomePage() {
                   
                 </CardHeader>
                 <div className="sticky top-16 z-30 border-b border-border/60 px-3 py-2.5 bg-card/95 backdrop-blur-md">
-                  <div className="flex min-h-10 w-full items-stretch rounded-lg bg-muted/50 p-0.5" data-testid="toggle-leaderboard-tabs">
+                  <div className="flex min-h-10 w-full items-stretch overflow-hidden rounded-lg bg-muted/50" data-testid="toggle-leaderboard-tabs">
                     <button
                       onClick={() => handleTabClick("fame")}
-                      className={`relative flex flex-1 items-center justify-center gap-2 whitespace-nowrap px-4 py-1.5 rounded-md text-[15px] font-medium transition-all ${
+                      className={`relative flex flex-1 items-center justify-center gap-2 whitespace-nowrap px-4 py-1.5 rounded-l-lg rounded-r-none text-[15px] font-medium transition-all ${
                         leaderboardTab === "fame"
                           ? "bg-background shadow-sm text-foreground"
                           : "text-muted-foreground"
@@ -1324,7 +1324,7 @@ export default function HomePage() {
                     </button>
                     <button
                       onClick={() => handleTabClick("approval")}
-                      className={`relative flex flex-1 items-center justify-center gap-2 whitespace-nowrap px-4 py-1.5 rounded-md text-[15px] font-medium transition-all ${
+                      className={`relative flex flex-1 items-center justify-center gap-2 whitespace-nowrap px-4 py-1.5 rounded-r-lg rounded-l-none text-[15px] font-medium transition-all ${
                         leaderboardTab === "approval"
                           ? "bg-background shadow-sm text-foreground"
                           : "text-muted-foreground"

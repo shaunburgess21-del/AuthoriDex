@@ -207,6 +207,19 @@ async function runLiveTickOnce(): Promise<{ processed: number; moved: number }> 
       `);
       written += chunk.length;
     }
+  } else {
+    // Heartbeat write: even when no live fields changed, record that the
+    // fast-lane tick ran so freshness UI reflects the 10-minute cadence.
+    await db.execute(sql`
+      UPDATE trending_people
+      SET live_updated_at = ${now}
+      WHERE id = (
+        SELECT id
+        FROM trending_people
+        ORDER BY rank ASC NULLS LAST, id ASC
+        LIMIT 1
+      )
+    `);
   }
 
   if (!_lastFullRefreshAt) {
