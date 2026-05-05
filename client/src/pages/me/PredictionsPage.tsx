@@ -48,6 +48,7 @@ interface PredictionStats {
   winRate: number;
   bestCategory: string | null;
   currentStreak: number;
+  hiddenCount?: number;
 }
 
 interface PredictionsResponse {
@@ -307,10 +308,11 @@ export default function PredictionsPage() {
     [predictions],
   );
 
-  const hiddenCount = useMemo(
+  const localHiddenCount = useMemo(
     () => predictions.filter((p) => p.hidden).length,
     [predictions],
   );
+  const hiddenCount = stats?.hiddenCount ?? localHiddenCount;
 
   const plChartData = useMemo(
     () =>
@@ -628,7 +630,7 @@ function OverviewTab({
       .sort((a, b) => b[1] - a[1])
       .map(([category, count], i) => ({
         id: category,
-        label: category.replace(/_/g, " "),
+        label: category.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()),
         value: count,
         color: palette[i % palette.length],
       }));
@@ -749,8 +751,9 @@ function OverviewTab({
           <Flame className="h-4 w-4 mx-auto text-orange-600 dark:text-orange-400" />
           <p className="text-2xl font-mono font-bold tabular-nums">{stats.currentStreak}</p>
           <p className="text-[10px] uppercase tracking-wide text-muted-foreground leading-tight">
-            Streak
+            Login streak
           </p>
+          <p className="text-[9px] text-muted-foreground/70 leading-tight">Days active</p>
         </Card>
       </div>
 
@@ -1061,7 +1064,7 @@ function PredictionsJourneyTimeline({
         label: "+100 credits",
         earned: credits100,
         progress: stats.netCredits > 0 ? Math.min(1, stats.netCredits / 100) : 0,
-        hint: stats.netCredits >= 0 ? `+${stats.netCredits}` : `${stats.netCredits}`,
+        hint: stats.netCredits >= 100 ? `+${stats.netCredits}` : stats.netCredits > 0 ? `+${stats.netCredits}/100` : `0/100`,
       },
       {
         id: "first_underdog",
@@ -1073,7 +1076,7 @@ function PredictionsJourneyTimeline({
         ? [
             {
               id: "best_category_win",
-              label: `First ${stats.bestCategory.replace(/_/g, " ")} win`,
+              label: `First ${stats.bestCategory.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())} win`,
               earned: bestCategoryWin,
               progress: bestCategoryWin ? 1 : 0,
             } satisfies PredictionMilestone,

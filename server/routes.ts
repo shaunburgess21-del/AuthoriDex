@@ -8001,6 +8001,12 @@ Only return the JSON object.`;
         ? Object.entries(categoryWins).sort((a, b) => b[1] - a[1])[0][0]
         : null;
 
+      const [hiddenCountRow] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(profileItemPrivacy)
+        .where(and(eq(profileItemPrivacy.userId, userId), eq(profileItemPrivacy.itemType, 'market_bet')));
+      const totalHidden = Number(hiddenCountRow?.count ?? 0);
+
       res.json({
         predictions,
         stats: {
@@ -8013,6 +8019,7 @@ Only return the JSON object.`;
           winRate,
           bestCategory,
           currentStreak: userProfile?.currentStreak ?? 0,
+          hiddenCount: totalHidden,
         },
       });
     } catch (error: any) {
