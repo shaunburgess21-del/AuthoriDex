@@ -474,7 +474,7 @@ Once `feat/anonymous-voting-budget` merges into `main`, run the
 brief's verification checklist (`anonymous-voting-implementation.md`
 lines 303-317). Verbatim:
 
-1. Migration 0046_anon_vote_budget row in schema_migrations.
+1. Migration 0049_anon_vote_budget row in schema_migrations.
 2. anon_vote_budget table exists in production Supabase.
 3. CHECK constraint rejects invalid surface_type values.
 4. fdx_sid cookie set on first request to any /api/* endpoint.

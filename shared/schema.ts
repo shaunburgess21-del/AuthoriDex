@@ -897,7 +897,7 @@ export const anonVoteBudget = pgTable("anon_vote_budget", {
   fdxSid: text("fdx_sid").notNull(),
   surfaceType: text("surface_type").notNull(),
   targetId: text("target_id").notNull(),
-  // timestamptz to match the DB column (see migration 0046).
+  // timestamptz to match the DB column (see migration 0049).
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
   pk: primaryKey({ columns: [table.fdxSid, table.surfaceType, table.targetId] }),

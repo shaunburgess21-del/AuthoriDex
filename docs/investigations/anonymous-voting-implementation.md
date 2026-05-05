@@ -32,7 +32,7 @@ The system tracks anonymous voting via three layered mechanisms:
 
 ## Schema changes
 
-### Migration: 0046_anon_vote_budget.sql
+### Migration: 0049_anon_vote_budget.sql
 
 ```sql
 -- Phase 4 — Anonymous voting budget
@@ -300,10 +300,11 @@ This is the v1 "discard at signup" behaviour. If/when we revisit and decide to b
 - CAPTCHA on (N+1)th attempt.
 - Budget reset / amnesty mechanic.
 - Add automated test coverage for anon-budget (unit + integration). Deferred from Stage 8 — cost-benefit flips when public users land.
+- Consider extending /api/profile/sync signup cleanup to delete anon vote_actions ledger entries on signup. Currently anon ledger entries (userId='anon_<fdx_sid>', source='*-anon') persist post-signup as pseudonymous records. fdx_sid cookie is cleared on signup so no reverse-linking to authed user identity, but a privacy review may want full anon trace deletion. Non-blocking for Phase 4 ship.
 
 ## Verification checklist (post-merge to main)
 
-1. Migration 0046_anon_vote_budget row in schema_migrations.
+1. Migration 0049_anon_vote_budget row in schema_migrations.
 2. anon_vote_budget table exists in production Supabase.
 3. CHECK constraint rejects invalid surface_type values.
 4. fdx_sid cookie set on first request to any /api/* endpoint.
