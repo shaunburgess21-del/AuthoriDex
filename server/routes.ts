@@ -800,6 +800,14 @@ setInterval(() => {
 
 type VoteActionKind = "create" | "update" | "remove";
 
+function isMissingVoteActionsTableError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const maybe = error as { code?: unknown; message?: unknown };
+  const code = typeof maybe.code === "string" ? maybe.code : "";
+  const message = typeof maybe.message === "string" ? maybe.message.toLowerCase() : "";
+  return code === "42P01" && message.includes("vote_actions");
+}
+
 async function appendVoteAction(
   tx: any,
   params: {
@@ -815,18 +823,32 @@ async function appendVoteAction(
     metadata?: Record<string, unknown> | null;
   },
 ): Promise<void> {
-  await tx.insert(voteActions).values({
-    userId: params.userId,
-    voteType: params.voteType,
-    targetType: params.targetType,
-    targetId: params.targetId,
-    actionKind: params.actionKind,
-    prevValue: params.prevValue ?? null,
-    nextValue: params.nextValue ?? null,
-    source: params.source,
-    requestId: params.requestId ?? null,
-    metadata: params.metadata ?? null,
-  });
+  try {
+    await tx.insert(voteActions).values({
+      userId: params.userId,
+      voteType: params.voteType,
+      targetType: params.targetType,
+      targetId: params.targetId,
+      actionKind: params.actionKind,
+      prevValue: params.prevValue ?? null,
+      nextValue: params.nextValue ?? null,
+      source: params.source,
+      requestId: params.requestId ?? null,
+      metadata: params.metadata ?? null,
+    });
+  } catch (error) {
+    // Ledger telemetry must not block user-facing voting if a deploy misses schema.
+    if (isMissingVoteActionsTableError(error)) {
+      console.error("[vote-actions] Missing vote_actions table; skipping ledger write for request", {
+        voteType: params.voteType,
+        targetType: params.targetType,
+        targetId: params.targetId,
+        source: params.source,
+      });
+      return;
+    }
+    throw error;
+  }
 }
 
 async function getRelatedPeopleForCards(cardType: string, cardIds: string[]): Promise<Record<string, { id: string; name: string }[]>> {

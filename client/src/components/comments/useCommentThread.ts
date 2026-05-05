@@ -172,7 +172,7 @@ export function useCommentThread(adapter: CommentAdapter): UseCommentThreadResul
 
       return { previousComments };
     },
-    onError: (_error, _variables, context) => {
+    onError: (error, _variables, context) => {
       const ctx = context as { previousComments?: CommentItem[]; previousVotes?: Record<string, VoteType> } | undefined;
       if (ctx?.previousComments) {
         queryClient.setQueryData(queryKey, ctx.previousComments);
@@ -180,7 +180,10 @@ export function useCommentThread(adapter: CommentAdapter): UseCommentThreadResul
       if (adapter.fetchUserVotes && ctx?.previousVotes !== undefined) {
         queryClient.setQueryData(userVotesKey, ctx.previousVotes);
       }
-      toast.error("Error", { description: "Failed to vote. Please sign in." });
+      const isUnauthorized = error instanceof Error && /^401:/.test(error.message);
+      toast.error("Error", {
+        description: isUnauthorized ? "Failed to vote. Please sign in." : "Failed to vote. Please try again.",
+      });
     },
     onSuccess: (data, vars) => {
       adapter.onVoteSuccess?.(data, vars);
