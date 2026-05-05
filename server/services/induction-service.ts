@@ -11,6 +11,10 @@ export interface ApproveInductionCandidateResult {
   message: string;
 }
 
+function isEmptyish(v: string | null | undefined): boolean {
+  return v == null || String(v).trim() === "";
+}
+
 export async function approveInductionCandidate(
   candidateId: string,
   options: { executor?: DbExecutor; runOnboarding?: boolean } = {},
@@ -28,31 +32,47 @@ export async function approveInductionCandidate(
     throw Object.assign(new Error("Candidate not found"), { statusCode: 404 });
   }
 
-  const existingPerson = await executor
-    .select({
-      id: trackedPeople.id,
-      imageSlug: trackedPeople.imageSlug,
-      status: trackedPeople.status,
-    })
+  const existingRows = await executor
+    .select()
     .from(trackedPeople)
     .where(eq(trackedPeople.name, candidate.displayName))
     .limit(1);
 
   let personId: string;
 
-  if (existingPerson.length > 0) {
-    personId = existingPerson[0].id;
-    const backfillUpdates: Partial<{
-      imageSlug: string | null;
-      status: string;
-    }> = {};
+  if (existingRows.length > 0) {
+    const tp = existingRows[0];
+    personId = tp.id;
+    const backfillUpdates: Record<string, unknown> = {};
 
-    if (!existingPerson[0].imageSlug && candidate.imageSlug) {
+    if (isEmptyish(tp.imageSlug) && !isEmptyish(candidate.imageSlug)) {
       backfillUpdates.imageSlug = candidate.imageSlug;
     }
-    if (existingPerson[0].status !== "main_leaderboard") {
+    if (tp.status !== "main_leaderboard") {
       backfillUpdates.status = "main_leaderboard";
     }
+    if (isEmptyish(tp.wikiSlug) && !isEmptyish(candidate.wikiSlug)) {
+      backfillUpdates.wikiSlug = candidate.wikiSlug;
+    }
+    if (isEmptyish(tp.xHandle) && !isEmptyish(candidate.xHandle)) {
+      backfillUpdates.xHandle = candidate.xHandle;
+    }
+    if (isEmptyish(tp.instagramHandle) && !isEmptyish(candidate.instagramHandle)) {
+      backfillUpdates.instagramHandle = candidate.instagramHandle;
+    }
+    if (isEmptyish(tp.tiktokHandle) && !isEmptyish(candidate.tiktokHandle)) {
+      backfillUpdates.tiktokHandle = candidate.tiktokHandle;
+    }
+    if (isEmptyish(tp.youtubeId) && !isEmptyish(candidate.youtubeId)) {
+      backfillUpdates.youtubeId = candidate.youtubeId;
+    }
+    if (isEmptyish(tp.spotifyId) && !isEmptyish(candidate.spotifyId)) {
+      backfillUpdates.spotifyId = candidate.spotifyId;
+    }
+    if (isEmptyish(tp.searchQueryOverride) && !isEmptyish(candidate.searchQueryOverride)) {
+      backfillUpdates.searchQueryOverride = candidate.searchQueryOverride;
+    }
+
     if (Object.keys(backfillUpdates).length > 0) {
       await executor
         .update(trackedPeople)
@@ -71,6 +91,11 @@ export async function approveInductionCandidate(
         imageSlug: candidate.imageSlug,
         wikiSlug: candidate.wikiSlug,
         xHandle: candidate.xHandle,
+        instagramHandle: candidate.instagramHandle,
+        tiktokHandle: candidate.tiktokHandle,
+        youtubeId: candidate.youtubeId,
+        spotifyId: candidate.spotifyId,
+        searchQueryOverride: candidate.searchQueryOverride,
         displayOrder: (maxOrder[0]?.maxOrder || 0) + 1,
         status: "main_leaderboard",
       })

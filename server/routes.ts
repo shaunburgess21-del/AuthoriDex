@@ -7,7 +7,7 @@ import { db } from "./db";
 import { syncWinningAvatarForPerson } from "./lib/curateAvatar";
 import { trendSnapshots, trackedPeople, communityInsights, insightVotes, comments as unifiedComments, commentVotes, matchups, votes, voteActions, xpActions, xpLedger, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, contentCategories, userCategoryEngagement, emailUnsubscribeState, insertCommunityInsightSchema, insertInsightVoteSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
 import { validateSuggestionPayload, SUGGESTION_TYPES } from "@shared/suggestionSchemas";
-import { normaliseSocialHandles } from "@shared/handleNormalise";
+import { normaliseSocialHandles, SOCIAL_HANDLE_KEYS } from "@shared/handleNormalise";
 import { eq, desc, and, gt, sql, count, gte, lte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull, isNull } from "drizzle-orm";
 import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
@@ -905,6 +905,36 @@ function extractImageFilenameFromUrl(imageUrl: string | null | undefined): strin
 
 function buildCelebrityLargePublicUrl(supabaseUrl: string, slug: string, filename: string): string {
   return `${supabaseUrl}/storage/v1/object/public/celebrity-large/${encodeURIComponent(slug)}/${filename}`;
+}
+
+function occupiedInductionGallerySlots(files: { name: string }[] | null | undefined): Set<number> {
+  const slots = new Set<number>();
+  for (const file of files ?? []) {
+    const m = /^([1-4])\.(webp|jpg|jpeg|png)$/i.exec(file.name);
+    if (m) slots.add(parseInt(m[1], 10));
+  }
+  return slots;
+}
+
+/** Next free slot 1–4 for numbered uploads under `celebrity-large/{slug}/`. */
+function nextInductionGallerySlot(files: { name: string }[] | null | undefined): number | null {
+  const occupied = occupiedInductionGallerySlots(files);
+  for (let slot = 1; slot <= 4; slot++) {
+    if (!occupied.has(slot)) return slot;
+  }
+  return null;
+}
+
+function applyInductionSocialFromBody(
+  body: Record<string, unknown>,
+  handleValues: Partial<Record<(typeof SOCIAL_HANDLE_KEYS)[number], string | null>>,
+  target: Record<string, unknown>,
+) {
+  for (const key of SOCIAL_HANDLE_KEYS) {
+    if (key in body) {
+      target[key] = handleValues[key] ?? null;
+    }
+  }
 }
 
 function imageUrlMatchesCurrentSlugPath(imageUrl: string | null | undefined, slug: string, filename?: string | null): boolean {
@@ -18635,15 +18665,20 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
   // POST /api/admin/induction - Admin: create a new induction candidate
   app.post("/api/admin/induction", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const { displayName, category, imageSlug, wikiSlug, seedVotes, xHandle, inductionStatus } = req.body;
+      const body = req.body as Record<string, unknown>;
+      const { displayName, category, imageSlug, wikiSlug, seedVotes, inductionStatus, searchQueryOverride } = req.body;
       if (!displayName || !category) return res.status(400).json({ error: "displayName and category are required" });
+
+      const handleResult = normaliseSocialHandles(body);
+      if (Object.keys(handleResult.errors).length > 0) {
+        return res.status(400).json({ error: "Invalid handle(s)", fieldErrors: handleResult.errors });
+      }
 
       const autoSlug = (typeof imageSlug === "string" && imageSlug.trim())
         ? imageSlug.trim()
         : generateImageSlug(displayName);
       const statusStr = (typeof inductionStatus === "string" && inductionStatus.trim()) ? inductionStatus.trim() : "Queue";
       const activeFromStatus = !["inducted", "rejected", "inactive", "archived"].includes(statusStr.toLowerCase());
-      const xh = (typeof xHandle === "string" && xHandle.trim()) ? xHandle.trim().replace(/^@+/, "") : null;
       const sv = typeof seedVotes === "number" && !Number.isNaN(seedVotes)
         ? Math.max(0, Math.floor(seedVotes))
         : Math.max(0, parseInt(String(seedVotes ?? "0"), 10) || 0);
@@ -18651,16 +18686,23 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       const existing = await db.select({ id: inductionCandidates.id }).from(inductionCandidates).where(eq(inductionCandidates.displayName, displayName)).limit(1);
       if (existing.length > 0) return res.status(409).json({ error: "Candidate with this name already exists" });
 
-      const [created] = await db.insert(inductionCandidates).values({
+      const insertRow: Record<string, unknown> = {
         displayName,
         category,
         imageSlug: autoSlug,
         wikiSlug: wikiSlug || null,
         seedVotes: sv,
-        xHandle: xh,
         inductionStatus: statusStr,
         isActive: activeFromStatus,
-      }).returning();
+      };
+      applyInductionSocialFromBody(body, handleResult.values, insertRow);
+      if ("searchQueryOverride" in body) {
+        const sq = searchQueryOverride;
+        insertRow.searchQueryOverride =
+          typeof sq === "string" && sq.trim() ? sq.trim() : null;
+      }
+
+      const [created] = await db.insert(inductionCandidates).values(insertRow as any).returning();
 
       res.json(created);
     } catch (error: any) {
@@ -18669,11 +18711,79 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
     }
   });
 
+  // POST /api/admin/induction/:id/images - Stage up to 4 images under celebrity-large/{imageSlug}/
+  app.post("/api/admin/induction/:id/images", requireAuth, requireAdmin, upload.single("file"), async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const file = req.file;
+      if (!file) return res.status(400).json({ error: "No file uploaded" });
+
+      const [candidate] = await db.select().from(inductionCandidates).where(eq(inductionCandidates.id, id)).limit(1);
+      if (!candidate) return res.status(404).json({ error: "Candidate not found" });
+
+      const slug = (candidate.imageSlug || "").trim();
+      if (!slug) {
+        return res.status(400).json({ error: "Candidate must have a non-empty image slug before uploading images" });
+      }
+
+      const BUCKET = "celebrity-large";
+      const { data: listed, error: listError } = await supabaseServer.storage.from(BUCKET).list(slug);
+      if (listError) {
+        console.error("[induction images] list error:", listError.message);
+        return res.status(500).json({ error: "Failed to read storage folder for this slug" });
+      }
+
+      const occupied = occupiedInductionGallerySlots(listed ?? []);
+      if (occupied.size >= 4) {
+        return res.status(400).json({ error: "Maximum of 4 images already stored for this candidate slug" });
+      }
+
+      const slot = nextInductionGallerySlot(listed ?? []);
+      if (slot === null) {
+        return res.status(400).json({ error: "No free image slot (1–4) available for this slug" });
+      }
+
+      const optimized = await optimizeImage(file.buffer, {
+        maxWidth: 800,
+        quality: 80,
+        targetBytes: 200 * 1024,
+        minQuality: 60,
+        minWidth: 640,
+      });
+
+      const objectPath = `${slug}/${slot}.webp`;
+      const { error: uploadError } = await supabaseServer.storage.from(BUCKET).upload(objectPath, optimized.buffer, {
+        contentType: optimized.contentType,
+        upsert: true,
+      });
+
+      if (uploadError) {
+        console.error("[induction images] upload error:", uploadError);
+        return res.status(500).json({ error: "Failed to upload image" });
+      }
+
+      const supabaseUrl = process.env.SUPABASE_URL;
+      if (!supabaseUrl) return res.status(503).json({ error: "SUPABASE_URL not configured" });
+      const publicUrl = buildCelebrityLargePublicUrl(supabaseUrl, slug, `${slot}.webp`);
+
+      res.json({ success: true, slot, publicUrl });
+    } catch (error: any) {
+      console.error("Error uploading induction candidate image:", error);
+      res.status(500).json({ error: "Failed to upload image" });
+    }
+  });
+
   // PATCH /api/admin/induction/:id - Admin: update an induction candidate
   app.patch("/api/admin/induction/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
+      const body = req.body as Record<string, unknown>;
       const { id } = req.params;
-      const { displayName, category, imageSlug, wikiSlug, seedVotes, isActive, xHandle, inductionStatus } = req.body;
+      const { displayName, category, imageSlug, wikiSlug, seedVotes, isActive, inductionStatus, searchQueryOverride } = req.body;
+
+      const handleResult = normaliseSocialHandles(body);
+      if (Object.keys(handleResult.errors).length > 0) {
+        return res.status(400).json({ error: "Invalid handle(s)", fieldErrors: handleResult.errors });
+      }
 
       const updates: any = {};
       if (displayName !== undefined) updates.displayName = displayName;
@@ -18681,9 +18791,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       if (imageSlug !== undefined) updates.imageSlug = imageSlug;
       if (wikiSlug !== undefined) updates.wikiSlug = wikiSlug;
       if (seedVotes !== undefined) updates.seedVotes = seedVotes;
-      if (xHandle !== undefined) {
-        updates.xHandle = (typeof xHandle === "string" && xHandle.trim()) ? xHandle.trim().replace(/^@+/, "") : null;
-      }
+      applyInductionSocialFromBody(body, handleResult.values, updates);
       if (inductionStatus !== undefined) {
         const st = (typeof inductionStatus === "string" && inductionStatus.trim()) ? inductionStatus.trim() : "Queue";
         updates.inductionStatus = st;
@@ -18692,6 +18800,12 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         }
       }
       if (isActive !== undefined) updates.isActive = isActive;
+      if (searchQueryOverride !== undefined) {
+        updates.searchQueryOverride =
+          typeof searchQueryOverride === "string" && searchQueryOverride.trim()
+            ? searchQueryOverride.trim()
+            : null;
+      }
 
       if (Object.keys(updates).length === 0) return res.status(400).json({ error: "No valid fields to update" });
 

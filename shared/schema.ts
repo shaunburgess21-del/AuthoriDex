@@ -493,6 +493,11 @@ export const inductionCandidates = pgTable("induction_candidates", {
   seedVotes: integer("seed_votes").notNull().default(0),
   wikiSlug: text("wiki_slug"),
   xHandle: text("x_handle"),
+  instagramHandle: text("instagram_handle"),
+  tiktokHandle: text("tiktok_handle"),
+  youtubeId: text("youtube_id"),
+  spotifyId: text("spotify_id"),
+  searchQueryOverride: text("search_query_override"),
   inductionStatus: text("induction_status").notNull().default("Queue"),
   isActive: boolean("is_active").notNull().default(true),
 });
