@@ -1398,8 +1398,11 @@ export default function VotePage() {
   }).sort((a, b) => b.votes - a.votes);
   
   const sortedCandidates = [...enrichedCandidates].sort((a, b) => b.votes - a.votes);
+  const candidateRankById = useMemo(
+    () => new Map(sortedCandidates.map((candidate, index) => [candidate.id, index + 1])),
+    [sortedCandidates],
+  );
   const maxVotes = sortedCandidates[0]?.votes || 1;
-  const filteredMaxVotes = filteredCandidates[0]?.votes || 1;
 
   const { data: dbPolls = [], isLoading: pollsLoading } = useQuery<any[]>({
     queryKey: ['/api/trending-polls'],
@@ -3095,8 +3098,8 @@ export default function VotePage() {
                 <div key={candidate.id} onClick={(e) => handleCardEmptyTap(e, "induction", candidate.id)}>
                   <InductionCandidateCard
                     candidate={candidate}
-                    rank={index + 1}
-                    maxVotes={filteredMaxVotes}
+                    rank={candidateRankById.get(candidate.id) ?? index + 1}
+                    maxVotes={maxVotes}
                     isVoted={votedIds.has(candidate.id)}
                     onToggleVote={handleToggleVote}
                     onXPGain={() => { /* bursts now fire from vote mutation onSuccess */ }}
@@ -3760,8 +3763,8 @@ export default function VotePage() {
                   <InductionCandidateCard
                     key={candidate.id}
                     candidate={candidate}
-                    rank={index + 1}
-                    maxVotes={filteredMaxVotes}
+                    rank={candidateRankById.get(candidate.id) ?? index + 1}
+                    maxVotes={maxVotes}
                     isVoted={votedIds.has(candidate.id)}
                     onToggleVote={handleToggleVote}
                     onXPGain={() => { /* bursts now fire from vote mutation onSuccess */ }}
@@ -4132,8 +4135,8 @@ export default function VotePage() {
               return (
                 <InductionCandidateCard
                   candidate={candidate}
-                  rank={idx + 1}
-                  maxVotes={filteredMaxVotes}
+                  rank={candidateRankById.get(candidate.id) ?? idx + 1}
+                  maxVotes={maxVotes}
                   isVoted={votedIds.has(candidate.id)}
                   onToggleVote={handleToggleVote}
                   onXPGain={() => {}}

@@ -153,6 +153,11 @@ export default function InductionQueuePage() {
     });
   }, [candidates, categoryFilter, searchQuery]);
 
+  const candidateRankById = useMemo(
+    () => new Map(candidates.map((candidate, index) => [candidate.id, index + 1])),
+    [candidates],
+  );
+
   const maxVotes = candidates.length > 0 ? candidates[0].seedVotes : 1;
   const totalVotes = candidates.reduce((sum, c) => sum + c.seedVotes, 0);
   const uniqueCategories = new Set(candidates.map((c) => c.category));
@@ -269,7 +274,7 @@ export default function InductionQueuePage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-10">
           <AnimatePresence mode="popLayout">
             {filteredCandidates.map((candidate, idx) => {
-              const globalRank = candidates.indexOf(candidate) + 1;
+              const globalRank = candidateRankById.get(candidate.id) ?? idx + 1;
               const progressPct = maxVotes > 0 ? (candidate.seedVotes / maxVotes) * 100 : 0;
               const isVoted = votedIds.has(candidate.id);
 
