@@ -48,7 +48,7 @@ import {
 } from "recharts";
 
 type UnifiedVote = MyVoteCardData;
-type VoteStats = { uniqueVotes: number; voteActions: number; detectedRefinements?: number };
+type VoteStats = { uniqueVotes: number; voteActions: number; hiddenCount?: number; detectedRefinements?: number };
 
 // Shared colors per vote type so the doughnut, the card accent, and the filter
 // chips all reinforce each other.
@@ -86,9 +86,9 @@ const VOTE_TYPE_FILTERS = [
   { value: "overall_rating", label: "Overall Rating", icon: ThumbsUp },
   { value: "face_off", label: "Matchups", icon: Swords },
   { value: "value_vote", label: "Underrated/Overrated", icon: Star },
-  { value: "trending_poll", label: "Sentiment Polls", icon: BarChart3 },
+  { value: "trending_poll", label: "Trending Polls", icon: BarChart3 },
   { value: "opinion_poll", label: "Opinion Polls", icon: MessageCircle },
-  { value: "image_curate", label: "Image Curate", icon: ImageIcon },
+  { value: "image_curate", label: "Image Votes", icon: ImageIcon },
   { value: "induction", label: "Induction", icon: UserPlus },
 ] as const;
 
@@ -295,7 +295,8 @@ export default function VotesPage() {
     return profile?.totalVotes ?? 0;
   }, [voteStats?.uniqueVotes, allVotes, list.length, profile?.totalVotes]);
 
-  const hiddenCount = useMemo(() => list.filter((v) => v.hidden).length, [list]);
+  const localHiddenCount = useMemo(() => list.filter((v) => v.hidden).length, [list]);
+  const hiddenCount = voteStats?.hiddenCount ?? localHiddenCount;
 
   if (!user) {
     return (
@@ -374,9 +375,8 @@ export default function VotesPage() {
         {activeTab === "overview" && (
           <OverviewTab
             allVotes={allVotes ?? []}
-            hiddenCount={allVotes ? allVotes.filter((v) => v.hidden).length : 0}
+            hiddenCount={hiddenCount}
             totalVotes={totalCount}
-            voteActions={voteStats?.voteActions ?? null}
             currentStreak={profile?.currentStreak ?? 0}
             onJumpToHidden={() => {
               setHiddenOnly(true);
@@ -430,7 +430,6 @@ function OverviewTab({
   allVotes,
   hiddenCount,
   totalVotes,
-  voteActions,
   currentStreak,
   onJumpToHidden,
   onJumpToVotes,
@@ -441,7 +440,6 @@ function OverviewTab({
   allVotes: UnifiedVote[];
   hiddenCount: number;
   totalVotes: number;
-  voteActions: number | null;
   currentStreak: number;
   onJumpToHidden: () => void;
   onJumpToVotes: () => void;
@@ -565,23 +563,18 @@ function OverviewTab({
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <StatTile
           icon={<Vote className="h-4 w-4 text-cyan-500" />}
-          label="Unique votes"
+          label="Total votes"
           value={totalVotes.toLocaleString()}
-          helper="Current records"
-        />
-        <StatTile
-          icon={<Sparkles className="h-4 w-4 text-amber-500" />}
-          label="Vote actions"
-          value={(voteActions ?? totalVotes).toLocaleString()}
-          helper={voteActions !== null ? "Votes + detected edits" : "Votes + edits"}
+          helper="All time"
         />
         <StatTile
           icon={<Flame className="h-4 w-4 text-orange-500" />}
-          label="Current streak"
+          label="Login streak"
           value={`${currentStreak} day${currentStreak === 1 ? "" : "s"}`}
+          helper="Consecutive days active"
         />
         <StatTile
           icon={<Eye className="h-4 w-4 text-emerald-500" />}
@@ -616,7 +609,7 @@ function OverviewTab({
           {topSubject && (
             <MostVotedSubjectHero
               subject={topSubject}
-              totalVotes={allVotes.length}
+              totalVotes={totalVotes}
               onSeeAll={onJumpToImpact}
             />
           )}
@@ -628,7 +621,7 @@ function OverviewTab({
                 <p className="text-xs text-muted-foreground">Last 6 months</p>
               </div>
               <Badge variant="outline" className="gap-1 text-[10px]">
-                <TrendingUp className="h-3 w-3" /> {allVotes.length} lifetime
+                <TrendingUp className="h-3 w-3" /> {totalVotes.toLocaleString()} lifetime
               </Badge>
             </div>
             <div className="h-40">
@@ -681,7 +674,7 @@ function OverviewTab({
             </div>
             <DoughnutChart
               data={byTypeSegments}
-              centerTitle={allVotes.length}
+              centerTitle={totalVotes}
               centerSubtitle="votes"
               height={240}
               onSegmentClick={(id) => {
@@ -693,6 +686,11 @@ function OverviewTab({
                 if (match) onFilterAndJumpToVotes(match.value);
               }}
             />
+            {totalVotes > allVotes.length && (
+              <p className="text-[10px] text-muted-foreground text-center mt-2">
+                Breakdown based on your {allVotes.length} most recent votes
+              </p>
+            )}
           </Card>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -708,7 +706,7 @@ function OverviewTab({
             />
           </div>
 
-          <JourneyTimeline allVotes={allVotes} />
+          <JourneyTimeline allVotes={allVotes} totalVotes={totalVotes} />
         </>
       ) : (
         <EmptyState
@@ -877,9 +875,9 @@ interface Milestone {
   hint?: string;
 }
 
-function JourneyTimeline({ allVotes }: { allVotes: UnifiedVote[] }) {
+function JourneyTimeline({ allVotes, totalVotes }: { allVotes: UnifiedVote[]; totalVotes: number }) {
   const milestones: Milestone[] = useMemo(() => {
-    const total = allVotes.length;
+    const total = Math.max(allVotes.length, totalVotes);
     const firstMatchup = allVotes.some((v) => v.voteType === "face_off");
     const firstRating = allVotes.some((v) => v.voteType === "overall_rating");
     const firstValue = allVotes.some((v) => v.voteType === "value_vote");
@@ -897,7 +895,7 @@ function JourneyTimeline({ allVotes }: { allVotes: UnifiedVote[] }) {
       { id: "first_rating", label: "First rating", earned: firstRating, progress: firstRating ? 1 : 0 },
       { id: "first_value", label: "First Underrated/Overrated", earned: firstValue, progress: firstValue ? 1 : 0 },
     ];
-  }, [allVotes]);
+  }, [allVotes, totalVotes]);
 
   const earnedCount = milestones.filter((m) => m.earned).length;
   const nextIdx = milestones.findIndex((m) => !m.earned);

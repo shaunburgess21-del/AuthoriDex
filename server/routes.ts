@@ -4385,6 +4385,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      let userApprovalRatings: Record<string, number> = {};
+      if (userId && tab === 'approval') {
+        const ratings = await db
+          .select({ personId: userVotes.personId, rating: userVotes.rating })
+          .from(userVotes)
+          .where(eq(userVotes.userId, userId));
+
+        for (const r of ratings) {
+          if (r.rating != null && r.rating >= 1 && r.rating <= 5) {
+            userApprovalRatings[r.personId] = r.rating;
+          }
+        }
+      }
+
       const prevRankLookup = await getSnapshotRankMap();
       const baselineStatus = prevRankLookup.size > 0 ? "normal" : "degraded";
 
@@ -4433,6 +4447,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ...person,
           leaderboardRank,
           userValueVote: userValueVotes[person.id] || null,
+          userApprovalRating: userApprovalRatings[person.id] ?? null,
           rankChange: prevRank - person.rank,
         };
       });
@@ -7336,7 +7351,7 @@ Only return the JSON object.`;
   app.get("/api/me/vote-stats", requireAuth, async (req: AuthRequest, res) => {
     try {
       const userId = req.userId!;
-      const [profileRow, actionRow, grouped] = await Promise.all([
+      const [profileRow, actionRow, grouped, hiddenRow] = await Promise.all([
         db.select({ totalVotes: profiles.totalVotes }).from(profiles).where(eq(profiles.id, userId)).limit(1),
         db
           .select({ count: sql<number>`count(*)::int` })
@@ -7346,10 +7361,14 @@ Only return the JSON object.`;
           .from(voteActions)
           .where(and(eq(voteActions.userId, userId), inArray(voteActions.voteType, VOTE_TAB_VOTE_TYPES as unknown as string[])))
           .groupBy(voteActions.voteType),
+        db.select({ count: sql<number>`count(*)::int` })
+          .from(profileItemPrivacy)
+          .where(eq(profileItemPrivacy.userId, userId)),
       ]);
 
       const uniqueVotes = Number(profileRow[0]?.totalVotes ?? 0);
       const voteActionsCount = Number(actionRow[0]?.count ?? 0);
+      const hiddenCount = Number(hiddenRow[0]?.count ?? 0);
       const byType = grouped.reduce((acc, row) => {
         acc[row.voteType] = Number(row.count ?? 0);
         return acc;
@@ -7358,6 +7377,7 @@ Only return the JSON object.`;
       res.json({
         uniqueVotes,
         voteActions: voteActionsCount,
+        hiddenCount,
         byType,
       });
     } catch (error: any) {

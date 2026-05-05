@@ -26,6 +26,7 @@ interface ExtendedPerson extends TrendingPerson {
   overratedPct?: number | null;
   valueScore?: number | null;
   userValueVote?: string | null;
+  userApprovalRating?: number | null;
   leaderboardRank?: number;
   approvalVotesCount?: number | null;
   rankChange?: number | null;
@@ -84,6 +85,14 @@ export function LeaderboardRow({
           if (!getHasEverVoted()) {
             markEverVoted();
           }
+        } else if (person.userApprovalRating != null && person.userApprovalRating >= 1 && person.userApprovalRating <= 5) {
+          setSentimentScore(person.userApprovalRating);
+          try {
+            localStorage.setItem(`sentiment-vote-${person.id}`, String(person.userApprovalRating));
+          } catch { /* ignore */ }
+          if (!getHasEverVoted()) {
+            markEverVoted();
+          }
         } else {
           setSentimentScore(null);
         }
@@ -123,7 +132,7 @@ export function LeaderboardRow({
       window.removeEventListener('sentiment-vote-updated', handleCustomUpdate);
       window.removeEventListener('authoridex-ever-voted', handleEverVoted);
     };
-  }, [person.id]);
+  }, [person.id, person.userApprovalRating]);
 
   const fameScore = (person as any).fameIndexLive ?? person.fameIndex ?? Math.round(person.trendScore / 100);
   const delta24h = formatDelta(person.change24h);
