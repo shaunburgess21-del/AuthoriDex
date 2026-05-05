@@ -1288,7 +1288,7 @@ export default function HomePage() {
                       </div>
                       <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground/60 flex-wrap" data-testid="text-leaderboard-freshness">
                         <TouchTooltip
-                          content={<p>Fast lane leaderboard refresh from internal activity. External-source refresh runs separately.</p>}
+                          content={<p>Data refresh from Wikipedia, Mediastack, GDELT, and Google.</p>}
                           side="bottom"
                           className="text-xs max-w-[240px]"
                         >
