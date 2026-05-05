@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, type ReactElement } from "react";
+import { useState, useMemo, useEffect, useRef, type ReactElement } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { normalizeMarketCategory, MARKET_CATEGORY_OPTIONS } from "@shared/constants";
 import { SOCIAL_HANDLE_HELP } from "@shared/handleNormalise";
@@ -12,10 +12,11 @@ import { PersonAvatar } from "@/components/PersonAvatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Plus, Check, X, Search, Trash2, Edit2 } from "lucide-react";
+import { Plus, Check, X, Search, Trash2, Edit2, ImagePlus } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 const HOVER_TOOLTIP_MEDIA = "(hover: hover) and (pointer: fine)";
+const MAX_INDUCTION_GALLERY = 5;
 
 const INDUCTION_STATUS_OPTIONS = ["Queue", "Inactive", "Archived", "Rejected", "Inducted"] as const;
 
@@ -53,7 +54,7 @@ function formDataToApiBody(form: InductionFormData): Record<string, unknown> {
   return {
     displayName: form.displayName,
     category: form.category,
-    imageSlug: form.imageSlug.trim() || null,
+    imageSlug: form.imageSlug.trim() || undefined,
     wikiSlug: form.wikiSlug.trim() || null,
     seedVotes: form.seedVotes,
     inductionStatus: form.inductionStatus,
@@ -66,9 +67,12 @@ function formDataToApiBody(form: InductionFormData): Record<string, unknown> {
   };
 }
 
-async function uploadInductionGallerySlot(candidateId: string, file: File): Promise<void> {
+async function uploadInductionGallerySlot(candidateId: string, file: File, slot?: number): Promise<void> {
   const fd = new FormData();
   fd.append("file", file);
+  if (slot !== undefined) {
+    fd.append("slot", String(slot));
+  }
   const headers = await getAuthHeaders();
   const res = await fetch(`/api/admin/induction/${candidateId}/images`, {
     method: "POST",
@@ -140,6 +144,7 @@ export function AdminInductionQueue() {
   const [editCandidate, setEditCandidate] = useState<InductionCandidate | null>(null);
   const [formData, setFormData] = useState<InductionFormData>({ ...EMPTY_FORM });
   const [pendingGalleryFiles, setPendingGalleryFiles] = useState<File[]>([]);
+  const galleryInputRef = useRef<HTMLInputElement | null>(null);
 
   const { data: adminCategoryRows } = useQuery<AdminCategoryRow[]>({
     queryKey: ["/api/admin/categories"],
@@ -175,7 +180,7 @@ export function AdminInductionQueue() {
       const res = await apiRequest("POST", "/api/admin/induction", body);
       const created = (await res.json()) as { id: string };
       const uploadFailures: string[] = [];
-      for (const file of galleryFiles.slice(0, 4)) {
+      for (const file of galleryFiles.slice(0, MAX_INDUCTION_GALLERY)) {
         try {
           await uploadInductionGallerySlot(created.id, file);
         } catch (err: any) {
@@ -207,7 +212,7 @@ export function AdminInductionQueue() {
       const { id, galleryFiles, ...body } = payload;
       await apiRequest("PATCH", `/api/admin/induction/${id}`, body);
       const uploadFailures: string[] = [];
-      for (const file of galleryFiles.slice(0, 4)) {
+      for (const file of galleryFiles.slice(0, MAX_INDUCTION_GALLERY)) {
         try {
           await uploadInductionGallerySlot(id, file);
         } catch (err: any) {
@@ -295,12 +300,27 @@ export function AdminInductionQueue() {
   const handleSubmit = () => {
     if (!formData.displayName || !formData.category) return;
     const body = formDataToApiBody(formData);
-    const galleryFiles = pendingGalleryFiles.slice(0, 4);
+    const galleryFiles = pendingGalleryFiles.slice(0, MAX_INDUCTION_GALLERY);
     if (editCandidate) {
       updateMutation.mutate({ id: editCandidate.id, ...body, galleryFiles });
     } else {
       createMutation.mutate({ ...body, galleryFiles });
     }
+  };
+
+  const handleGalleryFilesPick = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setPendingGalleryFiles((prev) => {
+      const next = [...prev];
+      for (const file of Array.from(files)) {
+        if (next.length >= MAX_INDUCTION_GALLERY) break;
+        next.push(file);
+      }
+      if (next.length === prev.length) {
+        toast.error(`You can upload up to ${MAX_INDUCTION_GALLERY} images.`);
+      }
+      return next;
+    });
   };
 
   const closeDialog = () => {
@@ -309,7 +329,7 @@ export function AdminInductionQueue() {
     resetForm();
   };
 
-  const canStageUploads = formData.imageSlug.trim().length > 0;
+  const canStageUploads = !createMutation.isPending && !updateMutation.isPending;
 
   return (
     <>
@@ -632,29 +652,57 @@ export function AdminInductionQueue() {
             <div className="space-y-3">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Images (after save)</p>
               <div>
-                <Label htmlFor="induction-gallery-input">Gallery staging (max 4)</Label>
-                <input
-                  id="induction-gallery-input"
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  disabled={!canStageUploads || createMutation.isPending || updateMutation.isPending}
-                  className="mt-1 block w-full text-sm text-muted-foreground file:mr-3 file:rounded-md file:border file:border-input file:bg-muted file:px-3 file:py-1.5"
-                  data-testid="input-candidate-gallery"
-                  onChange={(e) => {
-                    const picked = Array.from(e.target.files || []);
-                    setPendingGalleryFiles(picked.slice(0, 4));
-                    e.target.value = "";
-                  }}
-                />
+                <Label>Profile images (optional, max 5)</Label>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Set Image Slug first. Files upload to storage as <code className="text-xs">1.webp</code>…<code className="text-xs">4.webp</code>{" "}
-                  under that slug and are linked to the profile when you approve induction.
+                  Stored in Supabase. Uploads run after the candidate is saved.
+                </p>
+                <div className="mt-2 flex items-center gap-3">
+                  <input
+                    ref={galleryInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => {
+                      handleGalleryFilesPick(e.target.files);
+                      e.currentTarget.value = "";
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => galleryInputRef.current?.click()}
+                    disabled={!canStageUploads || pendingGalleryFiles.length >= MAX_INDUCTION_GALLERY}
+                    data-testid="button-induction-add-images"
+                  >
+                    <ImagePlus className="h-4 w-4 mr-2" />
+                    Add images
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    {pendingGalleryFiles.length}/{MAX_INDUCTION_GALLERY} selected
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Image slug is optional on create; if blank it is auto-generated from the candidate name.
                 </p>
                 {pendingGalleryFiles.length > 0 && (
-                  <p className="text-xs mt-2 text-foreground">
-                    {pendingGalleryFiles.length} file(s) queued — will upload after you click {editCandidate ? "Update" : "Create"}.
-                  </p>
+                  <ul className="text-xs space-y-1 max-h-28 overflow-y-auto mt-2">
+                    {pendingGalleryFiles.map((file, index) => (
+                      <li key={`${file.name}-${index}`} className="flex items-center justify-between gap-2">
+                        <span className="truncate">{file.name}</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 shrink-0 px-2"
+                          onClick={() => setPendingGalleryFiles((prev) => prev.filter((_, j) => j !== index))}
+                        >
+                          Remove
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
                 )}
               </div>
             </div>

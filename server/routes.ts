@@ -910,16 +910,16 @@ function buildCelebrityLargePublicUrl(supabaseUrl: string, slug: string, filenam
 function occupiedInductionGallerySlots(files: { name: string }[] | null | undefined): Set<number> {
   const slots = new Set<number>();
   for (const file of files ?? []) {
-    const m = /^([1-4])\.(webp|jpg|jpeg|png)$/i.exec(file.name);
+    const m = /^([1-5])\.(webp|jpg|jpeg|png)$/i.exec(file.name);
     if (m) slots.add(parseInt(m[1], 10));
   }
   return slots;
 }
 
-/** Next free slot 1–4 for numbered uploads under `celebrity-large/{slug}/`. */
+/** Next free slot 1–5 for numbered uploads under `celebrity-large/{slug}/`. */
 function nextInductionGallerySlot(files: { name: string }[] | null | undefined): number | null {
   const occupied = occupiedInductionGallerySlots(files);
-  for (let slot = 1; slot <= 4; slot++) {
+  for (let slot = 1; slot <= 5; slot++) {
     if (!occupied.has(slot)) return slot;
   }
   return null;
@@ -18711,12 +18711,21 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
     }
   });
 
-  // POST /api/admin/induction/:id/images - Stage up to 4 images under celebrity-large/{imageSlug}/
+  // POST /api/admin/induction/:id/images - Stage up to 5 images under celebrity-large/{imageSlug}/
   app.post("/api/admin/induction/:id/images", requireAuth, requireAdmin, upload.single("file"), async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
       const file = req.file;
       if (!file) return res.status(400).json({ error: "No file uploaded" });
+      const rawSlot = req.body?.slot;
+      let requestedSlot: number | null = null;
+      if (rawSlot !== undefined && rawSlot !== null && String(rawSlot).trim() !== "") {
+        const parsed = Number(rawSlot);
+        if (!Number.isInteger(parsed) || parsed < 1 || parsed > 5) {
+          return res.status(400).json({ error: "slot must be an integer from 1 to 5" });
+        }
+        requestedSlot = parsed;
+      }
 
       const [candidate] = await db.select().from(inductionCandidates).where(eq(inductionCandidates.id, id)).limit(1);
       if (!candidate) return res.status(404).json({ error: "Candidate not found" });
@@ -18734,13 +18743,18 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       }
 
       const occupied = occupiedInductionGallerySlots(listed ?? []);
-      if (occupied.size >= 4) {
-        return res.status(400).json({ error: "Maximum of 4 images already stored for this candidate slug" });
-      }
-
-      const slot = nextInductionGallerySlot(listed ?? []);
-      if (slot === null) {
-        return res.status(400).json({ error: "No free image slot (1–4) available for this slug" });
+      let slot: number;
+      if (requestedSlot !== null) {
+        slot = requestedSlot;
+      } else {
+        if (occupied.size >= 5) {
+          return res.status(400).json({ error: "Maximum of 5 images already stored for this candidate slug" });
+        }
+        const autoSlot = nextInductionGallerySlot(listed ?? []);
+        if (autoSlot === null) {
+          return res.status(400).json({ error: "No free image slot (1–5) available for this slug" });
+        }
+        slot = autoSlot;
       }
 
       const optimized = await optimizeImage(file.buffer, {
