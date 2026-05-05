@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, type ReactElement } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { normalizeMarketCategory, MARKET_CATEGORY_OPTIONS } from "@shared/constants";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -12,6 +12,35 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Plus, Check, X, Search, Trash2, Edit2 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+
+const HOVER_TOOLTIP_MEDIA = "(hover: hover) and (pointer: fine)";
+
+/** Hover tooltips only on fine-pointer + hover-capable devices (avoids Radix press-to-open on touch). */
+function DesktopActionTooltip({ children, content }: { children: ReactElement; content: string }) {
+  const [supportsHoverTooltip, setSupportsHoverTooltip] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia(HOVER_TOOLTIP_MEDIA);
+    const update = () => setSupportsHoverTooltip(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
+  if (!supportsHoverTooltip) {
+    return children;
+  }
+
+  return (
+    <Tooltip delayDuration={200}>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent side="top" sideOffset={6} className="max-w-[260px]">
+        {content}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 interface InductionCandidate {
   id: string;
@@ -231,28 +260,32 @@ export function AdminInductionQueue() {
                         <div className="flex items-center justify-end gap-1">
                           {candidate.isActive && (
                             <>
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                className="text-emerald-600 dark:text-emerald-400"
-                                onClick={() => approveMutation.mutate(candidate.id)}
-                                disabled={approveMutation.isPending}
-                                aria-label="Approve"
-                                data-testid={`button-approve-${candidate.id}`}
-                              >
-                                <Check className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                className="text-red-600 dark:text-red-400"
-                                onClick={() => rejectMutation.mutate(candidate.id)}
-                                disabled={rejectMutation.isPending}
-                                aria-label="Reject"
-                                data-testid={`button-reject-${candidate.id}`}
-                              >
-                                <X className="h-4 w-4" />
-                              </Button>
+                              <DesktopActionTooltip content="Approve and add this candidate to the main leaderboard (full profile).">
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="text-emerald-600 dark:text-emerald-400"
+                                  onClick={() => approveMutation.mutate(candidate.id)}
+                                  disabled={approveMutation.isPending}
+                                  aria-label="Approve"
+                                  data-testid={`button-approve-${candidate.id}`}
+                                >
+                                  <Check className="h-4 w-4" />
+                                </Button>
+                              </DesktopActionTooltip>
+                              <DesktopActionTooltip content="Deactivate this candidate so they no longer appear in the Induction Queue.">
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="text-red-600 dark:text-red-400"
+                                  onClick={() => rejectMutation.mutate(candidate.id)}
+                                  disabled={rejectMutation.isPending}
+                                  aria-label="Reject"
+                                  data-testid={`button-reject-${candidate.id}`}
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </DesktopActionTooltip>
                             </>
                           )}
                           <Button
