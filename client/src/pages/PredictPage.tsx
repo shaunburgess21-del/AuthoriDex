@@ -2247,6 +2247,15 @@ export default function PredictPage() {
       (best, l) => Math.max(best, Number((l as any).currentScore ?? 0)),
       Number(m.totalPool ?? 0),
     );
+  // Sum of real stakes across an /api/open-markets row's entries. Replaces the
+  // old `seedVolume` fallback used by the Trending sort, so trending now ranks
+  // by the same honest pool the cards display.
+  const openMarketPool = (m: any): number =>
+    (m?.entries || []).reduce(
+      (sum: number, e: any) =>
+        sum + Number(e?.totalStake || 0) + Number(e?.noStake || 0),
+      0,
+    );
 
   /* The four filteredX lists are wrapped in useMemo not because the
    * filter+sort itself is expensive (markets are O(few-dozen)), but
@@ -2401,10 +2410,10 @@ export default function PredictPage() {
         .sort((a: any, b: any) =>
           communityCategory === "trending"
             ? trendingCompare(
-                a.totalBets,
-                b.totalBets,
-                Number(a.totalPool ?? 0),
-                Number(b.totalPool ?? 0),
+                Number(a.activeParticipantCount ?? 0),
+                Number(b.activeParticipantCount ?? 0),
+                openMarketPool(a),
+                openMarketPool(b),
               )
             : 0,
         ),
@@ -3443,7 +3452,12 @@ export default function PredictPage() {
             (!communityOverlaySearchQuery || m.title?.toLowerCase().includes(communityOverlaySearchQuery.toLowerCase()))
           )
           .sort((a: any, b: any) => communityOverlayCategoryFilter === "trending"
-            ? trendingCompare(a.totalBets, b.totalBets, Number(a.totalPool ?? 0), Number(b.totalPool ?? 0))
+            ? trendingCompare(
+                Number(a.activeParticipantCount ?? 0),
+                Number(b.activeParticipantCount ?? 0),
+                openMarketPool(a),
+                openMarketPool(b),
+              )
             : 0)
           .map((market: any) => (
             <OpenMarketCard 
