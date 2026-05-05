@@ -456,6 +456,34 @@ export const insertVoteSchema = createInsertSchema(votes).omit({
 export type Vote = typeof votes.$inferSelect;
 export type InsertVote = z.infer<typeof insertVoteSchema>;
 
+// Vote Actions - append-only ledger for every vote mutation/create/edit/remove.
+export const voteActions = pgTable("vote_actions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  voteType: text("vote_type").notNull(),
+  targetType: text("target_type").notNull(),
+  targetId: varchar("target_id").notNull(),
+  actionKind: text("action_kind").notNull(), // 'create' | 'update' | 'remove'
+  prevValue: text("prev_value"),
+  nextValue: text("next_value"),
+  source: text("source").notNull().default("unknown"),
+  requestId: text("request_id"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  userCreatedIdx: index("vote_actions_user_created_idx").on(table.userId, table.createdAt),
+  voteTypeCreatedIdx: index("vote_actions_type_created_idx").on(table.voteType, table.createdAt),
+  targetCreatedIdx: index("vote_actions_target_created_idx").on(table.targetType, table.targetId, table.createdAt),
+}));
+
+export const insertVoteActionSchema = createInsertSchema(voteActions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type VoteAction = typeof voteActions.$inferSelect;
+export type InsertVoteAction = z.infer<typeof insertVoteActionSchema>;
+
 // Induction Candidates - potential new celebrities for community voting
 export const inductionCandidates = pgTable("induction_candidates", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

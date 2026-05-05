@@ -5,7 +5,7 @@ import { storage } from "./storage";
 import { getBaselineDiagnostics } from "./utils/baseline";
 import { db } from "./db";
 import { syncWinningAvatarForPerson } from "./lib/curateAvatar";
-import { trendSnapshots, trackedPeople, communityInsights, insightVotes, comments as unifiedComments, commentVotes, matchups, votes, xpActions, xpLedger, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, contentCategories, userCategoryEngagement, emailUnsubscribeState, insertCommunityInsightSchema, insertInsightVoteSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
+import { trendSnapshots, trackedPeople, communityInsights, insightVotes, comments as unifiedComments, commentVotes, matchups, votes, voteActions, xpActions, xpLedger, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, contentCategories, userCategoryEngagement, emailUnsubscribeState, insertCommunityInsightSchema, insertInsightVoteSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
 import { validateSuggestionPayload, SUGGESTION_TYPES } from "@shared/suggestionSchemas";
 import { normaliseSocialHandles } from "@shared/handleNormalise";
 import { eq, desc, and, gt, sql, count, gte, lte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull, isNull } from "drizzle-orm";
@@ -30,6 +30,7 @@ import { getTrendContext, getTrendContextBatch, formatRelativeTime, type TrendCo
 import { fetchTrendingNewsContext, probeSerperSearchLive, refreshSerperCacheForPerson, getSerperDegradedState, getSerperRunStats } from "./providers/serper";
 import { generateProfilePreview, getOrGenerateCelebrityProfile } from "./services/profile-generator";
 import { getSourceStats, refreshSourceStats } from "./scoring/sourceStats";
+import { VOTE_TAB_VOTE_TYPES } from "./utils/vote-actions";
 import {
   normalizeSourceValue,
   PLATFORM_WEIGHTS,
@@ -796,6 +797,37 @@ setInterval(() => {
     else voteRateMap.set(uid, filtered);
   }
 }, 300_000);
+
+type VoteActionKind = "create" | "update" | "remove";
+
+async function appendVoteAction(
+  tx: any,
+  params: {
+    userId: string;
+    voteType: string;
+    targetType: string;
+    targetId: string;
+    actionKind: VoteActionKind;
+    prevValue?: string | null;
+    nextValue?: string | null;
+    source: string;
+    requestId?: string | null;
+    metadata?: Record<string, unknown> | null;
+  },
+): Promise<void> {
+  await tx.insert(voteActions).values({
+    userId: params.userId,
+    voteType: params.voteType,
+    targetType: params.targetType,
+    targetId: params.targetId,
+    actionKind: params.actionKind,
+    prevValue: params.prevValue ?? null,
+    nextValue: params.nextValue ?? null,
+    source: params.source,
+    requestId: params.requestId ?? null,
+    metadata: params.metadata ?? null,
+  });
+}
 
 async function getRelatedPeopleForCards(cardType: string, cardIds: string[]): Promise<Record<string, { id: string; name: string }[]>> {
   if (cardIds.length === 0) return {};
@@ -2921,6 +2953,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await tx.update(celebrityImages)
             .set({ votesUp: sql`${celebrityImages.votesUp} + 1` })
             .where(eq(celebrityImages.id, imageId));
+          await appendVoteAction(tx, {
+            userId,
+            voteType: "image_curate",
+            targetType: "person",
+            targetId: personId,
+            actionKind: "update",
+            prevValue: previousImageId,
+            nextValue: imageId,
+            source: "curate-profile",
+            metadata: { imageId, previousImageId },
+          });
         });
       } else {
         await db.transaction(async (tx) => {
@@ -2931,6 +2974,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await tx.update(profiles)
             .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
             .where(eq(profiles.id, userId));
+          await appendVoteAction(tx, {
+            userId,
+            voteType: "image_curate",
+            targetType: "person",
+            targetId: personId,
+            actionKind: "create",
+            nextValue: imageId,
+            source: "curate-profile",
+            metadata: { imageId },
+          });
         });
 
         try {
@@ -3220,6 +3273,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
             eq(insightVotes.insightId, id),
             eq(insightVotes.userId, userId)
           ));
+        await appendVoteAction(db, {
+          userId,
+          voteType: "insight_vote",
+          targetType: "community_insight",
+          targetId: id,
+          actionKind: "update",
+          prevValue: existingVote[0]?.voteType ?? null,
+          nextValue: voteType,
+          source: "community-insight-vote",
+        });
       } else {
         isNewVote = true;
         await db
@@ -3229,6 +3292,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
             userId,
             voteType,
           });
+        await appendVoteAction(db, {
+          userId,
+          voteType: "insight_vote",
+          targetType: "community_insight",
+          targetId: id,
+          actionKind: "create",
+          nextValue: voteType,
+          source: "community-insight-vote",
+        });
       }
 
       let xpResult;
@@ -3336,6 +3408,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
             eq(sentimentVotes.personId, personId),
             eq(sentimentVotes.votedDate, today)
           ));
+        await appendVoteAction(db, {
+          userId,
+          voteType: "sentiment",
+          targetType: "person",
+          targetId: personId,
+          actionKind: "update",
+          prevValue: existingVote[0]?.voteType ?? null,
+          nextValue: voteType,
+          source: "sentiment-vote",
+          metadata: { votedDate: today },
+        });
         
         return res.json({ success: true, updated: true });
       }
@@ -3353,6 +3436,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await tx.update(profiles)
           .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
           .where(eq(profiles.id, userId));
+        await appendVoteAction(tx, {
+          userId,
+          voteType: "sentiment",
+          targetType: "person",
+          targetId: personId,
+          actionKind: "create",
+          nextValue: voteType,
+          source: "sentiment-vote",
+          metadata: { votedDate: today },
+        });
       });
 
       // Phase 3: category-attributed engagement signal. Resolved via
@@ -3504,7 +3597,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // bump and behavioural engagement hooks; changing Underrated/O/Fairly Rated later
       // is refinement, not new engagement signal.
       const [priorValVote] = await db
-        .select({ id: celebrityValueVotes.id })
+        .select({ id: celebrityValueVotes.id, vote: celebrityValueVotes.vote })
         .from(celebrityValueVotes)
         .where(and(eq(celebrityValueVotes.userId, userId), eq(celebrityValueVotes.celebrityId, celebrityId)))
         .limit(1);
@@ -3532,6 +3625,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
             .where(eq(profiles.id, userId));
         }
+        await appendVoteAction(tx, {
+          userId,
+          voteType: "value_vote",
+          targetType: "person",
+          targetId: celebrityId,
+          actionKind: firstValueVote ? "create" : "update",
+          prevValue: priorValVote?.vote ?? null,
+          nextValue: vote,
+          source: "value-vote",
+        });
       });
 
       // Phase 3: behavioural engagement — first value vote only, outside the primary tx.
@@ -3693,7 +3796,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Snapshot before upsert — behavioural engagement counts the first 1–5
       // rating per (user, person) only; edits are refinement, same as value-vote.
       const [priorApprovalRow] = await db
-        .select({ id: userVotes.id })
+        .select({ id: userVotes.id, rating: userVotes.rating })
         .from(userVotes)
         .where(and(eq(userVotes.userId, userId), eq(userVotes.personId, celebrityId)))
         .limit(1);
@@ -3715,6 +3818,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
             votedAt: new Date(),
           },
         });
+      await appendVoteAction(db, {
+        userId,
+        voteType: "overall_rating",
+        targetType: "person",
+        targetId: celebrityId,
+        actionKind: firstApprovalRating ? "create" : "update",
+        prevValue: priorApprovalRow ? String(priorApprovalRow.rating) : null,
+        nextValue: String(rating),
+        source: "approval-rating",
+      });
 
       if (firstApprovalRating) {
         try {
@@ -4785,6 +4898,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 downvotes: sql`${unifiedComments.downvotes} + ${voteType === "down" ? -1 : 0}`,
               })
               .where(eq(unifiedComments.id, id));
+            await appendVoteAction(tx, {
+              userId,
+              voteType: "comment_vote",
+              targetType: "comment",
+              targetId: id,
+              actionKind: "remove",
+              prevValue: previousVoteType,
+              source: "comment-vote",
+            });
           } else {
             await tx
               .update(commentVotes)
@@ -4800,6 +4922,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 downvotes: sql`${unifiedComments.downvotes} + ${voteType === "down" ? 1 : -1}`,
               })
               .where(eq(unifiedComments.id, id));
+            await appendVoteAction(tx, {
+              userId,
+              voteType: "comment_vote",
+              targetType: "comment",
+              targetId: id,
+              actionKind: "update",
+              prevValue: previousVoteType,
+              nextValue: voteType,
+              source: "comment-vote",
+            });
           }
         } else {
           isNewVote = true;
@@ -4817,6 +4949,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
               downvotes: sql`${unifiedComments.downvotes} + ${voteType === "down" ? 1 : 0}`,
             })
             .where(eq(unifiedComments.id, id));
+          await appendVoteAction(tx, {
+            userId,
+            voteType: "comment_vote",
+            targetType: "comment",
+            targetId: id,
+            actionKind: "create",
+            nextValue: voteType,
+            source: "comment-vote",
+          });
         }
       });
 
@@ -5774,6 +5915,15 @@ Only return the JSON object.`;
       if (remove === true) {
         if (existingVote) {
           await db.delete(votes).where(eq(votes.id, existingVote.id));
+          await appendVoteAction(db, {
+            userId: voterId,
+            voteType: "face_off",
+            targetType: "face_off",
+            targetId: id,
+            actionKind: "remove",
+            prevValue: existingVote.value,
+            source: req.userId ? "matchup-vote" : "matchup-vote-anon",
+          });
           if (req.userId) {
             await db.update(profiles)
               .set({ totalVotes: sql`GREATEST(${profiles.totalVotes} - 1, 0)` })
@@ -5826,6 +5976,29 @@ Only return the JSON object.`;
           await db.update(votes)
             .set({ value: option })
             .where(eq(votes.id, existingVote.id));
+          await appendVoteAction(db, {
+            userId: voterId,
+            voteType: "face_off",
+            targetType: "face_off",
+            targetId: id,
+            actionKind: "update",
+            prevValue: existingVote.value,
+            nextValue: option,
+            source: req.userId ? "matchup-vote" : "matchup-vote-anon",
+          });
+        } else {
+          // Keep action counting semantics consistent across vote types:
+          // submitting the same choice still counts as a vote action.
+          await appendVoteAction(db, {
+            userId: voterId,
+            voteType: "face_off",
+            targetType: "face_off",
+            targetId: id,
+            actionKind: "update",
+            prevValue: existingVote.value,
+            nextValue: option,
+            source: req.userId ? "matchup-vote" : "matchup-vote-anon",
+          });
         }
       } else {
         await db.transaction(async (tx) => {
@@ -5843,6 +6016,15 @@ Only return the JSON object.`;
               .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
               .where(eq(profiles.id, req.userId));
           }
+          await appendVoteAction(tx, {
+            userId: voterId,
+            voteType: "face_off",
+            targetType: "face_off",
+            targetId: id,
+            actionKind: "create",
+            nextValue: option,
+            source: req.userId ? "matchup-vote" : "matchup-vote-anon",
+          });
         });
 
         if (req.userId) {
@@ -7102,50 +7284,29 @@ Only return the JSON object.`;
   app.get("/api/me/vote-stats", requireAuth, async (req: AuthRequest, res) => {
     try {
       const userId = req.userId!;
-      const asNum = (v: unknown) => Number(v ?? 0);
-
-      const [
-        faceOffCountRows,
-        sentimentCountRows,
-        valueCountRows,
-        trendPollCountRows,
-        opinionPollCountRows,
-        imageCountRows,
-        inductionCountRows,
-        overallRatingCountRows,
-        valueRefinementRows,
-      ] = await Promise.all([
-        db.select({ count: sql<number>`count(*)` }).from(votes).where(and(eq(votes.userId, userId), eq(votes.voteType, "face_off"))),
-        db.select({ count: sql<number>`count(*)` }).from(sentimentVotes).where(eq(sentimentVotes.userId, userId)),
-        db.select({ count: sql<number>`count(*)` }).from(celebrityValueVotes).where(eq(celebrityValueVotes.userId, userId)),
-        db.select({ count: sql<number>`count(*)` }).from(trendingPollVotes).where(eq(trendingPollVotes.userId, userId)),
-        db.select({ count: sql<number>`count(*)` }).from(opinionPollVotes).where(eq(opinionPollVotes.userId, userId)),
-        db.select({ count: sql<number>`count(*)` }).from(imageVotes).where(eq(imageVotes.userId, userId)),
-        db.select({ count: sql<number>`count(*)` }).from(inductionVotes).where(eq(inductionVotes.userId, userId)),
-        db.select({ count: sql<number>`count(*)` }).from(userVotes).where(eq(userVotes.userId, userId)),
-        // value_vote keeps createdAt+updatedAt, so we can surface detectable refinements.
-        db.select({ count: sql<number>`count(*)` })
-          .from(celebrityValueVotes)
-          .where(and(eq(celebrityValueVotes.userId, userId), ne(celebrityValueVotes.updatedAt, celebrityValueVotes.createdAt))),
+      const [profileRow, actionRow, grouped] = await Promise.all([
+        db.select({ totalVotes: profiles.totalVotes }).from(profiles).where(eq(profiles.id, userId)).limit(1),
+        db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(voteActions)
+          .where(and(eq(voteActions.userId, userId), inArray(voteActions.voteType, VOTE_TAB_VOTE_TYPES as unknown as string[]))),
+        db.select({ voteType: voteActions.voteType, count: sql<number>`count(*)::int` })
+          .from(voteActions)
+          .where(and(eq(voteActions.userId, userId), inArray(voteActions.voteType, VOTE_TAB_VOTE_TYPES as unknown as string[])))
+          .groupBy(voteActions.voteType),
       ]);
 
-      const uniqueVotes =
-        asNum(faceOffCountRows[0]?.count) +
-        asNum(sentimentCountRows[0]?.count) +
-        asNum(valueCountRows[0]?.count) +
-        asNum(trendPollCountRows[0]?.count) +
-        asNum(opinionPollCountRows[0]?.count) +
-        asNum(imageCountRows[0]?.count) +
-        asNum(inductionCountRows[0]?.count) +
-        asNum(overallRatingCountRows[0]?.count);
-
-      const detectedRefinements = asNum(valueRefinementRows[0]?.count);
-      const voteActions = uniqueVotes + detectedRefinements;
+      const uniqueVotes = Number(profileRow[0]?.totalVotes ?? 0);
+      const voteActionsCount = Number(actionRow[0]?.count ?? 0);
+      const byType = grouped.reduce((acc, row) => {
+        acc[row.voteType] = Number(row.count ?? 0);
+        return acc;
+      }, {} as Record<string, number>);
 
       res.json({
         uniqueVotes,
-        voteActions,
-        detectedRefinements,
+        voteActions: voteActionsCount,
+        byType,
       });
     } catch (error: any) {
       console.error("Error fetching /api/me/vote-stats:", error?.message || error);
@@ -12452,6 +12613,16 @@ Target length: about 90-150 words.`;
           .update(trendingPollVotes)
           .set({ choice, updatedAt: new Date() })
           .where(eq(trendingPollVotes.id, existing.id));
+        await appendVoteAction(db, {
+          userId: authReq.userId!,
+          voteType: "trending_poll",
+          targetType: "trending_poll",
+          targetId: poll.id,
+          actionKind: "update",
+          prevValue: existing.choice,
+          nextValue: choice,
+          source: "trending-poll-vote",
+        });
       } else {
         await db.transaction(async (tx) => {
           await tx
@@ -12465,6 +12636,15 @@ Target length: about 90-150 words.`;
           await tx.update(profiles)
             .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
             .where(eq(profiles.id, authReq.userId!));
+          await appendVoteAction(tx, {
+            userId: authReq.userId!,
+            voteType: "trending_poll",
+            targetType: "trending_poll",
+            targetId: poll.id,
+            actionKind: "create",
+            nextValue: choice,
+            source: "trending-poll-vote",
+          });
         });
 
         // Phase 3: engagement signal for the poll's category.
@@ -13397,12 +13577,21 @@ Target length: about 90-150 words.`;
 
       if (wantsRemove) {
         const [existingRemove] = await db
-          .select({ id: opinionPollVotes.id })
+          .select({ id: opinionPollVotes.id, optionId: opinionPollVotes.optionId })
           .from(opinionPollVotes)
           .where(and(eq(opinionPollVotes.pollId, poll.id), eq(opinionPollVotes.userId, userId)))
           .limit(1);
         if (existingRemove) {
           await db.delete(opinionPollVotes).where(eq(opinionPollVotes.id, existingRemove.id));
+          await appendVoteAction(db, {
+            userId,
+            voteType: "opinion_poll",
+            targetType: "opinion_poll",
+            targetId: poll.id,
+            actionKind: "remove",
+            prevValue: existingRemove.optionId,
+            source: "opinion-poll-vote",
+          });
           await db
             .update(profiles)
             .set({ totalVotes: sql`GREATEST(${profiles.totalVotes} - 1, 0)` })
@@ -13458,6 +13647,16 @@ Target length: about 90-150 words.`;
         await db.update(opinionPollVotes)
           .set({ optionId, updatedAt: new Date() })
           .where(eq(opinionPollVotes.id, existing.id));
+        await appendVoteAction(db, {
+          userId,
+          voteType: "opinion_poll",
+          targetType: "opinion_poll",
+          targetId: poll.id,
+          actionKind: "update",
+          prevValue: existing.optionId,
+          nextValue: optionId,
+          source: "opinion-poll-vote",
+        });
       } else {
         await db.transaction(async (tx) => {
           await tx.insert(opinionPollVotes).values({
@@ -13469,6 +13668,15 @@ Target length: about 90-150 words.`;
           await tx.update(profiles)
             .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
             .where(eq(profiles.id, userId));
+          await appendVoteAction(tx, {
+            userId,
+            voteType: "opinion_poll",
+            targetType: "opinion_poll",
+            targetId: poll.id,
+            actionKind: "create",
+            nextValue: optionId,
+            source: "opinion-poll-vote",
+          });
         });
 
         // Phase 3: engagement signal for the poll's category.
@@ -18155,6 +18363,15 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         await tx.update(profiles)
           .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
           .where(eq(profiles.id, userId));
+        await appendVoteAction(tx, {
+          userId,
+          voteType: "induction",
+          targetType: "induction_candidate",
+          targetId: id,
+          actionKind: "create",
+          nextValue: "up",
+          source: "induction-vote",
+        });
       });
 
       // Phase 3: engagement signal for the candidate's category.
