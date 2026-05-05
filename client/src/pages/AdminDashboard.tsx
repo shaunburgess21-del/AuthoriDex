@@ -2807,7 +2807,7 @@ export default function AdminDashboard() {
     setCelebrityForm({
       name: celebrity.name,
       category: celebrity.category,
-      status: celebrity.status,
+      status: "main_leaderboard",
       wikiSlug: celebrity.wikiSlug || "",
       xHandle: celebrity.xHandle || "",
       instagramHandle: celebrity.instagramHandle || "",
@@ -7803,7 +7803,6 @@ export default function AdminDashboard() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="main_leaderboard">Main Leaderboard</SelectItem>
-                  <SelectItem value="induction_queue">Induction Queue</SelectItem>
                 </SelectContent>
               </Select>
             </div>

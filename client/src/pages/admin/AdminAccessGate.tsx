@@ -24,7 +24,11 @@ export function getAdminAccessBlock({
   isAdmin,
   onGoHome,
 }: AdminAccessBlockProps): ReactNode | null {
-  if (profileLoading) {
+  // Keep the admin UI mounted during background profile refreshes when we
+  // already have a profile object. This prevents modal/form state loss (e.g.
+  // partially completed admin forms) after tab switches that briefly toggle
+  // profileLoading.
+  if (profileLoading && !profile) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
