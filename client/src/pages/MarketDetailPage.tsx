@@ -60,7 +60,6 @@ interface MarketEntry {
   label: string;
   totalStake: number;
   noStake?: number;
-  seedCount: number;
   displayOrder: number;
   resolutionStatus: string;
   betCount: number;
@@ -132,8 +131,6 @@ interface MarketData {
   resolutionCriteria?: string[] | null;
   resolutionSources?: ResolutionSource[] | null;
   resolveMethod?: string | null;
-  seedParticipants?: number;
-  seedVolume?: string | null;
   underlying?: string | null;
   metric?: string | null;
   strike?: string | null;
@@ -783,14 +780,15 @@ export default function MarketDetailPage() {
 
   const totalPool = useMemo(() => {
     if (!market) return 0;
-    const entryWeights = (market.entries || []).reduce((sum, e) => sum + (e.totalStake || 0) + (e.seedCount || 0), 0);
-    return entryWeights;
+    return (market.entries || []).reduce(
+      (sum, e) => sum + (e.totalStake || 0) + (e.noStake || 0),
+      0,
+    );
   }, [market]);
 
   const totalParticipants = useMemo(() => {
     if (!market) return 0;
-    const entrySeedTotal = (market.entries || []).reduce((sum: number, e: any) => sum + (e.seedCount || 0), 0);
-    return (market.totalParticipants || 0) + entrySeedTotal;
+    return market.totalParticipants || 0;
   }, [market]);
 
   const potentialPayout = useMemo(() => {

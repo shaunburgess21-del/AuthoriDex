@@ -288,8 +288,8 @@ function CreateMarketModal({
   const [strike, setStrike] = useState("");
   const [unit, setUnit] = useState("$");
   const [entries, setEntries] = useState<MarketEntryForm[]>([
-    { label: "Yes", description: "", seedCount: 0, imageUrl: "", entryPersonId: "", entryPersonName: "" },
-    { label: "No", description: "", seedCount: 0, imageUrl: "", entryPersonId: "", entryPersonName: "" },
+    { label: "Yes", description: "", imageUrl: "", entryPersonId: "", entryPersonName: "" },
+    { label: "No", description: "", imageUrl: "", entryPersonId: "", entryPersonName: "" },
   ]);
   const [visibility, setVisibility] = useState<"draft" | "live" | "inactive" | "archived">("live");
   const [inactiveMessage, setInactiveMessage] = useState("");
@@ -359,19 +359,19 @@ function CreateMarketModal({
     if (editMarket) return;
     if (openMarketType === "binary") {
       setEntries([
-        { label: "Yes", description: "", seedCount: 0, imageUrl: "", entryPersonId: "", entryPersonName: "" },
-        { label: "No", description: "", seedCount: 0, imageUrl: "", entryPersonId: "", entryPersonName: "" },
+        { label: "Yes", description: "", imageUrl: "", entryPersonId: "", entryPersonName: "" },
+        { label: "No", description: "", imageUrl: "", entryPersonId: "", entryPersonName: "" },
       ]);
     } else if (openMarketType === "updown") {
       setEntries([
-        { label: "Above", description: "", seedCount: 0, imageUrl: "", entryPersonId: "", entryPersonName: "" },
-        { label: "Below", description: "", seedCount: 0, imageUrl: "", entryPersonId: "", entryPersonName: "" },
+        { label: "Above", description: "", imageUrl: "", entryPersonId: "", entryPersonName: "" },
+        { label: "Below", description: "", imageUrl: "", entryPersonId: "", entryPersonName: "" },
       ]);
     } else {
       setEntries([
-        { label: "", description: "", seedCount: 0, imageUrl: "", entryPersonId: "", entryPersonName: "" },
-        { label: "", description: "", seedCount: 0, imageUrl: "", entryPersonId: "", entryPersonName: "" },
-        { label: "", description: "", seedCount: 0, imageUrl: "", entryPersonId: "", entryPersonName: "" },
+        { label: "", description: "", imageUrl: "", entryPersonId: "", entryPersonName: "" },
+        { label: "", description: "", imageUrl: "", entryPersonId: "", entryPersonName: "" },
+        { label: "", description: "", imageUrl: "", entryPersonId: "", entryPersonName: "" },
       ]);
     }
   }, [openMarketType]);
@@ -435,7 +435,6 @@ function CreateMarketModal({
               setEntries(data.entries.map((e: any) => ({
                 label: e.label || "",
                 description: e.description || "",
-                seedCount: e.seedCount || 0,
                 imageUrl: e.imageUrl || "",
                 entryPersonId: e.personId || "",
                 entryPersonName: "",
@@ -447,7 +446,6 @@ function CreateMarketModal({
         setEntries(editMarket.entries.map((e: any) => ({
           label: e.label || "",
           description: e.description || "",
-          seedCount: e.seedCount || 0,
           imageUrl: e.imageUrl || "",
           entryPersonId: e.personId || "",
           entryPersonName: "",
@@ -479,15 +477,15 @@ function CreateMarketModal({
       setMarketCelebResults([]);
       setRelatedPeople([]);
       setEntries([
-        { label: "Yes", description: "", seedCount: 0, imageUrl: "", entryPersonId: "", entryPersonName: "" },
-        { label: "No", description: "", seedCount: 0, imageUrl: "", entryPersonId: "", entryPersonName: "" },
+        { label: "Yes", description: "", imageUrl: "", entryPersonId: "", entryPersonName: "" },
+        { label: "No", description: "", imageUrl: "", entryPersonId: "", entryPersonName: "" },
       ]);
     }
   }, [editMarket, open]);
 
   const addEntry = () => {
     if (entries.length < 20) {
-      setEntries([...entries, { label: "", description: "", seedCount: 0, imageUrl: "", entryPersonId: "", entryPersonName: "" }]);
+      setEntries([...entries, { label: "", description: "", imageUrl: "", entryPersonId: "", entryPersonName: "" }]);
     }
   };
 
@@ -620,7 +618,6 @@ function CreateMarketModal({
         label: e.label,
         description: e.description || undefined,
         displayOrder: i,
-        seedCount: e.seedCount,
         imageUrl: e.imageUrl || undefined,
         personId: e.entryPersonId || undefined,
       })),
@@ -1051,16 +1048,6 @@ function CreateMarketModal({
                       disabled={openMarketType === "binary" || openMarketType === "updown"}
                       data-testid={`input-entry-label-${idx}`}
                     />
-                  </div>
-                  <div className="w-24 space-y-1">
-                    <Input
-                      type="number"
-                      value={entry.seedCount}
-                      onChange={(e) => updateEntry(idx, "seedCount", parseInt(e.target.value) || 0)}
-                      placeholder="Seed"
-                      data-testid={`input-entry-seed-${idx}`}
-                    />
-                    <p className="text-[10px] text-muted-foreground text-center">seed</p>
                   </div>
                   {openMarketType === "multi" && entries.length > 3 && (
                     <Button variant="ghost" size="icon" onClick={() => removeEntry(idx)} aria-label="Remove entry" data-testid={`button-remove-entry-${idx}`}>
@@ -4200,7 +4187,6 @@ export default function AdminDashboard() {
                                   <Badge variant={market.visibility === "live" ? "default" : market.visibility === "inactive" ? "secondary" : "outline"} className="text-xs">{market.visibility}</Badge>
                                   <Badge variant="outline" className="text-xs">{market.status}</Badge>
                                   {market.featured && <Badge variant="outline" className="text-xs border-yellow-500/40 dark:border-yellow-500/30 text-yellow-500"><Star className="h-3 w-3 mr-1" />Featured</Badge>}
-                                  <span className="text-xs text-muted-foreground">Pool: {Number(market.seedVolume || 0).toLocaleString()}</span>
                                 </div>
                               </div>
                               <div className="flex items-center gap-1 shrink-0">
@@ -4307,7 +4293,7 @@ export default function AdminDashboard() {
                                   <Badge variant={market.visibility === "live" ? "default" : market.visibility === "inactive" ? "secondary" : "outline"} className="text-xs">{market.visibility}</Badge>
                                   {market.category && <Badge variant="outline" className="text-xs capitalize">{market.category}</Badge>}
                                   {market.featured && <Badge variant="outline" className="text-xs border-yellow-500/40 dark:border-yellow-500/30 text-yellow-500"><Star className="h-3 w-3 mr-1" />Featured</Badge>}
-                                  <span className="text-xs text-muted-foreground">Pool: {Number(market.seedVolume || 0).toLocaleString()} | Wk {market.weekNumber || "-"}</span>
+                                  <span className="text-xs text-muted-foreground">Wk {market.weekNumber || "-"}</span>
                                 </div>
                               </div>
                               <div className="flex items-center gap-1 shrink-0">
@@ -4375,7 +4361,7 @@ export default function AdminDashboard() {
                                   <Badge variant="outline" className="text-xs">{market.status}</Badge>
                                   {market.category && <Badge variant="outline" className="text-xs capitalize">{market.category}</Badge>}
                                   {market.featured && <Badge variant="outline" className="text-xs border-yellow-500/40 dark:border-yellow-500/30 text-yellow-500"><Star className="h-3 w-3 mr-1" />Featured</Badge>}
-                                  <span className="text-xs text-muted-foreground">Pool: {Number(market.seedVolume || 0).toLocaleString()} | Wk {market.weekNumber || "-"}</span>
+                                  <span className="text-xs text-muted-foreground">Wk {market.weekNumber || "-"}</span>
                                 </div>
                               </div>
                               <div className="flex items-center gap-1 shrink-0">
@@ -4450,7 +4436,7 @@ export default function AdminDashboard() {
                                   <Badge variant="outline" className="text-xs">{market.status}</Badge>
                                   <Badge variant="outline" className="text-xs capitalize">{market.category}</Badge>
                                   {market.featured && <Badge variant="outline" className="text-xs border-yellow-500/40 dark:border-yellow-500/30 text-yellow-500"><Star className="h-3 w-3 mr-1" />Featured</Badge>}
-                                  <span className="text-xs text-muted-foreground">Pool: {Number(market.seedVolume || 0).toLocaleString()} | Wk {market.weekNumber || "-"}</span>
+                                  <span className="text-xs text-muted-foreground">Wk {market.weekNumber || "-"}</span>
                                 </div>
                               </div>
                               <div className="flex items-center gap-1 shrink-0">

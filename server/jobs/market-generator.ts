@@ -115,18 +115,15 @@ export async function generateWeeklyUpDown(): Promise<number> {
       endAt: sunday,
       closeAt: getWeeklyBettingCutoff(sunday),
       weekNumber,
-      seedParticipants: 0,
-      seedVolume: "0",
       metadata: openScore ? { openingScore: { personId: person.id, score: openScore.score, snapshotAt: openScore.snapshotAt } } : undefined,
-      seedConfig: { enabled: true, targetParticipantsMin: 30, targetParticipantsMax: 80, targetPoolMin: 5000, targetPoolMax: 15000, distributionBias: { up: 55, down: 45 } },
       featured: false,
     };
 
     try {
       const [market] = await db.insert(predictionMarkets).values(values).returning();
       await db.insert(marketEntries).values([
-        { marketId: market.id, entryType: "custom", label: "Up", displayOrder: 0, seedCount: 0 },
-        { marketId: market.id, entryType: "custom", label: "Down", displayOrder: 1, seedCount: 0 },
+        { marketId: market.id, entryType: "custom", label: "Up", displayOrder: 0 },
+        { marketId: market.id, entryType: "custom", label: "Down", displayOrder: 1 },
       ]);
       created++;
     } catch (slugErr: any) {
@@ -134,8 +131,8 @@ export async function generateWeeklyUpDown(): Promise<number> {
         const slugRetry = `${slug}-${randomUUID().slice(0, 6)}`;
         const [market] = await db.insert(predictionMarkets).values({ ...values, slug: slugRetry }).returning();
         await db.insert(marketEntries).values([
-          { marketId: market.id, entryType: "custom", label: "Up", displayOrder: 0, seedCount: 0 },
-          { marketId: market.id, entryType: "custom", label: "Down", displayOrder: 1, seedCount: 0 },
+          { marketId: market.id, entryType: "custom", label: "Up", displayOrder: 0 },
+          { marketId: market.id, entryType: "custom", label: "Down", displayOrder: 1 },
         ]);
         created++;
       } else {
@@ -199,8 +196,6 @@ export async function ensureUpDownMarketForInductee(person: {
     endAt: sunday,
     closeAt: getWeeklyBettingCutoff(sunday),
     weekNumber,
-    seedParticipants: 0,
-    seedVolume: "0",
     metadata: openScore
       ? {
           openingScore: {
@@ -210,22 +205,14 @@ export async function ensureUpDownMarketForInductee(person: {
           },
         }
       : undefined,
-    seedConfig: {
-      enabled: true,
-      targetParticipantsMin: 30,
-      targetParticipantsMax: 80,
-      targetPoolMin: 5000,
-      targetPoolMax: 15000,
-      distributionBias: { up: 55, down: 45 },
-    },
     featured: false,
   };
 
   try {
     const [market] = await db.insert(predictionMarkets).values(values).returning();
     await db.insert(marketEntries).values([
-      { marketId: market.id, entryType: "custom", label: "Up", displayOrder: 0, seedCount: 0 },
-      { marketId: market.id, entryType: "custom", label: "Down", displayOrder: 1, seedCount: 0 },
+      { marketId: market.id, entryType: "custom", label: "Up", displayOrder: 0 },
+      { marketId: market.id, entryType: "custom", label: "Down", displayOrder: 1 },
     ]);
     return "created";
   } catch (slugErr: any) {
@@ -237,8 +224,8 @@ export async function ensureUpDownMarketForInductee(person: {
           .values({ ...values, slug: slugRetry })
           .returning();
         await db.insert(marketEntries).values([
-          { marketId: market.id, entryType: "custom", label: "Up", displayOrder: 0, seedCount: 0 },
-          { marketId: market.id, entryType: "custom", label: "Down", displayOrder: 1, seedCount: 0 },
+          { marketId: market.id, entryType: "custom", label: "Up", displayOrder: 0 },
+          { marketId: market.id, entryType: "custom", label: "Down", displayOrder: 1 },
         ]);
         return "created";
       } catch {
@@ -291,7 +278,6 @@ export async function backfillGainerMarketForInductee(person: {
     personId: person.id,
     label: person.name,
     displayOrder: startOrder,
-    seedCount: 0,
     imageUrl: person.avatar ?? null,
   });
   return "added";
@@ -378,9 +364,6 @@ export async function generateWeeklyJackpot(): Promise<number> {
       endAt: sunday,
       closeAt: getWeeklyBettingCutoff(sunday),
       weekNumber,
-      seedParticipants: 0,
-      seedVolume: "0",
-      seedConfig: { enabled: true, targetParticipantsMin: 15, targetParticipantsMax: 55, targetPoolMin: 5000, targetPoolMax: 12000 },
       featured: false,
     };
 
@@ -660,16 +643,13 @@ export async function generateWeeklyH2H(): Promise<number> {
         endAt: sunday,
         closeAt: getWeeklyBettingCutoff(sunday),
         weekNumber,
-        seedParticipants: 0,
-        seedVolume: "0",
         metadata: h2hMeta,
-        seedConfig: { enabled: true, targetParticipantsMin: 55, targetParticipantsMax: 140, targetPoolMin: 18000, targetPoolMax: 40000, distributionBias: { personA: 50, personB: 50 } },
         featured: false,
       }).returning();
 
       await tx.insert(marketEntries).values([
-        { marketId: market.id, entryType: "person", personId: personA.id, label: personA.name, displayOrder: 0, seedCount: 0, imageUrl: null },
-        { marketId: market.id, entryType: "person", personId: personB.id, label: personB.name, displayOrder: 1, seedCount: 0, imageUrl: null },
+        { marketId: market.id, entryType: "person", personId: personA.id, label: personA.name, displayOrder: 0, imageUrl: null },
+        { marketId: market.id, entryType: "person", personId: personB.id, label: personB.name, displayOrder: 1, imageUrl: null },
       ]);
       createdCount++;
       existingSlugs.add(slug);
@@ -801,7 +781,6 @@ export async function generateWeeklyGainer(): Promise<{ created: number; updated
               personId: person.id,
               label: person.name,
               displayOrder: startOrder + idx,
-              seedCount: 0,
               imageUrl: person.avatar,
             }))
           );
@@ -843,10 +822,7 @@ export async function generateWeeklyGainer(): Promise<{ created: number; updated
             endAt: sunday,
             closeAt: getWeeklyBettingCutoff(sunday),
             weekNumber,
-            seedParticipants: 0,
-            seedVolume: "0",
             metadata: gainerMeta,
-            seedConfig: { enabled: true, targetParticipantsMin: 25, targetParticipantsMax: 60, targetPoolMin: 8000, targetPoolMax: 20000, distributionBias: {} },
             featured: false,
           }).returning();
           const entryValues = ranked.map((person, idx) => ({
@@ -855,7 +831,6 @@ export async function generateWeeklyGainer(): Promise<{ created: number; updated
             personId: person.id,
             label: person.name,
             displayOrder: idx,
-            seedCount: 0,
             imageUrl: person.avatar,
           }));
           await tx.insert(marketEntries).values(entryValues);
@@ -874,10 +849,7 @@ export async function generateWeeklyGainer(): Promise<{ created: number; updated
               endAt: sunday,
               closeAt: getWeeklyBettingCutoff(sunday),
               weekNumber,
-              seedParticipants: 0,
-              seedVolume: "0",
               metadata: gainerMeta,
-              seedConfig: { enabled: true, targetParticipantsMin: 25, targetParticipantsMax: 60, targetPoolMin: 8000, targetPoolMax: 20000, distributionBias: {} },
               featured: false,
             }).returning();
             const entryValues = ranked.map((person, idx) => ({
@@ -886,7 +858,6 @@ export async function generateWeeklyGainer(): Promise<{ created: number; updated
               personId: person.id,
               label: person.name,
               displayOrder: idx,
-              seedCount: 0,
               imageUrl: person.avatar,
             }));
             await tx.insert(marketEntries).values(entryValues);

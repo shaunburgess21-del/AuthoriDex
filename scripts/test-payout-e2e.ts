@@ -37,7 +37,7 @@ async function createTestMarket(personId: string) {
     marketType: "updown", title: "[TEST]", slug: `test-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     personId, category: "test", visibility: "hidden", status: "OPEN",
     startAt: new Date(Date.now() - 7200000), endAt: new Date(Date.now() - 60000),
-    weekNumber: 0, seedParticipants: 0, seedVolume: "0",
+    weekNumber: 0,
   }).returning();
   const [up] = await db.insert(marketEntries).values({ marketId: m.id, entryType: "custom", label: "Up", displayOrder: 0 }).returning();
   const [dn] = await db.insert(marketEntries).values({ marketId: m.id, entryType: "custom", label: "Down", displayOrder: 1 }).returning();

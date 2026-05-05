@@ -293,7 +293,6 @@ type OpenMarketEntryAdminPayload = {
   description: string | null;
   imageUrl: string | null;
   personId: string | null;
-  seedCount: number;
 };
 
 type OpenMarketAdminPayload = {
@@ -314,8 +313,6 @@ type OpenMarketAdminPayload = {
   personId: string | null;
   isLive: boolean;
   visibility: string;
-  seedParticipants: number;
-  seedVolume: string;
   underlying: string | null;
   metric: string | null;
   strike: string | null; // numeric stored as string in Drizzle
@@ -338,17 +335,16 @@ export function translateOpenMarketPayload(
       description: e?.description ?? null,
       imageUrl: e?.imageUrl ?? null,
       personId: e?.personId ?? null,
-      seedCount: 0,
     }));
   } else if (marketType === "binary") {
     entries = [
-      { label: "Yes", description: null, imageUrl: null, personId: null, seedCount: 0 },
-      { label: "No",  description: null, imageUrl: null, personId: null, seedCount: 0 },
+      { label: "Yes", description: null, imageUrl: null, personId: null },
+      { label: "No",  description: null, imageUrl: null, personId: null },
     ];
   } else if (marketType === "updown") {
     entries = [
-      { label: "Above", description: null, imageUrl: null, personId: null, seedCount: 0 },
-      { label: "Below", description: null, imageUrl: null, personId: null, seedCount: 0 },
+      { label: "Above", description: null, imageUrl: null, personId: null },
+      { label: "Below", description: null, imageUrl: null, personId: null },
     ];
   } else {
     entries = [];
@@ -382,8 +378,6 @@ export function translateOpenMarketPayload(
     personId: userPayload.personId ?? null,
     isLive: true,
     visibility: "live",
-    seedParticipants: 0,
-    seedVolume: "0",
     underlying: userPayload.underlying ?? null,
     metric: userPayload.metric ?? null,
     strike: strikeStr,
@@ -606,8 +600,6 @@ export async function dispatchApproval(
           personId: p.personId,
           isLive: p.isLive,
           visibility: p.visibility,
-          seedParticipants: p.seedParticipants,
-          seedVolume: p.seedVolume,
           underlying: p.underlying,
           metric: p.metric,
           strike: p.strike,
@@ -624,7 +616,6 @@ export async function dispatchApproval(
           label: e.label,
           description: e.description,
           displayOrder: i,
-          seedCount: e.seedCount,
           imageUrl: e.imageUrl,
         }))
       );

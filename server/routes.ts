@@ -14105,8 +14105,6 @@ Target length: about 90-150 words.`;
           tieRule: predictionMarkets.tieRule,
           cadence: predictionMarkets.cadence,
           baselineScore: predictionMarkets.baselineScore,
-          seedParticipants: predictionMarkets.seedParticipants,
-          seedVolume: predictionMarkets.seedVolume,
           underlying: predictionMarkets.underlying,
           metric: predictionMarkets.metric,
           strike: predictionMarkets.strike,
@@ -14222,7 +14220,7 @@ Target length: about 90-150 words.`;
         title, slug, openMarketType, teaser, summary, description, category,
         tags, coverImageUrl, sourceUrl, featured, timezone, startAt, endAt,
         closeAt, resolutionCriteria, resolutionSources, resolveMethod, rules,
-        seedParticipants, seedVolume, underlying, metric, strike, unit,
+        underlying, metric, strike, unit,
         entries: entryList, personId, isLive, visibility, inactiveMessage,
         relatedPersonIds,
       } = req.body;
@@ -14289,8 +14287,6 @@ Target length: about 90-150 words.`;
           resolutionSources: resolutionSources || null,
           resolveMethod: resolveMethod || null,
           rules: rules || null,
-          seedParticipants: seedParticipants || 0,
-          seedVolume: seedVolume ? String(seedVolume) : "0",
           underlying: underlying || null,
           metric: metric || null,
           strike: strike ? String(strike) : null,
@@ -14315,7 +14311,6 @@ Target length: about 90-150 words.`;
             label: e.label,
             description: e.description || null,
             displayOrder: e.displayOrder ?? i,
-            seedCount: e.seedCount || 0,
             imageUrl: e.imageUrl || null,
           }))
         )
@@ -14362,7 +14357,7 @@ Target length: about 90-150 words.`;
         title, teaser, summary, description, category, tags, coverImageUrl,
         sourceUrl, featured, timezone, startAt, endAt, closeAt,
         resolutionCriteria, resolutionSources, resolveMethod, rules,
-        seedParticipants, seedVolume, underlying, metric, strike, unit,
+        underlying, metric, strike, unit,
         openMarketType, personId, isLive, visibility, inactiveMessage, entries: entryList,
         relatedPersonIds,
       } = req.body;
@@ -14385,8 +14380,6 @@ Target length: about 90-150 words.`;
       if (resolutionSources !== undefined) updates.resolutionSources = resolutionSources;
       if (resolveMethod !== undefined) updates.resolveMethod = resolveMethod;
       if (rules !== undefined) updates.rules = rules;
-      if (seedParticipants !== undefined) updates.seedParticipants = seedParticipants;
-      if (seedVolume !== undefined) updates.seedVolume = String(seedVolume);
       if (underlying !== undefined) updates.underlying = underlying;
       if (metric !== undefined) updates.metric = metric;
       if (strike !== undefined) updates.strike = strike ? String(strike) : null;
@@ -14422,7 +14415,6 @@ Target length: about 90-150 words.`;
                 label: e.label,
                 description: e.description || null,
                 displayOrder: e.displayOrder ?? i,
-                seedCount: e.seedCount || 0,
                 imageUrl: e.imageUrl || null,
                 personId: e.personId || null,
                 entryType: e.personId ? "person" : "custom",
@@ -14438,7 +14430,6 @@ Target length: about 90-150 words.`;
                 label: e.label,
                 description: e.description || null,
                 displayOrder: e.displayOrder ?? i,
-                seedCount: e.seedCount || 0,
                 imageUrl: e.imageUrl || null,
               });
           }
@@ -14720,16 +14711,15 @@ Target length: about 90-150 words.`;
         const unit = row.unit?.trim() || "$";
 
         // Entries
-        const entries: { label: string; seedCount: number; description?: string }[] = [];
+        const entries: { label: string; description?: string }[] = [];
         if (Array.isArray(row.entries)) {
           for (const e of row.entries) {
-            if (e.label?.trim()) entries.push({ label: e.label.trim(), seedCount: e.seedCount || 0, description: e.description || undefined });
+            if (e.label?.trim()) entries.push({ label: e.label.trim(), description: e.description || undefined });
           }
         } else {
           for (let o = 1; o <= 20; o++) {
             const label = row[`option${o}`]?.toString().trim();
-            const seed = parseInt(row[`seed${o}`]) || 0;
-            if (label) entries.push({ label, seedCount: seed });
+            if (label) entries.push({ label });
           }
         }
 
@@ -14831,8 +14821,6 @@ Target length: about 90-150 words.`;
             unit: openMarketType === "updown" ? unit : null,
             metadata: Object.keys(metadata).length > 0 ? metadata : null,
             createdBy: authReq.userId,
-            seedParticipants: 0,
-            seedVolume: "0",
             cmsDisplayOrder: nextImportCmsOrder,
           }).returning();
           nextImportCmsOrder += 1;
@@ -14844,7 +14832,6 @@ Target length: about 90-150 words.`;
               label: e.label,
               description: e.description || null,
               displayOrder: idx,
-              seedCount: 0,
             }))
           );
 
@@ -16330,7 +16317,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
 
   app.post("/api/admin/native-markets/h2h", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const { personAId, personBId, category, visibility = "live", featured = false, seedConfig } = req.body;
+      const { personAId, personBId, category, visibility = "live", featured = false } = req.body;
 
       if (!personAId || !personBId) {
         return res.status(400).json({ error: "Both person A and person B are required" });
@@ -16376,15 +16363,6 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       }
       const h2hMetadata = h2hOpeningScores.length > 0 ? { openingScores: h2hOpeningScores } : undefined;
 
-      const defaultSeedConfig = {
-        enabled: true,
-        targetParticipantsMin: 40,
-        targetParticipantsMax: 120,
-        targetPoolMin: 10000,
-        targetPoolMax: 35000,
-        distributionBias: { personA: 50, personB: 50 },
-      };
-
       let market: any;
       try {
         [market] = await db.insert(predictionMarkets).values({
@@ -16398,10 +16376,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           startAt: monday,
           endAt: sunday,
           weekNumber,
-          seedParticipants: 0,
-          seedVolume: "0",
           metadata: h2hMetadata,
-          seedConfig: seedConfig || defaultSeedConfig,
         }).returning();
       } catch (slugErr: any) {
         if (slugErr.code === '23505') {
@@ -16417,10 +16392,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
             startAt: monday,
             endAt: sunday,
             weekNumber,
-            seedParticipants: 0,
-            seedVolume: "0",
             metadata: h2hMetadata,
-            seedConfig: seedConfig || defaultSeedConfig,
           }).returning();
         } else {
           throw slugErr;
@@ -16434,7 +16406,6 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           personId: personA.id,
           label: personA.name,
           displayOrder: 0,
-          seedCount: 0,
           imageUrl: personA.avatar,
         },
         {
@@ -16443,7 +16414,6 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           personId: personB.id,
           label: personB.name,
           displayOrder: 1,
-          seedCount: 0,
           imageUrl: personB.avatar,
         },
       ]);
@@ -16466,7 +16436,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
 
   app.post("/api/admin/native-markets/gainer", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const { category, personIds, visibility = "live", featured = false, seedConfig } = req.body;
+      const { category, personIds, visibility = "live", featured = false } = req.body;
       const normalizedCategory = normalizeMarketCategory(category);
 
       if (!CANONICAL_MARKET_CATEGORIES.includes(normalizedCategory as typeof CANONICAL_MARKET_CATEGORIES[number])) {
@@ -16525,15 +16495,6 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       }
       const gainerMetadata = gainerOpeningScores.length > 0 ? { openingScores: gainerOpeningScores } : undefined;
 
-      const defaultSeedConfig = {
-        enabled: true,
-        targetParticipantsMin: 25,
-        targetParticipantsMax: 60,
-        targetPoolMin: 8000,
-        targetPoolMax: 20000,
-        distributionBias: {},
-      };
-
       let market: any;
       try {
         [market] = await db.insert(predictionMarkets).values({
@@ -16547,10 +16508,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           startAt: monday,
           endAt: sunday,
           weekNumber,
-          seedParticipants: 0,
-          seedVolume: "0",
           metadata: gainerMetadata,
-          seedConfig: seedConfig || defaultSeedConfig,
         }).returning();
       } catch (slugErr: any) {
         if (slugErr.code === '23505') {
@@ -16566,10 +16524,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
             startAt: monday,
             endAt: sunday,
             weekNumber,
-            seedParticipants: 0,
-            seedVolume: "0",
             metadata: gainerMetadata,
-            seedConfig: seedConfig || defaultSeedConfig,
           }).returning();
         } else {
           throw slugErr;
@@ -16582,7 +16537,6 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         personId: person.id,
         label: person.name,
         displayOrder: idx,
-        seedCount: 0,
         imageUrl: person.avatar,
       }));
 
@@ -16787,7 +16741,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
   app.patch("/api/admin/native-markets/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
-      const { visibility, featured, seedConfig, inactiveMessage } = req.body;
+      const { visibility, featured, inactiveMessage } = req.body;
 
       const [existing] = await db.select().from(predictionMarkets).where(eq(predictionMarkets.id, id));
       if (!existing) {
@@ -16797,7 +16751,6 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       const updates: any = { updatedAt: new Date() };
       if (visibility !== undefined) updates.visibility = visibility;
       if (featured !== undefined) updates.featured = featured;
-      if (seedConfig !== undefined) updates.seedConfig = seedConfig;
       if (inactiveMessage !== undefined) updates.inactiveMessage = inactiveMessage;
 
       const [updated] = await db.update(predictionMarkets)
@@ -17521,8 +17474,6 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         startAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
         endAt: new Date(Date.now() - 60 * 1000),
         weekNumber: 0,
-        seedParticipants: 0,
-        seedVolume: "0",
       }).returning();
 
       const [upEntry] = await db.insert(marketEntries).values({
@@ -17688,8 +17639,8 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       await db.delete(marketEntries).where(eq(marketEntries.marketId, id));
 
       await db.insert(marketEntries).values([
-        { marketId: id, entryType: "person", personId: personA.id, label: personA.name, displayOrder: 0, seedCount: 0, imageUrl: personA.avatar },
-        { marketId: id, entryType: "person", personId: personB.id, label: personB.name, displayOrder: 1, seedCount: 0, imageUrl: personB.avatar },
+        { marketId: id, entryType: "person", personId: personA.id, label: personA.name, displayOrder: 0, imageUrl: personA.avatar },
+        { marketId: id, entryType: "person", personId: personB.id, label: personB.name, displayOrder: 1, imageUrl: personB.avatar },
       ]);
 
       await db.update(predictionMarkets).set({
@@ -17734,7 +17685,6 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         personId: person.id,
         label: person.name,
         displayOrder: idx,
-        seedCount: 0,
         imageUrl: person.avatar,
       }));
 
@@ -17746,17 +17696,6 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
     } catch (error: any) {
       console.error("Error updating gainer entries:", error.message);
       res.status(500).json({ error: "Failed to update entries" });
-    }
-  });
-
-  app.post("/api/admin/seed-engine/run", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
-    try {
-      const { runSeedBatch } = await import("./jobs/seed-engine");
-      const result = await runSeedBatch(true);
-      res.json(result);
-    } catch (error: any) {
-      console.error("Error running seed batch:", error.message);
-      res.status(500).json({ error: "Failed to run seed batch" });
     }
   });
 

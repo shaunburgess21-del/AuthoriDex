@@ -120,11 +120,8 @@ export default function UpDownDetailPage() {
     const downMultiplier = computePayoutMultiplier(upStake + downStake, downStake);
     const currentScore = Number(person.trendScore || person.fameIndex || 0);
     const baselineScore = getMarketBaselineScore(market, currentScore) ?? currentScore;
-    const totalPool =
-      upStake + downStake + Number(market.seedVolume || 0);
-    const totalParticipants =
-      (Number(market.activeParticipantCount || 0) || 0) +
-      Number(market.seedConfig?.participants || 0);
+    const totalPool = upStake + downStake;
+    const totalParticipants = Number(market.activeParticipantCount || 0) || 0;
 
     return {
       personName: person.name || market.title?.replace(/: Up or Down\?$/, "") || "Unknown",

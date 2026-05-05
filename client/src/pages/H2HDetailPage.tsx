@@ -129,12 +129,11 @@ export default function H2HDetailPage() {
     const s1 = Number(e1.totalStake || 0);
     const s2 = Number(e2.totalStake || 0);
     const total = s1 + s2 || 1;
-    const totalPool =
-      entries.reduce((sum: number, entry: any) => sum + Number(entry.totalStake || 0), 0) +
-      Number(market.seedVolume || 0);
-    const totalParticipants =
-      (Number(market.activeParticipantCount || 0) || 0) +
-      Number(market.seedConfig?.participants || 0);
+    const totalPool = entries.reduce(
+      (sum: number, entry: any) => sum + Number(entry.totalStake || 0),
+      0,
+    );
+    const totalParticipants = Number(market.activeParticipantCount || 0) || 0;
 
     return {
       title: market.title || `${p1.name || "?"} vs ${p2.name || "?"}`,

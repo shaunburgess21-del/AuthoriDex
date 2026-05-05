@@ -188,18 +188,15 @@ export default function CategoryRaceDetailPage() {
   const totalPool = useMemo(() => {
     if (!market) return 0;
     const entries = market.entries || [];
-    return (
-      entries.reduce((sum: number, e: any) => sum + Number(e.totalStake || 0), 0) +
-      Number(market.seedVolume || 0)
+    return entries.reduce(
+      (sum: number, e: any) => sum + Number(e.totalStake || 0),
+      0,
     );
   }, [market]);
 
   const totalParticipants = useMemo(() => {
     if (!market) return 0;
-    return (
-      (Number(market.activeParticipantCount || 0) || 0) +
-      Number(market.seedConfig?.participants || 0)
-    );
+    return Number(market.activeParticipantCount || 0) || 0;
   }, [market]);
 
   const userBet = useMemo(() => {

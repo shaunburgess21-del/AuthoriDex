@@ -372,7 +372,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       upMultiplier,
       downMultiplier,
       endTime: "",
-      totalPool: upStake + downStake + Number(m.seedVolume || 0),
+      totalPool: upStake + downStake,
       upPoolPercent: upPercent || 50,
       category: normalizeMarketCategory(m.category || person.category || "misc") as CategoryFilter,
       upEntryId: upEntry?.id,
@@ -395,7 +395,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       const s1 = Number(e1.totalStake || 0);
       const s2 = Number(e2.totalStake || 0);
       const total = s1 + s2 || 1;
-      const totalPool = entries.reduce((sum: number, entry: any) => sum + Number(entry.totalStake || 0), 0) + Number(m.seedVolume || 0);
+      const totalPool = entries.reduce((sum: number, entry: any) => sum + Number(entry.totalStake || 0), 0);
       return {
         id: m.id,
         title: m.title || `${p1.name || "?"} vs ${p2.name || "?"}`,
@@ -424,7 +424,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
     const dbMarkets = (nativeGainerData || []).filter((m: any) => m.visibility === "live");
     const all: TopGainerMarket[] = dbMarkets.map((m: any) => {
       const entries = m.entries || [];
-      const totalPool = entries.reduce((sum: number, entry: any) => sum + Number(entry.totalStake || 0), 0) + Number(m.seedVolume || 0);
+      const totalPool = entries.reduce((sum: number, entry: any) => sum + Number(entry.totalStake || 0), 0);
       const openingScoresMap = new Map<string, number>();
       const rawOpeningScores = (m.metadata as any)?.openingScores;
       if (Array.isArray(rawOpeningScores)) {

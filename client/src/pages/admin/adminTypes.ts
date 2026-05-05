@@ -78,8 +78,6 @@ export interface PredictionMarket {
   resolutionSources: { label: string; url?: string }[] | null;
   resolutionNotes: string | null;
   resolveMethod: string | null;
-  seedParticipants: number | null;
-  seedVolume: string | null;
   underlying: string | null;
   metric: string | null;
   strike: string | null;
@@ -99,7 +97,6 @@ export interface PredictionMarket {
   visibility: string | null;
   isLive: boolean | null;
   inactiveMessage: string | null;
-  seedConfig: any;
   weekNumber: number | null;
   /** Admin drag-order for World Markets (community); 0 for other market types. */
   cmsDisplayOrder?: number;
@@ -108,7 +105,6 @@ export interface PredictionMarket {
 export interface MarketEntryForm {
   label: string;
   description: string;
-  seedCount: number;
   imageUrl: string;
   entryPersonId: string;
   entryPersonName: string;

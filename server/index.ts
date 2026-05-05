@@ -12,7 +12,6 @@ import { runDataIngestion, hydrateTrendingPeopleFromSnapshots } from "./jobs/ing
 import { startLiveTickScheduler, setLastFullRefreshAt, applySnapBackDampening } from "./jobs/live-tick";
 import { startNotificationsDerivationScheduler } from "./jobs/notifications-derivation";
 import { startMarketResolverScheduler } from "./jobs/market-resolver";
-import { runSeedBatch } from "./jobs/seed-engine";
 import { startAgentRunnerScheduler } from "./agents/agentRunner";
 import { startActionWorkerScheduler } from "./agents/actionWorker";
 import { generateAllWeeklyMarkets, startMarketGeneratorScheduler } from "./jobs/market-generator";
@@ -426,33 +425,6 @@ function startIngestionScheduler() {
   scheduleNextRun();
 }
 
-function startSeedEngineScheduler() {
-  if (SERVERLESS_MODE) return;
-  log("[Seed Engine] Starting scheduler (hourly at :30 past each hour, Mon-Tue only)");
-
-  function scheduleNextSeedRun() {
-    const now = new Date();
-    const next = new Date(now);
-    next.setMinutes(30, 0, 0);
-    if (next <= now) next.setHours(next.getHours() + 1);
-    const ms = next.getTime() - now.getTime();
-    log(`[Seed Engine] Next run at ${next.toISOString()} (in ${Math.round(ms / 1000 / 60)} min)`);
-    setTimeout(async () => {
-      try {
-        const result = await runSeedBatch();
-        if (result.processed > 0) {
-          log(`[Seed Engine] Batch complete: ${result.processed} markets seeded, ${result.totalCreditsDistributed} credits distributed`);
-        }
-      } catch (e) {
-        log(`[Seed Engine] Error: ${e}`);
-      }
-      scheduleNextSeedRun();
-    }, ms);
-  }
-
-  scheduleNextSeedRun();
-}
-
 function formatError(error: unknown): string {
   if (error instanceof Error) {
     return error.stack || error.message;
@@ -727,8 +699,6 @@ async function startServer() {
     if (!SERVERLESS_MODE) {
       startScheduler("NotificationsDerivation", startNotificationsDerivationScheduler);
     }
-
-    startScheduler("Seed Engine", startSeedEngineScheduler);
 
     // Start market auto-resolver (resolves expired prediction markets every 5 min)
     if (!SERVERLESS_MODE) {

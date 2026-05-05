@@ -957,8 +957,6 @@ export const predictionMarkets = pgTable("prediction_markets", {
   resolutionSources: jsonb("resolution_sources"), // [{label, url?}]
   resolutionNotes: text("resolution_notes"), // Admin notes on how it was resolved
   resolveMethod: text("resolve_method"), // 'admin_manual' | 'oracle' | 'api'
-  seedParticipants: integer("seed_participants").default(0), // Display seed for social proof
-  seedVolume: numeric("seed_volume").default("0"), // Display seed for pool volume
   underlying: text("underlying"), // For updown: e.g. "Bitcoin", "S&P 500"
   metric: text("metric"), // For updown: e.g. "price", "market cap"
   strike: numeric("strike"), // For updown: the strike value
@@ -968,7 +966,6 @@ export const predictionMarkets = pgTable("prediction_markets", {
   isLive: boolean("is_live").default(true), // Legacy - use visibility instead
   visibility: text("visibility").default("live"), // draft | live | inactive | archived
   inactiveMessage: text("inactive_message"), // Custom message shown on inactive cards (e.g. "Coming Soon")
-  seedConfig: jsonb("seed_config"),
   weekNumber: integer("week_number"),
   tieRule: text("tie_rule").default("refund"), // 'refund' | 'down_wins' | 'up_wins'
   cadence: text("cadence").default("weekly"), // 'daily' | 'weekly' | 'custom'
@@ -1003,7 +1000,6 @@ export const marketEntries = pgTable("market_entries", {
   resolutionStatus: text("resolution_status").notNull().default("pending"), // 'pending', 'winner', 'loser', 'void'
   resolutionNotes: text("resolution_notes"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
-  seedCount: integer("seed_count").default(0), // Display seed for social proof on this entry
   imageUrl: text("image_url"), // Avatar/image for this entry (manual URL or resolved from linked person)
   noStake: integer("no_stake").notNull().default(0), // Total credits staked "No" on this entry
 }, (table) => ({

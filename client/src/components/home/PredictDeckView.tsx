@@ -293,14 +293,16 @@ function CommunityCard({
   onNavigate: (slug: string, pick?: string) => void;
 }) {
   const entries = market.entries || [];
-  const totalPool = entries.reduce((sum: number, e: any) => sum + (e.totalStake || 0) + (e.seedCount || 0), 0);
-  const entrySeedTotal = entries.reduce((sum: number, e: any) => sum + (e.seedCount || 0), 0);
-  const participants = (market.totalParticipants || 0) + entrySeedTotal;
-  
+  const totalPool = entries.reduce(
+    (sum: number, e: any) => sum + (e.totalStake || 0) + (e.noStake || 0),
+    0,
+  );
+  const participants = market.totalParticipants || 0;
+
   const entry1 = entries[0];
   const entry2 = entries[1];
-  const stake1 = (entry1?.totalStake || 0) + (entry1?.seedCount || 0);
-  const stake2 = (entry2?.totalStake || 0) + (entry2?.seedCount || 0);
+  const stake1 = (entry1?.totalStake || 0) + (entry1?.noStake || 0);
+  const stake2 = (entry2?.totalStake || 0) + (entry2?.noStake || 0);
   const total = stake1 + stake2 || 1;
   const pct1 = Math.round((stake1 / total) * 100);
   const pct2 = 100 - pct1;
@@ -343,8 +345,8 @@ function CommunityCard({
         {entries.length > 2 && (
           <div className="space-y-2 mb-3">
             {entries.slice(0, 1).map((entry: any) => {
-              const entryStake = (entry.totalStake || 0) + (entry.seedCount || 0);
-              const totalAll = entries.reduce((s: number, e: any) => s + (e.totalStake || 0) + (e.seedCount || 0), 0) || 1;
+              const entryStake = (entry.totalStake || 0) + (entry.noStake || 0);
+              const totalAll = entries.reduce((s: number, e: any) => s + (e.totalStake || 0) + (e.noStake || 0), 0) || 1;
               const pct = Math.round((entryStake / totalAll) * 100);
               return (
                 <div key={entry.id} className="flex items-center gap-2 text-sm font-medium">
@@ -596,7 +598,15 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
       const matchesCategory = categoryFilter === "all" || categoryFilter === "trending" || m.category === categoryFilter;
       const matchesSearch = !searchQuery || m.title?.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesCategory && matchesSearch;
-    }).sort((a: any, b: any) => categoryFilter === "trending" ? ((b.seedVolume ?? 0) - (a.seedVolume ?? 0)) : 0),
+    }).sort((a: any, b: any) => {
+      if (categoryFilter !== "trending") return 0;
+      const poolOf = (m: any) =>
+        (m.entries || []).reduce(
+          (sum: number, e: any) => sum + (e.totalStake || 0) + (e.noStake || 0),
+          0,
+        );
+      return poolOf(b) - poolOf(a);
+    }),
     [categoryFilter, searchQuery, openMarkets]
   );
 
