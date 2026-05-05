@@ -299,6 +299,7 @@ This is the v1 "discard at signup" behaviour. If/when we revisit and decide to b
 - Anonymous engagement migration at signup (revisit D8).
 - CAPTCHA on (N+1)th attempt.
 - Budget reset / amnesty mechanic.
+- Add automated test coverage for anon-budget (unit + integration). Deferred from Stage 8 — cost-benefit flips when public users land.
 
 ## Verification checklist (post-merge to main)
 

@@ -1,12 +1,19 @@
-# Phase 4 — Manual test checklist (Stages 6 & 7)
+# Phase 4 — Manual test checklist
 
-Run before Stage 7 kickoff. Pre-deploy confidence pass on the pre-signup
-context modal across both variants, all three dismissal paths, popstate
-sync, accessibility, and mobile responsiveness.
+Canonical manual-test doc for the anonymous-voting-budget feature.
+Covers four scopes:
 
-This file is a working scratch — commit separately as `chore(docs)` if
-you want it kept, or delete after Stage 6 ships to main. **Do not bundle
-it into the Stage 7 commit.**
+- **Stage 6** — pre-signup context modal (variants, dismissal paths,
+  popstate, accessibility, responsiveness).
+- **Stage 7** — end-to-end gate flow + redirectAfterLogin across the
+  11 vote-eligible surfaces and PredictPage signup prompts.
+- **Post-deploy verification** — production smoke after each push to
+  prod.
+- **Post-merge to main verification** — final confidence pass once
+  the branch lands on `main`.
+
+Stage 8 automated test coverage was deferred — see "Phase 4a follow-ups"
+in `anonymous-voting-implementation.md` for the rationale.
 
 ## Setup
 
@@ -435,3 +442,48 @@ flag as a Stage 8 manual-verification finding for Phase 4a inclusion.
 - [ ] Browser-back behaviour verified.
 - [ ] Phase 4a deferred items confirmed expected (not blocking).
 - [ ] Embedded widget sanity check passed.
+
+---
+
+## Post-deploy verification (production smoke)
+
+After each push to production, run through the brief's manual
+verification post-deploy items (`anonymous-voting-implementation.md`
+lines 268-283). Verbatim:
+
+1. Open production VoxDex in incognito.
+2. Verify fdx_sid cookie is set on first page load.
+3. Cast 8 votes across different cards. Each succeeds.
+4. Cast a 9th — verify redirect to /login?reason=vote_limit_reached.
+5. Verify popup appears on LoginPage.
+6. Close the popup — verify LoginPage stays accessible.
+7. Sign up.
+8. Verify redirect back to Vote page.
+9. Verify anon_vote_budget rows for that fdx_sid are gone.
+10. Verify the original anonymous votes in votes etc. are also gone.
+11. Verify the now-authenticated user can vote again, no gate.
+12. Re-vote on a target previously voted as anonymous — confirm fresh vote.
+13. Test the same flow on Predict — verify popup variant B.
+14. Test the IP cap by scripting 40 anonymous votes across browsers — verify 41st gets blocked.
+
+---
+
+## Post-merge to main verification
+
+Once `feat/anonymous-voting-budget` merges into `main`, run the
+brief's verification checklist (`anonymous-voting-implementation.md`
+lines 303-317). Verbatim:
+
+1. Migration 0046_anon_vote_budget row in schema_migrations.
+2. anon_vote_budget table exists in production Supabase.
+3. CHECK constraint rejects invalid surface_type values.
+4. fdx_sid cookie set on first request to any /api/* endpoint.
+5. Anonymous user can vote on all 7 surfaces.
+6. After 8 distinct-target votes, 9th attempt redirects.
+7. Popup appears on LoginPage with correct copy variant.
+8. Re-voting on same target doesn't consume budget.
+9. Value-vote + approval-rating on same person = 1 unit.
+10. Predict page surfaces popup variant B.
+11. Signup flow deletes anon_vote_budget rows + anonymous vote rows.
+12. Post-signup return lands on the original card with action ready.
+13. Per-IP cap fires correctly at 40 attempts.
