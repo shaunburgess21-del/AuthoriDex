@@ -31,7 +31,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { getAuthHeaders } from "@/lib/queryClient";
 import { ProfileTabs, type ProfileTab } from "@/components/ProfileTabs";
 import { MyVoteCard, type MyVoteCardData } from "@/components/me/MyVoteCard";
@@ -49,6 +48,7 @@ import {
 } from "recharts";
 
 type UnifiedVote = MyVoteCardData;
+type VoteStats = { uniqueVotes: number; voteActions: number; detectedRefinements?: number };
 
 // Shared colors per vote type so the doughnut, the card accent, and the filter
 // chips all reinforce each other.
@@ -81,18 +81,21 @@ const PERSON_VOTE_TYPES = new Set([
   "overall_rating",
 ]);
 
-const VOTE_TYPES = [
+/** Filter chips + overview shortcuts — excludes legacy `sentiment` (no UI surface today). */
+const VOTE_TYPE_FILTERS = [
   { value: "overall_rating", label: "Overall Rating", icon: ThumbsUp },
   { value: "face_off", label: "Matchups", icon: Swords },
-  { value: "sentiment", label: "Over/Underrated", icon: TrendingUp },
-  { value: "value_vote", label: "Value Votes", icon: Star },
+  { value: "value_vote", label: "Underrated/Overrated", icon: Star },
   { value: "trending_poll", label: "Sentiment Polls", icon: BarChart3 },
   { value: "opinion_poll", label: "Opinion Polls", icon: MessageCircle },
   { value: "image_curate", label: "Image Curate", icon: ImageIcon },
   { value: "induction", label: "Induction", icon: UserPlus },
 ] as const;
 
-type VoteTypeValue = (typeof VOTE_TYPES)[number]["value"];
+type VoteTypeValue = (typeof VOTE_TYPE_FILTERS)[number]["value"];
+
+/** URL/API still accepts `sentiment` for legacy rows (bookmarks, doughnut slice). */
+type MeVotesFilterParam = VoteTypeValue | "sentiment";
 
 const VALID_TABS = ["overview", "votes", "impact"] as const;
 type VotesTab = (typeof VALID_TABS)[number];
@@ -105,8 +108,14 @@ const TABS: ProfileTab[] = [
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
+const LEGACY_VOTE_TYPE_LABELS: Record<string, string> = {
+  sentiment: "Daily Over/Under (legacy)",
+};
+
 function getVoteTypeLabel(voteType: string) {
-  return VOTE_TYPES.find((t) => t.value === voteType)?.label ?? voteType;
+  const fromFilters = VOTE_TYPE_FILTERS.find((t) => t.value === voteType)?.label;
+  if (fromFilters) return fromFilters;
+  return LEGACY_VOTE_TYPE_LABELS[voteType] ?? voteType;
 }
 
 function getInitialTab(): VotesTab {
@@ -115,10 +124,11 @@ function getInitialTab(): VotesTab {
   return VALID_TABS.includes(param as VotesTab) ? (param as VotesTab) : "overview";
 }
 
-function getInitialVoteFilter(): VoteTypeValue | null {
+function getInitialVoteFilter(): MeVotesFilterParam | null {
   if (typeof window === "undefined") return null;
   const param = new URLSearchParams(window.location.search).get("type");
-  const match = VOTE_TYPES.find((t) => t.value === param);
+  if (param === "sentiment") return "sentiment";
+  const match = VOTE_TYPE_FILTERS.find((t) => t.value === param);
   return match ? match.value : null;
 }
 
@@ -200,7 +210,7 @@ export default function VotesPage() {
   const { user, profile } = useAuth();
   const [, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState<VotesTab>(getInitialTab);
-  const [activeFilter, setActiveFilterState] = useState<VoteTypeValue | null>(
+  const [activeFilter, setActiveFilterState] = useState<MeVotesFilterParam | null>(
     getInitialVoteFilter,
   );
   const [hiddenOnly, setHiddenOnlyState] = useState<boolean>(getInitialHiddenOnly);
@@ -221,7 +231,7 @@ export default function VotesPage() {
     writeQuery({ tab: tab === "overview" ? null : tab });
   };
 
-  const setActiveFilter = (next: VoteTypeValue | null) => {
+  const setActiveFilter = (next: MeVotesFilterParam | null) => {
     setActiveFilterState(next);
     writeQuery({ type: next });
   };
@@ -255,6 +265,17 @@ export default function VotesPage() {
     enabled: !!user,
   });
 
+  const { data: voteStats } = useQuery<VoteStats>({
+    queryKey: ["/api/me/vote-stats"],
+    queryFn: async () => {
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch("/api/me/vote-stats", { credentials: "include", headers: authHeaders });
+      if (!res.ok) throw new Error("Failed to fetch vote stats");
+      return res.json();
+    },
+    enabled: !!user,
+  });
+
   const visibility = useItemVisibility();
   const profileIsPrivate = profile ? profile.isPublic === false : false;
 
@@ -268,10 +289,11 @@ export default function VotesPage() {
   const filtered = hiddenOnly ? list.filter((v) => v.hidden) : list;
 
   const totalCount = useMemo(() => {
+    if (voteStats?.uniqueVotes !== undefined) return voteStats.uniqueVotes;
     if (allVotes) return allVotes.length;
     if (list.length) return list.length;
     return profile?.totalVotes ?? 0;
-  }, [allVotes, list.length, profile?.totalVotes]);
+  }, [voteStats?.uniqueVotes, allVotes, list.length, profile?.totalVotes]);
 
   const hiddenCount = useMemo(() => list.filter((v) => v.hidden).length, [list]);
 
@@ -354,6 +376,7 @@ export default function VotesPage() {
             allVotes={allVotes ?? []}
             hiddenCount={allVotes ? allVotes.filter((v) => v.hidden).length : 0}
             totalVotes={totalCount}
+            voteActions={voteStats?.voteActions ?? null}
             currentStreak={profile?.currentStreak ?? 0}
             onJumpToHidden={() => {
               setHiddenOnly(true);
@@ -407,6 +430,7 @@ function OverviewTab({
   allVotes,
   hiddenCount,
   totalVotes,
+  voteActions,
   currentStreak,
   onJumpToHidden,
   onJumpToVotes,
@@ -417,11 +441,12 @@ function OverviewTab({
   allVotes: UnifiedVote[];
   hiddenCount: number;
   totalVotes: number;
+  voteActions: number | null;
   currentStreak: number;
   onJumpToHidden: () => void;
   onJumpToVotes: () => void;
   onJumpToImpact: () => void;
-  onFilterAndJumpToVotes: (type: VoteTypeValue) => void;
+  onFilterAndJumpToVotes: (type: MeVotesFilterParam) => void;
   isLoading: boolean;
 }) {
   const monthlyData = useMemo(() => {
@@ -540,11 +565,18 @@ function OverviewTab({
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <StatTile
           icon={<Vote className="h-4 w-4 text-cyan-500" />}
-          label="Total votes"
+          label="Unique votes"
           value={totalVotes.toLocaleString()}
+          helper="Current records"
+        />
+        <StatTile
+          icon={<Sparkles className="h-4 w-4 text-amber-500" />}
+          label="Vote actions"
+          value={(voteActions ?? totalVotes).toLocaleString()}
+          helper={voteActions !== null ? "Votes + detected edits" : "Votes + edits"}
         />
         <StatTile
           icon={<Flame className="h-4 w-4 text-orange-500" />}
@@ -653,7 +685,11 @@ function OverviewTab({
               centerSubtitle="votes"
               height={240}
               onSegmentClick={(id) => {
-                const match = VOTE_TYPES.find((t) => t.value === id);
+                if (id === "sentiment") {
+                  onFilterAndJumpToVotes("sentiment");
+                  return;
+                }
+                const match = VOTE_TYPE_FILTERS.find((t) => t.value === id);
                 if (match) onFilterAndJumpToVotes(match.value);
               }}
             />
@@ -859,7 +895,7 @@ function JourneyTimeline({ allVotes }: { allVotes: UnifiedVote[] }) {
       { id: "v100", label: "100 votes", ...n(100) },
       { id: "first_matchup", label: "First matchup", earned: firstMatchup, progress: firstMatchup ? 1 : 0 },
       { id: "first_rating", label: "First rating", earned: firstRating, progress: firstRating ? 1 : 0 },
-      { id: "first_value", label: "First value vote", earned: firstValue, progress: firstValue ? 1 : 0 },
+      { id: "first_value", label: "First Underrated/Overrated", earned: firstValue, progress: firstValue ? 1 : 0 },
     ];
   }, [allVotes]);
 
@@ -1021,8 +1057,8 @@ function VotesTabPanel({
   hiddenCount: number;
   hiddenOnly: boolean;
   onToggleHiddenOnly: () => void;
-  activeFilter: VoteTypeValue | null;
-  onChangeFilter: (value: VoteTypeValue | null) => void;
+  activeFilter: MeVotesFilterParam | null;
+  onChangeFilter: (value: MeVotesFilterParam | null) => void;
   onToggleVisibility: (vote: UnifiedVote, hidden: boolean) => void;
   profileIsPrivate: boolean;
   isPending: boolean;
@@ -1043,7 +1079,7 @@ function VotesTabPanel({
           >
             All
           </FilterPill>
-          {VOTE_TYPES.map((t) => {
+          {VOTE_TYPE_FILTERS.map((t) => {
             const Icon = t.icon;
             return (
               <FilterPill
@@ -1058,6 +1094,17 @@ function VotesTabPanel({
               </FilterPill>
             );
           })}
+          {activeFilter === "sentiment" && (
+            <FilterPill
+              active
+              accent="slate"
+              onClick={() => onChangeFilter(null)}
+              dataTestId="filter-pill-sentiment-legacy"
+            >
+              <TrendingUp className="h-3 w-3" />
+              {LEGACY_VOTE_TYPE_LABELS.sentiment}
+            </FilterPill>
+          )}
           <FilterPill
             active={hiddenOnly}
             accent="amber"
@@ -1129,6 +1176,8 @@ function VotesTabPanel({
 
 // ---------- Tab: Impact ----------
 
+const RATING_ZONE_LABELS = ["Hate", "Dislike", "Neutral", "Like", "Love"] as const;
+
 interface ShapedSubject {
   key: string;
   name: string;
@@ -1139,6 +1188,13 @@ interface ShapedSubject {
   imageSlug: string | null;
   /** Counts per vote section (voteType) for this person within the current filter. */
   voteMix: Record<string, number>;
+  /** Overall Rating: sum of 1–5 scores for averaging. */
+  ratingSum: number;
+  ratingCount: number;
+  /** Underrated / Overrated / Fairly rated (value_vote + legacy sentiment). */
+  valueUnderrated: number;
+  valueOverrated: number;
+  valueFair: number;
 }
 
 function computeSubjectShaperEarned(votes: UnifiedVote[]): boolean {
@@ -1158,7 +1214,7 @@ function computeSubjectShaperEarned(votes: UnifiedVote[]): boolean {
 
 function aggregateShapedSubjects(
   votes: UnifiedVote[],
-  sectionFilter: VoteTypeValue | null,
+  sectionFilter: MeVotesFilterParam | null,
 ): ShapedSubject[] {
   const byKey = new Map<string, ShapedSubject>();
   for (const v of votes) {
@@ -1176,13 +1232,30 @@ function aggregateShapedSubjects(
       avatar: null,
       imageSlug: null,
       voteMix: {},
+      ratingSum: 0,
+      ratingCount: 0,
+      valueUnderrated: 0,
+      valueOverrated: 0,
+      valueFair: 0,
     };
     cur.total += 1;
     cur.voteMix[v.voteType] = (cur.voteMix[v.voteType] ?? 0) + 1;
     if (v.voteType === "overall_rating") {
       const r = Math.round(v.value || 0);
+      cur.ratingSum += r;
+      cur.ratingCount += 1;
       if (r >= 4) cur.up += 1;
       else if (r <= 2) cur.down += 1;
+    } else if (v.voteType === "value_vote" || v.voteType === "sentiment") {
+      if (v.value > 0) {
+        cur.up += 1;
+        cur.valueUnderrated += 1;
+      } else if (v.value < 0) {
+        cur.down += 1;
+        cur.valueOverrated += 1;
+      } else {
+        cur.valueFair += 1;
+      }
     } else {
       if (v.value > 0) cur.up += 1;
       if (v.value < 0) cur.down += 1;
@@ -1206,7 +1279,7 @@ function ImpactVoteMixRow({ mix }: { mix: Record<string, number> }) {
   if (shown.length === 0) return null;
   return (
     <div className="mt-1 flex flex-wrap items-center gap-1">
-      {shown.map(([type, count]) => (
+      {shown.map(([type]) => (
         <span
           key={type}
           className="inline-flex items-center gap-0.5 rounded-full border border-border/50 bg-muted/20 px-1.5 py-0 text-[9px] tabular-nums text-muted-foreground"
@@ -1215,7 +1288,7 @@ function ImpactVoteMixRow({ mix }: { mix: Record<string, number> }) {
             className="h-1.5 w-1.5 shrink-0 rounded-full"
             style={{ backgroundColor: VOTE_TYPE_COLOR[type] ?? "#94a3b8" }}
           />
-          {getVoteTypeLabel(type)} · {count}
+          {getVoteTypeLabel(type)}
         </span>
       ))}
       {overflow > 0 && <span className="text-[9px] text-muted-foreground">+{overflow}</span>}
@@ -1223,40 +1296,139 @@ function ImpactVoteMixRow({ mix }: { mix: Record<string, number> }) {
   );
 }
 
-const SIGNAL_TOOLTIP =
-  "Positive vs negative counts how your vote leaned on Vote (e.g. approve vs disapprove, overrated vs underrated). High/low overall ratings count when they are clearly positive or negative. This is not prediction markets.";
+/** Overall Rating line — shared by filtered Impact rows and All sections summary. */
+function ratingSummaryLine(subject: ShapedSubject): string | null {
+  if (subject.ratingCount === 0) return null;
+  const avg = subject.ratingSum / subject.ratingCount;
+  const r = Math.min(5, Math.max(1, Math.round(avg)));
+  const zone = RATING_ZONE_LABELS[r - 1];
+  if (subject.ratingCount === 1) return `Rated ${r}/5 · ${zone}`;
+  return `Avg ${avg.toFixed(1)}/5 · ${subject.ratingCount} ratings`;
+}
 
-function ImpactNetBalanceBlock({ up, down, total }: { up: number; down: number; total: number }) {
-  const net = up - down;
-  const short =
-    net > 0
-      ? `Net +${net}`
-      : net < 0
-        ? `Net ${net}`
-        : up === 0 && down === 0
-          ? "Neutral"
-          : "Balanced";
-  const detail =
-    net > 0
-      ? `Your signals on this person lean positive by ${net} (difference of positive-leaning vs negative-leaning votes). Not related to prediction Up/Down markets.`
-      : net < 0
-        ? `Your signals on this person lean negative by ${Math.abs(net)}. Vote activity only—not prediction markets.`
-        : "Positive and negative-leaning votes are in balance for this person.";
+/** Underrated/Overrated (and legacy sentiment) — shared by filtered Impact and All sections. */
+function valueVoteSummaryLine(subject: ShapedSubject): string | null {
+  const ve = subject.valueUnderrated + subject.valueOverrated + subject.valueFair;
+  if (ve === 0) return null;
+  if (subject.total === 1 && ve === 1) {
+    const pick = subject.valueUnderrated
+      ? "Underrated"
+      : subject.valueOverrated
+        ? "Overrated"
+        : "Fairly rated";
+    return `Your pick: ${pick}`;
+  }
+  const parts: string[] = [];
+  if (subject.valueUnderrated > 0) parts.push(`Underrated · ${subject.valueUnderrated}`);
+  if (subject.valueOverrated > 0) parts.push(`Overrated · ${subject.valueOverrated}`);
+  if (subject.valueFair > 0) parts.push(`Fairly rated · ${subject.valueFair}`);
+  return parts.join(" · ");
+}
+
+function buildAllSectionsSummaryParts(subject: ShapedSubject): string[] {
+  const parts: string[] = [];
+  const ratingLine = ratingSummaryLine(subject);
+  if (ratingLine) parts.push(ratingLine);
+  const valueLine = valueVoteSummaryLine(subject);
+  if (valueLine) parts.push(valueLine);
+  const img = subject.voteMix.image_curate ?? 0;
+  if (img > 0) parts.push(`${img} image upvote${img === 1 ? "" : "s"}`);
+  const ind = subject.voteMix.induction ?? 0;
+  if (ind > 0) parts.push(`${ind} induction vote${ind === 1 ? "" : "s"}`);
+  if (subject.total > 1) parts.push(`${subject.total} votes total`);
+  return parts;
+}
+
+function buildAllSectionsSummary(subject: ShapedSubject): {
+  primary: string;
+  secondaryMobile: string | null;
+  secondaryDesktop: string | null;
+} {
+  const parts = buildAllSectionsSummaryParts(subject);
+  if (parts.length === 0) {
+    return {
+      primary: `${subject.total} vote${subject.total === 1 ? "" : "s"} with this person`,
+      secondaryMobile: null,
+      secondaryDesktop: null,
+    };
+  }
+  const primary = parts[0];
+  const rest = parts.slice(1);
+  const mobShown = rest.slice(0, 1);
+  const deskShown = rest.slice(0, 2);
+  const mobOverflow = rest.length - mobShown.length;
+  const deskOverflow = rest.length - deskShown.length;
+  const fmt = (shown: string[], overflow: number): string | null => {
+    if (shown.length === 0 && overflow <= 0) return null;
+    const joined = shown.join(" · ");
+    if (overflow > 0) return joined ? `${joined} · +${overflow} more` : `+${overflow} more`;
+    return joined;
+  };
+  return {
+    primary,
+    secondaryMobile: fmt(mobShown, mobOverflow),
+    secondaryDesktop: fmt(deskShown, deskOverflow),
+  };
+}
+
+function impactSubjectContextLine(subject: ShapedSubject, filter: MeVotesFilterParam): string {
+  switch (filter) {
+    case "value_vote":
+    case "sentiment": {
+      const ve = subject.valueUnderrated + subject.valueOverrated + subject.valueFair;
+      if (ve === 0) return "No directional picks recorded";
+      return valueVoteSummaryLine(subject)!;
+    }
+    case "overall_rating": {
+      return ratingSummaryLine(subject) ?? "";
+    }
+    case "image_curate":
+      return `${subject.total} image upvote${subject.total === 1 ? "" : "s"}`;
+    case "induction":
+      return `${subject.total} induction vote${subject.total === 1 ? "" : "s"}`;
+    default:
+      return `${subject.total} vote${subject.total === 1 ? "" : "s"}`;
+  }
+}
+
+function ImpactSubjectSecondary({
+  subject,
+  impactSectionFilter,
+}: {
+  subject: ShapedSubject;
+  impactSectionFilter: MeVotesFilterParam | null;
+}) {
+  const filtered = impactSectionFilter !== null;
+
+  if (filtered) {
+    return (
+      <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+        {impactSubjectContextLine(subject, impactSectionFilter)}
+      </p>
+    );
+  }
 
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <div className="flex shrink-0 cursor-default flex-col items-end gap-0.5 text-right">
-          <span className="font-mono text-lg font-bold tabular-nums leading-none">{total}</span>
-          <span className="max-w-[5.5rem] text-[10px] leading-tight text-muted-foreground">{short}</span>
-        </div>
-      </TooltipTrigger>
-      <TooltipContent side="left" className="max-w-xs text-xs">
-        {detail}
-      </TooltipContent>
-    </Tooltip>
+    <div className="mt-0.5 space-y-1">
+      {(() => {
+        const summary = buildAllSectionsSummary(subject);
+        return (
+          <>
+            <p className="text-[11px] leading-snug text-muted-foreground">{summary.primary}</p>
+            {(summary.secondaryMobile || summary.secondaryDesktop) && (
+              <p className="text-[10px] leading-snug text-muted-foreground/90">
+                {summary.secondaryMobile && <span className="sm:hidden">{summary.secondaryMobile}</span>}
+                {summary.secondaryDesktop && <span className="hidden sm:inline">{summary.secondaryDesktop}</span>}
+              </p>
+            )}
+          </>
+        );
+      })()}
+      <ImpactVoteMixRow mix={subject.voteMix} />
+    </div>
   );
 }
+
 
 function ImpactTab({
   allVotes,
@@ -1269,13 +1441,13 @@ function ImpactTab({
   onJumpToVotes: () => void;
   setLocation: (to: string) => void;
 }) {
-  const [impactSectionFilter, setImpactSectionFilter] = useState<VoteTypeValue | null>(null);
+  const [impactSectionFilter, setImpactSectionFilter] = useState<MeVotesFilterParam | null>(null);
 
   const impactSectionOptions = useMemo(() => {
-    const seen = new Set<VoteTypeValue>();
+    const seen = new Set<MeVotesFilterParam>();
     for (const v of allVotes) {
       if (PERSON_VOTE_TYPES.has(v.voteType)) {
-        seen.add(v.voteType as VoteTypeValue);
+        seen.add(v.voteType as MeVotesFilterParam);
       }
     }
     return Array.from(seen).sort((a, b) => getVoteTypeLabel(a).localeCompare(getVoteTypeLabel(b)));
@@ -1446,29 +1618,8 @@ function ImpactTab({
                   <p className="truncate text-sm font-semibold" title={s.name}>
                     {s.name}
                   </p>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="flex cursor-default flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
-                        {s.up > 0 && (
-                          <span className="text-emerald-600 dark:text-emerald-400">
-                            +{s.up} positive signal{s.up === 1 ? "" : "s"}
-                          </span>
-                        )}
-                        {s.down > 0 && (
-                          <span className="text-rose-600 dark:text-rose-400">
-                            −{s.down} negative signal{s.down === 1 ? "" : "s"}
-                          </span>
-                        )}
-                        {s.up === 0 && s.down === 0 && <span>Neutral or mid ratings only</span>}
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom" className="max-w-xs text-xs">
-                      {SIGNAL_TOOLTIP}
-                    </TooltipContent>
-                  </Tooltip>
-                  <ImpactVoteMixRow mix={s.voteMix} />
+                  <ImpactSubjectSecondary subject={s} impactSectionFilter={impactSectionFilter} />
                 </div>
-                <ImpactNetBalanceBlock up={s.up} down={s.down} total={s.total} />
               </li>
             ))}
           </ol>

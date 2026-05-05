@@ -7099,6 +7099,60 @@ Only return the JSON object.`;
   });
 
   // Get user's votes
+  app.get("/api/me/vote-stats", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.userId!;
+      const asNum = (v: unknown) => Number(v ?? 0);
+
+      const [
+        faceOffCountRows,
+        sentimentCountRows,
+        valueCountRows,
+        trendPollCountRows,
+        opinionPollCountRows,
+        imageCountRows,
+        inductionCountRows,
+        overallRatingCountRows,
+        valueRefinementRows,
+      ] = await Promise.all([
+        db.select({ count: sql<number>`count(*)` }).from(votes).where(and(eq(votes.userId, userId), eq(votes.voteType, "face_off"))),
+        db.select({ count: sql<number>`count(*)` }).from(sentimentVotes).where(eq(sentimentVotes.userId, userId)),
+        db.select({ count: sql<number>`count(*)` }).from(celebrityValueVotes).where(eq(celebrityValueVotes.userId, userId)),
+        db.select({ count: sql<number>`count(*)` }).from(trendingPollVotes).where(eq(trendingPollVotes.userId, userId)),
+        db.select({ count: sql<number>`count(*)` }).from(opinionPollVotes).where(eq(opinionPollVotes.userId, userId)),
+        db.select({ count: sql<number>`count(*)` }).from(imageVotes).where(eq(imageVotes.userId, userId)),
+        db.select({ count: sql<number>`count(*)` }).from(inductionVotes).where(eq(inductionVotes.userId, userId)),
+        db.select({ count: sql<number>`count(*)` }).from(userVotes).where(eq(userVotes.userId, userId)),
+        // value_vote keeps createdAt+updatedAt, so we can surface detectable refinements.
+        db.select({ count: sql<number>`count(*)` })
+          .from(celebrityValueVotes)
+          .where(and(eq(celebrityValueVotes.userId, userId), ne(celebrityValueVotes.updatedAt, celebrityValueVotes.createdAt))),
+      ]);
+
+      const uniqueVotes =
+        asNum(faceOffCountRows[0]?.count) +
+        asNum(sentimentCountRows[0]?.count) +
+        asNum(valueCountRows[0]?.count) +
+        asNum(trendPollCountRows[0]?.count) +
+        asNum(opinionPollCountRows[0]?.count) +
+        asNum(imageCountRows[0]?.count) +
+        asNum(inductionCountRows[0]?.count) +
+        asNum(overallRatingCountRows[0]?.count);
+
+      const detectedRefinements = asNum(valueRefinementRows[0]?.count);
+      const voteActions = uniqueVotes + detectedRefinements;
+
+      res.json({
+        uniqueVotes,
+        voteActions,
+        detectedRefinements,
+      });
+    } catch (error: any) {
+      console.error("Error fetching /api/me/vote-stats:", error?.message || error);
+      res.status(500).json({ error: "Failed to fetch vote stats" });
+    }
+  });
+
   app.get("/api/me/votes", requireAuth, async (req: AuthRequest, res) => {
     try {
       const userId = req.userId!;

@@ -73,7 +73,7 @@ const VOTE_STYLES: Record<string, VoteStyle> = {
     accentBar: "bg-cyan-500/70",
   },
   value_vote: {
-    label: "Value",
+    label: "Underrated/Overrated",
     icon: Star,
     gradient: "from-amber-500/25 via-amber-500/10 to-transparent",
     accent: "text-amber-600 dark:text-amber-400",
