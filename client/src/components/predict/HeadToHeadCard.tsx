@@ -116,6 +116,7 @@ export function HeadToHeadCard({
     userPick === 1
       ? "bg-[#3B82F6]/90 text-white border border-[#3B82F6]"
       : "bg-[#7C3AED]/90 text-white border border-[#7C3AED]";
+  const isHot = market.totalPool > 5000 || (market.totalBets ?? market.activeParticipantCount ?? 0) > 50;
 
   return (
     <PredictCard testId={`card-h2h-${market.id}`} className={`relative overflow-hidden max-w-sm mx-auto ${isMarketClosed && !hasPicked ? 'opacity-75' : ''}`}>
@@ -125,13 +126,17 @@ export function HeadToHeadCard({
       </div>
 
       <div className="relative z-10 flex flex-col h-full">
-        <div className="flex items-center justify-between mb-3 gap-2">
-          <MarketCycleStrip
-            bettingCutoff={market.bettingCutoff ?? null}
-            resolveAt={market.endAt ?? null}
-            variant="compact"
-            className="min-w-0"
-          />
+        <div className="flex items-center justify-between mb-2 flex-wrap gap-1">
+          <div className="flex items-center gap-1.5">
+            <Badge variant="outline" className="text-violet-600 dark:text-violet-400 border-violet-500/40 dark:border-violet-500/30 text-[10px]">
+              Weekly
+            </Badge>
+            {isHot && (
+              <Badge variant="outline" className="text-orange-600 dark:text-orange-400 border-orange-500/40 dark:border-orange-500/30 text-[10px]">
+                Hot
+              </Badge>
+            )}
+          </div>
           <InteractiveCategoryPill
             category={market.category}
             onFilter={() => onFilterCategory?.(market.category)}
@@ -140,6 +145,12 @@ export function HeadToHeadCard({
             detailLabel="View Battle Details"
           />
         </div>
+        <MarketCycleStrip
+          bettingCutoff={market.bettingCutoff ?? null}
+          resolveAt={market.endAt ?? null}
+          variant="compact"
+          className="mb-2"
+        />
 
         <Link
           href={`/predict/h2h/${market.id}`}

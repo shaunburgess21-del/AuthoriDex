@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { TouchTooltip } from "@/components/ui/touch-tooltip";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
@@ -122,6 +122,7 @@ export function TopGainerCard({
   const visibleCandidateCount = market.candidateCount ?? market.allCandidates?.length ?? market.totalEntries ?? market.leaders.length;
   const canPick = !isPredicted;
   const racePlace = predictionSummary ? findPickRacePlace(market, predictionSummary.pickLabel) : null;
+  const isHot = market.totalPool > 5000 || (market.totalBets ?? market.activeParticipantCount ?? 0) > 50;
 
   const handlePlacePrediction = () => {
     onShowAllCandidates?.(market);
@@ -129,19 +130,32 @@ export function TopGainerCard({
 
   return (
     <PredictCard testId={`card-gainer-${market.id}`} className={`${isMarketClosed ? 'opacity-75' : ''} ${isShimmering ? 'shimmer-once' : ''}`}>
-      <div className="flex items-center justify-between mb-2">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span className="text-xs text-muted-foreground flex items-center gap-1 cursor-help border-b border-dashed border-muted-foreground/40">
-              <TrendingUp className="h-3 w-3" />
-              Biggest Mover Wins
-              <HelpCircle className="h-3 w-3" />
-            </span>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" className="max-w-[240px]">
-            <p className="text-xs">Pick who will have the highest % gain in their Trend Score this week. The biggest mover wins, not the highest ranked.</p>
-          </TooltipContent>
-        </Tooltip>
+      <div className="mb-2">
+        <TouchTooltip
+          content={<p>Pick who will have the highest % gain in their Trend Score this week. The biggest mover wins, not the highest ranked.</p>}
+          side="bottom"
+          align="start"
+          contentClassName="max-w-[240px] text-xs"
+        >
+          <Badge variant="outline" className="text-muted-foreground border-border/60 text-[10px] cursor-help">
+            <TrendingUp className="h-3 w-3 mr-0.5" />
+            Biggest Mover Wins
+            <HelpCircle className="h-3 w-3 ml-0.5" />
+          </Badge>
+        </TouchTooltip>
+      </div>
+
+      <div className="flex items-center justify-between mb-2 flex-wrap gap-1">
+        <div className="flex items-center gap-1.5">
+          <Badge variant="outline" className="text-violet-600 dark:text-violet-400 border-violet-500/40 dark:border-violet-500/30 text-[10px]">
+            Weekly
+          </Badge>
+          {isHot && (
+            <Badge variant="outline" className="text-orange-600 dark:text-orange-400 border-orange-500/40 dark:border-orange-500/30 text-[10px]">
+              Hot
+            </Badge>
+          )}
+        </div>
         <InteractiveCategoryPill
           category={market.category}
           onFilter={() => onFilterCategory?.(market.category)}
@@ -149,6 +163,12 @@ export function TopGainerCard({
           leaderboardCategories={leaderboardCategories}
         />
       </div>
+      <MarketCycleStrip
+        bettingCutoff={market.bettingCutoff ?? null}
+        resolveAt={market.endAt ?? null}
+        variant="compact"
+        className="mb-2"
+      />
 
       <Link
         href={`/predict/race/${market.id}`}
@@ -216,16 +236,10 @@ export function TopGainerCard({
         )}
       </div>
 
-      <div className="flex items-center justify-between mb-2 gap-2">
+      <div className="mb-2">
         <span className="text-sm font-semibold text-muted-foreground">
           Pool: {market.totalPool.toLocaleString('en-US')} credits
         </span>
-        <MarketCycleStrip
-          bettingCutoff={market.bettingCutoff ?? null}
-          resolveAt={market.endAt ?? null}
-          variant="compact"
-          className="min-w-0"
-        />
       </div>
 
       <div className="mt-auto space-y-2">
