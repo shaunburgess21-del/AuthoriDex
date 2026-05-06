@@ -204,10 +204,9 @@ function buildSimulationProfile(seed: typeof V2_HANDLES[number]): AgentSimulatio
     // voting from the comment sweep is also already halved (because
     // commentCap was halved in the previous tune), so this keeps the
     // half/half split between inline and standalone votes intact.
-    // Halved a second time (round to keep ≥2 so the vote-first inline rule
-    // still has runway each week): liquidity 6→3, noisy 5→3, sharp 3→2,
-    // casual/whale 4→2.
-    weeklyVoteCap: band === "liquidity" ? 3 : band === "noisy" ? 3 : band === "sharp" ? 2 : 2,
+    // Bumped +30% from the second halving (3/3/2/2 -> 4/4/3/3) after the
+    // cohort went silent. Rounding up so vote-first still has runway.
+    weeklyVoteCap: band === "liquidity" ? 4 : band === "noisy" ? 4 : band === "sharp" ? 3 : 3,
     // Comment frequency dialled down ~50% from the post-fix volume after
     // the cohort started commenting "hard and fast" across all surfaces.
     // Both knobs are halved so volume and pacing both come down: halving
@@ -217,14 +216,14 @@ function buildSimulationProfile(seed: typeof V2_HANDLES[number]): AgentSimulatio
     //   noisy/casual: 4 -> 2 weekly comments
     //   sharp/whale:  2 -> 1
     //   liquidity:    1 -> 1 (already minimum)
-    // Caps already at the 1/week floor for sharp/whale/liquidity; halve the
-    // chance instead so they fire roughly every other week. Noisy/casual
-    // halved from 2 → 1.
-    weeklyCommentCap: 1,
-    // Halved a second time: 0.39/0.36/0.19/0.28 -> 0.20/0.18/0.10/0.14.
-    dailyVoteChance: band === "liquidity" ? 0.20 : band === "noisy" ? 0.18 : band === "sharp" ? 0.10 : 0.14,
-    // Halved a second time: 0.07/0.04/0.025 -> 0.035/0.02/0.013.
-    dailyCommentChance: band === "noisy" ? 0.035 : band === "casual" ? 0.02 : 0.013,
+    // Bumped back up after the floor-collapse silenced commenting entirely.
+    // Noisy/casual lifted to 2/wk again; sharp/whale/liquidity stay at 1/wk
+    // floor and we lean on chance for the +30% lift instead.
+    weeklyCommentCap: band === "noisy" || band === "casual" ? 2 : 1,
+    // +30% from 0.20/0.18/0.10/0.14 -> 0.26/0.23/0.13/0.18.
+    dailyVoteChance: band === "liquidity" ? 0.26 : band === "noisy" ? 0.23 : band === "sharp" ? 0.13 : 0.18,
+    // +30% from 0.035/0.02/0.013 -> 0.045/0.026/0.017.
+    dailyCommentChance: band === "noisy" ? 0.045 : band === "casual" ? 0.026 : 0.017,
     commentStyle: band === "sharp" ? "analytical" : band === "noisy" ? "skeptical" : band === "liquidity" ? "short" : "casual",
     bankrollProfile: large ? "large" : band === "liquidity" ? "small" : "normal",
   };
