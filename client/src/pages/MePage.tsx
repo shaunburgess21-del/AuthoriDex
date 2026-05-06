@@ -87,7 +87,7 @@ export default function MePage() {
         </div>
       </header>
 
-      <div className="container mx-auto px-4 py-8 max-w-2xl">
+      <div className="container mx-auto px-2 sm:px-4 py-8 max-w-2xl">
         <h1 className="text-3xl font-serif font-bold mb-6" data-testid="text-me-title">
           My Account
         </h1>

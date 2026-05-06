@@ -106,7 +106,7 @@ export default function FavoritesPage() {
         </div>
       </header>
 
-      <div className="container mx-auto px-4 py-6 max-w-3xl">
+      <div className="container mx-auto px-2 sm:px-4 py-6 max-w-3xl">
         {isLoading ? (
           <div className="space-y-4">
             <Skeleton className="h-28 w-full" />

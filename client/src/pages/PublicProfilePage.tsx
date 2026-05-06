@@ -319,7 +319,7 @@ export default function PublicProfilePage() {
             <Skeleton className="h-6 w-32" />
           </div>
         </header>
-        <div className="container mx-auto px-4 py-8 max-w-2xl">
+        <div className="container mx-auto px-2 sm:px-4 py-8 max-w-2xl">
           <div className="flex items-center gap-4 mb-6">
             <Skeleton className="h-20 w-20 rounded-full" />
             <div className="space-y-2">
@@ -348,7 +348,7 @@ export default function PublicProfilePage() {
             <span className="font-semibold">Profile</span>
           </div>
         </header>
-        <div className="container mx-auto px-4 py-16 max-w-md">
+        <div className="container mx-auto px-2 sm:px-4 py-16 max-w-md">
           <Card className="p-8 text-center">
             <User className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
             <h2 className="text-xl font-semibold mb-2">User Not Found</h2>
@@ -371,7 +371,7 @@ export default function PublicProfilePage() {
             <span className="font-semibold">Profile</span>
           </div>
         </header>
-        <div className="container mx-auto px-4 py-16 max-w-md">
+        <div className="container mx-auto px-2 sm:px-4 py-16 max-w-md">
           <Card className="p-8 text-center">
             <Lock className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
             <h2 className="text-xl font-semibold mb-2">Private Profile</h2>
@@ -406,7 +406,7 @@ export default function PublicProfilePage() {
         </div>
       </header>
 
-      <div className="container mx-auto px-4 py-8 max-w-2xl space-y-6">
+      <div className="container mx-auto px-2 sm:px-4 py-8 max-w-2xl space-y-6">
         {/* Identity Card */}
         <Card className="p-6">
           <div className="flex items-start gap-4 mb-6">

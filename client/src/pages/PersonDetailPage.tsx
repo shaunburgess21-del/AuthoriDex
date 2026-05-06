@@ -670,7 +670,7 @@ function ViewAllPollsOverlay({
   return (
     <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-y-auto premium-scrollbar" data-testid="overlay-view-all-polls">
       <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-xl border-b">
-        <div className="container mx-auto px-4 py-4">
+        <div className="container mx-auto px-2 sm:px-4 py-4">
           <ViewAllOverlayHeader
             onClose={onClose}
             closeTestId="button-close-polls-overlay"
@@ -694,7 +694,7 @@ function ViewAllPollsOverlay({
         </div>
       </div>
       
-      <div className="container mx-auto px-4 py-6 max-w-4xl">
+      <div className="container mx-auto px-2 sm:px-4 py-6 max-w-4xl">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filteredPolls.map((poll) => (
             <FeaturedPollCard
@@ -1176,7 +1176,7 @@ export default function PersonDetailPage() {
           </div>
         </div>
       </header>
-      <div className="container mx-auto px-4 pt-4 md:pt-12 max-w-6xl">
+      <div className="container mx-auto px-2 sm:px-4 pt-4 md:pt-12 max-w-6xl">
         {/* 1. Header: Name + Category */}
         <div className="mb-8">
           <div className="flex gap-6">
@@ -1325,12 +1325,12 @@ export default function PersonDetailPage() {
         id="profile-tabs-section"
         className="sticky top-14 z-10 w-full bg-background border-b border-border/50 shadow-sm py-2"
       >
-        <div className="container mx-auto max-w-6xl px-4">
+        <div className="container mx-auto max-w-6xl px-2 sm:px-4">
           <ProfileTabs activeTab={activeTab} onTabChange={handleTabChange} noBottomMargin />
         </div>
       </div>
 
-      <div className="container mx-auto px-4 pb-12 max-w-6xl">
+      <div className="container mx-auto px-2 sm:px-4 pb-12 max-w-6xl">
         <div className="mt-4">
         {/* OVERVIEW TAB */}
         {activeTab === "overview" && (

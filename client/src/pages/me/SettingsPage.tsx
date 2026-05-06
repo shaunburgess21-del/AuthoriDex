@@ -230,7 +230,7 @@ export default function SettingsPage() {
         </div>
       </header>
 
-      <div className="container mx-auto px-4 py-6 max-w-2xl space-y-6">
+      <div className="container mx-auto px-2 sm:px-4 py-6 max-w-2xl space-y-6">
         <Card className="p-6">
           <div className="flex items-center gap-2 mb-6">
             <User className="h-5 w-5 text-muted-foreground" />

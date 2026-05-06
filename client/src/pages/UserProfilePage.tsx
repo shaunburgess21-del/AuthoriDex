@@ -248,7 +248,7 @@ export default function UserProfilePage() {
         </div>
       </header>
 
-      <div className="container mx-auto px-4 py-8 max-w-6xl">
+      <div className="container mx-auto px-2 sm:px-4 py-8 max-w-6xl">
         {/* Profile card */}
         <div className="mb-6">
           <Card>

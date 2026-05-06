@@ -1238,7 +1238,7 @@ export default function HomePage() {
         </div>
       </div>
       */}
-      <div className="container mx-auto px-4 pt-0 pb-8 max-w-7xl" data-content-section>
+      <div className="container mx-auto px-2 sm:px-4 pt-0 pb-8 max-w-7xl" data-content-section>
                             <div className="flex gap-4 overflow-x-auto scrollbar-hide pb-6 mb-0 md:grid md:grid-cols-3 md:overflow-visible md:pb-2 md:mb-4" data-testid="market-pulse-row">
                 <MarketPulseCard 
                   title="Daily Movers" 

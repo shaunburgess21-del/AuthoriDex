@@ -2510,7 +2510,7 @@ export default function VotePage() {
         className="sticky top-16 z-40 bg-background/80 backdrop-blur-xl border-b"
         data-testid="section-toggles-container"
       >
-            <div className="container mx-auto px-4 py-3 max-w-7xl flex items-center gap-3">
+            <div className="container mx-auto px-2 sm:px-4 py-3 max-w-7xl flex items-center gap-3">
           <ScrollMaskedChipRow className="pb-1 relative flex-1 min-w-0">
             {user && (
               <button
@@ -2564,7 +2564,7 @@ export default function VotePage() {
           </ScrollMaskedChipRow>
         </div>
       </div>
-      <div className="container mx-auto px-4 py-8 max-w-7xl pt-[5px] pb-[5px]">
+      <div className="container mx-auto px-2 sm:px-4 py-8 max-w-7xl pt-[5px] pb-[5px]">
         {/* ZONE 1: Public Opinion - Sentiment Polls Section (First) */}
         {(activeSection === "All" || activeSection === "Sentiment Polls") && (
         <section className="mb-10 mt-[5px]">

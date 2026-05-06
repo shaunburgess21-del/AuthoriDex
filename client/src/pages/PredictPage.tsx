@@ -841,7 +841,7 @@ function FullScreenOverlay({
   return (
     <div ref={scrollRef} onScroll={(e) => saveOverlayScroll(overlayName, e.currentTarget.scrollTop)} className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-y-auto premium-scrollbar" data-testid="overlay-view-all">
       <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-xl border-b">
-        <div className="container mx-auto px-4 py-4">
+        <div className="container mx-auto px-2 sm:px-4 py-4">
           <ViewAllOverlayHeader
             onClose={onClose}
             closeTestId="button-close-overlay"
@@ -867,7 +867,7 @@ function FullScreenOverlay({
         </div>
       </div>
       
-      <div className="container mx-auto px-4 py-6 max-w-7xl">
+      <div className="container mx-auto px-2 sm:px-4 py-6 max-w-7xl">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {children}
         </div>
@@ -2621,7 +2621,7 @@ export default function PredictPage() {
         </div>
       </header>
       <div className="sticky top-16 z-40 bg-background/80 backdrop-blur-xl border-b">
-        <div className="container mx-auto px-4 py-3 max-w-7xl flex items-center gap-3">
+        <div className="container mx-auto px-2 sm:px-4 py-3 max-w-7xl flex items-center gap-3">
           <HorizontalScroll className="pb-1 flex-1 min-w-0">
             {user && !userBetsError && (
               <button
@@ -2695,7 +2695,7 @@ export default function PredictPage() {
           )}
         </div>
       </div>
-      <div className="container mx-auto px-4 py-8 max-w-7xl pt-[5px] pb-[5px]">
+      <div className="container mx-auto px-2 sm:px-4 py-8 max-w-7xl pt-[5px] pb-[5px]">
         {showPredictMultiFailureBanner && (
           <div
             className="mb-6 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"

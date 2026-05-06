@@ -110,7 +110,7 @@ export default function NotificationsArchivePage() {
         </div>
       </header>
 
-      <div className="container mx-auto px-4 py-6 max-w-3xl">
+      <div className="container mx-auto px-2 sm:px-4 py-6 max-w-3xl">
         <div className="flex items-center justify-between gap-3 mb-6">
           <div className="flex items-center gap-3 min-w-0">
             <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center shrink-0">
