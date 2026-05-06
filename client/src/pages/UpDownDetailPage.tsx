@@ -177,6 +177,8 @@ export default function UpDownDetailPage() {
         currentScore: hydrated.currentScore,
         baselineScore: hydrated.baselineScore,
         baselineTimestamp: hydrated.startAt,
+        crowdSentiment: choice === "up" ? hydrated.upPercent : 100 - hydrated.upPercent,
+        poolTotal: hydrated.totalPool,
         estimatedPayout: choice === "up" ? hydrated.upMultiplier : hydrated.downMultiplier,
         tieRule: hydrated.tieRule,
         endAt: hydrated.endAt,
@@ -243,6 +245,7 @@ export default function UpDownDetailPage() {
               ...prev,
               entryId: dir === "up" ? hydrated.upEntryId : hydrated.downEntryId,
               choice: dir.toUpperCase(),
+              crowdSentiment: dir === "up" ? hydrated.upPercent : 100 - hydrated.upPercent,
               estimatedPayout: dir === "up" ? hydrated.upMultiplier : hydrated.downMultiplier,
             }
           : null

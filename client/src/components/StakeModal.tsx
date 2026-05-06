@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Target, TrendingUp, TrendingDown, LogIn, Star, MessageSquarePlus, HelpCircle, Lock, CreditCard, Loader2 } from "lucide-react";
+import { Target, TrendingUp, TrendingDown, LogIn, Star, MessageSquarePlus, HelpCircle, Lock, CreditCard, Loader2, ChevronDown } from "lucide-react";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { useMarketCycle } from "@/hooks/useMarketCycle";
 import { useAuth } from "@/contexts/AuthContext";
@@ -45,6 +46,7 @@ export interface StakeSelection {
   currentScore?: number;
   opponentScore?: number;
   crowdSentiment?: number;
+  poolTotal?: number;
   estimatedPayout?: number;
   baselineScore?: number;
   baselineTimestamp?: string;
@@ -111,6 +113,15 @@ export function StakeModal({
   const [thesis, setThesis] = useState("");
   const [showThesisSection, setShowThesisSection] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const isMobile = useIsMobile();
+  // Default chart closed on mobile to keep Confirm above the fold; default
+  // open on desktop. Read window width directly because `useIsMobile` returns
+  // false on the very first render (before its effect runs), which would
+  // otherwise leave the chart open on mobile by default.
+  const [chartOpen, setChartOpen] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return window.innerWidth >= 768;
+  });
 
   if (!selection) return null;
 
@@ -237,16 +248,19 @@ export function StakeModal({
 
         <div className="py-2 space-y-4">
           <Card className="p-3 bg-violet-500/8 dark:bg-violet-500/5 border-violet-500/20">
-            <p className="text-xs text-muted-foreground mb-1">Market</p>
-            <p className="text-sm font-semibold text-foreground">{selection.marketName}</p>
+            <p className="text-xs text-muted-foreground mb-1">{selection.marketName}</p>
             {isUpDown ? (
-              <p className="text-lg font-bold mt-1">
+              <p className="text-lg font-bold">
+                <span className="text-muted-foreground text-sm font-medium mr-1.5">Your pick:</span>
                 <span className="text-foreground">Trend Score </span>
                 {isUp && <span className="text-[#00C853]">UP</span>}
                 {isDown && <span className="text-[#FF0000]">DOWN</span>}
               </p>
             ) : (
-              <p className={`text-lg font-bold mt-1 ${isCommunityNo ? "text-[#FF0000]" : "text-[#00C853]"}`}>{selection.choice}</p>
+              <p className="text-lg font-bold">
+                <span className="text-muted-foreground text-sm font-medium mr-1.5">Your pick:</span>
+                <span className={isCommunityNo ? "text-[#FF0000]" : "text-[#00C853]"}>{selection.choice}</span>
+              </p>
             )}
 
             {isGainer && onChangePick && (
@@ -388,7 +402,7 @@ export function StakeModal({
             const color = isPositive ? "text-green-700 dark:text-green-500" : "text-red-700 dark:text-red-500";
             return (
               <div className="flex items-center justify-center gap-2 text-xs">
-                <span className="text-muted-foreground">Delta vs Baseline:</span>
+                <span className="text-muted-foreground">Change since baseline:</span>
                 <span className={`font-mono font-medium ${color}`}>
                   {isPositive ? "+" : ""}{delta.toLocaleString("en-US")} pts ({isPositive ? "+" : ""}{pct.toFixed(1)}%)
                 </span>
@@ -400,7 +414,7 @@ export function StakeModal({
             <p className="text-xs text-muted-foreground text-center">
               Estimated Payout:{" "}
               <span className="font-mono font-medium text-green-700 dark:text-green-500">
-                {selection.estimatedPayout.toFixed(1)}x
+                {selection.estimatedPayout.toFixed(1)}x your stake
               </span>
               {parsedAmount >= MIN_STAKE && (
                 <>
@@ -414,9 +428,28 @@ export function StakeModal({
             </p>
           )}
 
-          {shouldRenderCrowdSentiment(selection.crowdSentiment) && (
+          {(shouldRenderCrowdSentiment(selection.crowdSentiment) ||
+            (typeof selection.poolTotal === "number" && selection.poolTotal > 0)) && (
             <p className="text-xs text-muted-foreground text-center">
-              Crowd Sentiment: <span className="font-mono font-medium text-foreground">{selection.crowdSentiment}% of the pool is backing this outcome</span>
+              {typeof selection.poolTotal === "number" && selection.poolTotal > 0 && (
+                <>
+                  Pool:{" "}
+                  <span className="font-mono font-medium text-foreground">
+                    {selection.poolTotal.toLocaleString("en-US")} credits
+                  </span>
+                </>
+              )}
+              {typeof selection.poolTotal === "number" &&
+                selection.poolTotal > 0 &&
+                shouldRenderCrowdSentiment(selection.crowdSentiment) && (
+                  <span className="text-muted-foreground/70"> · </span>
+                )}
+              {shouldRenderCrowdSentiment(selection.crowdSentiment) && (
+                <>
+                  <span className="font-mono font-medium text-foreground">{selection.crowdSentiment}%</span>{" "}
+                  backing your pick
+                </>
+              )}
             </p>
           )}
 
@@ -453,14 +486,29 @@ export function StakeModal({
           )}
 
           {isUpDown && selection.marketId && (
-            <OutcomePathChart
-              marketId={selection.marketId}
-              baselineScore={selection.startScore || selection.baselineScore || 0}
-              currentScore={selection.currentScore || 0}
-              personName={selection.personName ?? selection.marketName}
-              compact
-              userPick={isUp ? "up" : isDown ? "down" : null}
-            />
+            <div>
+              {isMobile && (
+                <button
+                  type="button"
+                  onClick={() => setChartOpen((v) => !v)}
+                  className="w-full text-xs text-muted-foreground hover:text-foreground flex items-center justify-center gap-1.5 py-1"
+                  data-testid="button-stake-chart-toggle"
+                >
+                  {chartOpen ? "Hide" : "Show"} 7-day chart
+                  <ChevronDown className={`h-3 w-3 transition-transform ${chartOpen ? "rotate-180" : ""}`} />
+                </button>
+              )}
+              {(!isMobile || chartOpen) && (
+                <OutcomePathChart
+                  marketId={selection.marketId}
+                  baselineScore={selection.startScore || selection.baselineScore || 0}
+                  currentScore={selection.currentScore || 0}
+                  personName={selection.personName ?? selection.marketName}
+                  compact
+                  userPick={isUp ? "up" : isDown ? "down" : null}
+                />
+              )}
+            </div>
           )}
 
           <div className="space-y-2">

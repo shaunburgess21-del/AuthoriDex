@@ -127,14 +127,16 @@ function CompactStrip({
     return (
       <div
         className={cn(
-          "flex items-center gap-1.5 text-[11px] text-muted-foreground",
+          "flex flex-col sm:flex-row sm:items-center gap-x-1.5 gap-y-0.5 text-[11px] text-muted-foreground",
           className,
         )}
       >
-        <Lock className="h-3 w-3 shrink-0 text-amber-600 dark:text-amber-500" />
-        <span>
-          Entries closed{" "}
-          <span className="text-muted-foreground/70">·</span>{" "}
+        <span className="flex items-center gap-1.5">
+          <Lock className="h-3 w-3 shrink-0 text-amber-600 dark:text-amber-500" />
+          <span>Entries closed</span>
+        </span>
+        <span className="hidden sm:inline text-muted-foreground/70">·</span>
+        <span className="pl-[18px] sm:pl-0">
           Results <span className="font-medium text-foreground">{resolveLabel}</span>
         </span>
       </div>
@@ -144,14 +146,18 @@ function CompactStrip({
   return (
     <div
       className={cn(
-        "flex items-center gap-1.5 text-[11px] text-muted-foreground",
+        "flex flex-col sm:flex-row sm:items-center gap-x-1.5 gap-y-0.5 text-[11px] text-muted-foreground",
         className,
       )}
     >
-      <LockOpen className="h-3 w-3 shrink-0 text-amber-600 dark:text-amber-500" />
-      <span>
-        Entries close <span className="font-medium text-foreground">{cutoffLabel}</span>
-        <span className="text-muted-foreground/70"> · </span>
+      <span className="flex items-center gap-1.5">
+        <LockOpen className="h-3 w-3 shrink-0 text-amber-600 dark:text-amber-500" />
+        <span>
+          Entries close <span className="font-medium text-foreground">{cutoffLabel}</span>
+        </span>
+      </span>
+      <span className="hidden sm:inline text-muted-foreground/70">·</span>
+      <span className="pl-[18px] sm:pl-0">
         Results <span className="font-medium text-foreground">{resolveLabel}</span>
       </span>
     </div>
@@ -280,19 +286,23 @@ function ModalStrip({
   return (
     <div
       className={cn(
-        "flex items-center justify-center gap-1.5 text-xs text-muted-foreground text-center",
+        "flex flex-col sm:flex-row sm:items-center sm:justify-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground",
         className,
       )}
     >
-      {status === "OPEN" ? (
-        <LockOpen className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-500" />
-      ) : (
-        <Lock className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-500" />
-      )}
-      <span>
-        {status === "OPEN" ? "Entries close " : "Entries closed "}
-        <span className="font-medium text-foreground">{cutoffLabel}</span>
-        <span className="text-muted-foreground/70"> · </span>
+      <span className="flex items-center gap-1.5">
+        {status === "OPEN" ? (
+          <LockOpen className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-500" />
+        ) : (
+          <Lock className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-500" />
+        )}
+        <span>
+          {status === "OPEN" ? "Entries close " : "Entries closed "}
+          <span className="font-medium text-foreground">{cutoffLabel}</span>
+        </span>
+      </span>
+      <span className="hidden sm:inline text-muted-foreground/70">·</span>
+      <span className="pl-5 sm:pl-0">
         Results <span className="font-medium text-foreground">{resolveLabel}</span>
       </span>
     </div>

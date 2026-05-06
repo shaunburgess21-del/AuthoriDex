@@ -977,6 +977,7 @@ export default function HomePage() {
       const downStake = Number(downEntry?.totalStake || 0);
       const total = upStake + downStake || 1;
       const upPercent = Math.round((upStake / total) * 100);
+      const totalPool = upStake + downStake;
       const currentScore = Number(person.trendScore || 0);
       const baselineScore = getMarketBaselineScore(m as MarketBaselineSource, currentScore) ?? currentScore;
       return {
@@ -991,6 +992,7 @@ export default function HomePage() {
         upMultiplier: computePayoutMultiplier(upStake + downStake, upStake),
         downMultiplier: computePayoutMultiplier(upStake + downStake, downStake),
         upPoolPercent: upPercent || 50,
+        totalPool,
         bettingCutoff: (m.bettingCutoff as string) || null,
         startAt: (m.startAt as string) || null,
         endAt: (m.endAt as string) || null,
@@ -1033,6 +1035,7 @@ export default function HomePage() {
       startScore: market.startScore,
       currentScore: market.currentScore,
       crowdSentiment,
+      poolTotal: market.totalPool,
       estimatedPayout,
       baselineScore: market.baselineScore,
       baselineTimestamp: market.startAt || undefined,
@@ -1919,6 +1922,7 @@ export default function HomePage() {
             startScore: market.startScore,
             currentScore: market.currentScore,
             crowdSentiment,
+            poolTotal: market.totalPool,
             estimatedPayout,
             baselineScore: market.baselineScore,
             baselineTimestamp: market.startAt || undefined,

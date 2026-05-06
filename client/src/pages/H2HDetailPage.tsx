@@ -216,6 +216,7 @@ export default function H2HDetailPage() {
         currentScore: picked.currentScore,
         opponentScore: opponent.currentScore,
         crowdSentiment: sentiment,
+        poolTotal: hydrated.totalPool,
         estimatedPayout,
         endAt: hydrated.endAt,
         bettingCutoff: hydrated.bettingCutoff,
