@@ -8,7 +8,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { SlidersHorizontal } from "lucide-react";
+import { ArrowDown, ArrowUp, SlidersHorizontal } from "lucide-react";
 
 const DEFAULT_CATEGORIES = [
   { value: "all", label: "All Categories" },
@@ -27,16 +27,29 @@ const DEFAULT_CATEGORIES = [
   { value: "Lifestyle", label: "Lifestyle" },
 ];
 
+export type SortDirection = "desc" | "asc";
+
 interface FilterDropdownProps {
   value: string;
   onChange: (value: string) => void;
   categories?: { value: string; label: string }[];
   allValue?: string;
   testId?: string;
+  sortDirection?: SortDirection;
+  onSortDirectionChange?: (direction: SortDirection) => void;
 }
 
-export function FilterDropdown({ value, onChange, categories = DEFAULT_CATEGORIES, allValue = "all", testId = "button-filter" }: FilterDropdownProps) {
+export function FilterDropdown({
+  value,
+  onChange,
+  categories = DEFAULT_CATEGORIES,
+  allValue = "all",
+  testId = "button-filter",
+  sortDirection,
+  onSortDirectionChange,
+}: FilterDropdownProps) {
   const isFiltered = value.toLowerCase() !== allValue.toLowerCase();
+  const showSortSection = sortDirection !== undefined && onSortDirectionChange !== undefined;
 
   return (
     <DropdownMenu>
@@ -46,7 +59,27 @@ export function FilterDropdown({ value, onChange, categories = DEFAULT_CATEGORIE
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-48 z-[60]">
-        <DropdownMenuLabel>Category</DropdownMenuLabel>
+        {showSortSection && (
+          <>
+            <DropdownMenuLabel>Sort</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuRadioGroup
+              value={sortDirection}
+              onValueChange={(v) => onSortDirectionChange?.(v as SortDirection)}
+            >
+              <DropdownMenuRadioItem value="desc" data-testid="sort-desc">
+                <ArrowDown className="h-3.5 w-3.5 mr-2" />
+                Descending
+              </DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="asc" data-testid="sort-asc">
+                <ArrowUp className="h-3.5 w-3.5 mr-2" />
+                Ascending
+              </DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
+            <DropdownMenuSeparator />
+          </>
+        )}
+        <DropdownMenuLabel>{showSortSection ? "Categories" : "Category"}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuRadioGroup value={value} onValueChange={onChange}>
           {categories.map((category) => (
