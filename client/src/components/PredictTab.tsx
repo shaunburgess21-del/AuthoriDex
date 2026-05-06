@@ -701,6 +701,8 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       type: "h2h",
       choice: picked.name,
       marketName: market.title,
+      personName: picked.name,
+      opponentName: opponent.name,
       marketId: market.id,
       entryId,
       currentScore: picked.currentScore,
@@ -708,6 +710,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       crowdSentiment: sentiment,
       poolTotal: market.totalPool,
       estimatedPayout,
+      tieRule: (market as { tieRule?: string }).tieRule ?? "refund",
       endAt: serverResolutionDeadline ?? undefined,
       bettingCutoff: serverBettingCutoff,
     });
@@ -882,7 +885,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
           <JackpotEntryModal
             open={jackpotModalOpen}
             onClose={() => setJackpotModalOpen(false)}
-            person={{ id: personId, name: personName, avatar: personAvatar || "", trendScore: currentScore } as any}
+            person={{ id: personId, name: personName, avatar: personAvatar || "", trendScore: currentScore, rank: personRank ?? undefined } as any}
             marketId={jackpotMarket.id}
             userCredits={walletCredits}
             bettingCutoff={jackpotMarket.bettingCutoff || null}

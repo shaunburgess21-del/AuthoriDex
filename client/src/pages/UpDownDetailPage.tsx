@@ -455,12 +455,12 @@ export default function UpDownDetailPage() {
           />
         )}
 
-        {/* Crowd Sentiment */}
+        {/* Pool sentiment */}
         <Card className="border-border/50">
           <div className="p-4">
             <h2 className="text-sm font-semibold flex items-center gap-1.5 mb-3">
               <Users className="h-4 w-4 text-violet-600 dark:text-violet-400" />
-              Crowd Sentiment
+              Pool sentiment
             </h2>
             <div className="space-y-3">
               <div className="h-4 rounded-full overflow-hidden flex">

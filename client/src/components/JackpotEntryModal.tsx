@@ -14,7 +14,9 @@ import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover
 import { RULES_CONTENT, RulesExplainer } from "@/components/predict/RulesContent";
 import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { useXpBurst } from "@/components/XpBurstProvider";
+import { ChevronDown } from "lucide-react";
 import type { TrendingPerson } from "@shared/schema";
 
 interface JackpotEntry {
@@ -60,6 +62,8 @@ export function JackpotEntryModal({
   const [suggestions, setSuggestions] = useState<number[]>([]);
   const [showSuccess, setShowSuccess] = useState(false);
   const [lastPrediction, setLastPrediction] = useState<number | null>(null);
+  const [showAllEntries, setShowAllEntries] = useState(false);
+  const isMobile = useIsMobile();
 
   const parsedScore = useMemo(() => {
     const cleaned = scoreInput.replace(/,/g, "");
@@ -328,7 +332,9 @@ export function JackpotEntryModal({
               <PersonAvatar name={person.name} avatar={person.avatar || ""} size="md" />
               <div className="flex-1 min-w-0">
                 <p className="font-semibold truncate">{person.name}</p>
-                <p className="text-xs text-muted-foreground">Rank #{person.rank}</p>
+                {typeof person.rank === "number" && person.rank > 0 && (
+                  <p className="text-xs text-muted-foreground">Rank #{person.rank}</p>
+                )}
               </div>
               <div className="text-right">
                 <p className="text-xs text-muted-foreground">Current Score</p>
@@ -337,6 +343,35 @@ export function JackpotEntryModal({
                 </p>
               </div>
             </div>
+
+            {(userEntries?.totalPool > 0 || userEntries?.totalEntries > 0) && (
+              <p className="text-xs text-muted-foreground text-center" data-testid="text-jackpot-pool">
+                {userEntries.totalPool > 0 && (
+                  <>
+                    Pool:{" "}
+                    <span className="font-mono font-medium text-foreground">
+                      {formatNumber(userEntries.totalPool)} credits
+                    </span>
+                  </>
+                )}
+                {userEntries.totalPool > 0 && userEntries.totalEntries > 0 && (
+                  <span className="text-muted-foreground/70"> · </span>
+                )}
+                {userEntries.totalEntries > 0 && (
+                  <>
+                    <span className="font-mono font-medium text-foreground">
+                      {formatNumber(userEntries.totalEntries)}
+                    </span>{" "}
+                    {userEntries.totalEntries === 1 ? "entry" : "entries"}
+                  </>
+                )}
+              </p>
+            )}
+
+            <p className="text-xs text-muted-foreground text-center">
+              Closest exact score at{" "}
+              <span className="font-medium text-foreground">Sunday 23:59 UTC</span> wins the pot. Ties split.
+            </p>
 
             {/* Score input */}
             <div>
@@ -388,6 +423,40 @@ export function JackpotEntryModal({
                 </div>
               )}
             </div>
+
+            {existingEntries.length > 0 && (() => {
+              const collapsed = isMobile && !showAllEntries && existingEntries.length > 3;
+              const visible = collapsed ? existingEntries.slice(0, 3) : existingEntries;
+              return (
+                <div className="pt-2 border-t" data-testid="section-jackpot-existing-entries">
+                  <p className="text-xs font-medium text-muted-foreground mb-2">
+                    Your predictions ({existingEntries.length})
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {visible.map((e: JackpotEntry) => (
+                      <Badge
+                        key={e.betId}
+                        variant="outline"
+                        className="border-amber-500/40 dark:border-amber-500/30 text-amber-600 dark:text-amber-400 font-mono"
+                      >
+                        {formatNumber(e.predictedScore)}
+                      </Badge>
+                    ))}
+                  </div>
+                  {isMobile && existingEntries.length > 3 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllEntries((v) => !v)}
+                      className="mt-2 text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+                      data-testid="button-jackpot-show-all-entries"
+                    >
+                      {collapsed ? `Show all (${existingEntries.length})` : "Show fewer"}
+                      <ChevronDown className={`h-3 w-3 transition-transform ${collapsed ? "" : "rotate-180"}`} />
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Entry details */}
             <div className="space-y-2 p-3 rounded-lg bg-muted/30 border">
@@ -442,22 +511,6 @@ export function JackpotEntryModal({
               )}
               Enter Jackpot — 100 Credits
             </Button>
-
-            {/* Existing entries */}
-            {existingEntries.length > 0 && (
-              <div className="pt-2 border-t">
-                <p className="text-xs font-medium text-muted-foreground mb-2">
-                  Your predictions ({existingEntries.length})
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {existingEntries.map((e: JackpotEntry) => (
-                    <Badge key={e.betId} variant="outline" className="border-amber-500/40 dark:border-amber-500/30 text-amber-600 dark:text-amber-400 font-mono">
-                      {formatNumber(e.predictedScore)}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         )}
       </DialogContent>

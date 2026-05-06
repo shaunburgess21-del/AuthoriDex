@@ -23,7 +23,6 @@ const MISSION_HEADERS: Record<string, string> = {
   jackpot: "Predict the exact Trend Score at week's end to win the pot.",
   updown: "Will their Trend Score be higher or lower by close?",
   h2h: "Back your champion to win this weekly matchup.",
-  race: "Predict the #1 top performer to win.",
   gainer: "Pick the biggest mover — whoever gains the most % in their Trend Score wins.",
   community: "Cast your vote on this real-world prediction.",
 };
@@ -45,6 +44,7 @@ export interface StakeSelection {
   startScore?: number;
   currentScore?: number;
   opponentScore?: number;
+  opponentName?: string;
   crowdSentiment?: number;
   poolTotal?: number;
   estimatedPayout?: number;
@@ -127,7 +127,6 @@ export function StakeModal({
 
   const isCutoffPassed = selection.bettingCutoff ? marketCycle.status !== "OPEN" : false;
   const missionText = MISSION_HEADERS[selection.type] || "Place your prediction on this market.";
-  const showJackpotWarning = selection.type === "jackpot";
   const isUpDown = selection.type === "updown";
   const isH2H = selection.type === "h2h";
   const isGainer = selection.type === "gainer";
@@ -256,10 +255,24 @@ export function StakeModal({
                 {isUp && <span className="text-[#00C853]">UP</span>}
                 {isDown && <span className="text-[#FF0000]">DOWN</span>}
               </p>
+            ) : isCommunity ? (
+              <p className="text-lg font-bold text-balance">
+                <span className="text-muted-foreground text-sm font-medium mr-1.5">Your pick:</span>
+                <span
+                  className={`mr-1.5 px-1.5 py-0.5 rounded text-xs font-mono uppercase align-middle ${
+                    isCommunityNo
+                      ? "bg-red-500/15 text-[#FF0000]"
+                      : "bg-green-500/15 text-[#00C853]"
+                  }`}
+                >
+                  {selection.direction === "no" ? "No" : "Yes"}
+                </span>
+                <span className="text-foreground">{selection.choice}</span>
+              </p>
             ) : (
               <p className="text-lg font-bold">
                 <span className="text-muted-foreground text-sm font-medium mr-1.5">Your pick:</span>
-                <span className={isCommunityNo ? "text-[#FF0000]" : "text-[#00C853]"}>{selection.choice}</span>
+                <span className="text-foreground">{selection.choice}</span>
               </p>
             )}
 
@@ -331,13 +344,6 @@ export function StakeModal({
             )}
           </Card>
 
-          {showJackpotWarning && (
-            <p className="text-xs text-amber-700 dark:text-amber-500 text-center flex items-center justify-center gap-1">
-              <Lock className="h-3 w-3" />
-              Entries close Friday 23:59 UTC — Results Sunday
-            </p>
-          )}
-
           {isUpDown && (selection.startScore != null || selection.currentScore != null) && (
             <div className="grid grid-cols-2 gap-3">
               {selection.startScore != null && (
@@ -356,21 +362,33 @@ export function StakeModal({
           )}
 
           {isH2H && selection.currentScore != null && selection.opponentScore != null && (
-            <div className="grid grid-cols-2 gap-3">
-              <Card className="p-2.5 bg-muted/30">
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Your Pick Score</p>
-                <p className="font-mono font-bold text-sm">{selection.currentScore.toLocaleString("en-US")}</p>
-              </Card>
-              <Card className="p-2.5 bg-muted/30">
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Opponent Score</p>
-                <p className="font-mono font-bold text-sm">{selection.opponentScore.toLocaleString("en-US")}</p>
-              </Card>
-            </div>
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <Card className="p-2.5 bg-violet-500/8 dark:bg-violet-500/5 border-violet-500/30">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide truncate">
+                    {selection.personName ?? "Your pick"}
+                  </p>
+                  <p className="font-mono font-bold text-sm">{selection.currentScore.toLocaleString("en-US")}</p>
+                </Card>
+                <Card className="p-2.5 bg-muted/30">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide truncate">
+                    {selection.opponentName ?? "Opponent"}
+                  </p>
+                  <p className="font-mono font-bold text-sm">{selection.opponentScore.toLocaleString("en-US")}</p>
+                </Card>
+              </div>
+              <p className="text-xs text-muted-foreground text-center">
+                Wins if{" "}
+                <span className="font-medium text-foreground">{selection.personName ?? "your pick"}</span>{" "}
+                has a higher closing Trend Score than {selection.opponentName ?? "opponent"} at weekly close.
+                {selection.tieRule === "refund" && " Ties refund."}
+              </p>
+            </>
           )}
 
           {isGainer && (
             <>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <Card className="p-2.5 bg-muted/30">
                   <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Current Rank</p>
                   <p className="font-mono font-bold text-sm">#{selection.candidateRank ?? "-"}</p>
@@ -381,7 +399,7 @@ export function StakeModal({
                     {selection.candidatePercentGain != null ? `${selection.candidatePercentGain >= 0 ? "+" : ""}${selection.candidatePercentGain.toFixed(1)}%` : "--"}
                   </p>
                 </Card>
-                <Card className="p-2.5 bg-muted/30">
+                <Card className="p-2.5 bg-muted/30 col-span-2 sm:col-span-1">
                   <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Points Added</p>
                   <p className={`font-mono font-bold text-sm ${(selection.candidatePointsAdded ?? 0) >= 0 ? "text-green-700 dark:text-green-500" : "text-red-700 dark:text-red-500"}`}>
                     {selection.candidatePointsAdded != null ? `${selection.candidatePointsAdded >= 0 ? "+" : ""}${selection.candidatePointsAdded.toLocaleString("en-US")}` : "--"}

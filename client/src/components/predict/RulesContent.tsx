@@ -26,11 +26,11 @@ export const RULES_CONTENT: Record<string, RulesEntry> = {
   },
   updown: {
     title: "How Up/Down Works",
-    description: "Each week, a fixed baseline score is captured at market open (Monday 00:00 UTC). Everyone bets on whether the final score at close (Sunday 23:59 UTC) finishes above or below that same baseline.",
+    description: "Each week, a fixed baseline score is captured at market open (Monday 00:00 UTC). Everyone predicts whether the final score at close (Sunday 23:59 UTC) finishes above or below that same baseline.",
     steps: [
-      { icon: <TrendingUp className="h-4 w-4 text-violet-500" />, title: "Fixed Baseline", description: "A baseline score is locked at the start of each market period. All participants bet against this same reference point — not their personal entry time." },
+      { icon: <TrendingUp className="h-4 w-4 text-violet-500" />, title: "Fixed Baseline", description: "A baseline score is locked at the start of each market period. All participants stake against this same reference point — not their personal entry time." },
       { icon: <Target className="h-4 w-4 text-violet-500" />, title: "Pick UP or DOWN", description: "UP wins if the closing score finishes above the baseline. DOWN wins if it finishes below. Exact tie = full refund for all positions." },
-      { icon: <Trophy className="h-4 w-4 text-violet-500" />, title: "Payout Depends on the Crowd", description: "All bets go into one pool. If most people bet Up and you also bet Up, you share with the crowd — smaller payout. If you go against the crowd and win, you get a much bigger share. The contrarian edge: going against popular opinion is riskier, but the reward is much higher." },
+      { icon: <Trophy className="h-4 w-4 text-violet-500" />, title: "Payout Depends on the Crowd", description: "All stakes go into one pool. If most people pick Up and you also pick Up, you share with the crowd — smaller payout. If you go against the crowd and win, you get a much bigger share. The contrarian edge: going against popular opinion is riskier, but the reward is much higher." },
     ]
   },
   h2h: {

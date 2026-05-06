@@ -2011,9 +2011,11 @@ export default function PredictPage() {
 
     setPendingSelection({
       type: "community",
-      // The StakeModal heading shows "{choice}" prominently — include
-      // direction so the user can't misread which side they're betting.
-      choice: `${direction === "no" ? "No" : "Yes"} \u00b7 ${entry.label}`,
+      // Direction is rendered as a coloured pill in the StakeModal header
+      // and via the Yes/No toggle directly below the pick line, so we no
+      // longer prefix the choice string with "Yes ·" / "No ·" (was double
+      // print before the pill treatment).
+      choice: entry.label,
       marketName: market.title,
       marketId: market.id,
       entryId: entry.id,
@@ -2093,6 +2095,8 @@ export default function PredictPage() {
       type: "h2h",
       choice: picked.name,
       marketName: market.title,
+      personName: picked.name,
+      opponentName: opponent.name,
       marketId: market.id,
       entryId,
       currentScore: picked.currentScore,
@@ -2100,6 +2104,7 @@ export default function PredictPage() {
       crowdSentiment: sentiment,
       poolTotal: market.totalPool,
       estimatedPayout,
+      tieRule: (market as { tieRule?: string }).tieRule ?? "refund",
       endAt: serverResolutionDeadline ?? undefined,
       bettingCutoff: market.bettingCutoff,
     });

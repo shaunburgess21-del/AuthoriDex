@@ -753,6 +753,10 @@ export default function CategoryRaceDetailPage() {
         }}
         onConfirm={handleConfirmStake}
         walletBalance={walletCredits}
+        onChangePick={() => {
+          setStakeModalOpen(false);
+          setPendingSelection(null);
+        }}
       />
     </div>
   );
