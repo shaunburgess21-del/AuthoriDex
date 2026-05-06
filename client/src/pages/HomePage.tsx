@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { FilterDropdown } from "@/components/FilterDropdown";
 import { PersonAvatar } from "@/components/PersonAvatar";
-import { CategoryPill, getCategoryTextColor } from "@/components/CategoryPill";
+import { CategoryPill, getCategoryTextColor, getCategoryStyle } from "@/components/CategoryPill";
 import { VoteDeckView } from "@/components/home/VoteDeckView";
 import { PredictDeckView } from "@/components/home/PredictDeckView";
 import { TrendingNowFeed, type HotMover } from "@/components/TrendingNowFeed";
@@ -19,8 +19,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
+import { useFavorites } from "@/hooks/useFavorites";
+import { navigateToLogin } from "@/lib/authReturn";
 import { X, RefreshCw, TrendingUp, TrendingDown, Activity, ChevronRight, ChevronDown, LineChart, Vote, Trophy, Users, Sparkles, Target, Check, ThumbsDown, Minus, Star, Info, Crown, HelpCircle } from "lucide-react";
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useDragScroll } from "@/hooks/use-drag-scroll";
@@ -524,6 +527,12 @@ interface InsightPerson {
   rank: number | null;
   change24h: number | null;
   rankChange: number | null;
+  hotMover: boolean;
+}
+
+interface InsightWhyTrendingData {
+  hasContext: boolean;
+  summary?: string;
 }
 
 interface PersonMomentumResponse {
@@ -532,6 +541,11 @@ interface PersonMomentumResponse {
     wiki?: { deltaPct?: number };
     momentum?: { deltaPct?: number };
   };
+  categoryRank?: {
+    overall?: number | null;
+    category?: string | null;
+    categoryRank?: number | null;
+  } | null;
 }
 
 interface InsightSignal {
@@ -545,6 +559,7 @@ function InsightPanelContent({
   error,
   growthSignals,
   coolingSignals,
+  categoryRank,
   onClose,
   onViewProfile,
 }: {
@@ -553,6 +568,7 @@ function InsightPanelContent({
   error: boolean;
   growthSignals: InsightSignal[];
   coolingSignals: InsightSignal[];
+  categoryRank: number | null;
   onClose: () => void;
   onViewProfile: () => void;
 }) {
@@ -562,69 +578,219 @@ function InsightPanelContent({
     ? currentRank + person.rankChange
     : null;
   const showRankShift = currentRank != null && previousRank != null;
+  const rankChange = person.rankChange ?? 0;
+
+  const [, setLocation] = useLocation();
+  const { session } = useAuth();
+  const { isFavorite, isAuthenticated } = useFavorites();
+  const favorited = isFavorite(person.id);
+  const [favoriteLoading, setFavoriteLoading] = useState(false);
+
+  const handleToggleFavorite = async () => {
+    if (!isAuthenticated || !session?.access_token) return;
+    setFavoriteLoading(true);
+    try {
+      const method = favorited ? "DELETE" : "POST";
+      const res = await fetch(`/api/me/favorites/${person.id}`, {
+        method,
+        headers: {
+          "Authorization": `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
+        ...(method === "POST" ? {
+          body: JSON.stringify({
+            personName: person.name,
+            personAvatar: person.avatar,
+            personCategory: person.category,
+          }),
+        } : {}),
+      });
+      if (!res.ok) throw new Error(`Failed: ${res.status}`);
+      await queryClient.invalidateQueries({ queryKey: ["/api/me/favorites"] });
+      toast(favorited ? "Removed from favorites" : "Added to favorites", {
+        description: favorited
+          ? `${person.name} has been removed from your favorites`
+          : `${person.name} has been added to your favorites`,
+      });
+    } catch (err) {
+      console.error("Error toggling favorite:", err);
+      toast.error("Error", { description: "Failed to update favorite status" });
+    } finally {
+      setFavoriteLoading(false);
+    }
+  };
+
+  const handleSignInFromTooltip = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    navigateToLogin(setLocation);
+  };
+
+  const favoriteButton = (
+    <button
+      type="button"
+      onClick={handleToggleFavorite}
+      disabled={!isAuthenticated || favoriteLoading}
+      aria-label={favorited ? "Remove from favorites" : "Add to favorites"}
+      data-testid="button-insight-favorite"
+      className={`shrink-0 inline-flex items-center justify-center h-8 w-8 rounded-md transition-colors ${
+        isAuthenticated
+          ? "hover:bg-muted text-muted-foreground hover:text-foreground"
+          : "text-muted-foreground/60 cursor-not-allowed"
+      } ${favorited ? "text-yellow-500 hover:text-yellow-500" : ""}`}
+    >
+      <Star className={`h-5 w-5 ${favorited ? "fill-yellow-500" : ""}`} />
+    </button>
+  );
+
+  const categoryStyle = person.category ? getCategoryStyle(person.category) : null;
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/40 border border-border/50">
-        <PersonAvatar
-          name={person.name}
-          avatar={person.avatar}
-          size="md"
-          className="h-12 w-12"
-        />
+    <div className="space-y-3 sm:space-y-4 sm:pt-2">
+      <div className="flex items-center gap-3 px-3 py-2 sm:p-3 sm:pr-8 rounded-lg bg-muted/40 border border-border/50">
+        <button
+          type="button"
+          onClick={onViewProfile}
+          aria-label={`View ${person.name}'s profile`}
+          className="shrink-0 rounded-full transition-opacity hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-ring"
+          data-testid="button-insight-avatar"
+        >
+          <PersonAvatar
+            name={person.name}
+            avatar={person.avatar}
+            size="lg"
+            className="h-16 w-16 sm:h-20 sm:w-20"
+          />
+        </button>
         <div className="min-w-0 flex-1">
-          <p className="font-semibold text-sm truncate">{person.name}</p>
+          <button
+            type="button"
+            onClick={onViewProfile}
+            className="block max-w-full text-left font-semibold text-xl sm:text-2xl leading-tight truncate hover:underline focus:outline-none focus:underline cursor-pointer"
+            data-testid="button-insight-name"
+          >
+            {person.name}
+          </button>
           {person.category && (
-            <p className={`text-xs ${getCategoryTextColor(person.category)}`}>{person.category}</p>
+            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+              <span className={`text-base ${getCategoryTextColor(person.category)}`}>{person.category}</span>
+              {categoryRank != null && categoryRank > 0 && categoryStyle && (
+                <span
+                  data-vaul-no-drag
+                  onPointerDown={(e) => e.stopPropagation()}
+                  className="inline-flex"
+                >
+                  <TouchTooltip
+                    content={(
+                      <div className="space-y-1.5 normal-case tracking-normal">
+                        <p className="font-semibold text-sm">{person.category} Rank</p>
+                        <p className="text-xs text-muted-foreground">
+                          {person.name}'s position within the {person.category} category, ranked against others in the same field.
+                        </p>
+                      </div>
+                    )}
+                    side="bottom"
+                    align="start"
+                    contentClassName="max-w-[240px]"
+                    showCloseButton
+                  >
+                    <span
+                      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-semibold cursor-help ${categoryStyle.bg} border ${categoryStyle.border} ${categoryStyle.text}`}
+                      data-testid="text-insight-category-rank"
+                    >
+                      <Trophy className="h-3 w-3" />
+                      #{categoryRank}
+                    </span>
+                  </TouchTooltip>
+                </span>
+              )}
+            </div>
           )}
         </div>
-        {typeof person.change24h === "number" && (
-          <span className={`px-2 py-0.5 rounded text-xs font-mono font-medium tabular-nums ${
-            person.change24h > 0
-              ? "bg-green-500/15 text-green-600 dark:text-green-400"
-              : "bg-red-500/15 text-red-600 dark:text-red-400"
-          }`}>
-            {person.change24h > 0 ? "+" : ""}
-            {person.change24h.toFixed(1)}%
+        {isAuthenticated ? (
+          favoriteButton
+        ) : (
+          <span
+            data-vaul-no-drag
+            onPointerDown={(e) => e.stopPropagation()}
+            className="inline-flex shrink-0"
+          >
+            <TouchTooltip
+              content={(
+                <span>
+                  Sign in to favorite —{" "}
+                  <button
+                    type="button"
+                    onClick={handleSignInFromTooltip}
+                    className="underline text-primary hover:text-primary/80"
+                  >
+                    click here to sign in
+                  </button>
+                </span>
+              )}
+              side="left"
+            >
+              {favoriteButton}
+            </TouchTooltip>
           </span>
         )}
       </div>
 
-      <div className="rounded-lg border border-border/60 p-3 bg-background/60">
-        <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1.5">RANK SHIFT</p>
+      <div className="rounded-lg border border-border/60 px-3 py-2 sm:p-3 bg-background/60">
+        <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1.5">24H RANK MOVEMENT</p>
         {showRankShift ? (
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
             <p className="text-sm font-medium">
               Was #{previousRank} {"\u2192"} Now #{currentRank}
             </p>
-            <span className={`px-2 py-0.5 rounded text-xs font-mono font-semibold ${
-              (person.rankChange ?? 0) > 0
-                ? "bg-green-500/15 text-green-600 dark:text-green-400"
-                : (person.rankChange ?? 0) < 0
-                  ? "bg-red-500/15 text-red-600 dark:text-red-400"
-                  : "bg-muted text-muted-foreground"
-            }`}>
-              {(person.rankChange ?? 0) > 0 ? "+" : ""}
-              {person.rankChange ?? 0}
-            </span>
+            <div className="flex items-center gap-1.5">
+              {typeof person.change24h === "number" && person.change24h !== 0 && (
+                <span className={`px-2 py-0.5 rounded text-xs font-mono font-medium tabular-nums ${
+                  person.change24h > 0
+                    ? "bg-green-500/15 text-green-600 dark:text-green-400"
+                    : "bg-red-500/15 text-red-600 dark:text-red-400"
+                }`}>
+                  {person.change24h > 0 ? "+" : ""}
+                  {person.change24h.toFixed(1)}%
+                </span>
+              )}
+              {rankChange === 0 ? (
+                <span className="text-xs text-muted-foreground italic">No rank change</span>
+              ) : (
+                <span className={`px-2 py-0.5 rounded text-xs font-mono font-semibold ${
+                  rankChange > 0
+                    ? "bg-green-500/15 text-green-600 dark:text-green-400"
+                    : "bg-red-500/15 text-red-600 dark:text-red-400"
+                }`}>
+                  {rankChange > 0 ? "+" : ""}
+                  {rankChange} rank
+                </span>
+              )}
+            </div>
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">Rank movement unavailable</p>
         )}
       </div>
 
+      <InsightWhyTrendingSnippet
+        personId={person.id}
+        hotMover={person.hotMover}
+        onReadMore={onViewProfile}
+      />
+
       {loading ? (
-        <div className="rounded-lg border border-border/60 p-3 bg-background/60">
+        <div className="rounded-lg border border-border/60 px-3 py-2 sm:p-3 bg-background/60">
           <p className="text-sm text-muted-foreground">Loading signal insights...</p>
         </div>
       ) : error ? (
-        <div className="rounded-lg border border-border/60 p-3 bg-background/60">
+        <div className="rounded-lg border border-border/60 px-3 py-2 sm:p-3 bg-background/60">
           <p className="text-sm text-muted-foreground">Unable to load signal insights right now</p>
         </div>
       ) : (
         <>
           {growthSignals.length > 0 && (
-            <div className="rounded-lg border border-border/60 p-3 bg-background/60">
+            <div className="rounded-lg border border-border/60 px-3 py-2 sm:p-3 bg-background/60">
               <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">GROWTH SIGNALS</p>
               <div className="flex flex-wrap gap-2">
                 {growthSignals.map((signal) => (
@@ -639,7 +805,7 @@ function InsightPanelContent({
             </div>
           )}
           {coolingSignals.length > 0 && (
-            <div className="rounded-lg border border-border/60 p-3 bg-background/60">
+            <div className="rounded-lg border border-border/60 px-3 py-2 sm:p-3 bg-background/60">
               <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">COOLING SIGNALS</p>
               <div className="flex flex-wrap gap-2">
                 {coolingSignals.map((signal) => (
@@ -660,9 +826,91 @@ function InsightPanelContent({
         <Button variant="outline" onClick={onClose}>
           Close
         </Button>
+        <div className="flex flex-row gap-2 sm:contents">
+          <Button
+            variant="outline"
+            onClick={() => {
+              setLocation(`/person/${person.id}?tab=vote`);
+              onClose();
+            }}
+            className="flex-1 sm:flex-initial border-cyan-500/40 bg-cyan-500/15 text-cyan-700 dark:text-cyan-400 hover:bg-cyan-500/25 hover:text-cyan-700 dark:hover:text-cyan-400"
+            data-testid="button-insight-vote"
+          >
+            Vote
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setLocation(`/person/${person.id}?tab=predict`);
+              onClose();
+            }}
+            className="flex-1 sm:flex-initial border-violet-500/40 bg-violet-500/15 text-violet-700 dark:text-violet-400 hover:bg-violet-500/25 hover:text-violet-700 dark:hover:text-violet-400"
+            data-testid="button-insight-predict"
+          >
+            Predict
+          </Button>
+        </div>
         <Button onClick={onViewProfile}>
           View full profile
         </Button>
+      </div>
+    </div>
+  );
+}
+
+function InsightWhyTrendingSnippet({
+  personId,
+  hotMover,
+  onReadMore,
+}: {
+  personId: string;
+  hotMover: boolean;
+  onReadMore: () => void;
+}) {
+  const url = hotMover
+    ? `/api/why-trending/${personId}?hotMover=true`
+    : `/api/why-trending/${personId}`;
+  const queryKey = ["/api/why-trending", personId, hotMover ? "hot" : "default"];
+  const { data, isLoading, isError } = useQuery<InsightWhyTrendingData>({
+    queryKey,
+    queryFn: async () => {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
+    retry: 1,
+    staleTime: 60_000,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="rounded-lg border border-border/60 px-3 py-2 sm:p-3 bg-background/60 space-y-2">
+        <p className="text-[11px] uppercase tracking-wider text-muted-foreground">WHY THEY'RE TRENDING</p>
+        <Skeleton className="h-3 w-full" />
+        <Skeleton className="h-3 w-4/5" />
+      </div>
+    );
+  }
+
+  if (isError || !data?.hasContext || !data.summary) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-lg border border-border/60 px-3 py-2 sm:p-3 bg-background/60">
+      <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1.5">WHY THEY'RE TRENDING</p>
+      <p className="text-xs leading-snug text-muted-foreground line-clamp-3" data-testid="text-insight-why-trending">
+        {data.summary}
+      </p>
+      <div className="flex justify-end mt-1.5">
+        <button
+          type="button"
+          onClick={onReadMore}
+          className="text-xs font-medium text-primary hover:text-primary/80 transition-colors"
+          data-testid="button-insight-why-trending-read-more"
+        >
+          Read more {"\u2192"}
+        </button>
       </div>
     </div>
   );
@@ -1033,6 +1281,7 @@ export default function HomePage() {
       rank: person.rank ?? null,
       change24h: person.change24h ?? null,
       rankChange: person.rankChange ?? null,
+      hotMover: true,
     });
   };
 
@@ -1045,6 +1294,7 @@ export default function HomePage() {
       rank: ((person as any).liveRank ?? person.rank ?? null) as number | null,
       change24h: person.change24h ?? null,
       rankChange: ((person as any).rankChange ?? null) as number | null,
+      hotMover: false,
     });
   };
 
@@ -1597,16 +1847,17 @@ export default function HomePage() {
           <DrawerContent>
             {selectedInsightPerson && (
               <>
-                <DrawerHeader className="text-left">
-                  <DrawerTitle className="text-lg">24h Rank Movement</DrawerTitle>
+                <DrawerHeader className="text-left sr-only">
+                  <DrawerTitle>{selectedInsightPerson.name}</DrawerTitle>
                 </DrawerHeader>
-                <div className="px-4 pb-2">
+                <div className="px-3 pb-3 pt-1">
                   <InsightPanelContent
                     person={selectedInsightPerson}
                     loading={selectedInsightMomentumLoading}
                     error={selectedInsightMomentumError}
                     growthSignals={insightGrowthSignals}
                     coolingSignals={insightCoolingSignals}
+                    categoryRank={selectedInsightMomentum?.categoryRank?.categoryRank ?? null}
                     onClose={handleCloseInsightPanel}
                     onViewProfile={handleViewInsightProfile}
                   />
@@ -1620,8 +1871,8 @@ export default function HomePage() {
           <DialogContent className="sm:max-w-md">
             {selectedInsightPerson && (
               <>
-                <DialogHeader>
-                  <DialogTitle>24h Rank Movement</DialogTitle>
+                <DialogHeader className="sr-only">
+                  <DialogTitle>{selectedInsightPerson.name}</DialogTitle>
                 </DialogHeader>
                 <InsightPanelContent
                   person={selectedInsightPerson}
@@ -1629,6 +1880,7 @@ export default function HomePage() {
                   error={selectedInsightMomentumError}
                   growthSignals={insightGrowthSignals}
                   coolingSignals={insightCoolingSignals}
+                  categoryRank={selectedInsightMomentum?.categoryRank?.categoryRank ?? null}
                   onClose={handleCloseInsightPanel}
                   onViewProfile={handleViewInsightProfile}
                 />
