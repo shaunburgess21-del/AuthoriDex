@@ -2863,7 +2863,7 @@ export default function PredictPage() {
               </div>
             ) : recentActivity.length > 0 && (
               <div className="mt-8 mb-8 min-w-0 shrink-0 rounded-xl pulse-card-blue transition-all duration-200" data-testid="town-square-card">
-                <div className={`p-4 ${townSquareCollapsed ? 'pt-4 pb-4' : 'pt-5'}`}>
+                <div className={`px-3 sm:px-4 ${townSquareCollapsed ? 'py-4' : 'pt-5 pb-4'}`}>
                   <div
                     className="flex items-center gap-3 cursor-pointer select-none group"
                     onClick={() => setTownSquareCollapsed(!townSquareCollapsed)}
