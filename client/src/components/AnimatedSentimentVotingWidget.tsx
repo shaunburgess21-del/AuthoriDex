@@ -335,6 +335,9 @@ export function AnimatedSentimentVotingWidget({
       await queryClient.invalidateQueries({
         queryKey: ["/api/celebrity", personId, "sentiment-stats"],
       });
+      // Refresh the home leaderboard so per-row userApprovalRating mirrors
+      // the just-submitted vote alongside the localStorage event.
+      await queryClient.invalidateQueries({ queryKey: ["/api/leaderboard"] });
     },
     onError: (error: any, _variables, context) => {
       if (context?.submitId === latestSubmitIdRef.current) {

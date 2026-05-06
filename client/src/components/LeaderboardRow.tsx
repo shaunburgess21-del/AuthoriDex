@@ -215,6 +215,15 @@ export function LeaderboardRow({
                 {person.approvalVotesCount != null
                   ? `${compactVotes(person.approvalVotesCount)} votes`
                   : "No votes yet"}
+                {person.approvalAvgRating != null && (
+                  <>
+                    {" \u00B7 "}
+                    <span style={{ color: getApprovalColor(person.approvalAvgRating) }}>
+                      {person.approvalAvgRating.toFixed(1)}
+                    </span>
+                    <span className="text-muted-foreground">/5</span>
+                  </>
+                )}
               </span>
             )}
           </p>
@@ -306,6 +315,11 @@ export function LeaderboardRow({
 
         {activeTab === "approval" && (
           <>
+            <div className="hidden lg:flex w-[100px] shrink-0 justify-end items-center" data-testid={`text-vote-count-${person.id}`}>
+              <p className="font-mono font-semibold text-base tabular-nums text-muted-foreground">
+                {person.approvalVotesCount != null ? person.approvalVotesCount.toLocaleString('en-US') : '—'}
+              </p>
+            </div>
             <div className="text-right hidden sm:block w-[120px] shrink-0">
               <TouchTooltip
                 content={`${person.name}'s approval rating from community votes`}
@@ -357,14 +371,10 @@ export function LeaderboardRow({
                       onClick={(e) => e.stopPropagation()}
                       data-testid={`button-vote-icon-${person.id}`}
                     >
-                      {person.approvalAvgRating != null ? (
-                        <span>
-                          <span style={{ color: getApprovalColor(person.approvalAvgRating) }}>{person.approvalAvgRating.toFixed(1)}</span>
-                          <span className="text-muted-foreground">/5</span>
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
+                      <span>
+                        <span style={{ color: getRatingColor(sentimentScore) }}>{sentimentScore}</span>
+                        <span className="text-muted-foreground">/5</span>
+                      </span>
                     </button>
                   </PopoverTrigger>
                   <PopoverContent
