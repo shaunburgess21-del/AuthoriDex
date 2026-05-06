@@ -1,4 +1,4 @@
-import { Lock, Trophy } from "lucide-react";
+import { Lock, LockOpen, Trophy } from "lucide-react";
 import { useMarketCycle } from "@/hooks/useMarketCycle";
 import { cn } from "@/lib/utils";
 
@@ -148,7 +148,7 @@ function CompactStrip({
         className,
       )}
     >
-      <Lock className="h-3 w-3 shrink-0 text-amber-600 dark:text-amber-500" />
+      <LockOpen className="h-3 w-3 shrink-0 text-amber-600 dark:text-amber-500" />
       <span>
         Entries close <span className="font-medium text-foreground">{cutoffLabel}</span>
         <span className="text-muted-foreground/70"> · </span>
@@ -202,9 +202,15 @@ function FullStrip({
       )}
     >
       <div className="flex items-start gap-2 text-xs">
-        <Lock className="h-3.5 w-3.5 mt-0.5 shrink-0 text-amber-600 dark:text-amber-500" />
+        {status === "OPEN" ? (
+          <LockOpen className="h-3.5 w-3.5 mt-0.5 shrink-0 text-amber-600 dark:text-amber-500" />
+        ) : (
+          <Lock className="h-3.5 w-3.5 mt-0.5 shrink-0 text-amber-600 dark:text-amber-500" />
+        )}
         <div className="flex-1 min-w-0">
-          <span className="text-muted-foreground">Entries close </span>
+          <span className="text-muted-foreground">
+            {status === "OPEN" ? "Entries close " : "Entries closed "}
+          </span>
           {status === "OPEN" ? (
             <>
               <span className={cn("font-mono font-medium", urgencyClass)}>
@@ -278,9 +284,13 @@ function ModalStrip({
         className,
       )}
     >
-      <Lock className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-500" />
+      {status === "OPEN" ? (
+        <LockOpen className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-500" />
+      ) : (
+        <Lock className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-500" />
+      )}
       <span>
-        Entries close{" "}
+        {status === "OPEN" ? "Entries close " : "Entries closed "}
         <span className="font-medium text-foreground">{cutoffLabel}</span>
         <span className="text-muted-foreground/70"> · </span>
         Results <span className="font-medium text-foreground">{resolveLabel}</span>
