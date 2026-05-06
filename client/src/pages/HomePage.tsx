@@ -776,7 +776,10 @@ function InsightPanelContent({
       <InsightWhyTrendingSnippet
         personId={person.id}
         hotMover={person.hotMover}
-        onReadMore={onViewProfile}
+        onReadMore={() => {
+          setLocation(`/person/${person.id}?scroll=why-trending`);
+          onClose();
+        }}
       />
 
       {loading ? (

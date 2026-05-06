@@ -771,13 +771,52 @@ export default function PersonDetailPage() {
   const [curateCompleted, setCurateCompleted] = useState(false);
   const [expandedProfileImage, setExpandedProfileImage] = useState<string | null>(null);
 
-  // Always land at the top when navigating to a celebrity profile.
+  // Default: land at the top when navigating to a celebrity profile.
+  // When the leaderboard insight modal sends users here with hints
+  // (?tab=vote|predict to deep-link a tab, or ?scroll=why-trending to
+  // jump to the trending blurb), scroll to the matching section instead.
   // Wouter rehydrates cached page state on second-visit which can leave
-  // the scroll position mid-page; the global ScrollToTop only fires on
-  // path *changes*, so we own the reset locally keyed off the route param.
+  // the scroll position mid-page; we reset locally keyed off the route
+  // param.
   useEffect(() => {
     if (!params?.id) return;
+    const urlParams = new URLSearchParams(window.location.search);
+    const tabParam = urlParams.get("tab");
+    const scrollParam = urlParams.get("scroll");
+
+    let targetId: string | null = null;
+    if (scrollParam === "why-trending") {
+      targetId = "why-trending-section";
+    } else if (tabParam === "vote" || tabParam === "predict") {
+      targetId = "profile-tabs-section";
+    }
+
+    if (!targetId) {
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+      return;
+    }
+
+    // Snap to top first so the smooth scroll has a consistent starting
+    // point regardless of whatever scroll state wouter rehydrated.
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+
+    // The target may not be in the DOM until person data + suspense
+    // boundaries resolve. Poll briefly, then scroll once it's there.
+    const start = performance.now();
+    const tryScroll = () => {
+      const el = document.getElementById(targetId!);
+      if (el) {
+        const header = document.querySelector("header");
+        const headerHeight = header ? header.getBoundingClientRect().height : 0;
+        const top = el.getBoundingClientRect().top + window.scrollY - headerHeight - 8;
+        window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+        return;
+      }
+      if (performance.now() - start < 2500) {
+        requestAnimationFrame(tryScroll);
+      }
+    };
+    requestAnimationFrame(tryScroll);
   }, [params?.id]);
 
   const handleTabChange = (tab: string) => {
@@ -1374,7 +1413,7 @@ export default function PersonDetailPage() {
             </div>
 
             {((person.rank && person.rank <= 20) || isHotMover) && (
-              <div className="mb-8">
+              <div id="why-trending-section" className="mb-8 scroll-mt-20">
                 <WhyTrendingCard personId={person.id} personName={person.name} hotMover={isHotMover && !(person.rank && person.rank <= 20)} />
               </div>
             )}
