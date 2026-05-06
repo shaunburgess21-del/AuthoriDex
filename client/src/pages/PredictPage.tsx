@@ -103,6 +103,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useLocation, Link } from "wouter";
 import { navigateToLogin } from "@/lib/authReturn";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { TouchTooltip } from "@/components/ui/touch-tooltip";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { CardSection } from "@/components/CardSection";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
@@ -3108,7 +3109,7 @@ export default function PredictPage() {
           <section id="h2h" data-hash-anchor className="mb-10">
             <UnifiedSectionHeader
               title="Head-to-Head Battles"
-              subtitle="Who will gain more points"
+              subtitle="Who will finish with the higher Trend Score?"
               icon={<Swords className="h-5 w-5 text-violet-600 dark:text-violet-400" />}
               accent="violet"
               testId="section-header-h2h"
@@ -3219,6 +3220,22 @@ export default function PredictPage() {
               icon={<Trophy className="h-5 w-5 text-violet-600 dark:text-violet-400" />}
               accent="violet"
               testId="section-header-gainer"
+              subtitleMeta={
+                <TouchTooltip
+                  content={
+                    <p className="text-xs">
+                      The winner is whoever has the highest % gain in their Trend Score by Sunday close, not the highest ranked person.
+                    </p>
+                  }
+                  side="bottom"
+                  align="start"
+                  contentClassName="max-w-[260px]"
+                >
+                  <span className="-mt-0.5 inline-block text-xs leading-tight text-muted-foreground underline underline-offset-2 cursor-help">
+                    Biggest Mover Wins
+                  </span>
+                </TouchTooltip>
+              }
               actions={
                 <Tooltip>
                   <TooltipTrigger asChild>

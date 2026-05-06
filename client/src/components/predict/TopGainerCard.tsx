@@ -1,6 +1,5 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { TouchTooltip } from "@/components/ui/touch-tooltip";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
@@ -10,7 +9,7 @@ import type { ParticipantPreview } from "@/components/predict/ParticipantAvatarS
 import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { formatSignedPercent, formatSignedPoints } from "@/lib/predict-display";
 import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
-import { TrendingUp, Crown, HelpCircle, ChevronRight, Check } from "lucide-react";
+import { Crown, ChevronRight, Check } from "lucide-react";
 import { Link } from "wouter";
 
 type CategoryFilter = "all" | "favorites" | "trending" | "tech" | "politics" | "business" | "music" | "sports" | "film-tv" | "gaming" | "creator" | "food-drink" | "lifestyle" | "misc";
@@ -130,21 +129,6 @@ export function TopGainerCard({
 
   return (
     <PredictCard testId={`card-gainer-${market.id}`} className={`${isMarketClosed ? 'opacity-75' : ''} ${isShimmering ? 'shimmer-once' : ''}`}>
-      <div className="mb-2">
-        <TouchTooltip
-          content={<p>Pick who will have the highest % gain in their Trend Score this week. The biggest mover wins, not the highest ranked.</p>}
-          side="bottom"
-          align="start"
-          contentClassName="max-w-[240px] text-xs"
-        >
-          <Badge variant="outline" className="text-muted-foreground border-border/60 text-[10px] cursor-help">
-            <TrendingUp className="h-3 w-3 mr-0.5" />
-            Biggest Mover Wins
-            <HelpCircle className="h-3 w-3 ml-0.5" />
-          </Badge>
-        </TouchTooltip>
-      </div>
-
       <div className="flex items-center justify-between mb-2 flex-wrap gap-1">
         <div className="flex items-center gap-1.5">
           <Badge variant="outline" className="text-violet-600 dark:text-violet-400 border-violet-500/40 dark:border-violet-500/30 text-[10px]">

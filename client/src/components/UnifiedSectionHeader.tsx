@@ -2,6 +2,7 @@ interface UnifiedSectionHeaderProps {
   title: string;
   titleAddon?: React.ReactNode;
   subtitle?: string;
+  subtitleMeta?: React.ReactNode;
   icon?: React.ReactNode;
   accent: "cyan" | "violet";
   actions?: React.ReactNode;
@@ -29,6 +30,7 @@ export function UnifiedSectionHeader({
   title,
   titleAddon,
   subtitle,
+  subtitleMeta,
   icon,
   accent,
   actions,
@@ -57,6 +59,7 @@ export function UnifiedSectionHeader({
                 {titleAddon}
               </div>
               {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
+              {subtitleMeta && <div>{subtitleMeta}</div>}
             </div>
           </div>
           {actions && <div className="flex items-center gap-2">{actions}</div>}

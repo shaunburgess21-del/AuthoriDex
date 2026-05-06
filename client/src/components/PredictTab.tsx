@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { useMarketCycle } from "@/hooks/useMarketCycle";
 import { MarketCycleHero } from "@/components/MarketCycleHero";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { TouchTooltip } from "@/components/ui/touch-tooltip";
 import { formatSignedPercent, formatSignedPoints } from "@/lib/predict-display";
 import { computePayoutMultiplier } from "@/lib/parimutuel";
 import { useAuth } from "@/contexts/AuthContext";
@@ -238,7 +239,9 @@ function SectionHeader({
   count,
   onViewAll,
   showViewAll = false,
-  infoTooltip
+  infoTooltip,
+  meta,
+  subtitleMeta
 }: { 
   icon: React.ReactNode;
   title: string; 
@@ -247,6 +250,8 @@ function SectionHeader({
   onViewAll?: () => void;
   showViewAll?: boolean;
   infoTooltip?: string;
+  meta?: React.ReactNode;
+  subtitleMeta?: React.ReactNode;
 }) {
   const actions = (
     <div className="flex items-center gap-2">
@@ -285,6 +290,8 @@ function SectionHeader({
       icon={icon}
       accent="violet"
       actions={actions}
+      meta={meta}
+      subtitleMeta={subtitleMeta}
     />
   );
 }
@@ -913,7 +920,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
         <SectionHeader
           icon={<Swords className="h-5 w-5 text-violet-600 dark:text-violet-400" />}
           title="Head-to-Head Battles"
-          subtitle="Who will gain more points"
+          subtitle="Who will finish with the higher Trend Score?"
           count={h2hBattles.length || undefined}
           infoTooltip="Face-off markets matching this person against another rival"
         />
@@ -956,7 +963,22 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
           title="Category Races"
           subtitle="Pick the biggest mover in each category"
           count={gainerMarkets.length || undefined}
-          infoTooltip="The winner is whoever has the highest % gain in their Trend Score by Sunday close — not the highest ranked person."
+          subtitleMeta={
+            <TouchTooltip
+              content={
+                <p className="text-xs">
+                  The winner is whoever has the highest % gain in their Trend Score by Sunday close, not the highest ranked person.
+                </p>
+              }
+              side="bottom"
+              align="start"
+              contentClassName="max-w-[260px]"
+            >
+              <span className="-mt-0.5 inline-block text-xs leading-tight text-muted-foreground underline underline-offset-2 cursor-help">
+                Biggest Mover Wins
+              </span>
+            </TouchTooltip>
+          }
         />
         {gainerMarkets.length > 0 ? (
           <div className={gainerGrid.container}>
