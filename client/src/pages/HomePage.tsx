@@ -929,7 +929,8 @@ export default function HomePage() {
     const raw = params.get("category");
     if (!raw) return "all";
     const lowered = raw.toLowerCase();
-    if (lowered === "all" || lowered === "favorites" || lowered === "trending") return lowered;
+    if (lowered === "trending") return "all";
+    if (lowered === "all" || lowered === "favorites") return lowered;
     return normalizeMarketCategory(raw);
   });
   const [, setLocation] = useLocation();
@@ -1336,7 +1337,6 @@ export default function HomePage() {
     const pinned = [
       { value: "all", label: "All Categories" },
       { value: "favorites", label: "Favorites" },
-      { value: "trending", label: "Trending" },
     ];
     const dynamic = Array.from(leaderboardCategories ?? [])
       .filter((id) => id && id !== "all" && id !== "favorites" && id !== "trending")

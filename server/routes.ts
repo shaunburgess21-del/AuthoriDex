@@ -4182,7 +4182,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     category: string | undefined,
     limit: number,
     offset: number,
-    sortDir: string
+    sortDir: string,
+    userId: string | undefined,
   ) {
     try {
       const latestRun = await db
@@ -4224,8 +4225,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       let filtered = rows as any[];
       if (category && category !== "all") {
-        const categoryCanonical = normalizeMarketCategory(category);
-        filtered = filtered.filter((r: any) => normalizeMarketCategory(r.category) === categoryCanonical);
+        if (category.toLowerCase() === "favorites") {
+          if (!userId) {
+            filtered = [];
+          } else {
+            const favRows = await db
+              .select({ personId: userFavourites.personId })
+              .from(userFavourites)
+              .where(eq(userFavourites.userId, userId));
+            const favSet = new Set(favRows.map((r) => r.personId).filter(Boolean));
+            filtered = filtered.filter((r: any) => favSet.has(r.person_id));
+          }
+        } else {
+          const categoryCanonical = normalizeMarketCategory(category);
+          filtered = filtered.filter((r: any) => normalizeMarketCategory(r.category) === categoryCanonical);
+        }
       }
       if (search && search.trim()) {
         const term = search.trim().toLowerCase();
@@ -4327,23 +4341,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const nonSearchConditions: SQL<unknown>[] = [];
       
       if (category && category !== 'all') {
-        const canonicalCategory = normalizeMarketCategory(category);
-        const categoryRows = await db
-          .select({ id: trendingPeople.id, category: trendingPeople.category })
-          .from(trendingPeople)
-          .where(isNotNull(trendingPeople.category));
-        const matchingIds = categoryRows
-          .filter((row) => normalizeMarketCategory(row.category) === canonicalCategory)
-          .map((row) => row.id);
-
-        if (matchingIds.length === 0) {
-          const noRowsCondition = sql`1 = 0`;
-          conditions.push(noRowsCondition);
-          nonSearchConditions.push(noRowsCondition);
+        if (category.toLowerCase() === 'favorites') {
+          if (!userId) {
+            const noRowsCondition = sql`1 = 0`;
+            conditions.push(noRowsCondition);
+            nonSearchConditions.push(noRowsCondition);
+          } else {
+            const favRows = await db
+              .select({ personId: userFavourites.personId })
+              .from(userFavourites)
+              .where(eq(userFavourites.userId, userId));
+            const matchingIds = favRows.map((r) => r.personId).filter(Boolean);
+            if (matchingIds.length === 0) {
+              const noRowsCondition = sql`1 = 0`;
+              conditions.push(noRowsCondition);
+              nonSearchConditions.push(noRowsCondition);
+            } else {
+              const categoryCondition = inArray(trendingPeople.id, matchingIds);
+              conditions.push(categoryCondition);
+              nonSearchConditions.push(categoryCondition);
+            }
+          }
         } else {
-          const categoryCondition = inArray(trendingPeople.id, matchingIds);
-          conditions.push(categoryCondition);
-          nonSearchConditions.push(categoryCondition);
+          const canonicalCategory = normalizeMarketCategory(category);
+          const categoryRows = await db
+            .select({ id: trendingPeople.id, category: trendingPeople.category })
+            .from(trendingPeople)
+            .where(isNotNull(trendingPeople.category));
+          const matchingIds = categoryRows
+            .filter((row) => normalizeMarketCategory(row.category) === canonicalCategory)
+            .map((row) => row.id);
+
+          if (matchingIds.length === 0) {
+            const noRowsCondition = sql`1 = 0`;
+            conditions.push(noRowsCondition);
+            nonSearchConditions.push(noRowsCondition);
+          } else {
+            const categoryCondition = inArray(trendingPeople.id, matchingIds);
+            conditions.push(categoryCondition);
+            nonSearchConditions.push(categoryCondition);
+          }
         }
       }
       
@@ -4366,7 +4403,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // --- SNAPSHOT FALLBACK: If trending_people is empty, reconstruct from latest completed run ---
       if (totalCount === 0) {
         console.log("[leaderboard] trending_people is empty, attempting snapshot fallback...");
-        const fallbackResult = await buildSnapshotFallbackLeaderboard(tab, search, category, limit, offset, sortDir);
+        const fallbackResult = await buildSnapshotFallbackLeaderboard(tab, search, category, limit, offset, sortDir, userId);
         if (fallbackResult) {
           console.log(`[leaderboard] Snapshot fallback serving ${fallbackResult.data.length} people from run ${fallbackResult.meta.fallbackRunId}`);
           return res.json(fallbackResult);
