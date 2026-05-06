@@ -17,6 +17,11 @@ in `anonymous-voting-implementation.md` for the rationale.
 
 ## Setup
 
+- [ ] Apply pending migrations to dev DB: `npm run db:deploy-migrate`
+      — only needed when new migration files have been added since your
+      last run; the runner is a no-op when `schema_migrations` is up to
+      date. (See Phase 4a follow-up in `anonymous-voting-implementation.md`
+      for the discovery context.)
 - [ ] `npm run dev` (root)
 - [ ] Open Chrome / Firefox at the dev server URL with DevTools open
 - [ ] Have the Elements panel ready for `data-testid` lookup if needed
