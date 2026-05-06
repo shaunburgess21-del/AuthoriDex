@@ -101,6 +101,8 @@ import {
   AUTH_APPLY_VOTE_UI_ONCE_KEY,
   type VoteResumePayload,
 } from "@/lib/authReturn";
+import { useAnonBudget, applyBudgetFromVoteResponse } from "@/hooks/useAnonBudget";
+import { checkVoteGate } from "@/lib/voteGate";
 import { navigateWithVoteList } from "@/lib/voteListNavigation";
 import { parseVoteError } from "@/lib/voteErrors";
 import { getClientWeekDeadlines } from "@/hooks/useMarketCycle";
@@ -1265,12 +1267,17 @@ export default function VotePage() {
     }
   }, [user, myInductionVoteIds]);
 
+  const budget = useAnonBudget();
+
   const inductionVoteMutation = useMutation({
     mutationFn: async (id: string) => {
       const res = await apiRequest('POST', `/api/vote/induction/${id}/vote`);
       return res.json();
     },
     onSuccess: (data) => {
+      // Phase 4 — sync the anon-budget cache from the server-authoritative
+      // snapshot in the response.
+      applyBudgetFromVoteResponse(queryClient, data);
       hapticSuccess();
       queryClient.invalidateQueries({ queryKey: ['/api/vote/induction'] });
       queryClient.invalidateQueries({ queryKey: ['/api/me/induction-votes'] });
@@ -1518,6 +1525,9 @@ export default function VotePage() {
       return response.json();
     },
     onSuccess: (data, variables) => {
+      // Phase 4 — sync the anon-budget cache from the server-authoritative
+      // snapshot in the response.
+      applyBudgetFromVoteResponse(queryClient, data);
       hapticSuccess();
       queryClient.invalidateQueries({ queryKey: ['/api/matchups'] });
       queryClient.invalidateQueries({ queryKey: ['/api/matchups/user-votes'] });
@@ -1554,7 +1564,10 @@ export default function VotePage() {
       const response = await apiRequest('POST', `/api/matchups/${matchupId}/vote`, { remove: true });
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      // Phase 4 — sync budget cache. Remove paths return budget: null
+      // server-side (no budget delta) but the helper handles that correctly.
+      applyBudgetFromVoteResponse(queryClient, data);
       queryClient.invalidateQueries({ queryKey: ['/api/matchups'] });
       queryClient.invalidateQueries({ queryKey: ['/api/matchups/user-votes'] });
       toast("Vote removed", { description: "Your Matchup vote has been removed." });
@@ -1578,6 +1591,24 @@ export default function VotePage() {
   const handleMatchupVote = (matchupId: string, option: 'option_a' | 'option_b' | 'neutral') => {
     if (matchupRateLimited) return;
     const previousVote = matchupUserVotes[matchupId] || null;
+    // Phase 4 — anon-budget gate. Authed users always proceed; anon users
+    // proceed if they have remaining budget. Upsert path (re-vote on same
+    // target) proceeds even at exhaustion.
+    const isUpsert = previousVote !== null;
+    const decision = checkVoteGate(budget, "matchup_poll", matchupId, isUpsert);
+    if (!decision.proceed) {
+      navigateToLogin(setLocation, {
+        mode: "signup",
+        reason: "vote_limit_reached",
+        voteUi: voteLoginSnapshotRef.current,
+        resumeAction: {
+          ...decision.resumeAction,
+          cardRoute: window.location.pathname,
+          pendingVote: { matchupId, option },
+        },
+      });
+      return;
+    }
     setLocalMatchupVotes((prev: Record<string, string>) => ({ ...prev, [matchupId]: option }));
     matchupVoteMutation.mutate({ matchupId, option, previousVote });
   };
@@ -2135,11 +2166,27 @@ export default function VotePage() {
   }, []);
 
   const handleToggleVote = (candidateId: string) => {
-    if (!user) {
-      toast(signInToVoteTitle, signInToVoteToastOptions(() => navigateToLogin(setLocation, { voteUi: voteLoginSnapshotRef.current })));
+    if (votedIds.has(candidateId)) return;
+    // Phase 4 — anon-budget gate. The pre-Stage-7 anon-block has been
+    // removed; anon users with remaining budget now hit the server,
+    // exhausted users redirect via the gate. isUpsert hardcoded false:
+    // votedIds.has() filter above catches re-votes for authed users; anon
+    // users start with empty votedIds (server-side anon induction history
+    // not surfaced to client until signup).
+    const decision = checkVoteGate(budget, "induction", candidateId, false);
+    if (!decision.proceed) {
+      navigateToLogin(setLocation, {
+        mode: "signup",
+        reason: "vote_limit_reached",
+        voteUi: voteLoginSnapshotRef.current,
+        resumeAction: {
+          ...decision.resumeAction,
+          cardRoute: window.location.pathname,
+          pendingVote: { intent: "induct" },
+        },
+      });
       return;
     }
-    if (votedIds.has(candidateId)) return;
     setVotedIds(prev => {
       const newSet = new Set(prev);
       newSet.add(candidateId);
@@ -2154,6 +2201,9 @@ export default function VotePage() {
       return res.json();
     },
     onSuccess: (data) => {
+      // Phase 4 — sync the anon-budget cache from the server-authoritative
+      // snapshot in the response.
+      applyBudgetFromVoteResponse(queryClient, data);
       queryClient.invalidateQueries({ queryKey: ['/api/trending-polls'] });
       queryClient.invalidateQueries({ queryKey: ['/api/gamification/stats'] });
       if (data?.xp?.xpAwarded) {
@@ -2175,9 +2225,23 @@ export default function VotePage() {
     topicId: string,
     choice: 'support' | 'neutral' | 'oppose',
   ): Promise<void> => {
-    if (!user) {
-      toast(signInToVoteTitle, signInToVoteToastOptions(() => navigateToLogin(setLocation, { voteUi: voteLoginSnapshotRef.current })));
-      throw new Error("Not authenticated");
+    // Phase 4 — anon-budget gate. The pre-Stage-7 anon-block has been
+    // removed; anon users with remaining budget now hit the server.
+    // isUpsert defaults to false — the user's prior vote on this poll is
+    // not immediately surfaced from existing queries on this page.
+    const decision = checkVoteGate(budget, "trending_poll", topicId, false);
+    if (!decision.proceed) {
+      navigateToLogin(setLocation, {
+        mode: "signup",
+        reason: "vote_limit_reached",
+        voteUi: voteLoginSnapshotRef.current,
+        resumeAction: {
+          ...decision.resumeAction,
+          cardRoute: window.location.pathname,
+          pendingVote: { choice },
+        },
+      });
+      throw new Error("Vote gate redirect");
     }
     const topic = dbPolls.find((t: any) => t.id === topicId);
     if (!topic?.slug) {

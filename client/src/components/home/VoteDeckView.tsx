@@ -13,6 +13,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation, Link } from "wouter";
 import { navigateToLogin } from "@/lib/authReturn";
+import { useAnonBudget, applyBudgetFromVoteResponse } from "@/hooks/useAnonBudget";
+import { checkVoteGate } from "@/lib/voteGate";
 import { 
   Swords, 
   MessageSquare, 
@@ -468,6 +470,7 @@ function ValueCard({
 export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
+  const budget = useAnonBudget();
   const [activeSection, setActiveSection] = useState<VoteSection>("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<FilterCategory>("all");
@@ -536,8 +539,15 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
   });
 
   const inductionVoteMutation = useMutation({
-    mutationFn: (id: string) => apiRequest("POST", `/api/vote/induction/${id}/vote`),
-    onSuccess: () => {
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("POST", `/api/vote/induction/${id}/vote`);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      // Phase 4 — sync the anon-budget cache from the server-authoritative
+      // snapshot in the response. No-op for authed users (response.budget
+      // is null), so safe to call unconditionally.
+      applyBudgetFromVoteResponse(queryClient, data);
       hapticSuccess();
       queryClient.invalidateQueries({ queryKey: ["/api/vote/induction"] });
       queryClient.invalidateQueries({ queryKey: ["/api/me/induction-votes"] });
@@ -611,9 +621,13 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
     [valueCelebrities, categoryFilter, searchQuery]
   );  const valueVoteMutation = useMutation({
     mutationFn: async ({ personId, vote }: { personId: string; vote: 'underrated' | 'overrated' }) => {
-      return apiRequest('POST', `/api/celebrity/${personId}/value-vote`, { vote });
+      const res = await apiRequest('POST', `/api/celebrity/${personId}/value-vote`, { vote });
+      return res.json();
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (data, variables) => {
+      // Phase 4 — sync the anon-budget cache from the server-authoritative
+      // snapshot in the response.
+      applyBudgetFromVoteResponse(queryClient, data);
       hapticSuccess();
       queryClient.invalidateQueries({ queryKey: ['/api/celebrity', variables.personId, 'value-vote'] });
       queryClient.invalidateQueries({ queryKey: ['/api/trending'] });
@@ -639,11 +653,25 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
   };
 
   const handleInductionVote = (id: string) => {
-    if (!user) {
-      navigateToLogin(setLocation);
+    if (inductionVotes.has(id)) return;
+    // Phase 4 — anon-budget gate. Authed users always proceed; anon users
+    // proceed if they have remaining budget. isUpsert is hardcoded false:
+    // the early-return above filters re-votes, and anon users start with
+    // an empty inductionVotes set (server-side anon induction history
+    // isn't surfaced to client until signup).
+    const decision = checkVoteGate(budget, "induction", id, false);
+    if (!decision.proceed) {
+      navigateToLogin(setLocation, {
+        mode: "signup",
+        reason: "vote_limit_reached",
+        resumeAction: {
+          ...decision.resumeAction,
+          cardRoute: window.location.pathname,
+          pendingVote: { intent: "induct" },
+        },
+      });
       return;
     }
-    if (inductionVotes.has(id)) return;
     inductionVoteMutation.mutate(id, {
       onSuccess: () => {
         setInductionVotes((prev) => new Set(prev).add(id));
@@ -657,6 +685,23 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
   };
 
   const handleValueVote = (personId: string, vote: 'underrated' | 'overrated') => {
+    // Phase 4 — anon-budget gate. The card UI hides vote buttons after
+    // hasVoted is true, so this handler always sees a fresh-vote intent;
+    // isUpsert defaults to false. D2 unification (value-vote +
+    // approval-rating on same person = 1 unit) is enforced server-side.
+    const decision = checkVoteGate(budget, "celebrity_person", personId, false);
+    if (!decision.proceed) {
+      navigateToLogin(setLocation, {
+        mode: "signup",
+        reason: "vote_limit_reached",
+        resumeAction: {
+          ...decision.resumeAction,
+          cardRoute: window.location.pathname,
+          pendingVote: { vote },
+        },
+      });
+      return;
+    }
     setValueVotes(prev => ({ ...prev, [personId]: vote }));
     valueVoteMutation.mutate({ personId, vote });
   };

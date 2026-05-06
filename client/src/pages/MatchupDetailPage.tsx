@@ -18,6 +18,8 @@ import { VoteDetailNavCluster } from "@/components/vote/VoteDetailNavCluster";
 import { SwipeNavigator } from "@/components/vote/SwipeNavigator";
 import { useDetailNavigation } from "@/hooks/useDetailNavigation";
 import { navigateToLogin } from "@/lib/authReturn";
+import { useAnonBudget, applyBudgetFromVoteResponse } from "@/hooks/useAnonBudget";
+import { checkVoteGate } from "@/lib/voteGate";
 import { CardComments, useCommentCount } from "@/components/comments/CardComments";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import {
@@ -78,6 +80,7 @@ export default function MatchupDetailPage() {
   const queryClient = useQueryClient();
   const { trigger: triggerXpBurst } = useXpBurst();
   const { user, isLoggedIn } = useAuth();
+  const budget = useAnonBudget();
 
   const matchupCommentCount = useCommentCount("matchup", slug || "");
   const { showNav, historyDepth, goPrev, goNext, prevSlug, nextSlug } = useDetailNavigation(slug || undefined, "matchup");
@@ -102,6 +105,10 @@ export default function MatchupDetailPage() {
       return res.json();
     },
     onSuccess: (data) => {
+      // Phase 4 — sync the anon-budget cache from the server-authoritative
+      // snapshot in the response. No-op for authed users (response.budget
+      // is null), so safe to call unconditionally.
+      applyBudgetFromVoteResponse(queryClient, data);
       queryClient.invalidateQueries({ queryKey: ["/api/matchups/by-slug", slug] });
       queryClient.invalidateQueries({ queryKey: ["/api/matchups/user-votes"] });
       if (data?.xp?.xpAwarded) {
@@ -119,13 +126,34 @@ export default function MatchupDetailPage() {
       const res = await apiRequest("POST", `/api/matchups/${matchupId}/vote`, { remove: true });
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      // Phase 4 — sync budget cache. Remove paths return budget: null
+      // server-side (no budget delta) but the helper handles that correctly.
+      applyBudgetFromVoteResponse(queryClient, data);
       queryClient.invalidateQueries({ queryKey: ["/api/matchups/by-slug", slug] });
       queryClient.invalidateQueries({ queryKey: ["/api/matchups/user-votes"] });
     },
   });
 
   const handleVote = (matchupId: string, option: 'option_a' | 'option_b' | 'neutral') => {
+    // Phase 4 — anon-budget gate. Authed users always proceed; anon users
+    // proceed if they have remaining budget, redirect to /login on exhausted.
+    // Upsert path (re-vote on same target) proceeds even at exhaustion since
+    // the server-side unique constraint makes it a free upsert.
+    const isUpsert = !!userVotes?.[matchupId];
+    const decision = checkVoteGate(budget, "matchup_poll", matchupId, isUpsert);
+    if (!decision.proceed) {
+      navigateToLogin(setLocation, {
+        mode: "signup",
+        reason: "vote_limit_reached",
+        resumeAction: {
+          ...decision.resumeAction,
+          cardRoute: window.location.pathname,
+          pendingVote: { option },
+        },
+      });
+      return;
+    }
     voteMutation.mutate({ matchupId, option });
   };
 

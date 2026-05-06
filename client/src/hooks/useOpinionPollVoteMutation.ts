@@ -1,6 +1,10 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useXpBurst } from "@/components/XpBurstProvider";
+import {
+  applyBudgetFromVoteResponse,
+  type VoteResponseBudget,
+} from "@/hooks/useAnonBudget";
 
 const OPINION_POLLS_LIST_KEY = ["/api/opinion-polls"] as const;
 
@@ -29,6 +33,8 @@ type VoteResponse = {
   removed?: boolean;
   xp?: { xpAwarded?: number; reason?: string } | null;
   poll?: OpinionPollLike | null;
+  /** Phase 4 — anon-budget snapshot from server. null for authed users. */
+  budget?: VoteResponseBudget;
 };
 
 type MutationContext = { previousPolls: OpinionPollLike[] | undefined };
@@ -120,6 +126,10 @@ export function useOpinionPollVoteMutation() {
       }
     },
     onSuccess: (data) => {
+      // Phase 4 — sync the anon-budget cache from the server-authoritative
+      // snapshot in the response. No-op for authed users (response.budget
+      // is null), so safe to call unconditionally.
+      applyBudgetFromVoteResponse(queryClient, data);
       const serverPoll = data?.poll;
       if (serverPoll) {
         queryClient.setQueryData<OpinionPollLike[] | undefined>(OPINION_POLLS_LIST_KEY, (old) => {

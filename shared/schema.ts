@@ -889,6 +889,29 @@ export const userCategoryEngagement = pgTable("user_category_engagement", {
 export type UserCategoryEngagement = typeof userCategoryEngagement.$inferSelect;
 export type InsertUserCategoryEngagement = typeof userCategoryEngagement.$inferInsert;
 
+// Phase 4 — Anonymous voting budget. One row per (fdx_sid, surface_type,
+// target_id); re-votes are upserts against the composite PK so they
+// consume zero additional units. Written by server/lib/anonBudget.ts;
+// wiped by the signup-cleanup branch in /api/profile/sync.
+export const anonVoteBudget = pgTable("anon_vote_budget", {
+  fdxSid: text("fdx_sid").notNull(),
+  surfaceType: text("surface_type").notNull(),
+  targetId: text("target_id").notNull(),
+  // timestamptz to match the DB column (see migration 0049).
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.fdxSid, table.surfaceType, table.targetId] }),
+  sidIdx: index("anon_vote_budget_sid_idx").on(table.fdxSid),
+  createdIdx: index("anon_vote_budget_created_idx").on(table.createdAt),
+  surfaceCheck: check(
+    "anon_vote_budget_surface_check",
+    sql`${table.surfaceType} IN ('matchup_poll','opinion_poll','induction','trending_poll','celebrity_person')`,
+  ),
+}));
+
+export type AnonVoteBudget = typeof anonVoteBudget.$inferSelect;
+export type InsertAnonVoteBudget = typeof anonVoteBudget.$inferInsert;
+
 // Relations for gamification tables
 export const xpLedgerRelations = relations(xpLedger, ({ one }) => ({
   user: one(profiles, {

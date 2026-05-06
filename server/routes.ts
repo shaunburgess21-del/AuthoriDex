@@ -5,7 +5,7 @@ import { storage } from "./storage";
 import { getBaselineDiagnostics } from "./utils/baseline";
 import { db } from "./db";
 import { syncWinningAvatarForPerson } from "./lib/curateAvatar";
-import { trendSnapshots, trackedPeople, communityInsights, insightVotes, comments as unifiedComments, commentVotes, matchups, votes, voteActions, xpActions, xpLedger, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, contentCategories, userCategoryEngagement, emailUnsubscribeState, insertCommunityInsightSchema, insertInsightVoteSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
+import { anonVoteBudget, trendSnapshots, trackedPeople, communityInsights, insightVotes, comments as unifiedComments, commentVotes, matchups, votes, voteActions, xpActions, xpLedger, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, contentCategories, userCategoryEngagement, emailUnsubscribeState, insertCommunityInsightSchema, insertInsightVoteSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
 import { validateSuggestionPayload, SUGGESTION_TYPES } from "@shared/suggestionSchemas";
 import { normaliseSocialHandles, SOCIAL_HANDLE_KEYS } from "@shared/handleNormalise";
 import { eq, desc, and, gt, sql, count, gte, lte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull, isNull } from "drizzle-orm";
@@ -72,6 +72,7 @@ import { upsertEngagement } from "./lib/engagementWriter";
 import { captureBackgroundError } from "./sentry";
 import { computeBlendStateForUser } from "./lib/blendedRank";
 import {
+  ANON_VOTE_BUDGET,
   BEHAVIOUR_HALF_LIFE_DAYS,
   BEHAVIOUR_RAMP_MIN_CATEGORIES,
   BEHAVIOUR_RAMP_FULL_CATEGORIES,
@@ -79,6 +80,9 @@ import {
   BLEND_STATED_WEEK_4,
   PREDICTION_STAKE_WEIGHT_CAP,
 } from "./lib/rankingConfig";
+import { FDX_SID_COOKIE, readFdxSid } from "./lib/anonIdentity";
+import { consumeBudgetUnit, getBudgetStatus } from "./lib/anonBudget";
+import { anonVoteIpRateLimit } from "./middleware/anonRateLimit";
 import { resolvePublicMatchupBySlugOrId } from "./utils/matchup-resolve";
 import { registerCronRoutes, registerPublicRoutes, registerGamificationRoutes, registerFavoritesRoutes, registerNotificationsRoutes, registerAdminNotificationsRoutes, registerOgRoutes } from "./route-modules";
 import { handleAuthHook } from "./emails/routes/auth-hook";
@@ -3620,12 +3624,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // New unified value voting system for the Value leaderboard tab
 
   // POST /api/celebrity/:id/value-vote - Cast underrated/overrated vote
-  app.post("/api/celebrity/:id/value-vote", requireAuth, async (req: AuthRequest, res) => {
+  app.post("/api/celebrity/:id/value-vote", optionalAuth, anonVoteIpRateLimit, async (req: AuthRequest, res) => {
     try {
       const celebrityId = req.params.id;
-      const userId = req.userId!;
-
-      if (!checkVoteRateLimit(userId)) {
+      const writerId = req.userId || req.sessionId;
+      if (!writerId) {
+        return res.status(400).json({ error: "session_unavailable" });
+      }
+      if (!checkVoteRateLimit(writerId)) {
         return res.status(429).json({ error: "Too many votes. Please slow down." });
       }
       const { vote } = req.body;
@@ -3645,13 +3651,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Celebrity not found" });
       }
 
+      // Phase 4 — anonymous-budget gate. See matchup-vote handler for the
+      // canonical pattern. D2: value-vote and approval-rating share the
+      // 'celebrity_person' surface keyed on celebrityId, so a unit
+      // consumed here is reused by approval-rating (and vice versa).
+      let budgetSnapshot: {
+        used: number;
+        limit: number;
+        remaining: number;
+        exhausted: boolean;
+      } | null = null;
+      if (!req.userId) {
+        const fdxSid = readFdxSid(req);
+        if (!fdxSid) {
+          return res.status(400).json({ error: "session_unavailable" });
+        }
+        const result = await consumeBudgetUnit(fdxSid, "celebrity_person", celebrityId);
+        if (result.exhausted) {
+          return res.status(403).json({
+            error: "budget_exhausted",
+            budgetLimit: ANON_VOTE_BUDGET,
+            budgetUsed: result.newCount,
+          });
+        }
+        budgetSnapshot = result.newCount < 0 ? null : {
+          used: result.newCount,
+          limit: ANON_VOTE_BUDGET,
+          remaining: Math.max(0, ANON_VOTE_BUDGET - result.newCount),
+          exhausted: false,
+        };
+      }
+
       // Snapshot before upsert — first vote per user/celebrity drives profiles.totalVotes
       // bump and behavioural engagement hooks; changing Underrated/O/Fairly Rated later
       // is refinement, not new engagement signal.
       const [priorValVote] = await db
         .select({ id: celebrityValueVotes.id, vote: celebrityValueVotes.vote })
         .from(celebrityValueVotes)
-        .where(and(eq(celebrityValueVotes.userId, userId), eq(celebrityValueVotes.celebrityId, celebrityId)))
+        .where(and(eq(celebrityValueVotes.userId, writerId), eq(celebrityValueVotes.celebrityId, celebrityId)))
         .limit(1);
       const firstValueVote = !priorValVote;
 
@@ -3661,7 +3698,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .insert(celebrityValueVotes)
           .values({
             celebrityId,
-            userId,
+            userId: writerId,
             vote,
           })
           .onConflictDoUpdate({
@@ -3672,25 +3709,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
             },
           });
 
-        if (firstValueVote) {
+        if (firstValueVote && req.userId) {
           await tx.update(profiles)
             .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
-            .where(eq(profiles.id, userId));
+            .where(eq(profiles.id, req.userId));
         }
         await appendVoteAction(tx, {
-          userId,
+          userId: writerId,
           voteType: "value_vote",
           targetType: "person",
           targetId: celebrityId,
           actionKind: firstValueVote ? "create" : "update",
           prevValue: priorValVote?.vote ?? null,
           nextValue: vote,
-          source: "value-vote",
+          source: req.userId ? "value-vote" : "value-vote-anon",
         });
       });
 
       // Phase 3: behavioural engagement — first value vote only, outside the primary tx.
-      if (firstValueVote) {
+      // Anonymous votes intentionally skipped (D8 — anon votes don't pollute behavioural signal).
+      if (firstValueVote && req.userId) {
         try {
           const [personRow] = await db
             .select({ category: trackedPeople.category })
@@ -3698,7 +3736,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .where(eq(trackedPeople.id, celebrityId))
             .limit(1);
           await upsertEngagement({
-            userId,
+            userId: req.userId,
             categoryId: personRow?.category,
             voteDelta: 1,
             source: "value-vote",
@@ -3707,22 +3745,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.warn("[value-vote] engagement lookup failed:", e);
           captureBackgroundError(e, {
             surface: "value-vote.engagement",
-            userId,
+            userId: req.userId,
             celebrityId,
           });
         }
       }
 
       let xpResult;
-      try {
-        xpResult = await gamificationService.awardXp(
-          userId, 'vote_sentiment',
-          `value_vote_${celebrityId}_${userId}`,
-          { celebrityId, vote }
-        );
-      } catch (e) { console.error("XP award failed:", e); }
+      if (req.userId) {
+        try {
+          xpResult = await gamificationService.awardXp(
+            req.userId, 'vote_sentiment',
+            `value_vote_${celebrityId}_${req.userId}`,
+            { celebrityId, vote }
+          );
+        } catch (e) { console.error("XP award failed:", e); }
+      }
 
-      // Recompute metrics for this celebrity
+      // Recompute metrics for this celebrity (community totals include anon votes)
       const metrics = await recomputeCelebrityMetrics(celebrityId);
 
       res.json({
@@ -3733,6 +3773,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fairlyRatedPct: metrics.fairlyRatedPct,
         valueScore: metrics.valueScore,
         xp: xpResult ?? null,
+        budget: budgetSnapshot,
       });
     } catch (error: any) {
       console.error("[value-vote] Error:", error);
@@ -3811,12 +3852,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // POST /api/celebrity/:id/approval-rating - Submit or update 1–5 approval (persists via API + recomputes metrics)
-  app.post("/api/celebrity/:id/approval-rating", requireAuth, async (req: AuthRequest, res) => {
+  app.post("/api/celebrity/:id/approval-rating", optionalAuth, anonVoteIpRateLimit, async (req: AuthRequest, res) => {
     try {
       const celebrityId = req.params.id;
-      const userId = req.userId!;
-
-      if (!checkVoteRateLimit(userId)) {
+      const writerId = req.userId || req.sessionId;
+      if (!writerId) {
+        return res.status(400).json({ error: "session_unavailable" });
+      }
+      if (!checkVoteRateLimit(writerId)) {
         return res.status(429).json({ error: "Too many votes. Please slow down." });
       }
 
@@ -3845,19 +3888,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Celebrity not found" });
       }
 
+      // Phase 4 — anonymous-budget gate. D2: shares 'celebrity_person'
+      // surface with value-vote keyed on celebrityId. If the user already
+      // value-voted on this person, this approval-rating is a free upsert
+      // (PK collision → consumed: false).
+      let budgetSnapshot: {
+        used: number;
+        limit: number;
+        remaining: number;
+        exhausted: boolean;
+      } | null = null;
+      if (!req.userId) {
+        const fdxSid = readFdxSid(req);
+        if (!fdxSid) {
+          return res.status(400).json({ error: "session_unavailable" });
+        }
+        const result = await consumeBudgetUnit(fdxSid, "celebrity_person", celebrityId);
+        if (result.exhausted) {
+          return res.status(403).json({
+            error: "budget_exhausted",
+            budgetLimit: ANON_VOTE_BUDGET,
+            budgetUsed: result.newCount,
+          });
+        }
+        budgetSnapshot = result.newCount < 0 ? null : {
+          used: result.newCount,
+          limit: ANON_VOTE_BUDGET,
+          remaining: Math.max(0, ANON_VOTE_BUDGET - result.newCount),
+          exhausted: false,
+        };
+      }
+
       // Snapshot before upsert — behavioural engagement counts the first 1–5
       // rating per (user, person) only; edits are refinement, same as value-vote.
       const [priorApprovalRow] = await db
         .select({ id: userVotes.id, rating: userVotes.rating })
         .from(userVotes)
-        .where(and(eq(userVotes.userId, userId), eq(userVotes.personId, celebrityId)))
+        .where(and(eq(userVotes.userId, writerId), eq(userVotes.personId, celebrityId)))
         .limit(1);
       const firstApprovalRating = !priorApprovalRow;
 
       await db
         .insert(userVotes)
         .values({
-          userId,
+          userId: writerId,
           personId: celebrityId,
           personName: celebrity.name,
           rating,
@@ -3871,17 +3945,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
           },
         });
       await appendVoteAction(db, {
-        userId,
+        userId: writerId,
         voteType: "overall_rating",
         targetType: "person",
         targetId: celebrityId,
         actionKind: firstApprovalRating ? "create" : "update",
         prevValue: priorApprovalRow ? String(priorApprovalRow.rating) : null,
         nextValue: String(rating),
-        source: "approval-rating",
+        source: req.userId ? "approval-rating" : "approval-rating-anon",
       });
 
-      if (firstApprovalRating) {
+      // Phase 3 engagement — authenticated, first-rating only.
+      if (firstApprovalRating && req.userId) {
         try {
           const [personRow] = await db
             .select({ category: trackedPeople.category })
@@ -3889,7 +3964,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .where(eq(trackedPeople.id, celebrityId))
             .limit(1);
           await upsertEngagement({
-            userId,
+            userId: req.userId,
             categoryId: personRow?.category,
             voteDelta: 1,
             source: "approval-rating",
@@ -3898,7 +3973,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.warn("[approval-rating] engagement lookup failed:", e);
           captureBackgroundError(e, {
             surface: "approval-rating.engagement",
-            userId,
+            userId: req.userId,
             celebrityId,
           });
         }
@@ -3906,7 +3981,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       await recomputeCelebrityMetrics(celebrityId);
 
-      res.json({ success: true, rating });
+      res.json({ success: true, rating, budget: budgetSnapshot });
     } catch (error: any) {
       console.error("[approval-rating POST] Error:", error);
       res.status(500).json({ error: "Failed to submit approval rating" });
@@ -5949,7 +6024,7 @@ Only return the JSON object.`;
   });
   
   // Submit a vote on a matchup (supports anonymous via session ID)
-  app.post("/api/matchups/:id/vote", optionalAuth, async (req: AuthRequest, res) => {
+  app.post("/api/matchups/:id/vote", optionalAuth, anonVoteIpRateLimit, async (req: AuthRequest, res) => {
     try {
       // Use userId if logged in, otherwise use session ID for anonymous voting
       const voterId = req.userId || req.sessionId;
@@ -6029,13 +6104,54 @@ Only return the JSON object.`;
           optionBPercent: dispBPercent,
           neutralPercent: totalVotes > 0 ? 100 - dispAPercent - dispBPercent : 0,
           votedOption: null,
+          budget: null,
         });
       }
 
       if (!option || (option !== 'option_a' && option !== 'option_b' && option !== 'neutral')) {
         return res.status(400).json({ error: "Invalid option. Must be 'option_a', 'option_b', or 'neutral'" });
       }
-      
+
+      // Phase 4 — anonymous-budget gate. Authenticated users skip this
+      // path entirely. Anonymous users consume a budget unit keyed on
+      // (fdx_sid, 'matchup_poll', matchupId); if the post-call count
+      // is >= ANON_VOTE_BUDGET, refuse the write and surface the
+      // exhausted state. Re-votes on the same matchup are free
+      // (PK collision → consumed: false) but still gate on exhausted
+      // per the Stage 3 anonBudget contract.
+      //
+      // newCount === -1 is the Stage 3 fail-open sentinel — DB error
+      // during consume returned a permissive shape so the vote write
+      // proceeds, but the count is untrusted. Surface as budget: null
+      // so the client treats this response as "budget unknown" and
+      // refetches via GET /api/anon-budget.
+      let budgetSnapshot: {
+        used: number;
+        limit: number;
+        remaining: number;
+        exhausted: boolean;
+      } | null = null;
+      if (!req.userId) {
+        const fdxSid = readFdxSid(req);
+        if (!fdxSid) {
+          return res.status(400).json({ error: "session_unavailable" });
+        }
+        const result = await consumeBudgetUnit(fdxSid, "matchup_poll", id);
+        if (result.exhausted) {
+          return res.status(403).json({
+            error: "budget_exhausted",
+            budgetLimit: ANON_VOTE_BUDGET,
+            budgetUsed: result.newCount,
+          });
+        }
+        budgetSnapshot = result.newCount < 0 ? null : {
+          used: result.newCount,
+          limit: ANON_VOTE_BUDGET,
+          remaining: Math.max(0, ANON_VOTE_BUDGET - result.newCount),
+          exhausted: false,
+        };
+      }
+
       let xpResult = null;
       
       if (existingVote) {
@@ -6153,10 +6269,51 @@ Only return the JSON object.`;
         votedOption: option,
         xpAwarded: xpResult?.success ? xpResult.xpAwarded : 0,
         xp: xpResult ?? null,
+        budget: budgetSnapshot,
       });
     } catch (error: any) {
       console.error("Error submitting matchup vote:", error.message);
       res.status(500).json({ error: "Failed to submit vote" });
+    }
+  });
+
+  // Phase 4 — anonymous-vote budget read endpoint. Called by the
+  // useAnonBudget hook (Stage 5) on Vote-page mount and after any vote
+  // response surfaces a stale or null `budget` field (e.g. fail-open).
+  //
+  // Authenticated users get { authenticated: true } only — no budget
+  // tracking applies to them, so the client treats the response as
+  // "ungated" and skips the gate UI entirely.
+  //
+  // Anonymous users get { authenticated: false, used, limit, remaining,
+  // exhausted } sourced from getBudgetStatus, which is itself fail-open
+  // (a DB error returns a fresh-budget shape rather than throwing).
+  // No anonVoteIpRateLimit middleware here — this is a read, not a
+  // write attempt, and the per-IP cap exists to throttle write abuse.
+  app.get("/api/anon-budget", optionalAuth, async (req: AuthRequest, res) => {
+    try {
+      if (req.userId) {
+        return res.json({ authenticated: true });
+      }
+      const fdxSid = readFdxSid(req);
+      if (!fdxSid) {
+        // Stage 2 middleware should have set the cookie before this
+        // handler runs, so a missing fdxSid here means the client
+        // dropped cookies. Surface a fresh-budget shape so the UI
+        // doesn't gate on a transient cookie issue.
+        return res.json({
+          authenticated: false,
+          used: 0,
+          limit: ANON_VOTE_BUDGET,
+          remaining: ANON_VOTE_BUDGET,
+          exhausted: false,
+        });
+      }
+      const status = await getBudgetStatus(fdxSid);
+      res.json({ authenticated: false, ...status });
+    } catch (error: any) {
+      console.error("Error fetching anon budget:", error.message);
+      res.status(500).json({ error: "Failed to fetch budget" });
     }
   });
 
@@ -6389,10 +6546,44 @@ Only return the JSON object.`;
         lastActiveAt: new Date(),
       };
       
+      // Phase 4 — discard anonymous voting trail at signup (D8). The
+      // fdx_sid cookie identifies any anonymous votes this user cast
+      // pre-signup. Wipe them transactionally with the profile insert
+      // so the new user starts fresh — no anon-prefixed rows surviving
+      // in any of the 6 vote tables that Stage 4 wires. The fdx_sid
+      // cookie is also cleared on the response (below) so future writes
+      // don't carry the stale identity.
+      const fdxSidForCleanup = readFdxSid(req);
+      const anonWriterId = fdxSidForCleanup ? `anon_${fdxSidForCleanup}` : "";
+
       await db.transaction(async (tx) => {
         await tx.insert(profiles).values(newProfile);
         await tx.insert(creditLedger).values(initialGrantEntry).onConflictDoNothing();
+        if (fdxSidForCleanup) {
+          await tx.delete(votes).where(eq(votes.userId, anonWriterId));
+          await tx.delete(trendingPollVotes).where(eq(trendingPollVotes.userId, anonWriterId));
+          await tx.delete(opinionPollVotes).where(eq(opinionPollVotes.userId, anonWriterId));
+          await tx.delete(inductionVotes).where(eq(inductionVotes.userId, anonWriterId));
+          await tx.delete(userVotes).where(eq(userVotes.userId, anonWriterId));
+          await tx.delete(celebrityValueVotes).where(eq(celebrityValueVotes.userId, anonWriterId));
+          await tx.delete(anonVoteBudget).where(eq(anonVoteBudget.fdxSid, fdxSidForCleanup));
+        }
       });
+
+      // Phase 4 — clear fdx_sid cookie post-signup. The user is now
+      // authenticated, so fdx_sid serves no purpose for their writes;
+      // clearing it ensures a clean slate if they later sign out (no
+      // accidental re-attachment to the now-deleted anon trail).
+      // Flags must match the original res.cookie(...) call in
+      // server/lib/anonIdentity.ts so the browser actually clears.
+      if (fdxSidForCleanup) {
+        res.clearCookie(FDX_SID_COOKIE, {
+          path: "/",
+          httpOnly: true,
+          sameSite: "lax",
+          secure: process.env.NODE_ENV === "production",
+        });
+      }
 
       await createNotification({
         userId,
@@ -12654,10 +12845,13 @@ Target length: about 90-150 words.`;
   // PUBLIC: TRENDING POLL VOTE
   // ===========================================
 
-  app.post("/api/polls/:slug/vote", requireAuth, async (req, res) => {
+  app.post("/api/polls/:slug/vote", optionalAuth, anonVoteIpRateLimit, async (req: AuthRequest, res) => {
     try {
-      const authReq = req as AuthRequest;
-      if (!checkVoteRateLimit(authReq.userId!)) {
+      const writerId = req.userId || req.sessionId;
+      if (!writerId) {
+        return res.status(400).json({ error: "session_unavailable" });
+      }
+      if (!checkVoteRateLimit(writerId)) {
         return res.status(429).json({ error: "Too many votes. Please slow down." });
       }
       const { slug } = req.params;
@@ -12677,12 +12871,41 @@ Target length: about 90-150 words.`;
         return res.status(404).json({ error: "Poll not found" });
       }
 
+      // Phase 4 — anonymous-budget gate. surface = 'trending_poll',
+      // target = poll.id (the resolved-from-slug UUID, not the slug).
+      let budgetSnapshot: {
+        used: number;
+        limit: number;
+        remaining: number;
+        exhausted: boolean;
+      } | null = null;
+      if (!req.userId) {
+        const fdxSid = readFdxSid(req);
+        if (!fdxSid) {
+          return res.status(400).json({ error: "session_unavailable" });
+        }
+        const result = await consumeBudgetUnit(fdxSid, "trending_poll", poll.id);
+        if (result.exhausted) {
+          return res.status(403).json({
+            error: "budget_exhausted",
+            budgetLimit: ANON_VOTE_BUDGET,
+            budgetUsed: result.newCount,
+          });
+        }
+        budgetSnapshot = result.newCount < 0 ? null : {
+          used: result.newCount,
+          limit: ANON_VOTE_BUDGET,
+          remaining: Math.max(0, ANON_VOTE_BUDGET - result.newCount),
+          exhausted: false,
+        };
+      }
+
       const [existing] = await db
         .select()
         .from(trendingPollVotes)
         .where(and(
           eq(trendingPollVotes.pollId, poll.id),
-          eq(trendingPollVotes.userId, authReq.userId!)
+          eq(trendingPollVotes.userId, writerId)
         ))
         .limit(1);
 
@@ -12693,14 +12916,14 @@ Target length: about 90-150 words.`;
           .set({ choice, updatedAt: new Date() })
           .where(eq(trendingPollVotes.id, existing.id));
         await appendVoteAction(db, {
-          userId: authReq.userId!,
+          userId: writerId,
           voteType: "trending_poll",
           targetType: "trending_poll",
           targetId: poll.id,
           actionKind: "update",
           prevValue: existing.choice,
           nextValue: choice,
-          source: "trending-poll-vote",
+          source: req.userId ? "trending-poll-vote" : "trending-poll-vote-anon",
         });
       } else {
         await db.transaction(async (tx) => {
@@ -12708,42 +12931,47 @@ Target length: about 90-150 words.`;
             .insert(trendingPollVotes)
             .values({
               pollId: poll.id,
-              userId: authReq.userId!,
+              userId: writerId,
               choice,
             });
 
-          await tx.update(profiles)
-            .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
-            .where(eq(profiles.id, authReq.userId!));
+          if (req.userId) {
+            await tx.update(profiles)
+              .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
+              .where(eq(profiles.id, req.userId));
+          }
           await appendVoteAction(tx, {
-            userId: authReq.userId!,
+            userId: writerId,
             voteType: "trending_poll",
             targetType: "trending_poll",
             targetId: poll.id,
             actionKind: "create",
             nextValue: choice,
-            source: "trending-poll-vote",
+            source: req.userId ? "trending-poll-vote" : "trending-poll-vote-anon",
           });
         });
 
-        // Phase 3: engagement signal for the poll's category.
-        await upsertEngagement({
-          userId: authReq.userId!,
-          categoryId: poll.category,
-          voteDelta: 1,
-          source: "trending-poll-vote",
-        });
+        // Phase 3: engagement signal for the poll's category. Authed only
+        // (D8 — anon votes don't pollute behavioural signal).
+        if (req.userId) {
+          await upsertEngagement({
+            userId: req.userId,
+            categoryId: poll.category,
+            voteDelta: 1,
+            source: "trending-poll-vote",
+          });
 
-        try {
-          xpResult = await gamificationService.awardXp(
-            authReq.userId!, 'vote_sentiment',
-            `trending_poll_${poll.id}_${authReq.userId}`,
-            { pollId: poll.id, choice }
-          );
-        } catch (e) { console.error("XP award failed:", e); }
+          try {
+            xpResult = await gamificationService.awardXp(
+              req.userId, 'vote_sentiment',
+              `trending_poll_${poll.id}_${req.userId}`,
+              { pollId: poll.id, choice }
+            );
+          } catch (e) { console.error("XP award failed:", e); }
+        }
       }
 
-      res.json({ success: true, choice, xp: xpResult ?? null });
+      res.json({ success: true, choice, xp: xpResult ?? null, budget: budgetSnapshot });
     } catch (error: any) {
       console.error("Error voting on poll:", error.message);
       res.status(500).json({ error: "Failed to cast vote" });
@@ -13634,13 +13862,16 @@ Target length: about 90-150 words.`;
     }
   });
 
-  app.post("/api/opinion-polls/:slug/vote", requireAuth, async (req: AuthRequest, res) => {
+  app.post("/api/opinion-polls/:slug/vote", optionalAuth, anonVoteIpRateLimit, async (req: AuthRequest, res) => {
     try {
       const { slug } = req.params;
       const { optionId, remove } = req.body;
       const wantsRemove = remove === true || remove === "true";
-      const userId = req.userId!;
-      if (!checkVoteRateLimit(userId)) {
+      const writerId = req.userId || req.sessionId;
+      if (!writerId) {
+        return res.status(400).json({ error: "session_unavailable" });
+      }
+      if (!checkVoteRateLimit(writerId)) {
         return res.status(429).json({ error: "Too many votes. Please slow down." });
       }
 
@@ -13658,26 +13889,28 @@ Target length: about 90-150 words.`;
         const [existingRemove] = await db
           .select({ id: opinionPollVotes.id, optionId: opinionPollVotes.optionId })
           .from(opinionPollVotes)
-          .where(and(eq(opinionPollVotes.pollId, poll.id), eq(opinionPollVotes.userId, userId)))
+          .where(and(eq(opinionPollVotes.pollId, poll.id), eq(opinionPollVotes.userId, writerId)))
           .limit(1);
         if (existingRemove) {
           await db.delete(opinionPollVotes).where(eq(opinionPollVotes.id, existingRemove.id));
           await appendVoteAction(db, {
-            userId,
+            userId: writerId,
             voteType: "opinion_poll",
             targetType: "opinion_poll",
             targetId: poll.id,
             actionKind: "remove",
             prevValue: existingRemove.optionId,
-            source: "opinion-poll-vote",
+            source: req.userId ? "opinion-poll-vote" : "opinion-poll-vote-anon",
           });
-          await db
-            .update(profiles)
-            .set({ totalVotes: sql`GREATEST(${profiles.totalVotes} - 1, 0)` })
-            .where(eq(profiles.id, userId));
+          if (req.userId) {
+            await db
+              .update(profiles)
+              .set({ totalVotes: sql`GREATEST(${profiles.totalVotes} - 1, 0)` })
+              .where(eq(profiles.id, req.userId));
+          }
         }
-        const updatedPoll = await loadOpinionPollListShape(poll.id, userId);
-        return res.json({ success: true, removed: true, poll: updatedPoll });
+        const updatedPoll = await loadOpinionPollListShape(poll.id, writerId);
+        return res.json({ success: true, removed: true, poll: updatedPoll, budget: null });
       }
 
       if (!optionId) {
@@ -13694,6 +13927,38 @@ Target length: about 90-150 words.`;
         return res.status(400).json({ error: "Invalid option for this poll" });
       }
 
+      // Phase 4 — anonymous-budget gate. Placed before the existing-vote
+      // lookup (matchup-consistent placement); exhausted anon users 403
+      // even on same-option resubmit. The same-option-resubmit-bumps-
+      // updatedAt latent defect is out of scope for Phase 4 — captured
+      // as a post-Stage-8 follow-up.
+      let budgetSnapshot: {
+        used: number;
+        limit: number;
+        remaining: number;
+        exhausted: boolean;
+      } | null = null;
+      if (!req.userId) {
+        const fdxSid = readFdxSid(req);
+        if (!fdxSid) {
+          return res.status(400).json({ error: "session_unavailable" });
+        }
+        const result = await consumeBudgetUnit(fdxSid, "opinion_poll", poll.id);
+        if (result.exhausted) {
+          return res.status(403).json({
+            error: "budget_exhausted",
+            budgetLimit: ANON_VOTE_BUDGET,
+            budgetUsed: result.newCount,
+          });
+        }
+        budgetSnapshot = result.newCount < 0 ? null : {
+          used: result.newCount,
+          limit: ANON_VOTE_BUDGET,
+          remaining: Math.max(0, ANON_VOTE_BUDGET - result.newCount),
+          exhausted: false,
+        };
+      }
+
       const [existing] = await db
         .select({
           id: opinionPollVotes.id,
@@ -13702,7 +13967,7 @@ Target length: about 90-150 words.`;
           updatedAt: opinionPollVotes.updatedAt,
         })
         .from(opinionPollVotes)
-        .where(and(eq(opinionPollVotes.pollId, poll.id), eq(opinionPollVotes.userId, userId)))
+        .where(and(eq(opinionPollVotes.pollId, poll.id), eq(opinionPollVotes.userId, writerId)))
         .limit(1);
 
       const sameUtcDay = (a: Date, b: Date) =>
@@ -13727,56 +13992,60 @@ Target length: about 90-150 words.`;
           .set({ optionId, updatedAt: new Date() })
           .where(eq(opinionPollVotes.id, existing.id));
         await appendVoteAction(db, {
-          userId,
+          userId: writerId,
           voteType: "opinion_poll",
           targetType: "opinion_poll",
           targetId: poll.id,
           actionKind: "update",
           prevValue: existing.optionId,
           nextValue: optionId,
-          source: "opinion-poll-vote",
+          source: req.userId ? "opinion-poll-vote" : "opinion-poll-vote-anon",
         });
       } else {
         await db.transaction(async (tx) => {
           await tx.insert(opinionPollVotes).values({
             pollId: poll.id,
             optionId,
-            userId,
+            userId: writerId,
           });
 
-          await tx.update(profiles)
-            .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
-            .where(eq(profiles.id, userId));
+          if (req.userId) {
+            await tx.update(profiles)
+              .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
+              .where(eq(profiles.id, req.userId));
+          }
           await appendVoteAction(tx, {
-            userId,
+            userId: writerId,
             voteType: "opinion_poll",
             targetType: "opinion_poll",
             targetId: poll.id,
             actionKind: "create",
             nextValue: optionId,
-            source: "opinion-poll-vote",
+            source: req.userId ? "opinion-poll-vote" : "opinion-poll-vote-anon",
           });
         });
 
-        // Phase 3: engagement signal for the poll's category.
-        await upsertEngagement({
-          userId,
-          categoryId: poll.category,
-          voteDelta: 1,
-          source: "opinion-poll-vote",
-        });
+        // Phase 3: engagement signal for the poll's category. Authed only.
+        if (req.userId) {
+          await upsertEngagement({
+            userId: req.userId,
+            categoryId: poll.category,
+            voteDelta: 1,
+            source: "opinion-poll-vote",
+          });
 
-        try {
-          xpResult = await gamificationService.awardXp(
-            userId, 'vote_opinion',
-            `opinion_poll_${poll.id}_${userId}`,
-            { pollId: poll.id, optionId }
-          );
-        } catch (e) { console.error("XP award failed:", e); }
+          try {
+            xpResult = await gamificationService.awardXp(
+              req.userId, 'vote_opinion',
+              `opinion_poll_${poll.id}_${req.userId}`,
+              { pollId: poll.id, optionId }
+            );
+          } catch (e) { console.error("XP award failed:", e); }
+        }
       }
 
-      const updatedPoll = await loadOpinionPollListShape(poll.id, userId);
-      res.json({ success: true, xp: xpResult ?? null, poll: updatedPoll });
+      const updatedPoll = await loadOpinionPollListShape(poll.id, writerId);
+      res.json({ success: true, xp: xpResult ?? null, poll: updatedPoll, budget: budgetSnapshot });
     } catch (error: any) {
       console.error("Error voting on opinion poll:", error.message);
       res.status(500).json({ error: "Failed to vote" });
@@ -18414,63 +18683,101 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
     }
   });
 
-  // POST /api/vote/induction/:id/vote - Auth: vote for an induction candidate (one vote per user per candidate)
-  app.post("/api/vote/induction/:id/vote", requireAuth, async (req: AuthRequest, res) => {
+  // POST /api/vote/induction/:id/vote - Auth-or-anon: vote for an induction candidate (one vote per identity per candidate)
+  app.post("/api/vote/induction/:id/vote", optionalAuth, anonVoteIpRateLimit, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
-      const userId = req.userId!;
-      if (!checkVoteRateLimit(userId)) {
+      const writerId = req.userId || req.sessionId;
+      if (!writerId) {
+        return res.status(400).json({ error: "session_unavailable" });
+      }
+      if (!checkVoteRateLimit(writerId)) {
         return res.status(429).json({ error: "Too many votes. Please slow down." });
       }
       const [candidate] = await db.select().from(inductionCandidates).where(eq(inductionCandidates.id, id)).limit(1);
       if (!candidate) return res.status(404).json({ error: "Candidate not found" });
       if (!candidate.isActive) return res.status(400).json({ error: "Candidate is not active" });
 
+      // Phase 4 — anonymous-budget gate. Placed before the existing-vote
+      // lookup (matchup-consistent placement); exhausted anon users 403
+      // even on a re-click that would otherwise short-circuit to
+      // alreadyVoted: true. surface = 'induction', target = candidate id.
+      let budgetSnapshot: {
+        used: number;
+        limit: number;
+        remaining: number;
+        exhausted: boolean;
+      } | null = null;
+      if (!req.userId) {
+        const fdxSid = readFdxSid(req);
+        if (!fdxSid) {
+          return res.status(400).json({ error: "session_unavailable" });
+        }
+        const result = await consumeBudgetUnit(fdxSid, "induction", id);
+        if (result.exhausted) {
+          return res.status(403).json({
+            error: "budget_exhausted",
+            budgetLimit: ANON_VOTE_BUDGET,
+            budgetUsed: result.newCount,
+          });
+        }
+        budgetSnapshot = result.newCount < 0 ? null : {
+          used: result.newCount,
+          limit: ANON_VOTE_BUDGET,
+          remaining: Math.max(0, ANON_VOTE_BUDGET - result.newCount),
+          exhausted: false,
+        };
+      }
+
       const [existing] = await db.select()
         .from(inductionVotes)
-        .where(and(eq(inductionVotes.userId, userId), eq(inductionVotes.candidateId, id)));
+        .where(and(eq(inductionVotes.userId, writerId), eq(inductionVotes.candidateId, id)));
 
       if (existing) {
-        return res.json({ success: true, alreadyVoted: true });
+        return res.json({ success: true, alreadyVoted: true, budget: budgetSnapshot });
       }
 
       await db.transaction(async (tx) => {
-        await tx.insert(inductionVotes).values({ candidateId: id, userId }).onConflictDoNothing();
+        await tx.insert(inductionVotes).values({ candidateId: id, userId: writerId }).onConflictDoNothing();
         await tx.update(inductionCandidates)
           .set({ seedVotes: sql`${inductionCandidates.seedVotes} + 1` })
           .where(eq(inductionCandidates.id, id));
-        await tx.update(profiles)
-          .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
-          .where(eq(profiles.id, userId));
+        if (req.userId) {
+          await tx.update(profiles)
+            .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
+            .where(eq(profiles.id, req.userId));
+        }
         await appendVoteAction(tx, {
-          userId,
+          userId: writerId,
           voteType: "induction",
           targetType: "induction_candidate",
           targetId: id,
           actionKind: "create",
           nextValue: "up",
-          source: "induction-vote",
+          source: req.userId ? "induction-vote" : "induction-vote-anon",
         });
       });
 
-      // Phase 3: engagement signal for the candidate's category.
-      await upsertEngagement({
-        userId,
-        categoryId: candidate.category,
-        voteDelta: 1,
-        source: "induction-vote",
-      });
-
+      // Phase 3: engagement signal for the candidate's category. Authed only.
       let xpResult;
-      try {
-        xpResult = await gamificationService.awardXp(
-          userId, 'vote_induction',
-          `induction_${id}_${userId}`,
-          { candidateId: id }
-        );
-      } catch (e) { console.error("XP award failed:", e); }
+      if (req.userId) {
+        await upsertEngagement({
+          userId: req.userId,
+          categoryId: candidate.category,
+          voteDelta: 1,
+          source: "induction-vote",
+        });
 
-      res.json({ success: true, xp: xpResult ?? null });
+        try {
+          xpResult = await gamificationService.awardXp(
+            req.userId, 'vote_induction',
+            `induction_${id}_${req.userId}`,
+            { candidateId: id }
+          );
+        } catch (e) { console.error("XP award failed:", e); }
+      }
+
+      res.json({ success: true, xp: xpResult ?? null, budget: budgetSnapshot });
     } catch (error: any) {
       console.error("Error voting for induction candidate:", error);
       res.status(500).json({ error: "Failed to vote" });

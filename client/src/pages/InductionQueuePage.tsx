@@ -6,6 +6,8 @@ import { toast } from "sonner";
 import { apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedApiError, signInToVoteToastOptions, signInToVoteTitle } from "@/lib/signInToVoteToast";
 import { navigateToLogin } from "@/lib/authReturn";
+import { useAnonBudget, applyBudgetFromVoteResponse } from "@/hooks/useAnonBudget";
+import { checkVoteGate } from "@/lib/voteGate";
 import { goBack } from "@/lib/goBack";
 import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { useXpBurst } from "@/components/XpBurstProvider";
@@ -102,12 +104,17 @@ export default function InductionQueuePage() {
     return () => { if (animRef.current) clearTimeout(animRef.current); };
   }, []);
 
+  const budget = useAnonBudget();
+
   const voteMutation = useMutation({
     mutationFn: async (id: string) => {
       const res = await apiRequest("POST", `/api/vote/induction/${id}/vote`);
       return res.json();
     },
     onSuccess: (data) => {
+      // Phase 4 — sync the anon-budget cache from the server-authoritative
+      // snapshot in the response.
+      applyBudgetFromVoteResponse(queryClient, data);
       queryClient.invalidateQueries({ queryKey: ["/api/vote/induction"] });
       queryClient.invalidateQueries({ queryKey: ["/api/me/induction-votes"] });
       if (data?.xp?.xpAwarded) {
@@ -129,11 +136,25 @@ export default function InductionQueuePage() {
   });
 
   const handleVote = (id: string) => {
-    if (!user) {
-      toast(signInToVoteTitle, signInToVoteToastOptions(() => navigateToLogin(setLocation)));
+    if (votedIds.has(id)) return;
+    // Phase 4 — anon-budget gate. The pre-Stage-7 anon-block has been
+    // removed; anon users with remaining budget hit the server. isUpsert
+    // hardcoded false: votedIds.has() above filters re-votes for authed;
+    // anon users start with empty votedIds (server-side anon induction
+    // history not surfaced to client until signup).
+    const decision = checkVoteGate(budget, "induction", id, false);
+    if (!decision.proceed) {
+      navigateToLogin(setLocation, {
+        mode: "signup",
+        reason: "vote_limit_reached",
+        resumeAction: {
+          ...decision.resumeAction,
+          cardRoute: window.location.pathname,
+          pendingVote: { intent: "induct" },
+        },
+      });
       return;
     }
-    if (votedIds.has(id)) return;
     setVotedIds((prev) => new Set(prev).add(id));
     setShowVoteAnim(id);
     animRef.current = setTimeout(() => setShowVoteAnim(null), 800);

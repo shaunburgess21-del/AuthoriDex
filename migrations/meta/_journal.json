@@ -330,6 +330,13 @@
       "when": 1779672000000,
       "tag": "0046_retire_prediction_market_seeding",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1777833084527,
+      "tag": "0049_anon_vote_budget",
+      "breakpoints": true
     }
   ]
 }

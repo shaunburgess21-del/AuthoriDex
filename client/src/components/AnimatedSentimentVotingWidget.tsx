@@ -9,6 +9,9 @@ import { apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { parseVoteError } from "@/lib/voteErrors";
 import { getRatingTileColor } from "@/lib/ratingColors";
 import { toast } from "sonner";
+import { navigateToLogin } from "@/lib/authReturn";
+import { useAnonBudget, applyBudgetFromVoteResponse } from "@/hooks/useAnonBudget";
+import { checkVoteGate } from "@/lib/voteGate";
 
 interface AnimatedSentimentVotingWidgetProps {
   personId: string;
@@ -219,6 +222,7 @@ export function AnimatedSentimentVotingWidget({
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
+  const budget = useAnonBudget();
   const [currentValue, setCurrentValue] = useState<number | null>(null);
   const [hasInteracted, setHasInteracted] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -288,7 +292,8 @@ export function AnimatedSentimentVotingWidget({
 
   const approvalRatingMutation = useMutation({
     mutationFn: async ({ rating }: { rating: number }) => {
-      await apiRequest("POST", `/api/celebrity/${personId}/approval-rating`, { rating });
+      const res = await apiRequest("POST", `/api/celebrity/${personId}/approval-rating`, { rating });
+      return res.json();
     },
     onMutate: ({ rating }) => {
       const submitId = latestSubmitIdRef.current + 1;
@@ -319,7 +324,10 @@ export function AnimatedSentimentVotingWidget({
 
       return snapshot;
     },
-    onSuccess: async () => {
+    onSuccess: async (data) => {
+      // Phase 4 — sync the anon-budget cache from the server-authoritative
+      // snapshot in the response.
+      applyBudgetFromVoteResponse(queryClient, data);
       await queryClient.invalidateQueries({
         queryKey: ["/api/celebrity", personId, "approval-rating"],
       });
@@ -362,20 +370,30 @@ export function AnimatedSentimentVotingWidget({
   const handleVoteSubmit = async () => {
     if (!currentValue) return;
 
-    if (user) {
-      approvalRatingMutation.mutate({ rating: currentValue });
-    } else {
-      // Anonymous vote — we keep the local-only flow (no server call).
-      try { localStorage.setItem("authoridex-has-ever-voted", "1"); } catch { /* ignore */ }
-      try { localStorage.setItem(`sentiment-vote-${personId}`, currentValue.toString()); } catch { /* ignore */ }
-      window.dispatchEvent(new CustomEvent("authoridex-ever-voted"));
-      window.dispatchEvent(
-        new CustomEvent("sentiment-vote-updated", {
-          detail: { personId, value: currentValue },
-        })
-      );
-      setIsSubmitted(true);
+    // Phase 4 — anon-budget gate. Authed users with an existing rating
+    // hit the upsert path (free under D2 celebrity_person unification);
+    // anon users go through the budget gate and either fire the server
+    // mutation or redirect to /login on exhaustion. The pre-Stage-7
+    // anon-localStorage-only flow has been removed: anon votes now
+    // persist server-side (within budget). The mutation's existing
+    // onMutate optimistic snapshot covers the same localStorage writes
+    // and event dispatches the old anon path did, with onError rollback
+    // for server failures.
+    const isUpsert = !!user && approvalFromServer?.rating != null;
+    const decision = checkVoteGate(budget, "celebrity_person", personId, isUpsert);
+    if (!decision.proceed) {
+      navigateToLogin(setLocation, {
+        mode: "signup",
+        reason: "vote_limit_reached",
+        resumeAction: {
+          ...decision.resumeAction,
+          cardRoute: window.location.pathname,
+          pendingVote: { rating: currentValue },
+        },
+      });
+      return;
     }
+    approvalRatingMutation.mutate({ rating: currentValue });
   };
 
   const handleVisitProfile = () => {

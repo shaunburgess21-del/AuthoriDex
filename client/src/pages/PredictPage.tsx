@@ -1848,8 +1848,10 @@ export default function PredictPage() {
   const handleEnterJackpot = () => {
     if (!selectedJackpotPerson) return;
     if (!user) {
-      toast("Sign in required", { description: "Sign in to place predictions." });
-      navigateToLogin(setLocation);
+      // Phase 4 — direct redirect with predict_signup reason. Variant B
+      // SignupReasonModal renders on /login. No toast (D7 — no Vote-page
+      // toast for the redirect path; predict mirrors that).
+      navigateToLogin(setLocation, { mode: "signup", reason: "predict_signup" });
       return;
     }
     setJackpotModalOpen(true);
@@ -1994,8 +1996,10 @@ export default function PredictPage() {
       return;
     }
     if (!user) {
-      toast("Sign in required", { description: "Sign in to place predictions." });
-      navigateToLogin(setLocation);
+      // Phase 4 — direct redirect with predict_signup reason. Variant B
+      // SignupReasonModal renders on /login. No toast (D7 — no Vote-page
+      // toast for the redirect path; predict mirrors that).
+      navigateToLogin(setLocation, { mode: "signup", reason: "predict_signup" });
       return;
     }
 
@@ -2027,8 +2031,10 @@ export default function PredictPage() {
       return;
     }
     if (!user) {
-      toast("Sign in required", { description: "Sign in to place predictions." });
-      navigateToLogin(setLocation);
+      // Phase 4 — direct redirect with predict_signup reason. Variant B
+      // SignupReasonModal renders on /login. No toast (D7 — no Vote-page
+      // toast for the redirect path; predict mirrors that).
+      navigateToLogin(setLocation, { mode: "signup", reason: "predict_signup" });
       return;
     }
 
@@ -2061,8 +2067,10 @@ export default function PredictPage() {
       return;
     }
     if (!user) {
-      toast("Sign in required", { description: "Sign in to place predictions." });
-      navigateToLogin(setLocation);
+      // Phase 4 — direct redirect with predict_signup reason. Variant B
+      // SignupReasonModal renders on /login. No toast (D7 — no Vote-page
+      // toast for the redirect path; predict mirrors that).
+      navigateToLogin(setLocation, { mode: "signup", reason: "predict_signup" });
       return;
     }
 
@@ -2100,8 +2108,10 @@ export default function PredictPage() {
       return;
     }
     if (!user) {
-      toast("Sign in required", { description: "Sign in to place predictions." });
-      navigateToLogin(setLocation);
+      // Phase 4 — direct redirect with predict_signup reason. Variant B
+      // SignupReasonModal renders on /login. No toast (D7 — no Vote-page
+      // toast for the redirect path; predict mirrors that).
+      navigateToLogin(setLocation, { mode: "signup", reason: "predict_signup" });
       return;
     }
 
@@ -2785,7 +2795,7 @@ export default function PredictPage() {
                 searchPlaceholder="Search predictions..."
                 testIdPrefix="community"
                 user={user}
-                onAuthRequired={() => navigateToLogin(setLocation)}
+                onAuthRequired={() => navigateToLogin(setLocation, { mode: "signup", reason: "predict_signup" })}
                 filters={communityCategoryFilters}
               />
             </UnifiedSectionHeader>
@@ -3038,7 +3048,7 @@ export default function PredictPage() {
                 searchPlaceholder="Search celebrities..."
                 testIdPrefix="updown"
                 user={user}
-                onAuthRequired={() => navigateToLogin(setLocation)}
+                onAuthRequired={() => navigateToLogin(setLocation, { mode: "signup", reason: "predict_signup" })}
                 filters={updownCategoryFilters}
               />
             </UnifiedSectionHeader>
@@ -3139,7 +3149,7 @@ export default function PredictPage() {
                 searchPlaceholder="Search matchups..."
                 testIdPrefix="h2h"
                 user={user}
-                onAuthRequired={() => navigateToLogin(setLocation)}
+                onAuthRequired={() => navigateToLogin(setLocation, { mode: "signup", reason: "predict_signup" })}
                 filters={h2hCategoryFilters}
               />
             </UnifiedSectionHeader>
@@ -3262,7 +3272,7 @@ export default function PredictPage() {
                 searchPlaceholder="Search gainers..."
                 testIdPrefix="gainer"
                 user={user}
-                onAuthRequired={() => navigateToLogin(setLocation)}
+                onAuthRequired={() => navigateToLogin(setLocation, { mode: "signup", reason: "predict_signup" })}
                 filters={gainerCategoryFilters}
               />
             </UnifiedSectionHeader>
@@ -3341,7 +3351,7 @@ export default function PredictPage() {
         searchQuery={weeklyOverlaySearchQuery}
         onSearchChange={setWeeklyOverlaySearchQuery}
         user={user}
-        onAuthRequired={() => navigateToLogin(setLocation)}
+        onAuthRequired={() => navigateToLogin(setLocation, { mode: "signup", reason: "predict_signup" })}
         categories={updownCategoryFilters.map((c) => ({ value: c.id, label: c.label }))}
       >
         {hydratedMarkets
@@ -3376,7 +3386,7 @@ export default function PredictPage() {
         searchQuery={h2hOverlaySearchQuery}
         onSearchChange={setH2hOverlaySearchQuery}
         user={user}
-        onAuthRequired={() => navigateToLogin(setLocation)}
+        onAuthRequired={() => navigateToLogin(setLocation, { mode: "signup", reason: "predict_signup" })}
         categories={h2hCategoryFilters.map((c) => ({ value: c.id, label: c.label }))}
       >
         {hydratedH2H
@@ -3422,7 +3432,7 @@ export default function PredictPage() {
         searchQuery={gainersOverlaySearchQuery}
         onSearchChange={setGainersOverlaySearchQuery}
         user={user}
-        onAuthRequired={() => navigateToLogin(setLocation)}
+        onAuthRequired={() => navigateToLogin(setLocation, { mode: "signup", reason: "predict_signup" })}
         categories={gainerCategoryFilters.map((c) => ({ value: c.id, label: c.label }))}
       >
         {filteredOverlayGainers.length > 0 ? (
@@ -3457,7 +3467,7 @@ export default function PredictPage() {
         searchQuery={communityOverlaySearchQuery}
         onSearchChange={setCommunityOverlaySearchQuery}
         user={user}
-        onAuthRequired={() => navigateToLogin(setLocation)}
+        onAuthRequired={() => navigateToLogin(setLocation, { mode: "signup", reason: "predict_signup" })}
         categories={communityCategoryFilters.map((c) => ({ value: c.id, label: c.label }))}
       >
         {openMarkets

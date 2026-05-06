@@ -4,6 +4,7 @@ import helmet from "helmet";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { registerRoutes } from "./routes";
 import { resolveAuthContextFromHeader, type AuthRequest } from "./auth-middleware";
+import { anonIdentityMiddleware } from "./middleware/anonIdentityMiddleware";
 
 import { log, logger, requestIdMiddleware } from "./log";
 import { initSentry, sentryErrorHandler, captureBackgroundError } from "./sentry";
@@ -487,6 +488,11 @@ app.use("/api/", async (req: AuthRequest, _res, next) => {
   } catch { /* auth resolution is best-effort here */ }
   next();
 });
+
+// Phase 4 — ensure every /api/* request carries an fdx_sid cookie so
+// optionalAuth + the anonymous-vote budget can rely on it without
+// minting on demand. See server/lib/anonIdentity.ts for rationale.
+app.use("/api/", anonIdentityMiddleware);
 
 const skipRateLimit = (req: Request) => {
   const p = req.path;

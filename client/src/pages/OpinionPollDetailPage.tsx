@@ -23,6 +23,9 @@ import { CardComments, useCommentCount } from "@/components/comments/CardComment
 import { apiRequest } from "@/lib/queryClient";
 import { optimisticVotePatch } from "@/hooks/useOpinionPollVoteMutation";
 import { isUnauthorizedApiError, signInToVoteToastOptions, signInToVoteTitle } from "@/lib/signInToVoteToast";
+import { navigateToLogin } from "@/lib/authReturn";
+import { useAnonBudget, applyBudgetFromVoteResponse } from "@/hooks/useAnonBudget";
+import { checkVoteGate } from "@/lib/voteGate";
 import { formatDate } from "@/lib/formatDate";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { VoteDetailNavCluster } from "@/components/vote/VoteDetailNavCluster";
@@ -94,6 +97,8 @@ export default function OpinionPollDetailPage() {
     enabled: !!slug,
   });
 
+  const budget = useAnonBudget();
+
   const voteMutation = useMutation({
     mutationFn: async (optionId: string) => {
       const res = await apiRequest("POST", `/api/opinion-polls/${encodeURIComponent(slug)}/vote`, { optionId });
@@ -112,6 +117,9 @@ export default function OpinionPollDetailPage() {
       return { previousDetail, previousList };
     },
     onSuccess: (data) => {
+      // Phase 4 — sync the anon-budget cache from the server-authoritative
+      // snapshot in the response.
+      applyBudgetFromVoteResponse(queryClient, data);
       if (data?.poll) {
         queryClient.setQueryData<any[]>(["/api/opinion-polls"], (old: any[] | undefined) =>
           old?.map((p) => (p.id === data.poll.id ? data.poll : p)),
@@ -153,6 +161,9 @@ export default function OpinionPollDetailPage() {
       return { previousDetail, previousList };
     },
     onSuccess: (data) => {
+      // Phase 4 — sync budget cache. Remove paths return budget: null
+      // server-side (no budget delta) but the helper handles that correctly.
+      applyBudgetFromVoteResponse(queryClient, data);
       if (data?.poll) {
         queryClient.setQueryData<any[]>(["/api/opinion-polls"], (old: any[] | undefined) =>
           old?.map((p) => (p.id === data.poll.id ? data.poll : p)),
@@ -370,8 +381,20 @@ export default function OpinionPollDetailPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      if (!user) {
-                        toast.error("Sign in required", { description: "Please sign in to vote" });
+                      // Phase 4 — anon-budget gate. The pre-Stage-7 toast-only
+                      // anon-block has been removed; fresh-vote isUpsert is false
+                      // (this branch only renders for users with no prior vote).
+                      const decision = checkVoteGate(budget, "opinion_poll", poll.id, false);
+                      if (!decision.proceed) {
+                        navigateToLogin(setLocation, {
+                          mode: "signup",
+                          reason: "vote_limit_reached",
+                          resumeAction: {
+                            ...decision.resumeAction,
+                            cardRoute: window.location.pathname,
+                            pendingVote: { kind: "vote", optionId: option.id },
+                          },
+                        });
                         return;
                       }
                       voteMutation.mutate(option.id);
@@ -462,10 +485,10 @@ export default function OpinionPollDetailPage() {
                       disabled={voteMutation.isPending}
                       className={`min-w-0 flex-1 text-left cursor-pointer rounded-r-md hover:ring-1 hover:ring-inset hover:ring-[#EFEFEF]/50 dark:hover:ring-white/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#EFEFEF]/40 dark:focus-visible:ring-white/30 border-0 bg-transparent p-0 ${voteMutation.isPending ? "opacity-60 cursor-not-allowed" : ""}`}
                       onClick={() => {
-                        if (!user) {
-                          toast.error("Sign in required", { description: "Please sign in to vote" });
-                          return;
-                        }
+                        // Phase 4 — change-vote is always a free upsert under D3
+                        // (re-vote costs 0 additional units), so no gate needed.
+                        // Anon users with prior votes can change them through the
+                        // same dialog flow.
                         setPendingOption({ id: option.id, name: option.name });
                         setChangeDialogOpen(true);
                       }}
@@ -497,10 +520,8 @@ export default function OpinionPollDetailPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    if (!user) {
-                      toast.error("Sign in required", { description: "Please sign in to manage your vote" });
-                      return;
-                    }
+                    // Phase 4 — no budget cost on remove (per Stage 4 server
+                    // behaviour); anon users with a prior vote can remove it.
                     removeVoteMutation.mutate();
                   }}
                   disabled={removeVoteMutation.isPending}

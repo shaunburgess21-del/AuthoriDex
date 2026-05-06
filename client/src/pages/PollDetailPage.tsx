@@ -20,6 +20,8 @@ import { VoteDetailNavCluster } from "@/components/vote/VoteDetailNavCluster";
 import { SwipeNavigator } from "@/components/vote/SwipeNavigator";
 import { useDetailNavigation } from "@/hooks/useDetailNavigation";
 import { navigateToLogin } from "@/lib/authReturn";
+import { useAnonBudget, applyBudgetFromVoteResponse } from "@/hooks/useAnonBudget";
+import { checkVoteGate } from "@/lib/voteGate";
 import { goBack } from "@/lib/goBack";
 import { CardComments, useCommentCount } from "@/components/comments/CardComments";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
@@ -105,12 +107,17 @@ export default function PollDetailPage() {
     enabled: !!slug,
   });
 
+  const budget = useAnonBudget();
+
   const voteMutation = useMutation({
     mutationFn: async (choice: string) => {
       const res = await apiRequest("POST", `/api/polls/${encodeURIComponent(slug)}/vote`, { choice });
       return res.json();
     },
     onSuccess: (data) => {
+      // Phase 4 — sync the anon-budget cache from the server-authoritative
+      // snapshot in the response.
+      applyBudgetFromVoteResponse(queryClient, data);
       queryClient.invalidateQueries({ queryKey: ["/api/polls", slug] });
       if (data?.xp?.xpAwarded) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
@@ -123,8 +130,23 @@ export default function PollDetailPage() {
   });
 
   const handleVote = (choice: string) => {
-    if (!isLoggedIn) {
-      toast.error("Sign in Required", { description: "Please sign in to vote." });
+    if (!poll) return;
+    // Phase 4 — anon-budget gate. The pre-Stage-7 toast-only anon-block
+    // has been removed; anon users with remaining budget hit the server,
+    // exhausted users redirect via the gate. isUpsert defaults to false
+    // — poll.userVote is not always populated in this query response;
+    // brief guidance is to pass false when uncertain.
+    const decision = checkVoteGate(budget, "trending_poll", poll.id, false);
+    if (!decision.proceed) {
+      navigateToLogin(setLocation, {
+        mode: "signup",
+        reason: "vote_limit_reached",
+        resumeAction: {
+          ...decision.resumeAction,
+          cardRoute: window.location.pathname,
+          pendingVote: { choice },
+        },
+      });
       return;
     }
     voteMutation.mutate(choice);
