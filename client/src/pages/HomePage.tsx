@@ -92,7 +92,7 @@ function MarketPulseCard({
       className={`min-w-[280px] md:min-w-0 shrink-0 md:shrink h-full rounded-xl ${cardClass} transition-all duration-200`}
       data-testid={`pulse-card-${type}`}
     >
-      <div className={`p-4 ${collapsed ? 'pt-4 pb-4' : 'pt-5'}`}>
+      <div className={`px-3 sm:px-4 ${collapsed ? 'py-4' : 'pt-5 pb-4'}`}>
         <div 
           className="flex items-center gap-3 cursor-pointer select-none group"
           onClick={onToggle}

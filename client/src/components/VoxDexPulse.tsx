@@ -710,7 +710,7 @@ export function VoxDexPulse({ collapsed, onToggle }: VoxDexPulseProps) {
   return (
     <section className="container mx-auto px-2 sm:px-4 max-w-7xl pt-2 pb-0 mb-6">
       <div className="rounded-xl pulse-card-voxdex transition-all duration-200">
-        <div className={`p-4 ${collapsed ? 'pt-4 pb-4' : 'pt-5'}`}>
+        <div className={`px-3 sm:px-4 ${collapsed ? 'py-4' : 'pt-5 pb-4'}`}>
           {/* Header row — always visible */}
           <div
             className="flex items-center gap-3 cursor-pointer select-none group"

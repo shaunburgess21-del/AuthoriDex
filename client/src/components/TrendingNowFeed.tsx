@@ -45,7 +45,7 @@ export function TrendingNowFeed({ onOpenInsight, collapsed, onToggle }: Trending
       className="rounded-xl pulse-card-orange transition-all duration-200"
       data-testid="trending-now-feed"
     >
-      <div className={`p-4 ${collapsed ? 'pt-4 pb-4' : 'pt-5'}`}>
+      <div className={`px-3 sm:px-4 ${collapsed ? 'py-4' : 'pt-5 pb-4'}`}>
         <div
           className="flex items-center gap-3 cursor-pointer select-none group"
           onClick={onToggle}
