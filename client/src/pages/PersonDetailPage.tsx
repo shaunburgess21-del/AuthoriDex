@@ -808,7 +808,17 @@ export default function PersonDetailPage() {
       if (el) {
         const header = document.querySelector("header");
         const headerHeight = header ? header.getBoundingClientRect().height : 0;
-        const top = el.getBoundingClientRect().top + window.scrollY - headerHeight - 8;
+        // The Overview tab also has a second sticky bar (the profile
+        // tabs) that overlays content. When scrolling to a section
+        // *below* the tabs (e.g. why-trending), subtract its height too
+        // so the heading lands below both sticky bars rather than under
+        // the tabs.
+        let stickyOffset = headerHeight;
+        if (targetId !== "profile-tabs-section") {
+          const tabsBar = document.getElementById("profile-tabs-section");
+          if (tabsBar) stickyOffset += tabsBar.getBoundingClientRect().height;
+        }
+        const top = el.getBoundingClientRect().top + window.scrollY - stickyOffset - 8;
         window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
         return;
       }

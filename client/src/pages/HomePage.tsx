@@ -826,9 +826,6 @@ function InsightPanelContent({
       )}
 
       <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
-        <Button variant="outline" onClick={onClose}>
-          Close
-        </Button>
         <div className="flex flex-row gap-2 sm:contents">
           <Button
             variant="outline"
