@@ -1,5 +1,5 @@
 import { formatDelta } from "@/lib/formatNumber";
-import { Flame, ChevronDown, ArrowRight, Clock } from "lucide-react";
+import { Flame, ChevronDown, ArrowRight } from "lucide-react";
 import { PersonAvatar } from "./PersonAvatar";
 import { getCategoryTextColor } from "@/components/CategoryPill";
 import { Button } from "@/components/ui/button";
@@ -16,29 +16,14 @@ export interface HotMover {
   rankChange: number | null;
 }
 
-interface HotMoversMeta {
-  currentRunFinishedAt?: string | null;
-}
-
 interface HotMoversResponse {
   data: HotMover[];
-  meta?: HotMoversMeta;
 }
 
 interface TrendingNowFeedProps {
   onOpenInsight: (person: HotMover) => void;
   collapsed: boolean;
   onToggle: () => void;
-}
-
-function formatUpdatedAgo(timestamp: number | undefined): string {
-  if (!timestamp) return "";
-  const seconds = Math.floor((Date.now() - timestamp) / 1000);
-  if (seconds < 60) return "just now";
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  return `${hours}h ago`;
 }
 
 export function TrendingNowFeed({ onOpenInsight, collapsed, onToggle }: TrendingNowFeedProps) {
@@ -49,17 +34,6 @@ export function TrendingNowFeed({ onOpenInsight, collapsed, onToggle }: Trending
   const hotMovers: HotMover[] = rawResponse
     ? (Array.isArray(rawResponse) ? rawResponse : rawResponse.data ?? [])
     : [];
-  const meta: HotMoversMeta | undefined =
-    rawResponse && !Array.isArray(rawResponse) ? rawResponse.meta : undefined;
-
-  // Drive the freshness clock from the server's reported run-finished
-  // timestamp, not TanStack Query's dataUpdatedAt (which is the time of the
-  // last successful client refetch and would always read "just now" right
-  // after a refetch even though the server response is cached for up to
-  // 10 minutes and the underlying ingest runs roughly hourly).
-  const updatedAgo = formatUpdatedAgo(
-    meta?.currentRunFinishedAt ? Date.parse(meta.currentRunFinishedAt) : undefined
-  );
 
   const scrollToLeaderboard = () => {
     const el = document.getElementById("leaderboard");
@@ -81,15 +55,7 @@ export function TrendingNowFeed({ onOpenInsight, collapsed, onToggle }: Trending
             <Flame className="h-4 w-4 text-orange-600 dark:text-orange-400" />
           </div>
           <div className="flex-1">
-            <div className="flex items-center gap-2">
-              <h3 className="text-sm font-semibold text-foreground dark:text-slate-100">Hot Movers</h3>
-              {updatedAgo && (
-                <span className="flex items-center gap-1 text-[10px] text-muted-foreground dark:text-slate-500" data-testid="text-hot-movers-updated">
-                  <Clock className="h-2.5 w-2.5" />
-                  {updatedAgo}
-                </span>
-              )}
-            </div>
+            <h3 className="text-sm font-semibold text-foreground dark:text-slate-100">Hot Movers</h3>
             <p className="text-[10px] text-muted-foreground dark:text-slate-500 uppercase tracking-wider">Exceptional 24h movement</p>
           </div>
           <div className={`h-6 w-6 rounded-md flex items-center justify-center bg-muted/50 dark:bg-slate-700/30 transition-transform duration-200 ${collapsed ? '' : 'rotate-180'}`}>
