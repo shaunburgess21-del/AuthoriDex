@@ -22,7 +22,6 @@ import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { h2hUserPickFromBet } from "@/components/predict/HeadToHeadCard";
 import { normalizeMarketCategory } from "@shared/constants";
 import { apiRequest } from "@/lib/queryClient";
@@ -34,7 +33,6 @@ import {
   ArrowLeft,
   Swords,
   Clock,
-  HelpCircle,
   Users,
   TrendingUp,
   TrendingDown,
@@ -363,21 +361,6 @@ export default function H2HDetailPage() {
           <div className="relative p-4 md:p-5">
             <div className="flex items-center gap-2 mb-4">
               <CategoryPill category={hydrated.category} />
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="text-xs text-muted-foreground flex items-center gap-1 cursor-help">
-                    <Swords className="h-3 w-3" />
-                    Highest Trend Score Wins
-                    <HelpCircle className="h-3 w-3" />
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-[260px]">
-                  <p className="text-xs">
-                    The person with the higher Trend Score at Sunday close wins.
-                    Pick who you think will be on top.
-                  </p>
-                </TooltipContent>
-              </Tooltip>
             </div>
 
             <div className="relative mb-4" style={{ padding: '0 5px' }}>

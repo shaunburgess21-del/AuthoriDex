@@ -137,16 +137,31 @@ export function WeeklyUpDownCard({
           Will <span className="font-semibold text-foreground">{market.personName.split(" ")[0]}</span> close above or below the weekly baseline?
         </p>
 
-        <div className="flex items-center gap-1.5 text-sm md:text-[11px] text-muted-foreground mb-1 max-md:mt-2 flex-wrap">
-          <span>Baseline: <span className="font-mono text-foreground">{market.baselineScore.toLocaleString('en-US')}</span></span>
-          <span className="text-muted-foreground/40">&middot;</span>
-          <span>Current: <span className="font-mono text-foreground">{market.currentScore.toLocaleString('en-US')}</span></span>
-          <span className="text-muted-foreground/40">&middot;</span>
-          <span>Pool: <span className="font-mono text-violet-600 dark:text-violet-400">{market.totalPool.toLocaleString('en-US')}</span> credits</span>
+        <div className="sm:hidden text-sm text-muted-foreground space-y-1 mt-2">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span>Baseline: <span className="font-mono text-foreground">{market.baselineScore.toLocaleString('en-US')}</span></span>
+            <span className="text-muted-foreground/40">&middot;</span>
+            <span>Current: <span className="font-mono text-foreground">{market.currentScore.toLocaleString('en-US')}</span></span>
+          </div>
+          <div>
+            <span>Change: <span className={`font-mono ${delta >= 0 ? "text-green-500" : "text-red-500"}`}>{delta >= 0 ? "+" : ""}{delta.toLocaleString('en-US')} ({delta >= 0 ? "+" : ""}{pctDelta}%)</span></span>
+          </div>
+          <div>
+            <span>Pool: <span className="font-mono text-violet-600 dark:text-violet-400">{market.totalPool.toLocaleString('en-US')}</span> credits</span>
+          </div>
         </div>
 
-        <div className="text-sm md:text-[11px] text-muted-foreground">
-          <span>Change: <span className={`font-mono ${delta >= 0 ? "text-green-500" : "text-red-500"}`}>{delta >= 0 ? "+" : ""}{delta.toLocaleString('en-US')} ({delta >= 0 ? "+" : ""}{pctDelta}%)</span></span>
+        <div className="hidden sm:block text-[11px] text-muted-foreground space-y-1">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span>Baseline: <span className="font-mono text-foreground">{market.baselineScore.toLocaleString('en-US')}</span></span>
+            <span className="text-muted-foreground/40">&middot;</span>
+            <span>Current: <span className="font-mono text-foreground">{market.currentScore.toLocaleString('en-US')}</span></span>
+            <span className="text-muted-foreground/40">&middot;</span>
+            <span>Change: <span className={`font-mono ${delta >= 0 ? "text-green-500" : "text-red-500"}`}>{delta >= 0 ? "+" : ""}{delta.toLocaleString('en-US')} ({delta >= 0 ? "+" : ""}{pctDelta}%)</span></span>
+          </div>
+          <div>
+            <span>Pool: <span className="font-mono text-violet-600 dark:text-violet-400">{market.totalPool.toLocaleString('en-US')}</span> credits</span>
+          </div>
         </div>
       </Link>
 

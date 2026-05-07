@@ -23,7 +23,6 @@ import { MuteMarketToggle } from "@/components/predict/MuteMarketToggle";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { normalizeMarketCategory } from "@shared/constants";
 import { apiRequest } from "@/lib/queryClient";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
@@ -38,7 +37,6 @@ import {
   TrendingDown,
   Clock,
   Lock,
-  HelpCircle,
   Users,
   BarChart3,
   ListChecks,
@@ -353,20 +351,6 @@ export default function UpDownDetailPage() {
                   <h2 className="text-lg font-bold">{hydrated.personName}</h2>
                   <CategoryPill category={hydrated.category} />
                 </div>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="text-[0.975rem] md:text-xs text-muted-foreground flex items-center gap-1 cursor-help">
-                      <HelpCircle className="h-3 w-3 shrink-0" />
-                      Will their Trend Score close above or below baseline?
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-[260px]">
-                    <p className="text-xs">
-                      If {firstName}'s Trend Score is above the weekly baseline at
-                      close, UP wins. Below, DOWN wins.
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
                 <Badge
                   variant="outline"
                   className={`mt-1.5 ${

@@ -24,7 +24,6 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatSignedPercent, formatSignedPoints } from "@/lib/predict-display";
 import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
 import { apiRequest } from "@/lib/queryClient";
@@ -34,7 +33,6 @@ import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { computePayoutMultiplier } from "@/lib/parimutuel";
 import {
   ArrowLeft,
-  TrendingUp,
   Crown,
   Search,
   Users,
@@ -42,7 +40,6 @@ import {
   Clock,
   ChevronRight,
   Lock,
-  HelpCircle,
   BarChart3,
   Zap,
 } from "lucide-react";
@@ -378,21 +375,6 @@ export default function CategoryRaceDetailPage() {
           <div className="relative p-4 md:p-5">
             <div className="flex items-center gap-2 mb-3">
               <CategoryPill category={normalizeMarketCategory(market.category || "misc")} />
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="text-xs text-muted-foreground flex items-center gap-1 cursor-help">
-                    <TrendingUp className="h-3 w-3" />
-                    Biggest Mover Wins
-                    <HelpCircle className="h-3 w-3" />
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-[260px]">
-                  <p className="text-xs">
-                    Pick who will have the highest % gain in their Trend Score by
-                    Sunday close. The biggest mover wins — not the highest ranked.
-                  </p>
-                </TooltipContent>
-              </Tooltip>
             </div>
 
             <div className="grid grid-cols-3 gap-3 text-center">
