@@ -39,6 +39,14 @@ interface LeaderboardRowProps {
   onVoteClick?: () => void;
   onPredictUp?: () => void;
   onPredictDown?: () => void;
+  /**
+   * The user's existing pending pick on this person's weekly Up/Down
+   * market, if any. When set, we visually disable the opposite-side
+   * chip (40% opacity, no hover) — matching the same-side rule on the
+   * detail / card surfaces. Same-side clicks still fire onPredict* so
+   * the parent can route into the StakeModal's top-up flow.
+   */
+  userPredictionPick?: "up" | "down" | null;
   predictionsDisabled?: boolean;
   predictionsClosedMessage?: Pick<ClosedMarketMessage, "title" | "lines">;
   approvalShowResults?: boolean;
@@ -68,6 +76,7 @@ export function LeaderboardRow({
   onVoteClick,
   onPredictUp,
   onPredictDown,
+  userPredictionPick = null,
   predictionsDisabled,
   predictionsClosedMessage,
   approvalShowResults,
@@ -271,44 +280,58 @@ export function LeaderboardRow({
               </p>
             </div>
             <div className="w-[88px] shrink-0 flex justify-end gap-1">
-              <ClosedMarketActionTrigger
-                isClosed={!!predictionsDisabled}
-                message={closedPredictMessage}
-                side="top"
-                align="center"
-              >
-                <button
-                  className="no-default-hover-elevate no-default-active-elevate inline-flex items-center gap-0.5 px-2 py-1 rounded-md text-[11px] font-medium border bg-[#00C853]/10 border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20 transition-colors"
-                  aria-label={`Predict ${person.name} Up`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onPredictUp?.();
-                  }}
-                  data-testid={`button-predict-up-${person.id}`}
-                >
-                  <TrendingUp style={{ width: 12, height: 12 }} />
-                  Up
-                </button>
-              </ClosedMarketActionTrigger>
-              <ClosedMarketActionTrigger
-                isClosed={!!predictionsDisabled}
-                message={closedPredictMessage}
-                side="top"
-                align="center"
-              >
-                <button
-                  className="no-default-hover-elevate no-default-active-elevate inline-flex items-center gap-0.5 px-2 py-1 rounded-md text-[11px] font-medium border bg-[#FF0000]/10 border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20 transition-colors"
-                  aria-label={`Predict ${person.name} Down`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onPredictDown?.();
-                  }}
-                  data-testid={`button-predict-down-${person.id}`}
-                >
-                  <TrendingDown style={{ width: 12, height: 12 }} />
-                  Dn
-                </button>
-              </ClosedMarketActionTrigger>
+              {(() => {
+                const upDisabled = userPredictionPick === "down";
+                const downDisabled = userPredictionPick === "up";
+                return (
+                  <>
+                    <ClosedMarketActionTrigger
+                      isClosed={!!predictionsDisabled}
+                      message={closedPredictMessage}
+                      side="top"
+                      align="center"
+                    >
+                      <button
+                        className={`no-default-hover-elevate no-default-active-elevate inline-flex items-center gap-0.5 px-2 py-1 rounded-md text-[11px] font-medium border bg-[#00C853]/10 border-[#00C853]/50 text-[#00C853] transition-colors ${upDisabled ? "opacity-40 cursor-not-allowed" : "hover:border-[#00C853]/80 hover:bg-[#00C853]/20"}`}
+                        aria-label={`Predict ${person.name} Up`}
+                        aria-disabled={upDisabled || undefined}
+                        disabled={upDisabled}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (upDisabled) return;
+                          onPredictUp?.();
+                        }}
+                        data-testid={`button-predict-up-${person.id}`}
+                      >
+                        <TrendingUp style={{ width: 12, height: 12 }} />
+                        Up
+                      </button>
+                    </ClosedMarketActionTrigger>
+                    <ClosedMarketActionTrigger
+                      isClosed={!!predictionsDisabled}
+                      message={closedPredictMessage}
+                      side="top"
+                      align="center"
+                    >
+                      <button
+                        className={`no-default-hover-elevate no-default-active-elevate inline-flex items-center gap-0.5 px-2 py-1 rounded-md text-[11px] font-medium border bg-[#FF0000]/10 border-[#FF0000]/50 text-[#FF0000] transition-colors ${downDisabled ? "opacity-40 cursor-not-allowed" : "hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20"}`}
+                        aria-label={`Predict ${person.name} Down`}
+                        aria-disabled={downDisabled || undefined}
+                        disabled={downDisabled}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (downDisabled) return;
+                          onPredictDown?.();
+                        }}
+                        data-testid={`button-predict-down-${person.id}`}
+                      >
+                        <TrendingDown style={{ width: 12, height: 12 }} />
+                        Dn
+                      </button>
+                    </ClosedMarketActionTrigger>
+                  </>
+                );
+              })()}
             </div>
           </>
         )}

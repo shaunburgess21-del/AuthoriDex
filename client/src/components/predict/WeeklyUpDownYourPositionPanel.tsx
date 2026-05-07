@@ -29,6 +29,7 @@ export function WeeklyUpDownYourPositionPanel({
   variant = "detail",
   href,
   onLinkClick,
+  onAddTopUp,
   className,
   tieRule,
 }: {
@@ -40,6 +41,13 @@ export function WeeklyUpDownYourPositionPanel({
   variant?: "detail" | "cardLink";
   href?: string;
   onLinkClick?: () => void;
+  /**
+   * Top-up handler. When provided alongside a non-null `pick`, the
+   * cardLink variant renders as a button that opens the parent's
+   * StakeModal in same-side top-up mode instead of bouncing through
+   * the detail page. Falls back to `href` when omitted.
+   */
+  onAddTopUp?: (pick: "up" | "down") => void;
   className?: string;
   tieRule?: string | null;
 }) {
@@ -130,6 +138,25 @@ export function WeeklyUpDownYourPositionPanel({
         </div>
       </div>
     );
+
+    // Top-up button takes precedence over the detail-page link: tapping
+    // the panel pulls up the StakeModal in same-side top-up mode so users
+    // can add credits in-place without bouncing through the detail page.
+    // The `pick` guard is here because the detail-page (`detail` variant)
+    // and legacy callers without a current pick still want the link.
+    if (onAddTopUp && pick) {
+      return (
+        <button
+          type="button"
+          onClick={() => onAddTopUp(pick)}
+          className="block w-full rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          aria-label={`Add to your ${pick.toUpperCase()} stake on ${personName}`}
+          data-testid={`button-topup-${pick}-${personName.replace(/\s+/g, "-").toLowerCase()}`}
+        >
+          {compact}
+        </button>
+      );
+    }
 
     if (href) {
       return (

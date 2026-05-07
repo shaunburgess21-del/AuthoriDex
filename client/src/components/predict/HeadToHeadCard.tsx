@@ -216,26 +216,51 @@ export function HeadToHeadCard({
         </Link>
 
         <div className="flex items-center justify-between px-2 mb-2">
-          <ClosedMarketActionTrigger isClosed={isMarketClosed && !hasPicked} message={closedMessage} side="top" align="center">
-            <div
-              className={`flex flex-col items-center flex-1 ${!hasPicked ? 'cursor-pointer' : ''}`}
-              onClick={() => !hasPicked && onSelect?.(1)}
-            >
-              <p className="text-sm font-semibold text-center">{smartName(market.person1.name)}</p>
-              <span className="text-[10px] font-mono text-muted-foreground">{market.person1.currentScore?.toLocaleString('en-US') || ''}</span>
-              <span className="text-xs text-blue-600 dark:text-blue-400 font-semibold">{market.person1Percent}%</span>
-            </div>
-          </ClosedMarketActionTrigger>
-          <ClosedMarketActionTrigger isClosed={isMarketClosed && !hasPicked} message={closedMessage} side="top" align="center">
-            <div
-              className={`flex flex-col items-center flex-1 ${!hasPicked ? 'cursor-pointer' : ''}`}
-              onClick={() => !hasPicked && onSelect?.(2)}
-            >
-              <p className="text-sm font-semibold text-center">{smartName(market.person2.name)}</p>
-              <span className="text-[10px] font-mono text-muted-foreground">{market.person2.currentScore?.toLocaleString('en-US') || ''}</span>
-              <span className="text-xs text-purple-600 dark:text-purple-400 font-semibold">{100 - market.person1Percent}%</span>
-            </div>
-          </ClosedMarketActionTrigger>
+          {/* Score-row tiles: clickable for fresh picks AND same-side
+              top-ups; greyed when the user picked the opposite side
+              (opposite-side hedges blocked at the call site). */}
+          {(() => {
+            const p1Active = !hasPicked || userPick === 1;
+            const p1Disabled = hasPicked && userPick !== 1;
+            return (
+              <ClosedMarketActionTrigger isClosed={isMarketClosed && !hasPicked} message={closedMessage} side="top" align="center">
+                <div
+                  className={cn(
+                    "flex flex-col items-center flex-1",
+                    p1Active && "cursor-pointer",
+                    p1Disabled && "opacity-40 cursor-not-allowed",
+                  )}
+                  onClick={() => p1Active && onSelect?.(1)}
+                  aria-disabled={p1Disabled || undefined}
+                >
+                  <p className="text-sm font-semibold text-center">{smartName(market.person1.name)}</p>
+                  <span className="text-[10px] font-mono text-muted-foreground">{market.person1.currentScore?.toLocaleString('en-US') || ''}</span>
+                  <span className="text-xs text-blue-600 dark:text-blue-400 font-semibold">{market.person1Percent}%</span>
+                </div>
+              </ClosedMarketActionTrigger>
+            );
+          })()}
+          {(() => {
+            const p2Active = !hasPicked || userPick === 2;
+            const p2Disabled = hasPicked && userPick !== 2;
+            return (
+              <ClosedMarketActionTrigger isClosed={isMarketClosed && !hasPicked} message={closedMessage} side="top" align="center">
+                <div
+                  className={cn(
+                    "flex flex-col items-center flex-1",
+                    p2Active && "cursor-pointer",
+                    p2Disabled && "opacity-40 cursor-not-allowed",
+                  )}
+                  onClick={() => p2Active && onSelect?.(2)}
+                  aria-disabled={p2Disabled || undefined}
+                >
+                  <p className="text-sm font-semibold text-center">{smartName(market.person2.name)}</p>
+                  <span className="text-[10px] font-mono text-muted-foreground">{market.person2.currentScore?.toLocaleString('en-US') || ''}</span>
+                  <span className="text-xs text-purple-600 dark:text-purple-400 font-semibold">{100 - market.person1Percent}%</span>
+                </div>
+              </ClosedMarketActionTrigger>
+            );
+          })()}
         </div>
 
         <div className="h-2 rounded-full overflow-hidden mb-2 flex">
@@ -299,46 +324,107 @@ export function HeadToHeadCard({
 
         <div className="mt-auto">
           {hasPicked ? (
-            <Link
-              href={`/predict/h2h/${market.id}`}
-              onClick={() => setPredictReturnAnchor(`card-h2h-${market.id}`)}
-              className="block w-full rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-              data-testid={`link-h2h-your-pick-${market.id}`}
-              aria-label={`View head-to-head details: your pick ${smartName(pickedName)}`}
-            >
-              <div
-                className={cn(
-                  "flex min-h-10 items-center gap-2 rounded-lg border px-3 py-3 md:py-2 transition-colors",
-                  pickAccentShell
-                )}
-              >
-                <Check className={cn("h-4 w-4 shrink-0", pickAccentIconClass)} />
-                <div className="min-w-0 flex-1">
-                  <p className="text-[11px] leading-none text-muted-foreground">Your pick</p>
-                  <p className="truncate text-sm font-semibold leading-tight text-foreground">{smartName(pickedName)}</p>
-                </div>
-                {userStake != null && (
-                  <div className="flex shrink-0 flex-col items-end tabular-nums">
-                    <span className="text-[10px] leading-none text-muted-foreground">Stake</span>
-                    <span className="text-xs font-semibold leading-tight text-foreground">
-                      {userStake.toLocaleString("en-US")}
-                    </span>
-                  </div>
-                )}
-                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-                <Badge
-                  className={
-                    pickWinning
-                      ? "shrink-0 bg-green-600/20 text-green-500 border-green-500/40 dark:border-green-500/30"
-                      : pickTied
-                        ? "shrink-0 bg-amber-600/20 text-amber-500 border-amber-500/40 dark:border-amber-500/30"
-                        : "shrink-0 bg-[#FF0000]/10 text-[#FF0000] border-[#FF0000]/50 dark:border-[#FF0000]/50"
-                  }
+            <div className="flex items-stretch gap-2">
+              {/* Primary tap = same-side top-up via parent's StakeModal.
+                  Falls back to the detail-page link for legacy callers
+                  that didn't wire onSelect. */}
+              {onSelect ? (
+                <button
+                  type="button"
+                  onClick={() => onSelect(userPick as 1 | 2)}
+                  className="flex-1 block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                  data-testid={`button-h2h-topup-${market.id}`}
+                  aria-label={`Add to your ${smartName(pickedName)} stake`}
                 >
-                  {pickWinning ? "Winning" : pickTied ? "Tied" : "Behind"}
-                </Badge>
-              </div>
-            </Link>
+                  <div
+                    className={cn(
+                      "flex min-h-10 items-center gap-2 rounded-lg border px-3 py-3 md:py-2 transition-colors",
+                      pickAccentShell
+                    )}
+                  >
+                    <Check className={cn("h-4 w-4 shrink-0", pickAccentIconClass)} />
+                    <div className="min-w-0 flex-1 text-left">
+                      <p className="text-[11px] leading-none text-muted-foreground">Your pick</p>
+                      <p className="truncate text-sm font-semibold leading-tight text-foreground">{smartName(pickedName)}</p>
+                    </div>
+                    {userStake != null && (
+                      <div className="flex shrink-0 flex-col items-end tabular-nums">
+                        <span className="text-[10px] leading-none text-muted-foreground">Stake</span>
+                        <span className="text-xs font-semibold leading-tight text-foreground">
+                          {userStake.toLocaleString("en-US")}
+                        </span>
+                      </div>
+                    )}
+                    <Badge
+                      className={
+                        pickWinning
+                          ? "shrink-0 bg-green-600/20 text-green-500 border-green-500/40 dark:border-green-500/30"
+                          : pickTied
+                            ? "shrink-0 bg-amber-600/20 text-amber-500 border-amber-500/40 dark:border-amber-500/30"
+                            : "shrink-0 bg-[#FF0000]/10 text-[#FF0000] border-[#FF0000]/50 dark:border-[#FF0000]/50"
+                      }
+                    >
+                      {pickWinning ? "Winning" : pickTied ? "Tied" : "Behind"}
+                    </Badge>
+                  </div>
+                </button>
+              ) : (
+                <Link
+                  href={`/predict/h2h/${market.id}`}
+                  onClick={() => setPredictReturnAnchor(`card-h2h-${market.id}`)}
+                  className="flex-1 block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                  data-testid={`link-h2h-your-pick-${market.id}`}
+                  aria-label={`View head-to-head details: your pick ${smartName(pickedName)}`}
+                >
+                  <div
+                    className={cn(
+                      "flex min-h-10 items-center gap-2 rounded-lg border px-3 py-3 md:py-2 transition-colors",
+                      pickAccentShell
+                    )}
+                  >
+                    <Check className={cn("h-4 w-4 shrink-0", pickAccentIconClass)} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] leading-none text-muted-foreground">Your pick</p>
+                      <p className="truncate text-sm font-semibold leading-tight text-foreground">{smartName(pickedName)}</p>
+                    </div>
+                    {userStake != null && (
+                      <div className="flex shrink-0 flex-col items-end tabular-nums">
+                        <span className="text-[10px] leading-none text-muted-foreground">Stake</span>
+                        <span className="text-xs font-semibold leading-tight text-foreground">
+                          {userStake.toLocaleString("en-US")}
+                        </span>
+                      </div>
+                    )}
+                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                    <Badge
+                      className={
+                        pickWinning
+                          ? "shrink-0 bg-green-600/20 text-green-500 border-green-500/40 dark:border-green-500/30"
+                          : pickTied
+                            ? "shrink-0 bg-amber-600/20 text-amber-500 border-amber-500/40 dark:border-amber-500/30"
+                            : "shrink-0 bg-[#FF0000]/10 text-[#FF0000] border-[#FF0000]/50 dark:border-[#FF0000]/50"
+                      }
+                    >
+                      {pickWinning ? "Winning" : pickTied ? "Tied" : "Behind"}
+                    </Badge>
+                  </div>
+                </Link>
+              )}
+              {/* Secondary "View details" affordance — keeps the
+                  detail-page link reachable when the primary tap is
+                  the top-up flow. */}
+              {onSelect && (
+                <Link
+                  href={`/predict/h2h/${market.id}`}
+                  onClick={() => setPredictReturnAnchor(`card-h2h-${market.id}`)}
+                  className="shrink-0 flex items-center justify-center px-2 rounded-lg border border-border/50 hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                  data-testid={`link-h2h-details-${market.id}`}
+                  aria-label="View head-to-head details"
+                >
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden />
+                </Link>
+              )}
+            </div>
           ) : (
             <div className="grid grid-cols-2 gap-2">
               <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMessage} side="top" align="center">

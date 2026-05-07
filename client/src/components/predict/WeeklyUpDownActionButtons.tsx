@@ -30,6 +30,11 @@ export function WeeklyUpDownActionButtons({
         variant="cardLink"
         href={`/predict/updown/${marketId}`}
         onLinkClick={() => setPredictReturnAnchor(`card-weekly-${marketId}`)}
+        // When PredictPage hands us an `onSelect`, route the panel tap
+        // through it so the StakeModal pops in same-side top-up mode
+        // without a detail-page round-trip. Older callers without
+        // `onSelect` still get the legacy link-to-detail behaviour.
+        onAddTopUp={onSelect ? (pick) => onSelect(pick) : undefined}
         pick={pendingPosition.pick}
         personName={personName}
         baselineScore={baselineScore}

@@ -201,15 +201,31 @@ export default function CategoryRaceDetailPage() {
     return Number(market.activeParticipantCount || 0) || 0;
   }, [market]);
 
-  const userBet = useMemo(() => {
-    if (!userBets || !marketId) return null;
-    return userBets.find((b: any) => b.marketId === marketId) || null;
+  const userMarketBets = useMemo(() => {
+    if (!userBets || !marketId) return [] as any[];
+    return userBets.filter((b: any) => b.marketId === marketId);
   }, [userBets, marketId]);
 
+  const userBet = useMemo(() => userMarketBets[0] || null, [userMarketBets]);
+
+  // Race lets users back multiple candidates, so "userPick" here just means
+  // the *first* candidate the user backed (used by existing path-to-win
+  // copy and the position card's drift). For per-candidate top-up checks
+  // we look up `existingStakeFor(candidate)` directly.
   const userPick = useMemo(() => {
     if (!userBet) return null;
     return candidates.find((c) => c.entryId === userBet.entryId) || null;
   }, [userBet, candidates]);
+
+  const existingStakeFor = useCallback(
+    (entryId: string | undefined): number => {
+      if (!entryId) return 0;
+      return userMarketBets
+        .filter((b: any) => b.entryId === entryId)
+        .reduce((sum: number, b: any) => sum + Number(b.stakeAmount || 0), 0);
+    },
+    [userMarketBets],
+  );
 
   const userPickRank = useMemo(() => {
     if (!userPick) return null;
@@ -234,10 +250,12 @@ export default function CategoryRaceDetailPage() {
 
   const handleCandidateSelect = useCallback(
     (candidate: GainerCandidate) => {
-      if (userPick) return;
-      if (isMarketClosed) {
-        return;
-      }
+      if (isMarketClosed) return;
+      // Race natively supports backing multiple candidates — no blanket
+      // guard. If the user re-clicks one they've already backed we treat
+      // it as a same-side top-up (StakeModal copy adapts).
+      const priorStake = existingStakeFor(candidate.entryId);
+      const isTopUp = priorStake > 0;
       const candidateStake = Number(candidate.totalStake || 0);
       const estimatedPayout = computePayoutMultiplier(totalPool, candidateStake);
       const crowdSentiment = totalPool > 0
@@ -256,10 +274,12 @@ export default function CategoryRaceDetailPage() {
         estimatedPayout,
         endAt: serverResolutionDeadline ?? undefined,
         bettingCutoff: market?.bettingCutoff || null,
+        isTopUp,
+        existingStake: isTopUp ? priorStake : undefined,
       } as StakeSelection);
       setStakeModalOpen(true);
     },
-    [isMarketClosed, userPick, marketId, categoryLabel, totalPool, market, serverResolutionDeadline]
+    [isMarketClosed, marketId, categoryLabel, totalPool, market, serverResolutionDeadline, existingStakeFor]
   );
 
   const betMutation = useMutation({
@@ -466,7 +486,10 @@ export default function CategoryRaceDetailPage() {
               const globalIdx = candidates.indexOf(candidate);
               const isLeader = globalIdx === 0;
               const isUserPick = userPick?.entryId === candidate.entryId;
-              const canSelect = !userPick;
+              // Race lets users back any candidate at any time (including
+              // re-staking on one they've already picked, which routes to
+              // a top-up). Selection only blocks once the market closes.
+              const canSelect = !isMarketClosed;
 
               return (
                 <ClosedMarketActionTrigger

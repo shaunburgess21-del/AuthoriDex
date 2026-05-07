@@ -62,6 +62,15 @@ export interface StakeSelection {
   /** Yes/No side for community-market multi-option entries.
    *  Other market types (updown/h2h/gainer/jackpot) ignore this. */
   direction?: "yes" | "no";
+  /**
+   * True when this selection is a follow-up bet on a side the user has
+   * already backed. Switches the modal header to "Add to your X stake"
+   * and surfaces the user's previous total under the pick card.
+   * Same-side only — opposite-side hedges are blocked at the call site.
+   */
+  isTopUp?: boolean;
+  /** Total stake the user already has on this side (sum across prior bets). */
+  existingStake?: number;
 }
 
 interface StakeModalProps {
@@ -126,7 +135,6 @@ export function StakeModal({
   if (!selection) return null;
 
   const isCutoffPassed = selection.bettingCutoff ? marketCycle.status !== "OPEN" : false;
-  const missionText = MISSION_HEADERS[selection.type] || "Place your prediction on this market.";
   const isUpDown = selection.type === "updown";
   const isH2H = selection.type === "h2h";
   const isGainer = selection.type === "gainer";
@@ -134,6 +142,30 @@ export function StakeModal({
   const isCommunityNo = isCommunity && selection.direction === "no";
   const isUp = selection.choice.includes("UP");
   const isDown = selection.choice.includes("DOWN");
+
+  const isTopUp = !!selection.isTopUp;
+  // Header copy. On a follow-up bet we surface "Add to your X stake" so users
+  // know the new credits compound onto an existing position rather than
+  // creating a separate one. Same-side only — opposite-side hedges are
+  // blocked at the call site.
+  const topUpHeading = (() => {
+    if (!isTopUp) return null;
+    if (isUpDown) {
+      if (isUp) return "Add to your UP stake";
+      if (isDown) return "Add to your DOWN stake";
+      return "Add to your stake";
+    }
+    if (isH2H) return `Add to your ${selection.personName ?? selection.choice} stake`;
+    if (isGainer) return `Add to your ${selection.choice} stake`;
+    if (isCommunity) {
+      return `Add to your ${selection.direction === "no" ? "No" : "Yes"} stake`;
+    }
+    return "Add to your stake";
+  })();
+  const dialogTitleText = topUpHeading ?? "Confirm Prediction";
+  const missionText = isTopUp
+    ? "Adding more credits compounds onto your existing position."
+    : (MISSION_HEADERS[selection.type] || "Place your prediction on this market.");
 
   const fireConfetti = (origin: { x: number; y: number }) => {
     confetti({
@@ -211,7 +243,7 @@ export function StakeModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Target className="h-5 w-5 text-violet-700 dark:text-violet-500" />
-            Confirm Prediction
+            {dialogTitleText}
             {selection?.type && RULES_CONTENT[selection.type] && (
               <Popover>
                 <PopoverTrigger asChild>
@@ -273,6 +305,16 @@ export function StakeModal({
               <p className="text-lg font-bold">
                 <span className="text-muted-foreground text-sm font-medium mr-1.5">Your pick:</span>
                 <span className="text-foreground">{selection.choice}</span>
+              </p>
+            )}
+
+            {isTopUp && typeof selection.existingStake === "number" && selection.existingStake > 0 && (
+              <p
+                className="mt-1.5 text-xs text-muted-foreground"
+                data-testid="stake-modal-existing-stake"
+              >
+                Currently staked: {selection.existingStake.toLocaleString()} credits.
+                Adding more will be combined for the same outcome.
               </p>
             )}
 

@@ -169,13 +169,15 @@ export default function H2HDetailPage() {
     };
   }, [market]);
 
-  const userBet = useMemo(() => {
-    if (!userBetsData || !marketId) return null;
+  const userMarketBets = useMemo(() => {
+    if (!userBetsData || !marketId) return [] as any[];
     const betsArray = Array.isArray(userBetsData)
       ? userBetsData
       : (userBetsData as any)?.predictions ?? [];
-    return betsArray.find((b: any) => b.marketId === marketId) || null;
+    return betsArray.filter((b: any) => b.marketId === marketId);
   }, [userBetsData, marketId]);
+
+  const userBet = useMemo(() => userMarketBets[0] || null, [userMarketBets]);
 
   const userPickSide = useMemo((): 1 | 2 | null => {
     if (!userBet || !hydrated) return null;
@@ -192,10 +194,30 @@ export default function H2HDetailPage() {
     );
   }, [userBet, hydrated]);
 
+  // Sum every prior bet on the side the user already picked, so a top-up
+  // shows the cumulative position in the StakeModal subline (not just the
+  // most recent ticket).
+  const userPickTotalStake = useMemo(() => {
+    if (!userPickSide || !hydrated) return 0;
+    const myEntryId =
+      userPickSide === 1 ? hydrated.person1EntryId : hydrated.person2EntryId;
+    return userMarketBets
+      .filter((b: any) => b.entryId === myEntryId)
+      .reduce((sum: number, b: any) => sum + Number(b.stakeAmount || 0), 0);
+  }, [userMarketBets, userPickSide, hydrated]);
+
   const handleSelect = useCallback(
     (person: 1 | 2) => {
-      if (!hydrated || userPickSide) return;
-      if (isMarketClosed) {
+      if (!hydrated) return;
+      if (isMarketClosed) return;
+      // Same-side top-ups allowed; opposite-side hedges blocked.
+      if (userPickSide && person !== userPickSide) {
+        const myName =
+          userPickSide === 1 ? hydrated.person1.name : hydrated.person2.name;
+        hapticError();
+        toast("Stick with your pick", {
+          description: `You already backed ${myName}. We don't allow backing both sides — top up your existing pick instead.`,
+        });
         return;
       }
       const picked = person === 1 ? hydrated.person1 : hydrated.person2;
@@ -210,6 +232,7 @@ export default function H2HDetailPage() {
         ? hydrated.totalPool / 2
         : (pickedStake / userStakeTotal) * hydrated.totalPool;
       const estimatedPayout = computePayoutMultiplier(hydrated.totalPool, pickedPool);
+      const isTopUp = !!userPickSide;
       setPendingSelection({
         type: "h2h",
         marketId,
@@ -226,10 +249,12 @@ export default function H2HDetailPage() {
         tieRule: hydrated.tieRule ?? "refund",
         endAt: hydrated.endAt,
         bettingCutoff: hydrated.bettingCutoff,
+        isTopUp,
+        existingStake: isTopUp ? userPickTotalStake : undefined,
       });
       setStakeModalOpen(true);
     },
-    [hydrated, isMarketClosed, userPickSide, marketId]
+    [hydrated, isMarketClosed, userPickSide, marketId, userPickTotalStake]
   );
 
   const betMutation = useMutation({
@@ -365,48 +390,64 @@ export default function H2HDetailPage() {
 
             <div className="relative mb-4" style={{ padding: '0 5px' }}>
               <div className="flex" style={{ gap: '7px' }}>
-                {/* Person 1 */}
-                <ClosedMarketActionTrigger isClosed={isMarketClosed && !userPickSide} message={closedMarketMessage} side="top" align="center">
-                  <div
-                    className={`flex-1 relative ${!userPickSide ? "cursor-pointer group/p1" : ""}`}
-                    onClick={() => !userPickSide && handleSelect(1)}
-                  >
-                  <div className="absolute -inset-4 rounded-md bg-blue-500/25 dark:bg-blue-500/20 blur-lg pointer-events-none transition-opacity group-hover/p1:bg-blue-500/40" />
-                  <div className="rounded-lg overflow-hidden ring-2 ring-transparent transition-all group-hover/p1:ring-blue-500/60">
-                    <PersonAvatar
-                      name={hydrated.person1.name}
-                      avatar={hydrated.person1.avatar}
-                      className="h-auto w-full aspect-[4/5]"
-                    />
-                  </div>
-                  {person1Leading && (
-                    <div className="absolute -top-1.5 -right-1.5 z-10 h-6 w-6 rounded-full bg-amber-500/25 dark:bg-amber-500/20 border border-amber-500/60 dark:border-amber-500/50 flex items-center justify-center">
-                      <Crown className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-                    </div>
-                  )}
-                  </div>
-                </ClosedMarketActionTrigger>
-                {/* Person 2 */}
-                <ClosedMarketActionTrigger isClosed={isMarketClosed && !userPickSide} message={closedMarketMessage} side="top" align="center">
-                  <div
-                    className={`flex-1 relative ${!userPickSide ? "cursor-pointer group/p2" : ""}`}
-                    onClick={() => !userPickSide && handleSelect(2)}
-                  >
-                  <div className="absolute -inset-4 rounded-md bg-purple-500/25 dark:bg-purple-500/20 blur-lg pointer-events-none transition-opacity group-hover/p2:bg-purple-500/40" />
-                  <div className="rounded-lg overflow-hidden ring-2 ring-transparent transition-all group-hover/p2:ring-purple-500/60">
-                    <PersonAvatar
-                      name={hydrated.person2.name}
-                      avatar={hydrated.person2.avatar}
-                      className="h-auto w-full aspect-[4/5]"
-                    />
-                  </div>
-                  {person2Leading && (
-                    <div className="absolute -top-1.5 -right-1.5 z-10 h-6 w-6 rounded-full bg-amber-500/25 dark:bg-amber-500/20 border border-amber-500/60 dark:border-amber-500/50 flex items-center justify-center">
-                      <Crown className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-                    </div>
-                  )}
-                  </div>
-                </ClosedMarketActionTrigger>
+                {/* Person 1 — clickable when no pick OR user already picked
+                    person 1 (same-side top-up). Greyed when user picked
+                    person 2 (opposite-side hedge blocked). */}
+                {(() => {
+                  const p1Active = !userPickSide || userPickSide === 1;
+                  const p1Disabled = !!userPickSide && userPickSide !== 1;
+                  return (
+                    <ClosedMarketActionTrigger isClosed={isMarketClosed && !userPickSide} message={closedMarketMessage} side="top" align="center">
+                      <div
+                        className={`flex-1 relative ${p1Active ? "cursor-pointer group/p1" : ""} ${p1Disabled ? "opacity-40 grayscale cursor-not-allowed" : ""}`}
+                        onClick={() => p1Active && handleSelect(1)}
+                        aria-disabled={p1Disabled || undefined}
+                      >
+                      <div className="absolute -inset-4 rounded-md bg-blue-500/25 dark:bg-blue-500/20 blur-lg pointer-events-none transition-opacity group-hover/p1:bg-blue-500/40" />
+                      <div className="rounded-lg overflow-hidden ring-2 ring-transparent transition-all group-hover/p1:ring-blue-500/60">
+                        <PersonAvatar
+                          name={hydrated.person1.name}
+                          avatar={hydrated.person1.avatar}
+                          className="h-auto w-full aspect-[4/5]"
+                        />
+                      </div>
+                      {person1Leading && (
+                        <div className="absolute -top-1.5 -right-1.5 z-10 h-6 w-6 rounded-full bg-amber-500/25 dark:bg-amber-500/20 border border-amber-500/60 dark:border-amber-500/50 flex items-center justify-center">
+                          <Crown className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                        </div>
+                      )}
+                      </div>
+                    </ClosedMarketActionTrigger>
+                  );
+                })()}
+                {/* Person 2 — same logic, mirrored. */}
+                {(() => {
+                  const p2Active = !userPickSide || userPickSide === 2;
+                  const p2Disabled = !!userPickSide && userPickSide !== 2;
+                  return (
+                    <ClosedMarketActionTrigger isClosed={isMarketClosed && !userPickSide} message={closedMarketMessage} side="top" align="center">
+                      <div
+                        className={`flex-1 relative ${p2Active ? "cursor-pointer group/p2" : ""} ${p2Disabled ? "opacity-40 grayscale cursor-not-allowed" : ""}`}
+                        onClick={() => p2Active && handleSelect(2)}
+                        aria-disabled={p2Disabled || undefined}
+                      >
+                      <div className="absolute -inset-4 rounded-md bg-purple-500/25 dark:bg-purple-500/20 blur-lg pointer-events-none transition-opacity group-hover/p2:bg-purple-500/40" />
+                      <div className="rounded-lg overflow-hidden ring-2 ring-transparent transition-all group-hover/p2:ring-purple-500/60">
+                        <PersonAvatar
+                          name={hydrated.person2.name}
+                          avatar={hydrated.person2.avatar}
+                          className="h-auto w-full aspect-[4/5]"
+                        />
+                      </div>
+                      {person2Leading && (
+                        <div className="absolute -top-1.5 -right-1.5 z-10 h-6 w-6 rounded-full bg-amber-500/25 dark:bg-amber-500/20 border border-amber-500/60 dark:border-amber-500/50 flex items-center justify-center">
+                          <Crown className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                        </div>
+                      )}
+                      </div>
+                    </ClosedMarketActionTrigger>
+                  );
+                })()}
               </div>
               {/* VS badge */}
               <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20">
@@ -469,7 +510,14 @@ export default function H2HDetailPage() {
         <MyPositionCard
           marketId={marketId}
           marketType="h2h"
-          hideCta
+          ctaLabel={
+            userPickSide
+              ? `Add to your ${userPickSide === 1 ? hydrated.person1.name : hydrated.person2.name} stake`
+              : undefined
+          }
+          onAddEntry={
+            userPickSide ? () => handleSelect(userPickSide) : undefined
+          }
           livePoolContext={
             userPickSide && Number.isFinite(hydrated.totalPool) && hydrated.totalPool > 0
               ? {

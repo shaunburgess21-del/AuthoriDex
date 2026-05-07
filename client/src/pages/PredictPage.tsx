@@ -2055,6 +2055,24 @@ export default function PredictPage() {
       return;
     }
 
+    // Same-side top-ups allowed; opposite-side hedges blocked at the
+    // call site (mirrors detail pages). The position panel taps can
+    // technically only fire onSelect with the user's existing pick,
+    // so this guard is the safety net for any other entry point that
+    // ends up routed through here.
+    const existing = userBetsByMarket.get(String(market.id));
+    const userPick = existing && existing.result === "pending"
+      ? (existing.entryLabel || "").toLowerCase() as "up" | "down" | string
+      : null;
+    if (userPick && (userPick === "up" || userPick === "down") && choice !== userPick) {
+      hapticError();
+      toast("Stick with your pick", {
+        description: `You already picked ${userPick.toUpperCase()}. We don't allow switching sides — top up your existing pick instead.`,
+      });
+      return;
+    }
+    const isTopUp = userPick === choice;
+
     setPendingSelection({
       type: "updown",
       choice: choice === "up" ? "Trend Score UP" : "Trend Score DOWN",
@@ -2070,6 +2088,8 @@ export default function PredictPage() {
       tieRule: market.tieRule || "refund",
       endAt: market.endAt,
       bettingCutoff: market.bettingCutoff,
+      isTopUp,
+      existingStake: isTopUp ? existing?.stakeAmount : undefined,
     });
     openStakeModal();
   };
@@ -2099,6 +2119,23 @@ export default function PredictPage() {
     const pickedPool = (sentiment / 100) * stakePool;
     const estimatedPayout = computePayoutMultiplier(stakePool, pickedPool);
 
+    // Same-side top-up vs opposite-side hedge guard. Mirrors the detail
+    // page logic — opposite-side hedges are blocked everywhere users
+    // can predict on H2H.
+    const existing = userBetsByMarket.get(String(market.id));
+    const userPickSide = existing && existing.result === "pending"
+      ? h2hUserPickFromBet(market, { entryLabel: existing.entryLabel, entryId: existing.entryId })
+      : null;
+    if (userPickSide && person !== userPickSide) {
+      const myName = userPickSide === 1 ? market.person1.name : market.person2.name;
+      hapticError();
+      toast("Stick with your pick", {
+        description: `You already backed ${myName}. We don't allow backing both sides — top up your existing pick instead.`,
+      });
+      return;
+    }
+    const isTopUp = userPickSide === person;
+
     setPendingSelection({
       type: "h2h",
       choice: picked.name,
@@ -2115,6 +2152,8 @@ export default function PredictPage() {
       tieRule: (market as { tieRule?: string }).tieRule ?? "refund",
       endAt: serverResolutionDeadline ?? undefined,
       bettingCutoff: market.bettingCutoff,
+      isTopUp,
+      existingStake: isTopUp ? existing?.stakeAmount : undefined,
     });
     openStakeModal();
   };
@@ -2144,6 +2183,12 @@ export default function PredictPage() {
       ? Math.round((candidateStake / market.totalPool) * 100)
       : 0;
 
+    // Race lets users back any candidate at any time; if they re-pick
+    // one they've already backed we treat it as a same-side top-up so
+    // the StakeModal subline shows their existing position.
+    const priorStake = userBetsPerEntry.get(String(market.id))?.get(String(candidate.entryId))?.stakeAmount ?? 0;
+    const isTopUp = priorStake > 0;
+
     setPendingSelection({
       type: "gainer",
       choice: candidate.name,
@@ -2161,6 +2206,8 @@ export default function PredictPage() {
       estimatedPayout,
       endAt: serverResolutionDeadline ?? undefined,
       bettingCutoff: market.bettingCutoff,
+      isTopUp,
+      existingStake: isTopUp ? priorStake : undefined,
     });
     openStakeModal();
   };

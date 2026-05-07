@@ -147,13 +147,15 @@ export default function UpDownDetailPage() {
     };
   }, [market]);
 
-  const userBet = useMemo(() => {
-    if (!userBetsData || !marketId) return null;
+  const userMarketBets = useMemo(() => {
+    if (!userBetsData || !marketId) return [] as any[];
     const betsArray = Array.isArray(userBetsData)
       ? userBetsData
       : (userBetsData as any)?.predictions ?? [];
-    return betsArray.find((b: any) => b.marketId === marketId) || null;
+    return betsArray.filter((b: any) => b.marketId === marketId);
   }, [userBetsData, marketId]);
+
+  const userBet = useMemo(() => userMarketBets[0] || null, [userMarketBets]);
 
   const userPick = useMemo((): "up" | "down" | null => {
     if (!userBet) return null;
@@ -163,12 +165,31 @@ export default function UpDownDetailPage() {
     return null;
   }, [userBet]);
 
+  // Sum across every prior same-side bet on this market so the StakeModal
+  // top-up subline shows the user's actual cumulative position (not just
+  // the most recent ticket) when adding more credits to an existing pick.
+  const userPickTotalStake = useMemo(() => {
+    if (!userPick) return 0;
+    return userMarketBets
+      .filter((b: any) => (b.entryLabel || "").toLowerCase() === userPick)
+      .reduce((sum: number, b: any) => sum + Number(b.stakeAmount || 0), 0);
+  }, [userMarketBets, userPick]);
+
   const handleSelect = useCallback(
     (choice: "up" | "down") => {
-      if (!hydrated || userPick) return;
-      if (isMarketClosed) {
+      if (!hydrated) return;
+      if (isMarketClosed) return;
+      // Same-side top-ups allowed. Opposite-side hedges are blocked —
+      // we honour the user's first commitment and prompt them to top
+      // up rather than create a contradictory ticket on the other side.
+      if (userPick && choice !== userPick) {
+        hapticError();
+        toast("Stick with your pick", {
+          description: `You already picked ${userPick.toUpperCase()}. We don't allow switching sides — top up your existing pick instead.`,
+        });
         return;
       }
+      const isTopUp = !!userPick;
       setPendingSelection({
         type: "updown",
         marketId,
@@ -186,10 +207,12 @@ export default function UpDownDetailPage() {
         tieRule: hydrated.tieRule,
         endAt: hydrated.endAt,
         bettingCutoff: hydrated.bettingCutoff,
+        isTopUp,
+        existingStake: isTopUp ? userPickTotalStake : undefined,
       });
       setStakeModalOpen(true);
     },
-    [hydrated, isMarketClosed, userPick, marketId]
+    [hydrated, isMarketClosed, userPick, marketId, userPickTotalStake]
   );
 
   const betMutation = useMutation({
@@ -411,7 +434,10 @@ export default function UpDownDetailPage() {
         <MyPositionCard
           marketId={marketId}
           marketType="updown"
-          hideCta
+          ctaLabel={
+            userPick ? `Add to your ${userPick.toUpperCase()} stake` : undefined
+          }
+          onAddEntry={userPick ? () => handleSelect(userPick) : undefined}
           livePoolContext={
             userPick && Number.isFinite(hydrated.totalPool) && hydrated.totalPool > 0
               ? {

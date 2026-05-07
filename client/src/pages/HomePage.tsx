@@ -977,12 +977,24 @@ export default function HomePage() {
   // profile.predictCredits; the home leaderboard's predict column
   // now mirrors that single source of truth so balance + post-bet
   // validation behave identically.
-  const { profile, refreshProfile } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
   const { trigger: triggerXpBurst } = useXpBurst();
   const walletCredits = profile?.predictCredits ?? 0;
 
   const { data: nativeUpdownData } = useQuery<any[]>({
     queryKey: ['/api/native-markets/updown'],
+  });
+
+  // Same-side / opposite-side rule for the leaderboard predict column.
+  // We need each user's existing pick (if any) on the active weekly
+  // market for each person so we can:
+  //   1) visually grey the opposite-side button (hedges blocked), and
+  //   2) treat re-clicking the picked side as a same-side top-up.
+  // The leaderboard already polls /api/native-markets/updown; pairing
+  // it with /api/me/predictions gives us everything per row.
+  const { data: userPredictionsData } = useQuery<any>({
+    queryKey: ["/api/me/predictions"],
+    enabled: !!user,
   });
   const updownMarkets = useMemo(() => {
     const dbMarkets = (nativeUpdownData || []).filter((m: any) => m.visibility === "live");
@@ -1019,6 +1031,45 @@ export default function HomePage() {
     });
   }, [nativeUpdownData]);
 
+  // Per-personId pending pick + cumulative stake on that side. Maps
+  // any leaderboard row's `personId` to the user's open up/down ticket
+  // so the row can render guarded buttons + the parent's predict
+  // handler can branch into same-side top-up mode.
+  const userUpdownPickByPerson = useMemo(() => {
+    const map = new Map<
+      string,
+      { pick: "up" | "down"; stakeAmount: number; marketId: string }
+    >();
+    if (!userPredictionsData || updownMarkets.length === 0) return map;
+    const betsArray = Array.isArray(userPredictionsData)
+      ? userPredictionsData
+      : (userPredictionsData as any)?.predictions ?? [];
+    const personByMarket = new Map<string, string>();
+    for (const m of updownMarkets) {
+      if (m.id && m.personId) personByMarket.set(String(m.id), String(m.personId));
+    }
+    for (const bet of betsArray as any[]) {
+      const personId = personByMarket.get(String(bet.marketId));
+      if (!personId) continue;
+      if (bet.result && bet.result !== "pending") continue;
+      const label = (bet.entryLabel || "").toLowerCase();
+      const pick: "up" | "down" | null =
+        label === "up" ? "up" : label === "down" ? "down" : null;
+      if (!pick) continue;
+      const prev = map.get(personId);
+      if (prev) {
+        prev.stakeAmount += Number(bet.stakeAmount || 0);
+      } else {
+        map.set(personId, {
+          pick,
+          stakeAmount: Number(bet.stakeAmount || 0),
+          marketId: String(bet.marketId),
+        });
+      }
+    }
+    return map;
+  }, [userPredictionsData, updownMarkets]);
+
   const isUpdownCutoffPassed = useMemo(() => {
     const allNative = (nativeUpdownData || []) as any[];
     return allNative.some((m: any) => m.isCutoffPassed === true);
@@ -1042,6 +1093,20 @@ export default function HomePage() {
       toast("No active market", { description: "No active prediction market for this person this week." });
       return;
     }
+    // Same-side top-up vs opposite-side hedge. Visual greying on the
+    // opposite chip is the primary deterrent (see LeaderboardRow); this
+    // toast catches users who fire onClick before the disabled prop
+    // settles in (e.g. profile data still loading).
+    const existing = userUpdownPickByPerson.get(personId);
+    if (existing && direction !== existing.pick) {
+      hapticError();
+      toast("Stick with your pick", {
+        description: `You already picked ${existing.pick.toUpperCase()}. We don't allow switching sides — top up your existing pick instead.`,
+      });
+      return;
+    }
+    const isTopUp = !!existing;
+
     const crowdSentiment = direction === "up" ? market.upPoolPercent : (100 - market.upPoolPercent);
     const estimatedPayout = direction === "up" ? market.upMultiplier : market.downMultiplier;
     setPendingSelection({
@@ -1060,10 +1125,12 @@ export default function HomePage() {
       tieRule: market.tieRule,
       endAt: market.endAt || undefined,
       bettingCutoff: market.bettingCutoff,
+      isTopUp,
+      existingStake: isTopUp ? existing.stakeAmount : undefined,
     });
     refreshProfile?.().catch(() => {});
     setStakeModalOpen(true);
-  }, [updownMarkets, isUpdownCutoffPassed, refreshProfile]);
+  }, [updownMarkets, isUpdownCutoffPassed, refreshProfile, userUpdownPickByPerson]);
 
   // Real updown bet path, mirroring PredictPage's nativeUpdownBetMutation
   // so the home leaderboard's predict column hits the same backend
@@ -1900,6 +1967,7 @@ export default function HomePage() {
                         onVoteClick={() => handleVoteClick(person.id)}
                         onPredictUp={() => handleLeaderboardPredict(person.id, "up")}
                         onPredictDown={() => handleLeaderboardPredict(person.id, "down")}
+                        userPredictionPick={userUpdownPickByPerson.get(person.id)?.pick ?? null}
                         predictionsDisabled={isUpdownCutoffPassed}
                         predictionsClosedMessage={leaderboardClosedMessage}
                         approvalShowResults={approvalShowResults}
