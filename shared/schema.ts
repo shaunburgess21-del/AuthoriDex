@@ -1227,10 +1227,17 @@ export const celebrityMetrics = pgTable("celebrity_metrics", {
   // Fame Index score (mirrors trend_score from trending_people)
   trendScore: real("trend_score").default(0),
   fameIndex: integer("fame_index").default(0),
-  // Approval SEED aggregates (pre-launch baseline, no fake users)
+  // Approval SEED aggregate MIRROR — admin-display only.
+  // Seed votes are physically stored as rows in `user_votes` with synthetic
+  // user_ids (`seed-system-approval%`); these two columns mirror the per-
+  // celebrity totals so the admin "Edit Celebrity" modal can render the
+  // 1-5 baseline without re-aggregating user_votes. They MUST NOT be added
+  // on top of the user_votes aggregate when computing display fields —
+  // doing so double-counts seeds. See server/services/celebrity-metrics-recompute.ts.
   seedApprovalCount: integer("seed_approval_count").notNull().default(0),
   seedApprovalSum: integer("seed_approval_sum").notNull().default(0), // sum of ratings (count * avg_rating)
-  // Approval DISPLAY aggregates (seed + real votes combined)
+  // Approval DISPLAY aggregates — sourced from COUNT/SUM over user_votes
+  // (which already includes seed rows). Single source of truth.
   approvalVotesCount: integer("approval_votes_count").notNull().default(0),
   approvalAvgRating: real("approval_avg_rating"), // 1-5 scale
   approvalPct: real("approval_pct"), // 0-100 scale ((avg_rating - 1) / 4 * 100)

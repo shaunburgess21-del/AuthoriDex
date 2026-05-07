@@ -6593,6 +6593,33 @@ Only return the JSON object.`;
       const fdxSidForCleanup = readFdxSid(req);
       const anonWriterId = fdxSidForCleanup ? `anon_${fdxSidForCleanup}` : "";
 
+      // Capture celebrity IDs touched by this anon identity BEFORE the
+      // delete tx, so we can recompute their cached metrics afterwards.
+      // Without this, celebrity_metrics keeps the contributions from the
+      // about-to-be-wiped anon votes until the next vote on each celeb
+      // (recomputeCelebrityMetrics only runs on vote-write, not delete).
+      const affectedCelebs = new Set<string>();
+      if (fdxSidForCleanup) {
+        try {
+          const userVotePeople = await db
+            .select({ id: userVotes.personId })
+            .from(userVotes)
+            .where(eq(userVotes.userId, anonWriterId));
+          const valueVotePeople = await db
+            .select({ id: celebrityValueVotes.celebrityId })
+            .from(celebrityValueVotes)
+            .where(eq(celebrityValueVotes.userId, anonWriterId));
+          userVotePeople.forEach((r) => affectedCelebs.add(r.id));
+          valueVotePeople.forEach((r) => affectedCelebs.add(r.id));
+        } catch (e) {
+          console.warn("[profile-sync] anon-cleanup affected-celeb lookup failed:", e);
+          captureBackgroundError(e, {
+            surface: "profile-sync.affected-celebs-lookup",
+            userId,
+          });
+        }
+      }
+
       await db.transaction(async (tx) => {
         await tx.insert(profiles).values(newProfile);
         await tx.insert(creditLedger).values(initialGrantEntry).onConflictDoNothing();
@@ -6606,6 +6633,26 @@ Only return the JSON object.`;
           await tx.delete(anonVoteBudget).where(eq(anonVoteBudget.fdxSid, fdxSidForCleanup));
         }
       });
+
+      // Post-tx: refresh cached celebrity_metrics for every celeb whose
+      // anon contributions were just wiped. Best-effort — failures are
+      // logged but never break signup (the tx has already committed and
+      // the user must be considered signed up at this point).
+      for (const celebId of affectedCelebs) {
+        try {
+          await recomputeCelebrityMetrics(celebId);
+        } catch (e) {
+          console.warn(
+            `[profile-sync] post-cleanup recompute failed celebId=${celebId}:`,
+            e,
+          );
+          captureBackgroundError(e, {
+            surface: "profile-sync.recompute-after-anon-cleanup",
+            celebId,
+            userId,
+          });
+        }
+      }
 
       // Phase 4 — clear fdx_sid cookie post-signup. The user is now
       // authenticated, so fdx_sid serves no purpose for their writes;
