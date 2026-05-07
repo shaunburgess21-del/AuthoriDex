@@ -12,6 +12,7 @@ import { multiplierFromPercent, formatMultiplier } from "@/lib/parimutuel";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Check, ChevronRight } from "lucide-react";
 import { Link } from "wouter";
+import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
 
 type CategoryFilter = "all" | "favorites" | "trending" | "tech" | "politics" | "business" | "music" | "sports" | "film-tv" | "gaming" | "creator" | "food-drink" | "lifestyle" | "misc";
 
@@ -154,6 +155,7 @@ export function HeadToHeadCard({
 
         <Link
           href={`/predict/h2h/${market.id}`}
+          onClick={() => setPredictReturnAnchor(`card-h2h-${market.id}`)}
           className="relative mb-3 block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           style={{ padding: '0 5px' }}
           aria-label={`View battle details: ${market.person1.name} vs ${market.person2.name}`}
@@ -299,6 +301,7 @@ export function HeadToHeadCard({
           {hasPicked ? (
             <Link
               href={`/predict/h2h/${market.id}`}
+              onClick={() => setPredictReturnAnchor(`card-h2h-${market.id}`)}
               className="block w-full rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               data-testid={`link-h2h-your-pick-${market.id}`}
               aria-label={`View head-to-head details: your pick ${smartName(pickedName)}`}

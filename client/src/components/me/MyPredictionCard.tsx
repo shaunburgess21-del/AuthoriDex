@@ -414,7 +414,7 @@ export function MyPredictionCard({
 
               <div className="grid grid-cols-2 gap-3 text-xs">
                 <div className="space-y-1">
-                  <p className="text-muted-foreground">Delta vs Baseline</p>
+                  <p className="text-muted-foreground">Change since baseline</p>
                   <p
                     className={cn(
                       "font-mono font-semibold",

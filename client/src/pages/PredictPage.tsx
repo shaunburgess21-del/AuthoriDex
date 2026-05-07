@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { hapticSuccess, hapticError } from "@/lib/haptic";
+import { consumePredictReturnAnchor, scrollToPredictAnchor } from "@/lib/predictReturnAnchor";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { CardGridSkeleton } from "@/components/ui/card-skeletons";
@@ -1273,6 +1274,13 @@ export default function PredictPage() {
 
   const handleCategoryPillFilter = useCallback((category: string) => {
     setCategoryFilter(normalizeMarketCategory(category) as CategoryFilter);
+  }, []);
+
+  useEffect(() => {
+    const anchor = consumePredictReturnAnchor();
+    if (anchor) {
+      scrollToPredictAnchor(anchor);
+    }
   }, []);
 
   const [globalSearchQuery, setGlobalSearchQuery] = useState("");

@@ -10,6 +10,7 @@ import { ParticipantAvatarStack, type ParticipantPreview } from "@/components/pr
 import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { Star, Flame, ListChecks } from "lucide-react";
 import { Link } from "wouter";
+import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
 
 type CategoryFilter = "all" | "favorites" | "trending" | "tech" | "politics" | "business" | "music" | "sports" | "film-tv" | "gaming" | "creator" | "food-drink" | "lifestyle" | "misc";
 
@@ -73,12 +74,6 @@ export function WeeklyUpDownCard({
     >
       <div className="flex items-center justify-between mb-2 flex-wrap gap-1">
         <div className="flex items-center gap-1.5">
-          <Badge
-            variant="outline"
-            className={delta >= 0 ? "text-green-500 border-green-500/40 dark:border-green-500/30" : "text-red-500 border-red-500/40 dark:border-red-500/30"}
-          >
-            {delta >= 0 ? "+" : ""}{pctDelta}%
-          </Badge>
           <Badge variant="outline" className="text-violet-600 dark:text-violet-400 border-violet-500/40 dark:border-violet-500/30 text-[10px]">
             {cadenceLabel}
           </Badge>
@@ -127,16 +122,14 @@ export function WeeklyUpDownCard({
 
       <Link
         href={`/predict/updown/${market.id}`}
+        onClick={() => setPredictReturnAnchor(`card-weekly-${market.id}`)}
         className="block rounded-lg -mx-1 px-1 py-0.5 mb-2 hover:bg-muted/25 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         aria-label={`View details for ${market.personName} up or down market`}
       >
-        <div className="flex items-start gap-3 mb-2">
+        <div className="flex items-center gap-3 mb-2">
           <PersonAvatar name={market.personName} avatar={market.personAvatar} className="h-20 w-20 md:h-16 md:w-16 shrink-0" />
           <div className="flex-1 min-w-0">
             <WeeklyUpDownNameBlock text={market.personName} />
-            <p className="text-sm md:text-xs text-muted-foreground font-mono mt-0.5 leading-[1.4]">
-              Now: {market.currentScore.toLocaleString('en-US')}
-            </p>
           </div>
         </div>
 
@@ -144,12 +137,16 @@ export function WeeklyUpDownCard({
           Will <span className="font-semibold text-foreground">{market.personName.split(" ")[0]}</span> close above or below the weekly baseline?
         </p>
 
-        <div className="flex items-center gap-1.5 text-sm md:text-[11px] text-muted-foreground mb-0 max-md:mt-2 flex-wrap">
+        <div className="flex items-center gap-1.5 text-sm md:text-[11px] text-muted-foreground mb-1 max-md:mt-2 flex-wrap">
           <span>Baseline: <span className="font-mono text-foreground">{market.baselineScore.toLocaleString('en-US')}</span></span>
           <span className="text-muted-foreground/40">&middot;</span>
-          <span>Delta: <span className={`font-mono ${delta >= 0 ? "text-green-500" : "text-red-500"}`}>{delta >= 0 ? "+" : ""}{delta.toLocaleString('en-US')}</span></span>
+          <span>Current: <span className="font-mono text-foreground">{market.currentScore.toLocaleString('en-US')}</span></span>
           <span className="text-muted-foreground/40">&middot;</span>
           <span>Pool: <span className="font-mono text-violet-600 dark:text-violet-400">{market.totalPool.toLocaleString('en-US')}</span> credits</span>
+        </div>
+
+        <div className="text-sm md:text-[11px] text-muted-foreground">
+          <span>Change: <span className={`font-mono ${delta >= 0 ? "text-green-500" : "text-red-500"}`}>{delta >= 0 ? "+" : ""}{delta.toLocaleString('en-US')} ({delta >= 0 ? "+" : ""}{pctDelta}%)</span></span>
         </div>
       </Link>
 

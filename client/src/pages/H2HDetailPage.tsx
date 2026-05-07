@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -66,6 +66,11 @@ export default function H2HDetailPage() {
   const [, params] = useRoute("/predict/h2h/:marketId");
   const [, setLocation] = useLocation();
   const marketId = params?.marketId || "";
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [marketId]);
+
   const { user, profile, refreshProfile } = useAuth();
   const walletCredits = profile?.predictCredits ?? 0;
   const queryClient = useQueryClient();

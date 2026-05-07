@@ -160,7 +160,7 @@ export function OutcomePathChart({
             Current: <span className="font-mono font-medium text-foreground">{formatScore(currentScore)}</span>
           </span>
           <span>
-            Delta:{" "}
+            Change:{" "}
             <span className={`font-mono font-medium ${delta >= 0 ? "text-green-500" : "text-red-500"}`}>
               {delta >= 0 ? "+" : ""}{formatScore(delta)} ({delta >= 0 ? "+" : ""}{pctDelta}%)
             </span>

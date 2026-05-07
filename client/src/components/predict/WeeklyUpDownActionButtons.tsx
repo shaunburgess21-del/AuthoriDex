@@ -3,6 +3,7 @@ import { TrendingDown, TrendingUp } from "lucide-react";
 import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { ClosedMarketActionTrigger } from "./ClosedMarketActionTrigger";
 import { WeeklyUpDownYourPositionPanel } from "./WeeklyUpDownYourPositionPanel";
+import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
 
 export function WeeklyUpDownActionButtons({
   marketId,
@@ -28,6 +29,7 @@ export function WeeklyUpDownActionButtons({
       <WeeklyUpDownYourPositionPanel
         variant="cardLink"
         href={`/predict/updown/${marketId}`}
+        onLinkClick={() => setPredictReturnAnchor(`card-weekly-${marketId}`)}
         pick={pendingPosition.pick}
         personName={personName}
         baselineScore={baselineScore}

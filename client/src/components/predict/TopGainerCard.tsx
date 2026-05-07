@@ -11,6 +11,7 @@ import { formatSignedPercent, formatSignedPoints } from "@/lib/predict-display";
 import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
 import { Crown, ChevronRight, Check } from "lucide-react";
 import { Link } from "wouter";
+import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
 
 type CategoryFilter = "all" | "favorites" | "trending" | "tech" | "politics" | "business" | "music" | "sports" | "film-tv" | "gaming" | "creator" | "food-drink" | "lifestyle" | "misc";
 
@@ -156,6 +157,7 @@ export function TopGainerCard({
 
       <Link
         href={`/predict/race/${market.id}`}
+        onClick={() => setPredictReturnAnchor(`card-gainer-${market.id}`)}
         className="group text-[16px] font-semibold mb-2 leading-[1.4] inline-flex items-center gap-1 text-foreground hover:text-violet-600 dark:hover:text-violet-400 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm"
       >
         Category Race: {getMarketCategoryLabel(market.category)}
@@ -167,6 +169,7 @@ export function TopGainerCard({
       {market.teaser?.trim() ? (
         <Link
           href={`/predict/race/${market.id}`}
+          onClick={() => setPredictReturnAnchor(`card-gainer-${market.id}`)}
           className="block mb-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm"
         >
           <p className="text-sm text-muted-foreground line-clamp-2 leading-[1.4] hover:text-violet-600 dark:hover:text-violet-400 transition-colors">
@@ -230,6 +233,7 @@ export function TopGainerCard({
         {isPredicted ? (
           <Link
             href={`/predict/race/${market.id}`}
+            onClick={() => setPredictReturnAnchor(`card-gainer-${market.id}`)}
             className="block w-full rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             data-testid={`link-predicted-gainer-${market.id}`}
             aria-label={

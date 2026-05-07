@@ -23,6 +23,10 @@ import { initGoogleAnalytics, trackGooglePageView } from "@/lib/analytics";
 // next deploy too.
 sessionStorage.removeItem("chunk_retry");
 
+if (typeof window !== "undefined" && "scrollRestoration" in window.history) {
+  window.history.scrollRestoration = "manual";
+}
+
 /**
  * Wraps React.lazy with automatic recovery from stale-chunk errors.
  * After a deploy the old HTML may reference chunk filenames that no longer

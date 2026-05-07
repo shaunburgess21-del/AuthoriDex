@@ -28,6 +28,7 @@ export function WeeklyUpDownYourPositionPanel({
   stakeAmount,
   variant = "detail",
   href,
+  onLinkClick,
   className,
   tieRule,
 }: {
@@ -38,6 +39,7 @@ export function WeeklyUpDownYourPositionPanel({
   stakeAmount: number;
   variant?: "detail" | "cardLink";
   href?: string;
+  onLinkClick?: () => void;
   className?: string;
   tieRule?: string | null;
 }) {
@@ -133,6 +135,7 @@ export function WeeklyUpDownYourPositionPanel({
       return (
         <Link
           href={href}
+          onClick={onLinkClick}
           className="block w-full rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           aria-label={`View your Weekly Up or Down position for ${personName}`}
         >
