@@ -412,6 +412,17 @@ export default function UpDownDetailPage() {
           marketId={marketId}
           marketType="updown"
           hideCta
+          livePoolContext={
+            userPick && Number.isFinite(hydrated.totalPool) && hydrated.totalPool > 0
+              ? {
+                  totalPool: hydrated.totalPool,
+                  userSidePool:
+                    userPick === "up"
+                      ? hydrated.totalPool * (hydrated.upPoolPercent / 100)
+                      : hydrated.totalPool * (1 - hydrated.upPoolPercent / 100),
+                }
+              : null
+          }
         />
 
         {/* Trend Score Chart */}

@@ -1,15 +1,13 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Activity,
   ArrowDownRight,
   ArrowUpRight,
   Crown,
+  HelpCircle,
   Plus,
   RotateCcw,
   Target,
-  TrendingDown,
-  TrendingUp,
   Trophy,
   Wallet,
 } from "lucide-react";
@@ -21,6 +19,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest } from "@/lib/queryClient";
 import { formatTimeAgo } from "@/lib/formatDate";
 import { getUpDownWinningState, UP_DOWN_STATE_LABELS } from "@/lib/updownState";
+import { TouchTooltip } from "@/components/ui/touch-tooltip";
+import { computePayoutMultiplier, multiplierFromPercent } from "@/lib/parimutuel";
 
 /**
  * Unified "My Position" card for every market detail page.
@@ -86,6 +86,21 @@ interface MyPositionResponse {
   bets: MyPositionBet[];
 }
 
+/**
+ * Live pari-mutuel pool snapshot used to recompute "Estimated payout"
+ * on each render, so users see drift as the pool grows or tilts.
+ *
+ * Pass either `userSidePool` (raw credits on the user's picked side)
+ * or `userSidePercent` (0..100), whichever the parent has cheap access
+ * to. When neither is provided, the body falls back to the at-entry
+ * `bet.potentialPayout` snapshot — same as today's behaviour.
+ */
+export interface LivePoolContext {
+  totalPool: number;
+  userSidePool?: number;
+  userSidePercent?: number;
+}
+
 export interface MyPositionCardProps {
   marketId: string;
   /** Hint for body rendering. Falls back to the response's marketType. */
@@ -108,6 +123,11 @@ export interface MyPositionCardProps {
   ctaLabel?: string;
   /** Hide the CTA entirely (e.g. resolved markets). */
   hideCta?: boolean;
+  /**
+   * Live pool snapshot for computing a drift-aware "Estimated payout".
+   * Optional — bodies degrade to the at-entry snapshot when omitted.
+   */
+  livePoolContext?: LivePoolContext | null;
   className?: string;
 }
 
@@ -120,6 +140,7 @@ export function MyPositionCard({
   onAddEntry,
   ctaLabel,
   hideCta,
+  livePoolContext,
   className,
 }: MyPositionCardProps) {
   const { isLoggedIn } = useAuth();
@@ -180,11 +201,11 @@ export function MyPositionCard({
       )}
       data-testid="card-my-position"
     >
-      {/* Header: live score + delta (open) OR aggregated result (resolved). */}
+      {/* Header: identity + entry count + total stake (open), with
+          aggregated Net/Payout summary on the right when resolved. The
+          per-kind body below carries the live "Estimated payout" so we
+          don't duplicate the hero's Current/Delta block here. */}
       <PositionHeader
-        currentScore={position.currentScore}
-        baselineScore={position.market.baselineScore}
-        marketType={marketType}
         betCount={position.betCount}
         totalStake={position.totalStake}
         bets={position.bets}
@@ -200,11 +221,11 @@ export function MyPositionCard({
         ) : marketType === "jackpot" ? (
           <JackpotBody position={position} />
         ) : marketType === "updown" ? (
-          <UpDownBody position={position} />
+          <UpDownBody position={position} livePoolContext={livePoolContext ?? null} />
         ) : marketType === "h2h" ? (
-          <H2HBody position={position} />
+          <H2HBody position={position} livePoolContext={livePoolContext ?? null} />
         ) : marketType === "race" || marketType === "gainer" ? (
-          <RaceBody position={position} />
+          <RaceBody position={position} livePoolContext={livePoolContext ?? null} />
         ) : (
           <GenericBody position={position} />
         )}
@@ -240,9 +261,6 @@ function defaultCtaLabel(marketType: string): string {
 }
 
 interface PositionHeaderProps {
-  currentScore: number | null;
-  baselineScore: number | null;
-  marketType: string;
   betCount: number;
   totalStake: number;
   bets?: MyPositionBet[];
@@ -251,9 +269,6 @@ interface PositionHeaderProps {
 }
 
 function PositionHeader({
-  currentScore,
-  baselineScore,
-  marketType,
   betCount,
   totalStake,
   bets,
@@ -288,16 +303,6 @@ function PositionHeader({
     }
     return { payout, profit, wonCount, lostCount, refundCount };
   }, [bets, showResult]);
-
-  const showScore = !showResult && currentScore != null && marketType !== "race" && marketType !== "gainer";
-  const delta = showScore && baselineScore != null && currentScore != null
-    ? currentScore - baselineScore
-    : null;
-  const pctDelta = delta != null && baselineScore != null && baselineScore !== 0
-    ? (delta / baselineScore) * 100
-    : null;
-  const isUp = delta != null && delta > 0;
-  const isDown = delta != null && delta < 0;
 
   // Result-aware accent: amber for resolved, violet for open. Mirrors
   // the card border/background switch in MyPositionCard so the icon
@@ -368,41 +373,6 @@ function PositionHeader({
         </div>
       )}
 
-      {showScore && (
-        <div className="text-right shrink-0">
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wide leading-none">Current</p>
-          <p className="font-mono font-bold text-sm sm:text-base tabular-nums leading-tight mt-0.5">
-            {currentScore!.toLocaleString("en-US")}
-          </p>
-          {delta != null && pctDelta != null && (
-            <p
-              className={cn(
-                "text-[11px] font-medium tabular-nums inline-flex items-center gap-0.5 leading-none mt-0.5",
-                isUp && "text-emerald-600 dark:text-emerald-400",
-                isDown && "text-red-600 dark:text-red-400",
-                !isUp && !isDown && "text-muted-foreground",
-              )}
-            >
-              {isUp ? (
-                <TrendingUp className="h-3 w-3" />
-              ) : isDown ? (
-                <TrendingDown className="h-3 w-3" />
-              ) : (
-                <Activity className="h-3 w-3" />
-              )}
-              {delta > 0 ? "+" : ""}
-              {Math.round(delta).toLocaleString("en-US")}
-              {Number.isFinite(pctDelta) && Math.abs(pctDelta) >= 0.1 && (
-                <span className="opacity-70 hidden sm:inline">
-                  {" "}
-                  ({pctDelta > 0 ? "+" : ""}
-                  {pctDelta.toFixed(1)}%)
-                </span>
-              )}
-            </p>
-          )}
-        </div>
-      )}
     </div>
   );
 }
@@ -587,7 +557,78 @@ function JackpotBody({ position }: { position: MyPositionResponse }) {
   );
 }
 
-function UpDownBody({ position }: { position: MyPositionResponse }) {
+/**
+ * Compute the live pari-mutuel multiplier from the current pool snapshot.
+ * Returns null when the parent didn't supply enough info — caller falls
+ * back to the at-entry potentialPayout.
+ */
+function liveMultiplierFrom(ctx: LivePoolContext | null): number | null {
+  if (!ctx || !Number.isFinite(ctx.totalPool) || ctx.totalPool <= 0) return null;
+  if (ctx.userSidePool != null && Number.isFinite(ctx.userSidePool)) {
+    return computePayoutMultiplier(ctx.totalPool, ctx.userSidePool);
+  }
+  if (ctx.userSidePercent != null && Number.isFinite(ctx.userSidePercent)) {
+    return multiplierFromPercent(ctx.userSidePercent);
+  }
+  return null;
+}
+
+/**
+ * Right-aligned "Estimated payout" column shared by UpDown / H2H / Race
+ * open bodies. Shows the live estimate when available, otherwise the
+ * at-entry snapshot. Surfaces drift from entry as a small chip so users
+ * can see the pari-mutuel multiplier moving with the pool.
+ */
+function EstimatedPayoutColumn({
+  stake,
+  atEntryPayout,
+  liveMultiplier,
+}: {
+  stake: number;
+  atEntryPayout: number;
+  liveMultiplier: number | null;
+}) {
+  const liveEstimate = liveMultiplier != null ? Math.round(stake * liveMultiplier) : null;
+  const display = liveEstimate ?? atEntryPayout;
+  const drift = liveEstimate != null ? liveEstimate - atEntryPayout : null;
+  const showDrift = drift != null && Math.abs(drift) >= 1;
+  return (
+    <div className="text-right shrink-0 min-w-[5.5rem]">
+      <p className="text-[10px] text-muted-foreground uppercase tracking-wide leading-none">
+        Estimated payout
+      </p>
+      <p className="font-mono font-semibold text-sm tabular-nums text-violet-600 dark:text-violet-400 leading-tight mt-0.5">
+        {display.toLocaleString("en-US")}
+      </p>
+      {showDrift && (
+        <p
+          className={cn(
+            "text-[10px] tabular-nums leading-none mt-0.5",
+            drift > 0
+              ? "text-emerald-600 dark:text-emerald-400"
+              : "text-red-600 dark:text-red-400",
+          )}
+        >
+          {drift > 0 ? "+" : ""}
+          {drift.toLocaleString("en-US")} from entry
+        </p>
+      )}
+      <TouchTooltip content="Pari-mutuel payouts shift as more credits enter the pool. Final payout is calculated at market close.">
+        <span className="text-[10px] text-muted-foreground/70 inline-flex items-center gap-0.5 cursor-help leading-none mt-1">
+          <HelpCircle className="h-2.5 w-2.5" /> pool may shift
+        </span>
+      </TouchTooltip>
+    </div>
+  );
+}
+
+function UpDownBody({
+  position,
+  livePoolContext,
+}: {
+  position: MyPositionResponse;
+  livePoolContext: LivePoolContext | null;
+}) {
   const bet = position.bets[0];
   if (!bet) return null;
 
@@ -611,8 +652,8 @@ function UpDownBody({ position }: { position: MyPositionResponse }) {
       : null;
 
   return (
-    <div className="flex items-center justify-between gap-3">
-      <div className="flex items-center gap-2">
+    <div className="flex items-start justify-between gap-3">
+      <div className="flex items-center gap-2 flex-wrap pt-0.5">
         <span
           className={cn(
             "inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-bold border",
@@ -638,39 +679,51 @@ function UpDownBody({ position }: { position: MyPositionResponse }) {
           </Badge>
         )}
       </div>
-      <div className="text-right shrink-0">
-        <p className="text-[10px] text-muted-foreground uppercase tracking-wide">If correct</p>
-        <p className="font-mono font-semibold text-sm tabular-nums">
-          {(bet.potentialPayout ?? 0).toLocaleString("en-US")}
-        </p>
-      </div>
+      <EstimatedPayoutColumn
+        stake={bet.stakeAmount}
+        atEntryPayout={bet.potentialPayout ?? 0}
+        liveMultiplier={liveMultiplierFrom(livePoolContext)}
+      />
     </div>
   );
 }
 
-function H2HBody({ position }: { position: MyPositionResponse }) {
+function H2HBody({
+  position,
+  livePoolContext,
+}: {
+  position: MyPositionResponse;
+  livePoolContext: LivePoolContext | null;
+}) {
   const bet = position.bets[0];
   if (!bet) return null;
 
   return (
-    <div className="flex items-center justify-between gap-3">
+    <div className="flex items-start justify-between gap-3">
       <div className="flex flex-col gap-1 min-w-0">
-        <span className="text-xs text-muted-foreground">You picked</span>
+        <span className="text-[10px] text-muted-foreground uppercase tracking-wide leading-none">
+          You picked
+        </span>
         <span className="text-sm font-semibold truncate" data-testid="text-my-position-h2h-pick">
           {bet.entryLabel ?? "—"}
         </span>
       </div>
-      <div className="text-right shrink-0">
-        <p className="text-[10px] text-muted-foreground uppercase tracking-wide">If correct</p>
-        <p className="font-mono font-semibold text-sm tabular-nums">
-          {(bet.potentialPayout ?? 0).toLocaleString("en-US")}
-        </p>
-      </div>
+      <EstimatedPayoutColumn
+        stake={bet.stakeAmount}
+        atEntryPayout={bet.potentialPayout ?? 0}
+        liveMultiplier={liveMultiplierFrom(livePoolContext)}
+      />
     </div>
   );
 }
 
-function RaceBody({ position }: { position: MyPositionResponse }) {
+function RaceBody({
+  position,
+  livePoolContext,
+}: {
+  position: MyPositionResponse;
+  livePoolContext: LivePoolContext | null;
+}) {
   // Race detail page already renders a leaderboard with rank info, so
   // this body stays minimal — just confirm the pick + payout. The
   // parent's leaderboard answers "how am I doing right now".
@@ -678,19 +731,20 @@ function RaceBody({ position }: { position: MyPositionResponse }) {
   if (!bet) return null;
 
   return (
-    <div className="flex items-center justify-between gap-3">
+    <div className="flex items-start justify-between gap-3">
       <div className="flex flex-col gap-1 min-w-0">
-        <span className="text-xs text-muted-foreground">Backing</span>
+        <span className="text-[10px] text-muted-foreground uppercase tracking-wide leading-none">
+          Backing
+        </span>
         <span className="text-sm font-semibold truncate" data-testid="text-my-position-race-pick">
           {bet.entryLabel ?? "—"}
         </span>
       </div>
-      <div className="text-right shrink-0">
-        <p className="text-[10px] text-muted-foreground uppercase tracking-wide">If correct</p>
-        <p className="font-mono font-semibold text-sm tabular-nums">
-          {(bet.potentialPayout ?? 0).toLocaleString("en-US")}
-        </p>
-      </div>
+      <EstimatedPayoutColumn
+        stake={bet.stakeAmount}
+        atEntryPayout={bet.potentialPayout ?? 0}
+        liveMultiplier={liveMultiplierFrom(livePoolContext)}
+      />
     </div>
   );
 }

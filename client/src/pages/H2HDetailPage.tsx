@@ -470,6 +470,17 @@ export default function H2HDetailPage() {
           marketId={marketId}
           marketType="h2h"
           hideCta
+          livePoolContext={
+            userPickSide && Number.isFinite(hydrated.totalPool) && hydrated.totalPool > 0
+              ? {
+                  totalPool: hydrated.totalPool,
+                  userSidePercent:
+                    userPickSide === 1
+                      ? hydrated.person1Percent
+                      : 100 - hydrated.person1Percent,
+                }
+              : null
+          }
         />
 
         {/* Path-to-win callout — mirrors the WhatNeedsToHappen pattern

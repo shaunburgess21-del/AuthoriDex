@@ -415,6 +415,14 @@ export default function CategoryRaceDetailPage() {
               input.focus({ preventScroll: true });
             }
           }}
+          livePoolContext={
+            userPick && totalPool > 0
+              ? {
+                  totalPool,
+                  userSidePool: userPick.totalStake ?? 0,
+                }
+              : null
+          }
         />
 
         {/* Path-to-win callout — quantifies how far behind the leader
