@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { X } from "lucide-react";
+import { TrendingDown, TrendingUp, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatTimeAgo } from "@/lib/formatDate";
 import { getKindMeta } from "@/lib/notifications/registry";
@@ -33,7 +33,27 @@ export function NotificationItem({ notification, onNavigate }: NotificationItemP
   const [isExiting, setIsExiting] = useState(false);
 
   const meta = getKindMeta(notification.kind);
-  const Icon = meta.icon;
+  const rawDirection =
+    notification.kind === "favorite_hot_mover" &&
+    notification.metadata &&
+    typeof notification.metadata === "object" &&
+    "direction" in notification.metadata
+      ? notification.metadata.direction
+      : null;
+  const direction = rawDirection === "up" || rawDirection === "down" ? rawDirection : null;
+  const Icon = direction === "up" ? TrendingUp : direction === "down" ? TrendingDown : meta.icon;
+  const iconBgAccent =
+    direction === "up"
+      ? "bg-emerald-500/15 dark:bg-emerald-500/10"
+      : direction === "down"
+        ? "bg-red-500/15 dark:bg-red-500/10"
+        : meta.bgAccent;
+  const iconAccent =
+    direction === "up"
+      ? "text-emerald-600 dark:text-emerald-400"
+      : direction === "down"
+        ? "text-red-600 dark:text-red-400"
+        : meta.accent;
   const isUnread = !notification.readAt;
   const isInternalLink = !!notification.href && notification.href.startsWith("/");
 
@@ -88,10 +108,10 @@ export function NotificationItem({ notification, onNavigate }: NotificationItemP
         <div
           className={cn(
             "h-9 w-9 rounded-full flex items-center justify-center shrink-0",
-            meta.bgAccent,
+            iconBgAccent,
           )}
         >
-          <Icon className={cn("h-4 w-4", meta.accent)} aria-hidden="true" />
+          <Icon className={cn("h-4 w-4", iconAccent)} aria-hidden="true" />
         </div>
       </div>
 

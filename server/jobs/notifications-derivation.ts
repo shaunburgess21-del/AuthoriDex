@@ -1,6 +1,7 @@
 import { db, withDbAdvisoryLock } from "../db";
 import {
   marketBets,
+  notifications,
   predictionMarkets,
   profiles,
   trackedPeople,
@@ -43,6 +44,7 @@ const STREAK_MILESTONES = [3, 7, 14, 30, 100] as const;
 // Hot mover threshold mirrors the trending-people "hot mover" pill in
 // the favorites dashboard — exceptional 24h move, not garden-variety.
 const HOT_MOVER_PCT_THRESHOLD = 15;
+const HOT_MOVER_ROLLING_COOLDOWN_HOURS = 24;
 
 /**
  * Returns a stable hour-bucket key (UTC) for idempotency. The actual
@@ -215,6 +217,7 @@ async function deriveFavoriteHotMovers(): Promise<number> {
   }
 
   const bucket = dayBucket();
+  const cooldownSince = sql`NOW() - INTERVAL '${HOT_MOVER_ROLLING_COOLDOWN_HOURS} hours'`;
   let inserted = 0;
 
   for (const fav of favs) {
@@ -225,14 +228,30 @@ async function deriveFavoriteHotMovers(): Promise<number> {
     const pctChange = ((current - prior) / prior) * 100;
     if (Math.abs(pctChange) < HOT_MOVER_PCT_THRESHOLD) continue;
 
+    const [recentHotMover] = await db
+      .select({ id: notifications.id })
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.userId, fav.userId),
+          eq(notifications.kind, "favorite_hot_mover"),
+          eq(notifications.entityType, "person"),
+          eq(notifications.entityId, fav.personId),
+          gte(notifications.createdAt, cooldownSince),
+        ),
+      )
+      .limit(1);
+    if (recentHotMover) continue;
+
     const direction = pctChange > 0 ? "up" : "down";
     const arrow = pctChange > 0 ? "+" : "";
     const personName = personNameMap.get(fav.personId) ?? "Your favorite";
+    const title = direction === "up" ? `${personName} is climbing fast` : `${personName} is slipping fast`;
 
     const id = await createNotification({
       userId: fav.userId,
       kind: "favorite_hot_mover",
-      title: `${personName} is moving fast`,
+      title,
       body: `Trend score ${arrow}${pctChange.toFixed(1)}% in the last 24h.`,
       href: `/person/${fav.personId}`,
       entityType: "person",
