@@ -636,6 +636,28 @@ export default function MarketDetailPage() {
     enabled: !!params.slug,
   });
 
+  // Native market types have dedicated detail pages with the live chart,
+  // "What needs to happen" callout, sticky position bar, and the
+  // same-side top-up / opposite-side hedge guards. Whenever a native
+  // market is reached via the generic /markets/:slug URL (PublicProfile
+  // history, RelatedMarkets, watchlist, notifications, shared links),
+  // route the user to the canonical surface so they get the polished,
+  // guarded experience instead of the legacy generic form below. The
+  // generic page is kept for community + jackpot, which have no
+  // dedicated route. We use `replace: true` so Back skips the legacy
+  // URL and returns to wherever the user actually came from.
+  useEffect(() => {
+    if (!market?.id || !market?.marketType) return;
+    const dest =
+      market.marketType === "updown" ? `/predict/updown/${market.id}` :
+      market.marketType === "h2h"    ? `/predict/h2h/${market.id}` :
+      market.marketType === "gainer" ? `/predict/race/${market.id}` :
+      null;
+    if (dest) {
+      setLocation(dest, { replace: true });
+    }
+  }, [market?.id, market?.marketType, setLocation]);
+
   // The page used to fetch /api/me/predictions to surface a per-market
   // "your prediction" pill list. That responsibility now belongs to
   // <MyPositionCard /> below, which fetches a per-market endpoint
