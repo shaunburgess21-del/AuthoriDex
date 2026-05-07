@@ -2033,6 +2033,9 @@ export default function PredictPage() {
       endAt: market.endAt,
       bettingCutoff: null,
       direction,
+      // Threaded so StakeModal can suppress the Yes/No badge + toggle
+      // for binary community markets where the entry label IS the side.
+      openMarketType: market.openMarketType ?? null,
     });
     openStakeModal();
   };

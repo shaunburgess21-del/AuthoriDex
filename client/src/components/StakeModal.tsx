@@ -63,6 +63,16 @@ export interface StakeSelection {
    *  Other market types (updown/h2h/gainer/jackpot) ignore this. */
   direction?: "yes" | "no";
   /**
+   * Sub-type for community markets: "binary" | "multi" | "updown".
+   * The Yes/No badge + direction toggle are only shown for "multi" —
+   * binary community markets already encode the side in the entry
+   * label ("Yes" / "No") so the badge would double-print it. When
+   * omitted on a community market we render the legacy badge to
+   * preserve current behaviour for callers that haven't been
+   * updated yet.
+   */
+  openMarketType?: "binary" | "multi" | "updown" | null;
+  /**
    * True when this selection is a follow-up bet on a side the user has
    * already backed. Switches the modal header to "Add to your X stake"
    * and surfaces the user's previous total under the pick card.
@@ -140,6 +150,14 @@ export function StakeModal({
   const isGainer = selection.type === "gainer";
   const isCommunity = selection.type === "community";
   const isCommunityNo = isCommunity && selection.direction === "no";
+  // Yes/No badge + toggle is only meaningful for community-multi
+  // markets. Binary community markets bake the side into the entry
+  // label itself, so showing "(YES) Yes" or "(NO) No" would be
+  // redundant. We default to true when openMarketType is missing so
+  // legacy callers keep their current rendering.
+  const isCommunityMultiSide =
+    isCommunity &&
+    (selection.openMarketType == null || selection.openMarketType === "multi");
   const isUp = selection.choice.includes("UP");
   const isDown = selection.choice.includes("DOWN");
 
@@ -290,15 +308,17 @@ export function StakeModal({
             ) : isCommunity ? (
               <p className="text-lg font-bold text-balance">
                 <span className="text-muted-foreground text-sm font-medium mr-1.5">Your pick:</span>
-                <span
-                  className={`mr-1.5 px-1.5 py-0.5 rounded text-xs font-mono uppercase align-middle ${
-                    isCommunityNo
-                      ? "bg-red-500/15 text-[#FF0000]"
-                      : "bg-green-500/15 text-[#00C853]"
-                  }`}
-                >
-                  {selection.direction === "no" ? "No" : "Yes"}
-                </span>
+                {isCommunityMultiSide && (
+                  <span
+                    className={`mr-1.5 px-1.5 py-0.5 rounded text-xs font-mono uppercase align-middle ${
+                      isCommunityNo
+                        ? "bg-red-500/15 text-[#FF0000]"
+                        : "bg-green-500/15 text-[#00C853]"
+                    }`}
+                  >
+                    {selection.direction === "no" ? "No" : "Yes"}
+                  </span>
+                )}
                 <span className="text-foreground">{selection.choice}</span>
               </p>
             ) : (
@@ -355,8 +375,10 @@ export function StakeModal({
 
             {/* Community-market direction toggle — mirrors the upDown one
                 so a user who tapped the wrong side on the card can flip
-                without closing + reopening the modal. */}
-            {isCommunity && onDirectionChange && (
+                without closing + reopening the modal. Only relevant on
+                multi-option community markets; binary community markets
+                pick the side via the entry label itself. */}
+            {isCommunity && isCommunityMultiSide && onDirectionChange && (
               <div className="flex gap-2 mt-2" role="group" aria-label="Yes / No toggle">
                 <button
                   type="button"

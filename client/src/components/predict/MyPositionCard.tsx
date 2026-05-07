@@ -70,6 +70,13 @@ interface MyPositionResponse {
   market: {
     id: string;
     marketType: string;
+    /**
+     * Sub-type used by community markets: "binary" | "multi" | "updown".
+     * Used here to gate Yes/No labelling — only community-multi markets
+     * carry a Yes/No-per-entry semantic. Native markets and binary
+     * community markets render just the entry label.
+     */
+    openMarketType?: "binary" | "multi" | "updown" | null;
     status: string;
     slug: string | null;
     title: string;
@@ -406,8 +413,16 @@ function ResultBody({
         const titleLabel = isJackpot && bet.predictedScore != null
           ? bet.predictedScore.toLocaleString("en-US")
           : (bet.entryLabel ?? "—");
+        // Yes/No prefixes are only meaningful for community-multi markets
+        // (Polymarket-style "vote No on USA"). Native markets all carry
+        // direction='yes' as a column default and binary community
+        // markets already encode the side in the entry label, so we
+        // suppress the prefix everywhere else.
+        const isCommunityMulti =
+          position.market.marketType === "community" &&
+          position.market.openMarketType === "multi";
         const directionPrefix =
-          !isJackpot && bet.direction
+          isCommunityMulti && bet.direction
             ? bet.direction === "no"
               ? "No on "
               : bet.direction === "yes"
@@ -750,6 +765,14 @@ function RaceBody({
 }
 
 function GenericBody({ position }: { position: MyPositionResponse }) {
+  // Yes/No badge is only meaningful for community-multi markets where
+  // each entry has Polymarket-style Yes/No betting. For binary community
+  // markets the entry label is already "Yes" or "No", so the badge would
+  // double-print the side ("(YES) No" was the bug we're fixing).
+  const showDirectionBadge =
+    position.market.marketType === "community" &&
+    position.market.openMarketType === "multi";
+
   return (
     <div className="space-y-1.5">
       {position.bets.map((bet) => {
@@ -760,16 +783,18 @@ function GenericBody({ position }: { position: MyPositionResponse }) {
             className="flex items-center justify-between gap-2 rounded-md px-2.5 py-2 text-sm bg-background/40 border border-border/40"
           >
             <div className="flex items-center gap-2 min-w-0">
-              <span
-                className={cn(
-                  "text-[10px] font-bold px-1.5 py-0.5 rounded uppercase",
-                  isYes
-                    ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
-                    : "bg-red-500/15 text-red-700 dark:text-red-400",
-                )}
-              >
-                {isYes ? "Yes" : "No"}
-              </span>
+              {showDirectionBadge && (
+                <span
+                  className={cn(
+                    "text-[10px] font-bold px-1.5 py-0.5 rounded uppercase",
+                    isYes
+                      ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+                      : "bg-red-500/15 text-red-700 dark:text-red-400",
+                  )}
+                >
+                  {isYes ? "Yes" : "No"}
+                </span>
+              )}
               <span className="text-sm font-medium truncate">{bet.entryLabel ?? "—"}</span>
             </div>
             <span className="text-[11px] text-muted-foreground tabular-nums shrink-0">

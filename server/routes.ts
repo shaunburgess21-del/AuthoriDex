@@ -8233,7 +8233,9 @@ Only return the JSON object.`;
           marketType: b.marketType,
           marketCadence: isNative ? (b.marketCadence ?? 'weekly') : b.marketCadence,
           marketCategory: b.marketCategory,
+          entryId: b.entryId,
           entryLabel: displayEntryLabel,
+          direction: b.direction,
           stakeAmount: b.stakeAmount,
           potentialPayout: b.potentialPayout,
           oddsAtBet,
@@ -8384,6 +8386,7 @@ Only return the JSON object.`;
         .select({
           id: predictionMarkets.id,
           marketType: predictionMarkets.marketType,
+          openMarketType: predictionMarkets.openMarketType,
           status: predictionMarkets.status,
           slug: predictionMarkets.slug,
           title: predictionMarkets.title,
@@ -8479,6 +8482,7 @@ Only return the JSON object.`;
         market: {
           id: market.id,
           marketType: market.marketType,
+          openMarketType: market.openMarketType ?? null,
           status: market.status,
           slug: market.slug,
           title: market.title,
@@ -19553,7 +19557,15 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
               mb.created_at AS event_at,
               COALESCE(pm.market_type::text, 'market') AS surface,
               mb.market_id::text AS target_id,
-              CONCAT(mb.direction::text, ' on ', COALESCE(me.label, '?'), ' for ', mb.stake_amount, ' credits') AS detail,
+              -- Direction (yes/no) is only meaningful on multi-option community
+              -- markets; native markets and binary community markets have no
+              -- Yes/No semantics so we just show the entry label + stake.
+              CASE
+                WHEN pm.market_type = 'community' AND pm.open_market_type = 'multi'
+                  THEN CONCAT(mb.direction::text, ' on ', COALESCE(me.label, '?'), ' for ', mb.stake_amount, ' credits')
+                ELSE
+                  CONCAT(COALESCE(me.label, '?'), ' for ', mb.stake_amount, ' credits')
+              END AS detail,
               NULL::text AS sub_kind
             FROM market_bets mb
             INNER JOIN profiles p ON p.id = mb.user_id
