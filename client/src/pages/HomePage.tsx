@@ -851,7 +851,7 @@ function InsightPanelContent({
               setLocation(`/person/${person.id}?tab=vote`);
               onClose();
             }}
-            className="flex-1 sm:flex-initial border-cyan-500/40 bg-cyan-500/15 text-cyan-700 dark:text-cyan-400 hover:bg-cyan-500/25 hover:text-cyan-700 dark:hover:text-cyan-400"
+            className="flex-1 sm:flex-initial bg-cyan-500/25 dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border border-cyan-500/50 dark:border-cyan-400/40 shadow-sm shadow-cyan-500/30 dark:shadow-cyan-500/20 hover:bg-cyan-500/35 dark:hover:bg-cyan-500/30 hover:text-cyan-600 dark:hover:text-cyan-400"
             data-testid="button-insight-vote"
           >
             Vote
@@ -862,7 +862,7 @@ function InsightPanelContent({
               setLocation(`/person/${person.id}?tab=predict`);
               onClose();
             }}
-            className="flex-1 sm:flex-initial border-violet-500/40 bg-violet-500/15 text-violet-700 dark:text-violet-400 hover:bg-violet-500/25 hover:text-violet-700 dark:hover:text-violet-400"
+            className="flex-1 sm:flex-initial bg-violet-500/25 dark:bg-violet-500/20 text-violet-600 dark:text-violet-400 border border-violet-500/50 dark:border-violet-400/40 shadow-sm shadow-violet-500/30 dark:shadow-violet-500/20 hover:bg-violet-500/35 dark:hover:bg-violet-500/30 hover:text-violet-600 dark:hover:text-violet-400"
             data-testid="button-insight-predict"
           >
             Predict
