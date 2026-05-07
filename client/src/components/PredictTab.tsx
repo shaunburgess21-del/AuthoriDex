@@ -538,8 +538,12 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
     return map;
   }, [userPredictionsData]);
 
+  // Per-(market, entry) aggregate of the user's active stakes split by
+  // direction. Mirrors the shape used by PredictPage so consumers
+  // (OpenMarketCard) can read both sides — needed for the no-hedging
+  // guard which has to detect "user already has a No on this entry".
   const userBetsPerEntry = useMemo(() => {
-    const map = new Map<string, Map<string, { direction: string; stakeAmount: number }>>();
+    const map = new Map<string, Map<string, { yesStake: number; noStake: number }>>();
     const betsArray = Array.isArray(userPredictionsData) ? userPredictionsData : (userPredictionsData as any)?.predictions ?? [];
     for (const b of betsArray as any[]) {
       if (!b.marketId || !b.entryId) continue;
@@ -547,10 +551,11 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       const eId = String(b.entryId);
       let inner = map.get(mId);
       if (!inner) { inner = new Map(); map.set(mId, inner); }
-      const prev = inner.get(eId);
+      const dir = b.direction === "no" ? "no" : "yes";
+      const prev = inner.get(eId) ?? { yesStake: 0, noStake: 0 };
       inner.set(eId, {
-        direction: b.direction || prev?.direction || "yes",
-        stakeAmount: (prev?.stakeAmount || 0) + (b.stakeAmount || 0),
+        yesStake: prev.yesStake + (dir === "yes" ? (b.stakeAmount || 0) : 0),
+        noStake: prev.noStake + (dir === "no" ? (b.stakeAmount || 0) : 0),
       });
     }
     return map;

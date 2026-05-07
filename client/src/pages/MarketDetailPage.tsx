@@ -663,6 +663,50 @@ export default function MarketDetailPage() {
   // <MyPositionCard /> below, which fetches a per-market endpoint
   // (/api/markets/:id/my-position) — so we no longer need the global
   // predictions query here. See MyPositionCard for the migration notes.
+  //
+  // We DO read the same /my-position endpoint here to power the
+  // no-hedging guards on the inline form (block opposite-direction
+  // tap on multi, block other-entry tap on binary, show "Currently
+  // staked" line for same-side top-ups). React Query dedupes the
+  // request with MyPositionCard so this is effectively free.
+  const { data: myPositionData } = useQuery<{
+    bets: Array<{ entryId: string; direction: string; stakeAmount: number; status: string }>;
+  }>({
+    queryKey: market?.id ? myPositionQueryKey(market.id) : ["/api/markets", "_none_", "my-position"],
+    // Use apiRequest so React Query dedupes this with the identical
+    // call inside MyPositionCard — same query key + same fetcher
+    // means a single network round-trip per render.
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/markets/${market!.id}/my-position`);
+      return res.json();
+    },
+    enabled: !!market?.id && !!user,
+  });
+
+  // Aggregate per-entry stakes split by direction. Mirrors the shape
+  // used on the Predict page so the guard logic reads the same.
+  const userBetsByEntry = useMemo(() => {
+    const map = new Map<string, { yesStake: number; noStake: number }>();
+    for (const b of myPositionData?.bets ?? []) {
+      if (b.status !== "active") continue;
+      const dir = b.direction === "no" ? "no" : "yes";
+      const prev = map.get(b.entryId) ?? { yesStake: 0, noStake: 0 };
+      map.set(b.entryId, {
+        yesStake: prev.yesStake + (dir === "yes" ? (b.stakeAmount || 0) : 0),
+        noStake: prev.noStake + (dir === "no" ? (b.stakeAmount || 0) : 0),
+      });
+    }
+    return map;
+  }, [myPositionData]);
+
+  // Single-entry binary markets only have one entry per user. We surface
+  // it explicitly so the binary-form guard can lock the opposite entry.
+  const userPickedEntryId = useMemo(() => {
+    for (const [eId, s] of userBetsByEntry) {
+      if (s.yesStake + s.noStake > 0) return eId;
+    }
+    return null;
+  }, [userBetsByEntry]);
 
   const isCommunityMarket = market?.marketType === "community";
   const isJackpotMarket = market?.marketType === "jackpot";
@@ -714,6 +758,22 @@ export default function MarketDetailPage() {
       setStakeAmount("");
     },
     onError: (err: Error) => {
+      // The server returns 409 with a JSON body { error, detail } when
+      // the no-hedging rule blocks a bet. apiRequest stringifies the
+      // body into the error message as "409: {…}", so parse it back
+      // out here to surface the human copy instead of raw JSON.
+      const m = err.message.match(/^(\d{3}): (.+)$/s);
+      if (m) {
+        try {
+          const body = JSON.parse(m[2]);
+          if (body?.error) {
+            toast.error(body.error, { description: body.detail });
+            return;
+          }
+        } catch {
+          // Fall through to the generic toast.
+        }
+      }
       toast.error("Failed to place prediction", { description: err.message });
     },
   });
@@ -775,7 +835,14 @@ export default function MarketDetailPage() {
 
 
   useEffect(() => {
-    if (pickParam && market?.entries && !pickApplied) {
+    if (pickApplied || !market?.entries) return;
+
+    // Explicit pick from the URL wins (links from leaderboard pin
+    // taps, etc.). When neither pick nor direction is supplied but
+    // the user already has an active position we pre-select it so
+    // the top-up flow lands directly on the right side without a
+    // tap — mirrors the StakeModal pattern shipped on native cards.
+    if (pickParam) {
       const pickLower = pickParam.toLowerCase();
       const matchedById = market.entries.find((e) => e.id === pickParam);
       const matchedByLabel = market.entries.find((e) =>
@@ -790,8 +857,18 @@ export default function MarketDetailPage() {
         setSelectedDirection(directionParam);
       }
       setPickApplied(true);
+      return;
     }
-  }, [pickParam, directionParam, market?.entries, pickApplied]);
+
+    if (userPickedEntryId) {
+      const stakes = userBetsByEntry.get(userPickedEntryId);
+      const dir: "yes" | "no" =
+        stakes && stakes.noStake > stakes.yesStake ? "no" : "yes";
+      setSelectedEntry(userPickedEntryId);
+      setSelectedDirection(dir);
+      setPickApplied(true);
+    }
+  }, [pickParam, directionParam, market?.entries, pickApplied, userPickedEntryId, userBetsByEntry]);
 
   const timeLeft = useCountdown(market?.closeAt || market?.endAt || null);
 
@@ -840,8 +917,46 @@ export default function MarketDetailPage() {
       toast.error("Invalid amount", { description: "Enter a valid stake amount." });
       return;
     }
+
+    // Defense-in-depth: even if the buttons somehow allow an opposite
+    // pick (state desync, accessibility tab order, etc.) the submit
+    // path checks the no-hedging rule again. Server enforces too via
+    // 409, this is purely UX so the user gets a helpful toast instead.
+    if (effectiveOpenMarketType === "multi") {
+      const stakes = userBetsByEntry.get(selectedEntry);
+      const oppositeStake = selectedDirection === "yes" ? stakes?.noStake ?? 0 : stakes?.yesStake ?? 0;
+      if (oppositeStake > 0) {
+        toast.error("Stick with your pick", {
+          description: "You've already taken the other direction on this option. Top up your existing pick instead.",
+        });
+        return;
+      }
+    } else if (effectiveOpenMarketType === "binary") {
+      if (userPickedEntryId && userPickedEntryId !== selectedEntry) {
+        toast.error("Stick with your pick", {
+          description: "You've already backed the other side. Top up your existing pick instead.",
+        });
+        return;
+      }
+    }
+
     betMutation.mutate({ entryId: selectedEntry, stakeAmount: amount, direction: selectedDirection });
   };
+
+  // Same-side top-up affordance — surfaces an inline "Currently staked"
+  // line above the stake input and swaps the submit label to "Add to
+  // your X stake". Mirrors the StakeModal subline we ship on native
+  // markets so the user knows their next stake is compounding rather
+  // than starting fresh. For binary markets `selectedDirection` is
+  // always "yes" (the No is the other entry, not the No direction).
+  const existingSameSideStake = (() => {
+    if (!selectedEntry) return 0;
+    const stakes = userBetsByEntry.get(selectedEntry);
+    if (!stakes) return 0;
+    if (effectiveOpenMarketType === "binary") return stakes.yesStake + stakes.noStake;
+    return selectedDirection === "yes" ? stakes.yesStake : stakes.noStake;
+  })();
+  const isTopUp = existingSameSideStake > 0;
 
   // Credits-affordance bits shared across the multi-option and binary forms.
   // Hoisted out of JSX so both branches stay in sync — previously only the
@@ -1196,6 +1311,23 @@ export default function MarketDetailPage() {
                       const isEntrySelected = selectedEntry === entry.id;
                       const isYesActive = isEntrySelected && selectedDirection === "yes";
                       const isNoActive = isEntrySelected && selectedDirection === "no";
+                      // Per the no-hedging rule, a user can only stake
+                      // one direction per entry on multi markets. We
+                      // grey out the opposite direction here so the
+                      // user sees the constraint up-front and gets a
+                      // toast on tap instead of a 409 round-trip.
+                      const entryStakes = userBetsByEntry.get(entry.id);
+                      const userDir: "yes" | "no" | null =
+                        entryStakes && entryStakes.yesStake > 0 ? "yes"
+                        : entryStakes && entryStakes.noStake > 0 ? "no"
+                        : null;
+                      const yesLocked = userDir === "no";
+                      const noLocked = userDir === "yes";
+                      const handleLockedTap = () => {
+                        toast.error("Stick with your pick", {
+                          description: "You've already taken the other direction on this option. Top up your existing pick instead.",
+                        });
+                      };
                       return (
                         <div
                           key={entry.id}
@@ -1217,22 +1349,30 @@ export default function MarketDetailPage() {
                           <div className="flex gap-1.5 shrink-0">
                             <button
                               className={`shrink-0 text-center w-[64px] px-1.5 py-1.5 text-xs font-semibold rounded transition-all tabular-nums ${
-                                isYesActive
-                                  ? "bg-[#00C853]/20 border border-[#00C853] text-[#00C853] shadow-[0_0_8px_rgba(0,200,83,0.25)]"
-                                  : "bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20"
+                                yesLocked
+                                  ? "bg-[#00C853]/5 border border-[#00C853]/30 text-[#00C853]/40 cursor-not-allowed"
+                                  : isYesActive
+                                    ? "bg-[#00C853]/20 border border-[#00C853] text-[#00C853] shadow-[0_0_8px_rgba(0,200,83,0.25)]"
+                                    : "bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20"
                               }`}
-                              onClick={() => { setSelectedEntry(entry.id); setSelectedDirection("yes"); }}
+                              aria-disabled={yesLocked || undefined}
+                              title={yesLocked ? "You've already taken the other direction on this option" : undefined}
+                              onClick={() => yesLocked ? handleLockedTap() : (setSelectedEntry(entry.id), setSelectedDirection("yes"))}
                               data-testid={`button-yes-${entry.id}`}
                             >
                               Yes {formatMultiplier(entry.yesMultiplier)}
                             </button>
                             <button
                               className={`shrink-0 text-center w-[64px] px-1.5 py-1.5 text-xs font-semibold rounded transition-all tabular-nums ${
-                                isNoActive
-                                  ? "bg-[#FF0000]/20 border border-[#FF0000] text-[#FF0000] shadow-[0_0_8px_rgba(255,0,0,0.25)]"
-                                  : "bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20"
+                                noLocked
+                                  ? "bg-[#FF0000]/5 border border-[#FF0000]/30 text-[#FF0000]/40 cursor-not-allowed"
+                                  : isNoActive
+                                    ? "bg-[#FF0000]/20 border border-[#FF0000] text-[#FF0000] shadow-[0_0_8px_rgba(255,0,0,0.25)]"
+                                    : "bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20"
                               }`}
-                              onClick={() => { setSelectedEntry(entry.id); setSelectedDirection("no"); }}
+                              aria-disabled={noLocked || undefined}
+                              title={noLocked ? "You've already taken the other direction on this option" : undefined}
+                              onClick={() => noLocked ? handleLockedTap() : (setSelectedEntry(entry.id), setSelectedDirection("no"))}
                               data-testid={`button-no-${entry.id}`}
                             >
                               No {formatMultiplier(entry.noMultiplier)}
@@ -1255,6 +1395,12 @@ export default function MarketDetailPage() {
                     className="bg-background/50"
                     data-testid="input-stake-amount"
                   />
+                  {isTopUp && (
+                    <p className="text-xs text-muted-foreground mt-1.5" data-testid="text-existing-stake">
+                      Currently staked: <span className="font-semibold tabular-nums text-foreground">{existingSameSideStake.toLocaleString("en-US")}</span> credits.
+                      Adding more will be combined for the same outcome.
+                    </p>
+                  )}
                 </div>
 
                 {potentialPayout !== null && (
@@ -1288,15 +1434,17 @@ export default function MarketDetailPage() {
                   ) : (
                     <Zap className="h-4 w-4 mr-2" />
                   )}
-                  {betMutation.isPending
-                    ? "Placing..."
-                    : !selectedEntry
-                      ? "Select an outcome"
-                      : !stakeAmount || Number(stakeAmount) <= 0
-                        ? "Enter stake amount"
-                        : insufficientCredits
-                          ? "Not enough credits"
-                          : `Place ${selectedDirection === "no" ? "No" : "Yes"} on ${entriesWithPercentages.find(e => e.id === selectedEntry)?.label || "..."}`}
+                  {(() => {
+                    if (betMutation.isPending) return "Placing...";
+                    if (!selectedEntry) return "Select an outcome";
+                    if (!stakeAmount || Number(stakeAmount) <= 0) return "Enter stake amount";
+                    if (insufficientCredits) return "Not enough credits";
+                    const sideLabel = selectedDirection === "no" ? "No" : "Yes";
+                    const entryLabel = entriesWithPercentages.find(e => e.id === selectedEntry)?.label || "...";
+                    return isTopUp
+                      ? `Add to your ${sideLabel} on ${entryLabel} stake`
+                      : `Place ${sideLabel} on ${entryLabel}`;
+                  })()}
                 </Button>
               </div>
             ) : (
@@ -1307,20 +1455,36 @@ export default function MarketDetailPage() {
                     {entriesWithPercentages.sort((a, b) => a.displayOrder - b.displayOrder).map((entry) => {
                       const isSelected = selectedEntry === entry.id;
                       const isYesLike = entry.label.toLowerCase() === "yes" || entry.label.toLowerCase() === "above" || entry.displayOrder === 0;
-                      const colorClass = isSelected
+                      // Per the no-hedging rule, binary markets allow
+                      // only one entry per user. We grey out the other
+                      // entry when the user already has a pick so they
+                      // see the constraint up-front.
+                      const isLockedOut = !!userPickedEntryId && userPickedEntryId !== entry.id;
+                      const colorClass = isLockedOut
                         ? isYesLike
-                          ? "bg-[#00C853]/20 border-[#00C853] text-[#00C853] shadow-[0_0_8px_rgba(0,200,83,0.25)]"
-                          : "bg-[#FF0000]/20 border-[#FF0000] text-[#FF0000] shadow-[0_0_8px_rgba(255,0,0,0.25)]"
-                        : isYesLike
-                          ? "bg-[#00C853]/10 border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20"
-                          : "bg-[#FF0000]/10 border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20";
+                          ? "bg-[#00C853]/5 border-[#00C853]/30 text-[#00C853]/40 cursor-not-allowed"
+                          : "bg-[#FF0000]/5 border-[#FF0000]/30 text-[#FF0000]/40 cursor-not-allowed"
+                        : isSelected
+                          ? isYesLike
+                            ? "bg-[#00C853]/20 border-[#00C853] text-[#00C853] shadow-[0_0_8px_rgba(0,200,83,0.25)]"
+                            : "bg-[#FF0000]/20 border-[#FF0000] text-[#FF0000] shadow-[0_0_8px_rgba(255,0,0,0.25)]"
+                          : isYesLike
+                            ? "bg-[#00C853]/10 border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20"
+                            : "bg-[#FF0000]/10 border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20";
                       return (
                         <Button
                           key={entry.id}
                           size="sm"
                           variant="outline"
                           className={`${colorClass} min-w-0 whitespace-normal text-left h-auto py-2`}
-                          onClick={() => setSelectedEntry(entry.id)}
+                          aria-disabled={isLockedOut || undefined}
+                          title={isLockedOut ? "You've already backed the other side" : undefined}
+                          onClick={() => isLockedOut
+                            ? toast.error("Stick with your pick", {
+                                description: "You've already backed the other side. Top up your existing pick instead.",
+                              })
+                            : setSelectedEntry(entry.id)
+                          }
                           data-testid={`button-pick-${entry.label.toLowerCase()}`}
                         >
                           {entry.label} ({entry.percentage}%)
@@ -1341,6 +1505,12 @@ export default function MarketDetailPage() {
                     className="bg-background/50"
                     data-testid="input-stake-amount"
                   />
+                  {isTopUp && (
+                    <p className="text-xs text-muted-foreground mt-1.5" data-testid="text-existing-stake">
+                      Currently staked: <span className="font-semibold tabular-nums text-foreground">{existingSameSideStake.toLocaleString("en-US")}</span> credits.
+                      Adding more will be combined for the same outcome.
+                    </p>
+                  )}
                 </div>
 
                 {potentialPayout !== null && (
@@ -1374,15 +1544,17 @@ export default function MarketDetailPage() {
                   ) : (
                     <Zap className="h-4 w-4 mr-2" />
                   )}
-                  {betMutation.isPending
-                    ? "Placing..."
-                    : !selectedEntry
-                      ? "Select an outcome"
-                      : !stakeAmount || Number(stakeAmount) <= 0
-                        ? "Enter stake amount"
-                        : insufficientCredits
-                          ? "Not enough credits"
-                          : "Place Prediction"}
+                  {(() => {
+                    if (betMutation.isPending) return "Placing...";
+                    if (!selectedEntry) return "Select an outcome";
+                    if (!stakeAmount || Number(stakeAmount) <= 0) return "Enter stake amount";
+                    if (insufficientCredits) return "Not enough credits";
+                    if (isTopUp) {
+                      const entryLabel = entriesWithPercentages.find(e => e.id === selectedEntry)?.label || "your pick";
+                      return `Add to your ${entryLabel} stake`;
+                    }
+                    return "Place Prediction";
+                  })()}
                 </Button>
               </div>
             )}

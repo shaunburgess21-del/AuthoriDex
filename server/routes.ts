@@ -15964,6 +15964,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           id: predictionMarkets.id,
           closeAt: predictionMarkets.closeAt,
           endAt: predictionMarkets.endAt,
+          openMarketType: predictionMarkets.openMarketType,
         })
         .from(predictionMarkets)
         .where(
@@ -15991,6 +15992,48 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         (market.endAt && new Date(market.endAt) < now)
       ) {
         return res.status(400).json({ error: "Betting is closed for this market" });
+      }
+
+      // No-hedging rule for community markets:
+      //   - multi:  per entry, only one direction. Same direction = top-up,
+      //             opposite direction on the same entry = blocked. Other
+      //             entries are independent.
+      //   - binary: per market, only one entry. Same entry = top-up,
+      //             other entry = blocked.
+      // Same-side top-ups are allowed and just compound on the existing
+      // pari-mutuel pool. Settlement (server/jobs/market-resolver.ts) is
+      // unchanged — legacy hedge bets placed before this rule continue to
+      // settle normally; we only block NEW hedge bets here.
+      const isMulti = market.openMarketType === "multi";
+      const isBinary = market.openMarketType === "binary";
+
+      if (isMulti || isBinary) {
+        const existing = await db
+          .select({
+            entryId: marketBets.entryId,
+            direction: marketBets.direction,
+          })
+          .from(marketBets)
+          .where(
+            and(
+              eq(marketBets.userId, authReq.userId!),
+              eq(marketBets.marketId, market.id),
+              eq(marketBets.status, "active"),
+            )
+          );
+
+        const wouldHedge =
+          (isMulti && existing.some(b => b.entryId === entryId && b.direction !== validDirection)) ||
+          (isBinary && existing.some(b => b.entryId !== entryId));
+
+        if (wouldHedge) {
+          return res.status(409).json({
+            error: "Stick with your pick",
+            detail: isBinary
+              ? "You've already backed the other side. Top up your existing pick instead."
+              : "You've already taken the other direction on this option. Top up your existing pick instead.",
+          });
+        }
       }
 
       const result = await placeMarketBet({

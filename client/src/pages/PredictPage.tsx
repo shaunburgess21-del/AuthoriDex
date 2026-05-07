@@ -1530,8 +1530,16 @@ export default function PredictPage() {
     return map;
   }, [userBetsData]);
 
+  // Per-(market, entry) aggregate of the user's active stakes split by
+  // direction. Keyed by direction so the no-hedging guard can detect
+  // opposite-side picks correctly — the previous shape collapsed both
+  // directions into a single record and silently lost the "user is
+  // already on the No side of this entry" signal we need to block
+  // hedges. With the rule enforced, only one side will be > 0 for any
+  // (market, entry) on new bets, but legacy hedge holders may still
+  // have both populated; consumers handle that gracefully.
   const userBetsPerEntry = useMemo(() => {
-    const map = new Map<string, Map<string, { direction: string; stakeAmount: number }>>();
+    const map = new Map<string, Map<string, { yesStake: number; noStake: number }>>();
     const betsArray = Array.isArray(userBetsData) ? userBetsData : (userBetsData as any)?.predictions ?? [];
     for (const b of betsArray as any[]) {
       if (!b.marketId || !b.entryId) continue;
@@ -1539,10 +1547,11 @@ export default function PredictPage() {
       const eId = String(b.entryId);
       let inner = map.get(mId);
       if (!inner) { inner = new Map(); map.set(mId, inner); }
-      const prev = inner.get(eId);
+      const dir = b.direction === "no" ? "no" : "yes";
+      const prev = inner.get(eId) ?? { yesStake: 0, noStake: 0 };
       inner.set(eId, {
-        direction: b.direction || prev?.direction || "yes",
-        stakeAmount: (prev?.stakeAmount || 0) + (b.stakeAmount || 0),
+        yesStake: prev.yesStake + (dir === "yes" ? (b.stakeAmount || 0) : 0),
+        noStake: prev.noStake + (dir === "no" ? (b.stakeAmount || 0) : 0),
       });
     }
     return map;
@@ -2011,6 +2020,44 @@ export default function PredictPage() {
       return;
     }
 
+    // No-hedging rule for community markets:
+    //   - multi:  per entry, only one direction. Same direction = top-up,
+    //             opposite direction on same entry = blocked. Other entries
+    //             remain independent.
+    //   - binary: only one entry per market. Same entry = top-up,
+    //             different entry = blocked.
+    // Server enforces this too (POST /api/open-markets/:slug/bet); the
+    // client guard is purely UX so the user sees a toast instead of a
+    // 409 round-trip.
+    const isBinary = market.openMarketType === "binary";
+    const marketBets = userBetsPerEntry.get(String(market.id));
+
+    if (isBinary && marketBets) {
+      for (const [eId, bets] of marketBets) {
+        if (eId !== String(entry.id) && (bets.yesStake > 0 || bets.noStake > 0)) {
+          hapticError();
+          toast("Stick with your pick", {
+            description: "You've already backed the other side. Top up your existing pick instead.",
+          });
+          return;
+        }
+      }
+    }
+
+    const sameEntryBets = marketBets?.get(String(entry.id));
+    const sameDirStake = direction === "yes" ? sameEntryBets?.yesStake ?? 0 : sameEntryBets?.noStake ?? 0;
+    const oppositeStake = direction === "yes" ? sameEntryBets?.noStake ?? 0 : sameEntryBets?.yesStake ?? 0;
+
+    if (oppositeStake > 0) {
+      hapticError();
+      toast("Stick with your pick", {
+        description: "You've already taken the other direction on this option. Top up your existing pick instead.",
+      });
+      return;
+    }
+
+    const isTopUp = sameDirStake > 0;
+
     const yesStake = Number(entry.totalStake || 0);
     const noStake = Number(entry.noStake || 0);
     const entryPool = yesStake + noStake;
@@ -2036,6 +2083,8 @@ export default function PredictPage() {
       // Threaded so StakeModal can suppress the Yes/No badge + toggle
       // for binary community markets where the entry label IS the side.
       openMarketType: market.openMarketType ?? null,
+      isTopUp,
+      existingStake: isTopUp ? sameDirStake : undefined,
     });
     openStakeModal();
   };
@@ -2189,7 +2238,10 @@ export default function PredictPage() {
     // Race lets users back any candidate at any time; if they re-pick
     // one they've already backed we treat it as a same-side top-up so
     // the StakeModal subline shows their existing position.
-    const priorStake = userBetsPerEntry.get(String(market.id))?.get(String(candidate.entryId))?.stakeAmount ?? 0;
+    // Native gainer bets always carry direction='yes' so we just read
+    // yesStake — the new map shape preserves both sides, but for native
+    // markets only one is ever populated.
+    const priorStake = userBetsPerEntry.get(String(market.id))?.get(String(candidate.entryId))?.yesStake ?? 0;
     const isTopUp = priorStake > 0;
 
     setPendingSelection({

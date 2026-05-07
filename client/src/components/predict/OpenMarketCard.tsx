@@ -111,50 +111,68 @@ function isYesLikeLabel(label: string) {
   return l === "yes" || l === "above";
 }
 
-function PendingBetLinkRow({ entryLabel, stakeAmount, href }: { entryLabel: string; stakeAmount: number; href: string }) {
+function PendingBetLinkRow({ entryLabel, stakeAmount, href, onTopUp }: { entryLabel: string; stakeAmount: number; href: string; /** When provided, the row becomes a button that triggers an in-place top-up modal instead of navigating to the detail page. Mirrors the native pattern (WeeklyUpDownYourPositionPanel). */ onTopUp?: () => void }) {
   const yesLike = isYesLikeLabel(entryLabel);
   const accent = yesLike ? "#00C853" : "#FF0000";
+
+  const inner = (
+    <div
+      className="flex min-h-10 items-center justify-between gap-2 rounded-md border px-3 py-3 md:py-2 text-left w-full transition-colors"
+      style={{
+        backgroundColor: `${accent}10`,
+        borderColor: `${accent}80`,
+      }}
+      data-testid="pending-bet-link"
+    >
+      <div className="flex items-center gap-2 min-w-0 flex-1">
+        <div
+          className="h-5 w-5 rounded-full flex items-center justify-center shrink-0 border"
+          style={{ backgroundColor: `${accent}1A`, borderColor: `${accent}80` }}
+        >
+          <Check className="h-2.5 w-2.5" style={{ color: accent }} />
+        </div>
+        <div className="min-w-0 flex flex-row flex-wrap items-center gap-1.5">
+          <span className="text-xs font-semibold uppercase tracking-wide leading-none text-foreground">Your pick</span>
+          <span className="text-xs font-semibold leading-none" style={{ color: accent }}>
+            {entryLabel.toUpperCase()}
+          </span>
+        </div>
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-baseline gap-1 tabular-nums">
+          <span className="text-[10px] text-muted-foreground">Stake</span>
+          <span className="text-xs font-semibold text-foreground">{stakeAmount.toLocaleString("en-US")}</span>
+        </div>
+        <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden />
+      </div>
+    </div>
+  );
+
+  if (onTopUp) {
+    return (
+      <button
+        type="button"
+        onClick={onTopUp}
+        className="block w-full rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background hover:brightness-110 transition-[filter]"
+        aria-label={`Top up your ${entryLabel} pick`}
+      >
+        {inner}
+      </button>
+    );
+  }
+
   return (
     <Link
       href={href}
       className="block w-full rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
       aria-label={`View your prediction: ${entryLabel}`}
     >
-      <div
-        className="flex min-h-10 items-center justify-between gap-2 rounded-md border px-3 py-3 md:py-2 text-left w-full transition-colors"
-        style={{
-          backgroundColor: `${accent}10`,
-          borderColor: `${accent}80`,
-        }}
-        data-testid="pending-bet-link"
-      >
-        <div className="flex items-center gap-2 min-w-0 flex-1">
-          <div
-            className="h-5 w-5 rounded-full flex items-center justify-center shrink-0 border"
-            style={{ backgroundColor: `${accent}1A`, borderColor: `${accent}80` }}
-          >
-            <Check className="h-2.5 w-2.5" style={{ color: accent }} />
-          </div>
-          <div className="min-w-0 flex flex-row flex-wrap items-center gap-1.5">
-            <span className="text-xs font-semibold uppercase tracking-wide leading-none text-foreground">Your pick</span>
-            <span className="text-xs font-semibold leading-none" style={{ color: accent }}>
-              {entryLabel.toUpperCase()}
-            </span>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <div className="flex items-baseline gap-1 tabular-nums">
-            <span className="text-[10px] text-muted-foreground">Stake</span>
-            <span className="text-xs font-semibold text-foreground">{stakeAmount.toLocaleString("en-US")}</span>
-          </div>
-          <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden />
-        </div>
-      </div>
+      {inner}
     </Link>
   );
 }
 
-function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel, onNavigate, isMarketClosed, isInactive = false, inactiveMessage, userBetResult, onFilterCategory, categoryRaceMap, leaderboardCategories, onBrowseFullScreen }: { market: any; entries: any[]; totalPool: number; participants: number; timeLabel: string; onNavigate: (slug: string, pick?: string, direction?: string) => void; isMarketClosed: boolean; isInactive?: boolean; inactiveMessage?: string; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number }; onFilterCategory?: (cat: string) => void; categoryRaceMap?: Map<string, string>; leaderboardCategories?: Set<string>; onBrowseFullScreen?: () => void }) {
+function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel, onNavigate, onPickEntry, isMarketClosed, isInactive = false, inactiveMessage, userBetResult, userBetsPerEntry, onFilterCategory, categoryRaceMap, leaderboardCategories, onBrowseFullScreen }: { market: any; entries: any[]; totalPool: number; participants: number; timeLabel: string; onNavigate: (slug: string, pick?: string, direction?: string) => void; /** When provided, tapping the "Your pick" pin opens the StakeModal in topUp mode instead of routing to the detail page. */ onPickEntry?: (market: any, entry: any, direction: "yes" | "no") => void; isMarketClosed: boolean; isInactive?: boolean; inactiveMessage?: string; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number }; userBetsPerEntry?: Map<string, { yesStake: number; noStake: number }>; onFilterCategory?: (cat: string) => void; categoryRaceMap?: Map<string, string>; leaderboardCategories?: Set<string>; onBrowseFullScreen?: () => void }) {
   const yesEntry = entries.find((e: any) => e.label === "Yes") || entries[0];
   const noEntry = entries.find((e: any) => e.label === "No") || entries[1];
   const yesStake = Number(yesEntry?.totalStake || 0);
@@ -221,7 +239,36 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
               Closed
             </Button>
           ) : userBetResult?.result === "pending" ? (
-            <PendingBetLinkRow entryLabel={userBetResult.entryLabel} stakeAmount={userBetResult.stakeAmount} href={`/markets/${market.slug}`} />
+            (() => {
+              // Wire the pin to top-up parity with native cards: when we
+              // can identify the picked entry from userBetsPerEntry and
+              // onPickEntry is provided, the pin opens the StakeModal in
+              // topUp mode for the user's existing direction. Otherwise
+              // we fall through to the legacy detail-page link.
+              let pickedEntry: any = null;
+              let pickedDirection: "yes" | "no" = "yes";
+              if (userBetsPerEntry && onPickEntry) {
+                for (const [eId, stakes] of userBetsPerEntry) {
+                  const dir = stakes.noStake > stakes.yesStake ? "no" : (stakes.yesStake > 0 ? "yes" : (stakes.noStake > 0 ? "no" : null));
+                  if (dir) {
+                    const found = entries.find((e: any) => String(e.id) === eId);
+                    if (found) {
+                      pickedEntry = found;
+                      pickedDirection = dir;
+                      break;
+                    }
+                  }
+                }
+              }
+              return (
+                <PendingBetLinkRow
+                  entryLabel={userBetResult.entryLabel}
+                  stakeAmount={userBetResult.stakeAmount}
+                  href={`/markets/${market.slug}`}
+                  onTopUp={pickedEntry && onPickEntry ? () => onPickEntry(market, pickedEntry, pickedDirection) : undefined}
+                />
+              );
+            })()
           ) : (
             <div className="grid grid-cols-2 gap-2">
               <Button
@@ -263,7 +310,13 @@ function MultiMarketEntryRow({
 }: {
   entry: any;
   market: any;
-  userBet?: { direction: string; stakeAmount: number };
+  /**
+   * Per-entry user position split by direction. Under the no-hedging
+   * rule only one side is ever populated for new bets; legacy hedge
+   * holders may still have both — we pick the dominant side for the
+   * pin so it shows something sensible.
+   */
+  userBet?: { yesStake: number; noStake: number };
   hasPendingBet: boolean;
   isMarketClosed: boolean;
   /** Show raw entry pool credits below the row (drawer only). */
@@ -281,7 +334,23 @@ function MultiMarketEntryRow({
   /** Called before onPickEntry/onNavigate so the drawer can close cleanly first. */
   onBeforeNavigate?: () => void;
 }) {
-  const betAccent = userBet?.direction === "no" ? "#FF0000" : "#00C853";
+  // Pick the dominant side for the pin. New bets only ever populate one
+  // direction; legacy hedge holders see whichever side they have more
+  // stake on so the pin is a reasonable shorthand.
+  const userDirection: "yes" | "no" | null = userBet
+    ? userBet.noStake > userBet.yesStake
+      ? "no"
+      : userBet.yesStake > 0
+        ? "yes"
+        : userBet.noStake > 0
+          ? "no"
+          : null
+    : null;
+  const userStake =
+    userDirection === "yes" ? userBet?.yesStake ?? 0
+    : userDirection === "no" ? userBet?.noStake ?? 0
+    : 0;
+  const betAccent = userDirection === "no" ? "#FF0000" : "#00C853";
   const entryPool =
     Number(entry.totalStake || 0) + Number(entry.noStake || 0);
 
@@ -327,17 +396,38 @@ function MultiMarketEntryRow({
         )}
       </div>
       <span className="text-[12px] md:text-[14px] font-mono font-semibold text-muted-foreground tabular-nums shrink-0 w-9 text-right">{entry.pct}%</span>
-      {hasPendingBet && userBet ? (
-        <Link
-          href={`/markets/${market.slug}`}
-          className="flex items-center gap-1.5 shrink-0 rounded-md border px-2 py-1.5 transition-colors"
-          style={{ backgroundColor: `${betAccent}10`, borderColor: `${betAccent}80` }}
-          data-testid={`pending-entry-${entry.id}`}
-        >
-          <Check className="h-3 w-3" style={{ color: betAccent }} />
-          <span className="text-[10px] font-semibold" style={{ color: betAccent }}>Your pick</span>
-          <span className="text-[10px] text-muted-foreground tabular-nums">{userBet.stakeAmount.toLocaleString("en-US")}</span>
-        </Link>
+      {hasPendingBet && userBet && userDirection ? (
+        // Pin doubles as the top-up trigger. When onPickEntry is wired
+        // (PredictPage / PredictTab) we open the StakeModal directly with
+        // the user's existing direction so the modal lands in topUp mode
+        // — matches the native pattern (e.g. WeeklyUpDownYourPositionPanel).
+        // Falls back to the detail-page link when no callback is wired
+        // (e.g. SSR or list views that haven't been migrated yet).
+        onPickEntry && !isMarketClosed ? (
+          <button
+            type="button"
+            onClick={(e) => handlePick(e, userDirection)}
+            className="flex items-center gap-1.5 shrink-0 rounded-md border px-2 py-1.5 transition-colors hover:brightness-110"
+            style={{ backgroundColor: `${betAccent}10`, borderColor: `${betAccent}80` }}
+            data-testid={`pending-entry-${entry.id}`}
+            aria-label={`Top up your ${userDirection.toUpperCase()} pick`}
+          >
+            <Check className="h-3 w-3" style={{ color: betAccent }} />
+            <span className="text-[10px] font-semibold" style={{ color: betAccent }}>Your pick</span>
+            <span className="text-[10px] text-muted-foreground tabular-nums">{userStake.toLocaleString("en-US")}</span>
+          </button>
+        ) : (
+          <Link
+            href={`/markets/${market.slug}`}
+            className="flex items-center gap-1.5 shrink-0 rounded-md border px-2 py-1.5 transition-colors"
+            style={{ backgroundColor: `${betAccent}10`, borderColor: `${betAccent}80` }}
+            data-testid={`pending-entry-${entry.id}`}
+          >
+            <Check className="h-3 w-3" style={{ color: betAccent }} />
+            <span className="text-[10px] font-semibold" style={{ color: betAccent }}>Your pick</span>
+            <span className="text-[10px] text-muted-foreground tabular-nums">{userStake.toLocaleString("en-US")}</span>
+          </Link>
+        )
       ) : !isMarketClosed ? (
         <div className="flex gap-1 md:gap-1.5 shrink-0">
           <button
@@ -364,7 +454,7 @@ function MultiMarketEntryRow({
 
 const MULTI_MARKET_PREVIEW_COUNT = 4;
 
-function MultiMarketCard({ market, entries, participants, timeLabel, onNavigate, onPickEntry, isMarketClosed, isInactive = false, inactiveMessage, userBetResult, userBetsPerEntry, onFilterCategory, categoryRaceMap, leaderboardCategories, onBrowseFullScreen }: { market: any; entries: any[]; participants: number; timeLabel: string; onNavigate: (slug: string, pick?: string, direction?: string) => void; onPickEntry?: (market: any, entry: any, direction: "yes" | "no") => void; isMarketClosed: boolean; isInactive?: boolean; inactiveMessage?: string; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number }; userBetsPerEntry?: Map<string, { direction: string; stakeAmount: number }>; onFilterCategory?: (cat: string) => void; categoryRaceMap?: Map<string, string>; leaderboardCategories?: Set<string>; onBrowseFullScreen?: () => void }) {
+function MultiMarketCard({ market, entries, participants, timeLabel, onNavigate, onPickEntry, isMarketClosed, isInactive = false, inactiveMessage, userBetResult, userBetsPerEntry, onFilterCategory, categoryRaceMap, leaderboardCategories, onBrowseFullScreen }: { market: any; entries: any[]; participants: number; timeLabel: string; onNavigate: (slug: string, pick?: string, direction?: string) => void; onPickEntry?: (market: any, entry: any, direction: "yes" | "no") => void; isMarketClosed: boolean; isInactive?: boolean; inactiveMessage?: string; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number }; userBetsPerEntry?: Map<string, { yesStake: number; noStake: number }>; onFilterCategory?: (cat: string) => void; categoryRaceMap?: Map<string, string>; leaderboardCategories?: Set<string>; onBrowseFullScreen?: () => void }) {
   const [, setLocation] = useLocation();
   const [optionsDrawerOpen, setOptionsDrawerOpen] = useState(false);
 
@@ -628,7 +718,7 @@ function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel,
   );
 }
 
-export function OpenMarketCard({ market, onNavigate, onPickEntry, isMarketClosed = false, userBetResult, userBetsPerEntry, onFilterCategory, categoryRaceMap, leaderboardCategories, onBrowseFullScreen }: { market: any; onNavigate: (slug: string, pick?: string, direction?: string) => void; /** When provided, multi-option Yes/No clicks open an in-page stake modal instead of navigating to /markets/:slug. Falls through to onNavigate for binary/up-down cards. */ onPickEntry?: (market: any, entry: any, direction: "yes" | "no") => void; isMarketClosed?: boolean; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number }; userBetsPerEntry?: Map<string, { direction: string; stakeAmount: number }>; onFilterCategory?: (cat: string) => void; categoryRaceMap?: Map<string, string>; leaderboardCategories?: Set<string>; onBrowseFullScreen?: () => void }) {
+export function OpenMarketCard({ market, onNavigate, onPickEntry, isMarketClosed = false, userBetResult, userBetsPerEntry, onFilterCategory, categoryRaceMap, leaderboardCategories, onBrowseFullScreen }: { market: any; onNavigate: (slug: string, pick?: string, direction?: string) => void; /** When provided, multi-option Yes/No clicks open an in-page stake modal instead of navigating to /markets/:slug. Falls through to onNavigate for binary/up-down cards. */ onPickEntry?: (market: any, entry: any, direction: "yes" | "no") => void; isMarketClosed?: boolean; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number }; userBetsPerEntry?: Map<string, { yesStake: number; noStake: number }>; onFilterCategory?: (cat: string) => void; categoryRaceMap?: Map<string, string>; leaderboardCategories?: Set<string>; onBrowseFullScreen?: () => void }) {
   const entries = market.entries || [];
   const totalStake = entries.reduce((sum: number, e: any) => sum + Number(e.totalStake || 0) + Number(e.noStake || 0), 0);
   const totalPool = totalStake;
@@ -646,5 +736,5 @@ export function OpenMarketCard({ market, onNavigate, onPickEntry, isMarketClosed
   if (market.openMarketType === "multi") {
     return <MultiMarketCard market={market} entries={entries} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} onPickEntry={onPickEntry} isMarketClosed={isMarketClosed || isInactive} isInactive={isInactive} inactiveMessage={market.inactiveMessage} userBetResult={userBetResult} userBetsPerEntry={userBetsPerEntry} onFilterCategory={onFilterCategory} categoryRaceMap={categoryRaceMap} leaderboardCategories={leaderboardCategories} onBrowseFullScreen={onBrowseFullScreen} />;
   }
-  return <BinaryMarketCard market={market} entries={entries} totalPool={totalPool} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} isMarketClosed={isMarketClosed || isInactive} isInactive={isInactive} inactiveMessage={market.inactiveMessage} userBetResult={userBetResult} onFilterCategory={onFilterCategory} categoryRaceMap={categoryRaceMap} leaderboardCategories={leaderboardCategories} onBrowseFullScreen={onBrowseFullScreen} />;
+  return <BinaryMarketCard market={market} entries={entries} totalPool={totalPool} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} onPickEntry={onPickEntry} isMarketClosed={isMarketClosed || isInactive} isInactive={isInactive} inactiveMessage={market.inactiveMessage} userBetResult={userBetResult} userBetsPerEntry={userBetsPerEntry} onFilterCategory={onFilterCategory} categoryRaceMap={categoryRaceMap} leaderboardCategories={leaderboardCategories} onBrowseFullScreen={onBrowseFullScreen} />;
 }
