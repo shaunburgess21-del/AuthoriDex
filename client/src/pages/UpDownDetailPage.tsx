@@ -416,10 +416,10 @@ export default function UpDownDetailPage() {
             userPick && Number.isFinite(hydrated.totalPool) && hydrated.totalPool > 0
               ? {
                   totalPool: hydrated.totalPool,
-                  userSidePool:
+                  userSidePercent:
                     userPick === "up"
-                      ? hydrated.totalPool * (hydrated.upPoolPercent / 100)
-                      : hydrated.totalPool * (1 - hydrated.upPoolPercent / 100),
+                      ? hydrated.upPercent
+                      : 100 - hydrated.upPercent,
                 }
               : null
           }
