@@ -9,6 +9,7 @@ import { ThumbsUp, Star, Zap, TrendingUp, TrendingDown, Check, X } from "lucide-
 import { getCategoryTextColor } from "@/components/CategoryPill";
 import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
+import { useAuth } from "@/contexts/AuthContext";
 
 const SEGMENT_COLORS_5 = ['#FF0000', '#FF9100', '#FFC400', '#76FF03', '#00C853'];
 
@@ -49,7 +50,6 @@ interface LeaderboardRowProps {
   userPredictionPick?: "up" | "down" | null;
   predictionsDisabled?: boolean;
   predictionsClosedMessage?: Pick<ClosedMarketMessage, "title" | "lines">;
-  approvalShowResults?: boolean;
 }
 
 const EVER_VOTED_KEY = "authoridex-has-ever-voted";
@@ -79,32 +79,43 @@ export function LeaderboardRow({
   userPredictionPick = null,
   predictionsDisabled,
   predictionsClosedMessage,
-  approvalShowResults,
 }: LeaderboardRowProps) {
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
   const [sentimentScore, setSentimentScore] = useState<number | null>(null);
   const [hasEverVoted, setHasEverVoted] = useState(getHasEverVoted);
 
   useEffect(() => {
     const loadSentimentScore = () => {
       try {
-        const savedVote = typeof window !== "undefined" ? localStorage.getItem(`sentiment-vote-${person.id}`) : null;
+        if (
+          person.userApprovalRating != null &&
+          person.userApprovalRating >= 1 &&
+          person.userApprovalRating <= 5
+        ) {
+          setSentimentScore(person.userApprovalRating);
+          if (!getHasEverVoted()) {
+            markEverVoted();
+          }
+          return;
+        }
+        if (!userId) {
+          setSentimentScore(null);
+          return;
+        }
+        const savedVote =
+          typeof window !== "undefined"
+            ? localStorage.getItem(`sentiment-vote-${person.id}`)
+            : null;
         if (savedVote) {
           const parsed = parseInt(savedVote, 10);
           setSentimentScore(Number.isFinite(parsed) ? parsed : null);
           if (!getHasEverVoted()) {
             markEverVoted();
           }
-        } else if (person.userApprovalRating != null && person.userApprovalRating >= 1 && person.userApprovalRating <= 5) {
-          setSentimentScore(person.userApprovalRating);
-          try {
-            localStorage.setItem(`sentiment-vote-${person.id}`, String(person.userApprovalRating));
-          } catch { /* ignore */ }
-          if (!getHasEverVoted()) {
-            markEverVoted();
-          }
-        } else {
-          setSentimentScore(null);
+          return;
         }
+        setSentimentScore(null);
       } catch {
         setSentimentScore(null);
       }
@@ -141,7 +152,7 @@ export function LeaderboardRow({
       window.removeEventListener('sentiment-vote-updated', handleCustomUpdate);
       window.removeEventListener('authoridex-ever-voted', handleEverVoted);
     };
-  }, [person.id, person.userApprovalRating]);
+  }, [person.id, person.userApprovalRating, userId]);
 
   const fameScore = (person as any).fameIndexLive ?? person.fameIndex ?? Math.round(person.trendScore / 100);
   const delta24h = formatDelta(person.change24h);
@@ -371,20 +382,7 @@ export function LeaderboardRow({
               </p>
             </div>
             <div className="w-[80px] shrink-0 flex justify-end">
-              {approvalShowResults ? (
-                <span className="font-mono font-bold text-lg tabular-nums">
-                  {person.approvalAvgRating != null ? (
-                    <>
-                      <span style={{ color: getApprovalColor(person.approvalAvgRating) }}>
-                        {person.approvalAvgRating.toFixed(1)}
-                      </span>
-                      <span className="text-muted-foreground">/5</span>
-                    </>
-                  ) : (
-                    <span className="text-muted-foreground">--</span>
-                  )}
-                </span>
-              ) : hasVoted && sentimentScore != null ? (
+              {hasVoted && sentimentScore != null ? (
                 <Popover modal>
                   <PopoverTrigger asChild>
                     <button

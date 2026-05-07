@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, useCallback } from "rea
 import { User, Session } from "@supabase/supabase-js";
 import { toast } from "sonner";
 import { getSupabase } from "@/lib/supabase";
+import { queryClient } from "@/lib/queryClient";
 
 export interface UserProfile {
   id: string;
@@ -48,6 +49,21 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+function clearLocalVoteCache() {
+  try {
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith("sentiment-vote-")) {
+        keysToRemove.push(key);
+      }
+    }
+    for (const key of keysToRemove) localStorage.removeItem(key);
+  } catch {
+    /* ignore */
+  }
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -157,16 +173,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
           async (_event, newSession) => {
-            if (mounted) {
-              setSession(newSession);
-              setUser(newSession?.user ?? null);
+            if (!mounted) return;
+            setSession(newSession);
+            setUser(newSession?.user ?? null);
 
-              if (newSession?.access_token && _event === "SIGNED_IN") {
-                await syncProfile(newSession.access_token);
-              } else if (!newSession) {
-                setProfile(null);
-                setProfileJustCreated(null);
-              }
+            if (newSession?.access_token && _event === "SIGNED_IN") {
+              queryClient.invalidateQueries({ queryKey: ["/api/leaderboard"] });
+              queryClient.invalidateQueries({ queryKey: ["/api/celebrity"] });
+              await syncProfile(newSession.access_token);
+            } else if (!newSession) {
+              clearLocalVoteCache();
+              queryClient.invalidateQueries({ queryKey: ["/api/leaderboard"] });
+              queryClient.invalidateQueries({ queryKey: ["/api/celebrity"] });
+              setProfile(null);
+              setProfileJustCreated(null);
             }
           }
         );
@@ -194,6 +214,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const supabase = await getSupabase();
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
+      clearLocalVoteCache();
+      queryClient.invalidateQueries({ queryKey: ["/api/leaderboard"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/celebrity"] });
       setProfile(null);
       setProfileJustCreated(null);
     } catch (err) {
