@@ -19603,6 +19603,64 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
     }
   });
 
+  // POST /api/admin/agents/reset-world-market-gate - Clear the per-(agent,
+  // market) re-evaluation lockout for World Markets so agents can re-evaluate
+  // markets they previously bet on or abstained from. Required after toggling
+  // WORLD_MARKETS_LLM_ENABLED back ON: rows from the prior on-cycle keep
+  // blocking re-eval (`world_abstained` for 7d, `executed` for 30d) which
+  // means flipping the env var doesn't actually restart any betting until
+  // the windows expire.
+  //
+  // Implementation: backdate `executedAt` on the gate-blocking rows so the
+  // existing age checks in agentRunner pass naturally on the next sweep.
+  // This preserves the audit trail (rows stay in scheduled_agent_actions)
+  // and doesn't touch the underlying market_bets ledger at all.
+  app.post("/api/admin/agents/reset-world-market-gate", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { scheduledAgentActions, predictionMarkets } = await import("@shared/schema");
+
+      // Backdate to 31 days ago — clears both the 7-day abstain gate and the
+      // 30-day conviction gate in agentRunner.ts (lines 393-422).
+      const backdate = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000);
+
+      // Only target rows for community (world) markets. Native markets use a
+      // different gate that we don't want to touch.
+      const result = await db.execute(sql`
+        UPDATE ${scheduledAgentActions}
+        SET executed_at = ${backdate}
+        WHERE id IN (
+          SELECT saa.id
+          FROM ${scheduledAgentActions} saa
+          INNER JOIN ${predictionMarkets} pm ON pm.id = saa.market_id
+          WHERE pm.market_type = 'community'
+            AND saa.status IN ('world_abstained', 'executed')
+            AND (saa.executed_at IS NULL OR saa.executed_at > ${backdate})
+        )
+      `);
+
+      const updated = (result as any).rowCount ?? 0;
+
+      await db.insert(adminAuditLog).values({
+        adminId: req.userId || "unknown",
+        actionType: "reset_world_market_gate",
+        targetTable: "scheduled_agent_actions",
+        targetId: "world_market_gate",
+        metadata: {
+          source: "admin_panel",
+          reason: "Unblock world-market re-evaluation after WORLD_MARKETS_LLM_ENABLED toggle",
+          rows_updated: updated,
+          backdated_to: backdate.toISOString(),
+        },
+      });
+
+      console.log(`[AgentAdmin] World market gate reset: backdated ${updated} rows to ${backdate.toISOString()}`);
+      res.json({ ok: true, rowsUpdated: updated, backdatedTo: backdate.toISOString() });
+    } catch (err: any) {
+      console.error("[AgentAdmin] reset-world-market-gate failed:", err);
+      res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
+    }
+  });
+
   // POST /api/admin/agents/:agentId/toggle-active - Pause or resume a single
   // agent's simulation activity without banning their profile.
   // Body: { active: boolean }. Setting active=false also skips any pending

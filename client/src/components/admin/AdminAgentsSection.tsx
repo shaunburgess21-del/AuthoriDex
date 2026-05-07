@@ -349,6 +349,20 @@ export function AdminAgentsSection() {
     onError: (err: Error) => toast.error("Clear failed", { description: err.message }),
   });
 
+  const resetWorldGateMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/agents/reset-world-market-gate");
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      toast("World-market re-eval gate reset", {
+        description: `Backdated ${data?.rowsUpdated ?? 0} rows. Agents can re-evaluate world markets on the next sweep.`,
+      });
+      refresh();
+    },
+    onError: (err: Error) => toast.error("Reset failed", { description: err.message }),
+  });
+
   const toggleActiveMutation = useMutation({
     mutationFn: async ({ agentId, active }: { agentId: string; active: boolean }) => {
       setPendingToggleAgentId(agentId);
@@ -590,6 +604,25 @@ export function AdminAgentsSection() {
                 ).toFixed(2)}
               </div>
             )}
+            <div className="mt-3 rounded-md border bg-muted/20 p-3 text-xs">
+              <div className="flex items-start justify-between gap-3">
+                <div className="text-muted-foreground">
+                  <div className="font-semibold text-foreground mb-1">Re-eval gate</div>
+                  After toggling <code>WORLD_MARKETS_LLM_ENABLED</code> back ON, agents will not re-bet on world markets they've already evaluated until the per-market lockout expires (7 days for abstains, 30 days for executed bets). Click to backdate those rows so re-eval can fire on the next sweep.
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => resetWorldGateMutation.mutate()}
+                  disabled={resetWorldGateMutation.isPending}
+                  data-testid="button-reset-world-gate"
+                  className="shrink-0"
+                >
+                  {resetWorldGateMutation.isPending ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : <Eraser className="h-3.5 w-3.5 mr-2" />}
+                  Reset Re-eval Gate
+                </Button>
+              </div>
+            </div>
           </CardContent>
         </Card>
       )}
