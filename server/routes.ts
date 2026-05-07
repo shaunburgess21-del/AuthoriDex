@@ -19376,6 +19376,16 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       const cutoff = sinceDate && !Number.isNaN(sinceDate.getTime())
         ? sinceDate
         : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      // Per-leg cap. Each kind (comment / vote / like / bet) gets up to
+      // `limit` rows and the outer SELECT then merges chronologically. The
+      // older single-leg `LIMIT limit` plus outer `LIMIT limit` design hid
+      // every non-bet event because bets fire much more often than any
+      // other action — every merged slot was eaten by the freshest bet
+      // and the UI showed Comments=0/Votes=0/Likes=0 even when those
+      // events clearly existed. Per-kind fairness fixes that. We also
+      // raise the outer cap to limit*4 so all four kinds can survive.
+      const perLegLimit = limit;
+      const overallLimit = limit * 4;
 
       // Single SQL union pulls comments + votes (3 tables) + likes + bets
       // for is_agent profiles, then orders by event_at across all sources.
@@ -19402,7 +19412,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
               AND c.deleted_at IS NULL
               AND c.created_at >= ${cutoff}
             ORDER BY c.created_at DESC
-            LIMIT ${limit}
+            LIMIT ${perLegLimit}
           )
 
           UNION ALL
@@ -19422,7 +19432,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
             WHERE p.is_agent = true
               AND v.voted_at >= ${cutoff}
             ORDER BY v.voted_at DESC
-            LIMIT ${limit}
+            LIMIT ${perLegLimit}
           )
 
           UNION ALL
@@ -19442,7 +19452,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
             WHERE p.is_agent = true
               AND tpv.created_at >= ${cutoff}
             ORDER BY tpv.created_at DESC
-            LIMIT ${limit}
+            LIMIT ${perLegLimit}
           )
 
           UNION ALL
@@ -19463,7 +19473,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
             WHERE p.is_agent = true
               AND opv.created_at >= ${cutoff}
             ORDER BY opv.created_at DESC
-            LIMIT ${limit}
+            LIMIT ${perLegLimit}
           )
 
           UNION ALL
@@ -19483,7 +19493,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
             WHERE p.is_agent = true
               AND cv.voted_at >= ${cutoff}
             ORDER BY cv.voted_at DESC
-            LIMIT ${limit}
+            LIMIT ${perLegLimit}
           )
 
           UNION ALL
@@ -19506,7 +19516,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
               AND mb.agent_id IS NOT NULL
               AND mb.created_at >= ${cutoff}
             ORDER BY mb.created_at DESC
-            LIMIT ${limit}
+            LIMIT ${perLegLimit}
           )
         )
         SELECT
@@ -19523,7 +19533,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         FROM recent r
         LEFT JOIN profiles p ON p.id = r.user_id
         ORDER BY r.event_at DESC
-        LIMIT ${limit}
+        LIMIT ${overallLimit}
       `);
 
       const events = (rows.rows as Array<Record<string, any>>).map((row) => ({
