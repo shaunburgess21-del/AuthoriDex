@@ -8,8 +8,22 @@ import {
 import { and, count, eq, sql } from "drizzle-orm";
 
 /**
- * Recompute display fields on celebrity_metrics from seeds + real votes.
- * Used after value votes and after inducting a new leaderboard member.
+ * Recompute display fields on celebrity_metrics.
+ *
+ * Approval contract: seed votes are physically stored as rows in `user_votes`
+ * with synthetic user IDs (`seed-system-approval%` — see
+ * server/services/seed-approval-breakdown.ts). The `seed_approval_count` /
+ * `seed_approval_sum` columns on celebrity_metrics are an admin-display
+ * mirror of those rows, NOT a separate signal to be added on top. The single
+ * source of truth for approval display is therefore COUNT(user_votes) /
+ * SUM(user_votes.rating) — adding seed_approval_* would double-count seeds.
+ *
+ * Value-vote contract is different: seed_underrated/overrated/fairly_rated
+ * counts are NOT mirrored into celebrity_value_votes, so they remain
+ * additive against the live aggregate.
+ *
+ * Used after approval-rating writes, value-vote writes, agent votes, and
+ * post-anon-cleanup at signup.
  */
 export async function recomputeCelebrityMetrics(celebrityId: string) {
   try {
@@ -25,6 +39,8 @@ export async function recomputeCelebrityMetrics(celebrityId: string) {
       .where(eq(celebrityMetrics.celebrityId, celebrityId))
       .limit(1);
 
+    // Preserve existing seed columns on the upsert below (admin GET reads
+    // them) but do NOT add them to the approval display math — see header.
     const seedApprovalCount = existingMetrics?.seedApprovalCount || 0;
     const seedApprovalSum = existingMetrics?.seedApprovalSum || 0;
     const seedUnderratedCount = existingMetrics?.seedUnderratedCount || 0;
@@ -39,18 +55,14 @@ export async function recomputeCelebrityMetrics(celebrityId: string) {
       .from(userVotes)
       .where(eq(userVotes.personId, celebrityId));
 
-    const realApprovalCount = Number(approvalAgg?.cnt ?? 0);
-    const realApprovalSum = Number(approvalAgg?.sumRating ?? 0);
+    // user_votes already includes seed rows, so this is the canonical total.
+    const approvalVotesCount = Number(approvalAgg?.cnt ?? 0);
+    const approvalSum = Number(approvalAgg?.sumRating ?? 0);
 
-    const totalApprovalCount = seedApprovalCount + realApprovalCount;
-    const totalApprovalSum = seedApprovalSum + realApprovalSum;
-
-    let approvalVotesCount = totalApprovalCount;
     let approvalAvgRating: number | null = null;
     let approvalPct: number | null = null;
-
-    if (totalApprovalCount > 0) {
-      approvalAvgRating = totalApprovalSum / totalApprovalCount;
+    if (approvalVotesCount > 0) {
+      approvalAvgRating = approvalSum / approvalVotesCount;
       approvalPct = Math.round(((approvalAvgRating - 1) / 4) * 100);
     }
 
