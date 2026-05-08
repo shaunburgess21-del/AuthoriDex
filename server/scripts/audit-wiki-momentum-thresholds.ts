@@ -13,6 +13,17 @@
 // every sampled day has a full trailing-7d denominator). Joins lightly to
 // `trend_snapshots` to grab per-day news context where available.
 //
+// Important gotcha (May 2026): Wikipedia's per-article API returns historical
+// daily pageviews going back years, but our `trend_snapshots` only contains
+// data forward from the moment a person was added to `tracked_people`.
+// Without filtering, this produces phantom "Wiki spiked but news was zero"
+// rows that are really just "we weren't tracking that person yet". The
+// sample is therefore filtered to person-days where
+//   day >= UTC date of the person's first ingest snapshot.
+// This excludes pre-tracking days from both the percentile distributions
+// and the top-20 leaderboards, so news_count nulls in the output reflect a
+// real signal (or a real ingest gap) rather than the audit's own artifact.
+//
 // Usage: npm run -s audit:wiki-momentum-thresholds
 
 import { db } from "../db";
@@ -181,6 +192,20 @@ async function main() {
   console.error(`[audit-wiki] tracked people on main_leaderboard with wikiSlug: ${trackedWithSlug.length}`);
   out.peopleSampled = trackedWithSlug.length;
 
+  // Per-person earliest-tracked date (UTC). Used below to filter out
+  // pre-tracking days from the sample — see header comment.
+  const firstTrackedRows = await db.execute(sql`
+    SELECT person_id,
+           to_char(date_trunc('day', MIN(timestamp) AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS first_day
+    FROM trend_snapshots
+    WHERE snapshot_origin = 'ingest'
+    GROUP BY person_id
+  `);
+  const firstTrackedDayByPerson = new Map<string, string>();
+  for (const row of firstTrackedRows.rows as Array<{ person_id: string; first_day: string }>) {
+    firstTrackedDayByPerson.set(row.person_id, row.first_day);
+  }
+
   // ---- 2. Fetch Wikipedia daily pageviews per person ----
   const perPersonDaily = new Map<string, DailyPoint[]>(); // personId -> daily series
   const fetchFailures: Array<{ personId: string; name: string; slug: string; reason: string }> = [];
@@ -214,6 +239,8 @@ async function main() {
   const personById = new Map(trackedWithSlug.map(p => [p.id, p]));
   const sample: PersonDay[] = [];
   const personMedians = new Map<string, number>(); // personId -> 30d median pageviews24h
+  let preTrackingFiltered = 0;
+  let peopleWithNoFirstTracked = 0;
 
   for (const [personId, series] of perPersonDaily.entries()) {
     const sorted = [...series].sort((a, b) => a.day.localeCompare(b.day));
@@ -224,11 +251,24 @@ async function main() {
     const startSampleIdx = Math.max(TRAILING_WINDOW, sorted.length - SAMPLE_DAYS);
     const personSampledViews: number[] = [];
     const person = personById.get(personId)!;
+    const firstTrackedDay = firstTrackedDayByPerson.get(personId);
+    if (!firstTrackedDay) peopleWithNoFirstTracked++;
 
     for (let dIdx = startSampleIdx; dIdx < sorted.length; dIdx++) {
       const today = sorted[dIdx];
       const trailing = sorted.slice(dIdx - TRAILING_WINDOW, dIdx);
       if (trailing.length < TRAILING_WINDOW) continue;
+
+      // Skip days before the person was added to tracked_people. Wikipedia
+      // serves historical pageviews regardless of when we started tracking,
+      // but `trend_snapshots` (and therefore newsCountSameDay) doesn't, so
+      // including pre-tracking days produces phantom "Wiki spiked, news =
+      // null" rows that look like cross-signal lag but aren't.
+      if (firstTrackedDay && today.day < firstTrackedDay) {
+        preTrackingFiltered++;
+        continue;
+      }
+
       const avg7d = trailing.reduce((s, x) => s + x.views, 0) / trailing.length;
       const ratio = today.views / Math.max(avg7d, 1);
       sample.push({
@@ -243,10 +283,20 @@ async function main() {
       });
       personSampledViews.push(today.views);
     }
-    personMedians.set(personId, median(personSampledViews));
+    if (personSampledViews.length > 0) {
+      personMedians.set(personId, median(personSampledViews));
+    }
   }
-  out.sample = { rows: sample.length, peopleWithUsableSeries: personMedians.size };
-  console.error(`[audit-wiki] sample rows=${sample.length} usable people=${personMedians.size}`);
+  out.sample = {
+    rows: sample.length,
+    peopleWithUsableSeries: personMedians.size,
+    preTrackingDaysFiltered: preTrackingFiltered,
+    peopleWithoutTrackedHistory: peopleWithNoFirstTracked,
+  };
+  console.error(
+    `[audit-wiki] sample rows=${sample.length} usable people=${personMedians.size} ` +
+    `preTrackingFiltered=${preTrackingFiltered}`,
+  );
 
   // ---- 4. Overall ratio distribution ----
   out.ratioPercentiles_overall = describePercentiles(sample.map(s => s.ratio));

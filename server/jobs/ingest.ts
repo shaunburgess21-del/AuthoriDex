@@ -26,6 +26,8 @@ import {
   SCORE_VERSION,
   getNewsAggregationMode,
   isDiagnosticsVerbose,
+  computeMomentumLevel,
+  MOMENTUM_RATIO_CAP,
 } from "../scoring/normalize";
 
 const GDELT_CANDIDATE_COUNT = 25;
@@ -1797,9 +1799,27 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
         searchDeltaValues.push(searchDelta);
         if (searchDeltaStale) searchDeltaStaleCount++;
 
+        // Wiki-momentum denominator (May 2026 — display-only signal). The
+        // Wikipedia provider returns 8 days of daily pageviews ending
+        // yesterday and produces `averageDaily7d` as `sum / 8`, which
+        // includes the 24h numerator in the denominator. The audit script
+        // uses cleaner "trailing 7 days excluding today" semantics, so we
+        // reconstruct that here from the persisted `pageviews7d` sum minus
+        // the 24h count, divided by 7. Falls back to the raw provider 7d
+        // average when the difference is non-positive (e.g. brand-new
+        // article with <2 days of history). This is the value passed as
+        // `wikiAverageDaily7d` to `computeTrendScore` so the dormant
+        // wiki-momentum velocity score uses calibration-aligned semantics.
+        const wikiPageviews7dSum = wiki?.pageviews7d ?? 0;
+        const wikiPageviews24h = wiki?.pageviews24h ?? 0;
+        const wikiAvg7dExcludingToday = wikiPageviews7dSum > wikiPageviews24h
+          ? (wikiPageviews7dSum - wikiPageviews24h) / 7
+          : (wiki?.averageDaily7d ?? 0);
+
         const inputs = {
           wikiPageviews: wiki?.pageviews24h || 0,
           wikiPageviews7dAvg: wiki?.averageDaily7d || 0, // 7-day average for stable mass baseline
+          wikiAverageDaily7d: wikiAvg7dExcludingToday,
           wikiDelta: wiki?.delta || 0,
           newsDelta: newsDelta,
           searchDelta: searchDelta,
@@ -1899,11 +1919,25 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
 
         totalProcessed++;
 
+        // Wiki-momentum diagnostics (May 2026 — display-only). Persisted
+        // alongside the news-momentum fields so the future score-impact
+        // audit can replay candidate weights against history. `ratio` is
+        // capped at MOMENTUM_RATIO_CAP for parity with the velocity-slot
+        // computation; the raw uncapped ratio is recoverable as
+        // `wiki / max(wikiMomentumAvg7d, 1)` from this same blob.
+        const wikiMomentumRatio = wikiAvg7dExcludingToday > 0 && wikiPageviews24h > 0
+          ? Math.min(wikiPageviews24h / Math.max(wikiAvg7dExcludingToday, 1), MOMENTUM_RATIO_CAP)
+          : 0;
+        const wikiMomentumLevel = computeMomentumLevel(wikiMomentumRatio);
+
         const diagnosticsData = {
           v: SNAPSHOT_DIAGNOSTICS_VERSION,
           raw: {
             wiki: wiki?.pageviews24h ?? 0,
             wiki7d: wiki?.averageDaily7d ?? 0,
+            wikiMomentumAvg7d: wikiAvg7dExcludingToday,
+            wikiMomentumRatio,
+            wikiMomentumLevel,
             news: news?.articleCount24h ?? 0,
             // News 7d daily average — denominator for momentum velocity
             // slot. Mirrors the source priority used for the score

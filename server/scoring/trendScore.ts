@@ -7,6 +7,7 @@ import {
   DEFAULT_SOURCE_STATS,
   normalizeSourceValue,
   normalizeNewsMomentum,
+  normalizeWikiMomentum,
 } from "./normalize";
 import {
   normalizeMass,
@@ -64,6 +65,16 @@ export interface TrendInputs {
    * the momentum score is 0 — see `normalizeNewsMomentum`.
    */
   newsAverageDaily7d?: number;
+
+  /**
+   * Trailing 7-day daily-average Wikipedia pageviews for this entity.
+   * Combined with `wikiPageviews` (24h) to compute the wiki-momentum
+   * velocity sub-score (May 2026 — display-only addition, dormant in
+   * `velocityScore`). When omitted the function falls back to
+   * `wikiPageviews7dAvg` so existing callers keep working without
+   * change. See `normalizeWikiMomentum` for the cap/compression curve.
+   */
+  wikiAverageDaily7d?: number;
 
   /** @deprecated Unused after simplification. Kept for caller compatibility. */
   prevNewsCount?: number;
@@ -154,6 +165,19 @@ export interface TrendScoreResult {
      * acceleration slice alongside stock (wiki) and volume (news count).
      */
     momentum: number;
+    /**
+     * Wiki-acceleration velocity sub-score (0..100). Derived from the
+     * 24h-vs-7d wiki pageviews ratio — see `normalizeWikiMomentum`.
+     * May 2026 (display-only addition).
+     *
+     * IMPORTANT: this slot is computed and persisted on every snapshot
+     * but is NOT consumed by `velocityScore` in this PR — `weights` does
+     * not include a `wikiMomentum` key, and the velocity composite at
+     * lines below sums only `search/news/wiki/momentum`. Promotion to a
+     * weighted slot is gated on a follow-up `audit-wiki-momentum-score-
+     * impact.ts` script — see header note in `normalize.ts`.
+     */
+    wikiMomentum: number;
     weights: { search: number; news: number; wiki: number; momentum: number };
   };
 }
@@ -239,14 +263,33 @@ export function computeTrendScore(
     inputs.newsAverageDaily7d ?? 0,
   );
 
+  // Wiki-momentum velocity slot (May 2026 — display-only). Computed and
+  // persisted on every snapshot so the future score-impact audit can replay
+  // candidate weights against history, but DELIBERATELY NOT included in the
+  // `velocityScore` sum below. The `wiki7d` input here is the same trailing
+  // 7-day daily average that drives `velocity.wiki`'s 60/40 blend; if a
+  // caller passes an explicit `wikiAverageDaily7d` (e.g. an
+  // excluding-today aggregate from ingest history) we prefer it. See
+  // `normalize.ts` header note for the promotion criterion.
+  const wikiMomentumDenom = inputs.wikiAverageDaily7d ?? wiki7d;
+  const wikiMomentumNormalized = normalizeWikiMomentum(
+    wiki24h,
+    wikiMomentumDenom,
+  );
+
   const wikiVelocityScore = inputs.activePlatforms.wiki
     ? wikiNormalized * 100
     : 0;
   const newsVelocityScore = newsNormalized * 100;
   const searchVelocityScore = searchNormalized * 100;
   const momentumVelocityScore = momentumNormalized * 100;
+  const wikiMomentumVelocityScore = inputs.activePlatforms.wiki
+    ? wikiMomentumNormalized * 100
+    : 0;
 
   const velocityWeights = PLATFORM_WEIGHTS.velocity;
+  // NOTE: `wikiMomentumVelocityScore` is intentionally NOT summed here.
+  // It's a dormant signal until calibrated — see normalize.ts header.
   const velocityScore = (
     (wikiVelocityScore * velocityWeights.wiki)
     + (newsVelocityScore * velocityWeights.news)
@@ -353,6 +396,7 @@ export function computeTrendScore(
       news: Math.round(newsVelocityScore * 100) / 100,
       wiki: Math.round(wikiVelocityScore * 100) / 100,
       momentum: Math.round(momentumVelocityScore * 100) / 100,
+      wikiMomentum: Math.round(wikiMomentumVelocityScore * 100) / 100,
       weights: {
         search: Math.round(velocityWeights.search * 1000) / 1000,
         news: Math.round(velocityWeights.news * 1000) / 1000,

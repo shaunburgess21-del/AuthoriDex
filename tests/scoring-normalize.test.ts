@@ -7,6 +7,8 @@ import {
   winsorize,
   normalizeSourceValue,
   normalizeNewsMomentum,
+  normalizeWikiMomentum,
+  computeMomentumLevel,
   MOMENTUM_RATIO_CAP,
   PLATFORM_WEIGHTS,
   MASS_ALLOCATION,
@@ -175,4 +177,96 @@ test("PLATFORM_WEIGHTS.velocity.search is permanently zero (Fix A)", () => {
 
 test("MASS_ALLOCATION + VELOCITY_ALLOCATION equals 1.0", () => {
   assert.ok(Math.abs((MASS_ALLOCATION + VELOCITY_ALLOCATION) - 1.0) < 1e-9);
+});
+
+// ─── Wiki-momentum normalization (May 2026 — display-only) ─────────────────
+// Mirrors the news-momentum behavioural contract. Same math under the
+// hood for now, but kept as a separate function so future Wiki-specific
+// curve calibration (the deferred score-weight integration) can edit
+// only this function without touching news.
+test("normalizeWikiMomentum returns 0 when 24h or 7d-avg is missing/zero", () => {
+  assert.equal(normalizeWikiMomentum(0, 5000), 0);
+  assert.equal(normalizeWikiMomentum(-1, 5000), 0);
+  assert.equal(normalizeWikiMomentum(50_000, 0), 0);
+  assert.equal(normalizeWikiMomentum(50_000, -1), 0);
+});
+
+test("normalizeWikiMomentum is monotonic and clamped to [0, 1]", () => {
+  const cooling = normalizeWikiMomentum(2_000, 10_000); // 0.2× → cooling
+  const steady = normalizeWikiMomentum(10_000, 10_000); // 1.0× → steady-state
+  const accel = normalizeWikiMomentum(50_000, 10_000); // 5.0× → accelerating
+  const burst = normalizeWikiMomentum(100_000, 10_000); // 10× → cap
+  const extreme = normalizeWikiMomentum(1_000_000, 10_000); // beyond cap
+
+  assert.ok(cooling >= 0 && cooling <= 1);
+  assert.ok(steady >= 0 && steady <= 1);
+  assert.ok(accel >= 0 && accel <= 1);
+  assert.ok(burst >= 0 && burst <= 1);
+  assert.ok(extreme >= 0 && extreme <= 1);
+  assert.ok(cooling < steady);
+  assert.ok(steady < accel);
+  assert.ok(accel < burst);
+  assert.ok(Math.abs(burst - 1.0) < 1e-9);
+  assert.ok(Math.abs(extreme - 1.0) < 1e-9);
+});
+
+test("normalizeWikiMomentum: steady-state (1×) lands ~0.29 (parity with news)", () => {
+  // Same log curve, same anchor — for now. This test will need updating
+  // if Wiki-specific calibration changes the cap or compression shape.
+  const score = normalizeWikiMomentum(20_000, 20_000);
+  assert.ok(
+    score > 0.25 && score < 0.35,
+    `expected ratio=1 → ~0.29, got ${score}`,
+  );
+});
+
+test("normalizeWikiMomentum: 5× breakout (Tim-Cook-on-keynote shape) lands in upper band", () => {
+  // Audit captured Tim Cook on Apr-20 at ratio 33.7 (capped to 10×); a
+  // 5× ratio is the "clearly elevated" shape we want this band to cover.
+  const score = normalizeWikiMomentum(50_000, 10_000);
+  assert.ok(
+    score > 0.70 && score < 0.80,
+    `expected ratio=5 → ~0.75, got ${score}`,
+  );
+});
+
+test("normalizeWikiMomentum saturates the same way as normalizeNewsMomentum", () => {
+  // Curve parity check — important for users reading both cards side by
+  // side. If the curves diverge in future calibration, this assertion is
+  // the canary that should be updated explicitly rather than drift.
+  for (const ratio of [0.1, 0.5, 1.0, 2.0, 5.0, 10.0]) {
+    const wiki = normalizeWikiMomentum(ratio * 1000, 1000);
+    const news = normalizeNewsMomentum(ratio * 1000, 1000);
+    assert.ok(
+      Math.abs(wiki - news) < 1e-9,
+      `wiki and news momentum curves should match; ratio=${ratio} → wiki=${wiki}, news=${news}`,
+    );
+  }
+});
+
+// ─── computeMomentumLevel: shared ratio-band → Low/Medium/High mapping ────
+test("computeMomentumLevel: ratio bands match documented thresholds", () => {
+  assert.equal(computeMomentumLevel(0), "none");
+  assert.equal(computeMomentumLevel(-1), "none");
+  assert.equal(computeMomentumLevel(0.01), "low");
+  assert.equal(computeMomentumLevel(0.99), "low");
+  assert.equal(computeMomentumLevel(1.0), "medium");
+  assert.equal(computeMomentumLevel(1.99), "medium");
+  assert.equal(computeMomentumLevel(2.0), "high");
+  assert.equal(computeMomentumLevel(33.7), "high"); // Tim Cook Apr-20
+});
+
+// ─── Display-only scoping safety rail (May 2026) ──────────────────────────
+test("PLATFORM_WEIGHTS.velocity does NOT include wikiMomentum (display-only)", () => {
+  // Wiki Momentum is computed and persisted on every snapshot but is
+  // dormant in the score until ≥14 days of live ratios let us calibrate
+  // a Wiki-specific cap/compression curve. If a wikiMomentum slot
+  // appears here without an explicit calibration PR, this test is the
+  // canary that should fail loudly.
+  const weights = PLATFORM_WEIGHTS.velocity as Record<string, number>;
+  assert.equal(weights.wikiMomentum, undefined,
+    "wikiMomentum must not be a weighted slot until the score-impact audit lands");
+  // Existing slots still sum to 1.
+  const total = weights.wiki + weights.news + weights.search + weights.momentum;
+  assert.ok(Math.abs(total - 1.0) < 1e-9, `velocity weights should sum to 1, got ${total}`);
 });

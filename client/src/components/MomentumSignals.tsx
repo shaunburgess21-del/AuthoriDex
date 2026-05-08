@@ -59,6 +59,21 @@ interface MomentumData {
       deltaPct: number;       // 24h change in *score* vs prior tick
       level: MomentumLevel;
     };
+    /**
+     * Wiki-momentum velocity slot (May 2026 — display-only). Mirrors the
+     * news-momentum block above but on Wikipedia daily pageviews. Computed
+     * and persisted on every snapshot, surfaced here, but NOT consumed by
+     * the engine's velocity score in this PR — see normalize.ts header for
+     * the deferred score-weight integration.
+     */
+    wikiMomentum?: {
+      score: number;          // 0..100 sub-score (mirrors velocityComponents.wikiMomentum)
+      ratio: number;          // wikiPageviews24h / max(wiki7d-avg, 1), capped at 10×
+      averageDaily7d: number; // trailing 7d daily Wikipedia pageview baseline
+      pageviews24h: number;   // today's pageviews, same value the Wikipedia Pulse card shows
+      deltaPct: number;       // 24h change in *score* vs prior tick
+      level: MomentumLevel;
+    };
     drivers: {
       status: "active" | "stable";
       breakdown: { search: number; news: number; wiki: number; momentum?: number } | null;
@@ -85,9 +100,9 @@ function formatNum(n: number): string {
 
 // Fallback thresholds used only when the server response doesn't carry `level`
 // (e.g. older cached responses or the first load before stats warm up).
-function fallbackLevel(source: "momentum" | "news" | "wiki", value: number): MomentumLevel {
+function fallbackLevel(source: "momentum" | "wiki-momentum" | "news" | "wiki", value: number): MomentumLevel {
   if (!Number.isFinite(value) || value <= 0) return "none";
-  if (source === "momentum") {
+  if (source === "momentum" || source === "wiki-momentum") {
     // Kept in sync with computeMomentumLevel in server/routes.ts.
     // value is the displayed 24h/7d ratio (capped at 10× by the API,
     // see MOMENTUM_RATIO_CAP in normalize.ts). Bands intentionally
@@ -95,6 +110,9 @@ function fallbackLevel(source: "momentum" | "news" | "wiki", value: number): Mom
     //   low    < 1.0  → below this person's typical day
     //   medium < 2.0  → typical or modestly above
     //   high  ≥ 2.0   → clearly elevated (≥ 2× typical)
+    // News and Wiki share thresholds — confirmed by the May 2026 audit
+    // (`audit-wiki-momentum-thresholds-output.json`,
+    // `singleThresholdFairAcrossTiers: true`).
     if (value < 1.0) return "low";
     if (value < 2.0) return "medium";
     return "high";
@@ -116,6 +134,9 @@ const LEVEL_SCALE_COPY =
 
 const MOMENTUM_LEVEL_COPY =
   "Level reflects how today's news volume compares to this person's own 7-day daily average — Low = below typical, Medium = around or modestly above typical, High = at least 2× their typical day.";
+
+const WIKI_MOMENTUM_LEVEL_COPY =
+  "Level reflects how today's Wikipedia pageviews compare to this person's own 7-day daily average — Low = below typical, Medium = around or modestly above typical, High = at least 2× their typical day.";
 
 // Each level gets a distinct dot SHAPE on top of its colour so the indicator is
 // still unambiguous for users who can't rely on red/amber/green alone:
@@ -412,6 +433,39 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
       )
     : null;
 
+  // ── Wiki Momentum (May 2026 — display-only mirror of News Momentum) ──
+  // Same warm-up / baseline / no-recent-pageviews state machine as the
+  // news momentum card above. Older API responses may omit `wikiMomentum`
+  // entirely (deployed before this PR or stale React Query cache); the
+  // optional chains below ensure the card still renders cleanly in that
+  // case as a quiet/empty state.
+  const wikiMomentumLevel: MomentumLevel = signals.wikiMomentum?.level
+    ?? fallbackLevel("wiki-momentum", signals.wikiMomentum?.ratio ?? 0);
+  const wikiMomentumTrend: TrendWord = signals.wikiMomentum
+    ? (signals.wikiMomentum.deltaPct > 5 ? "rising" : signals.wikiMomentum.deltaPct < -5 ? "falling" : "steady")
+    : "steady";
+  const wikiMomentumScore = signals.wikiMomentum?.score ?? 0;
+  const wikiMomentumAvg7d = signals.wikiMomentum?.averageDaily7d ?? 0;
+  const wikiPageviewsToday = signals.wikiMomentum?.pageviews24h ?? signals.wiki.views ?? 0;
+  const hasWikiToday = wikiPageviewsToday > 0;
+  const hasWikiMomentumBaseline = wikiMomentumAvg7d > 0;
+  const showWikiBaseline = hasWikiMomentumBaseline;
+
+  const wikiMomentumValue = showWikiBaseline ? formatNum(wikiMomentumAvg7d) : "—";
+  const wikiMomentumUnit = showWikiBaseline
+    ? "pageviews/day (7-day avg)"
+    : !hasWikiMomentumBaseline && (hasWikiToday || wikiMomentumScore > 0)
+      ? "establishing baseline"
+      : "no recent pageviews";
+
+  const wikiMomentumFooter = !showWikiBaseline && !hasWikiMomentumBaseline && (hasWikiToday || wikiMomentumScore > 0)
+    ? (
+        <p className="text-[10px] text-muted-foreground/60 pt-0.5" data-testid="text-wiki-momentum-warmup">
+          Need 7 days of history to compare against
+        </p>
+      )
+    : null;
+
   return (
     <div id="momentum-signals" className="mt-8 space-y-5" data-testid="section-momentum-signals">
       <div className="flex flex-col gap-1">
@@ -430,7 +484,30 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
         </div>
       )}
 
+      {/*
+       * Card layout (May 2026 — synthesis-first):
+       *   Row 1 (full-width): Today's Take — synthesis across all 4 signals
+       *   Row 2 (volume):     News Activity   |  Wikipedia Pulse
+       *   Row 3 (acceleration): News Momentum |  Wiki Momentum
+       *
+       * Pairing by signal-type (volume vs acceleration) rather than by
+       * source (news vs wiki) makes the symmetry between the two cards on
+       * each row visually obvious — same y-axis = same kind of question
+       * being asked of the data. Take goes on top so the high-level read
+       * frames the detail cards underneath.
+       */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="sm:col-span-2">
+          <MomentumTakeCard
+            sources={[
+              { name: "News", level: newsLevel, delta: signals.news.deltaPct },
+              { name: "News Momentum", level: momentumLevel, delta: signals.momentum?.deltaPct ?? 0 },
+              { name: "Wikipedia", level: wikiLevel, delta: signals.wiki.deltaPct },
+              { name: "Wiki Momentum", level: wikiMomentumLevel, delta: signals.wikiMomentum?.deltaPct ?? 0 },
+            ]}
+          />
+        </div>
+
         <SignalCard
           testId="card-news-activity"
           icon={<Newspaper className="h-3.5 w-3.5 text-muted-foreground" />}
@@ -457,28 +534,6 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
               </p>
             ) : null
           }
-        />
-
-        <SignalCard
-          testId="card-news-momentum"
-          icon={<Activity className="h-3.5 w-3.5 text-muted-foreground" />}
-          iconWrapClass="bg-muted"
-          title="News Momentum"
-          level={momentumLevel}
-          value={momentumValue}
-          unit={momentumUnit}
-          deltaPct={signals.momentum?.deltaPct ?? 0}
-          trendWord={momentumTrend}
-          tooltip={
-            <TouchTooltip
-              side="top"
-              contentClassName="max-w-[260px] text-xs normal-case tracking-normal"
-              content={`This person's typical daily news volume averaged over the last 7 days. ${MOMENTUM_LEVEL_COPY}`}
-            >
-              <Info className="h-3 w-3 text-muted-foreground/50 cursor-help" data-testid="icon-momentum-tooltip" />
-            </TouchTooltip>
-          }
-          footer={momentumFooter}
         />
 
         <SignalCard
@@ -514,12 +569,48 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
           ) : undefined}
         />
 
-        <MomentumTakeCard
-          sources={[
-            { name: "News", level: newsLevel, delta: signals.news.deltaPct },
-            { name: "Momentum", level: momentumLevel, delta: signals.momentum?.deltaPct ?? 0 },
-            { name: "Wikipedia", level: wikiLevel, delta: signals.wiki.deltaPct },
-          ]}
+        <SignalCard
+          testId="card-news-momentum"
+          icon={<Activity className="h-3.5 w-3.5 text-muted-foreground" />}
+          iconWrapClass="bg-muted"
+          title="News Momentum"
+          level={momentumLevel}
+          value={momentumValue}
+          unit={momentumUnit}
+          deltaPct={signals.momentum?.deltaPct ?? 0}
+          trendWord={momentumTrend}
+          tooltip={
+            <TouchTooltip
+              side="top"
+              contentClassName="max-w-[260px] text-xs normal-case tracking-normal"
+              content={`This person's typical daily news volume averaged over the last 7 days. ${MOMENTUM_LEVEL_COPY}`}
+            >
+              <Info className="h-3 w-3 text-muted-foreground/50 cursor-help" data-testid="icon-momentum-tooltip" />
+            </TouchTooltip>
+          }
+          footer={momentumFooter}
+        />
+
+        <SignalCard
+          testId="card-wiki-momentum"
+          icon={<Activity className="h-3.5 w-3.5 text-muted-foreground" />}
+          iconWrapClass="bg-muted"
+          title="Wiki Momentum"
+          level={wikiMomentumLevel}
+          value={wikiMomentumValue}
+          unit={wikiMomentumUnit}
+          deltaPct={signals.wikiMomentum?.deltaPct ?? 0}
+          trendWord={wikiMomentumTrend}
+          tooltip={
+            <TouchTooltip
+              side="top"
+              contentClassName="max-w-[260px] text-xs normal-case tracking-normal"
+              content={`This person's typical daily Wikipedia pageviews averaged over the last 7 days. ${WIKI_MOMENTUM_LEVEL_COPY}`}
+            >
+              <Info className="h-3 w-3 text-muted-foreground/50 cursor-help" data-testid="icon-wiki-momentum-tooltip" />
+            </TouchTooltip>
+          }
+          footer={wikiMomentumFooter}
         />
       </div>
 
@@ -607,12 +698,20 @@ const STATE_STYLES: Record<MomentumState, {
   },
 };
 
+// Source naming (May 2026): renamed `"Momentum"` → `"News Momentum"` and
+// added `"Wiki Momentum"` so the four sources read symmetrically. The
+// volume sources (News, Wikipedia) are paired with their per-person
+// acceleration counterparts (News Momentum, Wiki Momentum). Today's Take
+// templates and chip labels both use these strings directly.
 interface SourceSnapshot {
-  name: "News" | "Momentum" | "Wikipedia";
+  name: "News" | "News Momentum" | "Wikipedia" | "Wiki Momentum";
   level: MomentumLevel;
   delta: number;
 }
 
+// With four sources, the multi-source thresholds shift slightly so a
+// single high signal doesn't get drowned out by the others, but a
+// genuinely quiet day still classifies as Quiet rather than "Steady".
 function classifyMomentumState(sources: SourceSnapshot[]): MomentumState {
   const levels = sources.map(s => s.level);
   const deltas = sources.map(s => s.delta).filter(d => Number.isFinite(d));
@@ -625,48 +724,53 @@ function classifyMomentumState(sources: SourceSnapshot[]): MomentumState {
   const hasStrongRise = deltas.some(d => d >= 20);
   const hasStrongFall = deltas.some(d => d <= -20);
 
-  // Peaking wins even with some softening — current High levels are the
+  // Peaking wins even with some softening — multiple High levels are the
   // dominant story, regardless of 24h delta direction.
   if (highCount >= 2) return "peaking";
 
-  // Mixed: genuinely bidirectional movement. A source surging >=20% while
-  // another drops >=20% can't be honestly compressed into "rising" or
+  // Mixed: genuinely bidirectional movement. A source surging ≥20% while
+  // another drops ≥20% can't be honestly compressed into "rising" or
   // "cooling" — the take sentence will name both moves explicitly.
   if (hasStrongRise && hasStrongFall) return "mixed";
 
-  // Bulk directional movement across multiple sources.
+  // Bulk directional movement across multiple sources. With four sources,
+  // ≥2 rising/falling is still a meaningful directional read.
   if (risingCount >= 2 && !hasStrongFall) return "rising";
   if (fallingCount >= 2 && !hasStrongRise) return "cooling";
 
-  // Single dramatic move (>=20%) with no opposing pressure — newsworthy on
+  // Single dramatic move (≥20%) with no opposing pressure — newsworthy on
   // its own, even from a single source.
   if (hasStrongRise && fallingCount === 0) return "rising";
   if (hasStrongFall && risingCount === 0) return "cooling";
 
-  // Quiet needs genuine low activity across the board — one strong source
-  // flips the read to steady so we can surface it in the take copy instead.
-  if (lowCount >= 2 && highCount === 0 && risingCount === 0) return "quiet";
+  // Quiet bumped from ≥2 to ≥3 with the 4-source addition — otherwise a
+  // person with low news+wiki on a day where their momentum signals are
+  // simply "no comparable baseline" (level=none, common for newly-tracked
+  // people) would tip into Quiet too eagerly.
+  if (lowCount >= 3 && highCount === 0 && risingCount === 0) return "quiet";
   return "steady";
 }
 
 const LEVEL_RANK: Record<MomentumLevel, number> = { none: 0, low: 1, medium: 2, high: 3 };
 
-// "Wikipedia" is a proper noun so it stays capitalised mid-sentence;
-// "news" reads naturally in lowercase. "Momentum" is treated as a label
-// rather than a noun ("news momentum surging" reads better than
-// "momentum surging") — see momentumPhrase below for context-specific
-// rendering.
+// Mid-sentence rendering. "Wikipedia" stays capitalised (proper noun);
+// "news" reads naturally in lowercase. The momentum sources render as
+// "news momentum" / "wiki momentum" — labels rather than nouns, so they
+// flow into prose like "news momentum surging 47%" without sounding
+// stilted.
 function nameInSentence(name: SourceSnapshot["name"]): string {
   if (name === "Wikipedia") return "Wikipedia";
-  if (name === "Momentum") return "news momentum";
+  if (name === "News Momentum") return "news momentum";
+  if (name === "Wiki Momentum") return "wiki momentum";
   return "news";
 }
 
-// Sentence-start version of the source name (capitalised). "Momentum"
-// renders as "News momentum" so it reads naturally as a sentence
-// subject ("News momentum surging 47% in the last 24h.").
+// Sentence-start (capitalised) version. "News Momentum" / "Wiki Momentum"
+// render as "News momentum" / "Wiki momentum" so they read naturally as
+// sentence subjects ("News momentum surging 47% in the last 24h.").
 function nameAtSentenceStart(name: SourceSnapshot["name"]): string {
-  if (name === "Momentum") return "News momentum";
+  if (name === "News Momentum") return "News momentum";
+  if (name === "Wiki Momentum") return "Wiki momentum";
   return name;
 }
 
@@ -688,7 +792,8 @@ function composeTake(sources: SourceSnapshot[], state: MomentumState): string {
       // capitalised when it's the leading clause of the base phrase.
       const labels = highNames.map(nameAtSentenceStart);
       let base: string;
-      if (labels.length === 3) base = "Peak attention across every signal";
+      if (labels.length >= 4) base = "Peak attention across every signal";
+      else if (labels.length === 3) base = `Strong ${labels[0]}, ${labels[1]}, and ${labels[2]}`;
       else if (labels.length === 2) base = `Strong ${labels[0]} and ${labels[1]}`;
       else base = `Peak ${labels[0]}`;
 
@@ -745,7 +850,7 @@ function composeTake(sources: SourceSnapshot[], state: MomentumState): string {
       return "Attention easing across multiple signals.";
     }
     case "quiet": {
-      return "Quiet across news, momentum, and Wikipedia today.";
+      return "Quiet across news, Wikipedia, and momentum signals today.";
     }
     case "steady":
     default: {
@@ -755,11 +860,14 @@ function composeTake(sources: SourceSnapshot[], state: MomentumState): string {
         return `Steady overall — ${nameInSentence(biggestMover.name)} ${dir} ${pct}%.`;
       }
       if (strongest && strongest.level === "high") {
-        // "news momentum attention" reads awkwardly because momentum is
+        // "X momentum attention" reads awkwardly because momentum is
         // already a derivative measure — drop the "attention" suffix
-        // for that case so the sentence parses cleanly.
-        if (strongest.name === "Momentum") {
+        // for those cases so the sentence parses cleanly.
+        if (strongest.name === "News Momentum") {
           return "Sustained news momentum — no major shifts today.";
+        }
+        if (strongest.name === "Wiki Momentum") {
+          return "Sustained wiki momentum — no major shifts today.";
         }
         return `Sustained ${nameInSentence(strongest.name)} attention — no major shifts today.`;
       }
@@ -822,7 +930,16 @@ function MomentumTakeCard({ sources }: { sources: SourceSnapshot[] }) {
             {s.label}
           </span>
         </div>
-        <p className="text-[13px] text-foreground/80 leading-snug" data-testid="text-momentum-take">
+        {/*
+         * Cap line length at ~60ch even when the card is full-width
+         * (sm:col-span-2 in the synthesis-first layout). Without this,
+         * short takes like "Strong News and Wikipedia — News surging
+         * 1891%." stretch across a wide desktop card and read awkwardly.
+         */}
+        <p
+          className="text-[13px] text-foreground/80 leading-snug max-w-[60ch]"
+          data-testid="text-momentum-take"
+        >
           {take}
         </p>
       </CardContent>

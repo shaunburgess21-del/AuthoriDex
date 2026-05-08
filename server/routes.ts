@@ -2547,6 +2547,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // (Apr 2026 — PR2 Fix X). Older snapshots without `velocityComponents.momentum`
       // gracefully coalesce to 0 in the math below; the field is optional in
       // the response so existing API consumers don't break.
+      //
+      // NOTE (May 2026 — Wiki Momentum): wiki-momentum is deliberately NOT
+      // included in this breakdown. The breakdown apportions the velocity
+      // composite by the *weighted* contribution of each slot, and
+      // `velocity.wikiMomentum` carries weight 0 in this PR (display-only).
+      // Adding it as a named slice would either (a) inflate the breakdown
+      // sum beyond the actual `velocityScore` or (b) require rebalancing
+      // the displayed percentages to fit a 5th unweighted slice — both
+      // misleading. Once the score-impact audit promotes wikiMomentum to a
+      // real weight, extend `breakdownPct`, `driverBreakdown`, and the
+      // remainder/quietSources logic in lockstep.
       let driverBreakdown: { search: number; news: number; wiki: number; momentum?: number } | null = null;
       let breakdownPct: { search: number; news: number; wiki: number; momentum?: number } | null = null;
       let driverSourceCount = 4;
@@ -2786,6 +2797,81 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // computeMomentumLevel above for the rationale and band table.
       const momentumLevel = computeMomentumLevel(momentumRatio);
 
+      // ── Wiki Momentum (May 2026 — display-only signal) ────────────────────
+      // Mirrors the news-momentum API block above. The persisted snapshot
+      // already carries `diagnostics.raw.wikiMomentumAvg7d` /
+      // `wikiMomentumRatio` / `wikiMomentumLevel` and
+      // `velocityComponents.wikiMomentum`, but we recompute the ratio from
+      // a snapshot-history aggregate the same way the news API does — this
+      // way the API and the underlying score converge on the same baseline
+      // even when the persisted snapshot is up to an hour stale.
+      const persistedWikiMomentumScore = Number(diag?.velocityComponents?.wikiMomentum ?? 0);
+      const persistedWikiMomentumAvg7d = Number(diag?.raw?.wikiMomentumAvg7d ?? 0);
+      const wiki24h = Number(latest.wikiPageviews ?? 0);
+
+      // Trailing 7-day daily average from snapshot history, using the
+      // same "yesterday-and-7-days-back, excluding today" semantics the
+      // calibration audit used. Uses MAX per UTC day so multiple hourly
+      // snapshots on the same day collapse cleanly (Wikipedia's API only
+      // updates daily so values are stable within a day).
+      let historyWiki7dAvg = 0;
+      let historyWiki7dSamples = 0;
+      try {
+        const wiki7dRow = await db.execute(sql`
+          SELECT AVG(daily_max)::float AS avg7d, COUNT(*)::int AS samples
+          FROM (
+            SELECT date_trunc('day', timestamp AT TIME ZONE 'UTC')::date AS day,
+                   MAX(wiki_pageviews)::float AS daily_max
+            FROM trend_snapshots
+            WHERE person_id = ${person.id}
+              AND timestamp >= NOW() - INTERVAL '8 days'
+              AND timestamp <  date_trunc('day', NOW() AT TIME ZONE 'UTC')
+              AND snapshot_origin = 'ingest'
+              AND wiki_pageviews IS NOT NULL
+            GROUP BY day
+            ORDER BY day DESC
+            LIMIT 7
+          ) sub
+        `);
+        const row = wiki7dRow.rows?.[0] as { avg7d?: number; samples?: number } | undefined;
+        historyWiki7dAvg = Number(row?.avg7d ?? 0) || 0;
+        historyWiki7dSamples = Number(row?.samples ?? 0) || 0;
+      } catch (e) {
+        console.warn(`[momentum API] wiki7d history query failed for ${person.id}: ${(e as Error).message}`);
+      }
+
+      const WIKI_HISTORY_MIN_DAYS = 4; // ≥4 distinct days of wiki snapshots
+      const wiki7dAvgForDisplay = historyWiki7dSamples >= WIKI_HISTORY_MIN_DAYS
+        ? historyWiki7dAvg
+        : persistedWikiMomentumAvg7d;
+      const wiki7dAvgSource: "history" | "persisted" =
+        historyWiki7dSamples >= WIKI_HISTORY_MIN_DAYS ? "history" : "persisted";
+
+      const wikiMomentumDenom = Math.max(wiki7dAvgForDisplay, 1);
+      const wikiMomentumRatio = wiki7dAvgForDisplay > 0 && wiki24h > 0
+        ? Math.min(wiki24h / wikiMomentumDenom, 10) // cap matches MOMENTUM_RATIO_CAP
+        : 0;
+
+      // 24h delta vs the prior tick's persisted wikiMomentum score. Pre-
+      // existing snapshots without `velocityComponents.wikiMomentum`
+      // (anything before this PR ships) report deltaPct=0 rather than
+      // fabricating a 0 baseline — same null-handling as the news
+      // momentum block above.
+      const prevWikiMomentumRaw = prevDiag?.velocityComponents?.wikiMomentum;
+      const prevWikiMomentumScore = typeof prevWikiMomentumRaw === "number" ? prevWikiMomentumRaw : null;
+      const rawWikiMomentumDeltaPct = prevWikiMomentumScore !== null && prevWikiMomentumScore > 0
+        ? Math.round(((persistedWikiMomentumScore - prevWikiMomentumScore) / prevWikiMomentumScore) * 100)
+        : 0;
+      const wikiMomentumDeltaPct = Math.abs(rawWikiMomentumDeltaPct) <= DELTA_DEAD_ZONE_PCT ? 0 : rawWikiMomentumDeltaPct;
+
+      const recomputedWikiMomentumScore = wikiMomentumRatio > 0
+        ? Math.round((Math.log(1 + wikiMomentumRatio) / Math.log(11)) * 100)
+        : 0;
+      const wikiMomentumScoreForDisplay = wiki7dAvgSource === "history"
+        ? recomputedWikiMomentumScore
+        : persistedWikiMomentumScore;
+      const wikiMomentumLevel = computeMomentumLevel(wikiMomentumRatio);
+
       res.json({
         asOf: latest.timestamp.toISOString(),
         ageMinutes,
@@ -2866,6 +2952,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
             // 24h change in the *score* (not the ratio) vs the prior tick.
             deltaPct: momentumDeltaPct,
             level: momentumLevel,
+          },
+          // Wiki Momentum — display-only mirror of the news momentum block.
+          // Computed but NOT consumed by the engine's `velocityScore` (see
+          // `normalize.ts` header for the deferred score-weight integration
+          // and the promotion criterion).
+          wikiMomentum: {
+            score: Math.round(wikiMomentumScoreForDisplay * 10) / 10,
+            ratio: Math.round(wikiMomentumRatio * 100) / 100,
+            averageDaily7d: Math.round(wiki7dAvgForDisplay * 10) / 10,
+            pageviews24h: wiki24h,
+            deltaPct: wikiMomentumDeltaPct,
+            level: wikiMomentumLevel,
           },
           drivers: {
             status: driversStatus,

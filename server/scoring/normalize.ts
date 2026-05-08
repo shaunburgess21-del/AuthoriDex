@@ -103,6 +103,58 @@ export function normalizeNewsMomentum(
   return Math.log1p(ratio) / MOMENTUM_LOG_DENOM;
 }
 
+// ============================================================================
+// WIKI MOMENTUM NORMALIZATION (May 2026 — display-only, dormant in score)
+// ============================================================================
+// Parallel to normalizeNewsMomentum: per-person acceleration on Wikipedia
+// daily pageviews (pageviews24h vs trailing-7d daily average). Same math as
+// the news version for now (cap=10, log1p compression) so the display
+// thresholds calibrated against the audit (Low <1.0, Medium 1.0–2.0, High
+// ≥2.0) align with how the score-equivalent number behaves.
+//
+// IMPORTANT: this function is computed and persisted on every snapshot but
+// is NOT consumed by `velocityScore` in this PR. Promotion criterion: after
+// ≥14 days of persisted ratios, run `audit-wiki-momentum-score-impact.ts`
+// to re-derive the right `MOMENTUM_RATIO_CAP` for Wiki and replay
+// historical snapshots at candidate weights (0.05, 0.10, 0.15) trimming
+// from `velocity.wiki`. Only then should this function be wired into the
+// velocity composite.
+//
+// A separate function (rather than a generic `normalizeMomentum`) is
+// deliberate: future curve tuning for Wiki specifically will edit only
+// this function, and the same template will spawn `normalizeTrendsMomentum`
+// when SerpApi data lands.
+export function normalizeWikiMomentum(
+  pageviews24h: number,
+  averageDaily7d: number,
+): number {
+  if (!Number.isFinite(pageviews24h) || pageviews24h <= 0) return 0;
+  if (!Number.isFinite(averageDaily7d) || averageDaily7d <= 0) return 0;
+  const denom = Math.max(averageDaily7d, MOMENTUM_AVG_FLOOR);
+  const ratio = Math.min(pageviews24h / denom, MOMENTUM_RATIO_CAP);
+  if (ratio <= 0) return 0;
+  return Math.log1p(ratio) / MOMENTUM_LOG_DENOM;
+}
+
+// User-facing Low/Medium/High pill for momentum-style ratio signals
+// (News Momentum, Wiki Momentum, future Trends Momentum). Source-agnostic
+// because the audit confirmed the same 1.0/2.0 thresholds work fairly
+// across wiki tiers, and it would be confusing if news and wiki used
+// different cutoffs for what reads as "the same kind of signal" in the UI.
+//
+// `routes.ts` historically had its own private copy of this function for
+// the news endpoint. New consumers (ingest persistence, future Trends
+// Momentum) should import this canonical version. The routes.ts copy is
+// left in place to keep the news PR's blast radius tight; a future tidy
+// can collapse them.
+export type MomentumLevel = "none" | "low" | "medium" | "high";
+export function computeMomentumLevel(ratio: number): MomentumLevel {
+  if (!Number.isFinite(ratio) || ratio <= 0) return "none";
+  if (ratio < 1.0) return "low";
+  if (ratio < 2.0) return "medium";
+  return "high";
+}
+
 // Score composition: 40% mass, 60% velocity (velocity-heavy for "trending" feel).
 export const MASS_ALLOCATION = 0.40;
 export const VELOCITY_ALLOCATION = 0.60;

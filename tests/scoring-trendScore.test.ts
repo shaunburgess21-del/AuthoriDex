@@ -149,6 +149,100 @@ test("computeTrendScore: momentum classification returns a known string", () => 
   assert.ok(["Breakout", "Sustained", "Cooling", "Stable"].includes(out.momentum));
 });
 
+// ─── Wiki Momentum (May 2026 — display-only) ─────────────────────────────
+test("computeTrendScore: velocityComponents.wikiMomentum is present and finite", () => {
+  const out = computeTrendScore(baseInputs());
+  assert.equal(typeof out.velocityComponents.wikiMomentum, "number");
+  assert.ok(Number.isFinite(out.velocityComponents.wikiMomentum));
+  assert.ok(out.velocityComponents.wikiMomentum >= 0 && out.velocityComponents.wikiMomentum <= 100);
+});
+
+test("computeTrendScore: wikiMomentum slot — high 24h vs low 7d-avg → high sub-score", () => {
+  // Wiki spike shape (Tim Cook on Apple keynote: 24h pageviews 5× the
+  // trailing-7d daily average). Should hit the same upper band as the
+  // analogous news-momentum case since the curves are identical for now.
+  const out = computeTrendScore(baseInputs({
+    wikiPageviews: 100_000,
+    wikiPageviews7dAvg: 20_000,
+    wikiAverageDaily7d: 20_000,
+  }));
+  assert.ok(
+    out.velocityComponents.wikiMomentum >= 70,
+    `5× wiki breakout should yield wikiMomentum ≥ 70, got ${out.velocityComponents.wikiMomentum}`,
+  );
+});
+
+test("computeTrendScore: wikiMomentum slot — falls back to wikiPageviews7dAvg when wikiAverageDaily7d omitted", () => {
+  // Existing callers (audit-trend-engine, quick-score) don't pass an
+  // explicit wikiAverageDaily7d. The score function should fall back to
+  // wikiPageviews7dAvg so they keep working unchanged.
+  const out = computeTrendScore(baseInputs({
+    wikiPageviews: 100_000,
+    wikiPageviews7dAvg: 20_000,
+    // wikiAverageDaily7d intentionally omitted
+  }));
+  assert.ok(
+    out.velocityComponents.wikiMomentum >= 70,
+    `fallback denom should still produce 5× ratio, got ${out.velocityComponents.wikiMomentum}`,
+  );
+});
+
+test("computeTrendScore: wikiMomentum is DORMANT in the score (display-only)", () => {
+  // Critical safety rail for the May 2026 display-only scoping decision.
+  // Two inputs differing only in wiki-momentum potential — same
+  // wikiPageviews7dAvg (drives velocity.wiki and mass.wiki the same way),
+  // but one has a 24h spike that lights up wikiMomentum and the other
+  // doesn't. The fameIndex MUST be identical because wikiMomentum is
+  // not a weighted velocity slot until calibration lands.
+  const baseline = baseInputs({
+    wikiPageviews: 20_000,
+    wikiPageviews7dAvg: 20_000,
+    wikiAverageDaily7d: 20_000,
+    newsCount: 0,         // disable news-momentum so we isolate wiki
+    newsAverageDaily7d: 0,
+  });
+  const spike = baseInputs({
+    wikiPageviews: 20_000,        // same as baseline (same velocity.wiki / mass.wiki)
+    wikiPageviews7dAvg: 20_000,
+    wikiAverageDaily7d: 4_000,    // 5× ratio → wikiMomentum lights up
+    newsCount: 0,
+    newsAverageDaily7d: 0,
+  });
+
+  const baselineOut = computeTrendScore(baseline);
+  const spikeOut = computeTrendScore(spike);
+
+  // The wikiMomentum component differs between the two…
+  assert.ok(
+    spikeOut.velocityComponents.wikiMomentum > baselineOut.velocityComponents.wikiMomentum,
+    `spike should have higher wikiMomentum component, got baseline=${baselineOut.velocityComponents.wikiMomentum} spike=${spikeOut.velocityComponents.wikiMomentum}`,
+  );
+
+  // …but the velocity score, fame index, and trend score must be
+  // identical (within rounding) because wikiMomentum is dormant.
+  assert.equal(
+    spikeOut.velocityScore, baselineOut.velocityScore,
+    "velocityScore must NOT change when only wikiMomentum changes (display-only)",
+  );
+  assert.equal(
+    spikeOut.fameIndex, baselineOut.fameIndex,
+    "fameIndex must NOT change when only wikiMomentum changes (display-only)",
+  );
+});
+
+test("computeTrendScore: velocityComponents.weights does NOT include wikiMomentum", () => {
+  // Companion to the normalize.test.ts canary. The weights blob is
+  // surfaced in admin diagnostics and read by audit-trend-engine.ts; if
+  // a wikiMomentum key sneaks in here, the score-impact audit can't
+  // honestly replay weight=0 history.
+  const out = computeTrendScore(baseInputs());
+  const weights = out.velocityComponents.weights as Record<string, number>;
+  assert.equal(
+    weights.wikiMomentum, undefined,
+    "velocityComponents.weights must not include wikiMomentum until the score-impact audit lands",
+  );
+});
+
 // ---- Simplification invariants -------------------------------------------
 //
 // The legacy stabilization pipeline (rate limiting, catch-up, recalibration,
