@@ -61,6 +61,7 @@ export const trackedPeople = pgTable("tracked_people", {
   tiktokHandle: text("tiktok_handle"),
   searchQueryOverride: text("search_query_override"),
   newsQueryWidened: text("news_query_widened"),
+  googleTrendsTopicId: text("google_trends_topic_id"),
   status: text("status").notNull().default("main_leaderboard"),
 }, (table) => ({
   statusIdx: index("tracked_people_status_idx").on(table.status),
@@ -498,6 +499,7 @@ export const inductionCandidates = pgTable("induction_candidates", {
   youtubeId: text("youtube_id"),
   spotifyId: text("spotify_id"),
   searchQueryOverride: text("search_query_override"),
+  googleTrendsTopicId: text("google_trends_topic_id"),
   inductionStatus: text("induction_status").notNull().default("Queue"),
   isActive: boolean("is_active").notNull().default(true),
 });

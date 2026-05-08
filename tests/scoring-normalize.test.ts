@@ -8,6 +8,7 @@ import {
   normalizeSourceValue,
   normalizeNewsMomentum,
   normalizeWikiMomentum,
+  normalizeTrendsMomentum,
   computeMomentumLevel,
   MOMENTUM_RATIO_CAP,
   PLATFORM_WEIGHTS,
@@ -258,15 +259,64 @@ test("computeMomentumLevel: ratio bands match documented thresholds", () => {
 
 // ─── Display-only scoping safety rail (May 2026) ──────────────────────────
 test("PLATFORM_WEIGHTS.velocity does NOT include wikiMomentum (display-only)", () => {
-  // Wiki Momentum is computed and persisted on every snapshot but is
-  // dormant in the score until ≥14 days of live ratios let us calibrate
-  // a Wiki-specific cap/compression curve. If a wikiMomentum slot
-  // appears here without an explicit calibration PR, this test is the
-  // canary that should fail loudly.
   const weights = PLATFORM_WEIGHTS.velocity as Record<string, number>;
   assert.equal(weights.wikiMomentum, undefined,
     "wikiMomentum must not be a weighted slot until the score-impact audit lands");
-  // Existing slots still sum to 1.
   const total = weights.wiki + weights.news + weights.search + weights.momentum;
   assert.ok(Math.abs(total - 1.0) < 1e-9, `velocity weights should sum to 1, got ${total}`);
+});
+
+// ─── normalizeTrendsMomentum ─────────────────────────────────────────────
+// Google Trends values are 0-100 (relative interest), but the ratio
+// (today / 7d-avg) is self-normalizing so the same compression applies.
+
+test("normalizeTrendsMomentum returns 0 when interest or avg is missing/zero", () => {
+  assert.equal(normalizeTrendsMomentum(0, 50), 0);
+  assert.equal(normalizeTrendsMomentum(-1, 50), 0);
+  assert.equal(normalizeTrendsMomentum(50, 0), 0);
+  assert.equal(normalizeTrendsMomentum(50, -1), 0);
+});
+
+test("normalizeTrendsMomentum is monotonic and clamped to [0, 1]", () => {
+  const cooling = normalizeTrendsMomentum(10, 50);   // 0.2×
+  const steady = normalizeTrendsMomentum(50, 50);    // 1.0×
+  const accel = normalizeTrendsMomentum(100, 20);    // 5.0×
+  const burst = normalizeTrendsMomentum(100, 10);    // 10× cap
+
+  assert.ok(cooling >= 0 && cooling <= 1);
+  assert.ok(steady >= 0 && steady <= 1);
+  assert.ok(accel >= 0 && accel <= 1);
+  assert.ok(burst >= 0 && burst <= 1);
+  assert.ok(cooling < steady);
+  assert.ok(steady < accel);
+  assert.ok(accel <= burst);
+});
+
+test("normalizeTrendsMomentum: steady-state (1×) matches wiki/news ~0.29", () => {
+  const score = normalizeTrendsMomentum(50, 50);
+  assert.ok(
+    score > 0.25 && score < 0.35,
+    `expected ratio=1 → ~0.29, got ${score}`,
+  );
+});
+
+test("normalizeTrendsMomentum curve parity with wiki/news momentum", () => {
+  for (const ratio of [0.1, 0.5, 1.0, 2.0, 5.0, 10.0]) {
+    const trends = normalizeTrendsMomentum(ratio * 50, 50);
+    const news = normalizeNewsMomentum(ratio * 50, 50);
+    const wiki = normalizeWikiMomentum(ratio * 50, 50);
+    assert.ok(
+      Math.abs(trends - news) < 1e-9 && Math.abs(trends - wiki) < 1e-9,
+      `all momentum curves should match; ratio=${ratio} → trends=${trends}, news=${news}, wiki=${wiki}`,
+    );
+  }
+});
+
+// ─── Display-only scoping safety rail: Trends (May 2026) ─────────────────
+test("PLATFORM_WEIGHTS.velocity does NOT include trendsMomentum (display-only)", () => {
+  const weights = PLATFORM_WEIGHTS.velocity as Record<string, number>;
+  assert.equal(weights.trendsMomentum, undefined,
+    "trendsMomentum must not be a weighted slot until the score-impact audit lands");
+  assert.equal(weights.trends, undefined,
+    "trends must not be a weighted velocity slot until the score-impact audit lands");
 });

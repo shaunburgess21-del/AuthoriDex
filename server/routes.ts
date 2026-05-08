@@ -51,6 +51,7 @@ import {
 import { getLastFullRefreshAt } from "./jobs/live-tick";
 import { getLastRunMeta } from "./jobs/ingest";
 import { getMediastackBudgetSummary, getMediastackRefreshIntervalMinutes, probeMediastackLive } from "./providers/mediastack";
+import { fetchTrendsTopicSuggestions, isSerpApiTrendsConfigured } from "./providers/serpapi-trends";
 import pLimit from "p-limit";
 import { buildOpeningScores } from "./native-markets/openingScores";
 import { generateWeeklyUpDown, generateWeeklyJackpot, generateWeeklyH2H, generateWeeklyGainer, getWeekContext, ensureWeeklyMarketsForCurrentWeek } from "./jobs/market-generator";
@@ -2872,6 +2873,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         : persistedWikiMomentumScore;
       const wikiMomentumLevel = computeMomentumLevel(wikiMomentumRatio);
 
+      // ── Google Trends Momentum (May 2026 — display-only, dormant) ───────
+      // Read Trends diagnostics from the persisted snapshot. These are
+      // populated by ingest.ts when the 24h Trends gate fires.
+      const trendsInterest = Number(diag?.raw?.trendsInterest ?? 0);
+      const trendsAvg7dVal = Number(diag?.raw?.trendsAvg7d ?? 0);
+      const trendsAvg90dVal = Number(diag?.raw?.trendsMass90d ?? 0);
+      const trendsMomentumRatio = Number(diag?.raw?.trendsMomentumRatio ?? 0);
+      const trendsMomentumLevel = computeMomentumLevel(trendsMomentumRatio);
+
+      const persistedTrendsMomentumScore = Number(diag?.velocityComponents?.trendsMomentum ?? 0);
+      const prevTrendsMomentumRaw = prevDiag?.velocityComponents?.trendsMomentum;
+      const prevTrendsMomentumScore = typeof prevTrendsMomentumRaw === "number" ? prevTrendsMomentumRaw : null;
+      const rawTrendsDeltaPct = prevTrendsMomentumScore !== null && prevTrendsMomentumScore > 0
+        ? Math.round(((persistedTrendsMomentumScore - prevTrendsMomentumScore) / prevTrendsMomentumScore) * 100)
+        : 0;
+      const trendsDeltaPct = Math.abs(rawTrendsDeltaPct) <= DELTA_DEAD_ZONE_PCT ? 0 : rawTrendsDeltaPct;
+
       res.json({
         asOf: latest.timestamp.toISOString(),
         ageMinutes,
@@ -2964,6 +2982,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
             pageviews24h: wiki24h,
             deltaPct: wikiMomentumDeltaPct,
             level: wikiMomentumLevel,
+          },
+          // Google Trends — display-only, dormant in score (May 2026 PR1).
+          // Populated once Trends data starts flowing via the 24h ingest gate.
+          trends: {
+            interest: trendsInterest,
+            avg7d: Math.round(trendsAvg7dVal * 10) / 10,
+            avg90d: Math.round(trendsAvg90dVal * 10) / 10,
+            momentumRatio: Math.round(trendsMomentumRatio * 100) / 100,
+            momentumLevel: trendsMomentumLevel,
+            deltaPct: trendsDeltaPct,
+            topicId: person.googleTrendsTopicId ?? null,
           },
           drivers: {
             status: driversStatus,
@@ -10670,7 +10699,7 @@ Only return the JSON object.`;
   app.patch("/api/admin/celebrities/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
-      const { name, category, status, wikiSlug, avatar, searchQueryOverride } = req.body;
+      const { name, category, status, wikiSlug, avatar, searchQueryOverride, googleTrendsTopicId } = req.body;
       const adminId = req.userId!;
 
       const [existing] = await db.select().from(trackedPeople).where(eq(trackedPeople.id, id));
@@ -10690,6 +10719,7 @@ Only return the JSON object.`;
       if (wikiSlug !== undefined) updates.wikiSlug = wikiSlug;
       if (avatar !== undefined) updates.avatar = avatar;
       if (searchQueryOverride !== undefined) updates.searchQueryOverride = searchQueryOverride || null;
+      if (googleTrendsTopicId !== undefined) updates.googleTrendsTopicId = googleTrendsTopicId || null;
 
       const trendingUpdates: Record<string, unknown> = {};
       if (name !== undefined) trendingUpdates.name = name;
@@ -10721,6 +10751,36 @@ Only return the JSON object.`;
     } catch (error: any) {
       console.error("Error updating celebrity:", error.message);
       res.status(500).json({ error: "Failed to update celebrity" });
+    }
+  });
+
+  // Google Trends Topic ID suggestions — admin picks the correct entity
+  app.post("/api/admin/trends-topic-suggestions", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      if (!isSerpApiTrendsConfigured()) {
+        return res.status(503).json({ error: "SERPAPI_API_KEY not configured" });
+      }
+      const { personId, query } = req.body;
+      let searchQuery = query as string | undefined;
+
+      if (!searchQuery && personId) {
+        const [person] = await db.select({ name: trackedPeople.name })
+          .from(trackedPeople)
+          .where(eq(trackedPeople.id, personId))
+          .limit(1);
+        if (!person) return res.status(404).json({ error: "Person not found" });
+        searchQuery = person.name;
+      }
+
+      if (!searchQuery) {
+        return res.status(400).json({ error: "Either personId or query is required" });
+      }
+
+      const suggestions = await fetchTrendsTopicSuggestions(searchQuery);
+      res.json({ query: searchQuery, suggestions });
+    } catch (error: any) {
+      console.error("Error fetching Trends topic suggestions:", error.message);
+      res.status(500).json({ error: "Failed to fetch topic suggestions" });
     }
   });
 

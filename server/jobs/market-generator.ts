@@ -58,6 +58,7 @@ export async function generateWeeklyUpDown(): Promise<number> {
       tiktokHandle: null as string | null,
       searchQueryOverride: null as string | null,
       newsQueryWidened: null as string | null,
+      googleTrendsTopicId: null as string | null,
       status: "main_leaderboard",
     }));
     log(`[MarketGenerator:UpDown] Fallback: ${people.length} people from trendingPeople`);
@@ -703,6 +704,7 @@ export async function generateWeeklyGainer(): Promise<{ created: number; updated
       tiktokHandle: null as string | null,
       searchQueryOverride: null as string | null,
       newsQueryWidened: null as string | null,
+      googleTrendsTopicId: null as string | null,
       status: "main_leaderboard",
     }));
     usedFallback = true;

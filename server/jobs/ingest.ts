@@ -29,6 +29,13 @@ import {
   computeMomentumLevel,
   MOMENTUM_RATIO_CAP,
 } from "../scoring/normalize";
+import {
+  fetchGoogleTrendsBatch,
+  isSerpApiTrendsConfigured,
+  getSerpApiTrendsRunStats,
+  resetSerpApiTrendsRunStats,
+  type TrendsBatchResult,
+} from "../providers/serpapi-trends";
 
 const GDELT_CANDIDATE_COUNT = 25;
 
@@ -1491,6 +1498,60 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
       console.warn("[Canary] Failed to evaluate canaries:", e);
     }
 
+    // ══════════════════════════════════════════════════════════════════════════
+    // GOOGLE TRENDS — daily cadence gate + batched fetch (May 2026)
+    // ══════════════════════════════════════════════════════════════════════════
+    // Google Trends data only updates once per day. We gate the fetch behind a
+    // 24h check: if any tracked person's most recent snapshot already has
+    // `diagnostics.raw.trendsInterest` within the last 24h, skip the API calls.
+    // When the gate opens, we batch people into groups of 5 (SerpApi limit)
+    // and call `fetchGoogleTrendsBatch` for each chunk.
+    const TRENDS_FETCH_INTERVAL_MS = 24 * 60 * 60 * 1000;
+    const trendsDataMap = new Map<string, TrendsBatchResult>();
+
+    if (isSerpApiTrendsConfigured() && !isBackfill) {
+      let shouldFetchTrends = true;
+      try {
+        const lastTrendsRow = await db.execute(
+          sql`SELECT MAX(timestamp) as last_ts FROM trend_snapshots
+              WHERE snapshot_origin = 'ingest'
+              AND diagnostics::jsonb->'raw'->'trendsInterest' IS NOT NULL
+              AND diagnostics::jsonb->'raw'->>'trendsInterest' != 'null'`
+        );
+        const lastTs = (lastTrendsRow.rows[0] as any)?.last_ts;
+        if (lastTs) {
+          const elapsed = Date.now() - new Date(lastTs).getTime();
+          if (elapsed < TRENDS_FETCH_INTERVAL_MS) {
+            shouldFetchTrends = false;
+            console.log(`[Ingest] Google Trends: skipping — last fetch ${Math.round(elapsed / 60000)}min ago (gate: 24h)`);
+          }
+        }
+      } catch (e) {
+        console.warn("[Ingest] Google Trends gate check failed, will fetch:", (e as Error).message);
+      }
+
+      if (shouldFetchTrends) {
+        resetSerpApiTrendsRunStats();
+        const trendsStart = Date.now();
+        try {
+          const batchInput = people.map(p => ({
+            personId: p.id,
+            name: p.name,
+            googleTrendsTopicId: p.googleTrendsTopicId,
+          }));
+          const results = await fetchGoogleTrendsBatch(batchInput, 500);
+          for (const r of results) trendsDataMap.set(r.personId, r);
+          const trendsStats = getSerpApiTrendsRunStats();
+          console.log(`[Ingest] Google Trends: ${results.length}/${people.length} people, ${trendsStats.callsAttempted} API calls, ${trendsStats.finalFailures} failures, ${Date.now() - trendsStart}ms`);
+        } catch (e) {
+          console.error("[Ingest] Google Trends batch fetch failed:", (e as Error).message);
+        }
+        sourceTimings.trends = Date.now() - trendsStart;
+      }
+    } else if (!isSerpApiTrendsConfigured()) {
+      console.log("[Ingest] Google Trends: SERPAPI_API_KEY not set — skipping");
+    }
+
     for (const person of people) {
       try {
         const PER_PERSON_TIMEOUT_MS = 30_000;
@@ -1500,6 +1561,7 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
         const wiki = wikiData.get(person.id);
         const news = newsData.get(person.id);
         const serper = serperData.get(person.id);
+        const trends = trendsDataMap.get(person.id);
         const mostRecent = mostRecentMap.get(person.id);
         // NOTE (Jan 2026): X API disabled for trend scoring - kept for Platform Insights
         // const xMetrics = person.xHandle 
@@ -1820,6 +1882,8 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           wikiPageviews: wiki?.pageviews24h || 0,
           wikiPageviews7dAvg: wiki?.averageDaily7d || 0, // 7-day average for stable mass baseline
           wikiAverageDaily7d: wikiAvg7dExcludingToday,
+          trendsInterest: trends?.latestInterest ?? 0,
+          trendsAvg7d: trends?.avg7d ?? 0,
           wikiDelta: wiki?.delta || 0,
           newsDelta: newsDelta,
           searchDelta: searchDelta,
@@ -1930,6 +1994,15 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           : 0;
         const wikiMomentumLevel = computeMomentumLevel(wikiMomentumRatio);
 
+        // Google Trends momentum diagnostics (May 2026 — display-only, dormant)
+        const trendsInterestLatest = trends?.latestInterest ?? 0;
+        const trendsAvg7d = trends?.avg7d ?? 0;
+        const trendsAvg90d = trends?.avg90d ?? 0;
+        const trendsMomentumRatio = trendsAvg7d > 0 && trendsInterestLatest > 0
+          ? Math.min(trendsInterestLatest / Math.max(trendsAvg7d, 1), MOMENTUM_RATIO_CAP)
+          : 0;
+        const trendsMomentumLevel = computeMomentumLevel(trendsMomentumRatio);
+
         const diagnosticsData = {
           v: SNAPSHOT_DIAGNOSTICS_VERSION,
           raw: {
@@ -1938,6 +2011,15 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
             wikiMomentumAvg7d: wikiAvg7dExcludingToday,
             wikiMomentumRatio,
             wikiMomentumLevel,
+            ...(trends ? {
+              trendsInterest: trendsInterestLatest,
+              trendsAvg7d,
+              trendsMass90d: trendsAvg90d,
+              trendsMomentumRatio,
+              trendsMomentumLevel,
+              trendsTopicId: person.googleTrendsTopicId ?? null,
+              trendsUsedFallbackName: !person.googleTrendsTopicId,
+            } : {}),
             news: news?.articleCount24h ?? 0,
             // News 7d daily average — denominator for momentum velocity
             // slot. Mirrors the source priority used for the score

@@ -137,6 +137,7 @@ export interface Celebrity {
   youtubeId: string | null;
   spotifyId: string | null;
   searchQueryOverride: string | null;
+  googleTrendsTopicId: string | null;
   displayOrder: number;
 }
 
@@ -151,6 +152,7 @@ export const EMPTY_CELEBRITY_FORM = {
   youtubeId: "",
   spotifyId: "",
   searchQueryOverride: "",
+  googleTrendsTopicId: "",
 };
 
 export type SeedRatingKey = "1" | "2" | "3" | "4" | "5";

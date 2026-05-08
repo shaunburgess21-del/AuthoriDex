@@ -72,6 +72,9 @@ export async function approveInductionCandidate(
     if (isEmptyish(tp.searchQueryOverride) && !isEmptyish(candidate.searchQueryOverride)) {
       backfillUpdates.searchQueryOverride = candidate.searchQueryOverride;
     }
+    if (isEmptyish(tp.googleTrendsTopicId) && !isEmptyish(candidate.googleTrendsTopicId)) {
+      backfillUpdates.googleTrendsTopicId = candidate.googleTrendsTopicId;
+    }
 
     if (Object.keys(backfillUpdates).length > 0) {
       await executor
@@ -96,6 +99,7 @@ export async function approveInductionCandidate(
         youtubeId: candidate.youtubeId,
         spotifyId: candidate.spotifyId,
         searchQueryOverride: candidate.searchQueryOverride,
+        googleTrendsTopicId: candidate.googleTrendsTopicId,
         displayOrder: (maxOrder[0]?.maxOrder || 0) + 1,
         status: "main_leaderboard",
       })

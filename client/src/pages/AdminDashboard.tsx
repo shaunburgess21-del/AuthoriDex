@@ -2815,6 +2815,7 @@ export default function AdminDashboard() {
       youtubeId: celebrity.youtubeId || "",
       spotifyId: celebrity.spotifyId || "",
       searchQueryOverride: celebrity.searchQueryOverride || "",
+      googleTrendsTopicId: celebrity.googleTrendsTopicId || "",
     });
     setShowCelebrityModal(true);
     fetchWithAuth(`/api/admin/celebrities/${celebrity.id}/seed-approval-breakdown`)
@@ -7882,6 +7883,66 @@ export default function AdminDashboard() {
               />
               <p className="text-xs text-muted-foreground">
                 Custom search query for Serper. Use this to disambiguate common names.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="celeb-trends-topic-id">Google Trends Topic ID (optional)</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="celeb-trends-topic-id"
+                  value={celebrityForm.googleTrendsTopicId}
+                  onChange={(e) => setCelebrityForm({ ...celebrityForm, googleTrendsTopicId: e.target.value })}
+                  placeholder="e.g., /m/0cqt90"
+                  data-testid="input-celebrity-trends-topic"
+                  className="flex-1"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  data-testid="btn-trends-lookup"
+                  onClick={async () => {
+                    const name = celebrityForm.name || editingCelebrity?.name;
+                    if (!name) return;
+                    try {
+                      const res = await fetchWithAuth("/api/admin/trends-topic-suggestions", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ query: name }),
+                      });
+                      if (!res.ok) {
+                        toast.error("Lookup failed", { description: `HTTP ${res.status}` });
+                        return;
+                      }
+                      const data = await res.json();
+                      if (data.suggestions?.length > 0) {
+                        const personSuggestion = data.suggestions.find(
+                          (s: any) => s.type?.toLowerCase().includes("person") ||
+                            s.type?.toLowerCase().includes("politician") ||
+                            s.type?.toLowerCase().includes("athlete") ||
+                            s.type?.toLowerCase().includes("singer") ||
+                            s.type?.toLowerCase().includes("actor")
+                        ) || data.suggestions[0];
+                        setCelebrityForm(prev => ({ ...prev, googleTrendsTopicId: personSuggestion.topicId }));
+                        toast.success("Topic ID found", {
+                          description: `${personSuggestion.title} (${personSuggestion.type}) — ${personSuggestion.topicId}`,
+                        });
+                      } else {
+                        toast.info("No suggestions", { description: "Google Trends has no entity match for this name." });
+                      }
+                    } catch (err) {
+                      toast.error("Lookup error", { description: (err as Error).message });
+                    }
+                  }}
+                >
+                  Lookup
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Unique Google Trends entity ID for disambiguation. Click Lookup to auto-detect.
+                {!celebrityForm.googleTrendsTopicId && (
+                  <span className="text-yellow-600 ml-1">⚠ Without a Topic ID, Trends data uses name search (less accurate).</span>
+                )}
               </p>
             </div>
             {!editingCelebrity && (

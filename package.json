@@ -21,6 +21,7 @@
     "audit:handles": "tsx --env-file=.env server/scripts/audit-social-handles.ts",
     "audit:wiki-momentum-thresholds": "tsx --env-file=.env server/scripts/audit-wiki-momentum-thresholds.ts",
     "audit:wiki-news-gap": "tsx --env-file=.env server/scripts/audit-wiki-news-gap.ts",
+    "backfill:trends-topic-ids": "tsx --env-file=.env server/scripts/backfill-trends-topic-ids.ts",
     "apply:handle-verdicts": "tsx --env-file=.env server/scripts/apply-handle-verdicts.ts",
     "db:ensure-induction-cols": "tsx --env-file=.env server/scripts/ensure-induction-candidate-columns.ts",
     "db:ensure": "tsx --env-file=.env server/scripts/run-ensure-schema.ts",

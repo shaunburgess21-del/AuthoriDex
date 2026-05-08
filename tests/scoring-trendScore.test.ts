@@ -243,6 +243,66 @@ test("computeTrendScore: velocityComponents.weights does NOT include wikiMomentu
   );
 });
 
+// ─── trendsMomentum slot (May 2026 — Google Trends, display-only, dormant) ──
+
+test("computeTrendScore: velocityComponents.trendsMomentum is present and finite", () => {
+  const out = computeTrendScore(baseInputs({ trendsInterest: 80, trendsAvg7d: 40 }));
+  assert.ok(
+    typeof out.velocityComponents.trendsMomentum === "number" &&
+    Number.isFinite(out.velocityComponents.trendsMomentum),
+    "trendsMomentum must be a finite number in velocityComponents",
+  );
+  assert.ok(out.velocityComponents.trendsMomentum > 0,
+    "trendsMomentum should be > 0 when interest=80, avg7d=40");
+});
+
+test("computeTrendScore: trendsMomentum is DORMANT in the score (display-only)", () => {
+  const baseline = baseInputs({
+    trendsInterest: 0,
+    trendsAvg7d: 0,
+  });
+  const spike = baseInputs({
+    trendsInterest: 100,
+    trendsAvg7d: 10,   // 10× ratio → huge trendsMomentum
+  });
+
+  const baselineOut = computeTrendScore(baseline);
+  const spikeOut = computeTrendScore(spike);
+
+  assert.ok(
+    spikeOut.velocityComponents.trendsMomentum > baselineOut.velocityComponents.trendsMomentum,
+    `spike should have higher trendsMomentum, got baseline=${baselineOut.velocityComponents.trendsMomentum} spike=${spikeOut.velocityComponents.trendsMomentum}`,
+  );
+
+  assert.equal(
+    spikeOut.velocityScore, baselineOut.velocityScore,
+    "velocityScore must NOT change when only trendsMomentum changes (display-only)",
+  );
+  assert.equal(
+    spikeOut.fameIndex, baselineOut.fameIndex,
+    "fameIndex must NOT change when only trendsMomentum changes (display-only)",
+  );
+});
+
+test("computeTrendScore: velocityComponents.weights does NOT include trendsMomentum", () => {
+  const out = computeTrendScore(baseInputs());
+  const weights = out.velocityComponents.weights as Record<string, number>;
+  assert.equal(
+    weights.trendsMomentum, undefined,
+    "velocityComponents.weights must not include trendsMomentum until the score-impact audit lands",
+  );
+  assert.equal(
+    weights.trends, undefined,
+    "velocityComponents.weights must not include trends until the score-impact audit lands",
+  );
+});
+
+test("computeTrendScore: trendsMomentum is 0 when inputs omit Trends data", () => {
+  const out = computeTrendScore(baseInputs());
+  assert.equal(out.velocityComponents.trendsMomentum, 0,
+    "trendsMomentum should be 0 when no Trends inputs are provided");
+});
+
 // ---- Simplification invariants -------------------------------------------
 //
 // The legacy stabilization pipeline (rate limiting, catch-up, recalibration,

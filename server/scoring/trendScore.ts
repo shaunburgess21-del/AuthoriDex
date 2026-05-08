@@ -8,6 +8,7 @@ import {
   normalizeSourceValue,
   normalizeNewsMomentum,
   normalizeWikiMomentum,
+  normalizeTrendsMomentum,
 } from "./normalize";
 import {
   normalizeMass,
@@ -75,6 +76,15 @@ export interface TrendInputs {
    * change. See `normalizeWikiMomentum` for the cap/compression curve.
    */
   wikiAverageDaily7d?: number;
+
+  /**
+   * Google Trends latest-day interest value (0-100, SerpApi TIMESERIES).
+   * Combined with `trendsAvg7d` to compute the trends-momentum velocity
+   * sub-score (May 2026 — display-only, dormant in `velocityScore`).
+   */
+  trendsInterest?: number;
+  /** Trailing 7-day average daily Google Trends interest (0-100). */
+  trendsAvg7d?: number;
 
   /** @deprecated Unused after simplification. Kept for caller compatibility. */
   prevNewsCount?: number;
@@ -178,6 +188,12 @@ export interface TrendScoreResult {
      * impact.ts` script — see header note in `normalize.ts`.
      */
     wikiMomentum: number;
+    /**
+     * Google Trends acceleration velocity sub-score (0..100). Derived from
+     * latest-day interest vs trailing-7d mean — see `normalizeTrendsMomentum`.
+     * May 2026 (display-only addition, dormant in `velocityScore`).
+     */
+    trendsMomentum: number;
     weights: { search: number; news: number; wiki: number; momentum: number };
   };
 }
@@ -277,6 +293,13 @@ export function computeTrendScore(
     wikiMomentumDenom,
   );
 
+  // Trends-momentum velocity slot (May 2026 — display-only, same pattern as
+  // wikiMomentum). Computed from Google Trends 0-100 interest values.
+  const trendsMomentumNormalized = normalizeTrendsMomentum(
+    inputs.trendsInterest ?? 0,
+    inputs.trendsAvg7d ?? 0,
+  );
+
   const wikiVelocityScore = inputs.activePlatforms.wiki
     ? wikiNormalized * 100
     : 0;
@@ -286,6 +309,7 @@ export function computeTrendScore(
   const wikiMomentumVelocityScore = inputs.activePlatforms.wiki
     ? wikiMomentumNormalized * 100
     : 0;
+  const trendsMomentumVelocityScore = trendsMomentumNormalized * 100;
 
   const velocityWeights = PLATFORM_WEIGHTS.velocity;
   // NOTE: `wikiMomentumVelocityScore` is intentionally NOT summed here.
@@ -397,6 +421,7 @@ export function computeTrendScore(
       wiki: Math.round(wikiVelocityScore * 100) / 100,
       momentum: Math.round(momentumVelocityScore * 100) / 100,
       wikiMomentum: Math.round(wikiMomentumVelocityScore * 100) / 100,
+      trendsMomentum: Math.round(trendsMomentumVelocityScore * 100) / 100,
       weights: {
         search: Math.round(velocityWeights.search * 1000) / 1000,
         news: Math.round(velocityWeights.news * 1000) / 1000,

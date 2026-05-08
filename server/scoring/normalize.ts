@@ -136,8 +136,32 @@ export function normalizeWikiMomentum(
   return Math.log1p(ratio) / MOMENTUM_LOG_DENOM;
 }
 
+// ============================================================================
+// TRENDS MOMENTUM NORMALIZATION (May 2026 — display-only, dormant in score)
+// ============================================================================
+// Per-person acceleration on Google Trends interest (latest-day interest vs
+// trailing-7d daily average). Same math as News and Wiki Momentum (cap=10,
+// log1p compression). Google Trends values are 0-100 relative interest, not
+// absolute counts, but the ratio (today / 7d-avg) is self-normalizing so
+// the same compression curve applies.
+//
+// IMPORTANT: computed and persisted on every snapshot but NOT consumed by
+// `velocityScore` in this PR. Promotion after ≥14 days of persisted ratios
+// via `audit-trends-score-impact.ts`.
+export function normalizeTrendsMomentum(
+  latestInterest: number,
+  avg7dInterest: number,
+): number {
+  if (!Number.isFinite(latestInterest) || latestInterest <= 0) return 0;
+  if (!Number.isFinite(avg7dInterest) || avg7dInterest <= 0) return 0;
+  const denom = Math.max(avg7dInterest, MOMENTUM_AVG_FLOOR);
+  const ratio = Math.min(latestInterest / denom, MOMENTUM_RATIO_CAP);
+  if (ratio <= 0) return 0;
+  return Math.log1p(ratio) / MOMENTUM_LOG_DENOM;
+}
+
 // User-facing Low/Medium/High pill for momentum-style ratio signals
-// (News Momentum, Wiki Momentum, future Trends Momentum). Source-agnostic
+// (News Momentum, Wiki Momentum, Trends Momentum). Source-agnostic
 // because the audit confirmed the same 1.0/2.0 thresholds work fairly
 // across wiki tiers, and it would be confusing if news and wiki used
 // different cutoffs for what reads as "the same kind of signal" in the UI.
