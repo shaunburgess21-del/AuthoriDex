@@ -18,6 +18,8 @@ import {
 import { toast } from "sonner";
 import { CountdownDescription } from "@/components/CountdownDescription";
 import { isUnauthorizedApiError, signInToVoteToastOptions, signInToVoteTitle } from "@/lib/signInToVoteToast";
+import { navigateToLogin } from "@/lib/authReturn";
+import { isBudgetExhaustedVoteError } from "@/lib/voteErrors";
 import { SnapDismissContext } from "@/components/snap-scroll/VoteSnapScrollView";
 
 function parseOpinionPollCardError(err: unknown): { message: string; retryAfter?: number } {
@@ -246,6 +248,17 @@ export function OpinionPollCard({
       } catch (err) {
         if (isUnauthorizedApiError(err)) {
           toast(signInToVoteTitle, signInToVoteToastOptions(() => setLocation("/login")));
+        } else if (isBudgetExhaustedVoteError(err)) {
+          navigateToLogin(setLocation, {
+            mode: "signup",
+            reason: "vote_limit_reached",
+            resumeAction: {
+              surfaceType: "opinion_poll",
+              targetId: poll.id,
+              cardRoute: window.location.pathname,
+              pendingVote: { optionId },
+            },
+          });
         } else {
           const parsed = parseOpinionPollCardError(err);
           toast.error("Could not record vote", { description: parsed.retryAfter ? <CountdownDescription seconds={parsed.retryAfter} text={parsed.message} /> : parsed.message });
@@ -276,6 +289,17 @@ export function OpinionPollCard({
     } catch (err) {
       if (isUnauthorizedApiError(err)) {
         toast(signInToVoteTitle, signInToVoteToastOptions(() => setLocation("/login")));
+      } else if (isBudgetExhaustedVoteError(err)) {
+        navigateToLogin(setLocation, {
+          mode: "signup",
+          reason: "vote_limit_reached",
+          resumeAction: {
+            surfaceType: "opinion_poll",
+            targetId: poll.id,
+            cardRoute: window.location.pathname,
+            pendingVote: pendingOption ? { optionId: pendingOption.id } : undefined,
+          },
+        });
       } else {
         const parsed = parseOpinionPollCardError(err);
         toast.error("Could not change vote", { description: parsed.retryAfter ? <CountdownDescription seconds={parsed.retryAfter} text={parsed.message} /> : parsed.message });
@@ -291,6 +315,17 @@ export function OpinionPollCard({
     } catch (err) {
       if (isUnauthorizedApiError(err)) {
         toast(signInToVoteTitle, signInToVoteToastOptions(() => setLocation("/login")));
+      } else if (isBudgetExhaustedVoteError(err)) {
+        navigateToLogin(setLocation, {
+          mode: "signup",
+          reason: "vote_limit_reached",
+          resumeAction: {
+            surfaceType: "opinion_poll",
+            targetId: poll.id,
+            cardRoute: window.location.pathname,
+            pendingVote: { remove: true },
+          },
+        });
       } else {
         const parsed = parseOpinionPollCardError(err);
         toast.error("Could not remove vote", { description: parsed.retryAfter ? <CountdownDescription seconds={parsed.retryAfter} text={parsed.message} /> : parsed.message });

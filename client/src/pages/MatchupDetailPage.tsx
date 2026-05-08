@@ -20,6 +20,7 @@ import { useDetailNavigation } from "@/hooks/useDetailNavigation";
 import { navigateToLogin } from "@/lib/authReturn";
 import { useAnonBudget, applyBudgetFromVoteResponse } from "@/hooks/useAnonBudget";
 import { checkVoteGate } from "@/lib/voteGate";
+import { isBudgetExhaustedVoteError } from "@/lib/voteErrors";
 import { CardComments, useCommentCount } from "@/components/comments/CardComments";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import {
@@ -116,7 +117,20 @@ export default function MatchupDetailPage() {
       }
       toast("Vote Recorded", { description: "Your vote has been counted." });
     },
-    onError: () => {
+    onError: (error, variables) => {
+      if (isBudgetExhaustedVoteError(error)) {
+        navigateToLogin(setLocation, {
+          mode: "signup",
+          reason: "vote_limit_reached",
+          resumeAction: {
+            surfaceType: "matchup_poll",
+            targetId: variables.matchupId,
+            cardRoute: window.location.pathname,
+            pendingVote: { option: variables.option },
+          },
+        });
+        return;
+      }
       toast.error("Error", { description: "Failed to cast vote. Please sign in." });
     },
   });

@@ -26,6 +26,7 @@ import { isUnauthorizedApiError, signInToVoteToastOptions, signInToVoteTitle } f
 import { navigateToLogin } from "@/lib/authReturn";
 import { useAnonBudget, applyBudgetFromVoteResponse } from "@/hooks/useAnonBudget";
 import { checkVoteGate } from "@/lib/voteGate";
+import { isBudgetExhaustedVoteError } from "@/lib/voteErrors";
 import { formatDate } from "@/lib/formatDate";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { VoteDetailNavCluster } from "@/components/vote/VoteDetailNavCluster";
@@ -128,7 +129,7 @@ export default function OpinionPollDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/opinion-polls", slug] });
       toast("Vote recorded");
     },
-    onError: (error, _vars, ctx) => {
+    onError: (error, optionId, ctx) => {
       if (ctx?.previousDetail !== undefined) {
         queryClient.setQueryData(["/api/opinion-polls", slug], ctx.previousDetail);
       }
@@ -137,6 +138,17 @@ export default function OpinionPollDetailPage() {
       }
       if (isUnauthorizedApiError(error)) {
         toast(signInToVoteTitle, signInToVoteToastOptions(() => setLocation("/login")));
+      } else if (isBudgetExhaustedVoteError(error) && poll?.id) {
+        navigateToLogin(setLocation, {
+          mode: "signup",
+          reason: "vote_limit_reached",
+          resumeAction: {
+            surfaceType: "opinion_poll",
+            targetId: poll.id,
+            cardRoute: window.location.pathname,
+            pendingVote: { optionId },
+          },
+        });
       } else {
         toast.error("Could not vote", { description: parseOpinionPollVoteError(error) });
       }
@@ -181,6 +193,17 @@ export default function OpinionPollDetailPage() {
       }
       if (isUnauthorizedApiError(error)) {
         toast(signInToVoteTitle, signInToVoteToastOptions(() => setLocation("/login")));
+      } else if (isBudgetExhaustedVoteError(error) && poll?.id) {
+        navigateToLogin(setLocation, {
+          mode: "signup",
+          reason: "vote_limit_reached",
+          resumeAction: {
+            surfaceType: "opinion_poll",
+            targetId: poll.id,
+            cardRoute: window.location.pathname,
+            pendingVote: { remove: true },
+          },
+        });
       } else {
         toast.error("Could not remove vote", { description: parseOpinionPollVoteError(error) });
       }

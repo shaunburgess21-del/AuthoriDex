@@ -62,7 +62,7 @@ import { isUnauthorizedApiError, signInToVoteToastOptions, signInToVoteTitle } f
 import { navigateToLogin } from "@/lib/authReturn";
 import { useAnonBudget, applyBudgetFromVoteResponse } from "@/hooks/useAnonBudget";
 import { checkVoteGate } from "@/lib/voteGate";
-import { parseVoteError } from "@/lib/voteErrors";
+import { isBudgetExhaustedVoteError, parseVoteError } from "@/lib/voteErrors";
 import { ViewAllOverlayHeader } from "@/components/ViewAllOverlayHeader";
 import { AvatarHeightHeadline } from "@/components/AvatarHeightHeadline";
 import { VersusCard, type VersusCardMatchup } from "@/components/matchups/VersusCard";
@@ -943,6 +943,17 @@ export default function PersonDetailPage() {
       });
       if (isUnauthorizedApiError(error)) {
         toast(signInToVoteTitle, signInToVoteToastOptions(() => navigateToLogin(setLocation)));
+      } else if (isBudgetExhaustedVoteError(error)) {
+        navigateToLogin(setLocation, {
+          mode: "signup",
+          reason: "vote_limit_reached",
+          resumeAction: {
+            surfaceType: "matchup_poll",
+            targetId: variables.matchupId,
+            cardRoute: window.location.pathname,
+            pendingVote: { matchupId: variables.matchupId, option: variables.option },
+          },
+        });
       } else {
         const parsed = parseVoteError(error);
         toast.error(parsed.retryAfter ? "Slow down" : "Error", { description: parsed.message || "Failed to submit vote" });
@@ -978,6 +989,17 @@ export default function PersonDetailPage() {
       });
       if (isUnauthorizedApiError(error)) {
         toast(signInToVoteTitle, signInToVoteToastOptions(() => navigateToLogin(setLocation)));
+      } else if (isBudgetExhaustedVoteError(error)) {
+        navigateToLogin(setLocation, {
+          mode: "signup",
+          reason: "vote_limit_reached",
+          resumeAction: {
+            surfaceType: "matchup_poll",
+            targetId: variables.matchupId,
+            cardRoute: window.location.pathname,
+            pendingVote: { remove: true },
+          },
+        });
       } else {
         const parsed = parseVoteError(error);
         toast.error(parsed.retryAfter ? "Slow down" : "Error", { description: parsed.message || "Failed to update vote" });

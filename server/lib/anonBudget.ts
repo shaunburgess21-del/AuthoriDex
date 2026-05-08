@@ -12,12 +12,15 @@
 //     primary key — re-votes on the same target are free upserts. Returns:
 //       consumed: true iff this call inserted a new row (new combo).
 //       consumed: false iff the row already existed (re-vote / no-op).
-//       newCount: count of rows for this fdx_sid AFTER this call.
-//       exhausted: newCount >= ANON_VOTE_BUDGET (post-call snapshot).
+//       newCount: count of rows for this fdx_sid AFTER this call (and after
+//       any rollback when a new insert would exceed the budget).
+//       exhausted: newCount > ANON_VOTE_BUDGET — allows exactly N distinct
+//       units (see getBudgetStatus used >= limit for “no budget left”).
 //
-//     The route handlers (Stage 4) gate on `exhausted` regardless of
-//     `consumed`, so a re-vote attempted by an already-over-budget user
-//     still rejects with 403 — which is the desired behaviour.
+//     The route handlers (Stage 4) gate on `exhausted` after consume.
+//     Re-votes use onConflictDoNothing → consumed: false; exhaustion uses
+//     post-count `newCount > limit` so the Nth distinct vote succeeds and
+//     the (N+1)th is rejected (after rolling back the over-limit insert).
 //
 // Fail-open on DB error: budget enforcement is best-effort abuse
 // prevention, not strict access control. A transient DB issue should
@@ -49,7 +52,7 @@
 // and we're not in a hot path. Revisit with an in-memory per-sid cache
 // (5–10s TTL) if telemetry shows the queries adding latency.
 
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "../db";
 import { anonVoteBudget } from "@shared/schema";
 import { captureBackgroundError } from "../sentry";
@@ -110,18 +113,38 @@ export async function consumeBudgetUnit(
       .onConflictDoNothing()
       .returning({ fdxSid: anonVoteBudget.fdxSid });
 
-    const consumed = Boolean(inserted);
+    let consumed = Boolean(inserted);
 
     const [countRow] = await db
       .select({ c: sql<number>`count(*)::int` })
       .from(anonVoteBudget)
       .where(eq(anonVoteBudget.fdxSid, fdxSid));
 
-    const newCount = countRow?.c ?? 0;
+    let newCount = countRow?.c ?? 0;
+
+    if (consumed && newCount > ANON_VOTE_BUDGET) {
+      await db
+        .delete(anonVoteBudget)
+        .where(
+          and(
+            eq(anonVoteBudget.fdxSid, fdxSid),
+            eq(anonVoteBudget.surfaceType, surfaceType),
+            eq(anonVoteBudget.targetId, targetId),
+          ),
+        );
+      consumed = false;
+      const [afterRollback] = await db
+        .select({ c: sql<number>`count(*)::int` })
+        .from(anonVoteBudget)
+        .where(eq(anonVoteBudget.fdxSid, fdxSid));
+      newCount = afterRollback?.c ?? 0;
+      return { consumed, newCount, exhausted: true };
+    }
+
     return {
       consumed,
       newCount,
-      exhausted: newCount >= ANON_VOTE_BUDGET,
+      exhausted: newCount > ANON_VOTE_BUDGET,
     };
   } catch (err) {
     console.warn(

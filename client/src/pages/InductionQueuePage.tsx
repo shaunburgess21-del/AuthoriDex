@@ -8,6 +8,7 @@ import { isUnauthorizedApiError, signInToVoteToastOptions, signInToVoteTitle } f
 import { navigateToLogin } from "@/lib/authReturn";
 import { useAnonBudget, applyBudgetFromVoteResponse } from "@/hooks/useAnonBudget";
 import { checkVoteGate } from "@/lib/voteGate";
+import { isBudgetExhaustedVoteError } from "@/lib/voteErrors";
 import { goBack } from "@/lib/goBack";
 import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { useXpBurst } from "@/components/XpBurstProvider";
@@ -129,6 +130,17 @@ export default function InductionQueuePage() {
       });
       if (isUnauthorizedApiError(err)) {
         toast(signInToVoteTitle, signInToVoteToastOptions(() => navigateToLogin(setLocation)));
+      } else if (isBudgetExhaustedVoteError(err)) {
+        navigateToLogin(setLocation, {
+          mode: "signup",
+          reason: "vote_limit_reached",
+          resumeAction: {
+            surfaceType: "induction",
+            targetId: id,
+            cardRoute: window.location.pathname,
+            pendingVote: { intent: "induct" },
+          },
+        });
       } else {
         toast.error("Vote failed", { description: err.message || "Something went wrong" });
       }

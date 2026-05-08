@@ -22,6 +22,7 @@ import { useDetailNavigation } from "@/hooks/useDetailNavigation";
 import { navigateToLogin } from "@/lib/authReturn";
 import { useAnonBudget, applyBudgetFromVoteResponse } from "@/hooks/useAnonBudget";
 import { checkVoteGate } from "@/lib/voteGate";
+import { isBudgetExhaustedVoteError } from "@/lib/voteErrors";
 import { goBack } from "@/lib/goBack";
 import { CardComments, useCommentCount } from "@/components/comments/CardComments";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
@@ -124,7 +125,20 @@ export default function PollDetailPage() {
       }
       toast("Vote Recorded", { description: "Your vote has been counted." });
     },
-    onError: () => {
+    onError: (error, choice) => {
+      if (poll && isBudgetExhaustedVoteError(error)) {
+        navigateToLogin(setLocation, {
+          mode: "signup",
+          reason: "vote_limit_reached",
+          resumeAction: {
+            surfaceType: "trending_poll",
+            targetId: poll.id,
+            cardRoute: window.location.pathname,
+            pendingVote: { choice },
+          },
+        });
+        return;
+      }
       toast.error("Error", { description: "Failed to cast vote. Please sign in." });
     },
   });

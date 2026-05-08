@@ -3805,7 +3805,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           used: result.newCount,
           limit: ANON_VOTE_BUDGET,
           remaining: Math.max(0, ANON_VOTE_BUDGET - result.newCount),
-          exhausted: false,
+          exhausted: result.newCount >= ANON_VOTE_BUDGET,
         };
       }
 
@@ -4042,7 +4042,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           used: result.newCount,
           limit: ANON_VOTE_BUDGET,
           remaining: Math.max(0, ANON_VOTE_BUDGET - result.newCount),
-          exhausted: false,
+          exhausted: result.newCount >= ANON_VOTE_BUDGET,
         };
       }
 
@@ -6278,11 +6278,10 @@ Only return the JSON object.`;
 
       // Phase 4 — anonymous-budget gate. Authenticated users skip this
       // path entirely. Anonymous users consume a budget unit keyed on
-      // (fdx_sid, 'matchup_poll', matchupId); if the post-call count
-      // is >= ANON_VOTE_BUDGET, refuse the write and surface the
-      // exhausted state. Re-votes on the same matchup are free
-      // (PK collision → consumed: false) but still gate on exhausted
-      // per the Stage 3 anonBudget contract.
+      // (fdx_sid, 'matchup_poll', matchupId); if consumeBudgetUnit reports
+      // exhausted (budget would exceed ANON_VOTE_BUDGET), refuse the write.
+      // Re-votes on the same matchup are free (PK collision → consumed:
+      // false) and do not increment the global sid count.
       //
       // newCount === -1 is the Stage 3 fail-open sentinel — DB error
       // during consume returned a permissive shape so the vote write
@@ -6312,7 +6311,7 @@ Only return the JSON object.`;
           used: result.newCount,
           limit: ANON_VOTE_BUDGET,
           remaining: Math.max(0, ANON_VOTE_BUDGET - result.newCount),
-          exhausted: false,
+          exhausted: result.newCount >= ANON_VOTE_BUDGET,
         };
       }
 
@@ -13142,7 +13141,7 @@ Target length: about 90-150 words.`;
           used: result.newCount,
           limit: ANON_VOTE_BUDGET,
           remaining: Math.max(0, ANON_VOTE_BUDGET - result.newCount),
-          exhausted: false,
+          exhausted: result.newCount >= ANON_VOTE_BUDGET,
         };
       }
 
@@ -14201,7 +14200,7 @@ Target length: about 90-150 words.`;
           used: result.newCount,
           limit: ANON_VOTE_BUDGET,
           remaining: Math.max(0, ANON_VOTE_BUDGET - result.newCount),
-          exhausted: false,
+          exhausted: result.newCount >= ANON_VOTE_BUDGET,
         };
       }
 
@@ -19066,7 +19065,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           used: result.newCount,
           limit: ANON_VOTE_BUDGET,
           remaining: Math.max(0, ANON_VOTE_BUDGET - result.newCount),
-          exhausted: false,
+          exhausted: result.newCount >= ANON_VOTE_BUDGET,
         };
       }
 

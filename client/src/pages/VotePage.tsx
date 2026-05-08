@@ -104,7 +104,7 @@ import {
 import { useAnonBudget, applyBudgetFromVoteResponse } from "@/hooks/useAnonBudget";
 import { checkVoteGate } from "@/lib/voteGate";
 import { navigateWithVoteList } from "@/lib/voteListNavigation";
-import { parseVoteError } from "@/lib/voteErrors";
+import { isBudgetExhaustedVoteError, parseVoteError } from "@/lib/voteErrors";
 import { getClientWeekDeadlines } from "@/hooks/useMarketCycle";
 import { SuggestCategorySelect } from "@/components/suggest/SuggestCategorySelect";
 import { SuggestDurationPicker } from "@/components/suggest/SuggestDurationPicker";
@@ -1294,6 +1294,18 @@ export default function VotePage() {
       });
       if (isUnauthorizedApiError(err)) {
         toast(signInToVoteTitle, signInToVoteToastOptions(() => navigateToLogin(setLocation, { voteUi: voteLoginSnapshotRef.current })));
+      } else if (isBudgetExhaustedVoteError(err)) {
+        navigateToLogin(setLocation, {
+          mode: "signup",
+          reason: "vote_limit_reached",
+          voteUi: voteLoginSnapshotRef.current,
+          resumeAction: {
+            surfaceType: "induction",
+            targetId: candidateId,
+            cardRoute: window.location.pathname,
+            pendingVote: { intent: "induct" },
+          },
+        });
       } else {
         const parsed = parseVoteError(err);
         toast.error("Couldn't record vote", { description: parsed.retryAfter ? <CountdownDescription seconds={parsed.retryAfter} text={parsed.message} /> : parsed.message });
@@ -1549,6 +1561,18 @@ export default function VotePage() {
       }
       if (isUnauthorizedApiError(error)) {
         toast(signInToVoteTitle, signInToVoteToastOptions(() => navigateToLogin(setLocation, { voteUi: voteLoginSnapshotRef.current })));
+      } else if (isBudgetExhaustedVoteError(error)) {
+        navigateToLogin(setLocation, {
+          mode: "signup",
+          reason: "vote_limit_reached",
+          voteUi: voteLoginSnapshotRef.current,
+          resumeAction: {
+            surfaceType: "matchup_poll",
+            targetId: variables.matchupId,
+            cardRoute: window.location.pathname,
+            pendingVote: { matchupId: variables.matchupId, option: variables.option },
+          },
+        });
       } else {
         const parsed = parseVoteError(error);
         if (parsed.retryAfter) {
@@ -1576,6 +1600,18 @@ export default function VotePage() {
       setLocalMatchupVotes((prev: Record<string, string>) => ({ ...prev, [variables.matchupId]: variables.previousVote }));
       if (isUnauthorizedApiError(error)) {
         toast(signInToVoteTitle, signInToVoteToastOptions(() => navigateToLogin(setLocation, { voteUi: voteLoginSnapshotRef.current })));
+      } else if (isBudgetExhaustedVoteError(error)) {
+        navigateToLogin(setLocation, {
+          mode: "signup",
+          reason: "vote_limit_reached",
+          voteUi: voteLoginSnapshotRef.current,
+          resumeAction: {
+            surfaceType: "matchup_poll",
+            targetId: variables.matchupId,
+            cardRoute: window.location.pathname,
+            pendingVote: { remove: true },
+          },
+        });
       } else {
         const parsed = parseVoteError(error);
         if (parsed.retryAfter) {
@@ -2196,7 +2232,15 @@ export default function VotePage() {
   };
 
   const discourseVoteMutation = useMutation({
-    mutationFn: async ({ slug, choice }: { slug: string; choice: string }) => {
+    mutationFn: async ({
+      slug,
+      choice,
+      topicId: _topicId,
+    }: {
+      slug: string;
+      choice: string;
+      topicId: string;
+    }) => {
       const res = await apiRequest('POST', `/api/polls/${encodeURIComponent(slug)}/vote`, { choice });
       return res.json();
     },
@@ -2210,10 +2254,22 @@ export default function VotePage() {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }
     },
-    onError: (error: any) => {
+    onError: (error: any, variables) => {
       queryClient.invalidateQueries({ queryKey: ['/api/trending-polls'] });
       if (isUnauthorizedApiError(error)) {
         toast(signInToVoteTitle, signInToVoteToastOptions(() => navigateToLogin(setLocation, { voteUi: voteLoginSnapshotRef.current })));
+      } else if (isBudgetExhaustedVoteError(error)) {
+        navigateToLogin(setLocation, {
+          mode: "signup",
+          reason: "vote_limit_reached",
+          voteUi: voteLoginSnapshotRef.current,
+          resumeAction: {
+            surfaceType: "trending_poll",
+            targetId: variables.topicId,
+            cardRoute: window.location.pathname,
+            pendingVote: { choice: variables.choice },
+          },
+        });
       } else {
         const parsed = parseVoteError(error);
         toast.error("Couldn't record vote", { description: parsed.retryAfter ? <CountdownDescription seconds={parsed.retryAfter} text={parsed.message} /> : parsed.message });
@@ -2247,7 +2303,7 @@ export default function VotePage() {
     if (!topic?.slug) {
       throw new Error("Topic not found");
     }
-    await discourseVoteMutation.mutateAsync({ slug: topic.slug, choice });
+    await discourseVoteMutation.mutateAsync({ slug: topic.slug, choice, topicId });
   };
 
   const openSuggestModal = (open: () => void) => {

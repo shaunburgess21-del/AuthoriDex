@@ -6,7 +6,7 @@ import { useLocation } from "wouter";
 import { ArrowLeft, Users, Loader2 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest, getAuthHeaders } from "@/lib/queryClient";
-import { parseVoteError } from "@/lib/voteErrors";
+import { isBudgetExhaustedVoteError, parseVoteError } from "@/lib/voteErrors";
 import { getRatingTileColor } from "@/lib/ratingColors";
 import { toast } from "sonner";
 import { navigateToLogin } from "@/lib/authReturn";
@@ -339,7 +339,7 @@ export function AnimatedSentimentVotingWidget({
       // the just-submitted vote alongside the localStorage event.
       await queryClient.invalidateQueries({ queryKey: ["/api/leaderboard"] });
     },
-    onError: (error: any, _variables, context) => {
+    onError: (error: any, variables, context) => {
       if (context?.submitId === latestSubmitIdRef.current) {
         const voteStorageKey = `sentiment-vote-${personId}`;
         setCurrentValue(context.previousCurrentValue);
@@ -358,6 +358,20 @@ export function AnimatedSentimentVotingWidget({
             detail: { personId, value: context.previousCurrentValue },
           })
         );
+      }
+
+      if (isBudgetExhaustedVoteError(error)) {
+        navigateToLogin(setLocation, {
+          mode: "signup",
+          reason: "vote_limit_reached",
+          resumeAction: {
+            surfaceType: "celebrity_person",
+            targetId: personId,
+            cardRoute: window.location.pathname,
+            pendingVote: { rating: variables.rating },
+          },
+        });
+        return;
       }
 
       console.error("Error saving approval rating:", error);

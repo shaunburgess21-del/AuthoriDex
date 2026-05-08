@@ -15,6 +15,7 @@ import { useLocation, Link } from "wouter";
 import { navigateToLogin } from "@/lib/authReturn";
 import { useAnonBudget, applyBudgetFromVoteResponse } from "@/hooks/useAnonBudget";
 import { checkVoteGate } from "@/lib/voteGate";
+import { isBudgetExhaustedVoteError } from "@/lib/voteErrors";
 import { 
   Swords, 
   MessageSquare, 
@@ -619,7 +620,8 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
       return Number(b.fameIndex ?? 0) - Number(a.fameIndex ?? 0);
     }),
     [valueCelebrities, categoryFilter, searchQuery]
-  );  const valueVoteMutation = useMutation({
+  );
+  const valueVoteMutation = useMutation({
     mutationFn: async ({ personId, vote }: { personId: string; vote: 'underrated' | 'overrated' }) => {
       const res = await apiRequest('POST', `/api/celebrity/${personId}/value-vote`, { vote });
       return res.json();
@@ -640,6 +642,19 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
         delete next[variables.personId];
         return next;
       });
+      if (isBudgetExhaustedVoteError(error)) {
+        navigateToLogin(setLocation, {
+          mode: "signup",
+          reason: "vote_limit_reached",
+          resumeAction: {
+            surfaceType: "celebrity_person",
+            targetId: variables.personId,
+            cardRoute: window.location.pathname,
+            pendingVote: { vote: variables.vote },
+          },
+        });
+        return;
+      }
       toast.error("Vote failed", { description: error.message?.includes("401") ? "Please sign in to vote" : (error.message || "Failed to submit vote") });
     },
   });
@@ -677,6 +692,19 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
         setInductionVotes((prev) => new Set(prev).add(id));
       },
       onError: (error: any) => {
+        if (isBudgetExhaustedVoteError(error)) {
+          navigateToLogin(setLocation, {
+            mode: "signup",
+            reason: "vote_limit_reached",
+            resumeAction: {
+              surfaceType: "induction",
+              targetId: id,
+              cardRoute: window.location.pathname,
+              pendingVote: { intent: "induct" },
+            },
+          });
+          return;
+        }
         toast.error("Vote failed", { description: error.message?.includes("401")
             ? "Please sign in to vote"
             : error.message || "Failed to submit vote" });

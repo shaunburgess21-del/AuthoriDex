@@ -11,6 +11,23 @@
  *   2. Messages of the form "429: {json body}" thrown by legacy fetch helpers.
  *   3. Anything else → fallback to `error.message` or a generic string.
  */
+/**
+ * True when the API rejected the vote because the anonymous budget is exhausted
+ * (`403` + `{ error: "budget_exhausted" }`). Matches `ApiError` messages from
+ * `apiRequest` (`"<status>: <json body>"`).
+ */
+export function isBudgetExhaustedVoteError(err: unknown): boolean {
+  if (!(err instanceof Error) || !err.message) return false;
+  const jsonMatch = err.message.match(/^\d+:\s*(\{[\s\S]*\})\s*$/);
+  if (!jsonMatch) return false;
+  try {
+    const j = JSON.parse(jsonMatch[1]) as { error?: string };
+    return j.error === "budget_exhausted";
+  } catch {
+    return false;
+  }
+}
+
 export function parseVoteError(err: unknown): { message: string; retryAfter?: number } {
   const retryAfter = (err as { retryAfter?: number } | null | undefined)?.retryAfter;
   if (err instanceof Error && err.message) {
