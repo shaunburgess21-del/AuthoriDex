@@ -49,6 +49,7 @@ import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { motion, AnimatePresence, type PanInfo } from "framer-motion";
 import { LineChart as RechartsLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
+import { VOTE_HUB_DEEP_LINKS } from "@/lib/voteHubDeepLinks";
 
 type HomeView = "leaderboard" | "predict" | "vote";
 const CATEGORY_OPTIONS = ["All", "Tech", "Business", "Politics", "Sports", "Music", "Film & TV", "Gaming", "Creator", "Food & Drink", "Lifestyle"] as const;
@@ -78,6 +79,45 @@ function LeaderboardUpDownSnapshot() {
         Everyone shares one pool—winning with the popular side pays less; winning against the crowd pays more.
       </p>
     </div>
+  );
+}
+
+/** Short copy for the Approval leaderboard drawer (Rate / aggregate approval). */
+function LeaderboardApprovalSnapshot() {
+  return (
+    <div>
+      <div className="mb-2 flex items-center gap-2">
+        <Star className="h-5 w-5 shrink-0 text-cyan-600 dark:text-cyan-400" aria-hidden />
+        <h3 className="text-sm font-semibold">Approval rating</h3>
+      </div>
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        The <span className="font-medium text-foreground">Approval</span> score on each row is an aggregate from the community (shown out of 5).
+      </p>
+      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+        Tap <span className="font-medium text-foreground">Rate</span> on a row to cast your own 1–5 vote—it feeds into that person&apos;s approval rating.
+      </p>
+    </div>
+  );
+}
+
+function LeaderboardVoteInfoBody({ onNavigateLink }: { onNavigateLink: () => void }) {
+  return (
+    <>
+      <LeaderboardApprovalSnapshot />
+      <div className="mt-6 space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">More on Vote</p>
+        <div className="flex flex-col gap-2">
+          {VOTE_HUB_DEEP_LINKS.map(({ label, href }) => (
+            <Button key={href} variant="outline" className="w-full justify-between font-normal" asChild>
+              <Link href={href} onClick={onNavigateLink}>
+                {label}
+                <ChevronRight className="h-4 w-4 shrink-0 opacity-60" aria-hidden />
+              </Link>
+            </Button>
+          ))}
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -1023,6 +1063,7 @@ export default function HomePage() {
   const [trendOverlayOpen, setTrendOverlayOpen] = useState(false);
   const [leaderboardTab, setLeaderboardTab] = useState<LeaderboardTab>("fame");
   const [predictLeaderboardInfoOpen, setPredictLeaderboardInfoOpen] = useState(false);
+  const [voteLeaderboardInfoOpen, setVoteLeaderboardInfoOpen] = useState(false);
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [moversCollapsed, setMoversCollapsed] = useState(true);
   const welcomeOnboardingRef = useRef<OnboardingDrawerHandle>(null);
@@ -1994,7 +2035,18 @@ export default function HomePage() {
                                 <div className="text-right w-[100px]">Vote Count</div>
                                 <div className="text-right w-[120px]">Approval</div>
                                 <div className="text-right w-[120px]">Trend Score</div>
-                                <div className="text-right w-[80px]">Your Vote</div>
+                                <div className="flex min-w-[88px] justify-end">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="h-9 min-h-9 w-auto shrink-0 px-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
+                                    aria-label="About approval rating and Rate on the leaderboard"
+                                    data-testid="button-leaderboard-your-vote-info"
+                                    onClick={() => setVoteLeaderboardInfoOpen(true)}
+                                  >
+                                    Your Vote
+                                  </Button>
+                                </div>
                               </>
                             )}
                           </div>
@@ -2012,12 +2064,16 @@ export default function HomePage() {
                           </Button>
                         )}
                         {leaderboardTab === "approval" && (
-                          <span
-                            className="lg:hidden text-[11px] font-medium uppercase tracking-wider text-muted-foreground shrink-0"
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="lg:hidden h-9 min-h-9 w-auto shrink-0 px-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
+                            aria-label="About approval rating and Rate on the leaderboard"
                             data-testid="label-mobile-your-vote"
+                            onClick={() => setVoteLeaderboardInfoOpen(true)}
                           >
                             Your Vote
-                          </span>
+                          </Button>
                         )}
                       </div>
                       {hasActiveFilters && (
@@ -2264,6 +2320,35 @@ export default function HomePage() {
             </DialogHeader>
             <div className="min-h-0 overflow-y-auto px-1 pb-2 pt-2">
               <LeaderboardPredictInfoBody onNavigateLink={() => setPredictLeaderboardInfoOpen(false)} />
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+      {isMobile ? (
+        <Drawer open={voteLeaderboardInfoOpen} onOpenChange={setVoteLeaderboardInfoOpen}>
+          <DrawerContent className="max-h-[85vh]">
+            <DrawerHeader className="text-left">
+              <DrawerTitle>Your vote on the leaderboard</DrawerTitle>
+              <DrawerDescription className="sr-only">
+                How approval rating and Rate work on the leaderboard, with links to sections on the Vote page.
+              </DrawerDescription>
+            </DrawerHeader>
+            <div className="overflow-y-auto px-4 pb-6 pt-0">
+              <LeaderboardVoteInfoBody onNavigateLink={() => setVoteLeaderboardInfoOpen(false)} />
+            </div>
+          </DrawerContent>
+        </Drawer>
+      ) : (
+        <Dialog open={voteLeaderboardInfoOpen} onOpenChange={setVoteLeaderboardInfoOpen}>
+          <DialogContent className="flex max-h-[85vh] flex-col gap-0 overflow-hidden sm:max-w-md">
+            <DialogHeader className="shrink-0 text-left">
+              <DialogTitle>Your vote on the leaderboard</DialogTitle>
+              <DialogDescription className="sr-only">
+                How approval rating and Rate work on the leaderboard, with links to sections on the Vote page.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="min-h-0 overflow-y-auto px-1 pb-2 pt-2">
+              <LeaderboardVoteInfoBody onNavigateLink={() => setVoteLeaderboardInfoOpen(false)} />
             </div>
           </DialogContent>
         </Dialog>

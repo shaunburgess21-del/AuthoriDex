@@ -103,6 +103,8 @@ import {
 } from "@/lib/authReturn";
 import { useAnonBudget, applyBudgetFromVoteResponse } from "@/hooks/useAnonBudget";
 import { checkVoteGate } from "@/lib/voteGate";
+import { voteHubSectionFromHash } from "@/lib/voteHubDeepLinks";
+import { useScrollToHash } from "@/hooks/useScrollToHash";
 import { navigateWithVoteList } from "@/lib/voteListNavigation";
 import { isBudgetExhaustedVoteError, parseVoteError } from "@/lib/voteErrors";
 import { getClientWeekDeadlines } from "@/hooks/useMarketCycle";
@@ -1404,6 +1406,18 @@ export default function VotePage() {
   // Hoisted so handleAuthRequired / snapshot sync below can read the saved scroll Y.
   const savedSnapWindowScrollRef = useRef<number | null>(null);
 
+  useEffect(() => {
+    const syncSectionFromHash = () => {
+      const sec = voteHubSectionFromHash(window.location.hash);
+      if (sec) setActiveSection(sec as SectionToggle);
+    };
+    syncSectionFromHash();
+    window.addEventListener("hashchange", syncSectionFromHash);
+    return () => window.removeEventListener("hashchange", syncSectionFromHash);
+  }, []);
+
+  useScrollToHash([activeSection]);
+
   const enrichedCandidates = dbInductionCandidates;
   
   const filteredCandidates = enrichedCandidates.filter(c => {
@@ -2687,7 +2701,7 @@ export default function VotePage() {
       <div className="container mx-auto px-2 sm:px-4 py-8 max-w-7xl pt-[5px] pb-[5px]">
         {/* ZONE 1: Public Opinion - Sentiment Polls Section (First) */}
         {(activeSection === "All" || activeSection === "Sentiment Polls") && (
-        <section className="mb-10 mt-[5px]">
+        <section id="vote-sentiment" data-hash-anchor className="mb-10 mt-[5px] scroll-mt-28">
           <UnifiedSectionHeader
             title="Sentiment Polls"
             subtitle="Weigh in on current topics"
@@ -2792,7 +2806,7 @@ export default function VotePage() {
 
         {/* ZONE 1: Public Opinion - Matchups Section (Second) */}
         {(activeSection === "All" || activeSection === "Matchups") && (
-        <section className="mb-10">
+        <section id="vote-matchups" data-hash-anchor className="mb-10 scroll-mt-28">
           <UnifiedSectionHeader
             title="Matchups"
             subtitle="Vote on A vs B"
@@ -2905,7 +2919,7 @@ export default function VotePage() {
 
         {/* ZONE 1.5: Opinion Polls - Multi-option community polls */}
         {(activeSection === "All" || activeSection === "Opinion Polls") && (
-        <section className="mb-10">
+        <section id="vote-opinion" data-hash-anchor className="mb-10 scroll-mt-28">
           <UnifiedSectionHeader
             title="Opinion Polls"
             subtitle="Your preference. The world's verdict."
@@ -3012,7 +3026,7 @@ export default function VotePage() {
 
         {/* ZONE 2: Value Perception - Underrated/Overrated Section */}
         {(activeSection === "All" || activeSection === "Underrated/Overrated") && (
-        <section className="mb-10">
+        <section id="vote-value" data-hash-anchor className="mb-10 scroll-mt-28">
           <UnifiedSectionHeader
             title="Overrated / Underrated "
             subtitle="overhyped or underappreciated?"
@@ -3133,7 +3147,7 @@ export default function VotePage() {
 
         {/* ZONE 3: Governance - Induction Queue Section */}
         {(activeSection === "All" || activeSection === "Induction Queue") && (
-        <section className="mb-10">
+        <section id="vote-induction" data-hash-anchor className="mb-10 scroll-mt-28">
           <UnifiedSectionHeader
             title="The Induction Queue"
             subtitle="Who joins the leaderboard next"
@@ -3253,7 +3267,7 @@ export default function VotePage() {
 
         {/* ZONE 3: Governance - Curate Profile Section */}
         {(activeSection === "All" || activeSection === "Curate Profile") && (
-        <section className="mb-10">
+        <section id="vote-curate" data-hash-anchor className="mb-10 scroll-mt-28">
           <UnifiedSectionHeader
             title="Curate the Profile"
             subtitle="Help select their profile photo"
