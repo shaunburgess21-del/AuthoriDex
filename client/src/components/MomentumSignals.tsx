@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, Newspaper, BookOpen, Sparkles, AlertTriangle, Clock, ExternalLink, Info, ArrowUp, ArrowDown } from "lucide-react";
+import { Activity, Newspaper, BookOpen, Sparkles, AlertTriangle, ExternalLink, Info, ArrowUp, ArrowDown } from "lucide-react";
 import { SiX, SiYoutube, SiInstagram, SiTiktok, SiSpotify } from "react-icons/si";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
 import { cn } from "@/lib/utils";
@@ -348,17 +348,7 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
     return null;
   }
 
-  const { signals, staleFlags, ageMinutes, activeSources, officialProfiles } = data;
-
-  const freshnessText = ageMinutes < 2
-    ? "Just now"
-    : ageMinutes < 60
-      ? `${ageMinutes}m ago`
-      : `${Math.round(ageMinutes / 60)}h ago`;
-
-  const sourceLabels = activeSources.map(s =>
-    s === "wiki" ? "Wikipedia" : s === "news" ? "News" : s
-  );
+  const { signals, staleFlags, officialProfiles } = data;
 
   const newsLevel: MomentumLevel = signals.news.level ?? fallbackLevel("news", signals.news.count);
   const wikiLevel: MomentumLevel = signals.wiki.level ?? fallbackLevel("wiki", signals.wiki.views);
@@ -429,14 +419,7 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
           <h2 className="text-xl font-bold">Momentum Signals</h2>
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-          <span className="inline-flex items-center gap-1.5">
-            <span className="relative inline-flex items-center">
-              <span className="inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500 motion-safe:animate-pulse motion-reduce:animate-none" style={{ animationDuration: "2s" }} />
-            </span>
-            <Clock className="h-3 w-3" />
-            <span data-testid="text-freshness">Updated {freshnessText}</span>
-          </span>
-          <span className="whitespace-nowrap">Sources: {sourceLabels.join(", ")}</span>
+          <span className="whitespace-nowrap">Sources: News · Wikipedia · Google Trends</span>
         </div>
       </div>
 
