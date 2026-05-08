@@ -19,6 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
+import { tooltipSurfaceClass } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
@@ -30,6 +31,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useDragScroll } from "@/hooks/use-drag-scroll";
 import { useQuery, useQueries, useInfiniteQuery, useMutation, keepPreviousData } from "@tanstack/react-query";
 import { apiRequest, getAuthHeaders, parseApiError, queryClient } from "@/lib/queryClient";
+import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { hapticSuccess, hapticError } from "@/lib/haptic";
 import { useXpBurst } from "@/components/XpBurstProvider";
@@ -1766,7 +1768,7 @@ export default function HomePage() {
                             <PopoverContent
                               side="bottom"
                               align="center"
-                              className="max-w-[280px] p-3"
+                              className={cn(tooltipSurfaceClass, "relative max-w-[280px] pr-8")}
                               onOpenAutoFocus={(e) => e.preventDefault()}
                               onMouseEnter={!isCoarsePointer ? openFameTooltip : undefined}
                               onMouseLeave={
@@ -1779,20 +1781,17 @@ export default function HomePage() {
                                   : undefined
                               }
                             >
-                              <div className="flex items-start justify-between gap-2 mb-1.5">
-                                <span className="sr-only">Trending leaderboard info</span>
-                                <PopoverClose asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="no-default-hover-elevate no-default-active-elevate h-5 w-5 shrink-0 ml-auto"
-                                    aria-label="Close"
-                                    data-testid="button-close-trending-tooltip"
-                                  >
-                                    <X style={{ width: 14, height: 14 }} />
-                                  </Button>
-                                </PopoverClose>
-                              </div>
+                              <span className="sr-only">Trending leaderboard info</span>
+                              <PopoverClose asChild>
+                                <button
+                                  type="button"
+                                  aria-label="Close"
+                                  data-testid="button-close-trending-tooltip"
+                                  className="absolute top-2 right-2 p-0.5 rounded-sm text-muted-foreground hover:text-foreground transition-colors"
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </button>
+                              </PopoverClose>
                               <TrendScoreInfoContent />
                             </PopoverContent>
                           </Popover>
@@ -1859,7 +1858,7 @@ export default function HomePage() {
                             <PopoverContent
                               side="bottom"
                               align="center"
-                              className="max-w-[280px] p-3"
+                              className={cn(tooltipSurfaceClass, "relative max-w-[280px] pr-8")}
                               onOpenAutoFocus={(e) => e.preventDefault()}
                               onMouseEnter={!isCoarsePointer ? openApprovalTooltip : undefined}
                               onMouseLeave={
@@ -1872,20 +1871,17 @@ export default function HomePage() {
                                   : undefined
                               }
                             >
-                              <div className="flex items-start justify-between gap-2 mb-1.5">
-                                <span className="sr-only">Approval leaderboard info</span>
-                                <PopoverClose asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="no-default-hover-elevate no-default-active-elevate h-5 w-5 shrink-0 ml-auto"
-                                    aria-label="Close"
-                                    data-testid="button-close-approval-tooltip"
-                                  >
-                                    <X style={{ width: 14, height: 14 }} />
-                                  </Button>
-                                </PopoverClose>
-                              </div>
+                              <span className="sr-only">Approval leaderboard info</span>
+                              <PopoverClose asChild>
+                                <button
+                                  type="button"
+                                  aria-label="Close"
+                                  data-testid="button-close-approval-tooltip"
+                                  className="absolute top-2 right-2 p-0.5 rounded-sm text-muted-foreground hover:text-foreground transition-colors"
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </button>
+                              </PopoverClose>
                               <ApprovalRatingInfoContent />
                             </PopoverContent>
                           </Popover>

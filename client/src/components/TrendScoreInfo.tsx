@@ -1,4 +1,4 @@
-import { Info, Activity, Newspaper, BookOpen } from "lucide-react";
+import { Info, Newspaper, BookOpen, Search } from "lucide-react";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
 
 export function TrendScoreInfoContent() {
@@ -6,7 +6,7 @@ export function TrendScoreInfoContent() {
     <div className="space-y-3 normal-case tracking-normal">
       <p className="font-semibold text-sm">How Trend Score Works</p>
       <p className="text-xs text-muted-foreground">
-        Trend Score measures real-world attention using three independent signals:
+        Trend Score measures how much attention a person is getting right now, using three independent signals from public sources:
       </p>
       <ul className="space-y-1.5">
         <li className="flex items-center gap-2 text-xs">
@@ -14,19 +14,19 @@ export function TrendScoreInfoContent() {
           <span><span className="font-medium">News coverage</span> — how often they appear in recent articles</span>
         </li>
         <li className="flex items-center gap-2 text-xs">
-          <Activity className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-          <span><span className="font-medium">News momentum</span> — how today's coverage compares to their typical day</span>
-        </li>
-        <li className="flex items-center gap-2 text-xs">
           <BookOpen className="h-3.5 w-3.5 text-gray-400 shrink-0" />
           <span><span className="font-medium">Wikipedia activity</span> — how often people read about them</span>
         </li>
+        <li className="flex items-center gap-2 text-xs">
+          <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <span><span className="font-medium">Google Trends</span> — how often people search for them</span>
+        </li>
       </ul>
       <p className="text-xs text-muted-foreground">
-        We combine these independent signals from public sources into a single score that updates as new data comes in. A higher score means more attention right now.
+        We combine these signals into a single score that updates as new data comes in. A higher score means more attention right now.
       </p>
       <p className="text-[10px] text-muted-foreground/60 pt-1 border-t border-border/50">
-        Sources: News · Wikipedia
+        API Sources: News · Wikipedia · Google Trends
       </p>
     </div>
   );
