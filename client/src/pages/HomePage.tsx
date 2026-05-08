@@ -70,13 +70,14 @@ function LeaderboardUpDownSnapshot() {
         <h3 className="text-sm font-semibold">How Up/Down Works</h3>
       </div>
       <p className="text-xs leading-relaxed text-muted-foreground">
-        Each week we lock one baseline Trend Score.{" "}
-        <span className="font-medium text-foreground">Up</span> means you expect the score to finish above that line by
-        Sunday close; <span className="font-medium text-foreground">Down</span> means below. An exact tie refunds all
-        stakes.
+        Each Monday we snapshot every celebrity's Trend Score — that's their{" "}
+        <span className="font-medium text-foreground">baseline</span> for the week. Pick{" "}
+        <span className="font-medium text-foreground">Up</span> if you think their score will close higher by Sunday,{" "}
+        <span className="font-medium text-foreground">Down</span> if lower. Exact tie refunds everyone.
       </p>
       <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-        Everyone shares one pool—winning with the popular side pays less; winning against the crowd pays more.
+        Entries close Friday 23:59 UTC. Results pay out Sunday from one shared pool — going against the crowd pays more
+        per credit.
       </p>
     </div>
   );
