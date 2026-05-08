@@ -24,7 +24,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { h2hUserPickFromBet } from "@/components/predict/HeadToHeadCard";
 import { normalizeMarketCategory } from "@shared/constants";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, parseApiError } from "@/lib/queryClient";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { computePayoutMultiplier } from "@/lib/parimutuel";
 import { goBack } from "@/lib/goBack";
@@ -285,7 +285,8 @@ export default function H2HDetailPage() {
     },
     onError: (err: Error) => {
       hapticError();
-      toast.error("Failed to place prediction", { description: err.message });
+      const { title, description } = parseApiError(err, "Failed to place prediction");
+      toast.error(title, { description });
     },
   });
 

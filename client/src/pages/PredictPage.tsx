@@ -27,7 +27,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { TrendingPerson } from "@shared/schema";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
-import { apiRequest, getAuthHeaders } from "@/lib/queryClient";
+import { apiRequest, getAuthHeaders, parseApiError } from "@/lib/queryClient";
 import { getSupabase } from "@/lib/supabase";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { getMarketBaselineScore } from "@/lib/predict-market-baseline";
@@ -1941,7 +1941,8 @@ export default function PredictPage() {
     },
     onError: (err: Error) => {
       hapticError();
-      toast.error("Failed to place prediction", { description: err.message });
+      const { title, description } = parseApiError(err, "Failed to place prediction");
+      toast.error(title, { description });
     },
   });
 
@@ -1967,7 +1968,8 @@ export default function PredictPage() {
     },
     onError: (err: Error) => {
       hapticError();
-      toast.error("Failed to place prediction", { description: err.message });
+      const { title, description } = parseApiError(err, "Failed to place prediction");
+      toast.error(title, { description });
     },
   });
 
@@ -2004,7 +2006,8 @@ export default function PredictPage() {
     },
     onError: (err: Error) => {
       hapticError();
-      toast.error("Failed to place prediction", { description: err.message });
+      const { title, description } = parseApiError(err, "Failed to place prediction");
+      toast.error(title, { description });
     },
   });
 

@@ -29,7 +29,7 @@ import { X, RefreshCw, TrendingUp, TrendingDown, Activity, ChevronRight, Chevron
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useDragScroll } from "@/hooks/use-drag-scroll";
 import { useQuery, useQueries, useInfiniteQuery, useMutation, keepPreviousData } from "@tanstack/react-query";
-import { apiRequest, getAuthHeaders, queryClient } from "@/lib/queryClient";
+import { apiRequest, getAuthHeaders, parseApiError, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/contexts/AuthContext";
 import { hapticSuccess, hapticError } from "@/lib/haptic";
 import { useXpBurst } from "@/components/XpBurstProvider";
@@ -1159,7 +1159,8 @@ export default function HomePage() {
     },
     onError: (err: Error) => {
       hapticError();
-      toast.error("Failed to place prediction", { description: err.message });
+      const { title, description } = parseApiError(err, "Failed to place prediction");
+      toast.error(title, { description });
     },
   });
 

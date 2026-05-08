@@ -18,7 +18,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLocation, Link } from "wouter";
 import { navigateToLogin } from "@/lib/authReturn";
 import { toast } from "sonner";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, parseApiError } from "@/lib/queryClient";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { getMarketBaselineScore } from "@/lib/predict-market-baseline";
 import { getCanonicalNativeCycle } from "@/lib/nativeMarketLifecycle";
@@ -623,8 +623,9 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
         queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
       ]);
     },
-    onError: () => {
-      toast.error("Failed to place prediction");
+    onError: (err: Error) => {
+      const { title, description } = parseApiError(err, "Failed to place prediction");
+      toast.error(title, { description });
     },
   });
 
@@ -644,8 +645,9 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
         queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
       ]);
     },
-    onError: () => {
-      toast.error("Failed to place prediction");
+    onError: (err: Error) => {
+      const { title, description } = parseApiError(err, "Failed to place prediction");
+      toast.error(title, { description });
     },
   });
 

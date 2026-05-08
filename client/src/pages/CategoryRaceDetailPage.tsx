@@ -26,7 +26,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { formatSignedPercent, formatSignedPoints } from "@/lib/predict-display";
 import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, parseApiError } from "@/lib/queryClient";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { goBack } from "@/lib/goBack";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
@@ -313,7 +313,8 @@ export default function CategoryRaceDetailPage() {
     },
     onError: (err: Error) => {
       hapticError();
-      toast.error("Failed to place prediction", { description: err.message });
+      const { title, description } = parseApiError(err, "Failed to place prediction");
+      toast.error(title, { description });
     },
   });
 

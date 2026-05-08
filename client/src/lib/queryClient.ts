@@ -12,6 +12,44 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Parse the structured error envelope our API returns (e.g. 409s for the
+ * no-hedging rule). `apiRequest` stringifies the response body into the
+ * thrown error's message as `"<status>: <body>"`. This helper extracts a
+ * `{ title, description }` pair we can hand straight to a toast — falling
+ * back to the raw message for callers that haven't been migrated.
+ *
+ * Usage:
+ *   onError: (err) => {
+ *     const { title, description } = parseApiError(err, "Failed to place prediction");
+ *     toast.error(title, { description });
+ *   }
+ */
+export function parseApiError(
+  err: unknown,
+  fallbackTitle: string,
+): { title: string; description?: string; status?: number } {
+  const msg = err instanceof Error ? err.message : String(err);
+  const m = msg.match(/^(\d{3}): (.+)$/s);
+  if (m) {
+    const status = parseInt(m[1], 10);
+    try {
+      const body = JSON.parse(m[2]);
+      if (body && typeof body === "object" && body.error) {
+        return {
+          title: String(body.error),
+          description: body.detail ? String(body.detail) : undefined,
+          status,
+        };
+      }
+    } catch {
+      // Body wasn't JSON — fall through to the fallback below.
+    }
+    return { title: fallbackTitle, description: m[2], status };
+  }
+  return { title: fallbackTitle, description: msg };
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;

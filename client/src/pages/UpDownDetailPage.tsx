@@ -24,7 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { normalizeMarketCategory } from "@shared/constants";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, parseApiError } from "@/lib/queryClient";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { getMarketBaselineScore } from "@/lib/predict-market-baseline";
 import { computePayoutMultiplier } from "@/lib/parimutuel";
@@ -243,7 +243,8 @@ export default function UpDownDetailPage() {
     },
     onError: (err: Error) => {
       hapticError();
-      toast.error("Failed to place prediction", { description: err.message });
+      const { title, description } = parseApiError(err, "Failed to place prediction");
+      toast.error(title, { description });
     },
   });
 

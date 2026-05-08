@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { apiRequest, getAuthHeaders } from "@/lib/queryClient";
+import { apiRequest, getAuthHeaders, parseApiError } from "@/lib/queryClient";
 import { navigateToLogin } from "@/lib/authReturn";
 import { formatTimeAgo, formatDate } from "@/lib/formatDate";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
@@ -758,23 +758,8 @@ export default function MarketDetailPage() {
       setStakeAmount("");
     },
     onError: (err: Error) => {
-      // The server returns 409 with a JSON body { error, detail } when
-      // the no-hedging rule blocks a bet. apiRequest stringifies the
-      // body into the error message as "409: {…}", so parse it back
-      // out here to surface the human copy instead of raw JSON.
-      const m = err.message.match(/^(\d{3}): (.+)$/s);
-      if (m) {
-        try {
-          const body = JSON.parse(m[2]);
-          if (body?.error) {
-            toast.error(body.error, { description: body.detail });
-            return;
-          }
-        } catch {
-          // Fall through to the generic toast.
-        }
-      }
-      toast.error("Failed to place prediction", { description: err.message });
+      const { title, description } = parseApiError(err, "Failed to place prediction");
+      toast.error(title, { description });
     },
   });
 
