@@ -116,8 +116,17 @@ export function CommunityInsights({
     if (snapDismiss > 0) {
       setDrawerComment(null);
       setDeleteTarget(null);
+      setSelectedInsightId(null);
     }
   }, [snapDismiss]);
+
+  useEffect(() => {
+    setDisplayCount(PAGE_SIZE);
+    setExpandedPosts(new Set());
+    setSelectedInsightId(null);
+    setDrawerComment(null);
+    setDeleteTarget(null);
+  }, [personId]);
 
   const adapter = useMemo<CommentAdapter>(() => ({
     queryKey: [`/api/community-insights/${personId}`] as const,
@@ -607,7 +616,7 @@ function InsightCard({
             }}
             className="flex items-center gap-1.5 p-1.5 ml-auto rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             data-testid={`button-comments-${comment.id}`}
-            aria-label="Open comments"
+            aria-label="Open full post"
           >
             <MessageCircle className="h-4 w-4" />
           </button>
