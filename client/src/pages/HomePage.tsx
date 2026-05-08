@@ -21,8 +21,8 @@ import { Badge } from "@/components/ui/badge";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
 import { tooltipSurfaceClass } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { Popover, PopoverAnchor, PopoverContent, PopoverClose } from "@/components/ui/popover";
 import { useFavorites } from "@/hooks/useFavorites";
 import { navigateToLogin } from "@/lib/authReturn";
@@ -52,6 +52,57 @@ import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constan
 
 type HomeView = "leaderboard" | "predict" | "vote";
 const CATEGORY_OPTIONS = ["All", "Tech", "Business", "Politics", "Sports", "Music", "Film & TV", "Gaming", "Creator", "Food & Drink", "Lifestyle"] as const;
+
+const LEADERBOARD_PREDICT_MORE_LINKS = [
+  { label: "World Markets", href: "/predict#community" },
+  { label: "Weekly Jackpot", href: "/predict#jackpot" },
+  { label: "Head-to-Head Battles", href: "/predict#h2h" },
+  { label: "Category races", href: "/predict#race" },
+] as const;
+
+/** Short copy for the home leaderboard drawer only (~65% fewer words than full rules). */
+function LeaderboardUpDownSnapshot() {
+  return (
+    <div>
+      <div className="mb-2 flex items-center gap-2">
+        <HelpCircle className="h-5 w-5 shrink-0 text-violet-500" aria-hidden />
+        <h3 className="text-sm font-semibold">How Up/Down Works</h3>
+      </div>
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        Each week we lock one baseline Trend Score.{" "}
+        <span className="font-medium text-foreground">Up</span> means you expect the score to finish above that line by
+        Sunday close; <span className="font-medium text-foreground">Down</span> means below. An exact tie refunds all
+        stakes.
+      </p>
+      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+        Everyone shares one pool—winning with the popular side pays less; winning against the crowd pays more.
+      </p>
+    </div>
+  );
+}
+
+function LeaderboardPredictInfoBody({ onNavigateLink }: { onNavigateLink: () => void }) {
+  return (
+    <>
+      <LeaderboardUpDownSnapshot />
+      <div className="mt-6 space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          More prediction types
+        </p>
+        <div className="flex flex-col gap-2">
+          {LEADERBOARD_PREDICT_MORE_LINKS.map(({ label, href }) => (
+            <Button key={href} variant="outline" className="w-full justify-between font-normal" asChild>
+              <Link href={href} onClick={onNavigateLink}>
+                {label}
+                <ChevronRight className="h-4 w-4 shrink-0 opacity-60" aria-hidden />
+              </Link>
+            </Button>
+          ))}
+        </div>
+      </div>
+    </>
+  );
+}
 
 // Detects pointer:coarse devices (touchscreens/phones/tablets). Drives the
 // dual-mode behaviour of the leaderboard toggle tooltips: hover-to-open on
@@ -971,6 +1022,7 @@ export default function HomePage() {
   const [activeView, setActiveView] = useState<HomeView>("leaderboard");
   const [trendOverlayOpen, setTrendOverlayOpen] = useState(false);
   const [leaderboardTab, setLeaderboardTab] = useState<LeaderboardTab>("fame");
+  const [predictLeaderboardInfoOpen, setPredictLeaderboardInfoOpen] = useState(false);
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [moversCollapsed, setMoversCollapsed] = useState(true);
   const welcomeOnboardingRef = useRef<OnboardingDrawerHandle>(null);
@@ -1924,7 +1976,18 @@ export default function HomePage() {
                                 <div className="text-right w-[140px]">Trend Score</div>
                                 <div className="text-right w-[80px]">24h</div>
                                 <div className="text-right w-[84px]">Approval</div>
-                                <div className="text-right w-[88px]">Predict</div>
+                                <div className="flex justify-end w-[88px]">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="h-9 min-h-9 w-auto shrink-0 px-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
+                                    aria-label="About predicting Up or Down from the leaderboard"
+                                    data-testid="button-leaderboard-predict-info"
+                                    onClick={() => setPredictLeaderboardInfoOpen(true)}
+                                  >
+                                    Predict
+                                  </Button>
+                                </div>
                               </>
                             ) : (
                               <>
@@ -1937,12 +2000,16 @@ export default function HomePage() {
                           </div>
                         )}
                         {leaderboardTab === "fame" && (
-                          <span
-                            className="lg:hidden text-[11px] font-medium uppercase tracking-wider text-muted-foreground shrink-0"
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="lg:hidden h-9 min-h-9 w-auto shrink-0 px-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
+                            aria-label="About predicting Up or Down from the leaderboard"
                             data-testid="label-mobile-predict"
+                            onClick={() => setPredictLeaderboardInfoOpen(true)}
                           >
                             Predict
-                          </span>
+                          </Button>
                         )}
                         {leaderboardTab === "approval" && (
                           <span
@@ -2169,6 +2236,35 @@ export default function HomePage() {
                 />
               </>
             )}
+          </DialogContent>
+        </Dialog>
+      )}
+      {isMobile ? (
+        <Drawer open={predictLeaderboardInfoOpen} onOpenChange={setPredictLeaderboardInfoOpen}>
+          <DrawerContent className="max-h-[85vh]">
+            <DrawerHeader className="text-left">
+              <DrawerTitle>Predict from the leaderboard</DrawerTitle>
+              <DrawerDescription className="sr-only">
+                How Up and Down work on the leaderboard, with links to other prediction types on the Predict page.
+              </DrawerDescription>
+            </DrawerHeader>
+            <div className="overflow-y-auto px-4 pb-6 pt-0">
+              <LeaderboardPredictInfoBody onNavigateLink={() => setPredictLeaderboardInfoOpen(false)} />
+            </div>
+          </DrawerContent>
+        </Drawer>
+      ) : (
+        <Dialog open={predictLeaderboardInfoOpen} onOpenChange={setPredictLeaderboardInfoOpen}>
+          <DialogContent className="flex max-h-[85vh] flex-col gap-0 overflow-hidden sm:max-w-md">
+            <DialogHeader className="shrink-0 text-left">
+              <DialogTitle>Predict from the leaderboard</DialogTitle>
+              <DialogDescription className="sr-only">
+                How Up and Down work on the leaderboard, with links to other prediction types on the Predict page.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="min-h-0 overflow-y-auto px-1 pb-2 pt-2">
+              <LeaderboardPredictInfoBody onNavigateLink={() => setPredictLeaderboardInfoOpen(false)} />
+            </div>
           </DialogContent>
         </Dialog>
       )}
