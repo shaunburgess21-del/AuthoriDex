@@ -2715,11 +2715,10 @@ export default function PredictPage() {
           </div>
           
           {/* Right cluster.
-              On md+ this is `[Leaderboard] [Vote] [Predict] [Bell] [UserMenu]`
-              with comfortable gap-3 spacing. On mobile, the dense
-              `[Credits][ScrollText][Bell][UserMenu]` row needs to fit at
-              ~360px, so we drop to gap-2 there and tighten the inner
-              mobile group accordingly. */}
+              On md+: `[Leaderboard] [Vote] [Predict] [Bell] [UserMenu]` with gap-3.
+              On mobile: `[Credits][ScrollText]` then `[Bell][UserMenu]` — outer row
+              uses gap-2 for ~360px widths. Bell + UserMenu use the same defaults as
+              Vote / Leaderboard (`HeaderUserActions`); rules stays h-8. */}
           <div className="flex items-center gap-2 md:gap-3">
             <div className="hidden md:flex items-center gap-4">
               <Link href="/#leaderboard">
@@ -2749,7 +2748,7 @@ export default function PredictPage() {
                 <ScrollText className="h-4 w-4 text-muted-foreground" />
               </Button>
             </div>
-            <HeaderUserActions bellSize="compact" className="gap-1.5 md:gap-2" />
+            <HeaderUserActions />
           </div>
         </div>
       </header>

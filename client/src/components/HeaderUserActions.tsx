@@ -4,15 +4,14 @@ import { NotificationBell } from "@/components/notifications/NotificationBell";
 
 interface HeaderUserActionsProps {
   /**
-   * Visual density for the inner buttons. The dense PredictPage mobile
-   * header sets this to "compact" so the bell sits at h-8 to match the
-   * existing ScrollText icon size. Every other page uses "default".
+   * Bell touch target + icon scale. Hub pages (Vote, Predict, Leaderboard, …)
+   * use `"default"` for consistency. `"compact"` (h-8) remains available for
+   * unusually dense toolbars if needed.
    */
   bellSize?: "default" | "compact";
   /**
-   * Optional override for the wrapping flex gap. PredictPage's mobile
-   * cluster runs tighter (gap-2) than other pages (gap-3) so we expose
-   * this rather than baking opinions into the wrapper.
+   * Optional override for the wrapping flex gap between bell and UserMenu
+   * (default gap-3).
    */
   className?: string;
 }

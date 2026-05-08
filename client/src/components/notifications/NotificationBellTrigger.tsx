@@ -10,9 +10,8 @@ export type NotificationBellTriggerProps = {
   /** Caps at 9+; rendered as the badge. */
   cap: number;
   /**
-   * Render size. `compact` matches the existing 8x8 ScrollText icon used
-   * on the dense PredictPage mobile header; `default` runs larger to
-   * better match the Polymarket-style touch target in the main header.
+   * Render size. `default` is the standard hub-header bell; `compact` is a
+   * smaller h-8 control for dense toolbars when explicitly requested.
    */
   size?: "default" | "compact";
   className?: string;

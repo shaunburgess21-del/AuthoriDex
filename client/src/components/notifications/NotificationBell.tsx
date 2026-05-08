@@ -22,9 +22,8 @@ import { NotificationsPanel } from "./NotificationsPanel";
 
 interface NotificationBellProps {
   /**
-   * Trigger button size. `compact` (h-8 w-8) is used on the dense
-   * PredictPage mobile cluster; `default` is intentionally larger on
-   * other headers to match the desired bell prominence.
+   * Trigger button size. `default` (larger touch target) matches hub headers;
+   * `compact` (h-8 w-8) is optional for dense layouts.
    */
   size?: "default" | "compact";
   className?: string;
