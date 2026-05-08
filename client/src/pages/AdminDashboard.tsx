@@ -7953,6 +7953,9 @@ export default function AdminDashboard() {
                   <p className="text-xs text-muted-foreground">
                     Set seed vote counts for ratings 1-5 used as the initial approval baseline.
                   </p>
+                  <p className="text-[11px] text-muted-foreground/70 leading-snug mt-1">
+                    Seed/baseline count only. Public leaderboard vote count includes seeds + community votes + agent votes.
+                  </p>
                 </div>
 
                 {seedApprovalLoading ? (
