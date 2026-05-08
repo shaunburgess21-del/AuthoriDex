@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, Newspaper, BookOpen, Sparkles, AlertTriangle, ExternalLink, Info, ArrowUp, ArrowDown } from "lucide-react";
+import { Activity, Newspaper, BookOpen, Sparkles, AlertTriangle, ExternalLink, Info, ArrowUp, ArrowDown, TrendingUp } from "lucide-react";
 import { SiX, SiYoutube, SiInstagram, SiTiktok, SiSpotify } from "react-icons/si";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
 import { cn } from "@/lib/utils";
@@ -74,6 +74,17 @@ interface MomentumData {
       deltaPct: number;       // 24h change in *score* vs prior tick
       level: MomentumLevel;
     };
+    /** Google Trends interest signal (May 2026). Volume-only for now;
+     *  Trends Momentum (acceleration) deferred until 7+ days of data. */
+    trends?: {
+      interest: number;           // 0..100 Google Trends interest score
+      avg7d: number;              // 7-day average interest
+      avg90d: number;             // 90-day average interest (mass)
+      momentumRatio: number;      // interest / max(avg7d, 1), capped at 10×
+      momentumLevel: MomentumLevel;
+      deltaPct: number;
+      topicId: string | null;
+    };
     drivers: {
       status: "active" | "stable";
       breakdown: { search: number; news: number; wiki: number; momentum?: number } | null;
@@ -100,28 +111,25 @@ function formatNum(n: number): string {
 
 // Fallback thresholds used only when the server response doesn't carry `level`
 // (e.g. older cached responses or the first load before stats warm up).
-function fallbackLevel(source: "momentum" | "wiki-momentum" | "news" | "wiki", value: number): MomentumLevel {
+function fallbackLevel(source: "momentum" | "wiki-momentum" | "news" | "wiki" | "trends", value: number): MomentumLevel {
   if (!Number.isFinite(value) || value <= 0) return "none";
   if (source === "momentum" || source === "wiki-momentum") {
     // Kept in sync with computeMomentumLevel in server/routes.ts.
-    // value is the displayed 24h/7d ratio (capped at 10× by the API,
-    // see MOMENTUM_RATIO_CAP in normalize.ts). Bands intentionally
-    // map onto user-facing language:
-    //   low    < 1.0  → below this person's typical day
-    //   medium < 2.0  → typical or modestly above
-    //   high  ≥ 2.0   → clearly elevated (≥ 2× typical)
-    // News and Wiki share thresholds — confirmed by the May 2026 audit
-    // (`audit-wiki-momentum-thresholds-output.json`,
-    // `singleThresholdFairAcrossTiers: true`).
     if (value < 1.0) return "low";
     if (value < 2.0) return "medium";
     return "high";
   }
   if (source === "news") {
     // Kept in sync with FIXED_LEVEL_FALLBACKS.news in server/routes.ts.
-    // Bumped for NEWS_AGGREGATION_MODE=union which roughly 2-3x's raw counts.
     if (value < 15) return "low";
     if (value < 40) return "medium";
+    return "high";
+  }
+  if (source === "trends") {
+    // Google Trends interest is 0-100 normalised. Thresholds based on
+    // the scale's natural distribution across our tracked cohort.
+    if (value < 25) return "low";
+    if (value < 50) return "medium";
     return "high";
   }
   if (value < 500) return "low";
@@ -137,6 +145,9 @@ const MOMENTUM_LEVEL_COPY =
 
 const WIKI_MOMENTUM_LEVEL_COPY =
   "Level reflects how today's Wikipedia pageviews compare to this person's own 7-day daily average — Low = below typical, Medium = around or modestly above typical, High = at least 2× their typical day.";
+
+const TRENDS_LEVEL_COPY =
+  "Google Trends search interest score (0–100) measuring how often people search for this person relative to all Google searches. Low = under 25, Medium = 25–49, High = 50+.";
 
 // Each level gets a distinct dot SHAPE on top of its colour so the indicator is
 // still unambiguous for users who can't rely on red/amber/green alone:
@@ -360,6 +371,8 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
           <SignalSkeleton />
           <SignalSkeleton />
           <SignalSkeleton />
+          <SignalSkeleton />
+          <SignalSkeleton />
         </div>
       </div>
     );
@@ -466,6 +479,31 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
       )
     : null;
 
+  // ── Google Trends Activity (May 2026) ──────────────────────────────────
+  const trendsInterest = signals.trends?.interest ?? 0;
+  const hasTrendsData = signals.trends != null && trendsInterest > 0;
+  const trendsLevel: MomentumLevel = hasTrendsData
+    ? fallbackLevel("trends", trendsInterest)
+    : "none";
+  const trendsTrend: TrendWord = signals.trends
+    ? (signals.trends.deltaPct > 5 ? "rising" : signals.trends.deltaPct < -5 ? "falling" : "steady")
+    : "steady";
+  const trendsValue = hasTrendsData ? `${trendsInterest}` : "—";
+  const trendsUnit = hasTrendsData ? "interest score" : "awaiting data";
+  const trendsFooter = !hasTrendsData
+    ? (
+        <p className="text-[10px] text-muted-foreground/60 pt-0.5" data-testid="text-trends-warmup">
+          Awaiting first Google Trends data
+        </p>
+      )
+    : signals.trends && signals.trends.avg7d > 0
+      ? (
+          <p className="text-[10px] text-muted-foreground/60 pt-0.5" data-testid="text-trends-avg">
+            7-day avg: {signals.trends.avg7d.toFixed(1)}
+          </p>
+        )
+      : null;
+
   return (
     <div id="momentum-signals" className="mt-8 space-y-5" data-testid="section-momentum-signals">
       <div className="flex flex-col gap-1">
@@ -485,28 +523,47 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
       )}
 
       {/*
-       * Card layout (May 2026 — synthesis-first):
-       *   Row 1 (full-width): Today's Take — synthesis across all 4 signals
-       *   Row 2 (volume):     News Activity   |  Wikipedia Pulse
-       *   Row 3 (acceleration): News Momentum |  Wiki Momentum
+       * Card layout (May 2026 — 3×2 grid, paired by source):
+       *   Row 1 (overview + trends): Today's Take    |  Google Trends
+       *   Row 2 (news):              News Activity    |  News Momentum
+       *   Row 3 (wiki):              Wikipedia Pulse  |  Wiki Momentum
        *
-       * Pairing by signal-type (volume vs acceleration) rather than by
-       * source (news vs wiki) makes the symmetry between the two cards on
-       * each row visually obvious — same y-axis = same kind of question
-       * being asked of the data. Take goes on top so the high-level read
-       * frames the detail cards underneath.
+       * Pairing volume + acceleration for the same source side-by-side
+       * lets users compare a source's current level against its own
+       * acceleration at a glance.
        */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div className="sm:col-span-2">
-          <MomentumTakeCard
-            sources={[
-              { name: "News", level: newsLevel, delta: signals.news.deltaPct },
-              { name: "News Momentum", level: momentumLevel, delta: signals.momentum?.deltaPct ?? 0 },
-              { name: "Wikipedia", level: wikiLevel, delta: signals.wiki.deltaPct },
-              { name: "Wiki Momentum", level: wikiMomentumLevel, delta: signals.wikiMomentum?.deltaPct ?? 0 },
-            ]}
-          />
-        </div>
+        <MomentumTakeCard
+          sources={[
+            { name: "News", level: newsLevel, delta: signals.news.deltaPct },
+            { name: "News Momentum", level: momentumLevel, delta: signals.momentum?.deltaPct ?? 0 },
+            { name: "Wikipedia", level: wikiLevel, delta: signals.wiki.deltaPct },
+            { name: "Wiki Momentum", level: wikiMomentumLevel, delta: signals.wikiMomentum?.deltaPct ?? 0 },
+            { name: "Google Trends", level: trendsLevel, delta: signals.trends?.deltaPct ?? 0 },
+          ]}
+        />
+
+        <SignalCard
+          testId="card-trends-activity"
+          icon={<TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />}
+          iconWrapClass="bg-muted"
+          title="Google Trends"
+          level={trendsLevel}
+          value={trendsValue}
+          unit={trendsUnit}
+          deltaPct={signals.trends?.deltaPct ?? 0}
+          trendWord={trendsTrend}
+          tooltip={
+            <TouchTooltip
+              side="top"
+              contentClassName="max-w-[240px] text-xs normal-case tracking-normal"
+              content={TRENDS_LEVEL_COPY}
+            >
+              <Info className="h-3 w-3 text-muted-foreground/50 cursor-help" data-testid="icon-trends-tooltip" />
+            </TouchTooltip>
+          }
+          footer={trendsFooter}
+        />
 
         <SignalCard
           testId="card-news-activity"
@@ -534,6 +591,28 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
               </p>
             ) : null
           }
+        />
+
+        <SignalCard
+          testId="card-news-momentum"
+          icon={<Activity className="h-3.5 w-3.5 text-muted-foreground" />}
+          iconWrapClass="bg-muted"
+          title="News Momentum"
+          level={momentumLevel}
+          value={momentumValue}
+          unit={momentumUnit}
+          deltaPct={signals.momentum?.deltaPct ?? 0}
+          trendWord={momentumTrend}
+          tooltip={
+            <TouchTooltip
+              side="top"
+              contentClassName="max-w-[260px] text-xs normal-case tracking-normal"
+              content={`This person's typical daily news volume averaged over the last 7 days. ${MOMENTUM_LEVEL_COPY}`}
+            >
+              <Info className="h-3 w-3 text-muted-foreground/50 cursor-help" data-testid="icon-momentum-tooltip" />
+            </TouchTooltip>
+          }
+          footer={momentumFooter}
         />
 
         <SignalCard
@@ -570,28 +649,6 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
         />
 
         <SignalCard
-          testId="card-news-momentum"
-          icon={<Activity className="h-3.5 w-3.5 text-muted-foreground" />}
-          iconWrapClass="bg-muted"
-          title="News Momentum"
-          level={momentumLevel}
-          value={momentumValue}
-          unit={momentumUnit}
-          deltaPct={signals.momentum?.deltaPct ?? 0}
-          trendWord={momentumTrend}
-          tooltip={
-            <TouchTooltip
-              side="top"
-              contentClassName="max-w-[260px] text-xs normal-case tracking-normal"
-              content={`This person's typical daily news volume averaged over the last 7 days. ${MOMENTUM_LEVEL_COPY}`}
-            >
-              <Info className="h-3 w-3 text-muted-foreground/50 cursor-help" data-testid="icon-momentum-tooltip" />
-            </TouchTooltip>
-          }
-          footer={momentumFooter}
-        />
-
-        <SignalCard
           testId="card-wiki-momentum"
           icon={<Activity className="h-3.5 w-3.5 text-muted-foreground" />}
           iconWrapClass="bg-muted"
@@ -620,10 +677,10 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
 }
 
 // ─── Today's Take ─────────────────────────────────────────────────────────────
-// Replaces the old Score Drivers card. Synthesises the three signal cards above
-// into a single human-readable sentence + state badge, so users get a direct
-// answer to "what is this person's attention doing right now?" without needing
-// to reconcile contradictory-looking percentages against the level traffic lights.
+// Synthesises all five signal sources into a single human-readable sentence +
+// state badge, so users get a direct answer to "what is this person's attention
+// doing right now?" without needing to reconcile contradictory-looking
+// percentages against the level traffic lights.
 
 type MomentumState = "peaking" | "rising" | "mixed" | "steady" | "cooling" | "quiet";
 
@@ -698,20 +755,19 @@ const STATE_STYLES: Record<MomentumState, {
   },
 };
 
-// Source naming (May 2026): renamed `"Momentum"` → `"News Momentum"` and
-// added `"Wiki Momentum"` so the four sources read symmetrically. The
-// volume sources (News, Wikipedia) are paired with their per-person
-// acceleration counterparts (News Momentum, Wiki Momentum). Today's Take
-// templates and chip labels both use these strings directly.
+// Source naming: five sources feed Today's Take. Volume sources (News,
+// Wikipedia, Google Trends) are paired with acceleration counterparts
+// (News Momentum, Wiki Momentum). Today's Take templates and chip
+// labels both use these strings directly.
 interface SourceSnapshot {
-  name: "News" | "News Momentum" | "Wikipedia" | "Wiki Momentum";
+  name: "News" | "News Momentum" | "Wikipedia" | "Wiki Momentum" | "Google Trends";
   level: MomentumLevel;
   delta: number;
 }
 
-// With four sources, the multi-source thresholds shift slightly so a
-// single high signal doesn't get drowned out by the others, but a
-// genuinely quiet day still classifies as Quiet rather than "Steady".
+// With five sources, the thresholds are set so a single high signal
+// doesn't get drowned out, but a genuinely quiet day still classifies
+// as Quiet rather than "Steady".
 function classifyMomentumState(sources: SourceSnapshot[]): MomentumState {
   const levels = sources.map(s => s.level);
   const deltas = sources.map(s => s.delta).filter(d => Number.isFinite(d));
@@ -733,7 +789,7 @@ function classifyMomentumState(sources: SourceSnapshot[]): MomentumState {
   // "cooling" — the take sentence will name both moves explicitly.
   if (hasStrongRise && hasStrongFall) return "mixed";
 
-  // Bulk directional movement across multiple sources. With four sources,
+  // Bulk directional movement across multiple sources. With five sources,
   // ≥2 rising/falling is still a meaningful directional read.
   if (risingCount >= 2 && !hasStrongFall) return "rising";
   if (fallingCount >= 2 && !hasStrongRise) return "cooling";
@@ -743,10 +799,8 @@ function classifyMomentumState(sources: SourceSnapshot[]): MomentumState {
   if (hasStrongRise && fallingCount === 0) return "rising";
   if (hasStrongFall && risingCount === 0) return "cooling";
 
-  // Quiet bumped from ≥2 to ≥3 with the 4-source addition — otherwise a
-  // person with low news+wiki on a day where their momentum signals are
-  // simply "no comparable baseline" (level=none, common for newly-tracked
-  // people) would tip into Quiet too eagerly.
+  // Quiet threshold at ≥3 — with five sources, 3+ low/none still
+  // represents a genuinely quiet day without being too eager.
   if (lowCount >= 3 && highCount === 0 && risingCount === 0) return "quiet";
   return "steady";
 }
@@ -760,6 +814,7 @@ const LEVEL_RANK: Record<MomentumLevel, number> = { none: 0, low: 1, medium: 2, 
 // stilted.
 function nameInSentence(name: SourceSnapshot["name"]): string {
   if (name === "Wikipedia") return "Wikipedia";
+  if (name === "Google Trends") return "Google Trends";
   if (name === "News Momentum") return "news momentum";
   if (name === "Wiki Momentum") return "wiki momentum";
   return "news";
@@ -771,6 +826,7 @@ function nameInSentence(name: SourceSnapshot["name"]): string {
 function nameAtSentenceStart(name: SourceSnapshot["name"]): string {
   if (name === "News Momentum") return "News momentum";
   if (name === "Wiki Momentum") return "Wiki momentum";
+  if (name === "Google Trends") return "Google Trends";
   return name;
 }
 
@@ -792,7 +848,8 @@ function composeTake(sources: SourceSnapshot[], state: MomentumState): string {
       // capitalised when it's the leading clause of the base phrase.
       const labels = highNames.map(nameAtSentenceStart);
       let base: string;
-      if (labels.length >= 4) base = "Peak attention across every signal";
+      if (labels.length >= 5) base = "Peak attention across every signal";
+      else if (labels.length === 4) base = `Strong ${labels[0]}, ${labels[1]}, ${labels[2]}, and ${labels[3]}`;
       else if (labels.length === 3) base = `Strong ${labels[0]}, ${labels[1]}, and ${labels[2]}`;
       else if (labels.length === 2) base = `Strong ${labels[0]} and ${labels[1]}`;
       else base = `Peak ${labels[0]}`;
@@ -909,7 +966,7 @@ function MomentumTakeCard({ sources }: { sources: SourceSnapshot[] }) {
           <TouchTooltip
             side="top"
             contentClassName="max-w-[240px] text-xs normal-case tracking-normal"
-            content="A one-line synthesis of the three signals above, classifying this person's attention as Peaking, Rising, Mixed, Steady, Cooling, or Quiet based on current levels and 24h movement."
+            content="A one-line synthesis of all five signals, classifying this person's attention as Peaking, Rising, Mixed, Steady, Cooling, or Quiet based on current levels and 24h movement."
           >
             <Info className="h-3 w-3 text-muted-foreground/50 cursor-help" data-testid="icon-take-tooltip" />
           </TouchTooltip>
@@ -930,12 +987,7 @@ function MomentumTakeCard({ sources }: { sources: SourceSnapshot[] }) {
             {s.label}
           </span>
         </div>
-        {/*
-         * Cap line length at ~60ch even when the card is full-width
-         * (sm:col-span-2 in the synthesis-first layout). Without this,
-         * short takes like "Strong News and Wikipedia — News surging
-         * 1891%." stretch across a wide desktop card and read awkwardly.
-         */}
+        {/* Cap line length at ~60ch so short takes don't stretch awkwardly. */}
         <p
           className="text-[13px] text-foreground/80 leading-snug max-w-[60ch]"
           data-testid="text-momentum-take"

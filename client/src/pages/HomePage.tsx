@@ -561,6 +561,7 @@ interface PersonMomentumResponse {
     wiki?: { deltaPct?: number };
     momentum?: { deltaPct?: number };
     wikiMomentum?: { deltaPct?: number };
+    trends?: { deltaPct?: number };
   };
   categoryRank?: {
     overall?: number | null;
@@ -569,12 +570,11 @@ interface PersonMomentumResponse {
   } | null;
 }
 
-// Chip labels (May 2026): with Wiki Momentum added, the legacy generic
-// "Momentum" label became ambiguous. Renamed to "News Momentum" for
-// symmetry with "Wiki Momentum" — both surface 24h-vs-7d acceleration on
-// their respective sources.
+// Chip labels (May 2026): "Momentum" renamed to "News Momentum" for
+// symmetry with "Wiki Momentum". "Google Trends" added as a fifth signal
+// once the SerpApi integration landed.
 interface InsightSignal {
-  label: "Wiki" | "News" | "News Momentum" | "Wiki Momentum";
+  label: "Wiki" | "News" | "News Momentum" | "Wiki Momentum" | "Google Trends";
   deltaPct: number;
 }
 
@@ -1518,6 +1518,7 @@ export default function HomePage() {
       { label: "News" as const, deltaPct: selectedInsightMomentum.signals.news?.deltaPct ?? 0 },
       { label: "News Momentum" as const, deltaPct: selectedInsightMomentum.signals.momentum?.deltaPct ?? 0 },
       { label: "Wiki Momentum" as const, deltaPct: selectedInsightMomentum.signals.wikiMomentum?.deltaPct ?? 0 },
+      { label: "Google Trends" as const, deltaPct: selectedInsightMomentum.signals.trends?.deltaPct ?? 0 },
     ];
   }, [selectedInsightMomentum]);
 
