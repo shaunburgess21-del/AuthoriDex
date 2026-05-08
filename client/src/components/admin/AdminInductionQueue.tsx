@@ -12,7 +12,7 @@ import { PersonAvatar } from "@/components/PersonAvatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Plus, Check, X, Search, Trash2, Edit2, ImagePlus } from "lucide-react";
+import { Plus, Check, X, Search, Trash2, Edit2, ImagePlus, Loader2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 const HOVER_TOOLTIP_MEDIA = "(hover: hover) and (pointer: fine)";
@@ -33,6 +33,7 @@ type InductionFormData = {
   tiktokHandle: string;
   youtubeId: string;
   spotifyId: string;
+  googleTrendsTopicId: string;
 };
 
 const EMPTY_FORM: InductionFormData = {
@@ -48,6 +49,7 @@ const EMPTY_FORM: InductionFormData = {
   tiktokHandle: "",
   youtubeId: "",
   spotifyId: "",
+  googleTrendsTopicId: "",
 };
 
 function formDataToApiBody(form: InductionFormData): Record<string, unknown> {
@@ -64,6 +66,7 @@ function formDataToApiBody(form: InductionFormData): Record<string, unknown> {
     tiktokHandle: form.tiktokHandle,
     youtubeId: form.youtubeId,
     spotifyId: form.spotifyId,
+    googleTrendsTopicId: form.googleTrendsTopicId.trim() || null,
   };
 }
 
@@ -131,6 +134,7 @@ interface InductionCandidate {
   youtubeId?: string | null;
   spotifyId?: string | null;
   searchQueryOverride?: string | null;
+  googleTrendsTopicId?: string | null;
   inductionStatus?: string | null;
   isActive: boolean;
 }
@@ -144,6 +148,7 @@ export function AdminInductionQueue() {
   const [editCandidate, setEditCandidate] = useState<InductionCandidate | null>(null);
   const [formData, setFormData] = useState<InductionFormData>({ ...EMPTY_FORM });
   const [pendingGalleryFiles, setPendingGalleryFiles] = useState<File[]>([]);
+  const [trendsLookupLoading, setTrendsLookupLoading] = useState(false);
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
 
   const { data: adminCategoryRows } = useQuery<AdminCategoryRow[]>({
@@ -286,6 +291,7 @@ export function AdminInductionQueue() {
       tiktokHandle: c.tiktokHandle || "",
       youtubeId: c.youtubeId || "",
       spotifyId: c.spotifyId || "",
+      googleTrendsTopicId: c.googleTrendsTopicId || "",
     });
   };
 
@@ -646,6 +652,65 @@ export function AdminInductionQueue() {
                   data-testid="input-candidate-spotify"
                 />
                 <p className="text-xs text-muted-foreground mt-1">{SOCIAL_HANDLE_HELP.spotifyId}</p>
+              </div>
+              <div>
+                <Label>Google Trends Topic ID (optional)</Label>
+                <div className="flex gap-2">
+                  <Input
+                    value={formData.googleTrendsTopicId}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, googleTrendsTopicId: e.target.value }))}
+                    placeholder="e.g., /m/0cqt90"
+                    data-testid="input-candidate-trends-topic"
+                    className="flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={!formData.displayName.trim() || trendsLookupLoading}
+                    onClick={async () => {
+                      setTrendsLookupLoading(true);
+                      try {
+                        const headers = await getAuthHeaders();
+                        const resp = await fetch("/api/admin/trends-topic-suggestions", {
+                          method: "POST",
+                          headers: { ...headers, "Content-Type": "application/json" },
+                          body: JSON.stringify({ query: formData.displayName.trim() }),
+                        });
+                        if (!resp.ok) throw new Error(await resp.text());
+                        const data = await resp.json();
+                        if (data.suggestions?.length > 0) {
+                          const personSuggestion = data.suggestions.find((s: any) =>
+                            s.type?.toLowerCase().includes("person") ||
+                            s.type?.toLowerCase().includes("politician") ||
+                            s.type?.toLowerCase().includes("athlete") ||
+                            s.type?.toLowerCase().includes("singer") ||
+                            s.type?.toLowerCase().includes("actor")
+                          ) || data.suggestions[0];
+                          setFormData(prev => ({ ...prev, googleTrendsTopicId: personSuggestion.topicId }));
+                          toast.success("Topic ID found", {
+                            description: `${personSuggestion.title} (${personSuggestion.type}) — ${personSuggestion.topicId}`,
+                          });
+                        } else {
+                          toast.info("No suggestions", { description: "Google Trends has no entity match for this name." });
+                        }
+                      } catch (err: any) {
+                        toast.error("Lookup failed", { description: err.message });
+                      } finally {
+                        setTrendsLookupLoading(false);
+                      }
+                    }}
+                    data-testid="button-candidate-trends-lookup"
+                  >
+                    {trendsLookupLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Lookup"}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Unique Google Trends entity ID for disambiguation. Click Lookup to auto-detect.
+                  {!formData.googleTrendsTopicId && (
+                    <span className="text-yellow-600 ml-1">Without a Topic ID, Trends data uses name search (less accurate).</span>
+                  )}
+                </p>
               </div>
             </div>
 

@@ -19394,6 +19394,11 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         insertRow.searchQueryOverride =
           typeof sq === "string" && sq.trim() ? sq.trim() : null;
       }
+      if ("googleTrendsTopicId" in body) {
+        const gtt = body.googleTrendsTopicId;
+        insertRow.googleTrendsTopicId =
+          typeof gtt === "string" && gtt.trim() ? gtt.trim() : null;
+      }
 
       const [created] = await db.insert(inductionCandidates).values(insertRow as any).returning();
 
@@ -19512,6 +19517,11 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           typeof searchQueryOverride === "string" && searchQueryOverride.trim()
             ? searchQueryOverride.trim()
             : null;
+      }
+      if ("googleTrendsTopicId" in body) {
+        const gtt = body.googleTrendsTopicId;
+        updates.googleTrendsTopicId =
+          typeof gtt === "string" && (gtt as string).trim() ? (gtt as string).trim() : null;
       }
 
       if (Object.keys(updates).length === 0) return res.status(400).json({ error: "No valid fields to update" });
