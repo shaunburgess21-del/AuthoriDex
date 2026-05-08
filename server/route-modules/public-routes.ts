@@ -17,7 +17,7 @@ import {
 } from "../emails/templates/lifecycle/ContactSubmission";
 import type { AuthRequest } from "../auth-middleware";
 
-const USERNAME_PATTERN = /^[A-Za-z0-9_]{3,20}$/;
+const USERNAME_PATTERN = /^[A-Za-z0-9_]{3,30}$/;
 
 const CONTACT_INBOX = "team@voxdex.com";
 

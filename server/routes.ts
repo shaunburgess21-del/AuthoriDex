@@ -6866,7 +6866,9 @@ Only return the JSON object.`;
       // Build update object with only provided fields
       const updateData: Partial<Profile> = {};
       if (username !== undefined) {
-        // Validate username uniqueness
+        if (!/^[A-Za-z0-9_]{3,30}$/.test(username)) {
+          return res.status(400).json({ error: "Username must be 3-30 chars, letters/numbers/underscore only." });
+        }
         const existingUsername = await db.select().from(profiles)
           .where(and(eq(profiles.username, username), sql`${profiles.id} != ${userId}`))
           .limit(1);
@@ -6903,7 +6905,7 @@ Only return the JSON object.`;
       if (typeof username !== "string") {
         return res.status(400).json({ error: "username is required" });
       }
-      if (!/^[A-Za-z0-9_]{3,20}$/.test(username)) {
+      if (!/^[A-Za-z0-9_]{3,30}$/.test(username)) {
         return res.status(400).json({ error: "invalid_format" });
       }
       if (tosAccepted !== true) {
