@@ -355,8 +355,9 @@ export function AdminAgentsSection() {
       return res.json();
     },
     onSuccess: (data: any) => {
+      const cleared = data?.rowsDeleted ?? data?.rowsUpdated ?? 0;
       toast("World-market re-eval gate reset", {
-        description: `Backdated ${data?.rowsUpdated ?? 0} rows. Agents can re-evaluate world markets on the next sweep.`,
+        description: `Cleared ${cleared} blocking rows. Agents will re-evaluate world markets on the next sweep.`,
       });
       refresh();
     },
@@ -608,7 +609,7 @@ export function AdminAgentsSection() {
               <div className="flex items-start justify-between gap-3">
                 <div className="text-muted-foreground">
                   <div className="font-semibold text-foreground mb-1">Re-eval gate</div>
-                  After toggling <code>WORLD_MARKETS_LLM_ENABLED</code> back ON, agents will not re-bet on world markets they've already evaluated until the per-market lockout expires (7 days for abstains, 30 days for executed bets). Click to backdate those rows so re-eval can fire on the next sweep.
+                  After toggling <code>WORLD_MARKETS_LLM_ENABLED</code> back ON, agents stay locked out of world markets they previously evaluated: a 7-day cooldown on abstains, plus a 30-day conviction window on executed bets that only ~30% of bold agents pass per sweep. Click to physically clear those scheduling rows for community markets so the runner treats them as fresh on the next sweep. <span className="font-medium text-foreground">Does not touch the bet ledger or P&amp;L.</span>
                 </div>
                 <Button
                   variant="outline"

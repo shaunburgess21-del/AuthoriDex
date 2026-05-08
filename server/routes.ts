@@ -19714,38 +19714,41 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
   // market) re-evaluation lockout for World Markets so agents can re-evaluate
   // markets they previously bet on or abstained from. Required after toggling
   // WORLD_MARKETS_LLM_ENABLED back ON: rows from the prior on-cycle keep
-  // blocking re-eval (`world_abstained` for 7d, `executed` for 30d) which
-  // means flipping the env var doesn't actually restart any betting until
-  // the windows expire.
+  // blocking re-eval (`world_abstained` for 7d, `executed` for 30d + a
+  // probabilistic conviction gate that lets <30% through even when ages
+  // pass) which means flipping the env var doesn't actually restart any
+  // betting until the windows expire — and even then most agents stay
+  // locked out by the conviction probability check in agentRunner.
   //
-  // Implementation: backdate `executedAt` on the gate-blocking rows so the
-  // existing age checks in agentRunner pass naturally on the next sweep.
-  // This preserves the audit trail (rows stay in scheduled_agent_actions)
-  // and doesn't touch the underlying market_bets ledger at all.
+  // First version of this endpoint backdated `executed_at`. That worked
+  // for `world_abstained` rows (the runner deletes those once they age
+  // past 7d) but NOT for `executed` rows: the conviction gate also
+  // requires `daysToResolution > 14`, `agentRisk > 0.6`, AND a 30%
+  // dice roll, so backdating left the cohort with a near-zero chance
+  // of actually re-evaluating. User reported zero world-market bets
+  // even after pressing the reset button twice. Fix: physically delete
+  // the gate-blocking rows so the runner's "no prior evaluation" path
+  // fires on the next sweep. Safe because:
+  //   - market_bets (the actual bet/PNL ledger) is untouched
+  //   - scheduled_agent_actions rows for community markets are just
+  //     scheduling artifacts, not financial source-of-truth
+  //   - native markets are excluded by the market_type filter
   app.post("/api/admin/agents/reset-world-market-gate", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { scheduledAgentActions, predictionMarkets } = await import("@shared/schema");
 
-      // Backdate to 31 days ago — clears both the 7-day abstain gate and the
-      // 30-day conviction gate in agentRunner.ts (lines 393-422).
-      const backdate = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000);
-
-      // Only target rows for community (world) markets. Native markets use a
-      // different gate that we don't want to touch.
       const result = await db.execute(sql`
-        UPDATE ${scheduledAgentActions}
-        SET executed_at = ${backdate}
+        DELETE FROM ${scheduledAgentActions}
         WHERE id IN (
           SELECT saa.id
           FROM ${scheduledAgentActions} saa
           INNER JOIN ${predictionMarkets} pm ON pm.id = saa.market_id
           WHERE pm.market_type = 'community'
             AND saa.status IN ('world_abstained', 'executed')
-            AND (saa.executed_at IS NULL OR saa.executed_at > ${backdate})
         )
       `);
 
-      const updated = (result as any).rowCount ?? 0;
+      const deleted = (result as any).rowCount ?? 0;
 
       await db.insert(adminAuditLog).values({
         adminId: req.userId || "unknown",
@@ -19755,13 +19758,12 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         metadata: {
           source: "admin_panel",
           reason: "Unblock world-market re-evaluation after WORLD_MARKETS_LLM_ENABLED toggle",
-          rows_updated: updated,
-          backdated_to: backdate.toISOString(),
+          rows_deleted: deleted,
         },
       });
 
-      console.log(`[AgentAdmin] World market gate reset: backdated ${updated} rows to ${backdate.toISOString()}`);
-      res.json({ ok: true, rowsUpdated: updated, backdatedTo: backdate.toISOString() });
+      console.log(`[AgentAdmin] World market gate reset: deleted ${deleted} community-market scheduling rows`);
+      res.json({ ok: true, rowsDeleted: deleted });
     } catch (err: any) {
       console.error("[AgentAdmin] reset-world-market-gate failed:", err);
       res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });

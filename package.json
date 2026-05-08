@@ -19,6 +19,7 @@
     "import:induction": "tsx --env-file=.env server/scripts/import-induction-csv.ts",
     "backfill:handles": "tsx --env-file=.env server/scripts/backfill-social-handles.ts",
     "audit:handles": "tsx --env-file=.env server/scripts/audit-social-handles.ts",
+    "audit:wiki-momentum-thresholds": "tsx --env-file=.env server/scripts/audit-wiki-momentum-thresholds.ts",
     "apply:handle-verdicts": "tsx --env-file=.env server/scripts/apply-handle-verdicts.ts",
     "db:ensure-induction-cols": "tsx --env-file=.env server/scripts/ensure-induction-candidate-columns.ts",
     "db:ensure": "tsx --env-file=.env server/scripts/run-ensure-schema.ts",
