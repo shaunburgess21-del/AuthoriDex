@@ -8,8 +8,9 @@ import { PredictCard } from "@/components/predict/PredictCard";
 import type { ParticipantPreview } from "@/components/predict/ParticipantAvatarStack";
 import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { formatSignedPercent, formatSignedPoints } from "@/lib/predict-display";
+import { computeEarlyBirdMultiplier } from "@/lib/parimutuel";
 import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
-import { Crown, ChevronRight, Check } from "lucide-react";
+import { Crown, ChevronRight, Check, Zap } from "lucide-react";
 import { Link } from "wouter";
 import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
 
@@ -140,6 +141,16 @@ export function TopGainerCard({
               Hot
             </Badge>
           )}
+          {!isMarketClosed && (() => {
+            const startRef = market.endAt ? new Date(new Date(market.endAt).getTime() - 7 * 24 * 60 * 60 * 1000).toISOString() : null;
+            const boost = computeEarlyBirdMultiplier(new Date(), startRef, market.bettingCutoff);
+            if (boost <= 1.05) return null;
+            return (
+              <Badge variant="outline" className="text-amber-700 dark:text-amber-300 border-amber-500/40 dark:border-amber-500/30 text-[10px]">
+                <Zap className="h-3 w-3 mr-0.5" />{boost.toFixed(1)}x Boost
+              </Badge>
+            );
+          })()}
         </div>
         <InteractiveCategoryPill
           category={market.category}

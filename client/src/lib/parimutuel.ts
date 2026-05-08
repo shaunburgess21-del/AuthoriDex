@@ -52,3 +52,28 @@ export function estimateCreditsIfWin(stake: number, multiplier: number): number 
   if (!Number.isFinite(multiplier) || multiplier <= 0) return 0;
   return Math.round(stake * multiplier);
 }
+
+/**
+ * Early-bird bonus multiplier. Monday bettors receive up to 50% extra weight
+ * in the winning pool; the boost decays linearly to ~1.0x at cutoff.
+ *
+ * Must stay in sync with the server-side `computeEarlyBirdMultiplier` in
+ * `server/jobs/settlement-utils.ts`.
+ */
+export const EARLY_BIRD_BONUS_RATE = 0.5;
+
+export function computeEarlyBirdMultiplier(
+  now: Date | string | number,
+  marketStartAt: Date | string | null | undefined,
+  marketCloseAt: Date | string | null | undefined,
+): number {
+  if (!marketStartAt || !marketCloseAt) return 1;
+  const t = new Date(now).getTime();
+  const start = new Date(marketStartAt).getTime();
+  const close = new Date(marketCloseAt).getTime();
+  if (isNaN(t) || isNaN(start) || isNaN(close)) return 1;
+  const totalWindow = close - start;
+  if (totalWindow <= 0) return 1;
+  const remaining = Math.min(totalWindow, Math.max(0, close - t));
+  return +(1 + EARLY_BIRD_BONUS_RATE * (remaining / totalWindow)).toFixed(2);
+}

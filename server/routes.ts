@@ -57,6 +57,7 @@ import { buildOpeningScores } from "./native-markets/openingScores";
 import { generateWeeklyUpDown, generateWeeklyJackpot, generateWeeklyH2H, generateWeeklyGainer, getWeekContext, ensureWeeklyMarketsForCurrentWeek } from "./jobs/market-generator";
 import { voidMarketBets } from "./jobs/market-resolver";
 import { deriveNativeMarketLifecycle, getWeeklyBettingCutoff } from "./native-markets/lifecycle";
+import { computeEarlyBirdMultiplier } from "./jobs/settlement-utils";
 import { recomputeCelebrityMetrics } from "./services/celebrity-metrics-recompute";
 import { z, ZodError } from "zod";
 import { sendError, sendBadRequest, sendZodError } from "./utils/api-response";
@@ -16078,14 +16079,22 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       return { bet: { ...insertedBet, remainingCredits: updatedProfile.predictCredits }, potentialPayout };
     });
 
-    // Phase 3: stake-weighted prediction engagement signal. Resolve the
-    // market's category at write time; nullable column so guard.
+    // Phase 3: stake-weighted prediction engagement signal + early-bird
+    // boost. Single query fetches category, startAt, closeAt.
+    let earlyBirdMultiplier = 1;
     try {
       const [marketRow] = await db
-        .select({ category: predictionMarkets.category })
+        .select({
+          category: predictionMarkets.category,
+          startAt: predictionMarkets.startAt,
+          closeAt: predictionMarkets.closeAt,
+        })
         .from(predictionMarkets)
         .where(eq(predictionMarkets.id, marketId))
         .limit(1);
+      earlyBirdMultiplier = computeEarlyBirdMultiplier(
+        new Date(), marketRow?.startAt, marketRow?.closeAt,
+      );
       await upsertEngagement({
         userId,
         categoryId: marketRow?.category,
@@ -16116,6 +16125,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         potentialPayout: result.potentialPayout,
         remainingCredits: result.bet.remainingCredits,
         xp: xpResult ?? null,
+        earlyBirdMultiplier: +earlyBirdMultiplier.toFixed(2),
       },
       status: 200 as const,
     };

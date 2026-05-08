@@ -26,7 +26,7 @@ import { h2hUserPickFromBet } from "@/components/predict/HeadToHeadCard";
 import { normalizeMarketCategory } from "@shared/constants";
 import { apiRequest, parseApiError } from "@/lib/queryClient";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
-import { computePayoutMultiplier } from "@/lib/parimutuel";
+import { computePayoutMultiplier, computeEarlyBirdMultiplier } from "@/lib/parimutuel";
 import { goBack } from "@/lib/goBack";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import {
@@ -38,6 +38,7 @@ import {
   TrendingDown,
   Shield,
   Crown,
+  Zap,
 } from "lucide-react";
 
 interface HydratedH2H {
@@ -747,24 +748,37 @@ export default function H2HDetailPage() {
               </Badge>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-3">
-              <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMarketMessage} side="top" align="center">
-                <Button
-                  className="bg-[#3B82F6]/10 border border-[#3B82F6]/50 text-[#3B82F6] hover:border-[#3B82F6]/80 hover:bg-[#3B82F6]/20 py-3 h-auto text-base font-semibold"
-                  onClick={() => handleSelect(1)}
-                >
-                  {smartName(hydrated.person1.name)}
-                </Button>
-              </ClosedMarketActionTrigger>
-              <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMarketMessage} side="top" align="center">
-                <Button
-                  className="bg-[#7C3AED]/10 border border-[#7C3AED]/50 text-[#7C3AED] hover:border-[#7C3AED]/80 hover:bg-[#7C3AED]/20 py-3 h-auto text-base font-semibold"
-                  onClick={() => handleSelect(2)}
-                >
-                  {smartName(hydrated.person2.name)}
-                </Button>
-              </ClosedMarketActionTrigger>
-            </div>
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMarketMessage} side="top" align="center">
+                  <Button
+                    className="bg-[#3B82F6]/10 border border-[#3B82F6]/50 text-[#3B82F6] hover:border-[#3B82F6]/80 hover:bg-[#3B82F6]/20 py-3 h-auto text-base font-semibold"
+                    onClick={() => handleSelect(1)}
+                  >
+                    {smartName(hydrated.person1.name)}
+                  </Button>
+                </ClosedMarketActionTrigger>
+                <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMarketMessage} side="top" align="center">
+                  <Button
+                    className="bg-[#7C3AED]/10 border border-[#7C3AED]/50 text-[#7C3AED] hover:border-[#7C3AED]/80 hover:bg-[#7C3AED]/20 py-3 h-auto text-base font-semibold"
+                    onClick={() => handleSelect(2)}
+                  >
+                    {smartName(hydrated.person2.name)}
+                  </Button>
+                </ClosedMarketActionTrigger>
+              </div>
+              {!isMarketClosed && (() => {
+                const startRef = hydrated?.endAt ? new Date(new Date(hydrated.endAt).getTime() - 7 * 24 * 60 * 60 * 1000).toISOString() : null;
+                const boost = computeEarlyBirdMultiplier(new Date(), startRef, hydrated?.bettingCutoff);
+                if (boost <= 1.05) return null;
+                return (
+                  <p className="text-[11px] text-amber-700 dark:text-amber-400 text-center mt-2 flex items-center justify-center gap-1">
+                    <Zap className="h-3.5 w-3.5" />
+                    Early Bird Boost active: {boost.toFixed(1)}x — predict earlier for bigger payouts
+                  </p>
+                );
+              })()}
+            </>
           )}
         </div>
       </div>

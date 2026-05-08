@@ -8,9 +8,9 @@ import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
 import type { ParticipantPreview } from "@/components/predict/ParticipantAvatarStack";
 import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { cn } from "@/lib/utils";
-import { multiplierFromPercent, formatMultiplier } from "@/lib/parimutuel";
+import { multiplierFromPercent, formatMultiplier, computeEarlyBirdMultiplier } from "@/lib/parimutuel";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Check, ChevronRight } from "lucide-react";
+import { Check, ChevronRight, Zap } from "lucide-react";
 import { Link } from "wouter";
 import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
 
@@ -137,6 +137,16 @@ export function HeadToHeadCard({
                 Hot
               </Badge>
             )}
+            {!isMarketClosed && (() => {
+              const startRef = market.endAt ? new Date(new Date(market.endAt).getTime() - 7 * 24 * 60 * 60 * 1000).toISOString() : null;
+              const boost = computeEarlyBirdMultiplier(new Date(), startRef, market.bettingCutoff);
+              if (boost <= 1.05) return null;
+              return (
+                <Badge variant="outline" className="text-amber-700 dark:text-amber-300 border-amber-500/40 dark:border-amber-500/30 text-[10px]">
+                  <Zap className="h-3 w-3 mr-0.5" />{boost.toFixed(1)}x Boost
+                </Badge>
+              );
+            })()}
           </div>
           <InteractiveCategoryPill
             category={market.category}

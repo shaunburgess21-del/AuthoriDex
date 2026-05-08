@@ -2,7 +2,7 @@ import { db, withDbAdvisoryLock } from "../db";
 import { predictionMarkets, marketEntries, marketBets, trendSnapshots, profiles, creditLedger, trendingPeople } from "@shared/schema";
 import { eq, and, sql, inArray, lte, gte, desc, asc } from "drizzle-orm";
 import { log } from "../log";
-import { calculateSettlementPayouts } from "./settlement-utils";
+import { calculateSettlementPayouts, computeEarlyBirdMultiplier } from "./settlement-utils";
 import { scoreResolvedMarket } from "../agents/performanceUpdater";
 import { getAiModel, getChatCompletionTokenLimit } from "../config/ai-models";
 import { gamificationService } from "../services/gamification";
@@ -252,6 +252,7 @@ export async function settleMarketBets(marketId: string, winnerEntryId: string, 
         userId: marketBets.userId,
         stakeAmount: marketBets.stakeAmount,
         direction: marketBets.direction,
+        createdAt: marketBets.createdAt,
       })
       .from(marketBets)
       .where(and(eq(marketBets.marketId, marketId), eq(marketBets.status, "active")));
@@ -274,9 +275,16 @@ export async function settleMarketBets(marketId: string, winnerEntryId: string, 
       };
     }
 
+    const [marketTiming] = await tx
+      .select({ startAt: predictionMarkets.startAt, closeAt: predictionMarkets.closeAt })
+      .from(predictionMarkets)
+      .where(eq(predictionMarkets.id, marketId))
+      .limit(1);
+
     const preview = calculateSettlementPayouts(
-      allBets.map(b => ({ ...b, direction: b.direction as "yes" | "no" })),
+      allBets.map(b => ({ ...b, direction: b.direction as "yes" | "no", createdAt: b.createdAt })),
       winnerEntryId,
+      { marketStartAt: marketTiming?.startAt, marketCloseAt: marketTiming?.closeAt },
     );
     const payoutByBetId = new Map(preview.payouts.map((entry) => [entry.betId, entry.payout]));
 
@@ -890,6 +898,7 @@ async function resolveJackpot(market: any): Promise<"resolved" | "blocked"> {
       userId: marketBets.userId,
       stakeAmount: marketBets.stakeAmount,
       betMetadata: marketBets.betMetadata,
+      createdAt: marketBets.createdAt,
     })
     .from(marketBets)
     .where(and(eq(marketBets.marketId, market.id), eq(marketBets.status, "active")));
@@ -910,10 +919,6 @@ async function resolveJackpot(market: any): Promise<"resolved" | "blocked"> {
     return "resolved";
   }
 
-  // Whole pool is paid out to winners — VoxDex doesn't take a rake on
-  // jackpots (entries are paid in free virtual credits, no real-money
-  // economics to fund). If a future product decision reintroduces a
-  // platform fee, derive `payoutPool` from `totalPool` here.
   const totalPool = allBets.reduce((sum, b) => sum + b.stakeAmount, 0);
 
   const allBetsWithScore = allBets.map(b => {
@@ -947,14 +952,20 @@ async function resolveJackpot(market: any): Promise<"resolved" | "blocked"> {
   const now = new Date();
 
   await db.transaction(async (tx) => {
-    const perWinnerShare = Math.floor(totalPool / winners.length);
+    const winnersWithWeight = winners.map(w => ({
+      ...w,
+      weight: w.stakeAmount * computeEarlyBirdMultiplier(w.createdAt, market.startAt, market.closeAt),
+    }));
+    const totalWeight = winnersWithWeight.reduce((sum, w) => sum + w.weight, 0);
     let distributed = 0;
 
-    for (let i = 0; i < winners.length; i++) {
-      const w = winners[i];
-      const isLast = i === winners.length - 1;
-      // Last winner sweeps any rounding dust so payouts always sum to totalPool.
-      const share = isLast ? totalPool - distributed : perWinnerShare;
+    for (let i = 0; i < winnersWithWeight.length; i++) {
+      const w = winnersWithWeight[i];
+      const isLast = i === winnersWithWeight.length - 1;
+      const rawShare = totalWeight > 0
+        ? Math.floor((w.weight / totalWeight) * totalPool)
+        : Math.floor(totalPool / winnersWithWeight.length);
+      const share = isLast ? totalPool - distributed : rawShare;
       distributed += share;
 
       await tx.update(marketBets)
@@ -1036,12 +1047,14 @@ async function resolveJackpot(market: any): Promise<"resolved" | "blocked"> {
   try {
     const href = `/markets/${market.slug ?? market.id}`;
     const marketTitle = market.title ?? "Jackpot prediction";
-    const perWinnerShare = winners.length > 0 ? Math.floor(totalPool / winners.length) : 0;
-    for (let i = 0; i < winners.length; i++) {
-      const w = winners[i];
-      const share = i === winners.length - 1
-        ? totalPool - perWinnerShare * (winners.length - 1)
-        : perWinnerShare;
+    const settledWinnerBets = await db
+      .select({ id: marketBets.id, payoutAmount: marketBets.payoutAmount })
+      .from(marketBets)
+      .where(and(eq(marketBets.marketId, market.id), eq(marketBets.status, "won")));
+    const payoutById = new Map(settledWinnerBets.map(b => [b.id, b.payoutAmount ?? 0]));
+
+    for (const w of winners) {
+      const share = payoutById.get(w.id) ?? 0;
       const profit = share - w.stakeAmount;
       const signedProfit = `${profit >= 0 ? "+" : ""}${profit.toLocaleString("en-US")}`;
       const title = profit > 0

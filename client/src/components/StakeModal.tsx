@@ -17,7 +17,7 @@ import { WhatNeedsToHappen } from "@/components/predict/WhatNeedsToHappen";
 import { OutcomePathChart } from "@/components/predict/OutcomePathChart";
 import { RULES_CONTENT, RulesExplainer } from "@/components/predict/RulesContent";
 import { shouldRenderCrowdSentiment } from "@/lib/predict-display";
-import { estimateCreditsIfWin } from "@/lib/parimutuel";
+import { estimateCreditsIfWin, computeEarlyBirdMultiplier } from "@/lib/parimutuel";
 
 const MISSION_HEADERS: Record<string, string> = {
   jackpot: "Predict the exact Trend Score at week's end to win the pot.",
@@ -81,6 +81,8 @@ export interface StakeSelection {
   isTopUp?: boolean;
   /** Total stake the user already has on this side (sum across prior bets). */
   existingStake?: number;
+  /** Market open time — used to calculate the early-bird boost indicator. */
+  marketStartAt?: string;
 }
 
 interface StakeModalProps {
@@ -519,6 +521,40 @@ export function StakeModal({
               )}
             </p>
           )}
+
+          {(() => {
+            let startRef = selection.marketStartAt ?? selection.baselineTimestamp;
+            if (!startRef && selection.endAt) {
+              const d = new Date(selection.endAt);
+              d.setUTCDate(d.getUTCDate() - 7);
+              startRef = d.toISOString();
+            }
+            const boost = computeEarlyBirdMultiplier(
+              new Date(),
+              startRef,
+              selection.bettingCutoff,
+            );
+            if (boost <= 1.05) return null;
+            return (
+              <div className="flex items-center justify-center gap-1.5 text-xs">
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 text-amber-800 dark:text-amber-300 font-medium">
+                  <Star className="h-3 w-3" />
+                  Early Bird Boost: {boost.toFixed(1)}x
+                </span>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button className="text-muted-foreground hover:text-foreground">
+                      <HelpCircle className="h-3 w-3" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="text-xs max-w-60" side="top">
+                    Predict earlier in the week to earn a bigger share of the winning pool.
+                    Monday bettors get up to 1.5x weight — the boost decreases as the cutoff approaches.
+                  </PopoverContent>
+                </Popover>
+              </div>
+            );
+          })()}
 
           {(shouldRenderCrowdSentiment(selection.crowdSentiment) ||
             (typeof selection.poolTotal === "number" && selection.poolTotal > 0)) && (

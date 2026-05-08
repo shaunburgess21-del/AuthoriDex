@@ -8,9 +8,10 @@ import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
 import { PredictCard } from "@/components/predict/PredictCard";
 import { ParticipantAvatarStack, type ParticipantPreview } from "@/components/predict/ParticipantAvatarStack";
 import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
-import { Star, Flame, ListChecks } from "lucide-react";
+import { Star, Flame, ListChecks, Zap } from "lucide-react";
 import { Link } from "wouter";
 import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
+import { computeEarlyBirdMultiplier } from "@/lib/parimutuel";
 
 type CategoryFilter = "all" | "favorites" | "trending" | "tech" | "politics" | "business" | "music" | "sports" | "film-tv" | "gaming" | "creator" | "food-drink" | "lifestyle" | "misc";
 
@@ -92,6 +93,15 @@ export function WeeklyUpDownCard({
               Thin Pool
             </Badge>
           )}
+          {!isMarketClosed && (() => {
+            const boost = computeEarlyBirdMultiplier(new Date(), market.startAt, market.bettingCutoff);
+            if (boost <= 1.05) return null;
+            return (
+              <Badge variant="outline" className="text-amber-700 dark:text-amber-300 border-amber-500/40 dark:border-amber-500/30 text-[10px]">
+                <Zap className="h-3 w-3 mr-0.5" />{boost.toFixed(1)}x Boost
+              </Badge>
+            );
+          })()}
           {pendingPosition && !isMarketClosed && (
             <Badge
               variant="outline"
@@ -195,6 +205,8 @@ export function WeeklyUpDownCard({
         closedMessage={closedMessage}
         onSelect={onSelect}
         pendingPosition={pendingPosition ?? null}
+        marketStartAt={market.startAt}
+        bettingCutoff={market.bettingCutoff}
       />
       </div>
     </PredictCard>

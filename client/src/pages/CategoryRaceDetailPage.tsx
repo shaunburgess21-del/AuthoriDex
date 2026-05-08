@@ -30,7 +30,7 @@ import { apiRequest, parseApiError } from "@/lib/queryClient";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { goBack } from "@/lib/goBack";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
-import { computePayoutMultiplier } from "@/lib/parimutuel";
+import { computePayoutMultiplier, computeEarlyBirdMultiplier } from "@/lib/parimutuel";
 import {
   ArrowLeft,
   Crown,

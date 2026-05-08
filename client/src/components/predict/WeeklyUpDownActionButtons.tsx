@@ -1,9 +1,10 @@
 import { Button } from "@/components/ui/button";
-import { TrendingDown, TrendingUp } from "lucide-react";
+import { TrendingDown, TrendingUp, Zap } from "lucide-react";
 import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { ClosedMarketActionTrigger } from "./ClosedMarketActionTrigger";
 import { WeeklyUpDownYourPositionPanel } from "./WeeklyUpDownYourPositionPanel";
 import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
+import { computeEarlyBirdMultiplier } from "@/lib/parimutuel";
 
 export function WeeklyUpDownActionButtons({
   marketId,
@@ -14,6 +15,8 @@ export function WeeklyUpDownActionButtons({
   closedMessage,
   onSelect,
   pendingPosition,
+  marketStartAt,
+  bettingCutoff,
 }: {
   marketId: string;
   personName: string;
@@ -23,6 +26,8 @@ export function WeeklyUpDownActionButtons({
   closedMessage: Pick<ClosedMarketMessage, "title" | "lines">;
   onSelect?: (choice: "up" | "down") => void;
   pendingPosition?: { pick: "up" | "down" | null; stakeAmount: number } | null;
+  marketStartAt?: string | null;
+  bettingCutoff?: string | null;
 }) {
   if (!isMarketClosed && pendingPosition) {
     return (
@@ -44,28 +49,39 @@ export function WeeklyUpDownActionButtons({
     );
   }
 
+  const boost = computeEarlyBirdMultiplier(new Date(), marketStartAt, bettingCutoff);
+  const showBoostHint = !isMarketClosed && boost > 1.05;
+
   return (
-    <div className="grid grid-cols-2 gap-2">
-      <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMessage} side="top" align="center">
-        <Button
-          className="bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20 py-3 md:py-2 h-auto"
-          onClick={() => onSelect?.("up")}
-          data-testid={`button-up-${marketId}`}
-        >
-          <TrendingUp className="h-4 w-4 mr-1" />
-          Up
-        </Button>
-      </ClosedMarketActionTrigger>
-      <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMessage} side="top" align="center">
-        <Button
-          className="bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20 py-3 md:py-2 h-auto"
-          onClick={() => onSelect?.("down")}
-          data-testid={`button-down-${marketId}`}
-        >
-          <TrendingDown className="h-4 w-4 mr-1" />
-          Down
-        </Button>
-      </ClosedMarketActionTrigger>
+    <div>
+      <div className="grid grid-cols-2 gap-2">
+        <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMessage} side="top" align="center">
+          <Button
+            className="bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20 py-3 md:py-2 h-auto"
+            onClick={() => onSelect?.("up")}
+            data-testid={`button-up-${marketId}`}
+          >
+            <TrendingUp className="h-4 w-4 mr-1" />
+            Up
+          </Button>
+        </ClosedMarketActionTrigger>
+        <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMessage} side="top" align="center">
+          <Button
+            className="bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20 py-3 md:py-2 h-auto"
+            onClick={() => onSelect?.("down")}
+            data-testid={`button-down-${marketId}`}
+          >
+            <TrendingDown className="h-4 w-4 mr-1" />
+            Down
+          </Button>
+        </ClosedMarketActionTrigger>
+      </div>
+      {showBoostHint && (
+        <p className="text-[10px] text-amber-700 dark:text-amber-400 text-center mt-1.5 flex items-center justify-center gap-1">
+          <Zap className="h-3 w-3" />
+          Early predictions get boosted payouts
+        </p>
+      )}
     </div>
   );
 }
