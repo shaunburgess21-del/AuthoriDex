@@ -71,12 +71,24 @@ export const WORLD_MARKET_RESERVE_PER_SWEEP = 10;
 // sweep until the catalogue cycles through.
 export const NATIVE_ROTATION_MEMORY = 40;
 
+// Lenient env-flag parser. Accepts true/false in any case plus common
+// truthy aliases (1, yes, on) so a Railway value of `TRUE` doesn't read
+// as falsy (which is exactly how WORLD_MARKETS_LLM_ENABLED stayed silently
+// disabled for 2 days in May 2026 — Railway saved the value as "TRUE",
+// the strict `=== "true"` check returned false, and the kill switch
+// stayed engaged with no obvious symptom).
+function envFlag(value: string | undefined): boolean {
+  if (typeof value !== "string") return false;
+  const normalized = value.trim().toLowerCase();
+  return normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "on";
+}
+
 // World Market boost mode (toggle via env WORLD_MARKET_BOOST_ENABLED).
 // SAFETY: Default flipped to OFF (2026-05-01). When enabled, drops the
 // per-market skip rate dramatically and 1.5x's the activity gate, which
 // multiplies LLM call volume ~3x. Only re-enable once per-market caching
 // has been proven stable in production.
-export const WORLD_MARKET_BOOST_ENABLED = process.env.WORLD_MARKET_BOOST_ENABLED === "true";
+export const WORLD_MARKET_BOOST_ENABLED = envFlag(process.env.WORLD_MARKET_BOOST_ENABLED);
 export const WORLD_MARKET_ACTIVITY_MULTIPLIER = 1.5;
 
 // HARD KILL SWITCH for World Market LLM calls (web_search Responses API).
@@ -88,7 +100,7 @@ export const WORLD_MARKET_ACTIVITY_MULTIPLIER = 1.5;
 //   1. Topping up the OpenAI billing balance, AND
 //   2. Confirming the per-market cache (predictionMarkets.metadata.worldAssessment)
 //      is in place so the LLM only runs ONCE per market per TTL.
-export const WORLD_MARKETS_LLM_ENABLED = process.env.WORLD_MARKETS_LLM_ENABLED === "true";
+export const WORLD_MARKETS_LLM_ENABLED = envFlag(process.env.WORLD_MARKETS_LLM_ENABLED);
 
 // TTL for cached per-market LLM assessments — adaptive by time-to-resolution.
 //
