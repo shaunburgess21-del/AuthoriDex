@@ -810,6 +810,10 @@ export function VoteSnapScrollView({
                                       personId={item.personId}
                                       personName={item.personName || item.title}
                                       compact
+                                      placeholder="Add a comment..."
+                                      parentExpanded={isExpanded}
+                                      onDetail={navigateToDetail}
+                                      onShare={handleShare}
                                     />
                                   ) : (
                                     <CardComments

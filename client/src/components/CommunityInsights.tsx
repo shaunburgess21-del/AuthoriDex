@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   Loader2,
   MessageCircle,
@@ -22,6 +22,7 @@ import { CommentComposer } from "./comments/CommentComposer";
 import { CommentSortHeader } from "./comments/CommentSortHeader";
 import { DeleteContentDialog } from "./comments/DeleteContentDialog";
 import { useCommentThread } from "./comments/useCommentThread";
+import { SnapDismissContext } from "@/components/snap-scroll/VoteSnapScrollView";
 import type {
   CommentAdapter,
   CommentItem,
@@ -31,26 +32,15 @@ import type {
 
 const PAGE_SIZE = 4;
 
+const EMPTY_DISCUSSION_MESSAGE =
+  "No comments yet. Be the first to share your thoughts!";
+
 function getSentimentColor(vote: number): string {
   const colors = [
     "#dc2626", "#e63946", "#f97316", "#fa9c3c", "#fbbf24",
     "#c1d42d", "#84cc16", "#5bca30", "#22c55e", "#22c55e",
   ];
   return colors[vote - 1] || colors[4];
-}
-
-/**
- * Left-border accent colour for the top-3 ranked insights. Returns null for
- * ranks 4+ which render as plain borderless rows. Replaces the previous
- * full bordered-box + glow chrome with a 4 px left-border-only accent —
- * preserves the rank semantic without the "card" chrome that diverged from
- * CardComments. See commit body for the visual decision.
- */
-function getRankAccentColor(rank: number): string | null {
-  if (rank === 1) return "rgba(245, 158, 11, 0.6)"; // gold
-  if (rank === 2) return "rgba(148, 163, 184, 0.6)"; // silver
-  if (rank === 3) return "rgba(234, 88, 12, 0.6)"; // bronze
-  return null;
 }
 
 function truncateText(text: string, limit: number): { preview: string; isTruncated: boolean } {
@@ -86,12 +76,25 @@ interface CommunityInsightsProps {
   personId: string;
   personName: string;
   compact?: boolean;
+  placeholder?: string;
+  parentExpanded?: boolean;
+  onDetail?: () => void;
+  onShare?: () => void;
 }
 
-export function CommunityInsights({ personId, personName, compact = false }: CommunityInsightsProps) {
+export function CommunityInsights({
+  personId,
+  personName: _personName,
+  compact = false,
+  placeholder = "Share your thoughts on this topic...",
+  parentExpanded = false,
+  onDetail,
+  onShare,
+}: CommunityInsightsProps) {
   const { user, isLoggedIn, profile } = useAuth();
   const [, setLocation] = useLocation();
   const { trigger: triggerXpBurst } = useXpBurst();
+  const snapDismiss = useContext(SnapDismissContext);
 
   // Insight-only metadata cache. Populated synchronously inside `fetchList`
   // every time the query refetches (initial, post-mutation invalidations).
@@ -108,6 +111,13 @@ export function CommunityInsights({ personId, personName, compact = false }: Com
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const isLoadingMoreRef = useRef(false);
   const loadMoreRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (snapDismiss > 0) {
+      setDrawerComment(null);
+      setDeleteTarget(null);
+    }
+  }, [snapDismiss]);
 
   const adapter = useMemo<CommentAdapter>(() => ({
     queryKey: [`/api/community-insights/${personId}`] as const,
@@ -179,23 +189,9 @@ export function CommunityInsights({ personId, personName, compact = false }: Com
   const thread = useCommentThread(adapter);
   const isAuthenticated = isLoggedIn || !!user;
 
-  // Rank-by-net-votes map — computed across the FULL list regardless of which
-  // sort tab is active. Preserves the historical "this is the all-time
-  // leaderboard top" semantics for the gold/silver/bronze rank borders even
-  // when the user is viewing the feed in Newest order.
-  const ranksById = useMemo<Record<string, number>>(() => {
-    const sorted = [...thread.comments].sort((a, b) => {
-      const aNet = (a.upvotes || 0) - (a.downvotes || 0);
-      const bNet = (b.upvotes || 0) - (b.downvotes || 0);
-      if (aNet !== bNet) return bNet - aNet;
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    });
-    const map: Record<string, number> = {};
-    sorted.forEach((c, idx) => {
-      map[c.id] = idx + 1;
-    });
-    return map;
-  }, [thread.comments]);
+  const variant = compact ? "inline" : "card";
+  const rootClass =
+    variant === "inline" ? "flex flex-col h-full" : "mb-6 px-1";
 
   const totalCount = thread.threaded.length;
   const displayedThread = thread.threaded.slice(0, displayCount);
@@ -243,9 +239,6 @@ export function CommunityInsights({ personId, personName, compact = false }: Com
     });
   }, []);
 
-  // Live-derived insight for the modal: merges the immutable metadata from
-  // insightsCacheRef with the live vote counts from thread.comments. This
-  // gives the modal optimistic vote feedback without storing a stale snapshot.
   const selectedInsight = useMemo<CommunityInsight | null>(() => {
     if (!selectedInsightId) return null;
     const cached = insightsCacheRef.current[selectedInsightId];
@@ -283,85 +276,24 @@ export function CommunityInsights({ personId, personName, compact = false }: Com
     [user, thread],
   );
 
-  if (thread.isLoading) {
-    return (
-      <div>
-        {!compact && (
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-2xl font-serif font-bold">Community Insights</h2>
-          </div>
-        )}
-        <div className="flex items-center justify-center py-8">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          <span className="ml-2 text-muted-foreground">
-            Loading insights...
-          </span>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      {!compact && (
-        <div className="flex items-center justify-between mb-6">
-          <h2
-            className="text-2xl font-serif font-bold"
-            data-testid="text-community-insights-title"
-          >
-            Community Insights
-          </h2>
-        </div>
-      )}
-
-      <div className="max-w-2xl mx-auto">
-        {/* Composer at top — matches original CommunityInsights placement and
-            the "contribute then browse" social-feed convention (Reddit, X
-            reply composer, LinkedIn). CardComments puts its composer at the
-            bottom because the user reads the entity card above it first;
-            different surface, different convention. */}
-        {isAuthenticated ? (
-          <CommentComposer
-            value={thread.composerBody}
-            onChange={thread.setComposerBody}
-            onSubmit={thread.submit}
-            placeholder={`What are your thoughts on ${personName}?`}
-            isPending={thread.isPostPending}
-            authorAvatarUrl={profile?.avatarUrl ?? null}
-            authorDisplayName={profile?.username || user?.email || ""}
-            replyTo={null}
-            onCancelReply={() => {}}
-            supportsFullscreen
-            variant="card"
-          />
-        ) : (
-          <SignInToShare onLogin={() => navigateToLogin(setLocation)} />
-        )}
-
-        <div className="mt-6">
-          <CommentSortHeader
-            count={totalCount}
-            countLabel="Insights"
-            sort={thread.sort}
-            onSortChange={thread.setSort}
-          />
-        </div>
-
-        <div className="space-y-4">
-          {totalCount === 0 ? (
-            <div className="p-8 text-center border rounded-md border-border">
-              <p className="text-muted-foreground">
-                No insights yet. Be the first to share your thoughts on{" "}
-                {personName}!
-              </p>
-            </div>
-          ) : (
-            displayedThread.map(({ parent }) => (
+  const listSection = (
+    <>
+      {totalCount === 0 ? (
+        <p className="text-sm text-muted-foreground text-center py-6">
+          {EMPTY_DISCUSSION_MESSAGE}
+        </p>
+      ) : (
+        <div className="divide-y divide-border/10">
+          {displayedThread.map(({ parent }, idx) => {
+            const netVotes = (parent.upvotes || 0) - (parent.downvotes || 0);
+            const isTopComment =
+              thread.sort === "top" && idx === 0 && netVotes > 0;
+            return (
               <InsightCard
                 key={parent.id}
                 comment={parent}
                 insight={insightsCacheRef.current[parent.id]}
-                rank={ranksById[parent.id] ?? 0}
+                isTopComment={isTopComment}
                 isExpanded={expandedPosts.has(parent.id)}
                 onToggleExpanded={() => toggleExpanded(parent.id)}
                 onOpenOverlay={() => setSelectedInsightId(parent.id)}
@@ -377,30 +309,93 @@ export function CommunityInsights({ personId, personName, compact = false }: Com
                 onOpenActions={() => setDrawerComment(parent)}
                 disabled={!user}
               />
-            ))
-          )}
+            );
+          })}
+        </div>
+      )}
 
-          {hasMore && (
-            <div
-              ref={loadMoreRef}
-              className="flex justify-center py-6"
-              data-testid="infinite-scroll-trigger"
-            >
-              {isLoadingMore && (
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                  <span className="text-sm">Loading more insights...</span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {!hasMore && totalCount > 0 && (
-            <div className="flex justify-center py-6 text-muted-foreground text-sm">
-              You've seen all {totalCount} {totalCount === 1 ? "insight" : "insights"}
+      {hasMore && (
+        <div
+          ref={loadMoreRef}
+          className="flex justify-center py-6"
+          data-testid="infinite-scroll-trigger"
+        >
+          {isLoadingMore && (
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              <span className="text-sm">Loading more...</span>
             </div>
           )}
         </div>
+      )}
+
+      {!hasMore && totalCount > 0 && (
+        <div className="flex justify-center py-6 text-muted-foreground text-sm">
+          You&apos;ve seen all {totalCount}{" "}
+          {totalCount === 1 ? "comment" : "comments"}
+        </div>
+      )}
+    </>
+  );
+
+  const composerSection = isAuthenticated ? (
+    <CommentComposer
+      value={thread.composerBody}
+      onChange={thread.setComposerBody}
+      onSubmit={thread.submit}
+      placeholder={placeholder}
+      isPending={thread.isPostPending}
+      authorAvatarUrl={profile?.avatarUrl ?? null}
+      authorDisplayName={profile?.username || user?.email || ""}
+      replyTo={null}
+      onCancelReply={() => {}}
+      supportsFullscreen
+      parentExpanded={parentExpanded}
+      variant={variant}
+    />
+  ) : (
+    <SignInToDiscuss onLogin={() => navigateToLogin(setLocation)} />
+  );
+
+  if (thread.isLoading) {
+    return (
+      <div
+        className={rootClass}
+        data-testid="section-community-insights"
+      >
+        <div
+          className={`flex items-center justify-center py-8 ${variant === "inline" ? "flex-1" : ""}`}
+        >
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          <span className="ml-2 text-muted-foreground">Loading...</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className={rootClass} data-testid="section-community-insights">
+        <CommentSortHeader
+          count={thread.visibleCount}
+          countLabel="Discussion"
+          variant={variant}
+          sort={thread.sort}
+          onSortChange={thread.setSort}
+          onDetail={onDetail}
+          onShare={onShare}
+        />
+        {variant === "inline" ? (
+          <>
+            <div className="flex-1 min-h-0 overflow-y-auto">{listSection}</div>
+            {composerSection}
+          </>
+        ) : (
+          <>
+            {listSection}
+            {composerSection}
+          </>
+        )}
       </div>
 
       <CommentActionDrawer
@@ -440,14 +435,14 @@ export function CommunityInsights({ personId, personName, compact = false }: Com
         onDeleteInsight={(insightId) => thread.deleteComment({ commentId: insightId })}
         isDeletingInsight={thread.isDeletePending}
       />
-    </div>
+    </>
   );
 }
 
 interface InsightCardProps {
   comment: CommentItem;
   insight: CommunityInsight | undefined;
-  rank: number;
+  isTopComment: boolean;
   isExpanded: boolean;
   onToggleExpanded: () => void;
   onOpenOverlay: () => void;
@@ -459,7 +454,7 @@ interface InsightCardProps {
 function InsightCard({
   comment,
   insight,
-  rank,
+  isTopComment,
   isExpanded,
   onToggleExpanded,
   onOpenOverlay,
@@ -467,15 +462,6 @@ function InsightCard({
   onOpenActions,
   disabled,
 }: InsightCardProps) {
-  // RENDER BOUNDARY (do not move):
-  //   Vote-related fields (upvotes / downvotes / userVote) read from `comment`
-  //   (the CommentItem in thread.comments). useCommentThread's optimistic
-  //   mutations update those values synchronously when the user clicks vote.
-  //
-  //   Insight-only metadata (sentimentVote, personId) reads from `insight`
-  //   (the raw cache populated inside the adapter's fetchList). The cache only
-  //   updates on full refetch — never read vote fields from it or you'll
-  //   render stale counts after optimistic updates.
   const upvotes = comment.upvotes || 0;
   const downvotes = comment.downvotes || 0;
   const netVotes = upvotes - downvotes;
@@ -484,8 +470,6 @@ function InsightCard({
   const isDeleted = Boolean(comment.deletedAt);
 
   const sentimentVote = isDeleted ? null : insight?.sentimentVote ?? null;
-  const rankAccentColor = getRankAccentColor(rank);
-  const isTopThree = !isDeleted && rankAccentColor !== null;
   const { preview, isTruncated } = isDeleted
     ? { preview: "[deleted]", isTruncated: false }
     : truncateText(comment.body, 280);
@@ -493,8 +477,7 @@ function InsightCard({
   return (
     <div
       id={`insight-${comment.id}`}
-      className={`flex gap-3 py-3 ${isTopThree ? "border-l-4 pl-3" : ""}`}
-      style={isTopThree ? { borderLeftColor: rankAccentColor } : undefined}
+      className="flex gap-3 py-3"
       data-testid={`card-insight-${comment.id}`}
     >
       {!isDeleted && (
@@ -535,7 +518,7 @@ function InsightCard({
                 Voted {sentimentVote}/10
               </span>
             )}
-            {rank === 1 && (
+            {isTopComment && (
               <Badge
                 variant="outline"
                 className="text-[10px] border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 py-0"
@@ -547,7 +530,7 @@ function InsightCard({
           </div>
           <button
             onClick={onOpenActions}
-            className="shrink-0 p-1 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+            className="shrink-0 p-1 text-muted-foreground/50 hover:text-muted-foreground transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             data-interactive="true"
             aria-label="Insight actions"
           >
@@ -571,9 +554,6 @@ function InsightCard({
           </button>
         )}
         <div className="flex items-center gap-4 mt-2">
-          {/* Vote-button JSX deliberately mirrors CommentRow.tsx (cyan
-              optimistic pattern). C3-locked decision: honest duplication
-              instead of extracting a CommentVoteButtons primitive. */}
           {!isDeleted && (
             <>
               <button
@@ -637,18 +617,18 @@ function InsightCard({
   );
 }
 
-function SignInToShare({ onLogin }: { onLogin: () => void }) {
+function SignInToDiscuss({ onLogin }: { onLogin: () => void }) {
   return (
     <div className="text-center py-3 border-t border-border/20">
       <p className="text-sm text-muted-foreground">
         <button
           className="text-cyan-600 dark:text-cyan-400 underline hover:text-cyan-500 dark:hover:text-cyan-300 transition-colors"
           onClick={onLogin}
-          data-testid="link-login-to-share-insight"
+          data-testid="link-login-to-comment"
         >
           Sign in
         </button>{" "}
-        to share an insight
+        to join the discussion
       </p>
     </div>
   );
