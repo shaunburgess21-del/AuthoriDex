@@ -2874,15 +2874,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const wikiMomentumLevel = computeMomentumLevel(wikiMomentumRatio);
 
       // ── Google Trends Momentum (May 2026 — display-only, dormant) ───────
-      // Read Trends diagnostics from the persisted snapshot. These are
-      // populated by ingest.ts when the 24h Trends gate fires.
-      const trendsInterest = Number(diag?.raw?.trendsInterest ?? 0);
-      const trendsAvg7dVal = Number(diag?.raw?.trendsAvg7d ?? 0);
-      const trendsAvg90dVal = Number(diag?.raw?.trendsMass90d ?? 0);
-      const trendsMomentumRatio = Number(diag?.raw?.trendsMomentumRatio ?? 0);
+      // Trends data is only ingested once per 24h. When the gate is closed,
+      // subsequent hourly snapshots won't carry trends fields. Fall back to
+      // the most recent snapshot that *does* have trends data.
+      let trendsDiag = diag;
+      if (trendsDiag?.raw?.trendsInterest == null) {
+        const [trendsSnap] = await db
+          .select({ diagnostics: trendSnapshots.diagnostics })
+          .from(trendSnapshots)
+          .where(
+            and(
+              eq(trendSnapshots.personId, id),
+              sql`diagnostics::jsonb->'raw'->'trendsInterest' IS NOT NULL`,
+              sql`diagnostics::jsonb->'raw'->>'trendsInterest' != 'null'`,
+            )
+          )
+          .orderBy(desc(trendSnapshots.timestamp))
+          .limit(1);
+        if (trendsSnap) {
+          trendsDiag = trendsSnap.diagnostics as Record<string, any> | null;
+        }
+      }
+      const trendsInterest = Number(trendsDiag?.raw?.trendsInterest ?? 0);
+      const trendsAvg7dVal = Number(trendsDiag?.raw?.trendsAvg7d ?? 0);
+      const trendsAvg90dVal = Number(trendsDiag?.raw?.trendsMass90d ?? 0);
+      const trendsMomentumRatio = Number(trendsDiag?.raw?.trendsMomentumRatio ?? 0);
       const trendsMomentumLevel = computeMomentumLevel(trendsMomentumRatio);
 
-      const persistedTrendsMomentumScore = Number(diag?.velocityComponents?.trendsMomentum ?? 0);
+      const persistedTrendsMomentumScore = Number(trendsDiag?.velocityComponents?.trendsMomentum ?? 0);
       const prevTrendsMomentumRaw = prevDiag?.velocityComponents?.trendsMomentum;
       const prevTrendsMomentumScore = typeof prevTrendsMomentumRaw === "number" ? prevTrendsMomentumRaw : null;
       const rawTrendsDeltaPct = prevTrendsMomentumScore !== null && prevTrendsMomentumScore > 0
