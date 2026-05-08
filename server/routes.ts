@@ -16110,6 +16110,29 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         return res.status(400).json({ error: "Betting is closed for this market" });
       }
 
+      // No-hedging rule for native updown: only one entry per user
+      // per market. Same entry = top-up (compounded by placeMarketBet);
+      // other entry = blocked. Mirrors the community-binary guard.
+      // Client surfaces a toast on the predict-card and detail-page
+      // CTAs already; this is the server-side defence so a misbehaving
+      // client (or DevTools call) can't sneak a hedge through.
+      const existingNativeBets = await db
+        .select({ entryId: marketBets.entryId })
+        .from(marketBets)
+        .where(
+          and(
+            eq(marketBets.userId, authReq.userId!),
+            eq(marketBets.marketId, market.id),
+            eq(marketBets.status, "active"),
+          )
+        );
+      if (existingNativeBets.some((b) => b.entryId !== entryId)) {
+        return res.status(409).json({
+          error: "Stick with your pick",
+          detail: "You've already backed the other side. Top up your existing pick instead.",
+        });
+      }
+
       const result = await placeMarketBet({
         userId: authReq.userId!,
         marketId: market.id,
@@ -16161,6 +16184,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           id: predictionMarkets.id,
           closeAt: predictionMarkets.closeAt,
           endAt: predictionMarkets.endAt,
+          marketType: predictionMarkets.marketType,
         })
         .from(predictionMarkets)
         .where(
@@ -16192,6 +16216,34 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         (market.endAt && new Date(market.endAt) < now)
       ) {
         return res.status(400).json({ error: "Betting is closed for this market" });
+      }
+
+      // No-hedging rule for native markets:
+      //   - h2h:    only one entry per user (picking person A vs B).
+      //             Same entry = top-up, other = blocked.
+      //   - gainer: cross-entry is the whole point ("back another
+      //             candidate"), so we don't block. Re-picking the same
+      //             candidate is just compounded by placeMarketBet.
+      // updown is handled by the dedicated /updown/:marketId/bet route
+      // above — this route's marketType filter only sees h2h/gainer in
+      // practice but we key off market.marketType for safety.
+      if (market.marketType === "h2h") {
+        const existingH2HBets = await db
+          .select({ entryId: marketBets.entryId })
+          .from(marketBets)
+          .where(
+            and(
+              eq(marketBets.userId, authReq.userId!),
+              eq(marketBets.marketId, market.id),
+              eq(marketBets.status, "active"),
+            )
+          );
+        if (existingH2HBets.some((b) => b.entryId !== entryId)) {
+          return res.status(409).json({
+            error: "Stick with your pick",
+            detail: "You've already backed the other side. Top up your existing pick instead.",
+          });
+        }
       }
 
       const result = await placeMarketBet({

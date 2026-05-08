@@ -348,7 +348,16 @@ export function StakeModal({
               </button>
             )}
 
-            {isUpDown && onDirectionChange && (
+            {/* Direction toggles let a user who misclicked on the card
+                flip without closing + reopening the modal — useful for a
+                fresh pick. When `isTopUp` is true the user is adding to
+                an existing position, so flipping the toggle would let
+                them sneak past the no-hedging rule (which is enforced
+                client-side at the call sites and server-side at place-bet
+                time). Hide the toggle in that case so the only path to
+                the other side is closing the modal and the lock-out chip
+                already greys out the opposite button on the card. */}
+            {isUpDown && onDirectionChange && !isTopUp && (
               <div className="flex gap-2 mt-2">
                 <button
                   onClick={() => onDirectionChange("up")}
@@ -377,8 +386,9 @@ export function StakeModal({
                 so a user who tapped the wrong side on the card can flip
                 without closing + reopening the modal. Only relevant on
                 multi-option community markets; binary community markets
-                pick the side via the entry label itself. */}
-            {isCommunity && isCommunityMultiSide && onDirectionChange && (
+                pick the side via the entry label itself. Hidden when
+                isTopUp for the same no-hedging reason as native above. */}
+            {isCommunity && isCommunityMultiSide && onDirectionChange && !isTopUp && (
               <div className="flex gap-2 mt-2" role="group" aria-label="Yes / No toggle">
                 <button
                   type="button"
