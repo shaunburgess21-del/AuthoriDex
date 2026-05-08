@@ -1503,10 +1503,13 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     // ══════════════════════════════════════════════════════════════════════════
     // Google Trends data only updates once per day. We gate the fetch behind a
     // 24h check: if any tracked person's most recent snapshot already has
-    // `diagnostics.raw.trendsInterest` within the last 24h, skip the API calls.
+    // `diagnostics.raw.trendsInterest` within the gate window, skip the API calls.
     // When the gate opens, we batch people into groups of 5 (SerpApi limit)
     // and call `fetchGoogleTrendsBatch` for each chunk.
-    const TRENDS_FETCH_INTERVAL_MS = 24 * 60 * 60 * 1000;
+    // Budget: 15k calls/month ÷ 32 calls/cycle ≈ 468 cycles.
+    // 2h cadence = 360 cycles/month (~11.5k calls), leaving buffer for
+    // autocomplete lookups and roster growth.
+    const TRENDS_FETCH_INTERVAL_MS = 2 * 60 * 60 * 1000;
     const trendsDataMap = new Map<string, TrendsBatchResult>();
 
     if (isSerpApiTrendsConfigured() && !isBackfill) {
@@ -1523,7 +1526,7 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           const elapsed = Date.now() - new Date(lastTs).getTime();
           if (elapsed < TRENDS_FETCH_INTERVAL_MS) {
             shouldFetchTrends = false;
-            console.log(`[Ingest] Google Trends: skipping — last fetch ${Math.round(elapsed / 60000)}min ago (gate: 24h)`);
+            console.log(`[Ingest] Google Trends: skipping — last fetch ${Math.round(elapsed / 60000)}min ago (gate: 2h)`);
           }
         }
       } catch (e) {
