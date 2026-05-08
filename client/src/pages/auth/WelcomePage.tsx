@@ -46,7 +46,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { ApiError, apiRequest } from "@/lib/queryClient";
 import { redirectAfterLogin, hasPendingAuthReturnSnapshot } from "@/lib/authReturn";
 
-const USERNAME_PATTERN = /^[A-Za-z0-9_]{3,20}$/;
+const USERNAME_PATTERN = /^[A-Za-z0-9_]{3,30}$/;
 const DEBOUNCE_MS = 400;
 
 type Availability =
@@ -116,7 +116,7 @@ export default function WelcomePage() {
     if (!USERNAME_PATTERN.test(trimmed)) {
       setAvailability({
         status: "invalid",
-        reason: "3–20 letters, numbers, or underscores.",
+        reason: "3–30 letters, numbers, or underscores.",
       });
       return;
     }
@@ -429,7 +429,7 @@ function UsernameStatusText({
   if (!username.trim()) {
     return (
       <p className="text-xs text-muted-foreground">
-        3–20 letters, numbers, or underscores.
+        3–30 letters, numbers, or underscores.
       </p>
     );
   }
@@ -451,7 +451,7 @@ function UsernameStatusText({
     default:
       return (
         <p className="text-xs text-muted-foreground">
-          3–20 letters, numbers, or underscores.
+          3–30 letters, numbers, or underscores.
         </p>
       );
   }

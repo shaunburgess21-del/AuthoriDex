@@ -38,6 +38,8 @@ import { uploadAvatarFile, uploadGeneratedAvatar } from "@/lib/avatar/upload";
 import { PasswordCard } from "./PasswordCard";
 import { InterestsPicker } from "@/components/interests/InterestsPicker";
 
+const USERNAME_PATTERN = /^[A-Za-z0-9_]{3,30}$/;
+
 export default function SettingsPage() {
   const { user, profile, profileLoading, refreshProfile, signOut } = useAuth();
   const [, setLocation] = useLocation();
@@ -99,6 +101,10 @@ export default function SettingsPage() {
   });
 
   const normalize = (v: string | null | undefined) => (v ?? "").trim();
+
+  const usernameInvalid =
+    normalize(username).length > 0 && !USERNAME_PATTERN.test(normalize(username));
+
   // Avatar deliberately NOT included in the dirty-check anymore — picker
   // and file upload both PATCH /api/profile/avatar themselves and refresh
   // the profile, so by the time control returns the avatar is already
@@ -328,15 +334,21 @@ export default function SettingsPage() {
                 placeholder="Choose a username"
                 data-testid="input-username"
               />
-              <p className="text-xs text-muted-foreground">
-                This will be used for your public profile URL: /u/{username || "username"}
-              </p>
+              {usernameInvalid ? (
+                <p className="text-xs text-destructive">
+                  3–30 characters, letters, numbers, or underscores only.
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  This will be used for your public profile URL: /u/{username || "username"}
+                </p>
+              )}
             </div>
             
             <div className="flex items-center gap-3">
               <Button
                 onClick={handleSaveProfile}
-                disabled={!isDirty || updateProfileMutation.isPending || profileLoading || !profile}
+                disabled={!isDirty || usernameInvalid || updateProfileMutation.isPending || profileLoading || !profile}
                 data-testid="button-save-profile"
               >
                 {updateProfileMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
