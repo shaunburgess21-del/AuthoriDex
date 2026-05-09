@@ -5,7 +5,7 @@ import { storage } from "./storage";
 import { getBaselineDiagnostics } from "./utils/baseline";
 import { db } from "./db";
 import { syncWinningAvatarForPerson } from "./lib/curateAvatar";
-import { anonVoteBudget, trendSnapshots, trackedPeople, communityInsights, insightVotes, comments as unifiedComments, commentVotes, matchups, votes, voteActions, xpActions, xpLedger, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, contentCategories, userCategoryEngagement, emailUnsubscribeState, insertCommunityInsightSchema, insertInsightVoteSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
+import { anonVoteBudget, trendSnapshots, trackedPeople, communityInsights, insightVotes, comments as unifiedComments, commentVotes, matchups, votes, voteActions, xpActions, xpLedger, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, marketAmmState, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, contentCategories, userCategoryEngagement, emailUnsubscribeState, insertCommunityInsightSchema, insertInsightVoteSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
 import { validateSuggestionPayload, SUGGESTION_TYPES } from "@shared/suggestionSchemas";
 import { normaliseSocialHandles, SOCIAL_HANDLE_KEYS } from "@shared/handleNormalise";
 import { eq, desc, and, gt, sql, count, gte, lte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull, isNull } from "drizzle-orm";
@@ -8727,6 +8727,296 @@ Only return the JSON object.`;
     }
   });
 
+  // ============================================================================
+  // AMM ENDPOINTS (Phase 3 of the parimutuel -> AMM rebuild)
+  // ----------------------------------------------------------------------------
+  // GET  /api/markets/:id            - market detail + AMM state (LMSR markets)
+  // GET  /api/markets/:id/amm-position - per-user share holdings on an AMM market
+  // POST /api/markets/:id/buy        - LMSR buy (auth required, visibility-gated)
+  // POST /api/markets/:id/sell       - LMSR sell (auth required, visibility-gated)
+  //
+  // The admin resolve endpoint lives near the smoke-create endpoint
+  // alongside the rest of the AMM admin tooling.
+  // ============================================================================
+  app.get("/api/markets/:id", optionalAuth, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const isAdmin = req.userRole === "admin" || req.userRole === "moderator";
+
+      const [market] = await db
+        .select()
+        .from(predictionMarkets)
+        .where(eq(predictionMarkets.id, id))
+        .limit(1);
+
+      if (!market) {
+        return res.status(404).json({ error: "Market not found" });
+      }
+      // Hide drafts from non-admins. inactive/archived markets are
+      // visible (consistent with /api/open-markets/:slug) so users
+      // can still see resolved/closed markets they previously bet on.
+      if (market.visibility === "draft" && !isAdmin) {
+        return res.status(404).json({ error: "Market not found" });
+      }
+
+      const entries = await db
+        .select()
+        .from(marketEntries)
+        .where(eq(marketEntries.marketId, market.id))
+        .orderBy(asc(marketEntries.displayOrder));
+
+      let ammState:
+        | {
+            liquidityB: number;
+            outcomeOrder: string[];
+            shareQuantities: Record<string, number>;
+            houseSeedAmount: number;
+            totalUserCreditsIn: number;
+            prices: Record<string, number>;
+            updatedAt: string;
+          }
+        | null = null;
+
+      if (market.engine === "amm") {
+        const [stateRow] = await db
+          .select()
+          .from(marketAmmState)
+          .where(eq(marketAmmState.marketId, market.id))
+          .limit(1);
+
+        if (stateRow) {
+          const { currentPrices } = await import("@shared/lib/amm/positions");
+          const liquidityB = Number(stateRow.liquidityB);
+          const shareQuantities = stateRow.shareQuantities as Record<string, number>;
+          const outcomeOrder = stateRow.outcomeOrder as string[];
+          const prices = currentPrices({
+            liquidityB,
+            outcomeOrder,
+            shareQuantities,
+          });
+          ammState = {
+            liquidityB,
+            outcomeOrder,
+            shareQuantities,
+            houseSeedAmount: stateRow.houseSeedAmount,
+            totalUserCreditsIn: Number(stateRow.totalUserCreditsIn),
+            prices,
+            updatedAt: stateRow.updatedAt.toISOString(),
+          };
+        }
+      }
+
+      res.json({
+        market: {
+          id: market.id,
+          marketType: market.marketType,
+          engine: market.engine,
+          openMarketType: market.openMarketType,
+          status: market.status,
+          visibility: market.visibility,
+          title: market.title,
+          slug: market.slug,
+          summary: market.summary,
+          rules: market.rules,
+          startAt: market.startAt,
+          endAt: market.endAt,
+          closeAt: market.closeAt,
+          resolvedAt: market.resolvedAt,
+          tags: market.tags,
+          coverImageUrl: market.coverImageUrl,
+        },
+        entries: entries.map((e) => ({
+          id: e.id,
+          label: e.label,
+          description: e.description,
+          displayOrder: e.displayOrder,
+          resolutionStatus: e.resolutionStatus,
+          personId: e.personId,
+        })),
+        ammState,
+      });
+    } catch (err: any) {
+      console.error("[GET /api/markets/:id] failed:", err);
+      res.status(500).json({ error: "Failed to fetch market" });
+    }
+  });
+
+  // GET /api/markets/:id/amm-position - user's net share holdings on an
+  // AMM market plus current value at live prices. Returns 200 with empty
+  // positions array on parimutuel markets (the existing /my-position
+  // endpoint covers parimutuel state).
+  app.get("/api/markets/:id/amm-position", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.userId!;
+      const { id } = req.params;
+
+      const [market] = await db
+        .select({
+          id: predictionMarkets.id,
+          engine: predictionMarkets.engine,
+          status: predictionMarkets.status,
+          visibility: predictionMarkets.visibility,
+        })
+        .from(predictionMarkets)
+        .where(eq(predictionMarkets.id, id))
+        .limit(1);
+      if (!market) return res.status(404).json({ error: "Market not found" });
+      if (market.engine !== "amm") {
+        return res.json({ engine: market.engine, positions: [] });
+      }
+
+      const [stateRow] = await db
+        .select()
+        .from(marketAmmState)
+        .where(eq(marketAmmState.marketId, id))
+        .limit(1);
+      if (!stateRow) {
+        return res.json({ engine: "amm", positions: [], note: "AMM state missing" });
+      }
+
+      const myBets = await db
+        .select({
+          entryId: marketBets.entryId,
+          actionType: marketBets.actionType,
+          shareCount: marketBets.shareCount,
+          stakeAmount: marketBets.stakeAmount,
+          payoutAmount: marketBets.payoutAmount,
+          status: marketBets.status,
+        })
+        .from(marketBets)
+        .where(
+          and(eq(marketBets.marketId, id), eq(marketBets.userId, userId)),
+        );
+
+      const entries = await db
+        .select({
+          id: marketEntries.id,
+          label: marketEntries.label,
+          resolutionStatus: marketEntries.resolutionStatus,
+        })
+        .from(marketEntries)
+        .where(eq(marketEntries.marketId, id));
+      const entryMap = new Map(entries.map((e) => [e.id, e]));
+
+      const { summarizePosition, currentPrices } = await import(
+        "@shared/lib/amm/positions"
+      );
+      const liquidityB = Number(stateRow.liquidityB);
+      const outcomeOrder = stateRow.outcomeOrder as string[];
+      const shareQuantities = stateRow.shareQuantities as Record<string, number>;
+      const prices = currentPrices({ liquidityB, outcomeOrder, shareQuantities });
+
+      const ammRows = myBets
+        .filter((b) => b.actionType === "buy" || b.actionType === "sell")
+        .map((b) => ({
+          entryId: b.entryId,
+          actionType: b.actionType as "buy" | "sell",
+          shareCount: Number(b.shareCount ?? 0),
+          stakeAmount: b.stakeAmount,
+        }));
+      const summary = summarizePosition(ammRows);
+
+      const positions = Array.from(summary.entries()).map(([entryId, slot]) => {
+        const entry = entryMap.get(entryId);
+        const currentPrice = prices[entryId] ?? 0;
+        // Current resale value at marginal price (a rough proxy; the
+        // actual sell quote runs through `quoteSell` which is more
+        // pessimistic for large positions due to price impact).
+        const currentValue = slot.netShares * currentPrice;
+        const avgEntryPrice =
+          slot.netShares > 0 ? slot.netCreditsIn / slot.netShares : 0;
+        return {
+          entryId,
+          entryLabel: entry?.label ?? entryId,
+          entryResolutionStatus: entry?.resolutionStatus ?? "pending",
+          netShares: slot.netShares,
+          netCreditsIn: slot.netCreditsIn,
+          avgEntryPrice,
+          currentPrice,
+          currentValue,
+        };
+      });
+
+      res.json({
+        engine: "amm",
+        marketStatus: market.status,
+        positions: positions.filter((p) => Math.abs(p.netShares) > 1e-9),
+      });
+    } catch (err: any) {
+      console.error("[GET /api/markets/:id/amm-position] failed:", err);
+      res.status(500).json({ error: "Failed to fetch AMM position" });
+    }
+  });
+
+  // POST /api/markets/:id/buy - LMSR buy of YES shares of one entry.
+  // Body: { entryId: string; creditBudget: number }
+  app.post("/api/markets/:id/buy", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const { entryId, creditBudget } = req.body ?? {};
+      const isAdmin = req.userRole === "admin" || req.userRole === "moderator";
+
+      if (typeof entryId !== "string" || entryId.length === 0) {
+        return res.status(400).json({ error: "entryId is required" });
+      }
+      if (!Number.isInteger(creditBudget) || creditBudget <= 0) {
+        return res.status(400).json({ error: "creditBudget must be a positive integer" });
+      }
+
+      const { executeBuy } = await import("./services/amm-trades");
+      const result = await executeBuy({
+        marketId: id,
+        userId: req.userId!,
+        entryId,
+        creditBudget,
+        isAdmin,
+      });
+
+      if ("error" in result) {
+        return res.status(result.status).json({ error: result.error, message: result.message });
+      }
+      res.json({ ok: true, ...result });
+    } catch (err: any) {
+      console.error("[POST /api/markets/:id/buy] failed:", err);
+      res.status(500).json({ error: "Failed to execute buy" });
+    }
+  });
+
+  // POST /api/markets/:id/sell - LMSR sell of YES shares of one entry.
+  // Body: { entryId: string; shares: number }
+  app.post("/api/markets/:id/sell", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const { entryId, shares } = req.body ?? {};
+      const isAdmin = req.userRole === "admin" || req.userRole === "moderator";
+
+      if (typeof entryId !== "string" || entryId.length === 0) {
+        return res.status(400).json({ error: "entryId is required" });
+      }
+      const sharesNum = Number(shares);
+      if (!Number.isFinite(sharesNum) || sharesNum <= 0) {
+        return res.status(400).json({ error: "shares must be a positive number" });
+      }
+
+      const { executeSell } = await import("./services/amm-trades");
+      const result = await executeSell({
+        marketId: id,
+        userId: req.userId!,
+        entryId,
+        shares: sharesNum,
+        isAdmin,
+      });
+
+      if ("error" in result) {
+        return res.status(result.status).json({ error: result.error, message: result.message });
+      }
+      res.json({ ok: true, ...result });
+    } catch (err: any) {
+      console.error("[POST /api/markets/:id/sell] failed:", err);
+      res.status(500).json({ error: "Failed to execute sell" });
+    }
+  });
+
   // Get user's favorites
   // NOTE: Favorites CRUD (GET / POST / DELETE /api/me/favorites[/:personId])
   // has been extracted into server/route-modules/favorites-routes.ts
@@ -14873,7 +15163,17 @@ Target length: about 90-150 words.`;
             isAgent: profiles.isAgent,
           })
           .from(profiles)
-          .where(inArray(profiles.id, userIds))
+          .where(
+            and(
+              inArray(profiles.id, userIds),
+              // Defensive: exclude the AMM house sentinel from
+              // participant avatar stacks. The house never inserts
+              // into market_bets directly today, but Phase 3+ ledger
+              // flows touch market_bets-adjacent paths and we want
+              // user-facing UIs to never show __house__.
+              eq(profiles.isHouse, false),
+            ),
+          )
       : [];
 
     const profileMap = new Map(profileRows.map((profile) => [profile.id, profile]));
@@ -17261,7 +17561,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
             isPublic: profiles.isPublic,
           })
           .from(profiles)
-          .where(inArray(profiles.id, userIds)),
+          .where(and(inArray(profiles.id, userIds), eq(profiles.isHouse, false))),
         db
           .select({
             id: predictionMarkets.id,
@@ -19932,6 +20232,73 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       res.json({ ok: true, ...result });
     } catch (err: any) {
       console.error("[AmmAdmin] smoke-create-market failed:", err);
+      res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
+    }
+  });
+
+  // POST /api/admin/markets/:id/amm-resolve - Manually resolve an AMM
+  // market to a winner (or void it). Pays out winning shares at 1
+  // credit each, marks bets won/lost, and returns the seed (plus
+  // user credits in, minus payout liability) to the house via Phase
+  // 2's `returnAmmSeedAtSettlement`. Idempotent — re-running on an
+  // already-resolved market returns `idempotentSkip: true`.
+  //
+  // Body: { winnerEntryId?: string; void?: boolean }
+  //   - To resolve to a winner: pass `winnerEntryId`.
+  //   - To void the market: pass `{ void: true }` (refunds everyone
+  //     their net credits in; house breaks even).
+  //
+  // Phase 4 will extend the existing community-resolve flow to call
+  // this when `engine='amm'`. For now, this is the explicit admin-only
+  // entry point so we can smoke-test the full lifecycle on Railway.
+  app.post("/api/admin/markets/:id/amm-resolve", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const winnerEntryId =
+        typeof req.body?.winnerEntryId === "string" && req.body.winnerEntryId.length > 0
+          ? String(req.body.winnerEntryId)
+          : null;
+      const voidMarket = req.body?.void === true;
+
+      if (!voidMarket && !winnerEntryId) {
+        return res.status(400).json({
+          error: "validation",
+          message: "Either winnerEntryId or { void: true } must be provided.",
+        });
+      }
+      if (voidMarket && winnerEntryId) {
+        return res.status(400).json({
+          error: "validation",
+          message: "Cannot pass both winnerEntryId and void=true.",
+        });
+      }
+
+      const { resolveAmmMarket } = await import("./services/amm-resolver");
+      const result = await resolveAmmMarket({
+        marketId: id,
+        winnerEntryId,
+        voidMarket,
+        settledBy: req.userId ?? null,
+      });
+
+      if ("error" in result) {
+        const status =
+          result.error === "market_not_found"
+            ? 404
+            : result.error === "winner_invalid" || result.error === "invalid_state"
+              ? 400
+              : result.error === "missing_amm_state"
+                ? 500
+                : 400;
+        return res.status(status).json({ error: result.error, message: result.message });
+      }
+
+      console.log(
+        `[AmmAdmin] Resolved market ${id} (outcome=${result.outcome}, winner=${result.winnerEntryId ?? "void"}, payoutLiability=${result.payoutLiability}, creditedToHouse=${result.creditedToHouse}, settledUsers=${result.settledUserCount})`,
+      );
+      res.json({ ok: true, ...result });
+    } catch (err: any) {
+      console.error("[AmmAdmin] amm-resolve failed:", err);
       res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
     }
   });
