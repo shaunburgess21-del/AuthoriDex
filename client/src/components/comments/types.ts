@@ -39,7 +39,14 @@ export interface CommentAdapter {
   invalidateOnMutate?: readonly (readonly unknown[])[];
 }
 
+/** One node in a nested reply tree under a top-level comment. */
+export interface CommentTreeNode {
+  comment: CommentItem;
+  children: CommentTreeNode[];
+}
+
+/** Top-level comment plus recursively nested replies. */
 export interface ThreadedComment {
-  parent: CommentItem;
-  replies: CommentItem[];
+  root: CommentItem;
+  children: CommentTreeNode[];
 }
