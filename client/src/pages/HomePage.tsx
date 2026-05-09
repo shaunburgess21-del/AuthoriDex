@@ -1783,9 +1783,23 @@ export default function HomePage() {
               </div>
 
               <div id="leaderboard" className="scroll-mt-24" />
-              <Card>
-                <CardHeader className="relative flex flex-col gap-4 space-y-0 overflow-hidden rounded-t-xl bg-card/95 pb-4 pt-5">
-                  <span className="pointer-events-none absolute left-0 right-0 top-0 h-[3px] bg-[linear-gradient(90deg,transparent_0%,rgb(59,130,246)_50%,transparent_100%)]" />
+              <Card className="overflow-hidden">
+                <div className="relative isolate overflow-hidden rounded-t-xl">
+                  {/* Pulse-card-style top lip (clipped by rounded-t-xl) + side fades through header/tabs/filters; ends above first row */}
+                  <div
+                    className="pointer-events-none absolute inset-x-0 top-0 z-[1] h-[3px] bg-[linear-gradient(90deg,transparent_0%,rgb(59,130,246)_50%,transparent_100%)]"
+                    aria-hidden
+                  />
+                  <div
+                    className="pointer-events-none absolute left-0 top-0 bottom-0 z-[1] w-[3px] bg-gradient-to-b from-[rgba(59,130,246,0.34)] to-transparent"
+                    aria-hidden
+                  />
+                  <div
+                    className="pointer-events-none absolute right-0 top-0 bottom-0 z-[1] w-[3px] bg-gradient-to-b from-[rgba(59,130,246,0.34)] to-transparent"
+                    aria-hidden
+                  />
+                  <div className="relative z-[2]">
+                <CardHeader className="flex flex-col gap-4 space-y-0 bg-card/95 pb-4 pt-5">
                   <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                     <div className="flex-1">
                       <div className="flex items-center justify-between gap-2">
@@ -1991,7 +2005,6 @@ export default function HomePage() {
                     </div>
                   </div>
                 </div>
-                <CardContent className="p-0">
                   <div className="pl-3 pr-4 sm:pr-6 py-4 border-b bg-muted/30">
                     <div className="space-y-3">
                       <div className="flex items-center gap-2">
@@ -2110,6 +2123,9 @@ export default function HomePage() {
                       )}
                     </div>
                   </div>
+                  </div>
+                </div>
+                <CardContent className="p-0">
                   <motion.div
                     {...(isMobile
                       ? {
