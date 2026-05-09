@@ -26,7 +26,36 @@ import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } f
 import { Popover, PopoverAnchor, PopoverContent, PopoverClose } from "@/components/ui/popover";
 import { useFavorites } from "@/hooks/useFavorites";
 import { navigateToLogin } from "@/lib/authReturn";
-import { X, RefreshCw, TrendingUp, TrendingDown, Activity, ChevronRight, ChevronDown, LineChart, Vote, Trophy, Users, Sparkles, Target, Check, ThumbsDown, Minus, Star, Info, Crown, HelpCircle } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import {
+  X,
+  RefreshCw,
+  TrendingUp,
+  TrendingDown,
+  Activity,
+  ChevronRight,
+  ChevronDown,
+  LineChart,
+  Vote,
+  Trophy,
+  Users,
+  Sparkles,
+  Target,
+  Check,
+  ThumbsDown,
+  Minus,
+  Star,
+  Info,
+  Crown,
+  HelpCircle,
+  Scale,
+  Swords,
+  BarChart3,
+  MessageSquare,
+  UserPlus,
+  ImageIcon,
+  Loader2,
+} from "lucide-react";
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useDragScroll } from "@/hooks/use-drag-scroll";
 import { useQuery, useQueries, useInfiniteQuery, useMutation, keepPreviousData } from "@tanstack/react-query";
@@ -43,23 +72,65 @@ import { useIntersectionObserver } from "@/hooks/useIntersectionObserver";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { useLeaderboardCategories } from "@/hooks/useLeaderboardCategories";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { Loader2 } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { motion, AnimatePresence, type PanInfo } from "framer-motion";
 import { LineChart as RechartsLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
-import { VOTE_HUB_DEEP_LINKS } from "@/lib/voteHubDeepLinks";
+import { VOTE_HUB_DEEP_LINKS, type VoteHubSectionToggle } from "@/lib/voteHubDeepLinks";
 
 type HomeView = "leaderboard" | "predict" | "vote";
 const CATEGORY_OPTIONS = ["All", "Tech", "Business", "Politics", "Sports", "Music", "Film & TV", "Gaming", "Creator", "Food & Drink", "Lifestyle"] as const;
 
 const LEADERBOARD_PREDICT_MORE_LINKS = [
-  { label: "World Markets", href: "/predict#community" },
-  { label: "Weekly Jackpot", href: "/predict#jackpot" },
-  { label: "Head-to-Head Battles", href: "/predict#h2h" },
-  { label: "Category races", href: "/predict#race" },
-] as const;
+  { label: "World Markets", href: "/predict#community", icon: Scale },
+  { label: "Weekly Jackpot", href: "/predict#jackpot", icon: Crown },
+  { label: "Head-to-Head Battles", href: "/predict#h2h", icon: Swords },
+  { label: "Category races", href: "/predict#race", icon: BarChart3 },
+] as const satisfies ReadonlyArray<{ label: string; href: string; icon: LucideIcon }>;
+
+const VOTE_HUB_LINK_ICONS: Record<VoteHubSectionToggle, LucideIcon> = {
+  "Sentiment Polls": MessageSquare,
+  Matchups: Swords,
+  "Opinion Polls": Vote,
+  "Underrated/Overrated": BarChart3,
+  "Induction Queue": UserPlus,
+  "Curate Profile": ImageIcon,
+};
+
+function LeaderboardDrawerNavLink({
+  href,
+  label,
+  icon: Icon,
+  accent,
+  onNavigateLink,
+}: {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  accent: "vote" | "predict";
+  onNavigateLink: () => void;
+}) {
+  const iconTint =
+    accent === "vote"
+      ? "text-cyan-600 dark:text-cyan-400"
+      : "text-violet-600 dark:text-violet-400";
+  return (
+    <Link
+      href={href}
+      onClick={onNavigateLink}
+      className="flex min-h-10 items-center justify-between gap-3 px-3 py-2.5 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+    >
+      <span className="flex min-w-0 items-center gap-3">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted/40">
+          <Icon className={cn("h-4 w-4", iconTint)} aria-hidden />
+        </span>
+        <span className="truncate text-sm font-medium">{label}</span>
+      </span>
+      <ChevronRight className="h-4 w-4 shrink-0 opacity-60" aria-hidden />
+    </Link>
+  );
+}
 
 /** Short copy for the home leaderboard drawer only (~65% fewer words than full rules). */
 function LeaderboardUpDownSnapshot() {
@@ -107,14 +178,16 @@ function LeaderboardVoteInfoBody({ onNavigateLink }: { onNavigateLink: () => voi
       <LeaderboardApprovalSnapshot />
       <div className="mt-6 space-y-2">
         <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">More on Vote</p>
-        <div className="flex flex-col gap-2">
-          {VOTE_HUB_DEEP_LINKS.map(({ label, href }) => (
-            <Button key={href} variant="outline" className="w-full justify-between font-normal" asChild>
-              <Link href={href} onClick={onNavigateLink}>
-                {label}
-                <ChevronRight className="h-4 w-4 shrink-0 opacity-60" aria-hidden />
-              </Link>
-            </Button>
+        <div className="divide-y divide-border/60 overflow-hidden rounded-xl border border-border/60 bg-card/40">
+          {VOTE_HUB_DEEP_LINKS.map(({ label, href, sectionToggle }) => (
+            <LeaderboardDrawerNavLink
+              key={href}
+              href={href}
+              label={label}
+              icon={VOTE_HUB_LINK_ICONS[sectionToggle]}
+              accent="vote"
+              onNavigateLink={onNavigateLink}
+            />
           ))}
         </div>
       </div>
@@ -127,17 +200,17 @@ function LeaderboardPredictInfoBody({ onNavigateLink }: { onNavigateLink: () => 
     <>
       <LeaderboardUpDownSnapshot />
       <div className="mt-6 space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          More prediction types
-        </p>
-        <div className="flex flex-col gap-2">
-          {LEADERBOARD_PREDICT_MORE_LINKS.map(({ label, href }) => (
-            <Button key={href} variant="outline" className="w-full justify-between font-normal" asChild>
-              <Link href={href} onClick={onNavigateLink}>
-                {label}
-                <ChevronRight className="h-4 w-4 shrink-0 opacity-60" aria-hidden />
-              </Link>
-            </Button>
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">More on Predict</p>
+        <div className="divide-y divide-border/60 overflow-hidden rounded-xl border border-border/60 bg-card/40">
+          {LEADERBOARD_PREDICT_MORE_LINKS.map(({ label, href, icon }) => (
+            <LeaderboardDrawerNavLink
+              key={href}
+              href={href}
+              label={label}
+              icon={icon}
+              accent="predict"
+              onNavigateLink={onNavigateLink}
+            />
           ))}
         </div>
       </div>
@@ -2309,8 +2382,8 @@ export default function HomePage() {
           <DrawerContent className="max-h-[85vh]">
             <DrawerHeader className="text-left">
               <DrawerTitle>Predict from the leaderboard</DrawerTitle>
-              <DrawerDescription className="sr-only">
-                How Up and Down work on the leaderboard, with links to other prediction types on the Predict page.
+              <DrawerDescription className="text-sm text-muted-foreground">
+                How Up/Down works here, plus jump to a section on Predict.
               </DrawerDescription>
             </DrawerHeader>
             <div className="overflow-y-auto px-4 pb-6 pt-0">
@@ -2323,8 +2396,8 @@ export default function HomePage() {
           <DialogContent className="flex max-h-[85vh] flex-col gap-0 overflow-hidden sm:max-w-md">
             <DialogHeader className="shrink-0 text-left">
               <DialogTitle>Predict from the leaderboard</DialogTitle>
-              <DialogDescription className="sr-only">
-                How Up and Down work on the leaderboard, with links to other prediction types on the Predict page.
+              <DialogDescription className="text-sm text-muted-foreground">
+                How Up/Down works here, plus jump to a section on Predict.
               </DialogDescription>
             </DialogHeader>
             <div className="min-h-0 overflow-y-auto px-1 pb-2 pt-2">
@@ -2338,8 +2411,8 @@ export default function HomePage() {
           <DrawerContent className="max-h-[85vh]">
             <DrawerHeader className="text-left">
               <DrawerTitle>Your vote on the leaderboard</DrawerTitle>
-              <DrawerDescription className="sr-only">
-                How approval rating and Rate work on the leaderboard, with links to sections on the Vote page.
+              <DrawerDescription className="text-sm text-muted-foreground">
+                How approval works here, plus jump to a section on Vote.
               </DrawerDescription>
             </DrawerHeader>
             <div className="overflow-y-auto px-4 pb-6 pt-0">
@@ -2352,8 +2425,8 @@ export default function HomePage() {
           <DialogContent className="flex max-h-[85vh] flex-col gap-0 overflow-hidden sm:max-w-md">
             <DialogHeader className="shrink-0 text-left">
               <DialogTitle>Your vote on the leaderboard</DialogTitle>
-              <DialogDescription className="sr-only">
-                How approval rating and Rate work on the leaderboard, with links to sections on the Vote page.
+              <DialogDescription className="text-sm text-muted-foreground">
+                How approval works here, plus jump to a section on Vote.
               </DialogDescription>
             </DialogHeader>
             <div className="min-h-0 overflow-y-auto px-1 pb-2 pt-2">
