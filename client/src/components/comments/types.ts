@@ -6,7 +6,10 @@ export type ParentVoteLabel =
   | { type: "trending_poll"; choice: "support" | "neutral" | "oppose" | string }
   | { type: "matchup"; choice: "option_a" | "option_b" | "neutral" | string; optionName: string }
   | { type: "opinion_poll"; optionName: string }
-  | { type: "approval_rating"; rating: number };
+  | { type: "approval_rating"; rating: number }
+  | { type: "open_market_binary"; side: "yes" | "no" }
+  | { type: "open_market_multi"; optionName: string }
+  | { type: "open_market_updown"; side: "above" | "below" };
 
 export interface CommentItem {
   id: string;

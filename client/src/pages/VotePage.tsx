@@ -107,6 +107,10 @@ import { voteHubSectionFromHash } from "@/lib/voteHubDeepLinks";
 import { useScrollToHash } from "@/hooks/useScrollToHash";
 import { navigateWithVoteList } from "@/lib/voteListNavigation";
 import { isBudgetExhaustedVoteError, parseVoteError } from "@/lib/voteErrors";
+import {
+  getSentimentPollChoiceColor,
+  getSentimentPollChoiceLabel,
+} from "@/lib/sentimentPollVoteDisplay";
 import { getClientWeekDeadlines } from "@/hooks/useMarketCycle";
 import { SuggestCategorySelect } from "@/components/suggest/SuggestCategorySelect";
 import { SuggestDurationPicker } from "@/components/suggest/SuggestDurationPicker";
@@ -908,8 +912,13 @@ function DiscourseCard({
       ) : (
         <div className="flex flex-col gap-3 mt-auto">
           <div className="flex items-center gap-3">
-            <ThumbsUp className="h-4 w-4 text-[#00C853] shrink-0" />
-            <span className="text-sm text-[#00C853] w-16 shrink-0">Support</span>
+            <ThumbsUp className="h-4 w-4 shrink-0" style={{ color: getSentimentPollChoiceColor("support") }} />
+            <span
+              className="text-sm w-16 shrink-0 font-medium"
+              style={{ color: getSentimentPollChoiceColor("support") }}
+            >
+              {getSentimentPollChoiceLabel("support")}
+            </span>
             <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
               <div 
                 className="h-full bg-[#00C853] rounded-full transition-all duration-500"
@@ -920,8 +929,13 @@ function DiscourseCard({
           </div>
           
           <div className="flex items-center gap-3">
-            <Minus className="h-4 w-4 text-slate-400 shrink-0" />
-            <span className="text-sm text-slate-400 w-16 shrink-0">Neutral</span>
+            <Minus className="h-4 w-4 shrink-0" style={{ color: getSentimentPollChoiceColor("neutral") }} />
+            <span
+              className="text-sm w-16 shrink-0 font-medium"
+              style={{ color: getSentimentPollChoiceColor("neutral") }}
+            >
+              {getSentimentPollChoiceLabel("neutral")}
+            </span>
             <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
               <div 
                 className="h-full bg-slate-400 rounded-full transition-all duration-500"
@@ -932,8 +946,13 @@ function DiscourseCard({
           </div>
           
           <div className="flex items-center gap-3">
-            <ThumbsDown className="h-4 w-4 text-[#FF0000] shrink-0" />
-            <span className="text-sm text-[#FF0000] w-16 shrink-0">Oppose</span>
+            <ThumbsDown className="h-4 w-4 shrink-0" style={{ color: getSentimentPollChoiceColor("oppose") }} />
+            <span
+              className="text-sm w-16 shrink-0 font-medium"
+              style={{ color: getSentimentPollChoiceColor("oppose") }}
+            >
+              {getSentimentPollChoiceLabel("oppose")}
+            </span>
             <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
               <div 
                 className="h-full bg-[#FF0000] rounded-full transition-all duration-500"
@@ -965,17 +984,12 @@ function DiscourseCard({
                   </Link>
                 ))}
             </div>
-            <div 
-              className={`px-2 py-0.5 rounded-full text-xs font-medium border ${
-                voted === 'support' 
-                  ? 'bg-[#00C853]/10 border-[#00C853]/40 text-[#00C853]' 
-                  : voted === 'oppose'
-                  ? 'bg-[#FF0000]/10 border-[#FF0000]/40 text-[#FF0000]'
-                  : 'bg-slate-500/10 border-slate-500/40 text-slate-500 dark:text-slate-400'
-              }`}
+            <div
+              className="px-2 py-0.5 rounded-full text-xs font-medium border bg-white/5 border-white/20"
+              style={{ color: voted ? getSentimentPollChoiceColor(voted) : undefined }}
               data-testid={`badge-voted-${topic.id}`}
             >
-              You voted
+              {voted ? getSentimentPollChoiceLabel(voted) : "You voted"}
             </div>
           </div>
           

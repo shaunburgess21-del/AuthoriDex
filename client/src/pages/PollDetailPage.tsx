@@ -23,6 +23,10 @@ import { navigateToLogin } from "@/lib/authReturn";
 import { useAnonBudget, applyBudgetFromVoteResponse } from "@/hooks/useAnonBudget";
 import { checkVoteGate } from "@/lib/voteGate";
 import { isBudgetExhaustedVoteError } from "@/lib/voteErrors";
+import {
+  getSentimentPollChoiceColor,
+  getSentimentPollChoiceLabel,
+} from "@/lib/sentimentPollVoteDisplay";
 import { goBack } from "@/lib/goBack";
 import { CardComments, useCommentCount } from "@/components/comments/CardComments";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
@@ -370,8 +374,13 @@ export default function PollDetailPage() {
           ) : (
             <div className="flex flex-col gap-3 mb-4">
               <div className="flex items-center gap-3">
-                <ThumbsUp className="h-4 w-4 text-[#00C853] shrink-0" />
-                <span className="text-sm text-[#00C853] w-16 shrink-0">Support</span>
+                <ThumbsUp className="h-4 w-4 shrink-0" style={{ color: getSentimentPollChoiceColor("support") }} />
+                <span
+                  className="text-sm w-16 shrink-0 font-medium"
+                  style={{ color: getSentimentPollChoiceColor("support") }}
+                >
+                  {getSentimentPollChoiceLabel("support")}
+                </span>
                 <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-[#00C853] rounded-full transition-all duration-500"
@@ -381,8 +390,13 @@ export default function PollDetailPage() {
                 <span className="text-sm text-muted-foreground w-10 text-right">{poll.approvePercent}%</span>
               </div>
               <div className="flex items-center gap-3">
-                <Minus className="h-4 w-4 text-slate-600 dark:text-slate-400 shrink-0" />
-                <span className="text-sm text-slate-600 dark:text-slate-400 w-16 shrink-0">Neutral</span>
+                <Minus className="h-4 w-4 shrink-0" style={{ color: getSentimentPollChoiceColor("neutral") }} />
+                <span
+                  className="text-sm w-16 shrink-0 font-medium"
+                  style={{ color: getSentimentPollChoiceColor("neutral") }}
+                >
+                  {getSentimentPollChoiceLabel("neutral")}
+                </span>
                 <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-slate-400 rounded-full transition-all duration-500"
@@ -392,8 +406,13 @@ export default function PollDetailPage() {
                 <span className="text-sm text-muted-foreground w-10 text-right">{poll.neutralPercent}%</span>
               </div>
               <div className="flex items-center gap-3">
-                <ThumbsDown className="h-4 w-4 text-[#FF0000] shrink-0" />
-                <span className="text-sm text-[#FF0000] w-16 shrink-0">Oppose</span>
+                <ThumbsDown className="h-4 w-4 shrink-0" style={{ color: getSentimentPollChoiceColor("oppose") }} />
+                <span
+                  className="text-sm w-16 shrink-0 font-medium"
+                  style={{ color: getSentimentPollChoiceColor("oppose") }}
+                >
+                  {getSentimentPollChoiceLabel("oppose")}
+                </span>
                 <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-[#FF0000] rounded-full transition-all duration-500"
@@ -404,7 +423,17 @@ export default function PollDetailPage() {
               </div>
               <div className="flex items-center justify-between mt-2 pt-3 border-t border-white/10">
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <span>You voted: <span className="font-semibold capitalize text-[#00C853]">{poll.userVote}</span></span>
+                  <span>
+                    You voted:{" "}
+                    <span
+                      className="font-semibold"
+                      style={{
+                        color: poll.userVote ? getSentimentPollChoiceColor(poll.userVote) : undefined,
+                      }}
+                    >
+                      {poll.userVote ? getSentimentPollChoiceLabel(poll.userVote) : "—"}
+                    </span>
+                  </span>
                 </div>
                 <button
                   onClick={() => setShowVoteChange(true)}

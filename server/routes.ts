@@ -108,6 +108,9 @@ type ParentVoteLabel =
   | { type: "matchup"; choice: string; optionName: string }
   | { type: "opinion_poll"; optionName: string }
   | { type: "approval_rating"; rating: number }
+  | { type: "open_market_binary"; side: "yes" | "no" }
+  | { type: "open_market_multi"; optionName: string }
+  | { type: "open_market_updown"; side: "above" | "below" }
   | null;
 type CommentAuthorJoin = {
   authorId: string | null;
@@ -170,6 +173,23 @@ function resolvePublicAppUrl(req: Request): string {
 
 function uniqueStrings(values: Array<string | null | undefined>): string[] {
   return Array.from(new Set(values.filter((value): value is string => Boolean(value))));
+}
+
+function effectiveOpenMarketFlavor(openMarketType: string | null | undefined): "binary" | "multi" | "updown" {
+  if (openMarketType === "binary" || openMarketType === "multi" || openMarketType === "updown") {
+    return openMarketType;
+  }
+  return "multi";
+}
+
+function entryIsYesLikeBinary(label: string, displayOrder: number): boolean {
+  const l = label.toLowerCase();
+  return l === "yes" || l === "above" || displayOrder === 0;
+}
+
+function entryIsAboveUpdown(label: string, displayOrder: number): boolean {
+  const l = label.toLowerCase();
+  return l.includes("above") || l.includes("yes") || displayOrder === 0;
 }
 
 /** Compare stored DB category text to a canonical registry id (handles legacy title-case vs kebab-case). */
@@ -460,6 +480,116 @@ async function getCommentParentVoteLabelMap(input: {
       vote.userId,
       { type: "approval_rating", rating: vote.rating },
     ])));
+  }
+
+  if (input.parentType === "open_market") {
+    const [marketRow] = await db
+      .select({
+        openMarketType: predictionMarkets.openMarketType,
+        marketType: predictionMarkets.marketType,
+      })
+      .from(predictionMarkets)
+      .where(eq(predictionMarkets.id, input.parentId))
+      .limit(1);
+
+    if (!marketRow || marketRow.marketType !== "community") {
+      return labelByCommentId;
+    }
+
+    const flavor = effectiveOpenMarketFlavor(marketRow.openMarketType);
+
+    const entries = await db
+      .select({
+        id: marketEntries.id,
+        label: marketEntries.label,
+        displayOrder: marketEntries.displayOrder,
+      })
+      .from(marketEntries)
+      .where(eq(marketEntries.marketId, input.parentId));
+
+    const entryById = new Map(
+      entries.map(e => [e.id, { label: e.label ?? "", displayOrder: e.displayOrder ?? 0 }]),
+    );
+
+    const bets = await db
+      .select({
+        userId: marketBets.userId,
+        entryId: marketBets.entryId,
+        direction: marketBets.direction,
+        stakeAmount: marketBets.stakeAmount,
+      })
+      .from(marketBets)
+      .where(and(
+        eq(marketBets.marketId, input.parentId),
+        eq(marketBets.status, "active"),
+        inArray(marketBets.userId, userIds),
+      ));
+
+    type EntryStakes = { yesStake: number; noStake: number };
+    const byUserEntry = new Map<string, Map<string, EntryStakes>>();
+    for (const b of bets) {
+      const uid = b.userId;
+      const eid = b.entryId;
+      const dir = b.direction === "no" ? "no" : "yes";
+      const amt = Number(b.stakeAmount) || 0;
+      if (!byUserEntry.has(uid)) byUserEntry.set(uid, new Map());
+      const entryMap = byUserEntry.get(uid)!;
+      const cur = entryMap.get(eid) ?? { yesStake: 0, noStake: 0 };
+      if (dir === "yes") cur.yesStake += amt;
+      else cur.noStake += amt;
+      entryMap.set(eid, cur);
+    }
+
+    const labelByUserId = new Map<string, ParentVoteLabel>();
+
+    for (const uid of userIds) {
+      const entryMap = byUserEntry.get(uid);
+      if (!entryMap || entryMap.size === 0) continue;
+
+      let bestEntryId: string | null = null;
+      let bestTotal = -1;
+      for (const [eid, s] of entryMap) {
+        const total = s.yesStake + s.noStake;
+        if (total <= 0) continue;
+        if (total > bestTotal || (total === bestTotal && bestEntryId !== null && eid < bestEntryId)) {
+          bestTotal = total;
+          bestEntryId = eid;
+        }
+      }
+
+      if (!bestEntryId || bestTotal <= 0) continue;
+
+      const meta = entryById.get(bestEntryId);
+      if (!meta) continue;
+
+      const stakes = entryMap.get(bestEntryId)!;
+
+      let lbl: Exclude<ParentVoteLabel, null>;
+      if (flavor === "multi") {
+        lbl = { type: "open_market_multi", optionName: meta.label.trim() || "—" };
+      } else {
+        const dominantDir: "yes" | "no" =
+          stakes.yesStake > stakes.noStake
+            ? "yes"
+            : stakes.noStake > stakes.yesStake
+              ? "no"
+              : "yes";
+        if (flavor === "binary") {
+          const yesLike = entryIsYesLikeBinary(meta.label, meta.displayOrder);
+          const semanticYes = (yesLike && dominantDir === "yes") || (!yesLike && dominantDir === "no");
+          lbl = { type: "open_market_binary", side: semanticYes ? "yes" : "no" };
+        } else {
+          const aboveLike = entryIsAboveUpdown(meta.label, meta.displayOrder);
+          const semanticAbove = (aboveLike && dominantDir === "yes") || (!aboveLike && dominantDir === "no");
+          lbl = { type: "open_market_updown", side: semanticAbove ? "above" : "below" };
+        }
+      }
+
+      labelByUserId.set(uid, lbl);
+    }
+
+    applyLabelsByUserId(labelByUserId);
+    return labelByCommentId;
   }
 
   return labelByCommentId;
