@@ -1,8 +1,8 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   Loader2,
-  MessageCircle,
   MoreVertical,
+  Reply,
   ThumbsDown,
   ThumbsUp,
 } from "lucide-react";
@@ -593,6 +593,20 @@ function InsightCard({
                 <ThumbsDown className="h-3.5 w-3.5" />
                 {downvotes > 0 && <span>{downvotes}</span>}
               </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenOverlay();
+                }}
+                disabled={disabled}
+                className={`flex items-center gap-1 text-xs text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
+                data-testid={`button-reply-${comment.id}`}
+                aria-label="Reply in thread"
+              >
+                <Reply className="h-3.5 w-3.5" />
+                Reply
+              </button>
             </>
           )}
           {netVotes !== 0 && (
@@ -609,17 +623,6 @@ function InsightCard({
               {netVotes > 0 ? `+${netVotes}` : netVotes}
             </span>
           )}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpenOverlay();
-            }}
-            className="flex items-center gap-1.5 p-1.5 ml-auto rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-            data-testid={`button-comments-${comment.id}`}
-            aria-label="Open full post"
-          >
-            <MessageCircle className="h-4 w-4" />
-          </button>
         </div>
       </div>
     </div>
