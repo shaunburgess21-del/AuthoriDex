@@ -1,6 +1,7 @@
 import { db, withDbAdvisoryLock } from "../db";
 import {
   marketBets,
+  notificationMarketMutes,
   notifications,
   predictionMarkets,
   profiles,
@@ -265,13 +266,55 @@ async function deriveFavoriteHotMovers(): Promise<number> {
   return inserted;
 }
 
+type ClosingSoonMarket = {
+  id: string;
+  slug: string | null;
+  title: string;
+  marketType: string;
+  engine: string | null;
+  closeAt: Date | null;
+  endAt: Date | null;
+};
+
+type ClosingDigestVariant = "standard" | "jackpot" | "amm";
+
+function closingDigestVariant(m: ClosingSoonMarket): ClosingDigestVariant {
+  if (m.engine === "amm") return "amm";
+  if (m.marketType === "jackpot") return "jackpot";
+  return "standard";
+}
+
+function closingSoonTimingLabel(now: Date, closeAt: Date): string {
+  const minutesLeft = Math.max(1, Math.round((closeAt.getTime() - now.getTime()) / 60000));
+  const hoursLeft = Math.round(minutesLeft / 60);
+  return hoursLeft >= 1 ? `${hoursLeft}h` : `${minutesLeft}m`;
+}
+
+function closingSoonHref(market: ClosingSoonMarket): string {
+  switch (market.marketType) {
+    case "updown":
+      return `/predict/updown/${market.id}`;
+    case "h2h":
+      return `/predict/h2h/${market.id}`;
+    case "race":
+    case "gainer":
+      return `/predict/race/${market.id}`;
+    default:
+      return market.slug ? `/markets/${market.slug}` : "/predict";
+  }
+}
+
 /**
  * Find markets whose `closeAt` is within the next ~6h and ping users
  * who have an open bet on the market. We deliberately do NOT also fan
  * out to "users with a favorite linked to the market" — that's much
  * noisier and harder to reason about. Open-bet-only keeps signal high.
  *
- * Idempotency is keyed on (user, market) — once per market, ever.
+ * Digests: one notification per user per UTC hour per message family
+ * (standard betting vs jackpot entries vs AMM) so dozens of parallel
+ * weekly cards don't spam identical titles. Muted markets are excluded
+ * before grouping — there is no single `marketId` on digest rows, so
+ * we filter upfront. Idempotency: `closing_digest:${userId}:${hour}:${variant}`.
  */
 async function deriveMarketClosingSoon(): Promise<number> {
   const now = new Date();
@@ -308,70 +351,125 @@ async function deriveMarketClosingSoon(): Promise<number> {
     .from(marketBets)
     .where(and(inArray(marketBets.marketId, marketIds), eq(marketBets.status, "active")));
 
-  let inserted = 0;
-  const seen = new Set<string>();
+  const closingById = new Map(closingMarkets.map((m) => [m.id, m]));
+  const candidates: { userId: string; market: ClosingSoonMarket }[] = [];
+  const seenPair = new Set<string>();
   for (const bet of openBets) {
-    // Dedupe per (user, market) inside this batch — multiple bets on
-    // the same market shouldn't generate multiple pings.
-    const key = `${bet.userId}:${bet.marketId}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-
-    const market = closingMarkets.find((m) => m.id === bet.marketId);
+    const pairKey = `${bet.userId}:${bet.marketId}`;
+    if (seenPair.has(pairKey)) continue;
+    seenPair.add(pairKey);
+    const market = closingById.get(bet.marketId);
     if (!market) continue;
+    candidates.push({ userId: bet.userId, market });
+  }
 
-    const closeAt = market.closeAt ?? market.endAt;
-    const minutesLeft = Math.max(1, Math.round((closeAt.getTime() - now.getTime()) / 60000));
-    const hoursLeft = Math.round(minutesLeft / 60);
-    const timing = hoursLeft >= 1 ? `${hoursLeft}h` : `${minutesLeft}m`;
+  if (candidates.length === 0) return 0;
 
-    // Per-kind wording. The prior wording ("Closing in 5h") was ambiguous
-    // for weekly markets where entries close on Friday but the market
-    // doesn't actually resolve until Sunday. Each market type now uses
-    // language that matches what's actually closing — entries (jackpots
-    // are buy-in tickets) vs. bets (yes/no positions on H2H / Up-Down).
-    //
-    // Phase 4: AMM markets close 5 minutes before resolution (no
-    // multi-day lockout), so the copy frames the urgency differently:
-    // "Resolves in {timing} — last chance to trade".
-    const isAmm = market.engine === "amm";
-    const title = isAmm
-      ? `Resolves in ${timing} — last chance to trade`
-      : `${market.marketType === "jackpot" ? "Entries close" : "Betting closes"} in ${timing}`;
+  const distinctUserIds = Array.from(new Set(candidates.map((c) => c.userId)));
+  const distinctMarketIds = Array.from(new Set(candidates.map((c) => c.market.id)));
 
-    // Deep-link to the right detail surface per market kind so the
-    // notification CTA opens the page that actually shows their open
-    // bet — not the generic /markets/:slug fallback (which only really
-    // makes sense for jackpot/scoring markets).
-    const href = (() => {
-      switch (market.marketType) {
-        case "updown":
-          return `/predict/updown/${market.id}`;
-        case "h2h":
-          return `/predict/h2h/${market.id}`;
-        case "race":
-        case "gainer":
-          return `/predict/race/${market.id}`;
-        default:
-          return market.slug ? `/markets/${market.slug}` : "/predict";
-      }
-    })();
+  const muteRows = await db
+    .select({
+      userId: notificationMarketMutes.userId,
+      marketId: notificationMarketMutes.marketId,
+    })
+    .from(notificationMarketMutes)
+    .where(
+      and(
+        inArray(notificationMarketMutes.userId, distinctUserIds),
+        inArray(notificationMarketMutes.marketId, distinctMarketIds),
+      ),
+    );
+
+  const mutedPairs = new Set(muteRows.map((r) => `${r.userId}:${r.marketId}`));
+
+  const eligible = candidates.filter(
+    (c) => !mutedPairs.has(`${c.userId}:${c.market.id}`),
+  );
+
+  type Group = { userId: string; variant: ClosingDigestVariant; markets: ClosingSoonMarket[] };
+  const groupMap = new Map<string, Group>();
+  for (const { userId, market } of eligible) {
+    const variant = closingDigestVariant(market);
+    const gKey = `${userId}:${variant}`;
+    let g = groupMap.get(gKey);
+    if (!g) {
+      g = { userId, variant, markets: [] };
+      groupMap.set(gKey, g);
+    }
+    g.markets.push(market);
+  }
+
+  const bucket = hourBucket(now);
+  let inserted = 0;
+
+  for (const { userId, variant, markets } of groupMap.values()) {
+    let earliest: Date | null = null;
+    for (const m of markets) {
+      const ca = m.closeAt ?? m.endAt;
+      if (!ca) continue;
+      if (!earliest || ca.getTime() < earliest.getTime()) earliest = ca;
+    }
+    if (!earliest) continue;
+
+    const timing = closingSoonTimingLabel(now, earliest);
+    const title =
+      variant === "amm"
+        ? `Resolves in ${timing} — last chance to trade`
+        : variant === "jackpot"
+          ? `Entries close in ${timing}`
+          : `Betting closes in ${timing}`;
+
+    const count = markets.length;
+    const marketIdsInGroup = markets.map((m) => m.id);
+
+    let body: string;
+    let href: string;
+    let entityType: string;
+    let entityId: string | undefined;
+
+    if (count === 1) {
+      const m = markets[0];
+      body = m.title;
+      href = closingSoonHref(m);
+      entityType = "market";
+      entityId = m.id;
+    } else {
+      body =
+        variant === "jackpot"
+          ? `Entries close soon on ${count} predictions — tap to review`
+          : variant === "amm"
+            ? `${count} markets resolve soon — tap to review`
+            : `Betting closes soon on ${count} predictions — tap to review`;
+      href = "/predict";
+      entityType = "market_digest";
+      entityId = undefined;
+    }
+
+    const single = count === 1 ? markets[0] : null;
 
     const id = await createNotification({
-      userId: bet.userId,
+      userId,
       kind: "market_closing_soon",
       title,
-      body: market.title,
+      body,
       href,
-      entityType: "market",
-      entityId: market.id,
-      marketId: market.id,
+      entityType,
+      entityId,
       metadata: {
-        closeAt: closeAt.toISOString(),
-        marketType: market.marketType,
-        engine: market.engine ?? "parimutuel",
+        digest: count > 1,
+        marketIds: marketIdsInGroup,
+        count,
+        variant,
+        closeAt: earliest.toISOString(),
+        ...(single
+          ? {
+              marketType: single.marketType,
+              engine: single.engine ?? "parimutuel",
+            }
+          : {}),
       },
-      idempotencyKey: `closing:${bet.userId}:${market.id}`,
+      idempotencyKey: `closing_digest:${userId}:${bucket}:${variant}`,
     });
     if (id) inserted += 1;
   }
