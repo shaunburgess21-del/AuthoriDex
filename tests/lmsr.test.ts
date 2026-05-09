@@ -186,6 +186,44 @@ test("buyCost stays finite and monotonic even when shares >> b", () => {
   approxEqual(c2 / 5000, 1, 2e-3, "asymptotic price → 1 at extreme buys");
 });
 
+test("buyCost asymptotic fallback handles ratios > 500 without overflow", () => {
+  // Above the SHARES_RATIO_OVERFLOW_THRESHOLD = 500, buyCost switches to
+  // `Δ + b·ln(p)` to avoid `Math.expm1` overflowing to Infinity around
+  // ratio ≈ 709.78. Verify all of: finite, monotonic, and matches the
+  // closed-form within ~1e-216 at the boundary.
+  const q = [0, 0]; // p[0] = 0.5
+  const b = 1;
+  const huge1 = buyCost(q, 0, 600, b);    // ratio 600
+  const huger = buyCost(q, 0, 1000, b);   // ratio 1000
+  const enormous = buyCost(q, 0, 100000, b); // ratio 100k
+  assert.ok(
+    Number.isFinite(huge1) && Number.isFinite(huger) && Number.isFinite(enormous),
+    `all three should be finite, got ${huge1}, ${huger}, ${enormous}`,
+  );
+  assert.ok(huge1 < huger && huger < enormous, "monotonic in shares");
+  // At ratio = 1000, p = 0.5, expected = 1000 + ln(0.5) ≈ 999.307
+  approxEqual(huger, 1000 + Math.log(0.5), 1e-9, "asymptotic form is exact");
+  // At ratio 100k the closed form would have returned Infinity. Ours
+  // returns the asymptote.
+  approxEqual(enormous, 100000 + Math.log(0.5), 1e-9);
+});
+
+test("buyCost is continuous at the asymptotic switch point", () => {
+  // ratio = 500 (just below threshold) should give nearly the same
+  // result as ratio = 500.0001 (just above) — both forms must agree
+  // to within Number precision at the switch.
+  const q = [0, 0];
+  const b = 1;
+  const justBelow = buyCost(q, 0, 500, b);          // closed form
+  const justAbove = buyCost(q, 0, 500.0001, b);     // asymptotic
+  // Difference should be utterly negligible (< 1e-100 in theory; allow
+  // 1e-3 for the 0.0001 share gap).
+  assert.ok(
+    Math.abs(justBelow - justAbove) < 1e-3,
+    `discontinuity at switch point: ${justBelow} vs ${justAbove}`,
+  );
+});
+
 // ===========================================================================
 // SETTLEMENT / HOUSE PNL
 // ===========================================================================

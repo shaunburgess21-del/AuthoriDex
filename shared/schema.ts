@@ -1203,8 +1203,12 @@ export const marketAmmStateRelations = relations(marketAmmState, ({ one }) => ({
   }),
 }));
 
+export const insertMarketAmmStateSchema = createInsertSchema(marketAmmState).omit({
+  updatedAt: true,
+});
+
 export type MarketAmmState = typeof marketAmmState.$inferSelect;
-export type InsertMarketAmmState = typeof marketAmmState.$inferInsert;
+export type InsertMarketAmmState = z.infer<typeof insertMarketAmmStateSchema>;
 
 // ============================================================================
 // ADMIN AUDIT LOG (Immutable)

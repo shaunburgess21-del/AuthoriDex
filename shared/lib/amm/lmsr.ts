@@ -45,6 +45,17 @@
 const SHARES_TOLERANCE = 1e-6;
 const MAX_BISECTION_ITERATIONS = 100;
 const MAX_UPPER_BOUND_DOUBLINGS = 50;
+/**
+ * Threshold at which `buyCost` switches from the closed-form
+ * `b · ln(1 + p · (exp(Δ/b) − 1))` to the asymptotic
+ * `Δ + b · ln(p)`. JS Number's `Math.exp` / `Math.expm1` overflow to
+ * Infinity around 709.78, so we leave a generous safety margin. At
+ * the switch point the two forms agree to ~1e-217 — well within
+ * Number precision. Same threshold applies to `sellProceeds` for
+ * symmetry, though sells already saturate at `−b · ln(1 − p)` and
+ * never overflow in the upward direction.
+ */
+const SHARES_RATIO_OVERFLOW_THRESHOLD = 500;
 
 // ---------------------------------------------------------------------------
 // Validation helpers
@@ -171,6 +182,16 @@ export function pricePerShare(q: number[], outcomeIdx: number, b: number): numbe
  * with `log1p` / `expm1` so we retain precision when Δ << b (small trades
  * relative to liquidity), where the naive `cost(...) − cost(...)` form
  * would lose digits to subtraction.
+ *
+ * For `Δ/b > SHARES_RATIO_OVERFLOW_THRESHOLD` (i.e. astronomical buys
+ * relative to liquidity) we switch to the asymptotic form
+ *
+ *     buyCost(Δ) → Δ + b · ln(p)
+ *
+ * which is exact in the limit Δ → ∞ and continuous with the closed
+ * form at the switch point. Without this fallback `Math.expm1`
+ * overflows to Infinity around `Δ/b ≈ 709.78`, propagating Infinity
+ * through the rest of the buy/charge path.
  */
 export function buyCost(q: number[], outcomeIdx: number, shares: number, b: number): number {
   validateB(b);
@@ -179,7 +200,11 @@ export function buyCost(q: number[], outcomeIdx: number, shares: number, b: numb
   validateNonNegFinite(shares, "shares");
   if (shares === 0) return 0;
   const p = pricePerShare(q, outcomeIdx, b);
-  return b * Math.log1p(p * Math.expm1(shares / b));
+  const ratio = shares / b;
+  if (ratio > SHARES_RATIO_OVERFLOW_THRESHOLD) {
+    return shares + b * Math.log(p);
+  }
+  return b * Math.log1p(p * Math.expm1(ratio));
 }
 
 /**

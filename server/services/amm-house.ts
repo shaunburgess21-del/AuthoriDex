@@ -164,10 +164,21 @@ export async function seedAmmMarket(
         .from(marketAmmState)
         .where(eq(marketAmmState.marketId, marketId))
         .limit(1);
+      // Hard data-consistency check: if the ledger row exists but the
+      // state row doesn't, something has corrupted our bookkeeping (the
+      // two writes are inside the same transaction, so either both
+      // landed or neither did). Fail loud rather than silently
+      // returning recomputed (possibly mismatched) values.
+      if (!existingState) {
+        throw new Error(
+          `[ammHouse] Data inconsistency for market ${marketId}: amm_seed_debit ledger row exists ` +
+          `but market_amm_state row is missing. Manual repair required.`,
+        );
+      }
       return {
         marketId,
-        liquidityB: Number(existingState?.liquidityB ?? liquidityB),
-        houseSeedAmount: existingState?.houseSeedAmount ?? houseSeedAmount,
+        liquidityB: Number(existingState.liquidityB),
+        houseSeedAmount: existingState.houseSeedAmount,
         seeded: false,
       };
     }
