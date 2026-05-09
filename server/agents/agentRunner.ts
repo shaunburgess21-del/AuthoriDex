@@ -9,12 +9,17 @@ import {
   predictionMarkets,
   marketEntries,
   marketBets,
+  marketAmmState,
   trendingPeople,
   trendSnapshots,
   scheduledAgentActions,
   profiles,
   creditLedger,
 } from "@shared/schema";
+import {
+  type AmmStateSnapshot,
+  currentPrices as ammCurrentPrices,
+} from "@shared/lib/amm/positions";
 import { eq, and, sql, gte, lte, desc, inArray } from "drizzle-orm";
 import { log } from "../log";
 import { computePrediction, computeJackpotPrediction } from "./decisionEngine";
@@ -54,6 +59,7 @@ import {
   JACKPOT_AGENT_MIN_BUFFER_HOURS,
 } from "./constants";
 import { isAgentsPaused } from "./runtime-state";
+import { sizeAmmBudget } from "./sizing";
 
 const AGENT_RUNNER_LOCK_KEY = 5_201;
 
@@ -206,6 +212,7 @@ async function runAgentBatchOnce(): Promise<{
       teaser: predictionMarkets.teaser,
       resolutionCriteria: predictionMarkets.resolutionCriteria,
       metadata: predictionMarkets.metadata,
+      engine: predictionMarkets.engine,
     })
     .from(predictionMarkets)
     .where(
@@ -336,6 +343,38 @@ async function runAgentBatchOnce(): Promise<{
   const sharpPickedMarketIds = new Set(rankerSnapshot.picks.map((p) => p.marketId));
   if (sharpPickedMarketIds.size > 0) {
     log(`[AgentRunner] Sharp ranker picks (${rankerSnapshot.source}): ${Array.from(sharpPickedMarketIds).map((id) => id.slice(0, 8)).join(", ")}`);
+  }
+
+  // ---------------------------------------------------------------------
+  // Phase 10: precompute AMM state for AMM markets in the sweep.
+  // The inner loop below runs per (agent x market). Without batching, we
+  // would re-fetch the same market_amm_state row N_agents times per AMM
+  // market every sweep. Batched up-front, the cost is one query for the
+  // whole sweep regardless of cohort size.
+  // ---------------------------------------------------------------------
+  const ammSweepIds = sweepMarkets
+    .filter((m) => m.engine === "amm")
+    .map((m) => m.id);
+  const ammStateByMarket = new Map<string, AmmStateSnapshot>();
+  if (ammSweepIds.length > 0) {
+    const stateRows = await db
+      .select({
+        marketId: marketAmmState.marketId,
+        liquidityB: marketAmmState.liquidityB,
+        outcomeOrder: marketAmmState.outcomeOrder,
+        shareQuantities: marketAmmState.shareQuantities,
+      })
+      .from(marketAmmState)
+      .where(inArray(marketAmmState.marketId, ammSweepIds));
+    for (const row of stateRows) {
+      const b = Number(row.liquidityB);
+      if (!Number.isFinite(b) || b <= 0) continue;
+      ammStateByMarket.set(row.marketId, {
+        liquidityB: b,
+        outcomeOrder: row.outcomeOrder as string[],
+        shareQuantities: row.shareQuantities as Record<string, number>,
+      });
+    }
   }
 
   let scheduled = 0;
@@ -616,12 +655,81 @@ async function runAgentBatchOnce(): Promise<{
         continue;
       }
 
+      // ----------------------------------------------------------------
+      // Phase 10: AMM-specific decision adjustments. Run BEFORE the
+      // per-action delay/stake computation so a translated entryId
+      // flows naturally into the rest of the path.
+      // ----------------------------------------------------------------
+      if (market.engine === "amm") {
+        // (1) "no" direction has no AMM equivalent. On a binary market we
+        //     can translate to a YES on the OTHER entry (the prices sum
+        //     to 1, so betting against A is identical to betting for B).
+        //     On non-binary AMM markets there is no clean translation —
+        //     skip those defensively (today none exist on AMM, but the
+        //     guard keeps us safe if multi-outcome AMM ships later).
+        if (decision.direction === "no") {
+          if (entries.length === 2) {
+            const otherEntry = entries.find((e) => e.id !== decision.entryId);
+            if (otherEntry) {
+              decision = {
+                ...decision,
+                entryId: otherEntry.id,
+                direction: "yes",
+                confidence:
+                  typeof decision.confidence === "number"
+                    ? Math.max(0, Math.min(1, 1 - decision.confidence))
+                    : decision.confidence,
+              };
+            } else {
+              skipped++;
+              log(`[AgentRunner] AMM 'no' translation failed (no opposite entry) on ${market.id.slice(0, 8)} agent=${agent.displayName}`);
+              continue;
+            }
+          } else {
+            skipped++;
+            log(`[AgentRunner] AMM 'no' direction unsupported on ${entries.length}-way market ${market.id.slice(0, 8)} agent=${agent.displayName}`);
+            continue;
+          }
+        }
+
+        // (2) Pre-filter: skip queueing if the AMM price for the chosen
+        //     entry is already at or above the agent's confidence
+        //     (no edge). This prevents the worker from chewing through
+        //     no-op actions — `sizeAmmBudget` would just return 0 and
+        //     mark them `skipped: amm_no_edge`. Cheaper to skip here.
+        const ammSnap = ammStateByMarket.get(market.id);
+        const ammEntryId = decision.entryId;
+        if (ammSnap && ammEntryId) {
+          const cur = ammCurrentPrices(ammSnap)[ammEntryId] ?? 0;
+          const conf = typeof decision.confidence === "number" ? decision.confidence : 0.5;
+          // 0.02 buffer keeps tiny-edge bets out of the queue. The worker's
+          // sizing helper uses a tighter (0.005) epsilon so an in-flight
+          // price move between scheduling and execution doesn't kill the
+          // bet — agents can still execute when current price drifts up
+          // a hair after we scheduled them.
+          if (conf <= cur + 0.02) {
+            skipped++;
+            log(`[AgentRunner] AMM no-edge skip: agent=${agent.displayName} market=${market.id.slice(0, 8)} entry=${ammEntryId.slice(0, 8)} conf=${conf.toFixed(3)} <= price=${cur.toFixed(3)} + 0.02`);
+            continue;
+          }
+        }
+      }
+
+      // After the AMM block we may have reassigned decision (e.g. 'no'
+      // translation). Re-narrow entryId locally so the rest of the
+      // scheduling path sees a definite string.
+      const chosenEntryId = decision.entryId;
+      if (!chosenEntryId) {
+        skippedNoEntryId++;
+        continue;
+      }
+
       // Use World Market delay ranges for community markets
       const executeAfter = isCommunity
         ? computeWorldMarketExecuteAfter(agent.archetype)
         : computeExecuteAfter(agent.archetype);
 
-      const chosenEntry = entries.find((entry) => entry.id === decision.entryId);
+      const chosenEntry = entries.find((entry) => entry.id === chosenEntryId);
       let stakeAmount = computeAgentStakeAmount(agentData, decision);
 
       // Agent-specific stake overrides
@@ -643,7 +751,7 @@ async function runAgentBatchOnce(): Promise<{
       await db.insert(scheduledAgentActions).values({
         agentId: agent.id,
         marketId: market.id,
-        entryId: decision.entryId,
+        entryId: chosenEntryId,
         actionType: "predict",
         decisionPayload: decision,
         stakeAmount,
@@ -652,7 +760,7 @@ async function runAgentBatchOnce(): Promise<{
       });
 
       scheduled++;
-      log(`[AgentRunner] ${agent.displayName} → ${market.title?.slice(0, 30)} (entry=${decision.entryId.slice(0, 8)}, confidence=${decision.confidence?.toFixed(2)}, stake=${stakeAmount}, source=${decision.source ?? "deterministic"}, execAfter=${executeAfter.toISOString()})`);
+      log(`[AgentRunner] ${agent.displayName} → ${market.title?.slice(0, 30)} (engine=${market.engine}, entry=${chosenEntryId.slice(0, 8)}, confidence=${decision.confidence?.toFixed(2)}, stake=${stakeAmount}, source=${decision.source ?? "deterministic"}, execAfter=${executeAfter.toISOString()})`);
     }
   }
 
@@ -712,11 +820,20 @@ export async function runAgentBatch(): Promise<{
 
 /**
  * Conviction re-bet sweep: for each agent, look at markets they already bet on
- * where the score has moved significantly, and schedule a follow-up bet.
+ * where the situation has moved against (or for) their position, and schedule
+ * a follow-up bet.
+ *
+ * Engine-aware (Phase 10):
+ *  - Parimutuel Up/Down: existing fameIndex-vs-baseline drift trigger.
+ *  - AMM Up/Down: AMM-price-vs-original-fill drift trigger. We compare the
+ *    current LMSR price for the agent's chosen entry against the
+ *    `pricePerShare` recorded on their FIRST AMM buy in that market.
+ *    Re-uses `sizeAmmBudget` for the second-leg sizing so the conviction
+ *    bet respects the same per-trade price-move cap as a fresh bet.
  */
 async function runConvictionSweep(
   agents: (typeof agentConfigs.$inferSelect)[],
-  allMarkets: { id: string; personId: string | null; marketType: string | null; openMarketType?: string | null; title: string | null }[],
+  allMarkets: { id: string; personId: string | null; marketType: string | null; openMarketType?: string | null; title: string | null; engine?: string | null }[],
   _now: Date
 ): Promise<number> {
   let convictionScheduled = 0;
@@ -726,13 +843,46 @@ async function runConvictionSweep(
   );
   if (!updownMarkets.length) return 0;
 
-  const personIds = Array.from(new Set(updownMarkets.map(m => m.personId!)));
-  if (!personIds.length) return 0;
+  // Split into engines. Parimutuel uses the legacy fameIndex baseline; AMM
+  // uses on-chain price drift. Community ('updown' opened from world
+  // markets) stays parimutuel until world markets ship on AMM.
+  const parimutuelUpdown = updownMarkets.filter((m) => (m.engine ?? "parimutuel") !== "amm");
+  const ammUpdown = updownMarkets.filter((m) => m.engine === "amm");
 
-  const liveScores = await db
-    .select({ id: trendingPeople.id, fameIndex: trendingPeople.fameIndex })
-    .from(trendingPeople)
-    .where(inArray(trendingPeople.id, personIds));
+  // Pre-load AMM state for AMM updown markets in this sweep — single
+  // batched query, used by every agent below.
+  const ammStateByMarket = new Map<string, AmmStateSnapshot>();
+  if (ammUpdown.length > 0) {
+    const stateRows = await db
+      .select({
+        marketId: marketAmmState.marketId,
+        liquidityB: marketAmmState.liquidityB,
+        outcomeOrder: marketAmmState.outcomeOrder,
+        shareQuantities: marketAmmState.shareQuantities,
+      })
+      .from(marketAmmState)
+      .where(inArray(marketAmmState.marketId, ammUpdown.map((m) => m.id)));
+    for (const row of stateRows) {
+      const b = Number(row.liquidityB);
+      if (!Number.isFinite(b) || b <= 0) continue;
+      ammStateByMarket.set(row.marketId, {
+        liquidityB: b,
+        outcomeOrder: row.outcomeOrder as string[],
+        shareQuantities: row.shareQuantities as Record<string, number>,
+      });
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Parimutuel path — fameIndex baseline drift (unchanged from pre-Phase 10)
+  // ---------------------------------------------------------------------
+  const personIds = Array.from(new Set(parimutuelUpdown.map(m => m.personId!)));
+  const liveScores = personIds.length
+    ? await db
+        .select({ id: trendingPeople.id, fameIndex: trendingPeople.fameIndex })
+        .from(trendingPeople)
+        .where(inArray(trendingPeople.id, personIds))
+    : [];
   const scoreMap = new Map(liveScores.map(p => [p.id, p.fameIndex ?? 0]));
 
   for (const agent of agents) {
@@ -748,7 +898,7 @@ async function runConvictionSweep(
 
     const betByMarket = new Map(existingBets.map(b => [b.marketId, b.entryId]));
 
-    for (const market of updownMarkets) {
+    for (const market of parimutuelUpdown) {
       if (!betByMarket.has(market.id)) continue;
 
       const convictionExists = await db
@@ -842,6 +992,146 @@ async function runConvictionSweep(
       convictionScheduled++;
       const action = chosenEntryId === originalEntryId ? "doubled down" : "flipped";
       log(`[AgentRunner] Conviction: ${agent.displayName} ${action} on ${market.title?.slice(0, 30)} (delta=${(delta * 100).toFixed(1)}%, stake=${stakeAmount})`);
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // AMM path (Phase 10) — drift trigger is on the LMSR price for the
+  // agent's chosen entry, measured against the fill price recorded on
+  // their first AMM buy in that market. We re-use the same threshold
+  // (CONVICTION_SCORE_THRESHOLD_PCT) so admin tuning continues to
+  // affect both engines uniformly.
+  // ---------------------------------------------------------------------
+  if (ammUpdown.length > 0) {
+    for (const agent of agents) {
+      // Pull this agent's AMM buys across the AMM updown markets in the
+      // sweep, ordered oldest-first so the first row per (market, entry)
+      // is the agent's initial fill — that's our cost-basis anchor.
+      const ammBets = await db
+        .select({
+          marketId: marketBets.marketId,
+          entryId: marketBets.entryId,
+          actionType: marketBets.actionType,
+          pricePerShare: marketBets.pricePerShare,
+          createdAt: marketBets.createdAt,
+        })
+        .from(marketBets)
+        .where(
+          and(
+            eq(marketBets.agentId, agent.id),
+            eq(marketBets.actionType, "buy"),
+            inArray(marketBets.marketId, ammUpdown.map((m) => m.id)),
+          ),
+        )
+        .orderBy(marketBets.createdAt);
+
+      if (!ammBets.length) continue;
+
+      // First fill per market: we'll trigger conviction off the delta
+      // between current price and this anchor. `ammBets` is ordered
+      // oldest-first, so `Map.set(...)` with a `has()` guard preserves
+      // the first-fill semantics in O(1) per market lookup below.
+      const anchorByMarket = new Map<string, { entryId: string; pricePerShare: number }>();
+      for (const bet of ammBets) {
+        if (anchorByMarket.has(bet.marketId)) continue;
+        const ps = parseFloat(String(bet.pricePerShare ?? "0"));
+        if (!Number.isFinite(ps) || ps <= 0) continue;
+        anchorByMarket.set(bet.marketId, { entryId: bet.entryId, pricePerShare: ps });
+      }
+
+      for (const market of ammUpdown) {
+        const state = ammStateByMarket.get(market.id);
+        if (!state) continue;
+        const anchor = anchorByMarket.get(market.id);
+        if (!anchor) continue;
+
+        // Skip if a conviction bet for this agent+market already exists.
+        const convictionExists = await db
+          .select({ id: scheduledAgentActions.id })
+          .from(scheduledAgentActions)
+          .where(
+            and(
+              eq(scheduledAgentActions.agentId, agent.id),
+              eq(scheduledAgentActions.marketId, market.id),
+              eq(scheduledAgentActions.actionType, "conviction"),
+              sql`${scheduledAgentActions.status} IN ('pending', 'in_progress', 'executed')`,
+            ),
+          )
+          .limit(1);
+
+        if (convictionExists.length >= CONVICTION_MAX_PER_MARKET) continue;
+
+        const livePrice = ammCurrentPrices(state)[anchor.entryId] ?? 0;
+        if (livePrice <= 0) continue;
+
+        const delta = (livePrice - anchor.pricePerShare) / anchor.pricePerShare;
+        if (Math.abs(delta) < CONVICTION_SCORE_THRESHOLD_PCT) continue;
+
+        // Score moved in agent's favour iff price went UP on the entry
+        // they hold. Same flip mechanic as parimutuel — the anchor entry
+        // and the alternative entry on a binary AMM market are
+        // symmetrical (price[A] + price[B] = 1).
+        const movedInFavour = delta > 0;
+
+        let chosenEntryId = anchor.entryId;
+        if (!movedInFavour) {
+          const flipChance =
+            0.30 + (agent.contrarianism ? parseFloat(String(agent.contrarianism)) * 0.15 : 0);
+          if (Math.random() < flipChance) {
+            const otherEntryId = state.outcomeOrder.find((id) => id !== anchor.entryId);
+            if (otherEntryId) chosenEntryId = otherEntryId;
+          }
+        }
+
+        const confidence = Math.min(0.95, 0.6 + Math.abs(delta));
+
+        // Re-use the same target-price sizer the worker uses. We feed
+        // it the live state so the budget reflects what the actual
+        // executor will charge. If sizer says no-edge here we abstain
+        // entirely (the worker would just skip it on the other end).
+        const sizing = sizeAmmBudget({
+          state,
+          entryId: chosenEntryId,
+          confidence,
+          maxBudget: Math.min(MAX_AGENT_STAKE, computeStakeAmount(confidence)),
+        });
+        if (sizing.creditBudget === 0) continue;
+
+        const executeAfter = computeExecuteAfter(agent.archetype);
+
+        await db.insert(scheduledAgentActions).values({
+          agentId: agent.id,
+          marketId: market.id,
+          entryId: chosenEntryId,
+          actionType: "conviction",
+          decisionPayload: {
+            abstain: false,
+            entryId: chosenEntryId,
+            confidence: parseFloat(confidence.toFixed(3)),
+            convictionDelta: parseFloat(delta.toFixed(4)),
+            originalEntryId: anchor.entryId,
+            doubled: chosenEntryId === anchor.entryId,
+            // AMM-specific telemetry — useful when auditing why a
+            // conviction action got scheduled.
+            ammAnchorPrice: anchor.pricePerShare,
+            ammLivePrice: livePrice,
+          },
+          // We persist the SIZED budget so the worker can use it as the
+          // maxBudget cap on its second sizing pass. The worker re-sizes
+          // against the latest state at execution time, which prevents
+          // overcommitting if price has moved further between now and
+          // execute_after.
+          stakeAmount: sizing.creditBudget,
+          executeAfter,
+          status: "pending",
+        });
+
+        convictionScheduled++;
+        const action = chosenEntryId === anchor.entryId ? "doubled down" : "flipped";
+        log(
+          `[AgentRunner] AMM Conviction: ${agent.displayName} ${action} on ${market.title?.slice(0, 30)} (anchor=${anchor.pricePerShare.toFixed(3)} live=${livePrice.toFixed(3)} delta=${(delta * 100).toFixed(1)}%, sized=${sizing.creditBudget})`,
+        );
+      }
     }
   }
 
