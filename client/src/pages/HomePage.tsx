@@ -56,7 +56,7 @@ import {
   ImageIcon,
   Loader2,
 } from "lucide-react";
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback, type ReactNode } from "react";
 import { useDragScroll } from "@/hooks/use-drag-scroll";
 import { useQuery, useQueries, useInfiniteQuery, useMutation, keepPreviousData } from "@tanstack/react-query";
 import { apiRequest, getAuthHeaders, parseApiError, queryClient } from "@/lib/queryClient";
@@ -98,6 +98,14 @@ const VOTE_HUB_LINK_ICONS: Record<VoteHubSectionToggle, LucideIcon> = {
   "Curate Profile": ImageIcon,
 };
 
+function LeaderboardDrawerNavList({ children }: { children: ReactNode }) {
+  return (
+    <div className="divide-y divide-border/60 overflow-hidden rounded-xl border border-border/60 bg-card/40">
+      {children}
+    </div>
+  );
+}
+
 function LeaderboardDrawerNavLink({
   href,
   label,
@@ -118,11 +126,11 @@ function LeaderboardDrawerNavLink({
   return (
     <Link
       href={href}
-      onClick={onNavigateLink}
+      onClick={() => onNavigateLink()}
       className="flex min-h-10 items-center justify-between gap-3 px-3 py-2.5 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
     >
       <span className="flex min-w-0 items-center gap-3">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted/40">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted/40" aria-hidden>
           <Icon className={cn("h-4 w-4", iconTint)} aria-hidden />
         </span>
         <span className="truncate text-sm font-medium">{label}</span>
@@ -166,7 +174,7 @@ function LeaderboardApprovalSnapshot() {
         The <span className="font-medium text-foreground">Approval</span> score on each row is an aggregate from the community (shown out of 5).
       </p>
       <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-        Tap <span className="font-medium text-foreground">Rate</span> on a row to cast your own 1–5 vote—it feeds into that person&apos;s approval rating.
+        Use <span className="font-medium text-foreground">Rate</span> on a row to cast your own 1–5 vote—it feeds into that person&apos;s approval rating.
       </p>
     </div>
   );
@@ -178,7 +186,7 @@ function LeaderboardVoteInfoBody({ onNavigateLink }: { onNavigateLink: () => voi
       <LeaderboardApprovalSnapshot />
       <div className="mt-6 space-y-2">
         <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">More on Vote</p>
-        <div className="divide-y divide-border/60 overflow-hidden rounded-xl border border-border/60 bg-card/40">
+        <LeaderboardDrawerNavList>
           {VOTE_HUB_DEEP_LINKS.map(({ label, href, sectionToggle }) => (
             <LeaderboardDrawerNavLink
               key={href}
@@ -189,7 +197,7 @@ function LeaderboardVoteInfoBody({ onNavigateLink }: { onNavigateLink: () => voi
               onNavigateLink={onNavigateLink}
             />
           ))}
-        </div>
+        </LeaderboardDrawerNavList>
       </div>
     </>
   );
@@ -201,7 +209,7 @@ function LeaderboardPredictInfoBody({ onNavigateLink }: { onNavigateLink: () => 
       <LeaderboardUpDownSnapshot />
       <div className="mt-6 space-y-2">
         <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">More on Predict</p>
-        <div className="divide-y divide-border/60 overflow-hidden rounded-xl border border-border/60 bg-card/40">
+        <LeaderboardDrawerNavList>
           {LEADERBOARD_PREDICT_MORE_LINKS.map(({ label, href, icon }) => (
             <LeaderboardDrawerNavLink
               key={href}
@@ -212,7 +220,7 @@ function LeaderboardPredictInfoBody({ onNavigateLink }: { onNavigateLink: () => 
               onNavigateLink={onNavigateLink}
             />
           ))}
-        </div>
+        </LeaderboardDrawerNavList>
       </div>
     </>
   );
@@ -1864,29 +1872,28 @@ export default function HomePage() {
                     aria-hidden
                   />
                   <div className="relative z-[2]">
-                <CardHeader className="flex flex-col gap-4 space-y-0 bg-card/95 pb-4 pt-5">
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <CardTitle className="text-2xl font-serif">Leaderboard</CardTitle>
+                    <CardHeader className="flex flex-col gap-4 space-y-0 bg-card/95 pb-4 pt-5">
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <CardTitle className="text-2xl font-serif">Leaderboard</CardTitle>
+                          </div>
+                          <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground/60 flex-wrap" data-testid="text-leaderboard-freshness">
+                            <TouchTooltip
+                              content={<p>Data refresh from Wikipedia, Mediastack, GDELT, and Google.</p>}
+                              side="bottom"
+                              className="text-xs max-w-[240px]"
+                            >
+                              <span className="inline-flex items-center gap-1 cursor-help">
+                                <RefreshCw className="h-3 w-3 shrink-0 full-refresh-icon-shine" aria-hidden />
+                                <span>Data refresh: {systemFreshness?.liveUpdatedAtFormatted || systemFreshness?.fullRefreshAtFormatted || systemFreshness?.lastScoredAtFormatted || "recently"}</span>
+                              </span>
+                            </TouchTooltip>
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground/60 flex-wrap" data-testid="text-leaderboard-freshness">
-                        <TouchTooltip
-                          content={<p>Data refresh from Wikipedia, Mediastack, GDELT, and Google.</p>}
-                          side="bottom"
-                          className="text-xs max-w-[240px]"
-                        >
-                          <span className="inline-flex items-center gap-1 cursor-help">
-                            <RefreshCw className="h-3 w-3 shrink-0 full-refresh-icon-shine" aria-hidden />
-                            <span>Data refresh: {systemFreshness?.liveUpdatedAtFormatted || systemFreshness?.fullRefreshAtFormatted || systemFreshness?.lastScoredAtFormatted || "recently"}</span>
-                          </span>
-                        </TouchTooltip>
-                      </div>
-                    </div>
-                  </div>
-                  
-                </CardHeader>
-                <div className="sticky top-16 z-30 border-b border-border/60 px-3 py-2.5 bg-card/95 backdrop-blur-md">
+                    </CardHeader>
+                    <div className="sticky top-16 z-30 border-b border-border/60 px-3 py-2.5 bg-card/95 backdrop-blur-md">
                   <div className="flex min-h-10 w-full items-stretch overflow-hidden rounded-lg bg-muted/50" data-testid="toggle-leaderboard-tabs">
                     <div
                       className={`relative flex flex-1 min-w-0 items-center justify-center rounded-l-lg rounded-r-none px-4 py-1.5 text-[15px] font-medium transition-all ${
@@ -2380,7 +2387,7 @@ export default function HomePage() {
       {isMobile ? (
         <Drawer open={predictLeaderboardInfoOpen} onOpenChange={setPredictLeaderboardInfoOpen}>
           <DrawerContent className="max-h-[85vh]">
-            <DrawerHeader className="text-left">
+            <DrawerHeader className="space-y-1.5 text-left">
               <DrawerTitle>Predict from the leaderboard</DrawerTitle>
               <DrawerDescription className="text-sm text-muted-foreground">
                 How Up/Down works here, plus jump to a section on Predict.
@@ -2394,13 +2401,13 @@ export default function HomePage() {
       ) : (
         <Dialog open={predictLeaderboardInfoOpen} onOpenChange={setPredictLeaderboardInfoOpen}>
           <DialogContent className="flex max-h-[85vh] flex-col gap-0 overflow-hidden sm:max-w-md">
-            <DialogHeader className="shrink-0 text-left">
+            <DialogHeader className="shrink-0 space-y-1.5 text-left">
               <DialogTitle>Predict from the leaderboard</DialogTitle>
               <DialogDescription className="text-sm text-muted-foreground">
                 How Up/Down works here, plus jump to a section on Predict.
               </DialogDescription>
             </DialogHeader>
-            <div className="min-h-0 overflow-y-auto px-1 pb-2 pt-2">
+            <div className="min-h-0 overflow-y-auto px-4 pb-4 pt-2">
               <LeaderboardPredictInfoBody onNavigateLink={() => setPredictLeaderboardInfoOpen(false)} />
             </div>
           </DialogContent>
@@ -2409,7 +2416,7 @@ export default function HomePage() {
       {isMobile ? (
         <Drawer open={voteLeaderboardInfoOpen} onOpenChange={setVoteLeaderboardInfoOpen}>
           <DrawerContent className="max-h-[85vh]">
-            <DrawerHeader className="text-left">
+            <DrawerHeader className="space-y-1.5 text-left">
               <DrawerTitle>Your vote on the leaderboard</DrawerTitle>
               <DrawerDescription className="text-sm text-muted-foreground">
                 How approval works here, plus jump to a section on Vote.
@@ -2423,13 +2430,13 @@ export default function HomePage() {
       ) : (
         <Dialog open={voteLeaderboardInfoOpen} onOpenChange={setVoteLeaderboardInfoOpen}>
           <DialogContent className="flex max-h-[85vh] flex-col gap-0 overflow-hidden sm:max-w-md">
-            <DialogHeader className="shrink-0 text-left">
+            <DialogHeader className="shrink-0 space-y-1.5 text-left">
               <DialogTitle>Your vote on the leaderboard</DialogTitle>
               <DialogDescription className="text-sm text-muted-foreground">
                 How approval works here, plus jump to a section on Vote.
               </DialogDescription>
             </DialogHeader>
-            <div className="min-h-0 overflow-y-auto px-1 pb-2 pt-2">
+            <div className="min-h-0 overflow-y-auto px-4 pb-4 pt-2">
               <LeaderboardVoteInfoBody onNavigateLink={() => setVoteLeaderboardInfoOpen(false)} />
             </div>
           </DialogContent>
