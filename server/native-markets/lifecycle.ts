@@ -1,3 +1,5 @@
+import { DEFAULT_PRE_RESOLVE_COOLDOWN_MS, getAmmCooldownMs } from "./amm-settings";
+
 export type NativeMarketLifecycleStatus = "OPEN" | "ENTRIES_CLOSED" | "RESOLVED";
 export type MarketEngine = "parimutuel" | "amm";
 
@@ -9,12 +11,16 @@ export interface NativeMarketLifecycle {
 }
 
 /**
- * Pre-resolve cooldown for AMM markets. AMM markets trade right up
- * until 5 minutes before resolution to give the resolver cron a
- * comfortable window to fire and to prevent racing the resolution
- * itself. Mirrors NYSE's closing-auction concept.
+ * Default pre-resolve cooldown for AMM markets (5 minutes). The live
+ * value is admin-tunable via `amm_runtime_settings.pre_resolve_cooldown_ms`
+ * and read through `getAmmCooldownMs()`; this constant remains the
+ * compiled-in fallback when the cache hasn't yet warmed at boot.
+ *
+ * Existing imports (tests, etc.) still resolve against this value.
+ * For runtime checks, prefer the cached read so a hot fix to the
+ * cooldown propagates without a deploy.
  */
-export const AMM_PRE_RESOLVE_COOLDOWN_MS = 5 * 60 * 1000;
+export const AMM_PRE_RESOLVE_COOLDOWN_MS = DEFAULT_PRE_RESOLVE_COOLDOWN_MS;
 
 /**
  * Weekly betting closes on Friday 23:59:59.999 UTC for a Sunday-end
@@ -28,13 +34,15 @@ export function getWeeklyBettingCutoff(endAt: Date): Date {
 }
 
 /**
- * AMM trading cutoff is `endAt - 5 minutes`. AMM markets self-correct
- * via price (late traders pay near-fair odds), so the long Friday
- * cutoff is unnecessary. The 5-minute pad protects the resolution
- * cron from a trade that races settlement.
+ * AMM trading cutoff is `endAt - <admin-tunable cooldown>` (default
+ * 5 minutes). AMM markets self-correct via price (late traders pay
+ * near-fair odds), so the long Friday cutoff is unnecessary. The
+ * cooldown pad protects the resolution cron from a trade that races
+ * settlement, and is admin-tunable via `amm_runtime_settings` once we
+ * have agent-driven volume to observe.
  */
 export function getAmmTradingCutoff(endAt: Date): Date {
-  return new Date(endAt.getTime() - AMM_PRE_RESOLVE_COOLDOWN_MS);
+  return new Date(endAt.getTime() - getAmmCooldownMs());
 }
 
 /**

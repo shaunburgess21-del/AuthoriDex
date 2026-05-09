@@ -20615,6 +20615,81 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
   });
 
   // ============================================================================
+  // AMM RUNTIME SETTINGS (Phase 4 review pass)
+  // ----------------------------------------------------------------------------
+  // Admin-tunable AMM knobs that survive restarts and don't require a deploy.
+  // Today: pre-resolve cooldown (default 5 minutes). Once Phase 10 wakes the
+  // agents and we observe how late-hour AMM trading actually behaves, we can
+  // dial this up to 10 / 15 minutes from the admin panel without shipping.
+  //
+  // See server/native-markets/amm-settings.ts for the cache pattern (sync
+  // reads on the hot path, ~10s background refresh, pre-boot fallback to
+  // the compiled-in default).
+  // ============================================================================
+
+  app.get("/api/admin/amm/settings", requireAuth, requireAdmin, async (_req: AuthRequest, res) => {
+    try {
+      const {
+        getAmmSettings,
+        DEFAULT_PRE_RESOLVE_COOLDOWN_MS,
+        MIN_PRE_RESOLVE_COOLDOWN_MS,
+        MAX_PRE_RESOLVE_COOLDOWN_MS,
+      } = await import("./native-markets/amm-settings");
+      const state = await getAmmSettings();
+      res.json({
+        preResolveCooldownMs: state.preResolveCooldownMs,
+        updatedAt: state.updatedAt.toISOString(),
+        updatedBy: state.updatedBy,
+        bounds: {
+          defaultMs: DEFAULT_PRE_RESOLVE_COOLDOWN_MS,
+          minMs: MIN_PRE_RESOLVE_COOLDOWN_MS,
+          maxMs: MAX_PRE_RESOLVE_COOLDOWN_MS,
+        },
+      });
+    } catch (err: any) {
+      console.error("[AmmSettings] settings fetch failed:", err);
+      res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
+    }
+  });
+
+  app.post("/api/admin/amm/settings", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const raw = req.body?.preResolveCooldownMs;
+      const ms = typeof raw === "number" ? raw : Number(raw);
+      if (!Number.isFinite(ms) || ms <= 0) {
+        return res.status(400).json({
+          ok: false,
+          error: "preResolveCooldownMs must be a positive number (milliseconds)",
+        });
+      }
+      const {
+        setAmmCooldownMs,
+        MIN_PRE_RESOLVE_COOLDOWN_MS,
+        MAX_PRE_RESOLVE_COOLDOWN_MS,
+      } = await import("./native-markets/amm-settings");
+      const state = await setAmmCooldownMs({
+        preResolveCooldownMs: ms,
+        actorId: req.userId ?? null,
+      });
+      const clampedDifferent = state.preResolveCooldownMs !== Math.round(ms);
+      console.log(
+        `[AmmSettings] preResolveCooldownMs set to ${state.preResolveCooldownMs}ms by ${req.userId ?? "unknown"}` +
+          (clampedDifferent ? ` (clamped from ${Math.round(ms)}ms; bounds [${MIN_PRE_RESOLVE_COOLDOWN_MS}, ${MAX_PRE_RESOLVE_COOLDOWN_MS}])` : ""),
+      );
+      res.json({
+        ok: true,
+        preResolveCooldownMs: state.preResolveCooldownMs,
+        updatedAt: state.updatedAt.toISOString(),
+        updatedBy: state.updatedBy,
+        clamped: clampedDifferent,
+      });
+    } catch (err: any) {
+      console.error("[AmmSettings] settings update failed:", err);
+      res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
+    }
+  });
+
+  // ============================================================================
   // AMM SMOKE TEST ENDPOINT (Phase 2 of the parimutuel -> AMM rebuild)
   // ----------------------------------------------------------------------------
   // Creates a one-off `engine='amm'` community market, seeds it via the

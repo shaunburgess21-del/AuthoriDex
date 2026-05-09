@@ -1559,6 +1559,31 @@ export const agentRuntimeState = pgTable("agent_runtime_state", {
 
 export type AgentRuntimeState = typeof agentRuntimeState.$inferSelect;
 
+/**
+ * Singleton table holding admin-tunable AMM knobs that we want to be
+ * able to change *without* a deploy. Today the only field is
+ * `preResolveCooldownMs` — the gap between the AMM trading cutoff and
+ * `endAt`. Promoted out of a hardcoded constant in `lifecycle.ts` so
+ * we can dial it up (e.g. 10 or 15 minutes) once we observe how late-
+ * hour AMM trading actually behaves with the agent cohort live (Phase
+ * 10+).
+ *
+ * Cache pattern matches `agentRuntimeState`: the in-process module
+ * caches the value with a ~10s TTL so flipping the knob propagates
+ * within seconds without hammering the DB on every betting check.
+ *
+ * Intentionally narrow today; expect to grow as Phase 10/11/12 add
+ * more knobs (Kelly cap, per-engine max-loss override, etc.).
+ */
+export const ammRuntimeSettings = pgTable("amm_runtime_settings", {
+  id: text("id").primaryKey().default("global"),
+  preResolveCooldownMs: integer("pre_resolve_cooldown_ms").notNull().default(300_000),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  updatedBy: varchar("updated_by"),
+});
+
+export type AmmRuntimeSettings = typeof ammRuntimeSettings.$inferSelect;
+
 export const agentConfigs = pgTable("agent_configs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),

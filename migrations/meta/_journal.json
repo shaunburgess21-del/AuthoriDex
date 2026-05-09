@@ -54,6 +54,7 @@
     { "idx": 49, "version": "7", "when": 1777833084527, "tag": "0049_anon_vote_budget", "breakpoints": true },
     { "idx": 50, "version": "7", "when": 1778273606257, "tag": "0050_re_baseline", "breakpoints": true },
     { "idx": 51, "version": "7", "when": 1778273692364, "tag": "0051_agent_runtime_state", "breakpoints": true },
-    { "idx": 52, "version": "7", "when": 1778276420000, "tag": "0052_amm_phase_2", "breakpoints": true }
+    { "idx": 52, "version": "7", "when": 1778276420000, "tag": "0052_amm_phase_2", "breakpoints": true },
+    { "idx": 53, "version": "7", "when": 1778362800000, "tag": "0053_amm_runtime_settings", "breakpoints": true }
   ]
 }

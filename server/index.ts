@@ -651,6 +651,11 @@ async function startServer() {
 
     runStartupTask("hydrate trending people", hydrateTrendingPeopleFromSnapshots);
     runStartupTask("verify database constraints", verifyDbConstraints);
+    runStartupTask("warm AMM settings cache", async () => {
+      const { initAmmSettings, getAmmCooldownMs } = await import("./native-markets/amm-settings");
+      await initAmmSettings();
+      log(`[Startup] AMM pre-resolve cooldown = ${Math.round(getAmmCooldownMs() / 1000)}s`);
+    });
     runStartupTask("weekly market reconcile", async () => {
       const generation = await generateAllWeeklyMarkets();
       await resolveExpiredMarkets();
