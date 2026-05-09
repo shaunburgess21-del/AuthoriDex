@@ -19689,6 +19689,64 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
     }
   });
 
+  // ============================================================================
+  // GLOBAL "PAUSE ALL AGENTS" KILL SWITCH
+  // ----------------------------------------------------------------------------
+  // Backed by the `agent_runtime_state` singleton row. When `paused=true`, ALL
+  // agent activity (predictions, scheduled bets, comments, comment-likes,
+  // sentiment/matchup/poll votes) is silenced at the worker entry points.
+  // Non-agent LLM features ("why they're trending", resolution summaries, news
+  // ingest, etc.) are unaffected. See server/agents/runtime-state.ts for the
+  // full list of gated workers and the propagation TTL (~10 seconds).
+  // ============================================================================
+
+  app.get("/api/admin/agents/pause-state", requireAuth, requireAdmin, async (_req: AuthRequest, res) => {
+    try {
+      const { getAgentRuntimeState } = await import("./agents/runtime-state");
+      const state = await getAgentRuntimeState();
+      res.json({
+        paused: state.paused,
+        reason: state.reason,
+        pausedAt: state.pausedAt?.toISOString() ?? null,
+        pausedBy: state.pausedBy,
+        updatedAt: state.updatedAt.toISOString(),
+      });
+    } catch (err: any) {
+      console.error("[AgentAdmin] pause-state fetch failed:", err);
+      res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
+    }
+  });
+
+  app.post("/api/admin/agents/pause", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const paused = req.body?.paused === true;
+      const reason = typeof req.body?.reason === "string" && req.body.reason.trim()
+        ? String(req.body.reason).slice(0, 500)
+        : null;
+      const { setAgentsPaused, getAgentRuntimeState } = await import("./agents/runtime-state");
+      await setAgentsPaused({
+        paused,
+        reason,
+        actorId: req.userId ?? null,
+      });
+      const state = await getAgentRuntimeState();
+      console.log(
+        `[AgentAdmin] Agents ${paused ? "PAUSED" : "RESUMED"} by ${req.userId ?? "unknown"}${reason ? ` (reason: ${reason})` : ""}`,
+      );
+      res.json({
+        ok: true,
+        paused: state.paused,
+        reason: state.reason,
+        pausedAt: state.pausedAt?.toISOString() ?? null,
+        pausedBy: state.pausedBy,
+        updatedAt: state.updatedAt.toISOString(),
+      });
+    } catch (err: any) {
+      console.error("[AgentAdmin] pause toggle failed:", err);
+      res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
+    }
+  });
+
   // POST /api/admin/agents/refresh-simulation-profiles - Re-applies the
   // current seeder's per-persona simulation profile (cap, chance, edge,
   // stake) to all existing V2 agents. Use after tuning seeder values so

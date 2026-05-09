@@ -25,10 +25,18 @@ import { WORLD_MARKETS_LLM_ENABLED } from "./constants";
 import type { PredictionDecision } from "./types";
 import { buildAgentActionStakeIdempotencyKey, buildAgentBetMetadata } from "./actionWorker-utils";
 import { getWeeklyBettingCutoff } from "../jobs/market-generator";
+import { isAgentsPaused } from "./runtime-state";
 
 const STALE_IN_PROGRESS_TIMEOUT_MINUTES = 30;
 
 async function processDueActions(): Promise<void> {
+  // Global "pause all agents" kill switch (admin Agents tab toggle).
+  // Bail out before reclaiming or claiming any pending actions — those
+  // stay queued and resume executing the moment the switch flips back on.
+  if (await isAgentsPaused()) {
+    return;
+  }
+
   const reclaimed = await db.execute(sql`
     UPDATE scheduled_agent_actions
     SET status = 'pending',

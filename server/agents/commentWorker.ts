@@ -37,6 +37,7 @@ import {
   castSentimentPollVoteForUser,
   countAgentVotesThisWeek,
 } from "./voteWorker";
+import { isAgentsPaused } from "./runtime-state";
 
 /**
  * Probability that an agent's daily comment becomes a reply to someone
@@ -492,6 +493,22 @@ export async function runCommentSweep(): Promise<{
    *  picker filter is broken regardless of what other counters say. */
   bySurface: Record<CommentSurface, number>;
 }> {
+  // Global "pause all agents" kill switch (admin Agents tab toggle).
+  if (await isAgentsPaused()) {
+    log("[CommentWorker] Skipping sweep; agents are globally paused");
+    return {
+      posted: 0,
+      replies: 0,
+      replyFallbacks: 0,
+      skipped: 0,
+      llmRejected: 0,
+      capReached: false,
+      voteCapDeflections: 0,
+      voteCapBlocked: 0,
+      bySurface: {} as Record<CommentSurface, number>,
+    };
+  }
+
   const agents = await db
     .select()
     .from(agentConfigs)

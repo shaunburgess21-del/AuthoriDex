@@ -53,6 +53,7 @@ import {
   WORLD_CONVICTION_MIN_DAYS_OPEN,
   JACKPOT_AGENT_MIN_BUFFER_HOURS,
 } from "./constants";
+import { isAgentsPaused } from "./runtime-state";
 
 const AGENT_RUNNER_LOCK_KEY = 5_201;
 
@@ -677,6 +678,14 @@ export async function runAgentBatch(): Promise<{
   skipped: number;
   diagnostics?: Record<string, unknown>;
 }> {
+  // Global "pause all agents" kill switch (admin Agents tab toggle).
+  // Bail out before grabbing the advisory lock so a paused cohort doesn't
+  // even hold a connection slot.
+  if (await isAgentsPaused()) {
+    log("[AgentRunner] Skipping batch; agents are globally paused");
+    return { scheduled: 0, abstained: 0, skipped: 0, diagnostics: { paused: true } };
+  }
+
   const locked = await withDbAdvisoryLock(
     AGENT_RUNNER_LOCK_KEY,
     "AgentRunner",

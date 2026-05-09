@@ -25,6 +25,7 @@ import { log } from "../log";
 import { gamificationService } from "../services/gamification";
 import { getSimulationProfile, type AgentSimulationProfile } from "./simulationProfile";
 import { recomputeCelebrityMetrics } from "../services/celebrity-metrics-recompute";
+import { isAgentsPaused } from "./runtime-state";
 
 const BOOT_DELAY_MS = 180_000; // 3 minutes after boot
 
@@ -640,6 +641,12 @@ export { countAgentVotesThisWeek };
 // ── Main sweep ─────────────────────────────────────────────────────────
 
 export async function runVoteSweep(): Promise<AgentVoteResult[]> {
+  // Global "pause all agents" kill switch (admin Agents tab toggle).
+  if (await isAgentsPaused()) {
+    log("[VoteWorker] Skipping sweep; agents are globally paused");
+    return [];
+  }
+
   const agents = await db
     .select()
     .from(agentConfigs)

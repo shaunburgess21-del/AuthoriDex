@@ -21,12 +21,14 @@ import {
 } from "@/components/ui/table";
 import {
   Activity,
+  AlertTriangle,
   Bot,
   Coins,
   Eraser,
   FlaskConical,
   Loader2,
   Megaphone,
+  Pause,
   Pencil,
   Play,
   ThumbsUp,
@@ -181,6 +183,39 @@ export function AdminAgentsSection() {
   const [pendingToggleAgentId, setPendingToggleAgentId] = useState<string | null>(null);
   const [pendingClearAgentId, setPendingClearAgentId] = useState<string | null>(null);
   const [dryRunPreview, setDryRunPreview] = useState<DryRunPreview | null>(null);
+
+  const pauseStateQuery = useQuery<{
+    paused: boolean;
+    reason: string | null;
+    pausedAt: string | null;
+    pausedBy: string | null;
+    updatedAt: string;
+  }>({
+    queryKey: ["/api/admin/agents/pause-state"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/admin/agents/pause-state");
+      return res.json();
+    },
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: false,
+  });
+
+  const pauseMutation = useMutation({
+    mutationFn: async ({ paused, reason }: { paused: boolean; reason?: string }) => {
+      const res = await apiRequest("POST", "/api/admin/agents/pause", { paused, reason });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      toast(data?.paused ? "Agents paused" : "Agents resumed", {
+        description: data?.paused
+          ? "All prediction, comment, vote and like activity is silenced. Pending scheduled actions stay queued and resume on un-pause."
+          : "Workers will pick up new activity within ~10 seconds.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/agents/pause-state"] });
+      pauseStateQuery.refetch();
+    },
+    onError: (err: Error) => toast.error("Pause toggle failed", { description: err.message }),
+  });
 
   const statusQuery = useQuery<AgentStatusResponse>({
     queryKey: ["/api/admin/agents/status"],
@@ -467,6 +502,126 @@ export function AdminAgentsSection() {
           </Button>
         </div>
       </div>
+
+      {/* Global pause / kill switch — silences ALL agent activity (predictions,
+          scheduled bets, comments, comment-likes, votes) without a deploy.
+          Non-agent LLM features (e.g. "why they're trending") are unaffected. */}
+      {(() => {
+        const pauseState = pauseStateQuery.data;
+        const isPaused = pauseState?.paused === true;
+        const isLoading = pauseStateQuery.isLoading;
+        const isToggling = pauseMutation.isPending;
+        const lastChanged = pauseState?.updatedAt
+          ? new Date(pauseState.updatedAt).toLocaleString()
+          : null;
+        const handleToggle = () => {
+          if (isToggling) return;
+          if (!isPaused) {
+            // Pausing: prompt for an optional reason so future-us
+            // remembers WHY agents were silenced if we forget to flip back.
+            const reason = window.prompt(
+              "Pause all agents?\n\nThis silences predictions, comments, comment-likes and votes for the entire cohort. Pending scheduled actions stay queued and resume on un-pause.\n\nOptional reason (will be stored in audit log):",
+              "AMM rebuild",
+            );
+            if (reason === null) return;
+            pauseMutation.mutate({ paused: true, reason: reason.trim() || undefined });
+          } else {
+            pauseMutation.mutate({ paused: false });
+          }
+        };
+        return (
+          <Card
+            data-testid="card-agents-pause-switch"
+            className={isPaused ? "border-amber-500/60 bg-amber-500/5" : "border-emerald-500/30"}
+          >
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                {isPaused ? (
+                  <AlertTriangle className="h-5 w-5 text-amber-500" />
+                ) : (
+                  <Play className="h-5 w-5 text-emerald-500" />
+                )}
+                Agent Activity
+                <Badge
+                  variant="outline"
+                  className={
+                    isPaused
+                      ? "ml-2 border-amber-500/40 bg-amber-500/15 text-amber-500"
+                      : "ml-2 border-emerald-500/40 bg-emerald-500/15 text-emerald-500"
+                  }
+                >
+                  {isPaused ? "PAUSED" : "LIVE"}
+                </Badge>
+              </CardTitle>
+              <CardDescription>
+                Master kill switch. When paused, all agent prediction sweeps, scheduled bet executions,
+                comment generation, comment-likes and rating votes stop within ~10 seconds. Other LLM
+                features on the site (e.g. "why they're trending" snippets, resolution summaries,
+                news ingest) keep running normally.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <Switch
+                    checked={isPaused}
+                    onCheckedChange={handleToggle}
+                    disabled={isLoading || isToggling}
+                    data-testid="switch-agents-pause"
+                    aria-label="Pause all agents"
+                  />
+                  <span className="text-sm font-medium">
+                    {isToggling
+                      ? isPaused
+                        ? "Resuming…"
+                        : "Pausing…"
+                      : isPaused
+                        ? "Agents are sleeping"
+                        : "Agents are active"}
+                  </span>
+                </div>
+                <Button
+                  variant={isPaused ? "default" : "outline"}
+                  size="sm"
+                  onClick={handleToggle}
+                  disabled={isLoading || isToggling}
+                  data-testid="button-agents-pause-toggle"
+                >
+                  {isToggling ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : isPaused ? (
+                    <Play className="h-4 w-4 mr-2" />
+                  ) : (
+                    <Pause className="h-4 w-4 mr-2" />
+                  )}
+                  {isPaused ? "Resume agents" : "Pause all agents"}
+                </Button>
+              </div>
+              {isPaused && (
+                <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-600 dark:text-amber-400 space-y-1">
+                  {pauseState?.reason && (
+                    <div>
+                      <span className="font-semibold">Reason:</span> {pauseState.reason}
+                    </div>
+                  )}
+                  {pauseState?.pausedAt && (
+                    <div>
+                      <span className="font-semibold">Paused at:</span>{" "}
+                      {new Date(pauseState.pausedAt).toLocaleString()}
+                    </div>
+                  )}
+                  <div className="text-amber-600/80 dark:text-amber-400/80">
+                    Pending scheduled actions remain in the queue and will execute the moment you resume.
+                  </div>
+                </div>
+              )}
+              {!isPaused && lastChanged && (
+                <p className="text-xs text-muted-foreground">Last changed: {lastChanged}</p>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       {/* Cohort summary */}
       <Card data-testid="card-agents-cohort">

@@ -26,6 +26,7 @@ import {
 } from "@shared/schema";
 import { db } from "../db";
 import { log } from "../log";
+import { isAgentsPaused } from "./runtime-state";
 import {
   getSimulationProfile,
   isV2SimulationProfile,
@@ -168,6 +169,19 @@ export async function runCommentVoteSweep(): Promise<{
   skipped: number;
   capReached: boolean;
 }> {
+  // Global "pause all agents" kill switch (admin Agents tab toggle).
+  if (await isAgentsPaused()) {
+    log("[CommentVoteWorker] Skipping sweep; agents are globally paused");
+    return {
+      cast: 0,
+      upvotes: 0,
+      downvotes: 0,
+      agentsParticipated: 0,
+      skipped: 0,
+      capReached: false,
+    };
+  }
+
   const agents = await db
     .select()
     .from(agentConfigs)

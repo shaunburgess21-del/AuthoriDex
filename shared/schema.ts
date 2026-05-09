@@ -1455,6 +1455,36 @@ export type CommentReport = typeof commentReports.$inferSelect;
 // AI AGENT PREDICTION SYSTEM
 // ============================================================================
 
+/**
+ * Singleton table holding the global pause state for *all* agent activity:
+ * prediction loops (`agentRunner` + `actionWorker`), comment generation,
+ * comment-vote sweeps and rating-vote sweeps. Used by the admin "Pause
+ * agents" kill switch in the Agents tab.
+ *
+ * Always exactly one row keyed by `id='global'`. We use a singleton row
+ * rather than env flags so:
+ *   - Toggling does not require a deploy.
+ *   - State survives restarts / multi-instance deployments.
+ *   - We get a full audit trail (`pausedAt`, `pausedBy`, `reason`, `updatedAt`).
+ *
+ * Workers cache the value with a short TTL (~10s), so flipping the switch
+ * propagates within seconds without hammering the DB on every tick.
+ *
+ * NOT a feature flag for non-agent LLM features ("why they're trending",
+ * resolution summaries, news ingest, etc.) — those are completely
+ * independent and keep running while agents are paused.
+ */
+export const agentRuntimeState = pgTable("agent_runtime_state", {
+  id: text("id").primaryKey().default("global"),
+  paused: boolean("paused").notNull().default(false),
+  reason: text("reason"),
+  pausedAt: timestamp("paused_at"),
+  pausedBy: varchar("paused_by"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export type AgentRuntimeState = typeof agentRuntimeState.$inferSelect;
+
 export const agentConfigs = pgTable("agent_configs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
