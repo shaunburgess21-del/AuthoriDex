@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useContext, useEffect, useRef, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation } from "wouter";
@@ -42,6 +43,26 @@ function toCommentItem(comment: UnifiedCommentResponse): CommentItem {
     ...comment,
     parentId: comment.parentCommentId,
   };
+}
+
+/** Handles `{ items, nextCursor }` or legacy plain JSON array from GET /api/comments. */
+function parseCommentsPagedResponse(json: unknown): { items: CommentItem[]; nextCursor: string | null } {
+  if (Array.isArray(json)) {
+    return {
+      items: (json as UnifiedCommentResponse[]).map(toCommentItem),
+      nextCursor: null,
+    };
+  }
+  if (json && typeof json === "object" && "items" in json) {
+    const raw = (json as { items: unknown; nextCursor?: unknown }).items;
+    const items = Array.isArray(raw)
+      ? (raw as UnifiedCommentResponse[]).map(toCommentItem)
+      : [];
+    const nc = (json as { nextCursor?: unknown }).nextCursor;
+    const nextCursor = typeof nc === "string" || nc === null ? nc : null;
+    return { items, nextCursor };
+  }
+  return { items: [], nextCursor: null };
 }
 
 function createCardCommentsAdapter(args: {
@@ -109,11 +130,8 @@ function createCardCommentsAdapter(args: {
       });
       if (cursor) params.set("cursor", cursor);
       const res = await apiRequest("GET", `/api/comments?${params}`);
-      const json = (await res.json()) as { items: UnifiedCommentResponse[]; nextCursor: string | null };
-      return {
-        items: json.items.map(toCommentItem),
-        nextCursor: json.nextCursor ?? null,
-      };
+      const json: unknown = await res.json();
+      return parseCommentsPagedResponse(json);
     };
   }
 
@@ -171,7 +189,10 @@ function CardCommentsEmbedded({
 
   const base = API_BASE[entityType];
   const parentType = COMMENT_PARENT_TYPE[entityType];
-  const queryKey = ["/api/comments", parentType, slug] as const;
+  const queryKey = useMemo(
+    () => ["/api/comments", parentType, slug] as const,
+    [parentType, slug],
+  );
 
   const adapter = useMemo(
     () =>
@@ -333,7 +354,10 @@ function CardCommentsFocusInner({
 
   const base = API_BASE[entityType];
   const parentType = COMMENT_PARENT_TYPE[entityType];
-  const queryKey = ["/api/comments", parentType, slug] as const;
+  const queryKey = useMemo(
+    () => ["/api/comments", parentType, slug] as const,
+    [parentType, slug],
+  );
 
   const adapter = useMemo(
     () =>
@@ -376,7 +400,7 @@ function CardCommentsFocusInner({
   return (
     <>
       <div
-        className="flex flex-col h-full min-h-0 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:px-4"
+        className="flex flex-col h-full min-h-0 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
         data-testid="section-comments-focus"
       >
         <CommentSortHeader
@@ -390,6 +414,28 @@ function CardCommentsFocusInner({
           {thread.isLoading ? (
             <div className="flex justify-center py-12 text-muted-foreground">
               <Loader2 className="h-8 w-8 animate-spin" />
+            </div>
+          ) : thread.isError ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-12 px-4 text-center">
+              <p className="text-sm text-muted-foreground">
+                Could not load comments. Check your connection and try again.
+              </p>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => thread.refetch()}
+                disabled={thread.isRefetching}
+              >
+                {thread.isRefetching ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Retrying…
+                  </>
+                ) : (
+                  "Retry"
+                )}
+              </Button>
             </div>
           ) : (
             <>

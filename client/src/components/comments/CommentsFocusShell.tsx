@@ -41,34 +41,46 @@ export function CommentsFocusShell({
             "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
           )}
         >
-          <header className="flex shrink-0 items-center gap-3 border-b border-border/60 px-3 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] md:px-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex items-center gap-1.5 rounded-lg px-2 py-2 text-sm font-medium text-foreground hover:bg-muted/70 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background min-h-10 min-w-10 md:min-w-0"
-              aria-label="Back"
+          <header className="shrink-0 border-b border-border/60 pt-[max(0.75rem,env(safe-area-inset-top))]">
+            <div
+              className={cn(
+                "flex items-center gap-3 py-3 px-4",
+                "md:mx-auto md:max-w-3xl md:px-8 lg:max-w-4xl lg:px-12",
+              )}
             >
-              <ArrowLeft className="h-5 w-5 shrink-0" />
-              <span className="hidden sm:inline">Back</span>
-            </button>
-            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <DialogPrimitive.Title className="text-sm font-semibold leading-tight truncate">
-                Discussion
-              </DialogPrimitive.Title>
-              {contextTitle ? (
-                <p className="text-xs text-muted-foreground truncate">{contextTitle}</p>
-              ) : null}
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex items-center gap-1.5 rounded-lg px-2 py-2 text-sm font-medium text-foreground hover:bg-muted/70 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background min-h-10 min-w-10 md:min-w-0"
+                aria-label="Back"
+              >
+                <ArrowLeft className="h-5 w-5 shrink-0" />
+                <span className="hidden sm:inline">Back</span>
+              </button>
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <DialogPrimitive.Title className="text-sm font-semibold leading-tight truncate">
+                  Discussion
+                </DialogPrimitive.Title>
+                {contextTitle ? (
+                  <p className="text-xs text-muted-foreground truncate">{contextTitle}</p>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-lg p-2.5 text-muted-foreground hover:text-foreground hover:bg-muted/70 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background min-h-10 min-w-10"
+                aria-label="Exit full screen discussion"
+              >
+                <Minimize2 className="h-5 w-5" />
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg p-2.5 text-muted-foreground hover:text-foreground hover:bg-muted/70 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background min-h-10 min-w-10"
-              aria-label="Exit full screen discussion"
-            >
-              <Minimize2 className="h-5 w-5" />
-            </button>
           </header>
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div
+            className={cn(
+              "flex min-h-0 flex-1 flex-col overflow-hidden px-4",
+              "md:mx-auto md:max-w-3xl md:w-full md:px-8 lg:max-w-4xl lg:px-12",
+            )}
+          >
             {children}
           </div>
         </DialogPrimitive.Content>

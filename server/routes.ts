@@ -137,6 +137,16 @@ type CommentParentType = typeof COMMENT_PARENT_TYPES[number];
 const commentParentTypeSchema = z.enum(COMMENT_PARENT_TYPES);
 const commentVoteTypeSchema = z.enum(["up", "down"]);
 
+function isCommentsPaginatedQueryFlag(value: unknown): boolean {
+  if (value === true || value === 1) return true;
+  if (typeof value === "string") {
+    const v = value.trim().toLowerCase();
+    return v === "1" || v === "true";
+  }
+  if (Array.isArray(value)) return value.some(isCommentsPaginatedQueryFlag);
+  return false;
+}
+
 function isCommentVoteState(value: unknown): value is Exclude<CommentVoteState, null> {
   return value === "up" || value === "down";
 }
@@ -4901,10 +4911,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const limitRaw = Number(req.query.limit ?? 20);
       const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(Math.floor(limitRaw), 100)) : 20;
       const cursor = typeof req.query.cursor === "string" ? req.query.cursor : null;
-      const cursorDate = cursor && req.query.paginated !== "1" && req.query.paginated !== "true"
-        ? new Date(cursor)
-        : null;
-      const paginated = req.query.paginated === "1" || req.query.paginated === "true";
+      const paginated = isCommentsPaginatedQueryFlag(req.query.paginated);
+      const cursorDate = cursor && !paginated ? new Date(cursor) : null;
 
       const encodePagedCursor = (payload: Record<string, unknown>): string =>
         Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");

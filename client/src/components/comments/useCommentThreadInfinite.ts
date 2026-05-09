@@ -1,15 +1,65 @@
 import { useCallback, useMemo, useState } from "react";
+import type { InfiniteData } from "@tanstack/react-query";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { CommentAdapter, CommentItem, ThreadedComment, VoteType } from "./types";
 import type { CommentSort } from "./CommentSortHeader";
 import { buildThreadedComments } from "./buildThreadedComments";
 
+type CommentsInfinitePage = { items: CommentItem[]; nextCursor: string | null };
+
+function applyVoteToggleToComment(comment: CommentItem, voteType: VoteType): CommentItem {
+  const previousVote = comment.userVote ?? null;
+  const nextVote = previousVote === voteType ? null : voteType;
+  let upvotes = comment.upvotes || 0;
+  let downvotes = comment.downvotes || 0;
+  if (previousVote === "up") upvotes = Math.max(upvotes - 1, 0);
+  if (previousVote === "down") downvotes = Math.max(downvotes - 1, 0);
+  if (nextVote === "up") upvotes += 1;
+  if (nextVote === "down") downvotes += 1;
+  return { ...comment, userVote: nextVote, upvotes, downvotes };
+}
+
+function mapInfiniteDataVoteOptimistic(
+  data: InfiniteData<CommentsInfinitePage>,
+  commentId: string,
+  voteType: VoteType,
+): InfiniteData<CommentsInfinitePage> {
+  return {
+    ...data,
+    pages: data.pages.map((page) => ({
+      ...page,
+      items: page.items.map((c) =>
+        c.id === commentId ? applyVoteToggleToComment(c, voteType) : c,
+      ),
+    })),
+  };
+}
+
+function patchInfiniteDataVoteFromServer(
+  data: InfiniteData<CommentsInfinitePage>,
+  commentId: string,
+  patch: { userVote: VoteType | null; upvotes: number; downvotes: number },
+): InfiniteData<CommentsInfinitePage> {
+  return {
+    ...data,
+    pages: data.pages.map((page) => ({
+      ...page,
+      items: page.items.map((c) =>
+        c.id === commentId ? { ...c, ...patch } : c,
+      ),
+    })),
+  };
+}
+
 export interface UseCommentThreadInfiniteResult {
   comments: CommentItem[];
   visibleCount: number;
   threaded: ThreadedComment[];
   isLoading: boolean;
+  isError: boolean;
+  isRefetching: boolean;
+  refetch: () => void;
   isFetchingNextPage: boolean;
   hasNextPage: boolean;
   fetchNextPage: () => void;
@@ -50,9 +100,12 @@ export function useCommentThreadInfinite(adapter: CommentAdapter): UseCommentThr
   const {
     data,
     isLoading,
+    isError,
+    isFetching,
     isFetchingNextPage,
     hasNextPage,
     fetchNextPage,
+    refetch,
   } = useInfiniteQuery({
     queryKey: [...infiniteKey, sort],
     queryFn: async ({ pageParam }) => fetchPaged({ sort, cursor: pageParam as string | null }),
@@ -101,6 +154,19 @@ export function useCommentThreadInfinite(adapter: CommentAdapter): UseCommentThr
     }
   }, [queryClient, queryKey, userVotesKey, adapter]);
 
+  /** Keeps embedded `useCommentThread` in sync without prefix-invalidating the infinite query. */
+  const invalidateEmbeddedThreadQueries = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: adapter.queryKey, exact: true });
+    if (adapter.fetchUserVotes) {
+      queryClient.invalidateQueries({ queryKey: userVotesKey, exact: true });
+    }
+    if (adapter.invalidateOnMutate) {
+      for (const k of adapter.invalidateOnMutate) {
+        queryClient.invalidateQueries({ queryKey: k as unknown[], exact: true });
+      }
+    }
+  }, [queryClient, adapter, userVotesKey]);
+
   const postMutation = useMutation({
     mutationFn: (input: { body: string; parentId: string | null }) => adapter.postComment(input),
     onSuccess: (data) => {
@@ -116,7 +182,49 @@ export function useCommentThreadInfinite(adapter: CommentAdapter): UseCommentThr
 
   const voteMutation = useMutation({
     mutationFn: (input: { commentId: string; voteType: VoteType }) => adapter.voteComment(input),
-    onError: (error) => {
+    onMutate: async ({ commentId, voteType }) => {
+      const infiniteQueryKey = [...infiniteKey, sort];
+      await queryClient.cancelQueries({ queryKey: infiniteQueryKey });
+      if (adapter.fetchUserVotes) {
+        await queryClient.cancelQueries({ queryKey: userVotesKey });
+      }
+
+      const previousInfinite = queryClient.getQueryData<InfiniteData<CommentsInfinitePage>>(infiniteQueryKey);
+
+      queryClient.setQueryData<InfiniteData<CommentsInfinitePage>>(infiniteQueryKey, (old) => {
+        if (!old) return old;
+        return mapInfiniteDataVoteOptimistic(old, commentId, voteType);
+      });
+
+      if (adapter.fetchUserVotes) {
+        const previousVotes = queryClient.getQueryData<Record<string, VoteType>>(userVotesKey);
+        queryClient.setQueryData<Record<string, VoteType>>(userVotesKey, (current) => {
+          const next = { ...(current || {}) };
+          const prev = next[commentId] ?? null;
+          if (prev === voteType) {
+            delete next[commentId];
+          } else {
+            next[commentId] = voteType;
+          }
+          return next;
+        });
+        return { previousInfinite, previousVotes };
+      }
+
+      return { previousInfinite };
+    },
+    onError: (error, _vars, context) => {
+      const ctx = context as {
+        previousInfinite?: InfiniteData<CommentsInfinitePage>;
+        previousVotes?: Record<string, VoteType>;
+      } | undefined;
+      const infiniteQueryKey = [...infiniteKey, sort];
+      if (ctx?.previousInfinite !== undefined) {
+        queryClient.setQueryData(infiniteQueryKey, ctx.previousInfinite);
+      }
+      if (adapter.fetchUserVotes && ctx?.previousVotes !== undefined) {
+        queryClient.setQueryData(userVotesKey, ctx.previousVotes);
+      }
       const isUnauthorized = error instanceof Error && /^401:/.test(error.message);
       toast.error("Error", {
         description: isUnauthorized ? "Failed to vote. Please sign in." : "Failed to vote. Please try again.",
@@ -124,9 +232,24 @@ export function useCommentThreadInfinite(adapter: CommentAdapter): UseCommentThr
     },
     onSuccess: (data, vars) => {
       adapter.onVoteSuccess?.(data, vars);
+      const body = data as {
+        userVote?: VoteType | null;
+        vote?: VoteType | null;
+        upvotes?: number;
+        downvotes?: number;
+      };
+      const userVote = body.userVote ?? body.vote ?? null;
+      const { upvotes, downvotes } = body;
+      if (typeof upvotes !== "number" || typeof downvotes !== "number") return;
+
+      const infiniteQueryKey = [...infiniteKey, sort];
+      queryClient.setQueryData<InfiniteData<CommentsInfinitePage>>(infiniteQueryKey, (old) => {
+        if (!old) return old;
+        return patchInfiniteDataVoteFromServer(old, vars.commentId, { userVote, upvotes, downvotes });
+      });
     },
     onSettled: () => {
-      invalidateAll();
+      invalidateEmbeddedThreadQueries();
     },
   });
 
@@ -180,11 +303,16 @@ export function useCommentThreadInfinite(adapter: CommentAdapter): UseCommentThr
     setReplyTo(null);
   }, []);
 
+  const isRefetching = isFetching && !isFetchingNextPage;
+
   return {
     comments,
     visibleCount,
     threaded,
     isLoading,
+    isError,
+    isRefetching,
+    refetch,
     isFetchingNextPage,
     hasNextPage: !!hasNextPage,
     fetchNextPage,
