@@ -1785,17 +1785,9 @@ export default function HomePage() {
               <div id="leaderboard" className="scroll-mt-24" />
               <Card className="overflow-hidden">
                 <div className="relative isolate overflow-hidden rounded-t-xl">
-                  {/* Pulse-card-style top lip (clipped by rounded-t-xl) + side fades through header/tabs/filters; ends above first row */}
+                  {/* Same accent as .pulse-card-voxdex::before: 3px top bar only; overflow clips rounded-corner lip */}
                   <div
-                    className="pointer-events-none absolute inset-x-0 top-0 z-[1] h-[3px] bg-[linear-gradient(90deg,transparent_0%,rgb(59,130,246)_50%,transparent_100%)]"
-                    aria-hidden
-                  />
-                  <div
-                    className="pointer-events-none absolute left-0 top-0 bottom-0 z-[1] w-[3px] bg-gradient-to-b from-[rgba(59,130,246,0.34)] to-transparent"
-                    aria-hidden
-                  />
-                  <div
-                    className="pointer-events-none absolute right-0 top-0 bottom-0 z-[1] w-[3px] bg-gradient-to-b from-[rgba(59,130,246,0.34)] to-transparent"
+                    className="pointer-events-none absolute inset-x-0 top-0 z-10 h-[3px] bg-[linear-gradient(90deg,transparent_0%,rgb(59,130,246)_50%,transparent_100%)]"
                     aria-hidden
                   />
                   <div className="relative z-[2]">
