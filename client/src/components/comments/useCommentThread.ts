@@ -1,7 +1,14 @@
 import { useCallback, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import type { CommentAdapter, CommentItem, ThreadedComment, VoteType } from "./types";
+import type { CommentAdapter, CommentItem, CommentTreeNode, ThreadedComment, VoteType } from "./types";
+
+function buildChildNodes(items: CommentItem[], replyMap: Map<string, CommentItem[]>): CommentTreeNode[] {
+  return items.map((comment) => ({
+    comment,
+    children: buildChildNodes(replyMap.get(comment.id) ?? [], replyMap),
+  }));
+}
 
 export type CommentSort = "top" | "newest";
 
@@ -28,18 +35,7 @@ export interface UseCommentThreadResult {
   resetComposer: () => void;
 }
 
-/**
- * Adapter-driven hook used by every comment surface (card detail, person-detail
- * insights feed, insight-comments thread).
- *
- * Threading note: this hook mirrors the historical CardComments behaviour where
- * `replyMap` is keyed by every comment's `parentId`, but the final mapping only
- * walks top-level parent ids. As a result, depth-2+ replies (replies whose
- * parent is itself a reply) are dropped from rendering. The C4 commit will add
- * a one-tier flatten on the insight-comments adapter's `fetchList` (rewriting
- * depth-2+ parentIds to point at the nearest depth-1 ancestor) so content is
- * preserved when collapsing PostOverlayModal's depth-3 recursion.
- */
+/** Adapter-driven hook used by every comment surface (card detail, insights overlay, etc.). */
 export function useCommentThread(adapter: CommentAdapter): UseCommentThreadResult {
   const queryClient = useQueryClient();
   const [composerBody, setComposerBody] = useState("");
@@ -95,18 +91,15 @@ export function useCommentThread(adapter: CommentAdapter): UseCommentThreadResul
       arr.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
     });
 
-    return topLevel.map((parent) => ({
-      parent,
-      replies: replyMap.get(parent.id) || [],
+    return topLevel.map((root) => ({
+      root,
+      children: buildChildNodes(replyMap.get(root.id) ?? [], replyMap),
     }));
   }, [comments, sort]);
 
-  // Count of publicly visible comments (top-level + live replies). Used by
-  // the "Discussion (N)" header so it stays in sync with what the user
-  // actually sees, instead of including deleted rows.
-  const visibleCount = useMemo(() => {
-    return threaded.reduce((acc, t) => acc + 1 + t.replies.length, 0);
-  }, [threaded]);
+  // Count of publicly visible comments (excludes soft-deleted). Matches collapsed UI:
+  // hidden replies still count toward N.
+  const visibleCount = useMemo(() => comments.filter((c) => !c.deletedAt).length, [comments]);
 
   const invalidateAll = useCallback(() => {
     queryClient.invalidateQueries({ queryKey });

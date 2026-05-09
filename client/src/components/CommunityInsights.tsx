@@ -293,19 +293,19 @@ export function CommunityInsights({
         </p>
       ) : (
         <div className="divide-y divide-border/10">
-          {displayedThread.map(({ parent }, idx) => {
-            const netVotes = (parent.upvotes || 0) - (parent.downvotes || 0);
+          {displayedThread.map(({ root }, idx) => {
+            const netVotes = (root.upvotes || 0) - (root.downvotes || 0);
             const isTopComment =
               thread.sort === "top" && idx === 0 && netVotes > 0;
             return (
               <InsightCard
-                key={parent.id}
-                comment={parent}
-                insight={insightsCacheRef.current[parent.id]}
+                key={root.id}
+                comment={root}
+                insight={insightsCacheRef.current[root.id]}
                 isTopComment={isTopComment}
-                isExpanded={expandedPosts.has(parent.id)}
-                onToggleExpanded={() => toggleExpanded(parent.id)}
-                onOpenOverlay={() => setSelectedInsightId(parent.id)}
+                isExpanded={expandedPosts.has(root.id)}
+                onToggleExpanded={() => toggleExpanded(root.id)}
+                onOpenOverlay={() => setSelectedInsightId(root.id)}
                 onVote={(voteType) => {
                   if (!user) {
                     toast.error("Login Required", {
@@ -313,9 +313,9 @@ export function CommunityInsights({
                     });
                     return;
                   }
-                  thread.vote({ commentId: parent.id, voteType });
+                  thread.vote({ commentId: root.id, voteType });
                 }}
-                onOpenActions={() => setDrawerComment(parent)}
+                onOpenActions={() => setDrawerComment(root)}
                 disabled={!user}
               />
             );

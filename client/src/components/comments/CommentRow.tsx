@@ -5,9 +5,12 @@ import { Badge } from "@/components/ui/badge";
 import { formatTimeAgo } from "@/lib/formatDate";
 import type { CommentItem, VoteType } from "./types";
 
+const MAX_COMMENT_VISUAL_DEPTH = 5;
+
 export interface CommentRowProps {
   comment: CommentItem;
-  isReply: boolean;
+  /** 0 = top-level thread root; nested replies use 1+. */
+  depth: number;
   isTopComment: boolean;
   showReplyButton: boolean;
   onVote: (voteType: VoteType) => void;
@@ -23,7 +26,7 @@ export interface CommentRowProps {
 
 export function CommentRow({
   comment,
-  isReply,
+  depth,
   isTopComment,
   showReplyButton,
   onVote,
@@ -35,18 +38,22 @@ export function CommentRow({
   const netVotes = (comment.upvotes || 0) - (comment.downvotes || 0);
   const hasUpvoted = comment.userVote === "up";
   const hasDownvoted = comment.userVote === "down";
+  const isNested = depth > 0;
+  const visualDepth = Math.min(depth, MAX_COMMENT_VISUAL_DEPTH);
+  const indentRem = isNested ? visualDepth * 1.75 : 0;
 
   return (
     <div
       id={`comment-${comment.id}`}
-      className={`flex gap-3 py-3 ${isReply ? "ml-8 pl-3 border-l-2 border-border/20" : ""}`}
+      className={`flex gap-3 py-3 ${isNested ? "pl-3 border-l-2 border-border/20" : ""}`}
+      style={indentRem > 0 ? { marginLeft: `${indentRem}rem` } : undefined}
       data-testid={testIds?.root ?? `comment-${comment.id}`}
     >
       {!isDeleted && (
         <UserProfileAvatar
           displayName={comment.username || ""}
           avatarUrl={comment.avatarUrl}
-          size={isReply ? "xs" : "sm"}
+          size={isNested ? "xs" : "sm"}
           className="shrink-0"
         />
       )}

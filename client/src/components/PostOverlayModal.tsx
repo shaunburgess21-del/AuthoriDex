@@ -57,29 +57,6 @@ function getSentimentColor(vote: number): string {
   return colors[vote - 1] || colors[4];
 }
 
-function flattenInsightComments(comments: InsightCommentResponse[]): InsightCommentResponse[] {
-  const byId = new Map(comments.map((comment) => [comment.id, comment]));
-
-  return comments.map((comment) => {
-    if (!comment.parentCommentId) return comment;
-
-    let flattenedParentId = comment.parentCommentId;
-    let parent = byId.get(flattenedParentId);
-    const visited = new Set<string>([comment.id]);
-
-    while (parent?.parentCommentId && !visited.has(parent.id)) {
-      visited.add(parent.id);
-      flattenedParentId = parent.parentCommentId;
-      parent = byId.get(flattenedParentId);
-    }
-
-    return {
-      ...comment,
-      parentCommentId: flattenedParentId,
-    };
-  });
-}
-
 function toCommentItem(comment: InsightCommentResponse): CommentItem {
   return {
     id: comment.id,
@@ -115,7 +92,7 @@ function useInsightCommentsAdapter({
       // page in-memory when the UI switches sort modes.
       const res = await apiRequest("GET", `/api/comments?parentType=community_insight&parentId=${encodeURIComponent(insightId)}&limit=100`);
       const raw = (await res.json()) as InsightCommentResponse[];
-      return flattenInsightComments(raw).map(toCommentItem);
+      return raw.map(toCommentItem);
     },
     postComment: async ({ body, parentId }) => {
       const res = await apiRequest("POST", "/api/comments", {
