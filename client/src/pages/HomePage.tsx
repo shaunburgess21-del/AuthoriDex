@@ -1783,9 +1783,15 @@ export default function HomePage() {
               </div>
 
               <div id="leaderboard" className="scroll-mt-24" />
-              <Card>
-                <CardHeader className="relative flex flex-col gap-4 space-y-0 overflow-hidden rounded-t-xl bg-card/95 pb-4 pt-5">
-                  <span className="pointer-events-none absolute left-0 right-0 top-0 h-[3px] bg-[linear-gradient(90deg,transparent_0%,rgb(59,130,246)_50%,transparent_100%)]" />
+              <Card className="overflow-hidden">
+                <div className="relative isolate overflow-hidden rounded-t-xl">
+                  {/* Same accent as .pulse-card-voxdex::before: 3px top bar only; overflow clips rounded-corner lip */}
+                  <div
+                    className="pointer-events-none absolute inset-x-0 top-0 z-10 h-[3px] bg-[linear-gradient(90deg,transparent_0%,rgb(59,130,246)_50%,transparent_100%)]"
+                    aria-hidden
+                  />
+                  <div className="relative z-[2]">
+                <CardHeader className="flex flex-col gap-4 space-y-0 bg-card/95 pb-4 pt-5">
                   <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                     <div className="flex-1">
                       <div className="flex items-center justify-between gap-2">
@@ -1991,7 +1997,6 @@ export default function HomePage() {
                     </div>
                   </div>
                 </div>
-                <CardContent className="p-0">
                   <div className="pl-3 pr-4 sm:pr-6 py-4 border-b bg-muted/30">
                     <div className="space-y-3">
                       <div className="flex items-center gap-2">
@@ -2110,6 +2115,9 @@ export default function HomePage() {
                       )}
                     </div>
                   </div>
+                  </div>
+                </div>
+                <CardContent className="p-0">
                   <motion.div
                     {...(isMobile
                       ? {
