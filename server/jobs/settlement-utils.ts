@@ -48,6 +48,14 @@ export function calculateSettlementPayouts(
     return bet.entryId !== winnerEntryId;
   });
 
+  const totalWinnerStake = winnerBets.reduce((sum, b) => sum + b.stakeAmount, 0);
+  // Loser pool = the "winnings" available to redistribute. This is the
+  // ONLY portion the early-bird boost reweights. Winners always get their
+  // base stake back first, then share the loser pool by weight. This
+  // guarantees no correct bettor ever loses money — the boost is purely
+  // a redistribution of profit between earlier and later winners.
+  const winningsPool = Math.max(0, totalPool - totalWinnerStake);
+
   const useTimeWeight = !!(timing?.marketStartAt && timing?.marketCloseAt);
 
   const winnersWithWeight = winnerBets.map((bet) => ({
@@ -62,7 +70,7 @@ export function calculateSettlementPayouts(
   const payouts = winnersWithWeight.map((bet) => ({
     betId: bet.id,
     payout: totalWeight > 0
-      ? Math.floor((bet.weight / totalWeight) * totalPool)
+      ? bet.stakeAmount + Math.floor((bet.weight / totalWeight) * winningsPool)
       : bet.stakeAmount,
   }));
 

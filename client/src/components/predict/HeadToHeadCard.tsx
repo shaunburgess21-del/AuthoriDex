@@ -31,6 +31,7 @@ export interface HeadToHeadMarket {
   category: CategoryFilter;
   endTime: string;
   endAt?: string | null;
+  startAt?: string | null;
   totalPool: number;
   person1Percent: number;
   totalBets?: number;
@@ -138,7 +139,7 @@ export function HeadToHeadCard({
               </Badge>
             )}
             {!isMarketClosed && (() => {
-              const startRef = market.endAt ? new Date(new Date(market.endAt).getTime() - 7 * 24 * 60 * 60 * 1000).toISOString() : null;
+              const startRef = market.startAt ?? (market.endAt ? new Date(new Date(market.endAt).getTime() - 7 * 24 * 60 * 60 * 1000).toISOString() : null);
               const boost = computeEarlyBirdMultiplier(new Date(), startRef, market.bettingCutoff);
               if (boost <= 1.05) return null;
               return (

@@ -957,13 +957,18 @@ async function resolveJackpot(market: any): Promise<"resolved" | "blocked"> {
       weight: w.stakeAmount * computeEarlyBirdMultiplier(w.createdAt, market.startAt, market.closeAt),
     }));
     const totalWeight = winnersWithWeight.reduce((sum, w) => sum + w.weight, 0);
+    const totalWinnerStake = winnersWithWeight.reduce((sum, w) => sum + w.stakeAmount, 0);
+    // Mirror calculateSettlementPayouts: only the loser pool is reweighted.
+    // Winners always get their base stake back, guaranteeing no correct
+    // jackpot pick ever loses credits.
+    const winningsPool = Math.max(0, totalPool - totalWinnerStake);
     let distributed = 0;
 
     for (let i = 0; i < winnersWithWeight.length; i++) {
       const w = winnersWithWeight[i];
       const isLast = i === winnersWithWeight.length - 1;
       const rawShare = totalWeight > 0
-        ? Math.floor((w.weight / totalWeight) * totalPool)
+        ? w.stakeAmount + Math.floor((w.weight / totalWeight) * winningsPool)
         : Math.floor(totalPool / winnersWithWeight.length);
       const share = isLast ? totalPool - distributed : rawShare;
       distributed += share;

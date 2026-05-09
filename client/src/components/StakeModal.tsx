@@ -547,9 +547,14 @@ export function StakeModal({
                       <HelpCircle className="h-3 w-3" />
                     </button>
                   </PopoverTrigger>
-                  <PopoverContent className="text-xs max-w-60" side="top">
-                    Predict earlier in the week to earn a bigger share of the winning pool.
-                    Monday bettors get up to 1.5x weight — the boost decreases as the cutoff approaches.
+                  <PopoverContent className="text-xs max-w-64 space-y-1.5" side="top">
+                    <p>
+                      Predict earlier in the week to earn a bigger share of the winnings.
+                      Monday bettors get up to 1.5x weight — the boost decays linearly to 1x at cutoff.
+                    </p>
+                    <p className="text-muted-foreground">
+                      Boost only redistributes the losing side's pool, so correct picks always at least get their stake back.
+                    </p>
                   </PopoverContent>
                 </Popover>
               </div>

@@ -1655,6 +1655,7 @@ export default function PredictPage() {
           category: normalizeMarketCategory(m.category || "misc") as CategoryFilter,
           endTime: "",
           endAt: m.endAt || null,
+          startAt: m.startAt || null,
           totalPool,
           person1Percent: (s1 + s2) === 0 ? 50 : Math.round((s1 / total) * 100),
           totalBets: Number(m.activeParticipantCount || 0) || 0,
@@ -1714,6 +1715,7 @@ export default function PredictPage() {
           totalPool,
           endTime: "",
           endAt: m.endAt || null,
+          startAt: m.startAt || null,
           totalBets: Number(m.activeParticipantCount || 0) || 0,
           totalEntries: entries.length,
           candidateCount: allCandidates.length,
@@ -2207,6 +2209,7 @@ export default function PredictPage() {
       tieRule: (market as { tieRule?: string }).tieRule ?? "refund",
       endAt: serverResolutionDeadline ?? undefined,
       bettingCutoff: market.bettingCutoff,
+      marketStartAt: market.startAt ?? undefined,
       isTopUp,
       existingStake: isTopUp ? existing?.stakeAmount : undefined,
     });
@@ -2264,6 +2267,7 @@ export default function PredictPage() {
       estimatedPayout,
       endAt: serverResolutionDeadline ?? undefined,
       bettingCutoff: market.bettingCutoff,
+      marketStartAt: market.startAt ?? undefined,
       isTopUp,
       existingStake: isTopUp ? priorStake : undefined,
     });
