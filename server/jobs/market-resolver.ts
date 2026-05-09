@@ -1201,6 +1201,31 @@ function isStaleBlockedLegacyMarket(market: any, now: Date): boolean {
 async function autoVoidBlockedLegacyMarket(market: any, now: Date): Promise<boolean> {
   if (!isStaleBlockedLegacyMarket(market, now)) return false;
   try {
+    // AMM markets must void via the LMSR refund path (per-position cost
+    // basis), not via voidMarketBets which assumes parimutuel stake-as-
+    // refund semantics. A naive parimutuel refund on AMM rows would
+    // double-credit users for any sells they made before the block.
+    if (market?.engine === "amm") {
+      const ammResult = await resolveAmmMarket({ marketId: market.id, voidMarket: true, settledBy: null });
+      if ("error" in ammResult) {
+        log(`[MarketResolver] Failed AMM auto-void for stale blocked market ${market.id}: ${ammResult.error} ${ammResult.message}`);
+        return false;
+      }
+      await db.update(predictionMarkets).set({
+        resolveMethod: "auto",
+        voidReason: "Auto-voided stale blocked AMM market",
+        resolutionNotes: JSON.stringify({
+          type: market.marketType,
+          pendingReason: "auto_void_stale_blocked_legacy",
+          thresholdDays: LEGACY_BLOCK_AUTO_VOID_DAYS,
+          engine: "amm",
+        }),
+        updatedAt: now,
+      }).where(eq(predictionMarkets.id, market.id));
+      log(`[MarketResolver] Auto-voided stale blocked AMM market ${market.id} (${market.marketType}), house P&L=${ammResult.creditedToHouse}`);
+      return true;
+    }
+
     await voidMarketBets(market.id);
     await db.update(predictionMarkets).set({
       resolveMethod: "auto",

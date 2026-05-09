@@ -9140,6 +9140,12 @@ Only return the JSON object.`;
             eq(marketBets.userId, userId),
             eq(predictionMarkets.engine, "amm"),
             sql`${marketBets.actionType} IN ('buy','sell')`,
+            // Open tab only — exclude markets that have already paid out
+            // (RESOLVED) or refunded (VOID). Settlement zeros out user
+            // share value either way, so showing those rows here would
+            // double-count credits the user already received in their
+            // wallet.
+            sql`${predictionMarkets.status} IN ('OPEN','CLOSED_PENDING')`,
           ),
         );
 

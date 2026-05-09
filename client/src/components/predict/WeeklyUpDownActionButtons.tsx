@@ -17,6 +17,7 @@ export function WeeklyUpDownActionButtons({
   pendingPosition,
   marketStartAt,
   bettingCutoff,
+  engine,
 }: {
   marketId: string;
   personName: string;
@@ -28,6 +29,8 @@ export function WeeklyUpDownActionButtons({
   pendingPosition?: { pick: "up" | "down" | null; stakeAmount: number } | null;
   marketStartAt?: string | null;
   bettingCutoff?: string | null;
+  /** Phase 4: AMM markets price via LMSR and have no early-bird boost. */
+  engine?: "parimutuel" | "amm" | string | null;
 }) {
   if (!isMarketClosed && pendingPosition) {
     return (
@@ -49,8 +52,9 @@ export function WeeklyUpDownActionButtons({
     );
   }
 
-  const boost = computeEarlyBirdMultiplier(new Date(), marketStartAt, bettingCutoff);
-  const showBoostHint = !isMarketClosed && boost > 1.05;
+  const isAmm = engine === "amm";
+  const boost = isAmm ? 1 : computeEarlyBirdMultiplier(new Date(), marketStartAt, bettingCutoff);
+  const showBoostHint = !isAmm && !isMarketClosed && boost > 1.05;
 
   return (
     <div>

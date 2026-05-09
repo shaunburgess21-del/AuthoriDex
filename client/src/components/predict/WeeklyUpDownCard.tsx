@@ -247,6 +247,7 @@ export function WeeklyUpDownCard({
         pendingPosition={pendingPosition ?? null}
         marketStartAt={market.startAt}
         bettingCutoff={market.bettingCutoff}
+        engine={market.engine}
       />
       </div>
     </PredictCard>

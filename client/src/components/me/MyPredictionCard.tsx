@@ -154,6 +154,7 @@ export function MyPredictionCard({
       ? ((delta / prediction.baselineScore) * 100).toFixed(1)
       : "0";
   const isResolved = prediction.result === "won" || prediction.result === "lost";
+  const isAmm = prediction.engine === "amm";
   const payoutDisplay = isResolved
     ? prediction.payout
     : prediction.potentialPayout || prediction.payout;
@@ -327,6 +328,15 @@ export function MyPredictionCard({
           {prediction.marketCadence && (
             <Badge variant="outline" className="text-[10px] px-1.5 py-0">
               {prediction.marketCadence}
+            </Badge>
+          )}
+          {isAmm && (
+            <Badge
+              variant="outline"
+              className="text-[10px] px-1.5 py-0 border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+              title="LMSR / AMM market — settled at 1 credit per winning share"
+            >
+              LMSR
             </Badge>
           )}
           {hidden && (
