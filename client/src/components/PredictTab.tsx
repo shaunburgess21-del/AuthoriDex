@@ -388,6 +388,8 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       endAt: m.endAt,
       bettingCutoff: m.bettingCutoff || null,
       tieRule: m.metadata?.tieRule ?? "refund",
+      engine: m.engine ?? "parimutuel",
+      ammState: m.ammState ?? null,
     };
   }, [nativeUpdownData, personId]);
 
@@ -423,6 +425,8 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
         person1Percent: (s1 + s2) === 0 ? 50 : Math.round((s1 / total) * 100),
         modelP1Percent: typeof m.modelP1Percent === "number" ? m.modelP1Percent : undefined,
         modelConfidence: m.modelConfidence ?? undefined,
+        engine: m.engine ?? "parimutuel",
+        ammState: m.ammState ?? null,
       };
     });
     return all.filter(h => h.person1Id === personId || h.person2Id === personId);

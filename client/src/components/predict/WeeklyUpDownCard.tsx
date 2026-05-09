@@ -8,10 +8,11 @@ import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
 import { PredictCard } from "@/components/predict/PredictCard";
 import { ParticipantAvatarStack, type ParticipantPreview } from "@/components/predict/ParticipantAvatarStack";
 import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
-import { Star, Flame, ListChecks, Zap } from "lucide-react";
+import { Activity, Star, Flame, ListChecks, Zap } from "lucide-react";
 import { Link } from "wouter";
 import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
 import { computeEarlyBirdMultiplier } from "@/lib/parimutuel";
+import { type ApiAmmStateBlock, pricesFor, snapshotFromApi } from "@/lib/ammClient";
 
 type CategoryFilter = "all" | "favorites" | "trending" | "tech" | "politics" | "business" | "music" | "sports" | "film-tv" | "gaming" | "creator" | "food-drink" | "lifestyle" | "misc";
 
@@ -41,6 +42,10 @@ export interface PredictionMarket {
   activeParticipantCount?: number;
   recentParticipants?: ParticipantPreview[];
   bettingCutoff?: string | null;
+  /** Phase 4: 'amm' flips the card into live LMSR pricing mode. */
+  engine?: "parimutuel" | "amm" | string | null;
+  /** Phase 4: live AMM state snapshot from `/api/native-markets/updown`. */
+  ammState?: ApiAmmStateBlock | null;
 }
 
 export function WeeklyUpDownCard({
@@ -68,6 +73,25 @@ export function WeeklyUpDownCard({
   const pctDelta = market.baselineScore > 0 ? ((delta / market.baselineScore) * 100).toFixed(1) : "0";
   const cadenceLabel = (market.cadence || "weekly").charAt(0).toUpperCase() + (market.cadence || "weekly").slice(1);
 
+  const isAmm = market.engine === "amm";
+  const ammSnapshot = isAmm ? snapshotFromApi(market.ammState ?? null) : null;
+  const ammPrices = ammSnapshot ? pricesFor(ammSnapshot) : null;
+  let upPoolPercent = market.upPoolPercent;
+  let upMult = market.upMultiplier;
+  let downMult = market.downMultiplier;
+  let upPrice: number | null = null;
+  let downPrice: number | null = null;
+  if (isAmm && ammPrices && market.upEntryId && market.downEntryId) {
+    const pUp = Number(ammPrices[market.upEntryId] ?? 0);
+    const pDown = Number(ammPrices[market.downEntryId] ?? 0);
+    const total = pUp + pDown;
+    if (total > 0) {
+      upPoolPercent = Math.round((pUp / total) * 100);
+      upPrice = pUp;
+      downPrice = pDown;
+    }
+  }
+
   return (
     <PredictCard
       testId={`card-weekly-${market.id}`}
@@ -93,7 +117,12 @@ export function WeeklyUpDownCard({
               Thin Pool
             </Badge>
           )}
-          {!isMarketClosed && (() => {
+          {isAmm && !isMarketClosed && (
+            <Badge variant="outline" className="text-emerald-600 dark:text-emerald-400 border-emerald-500/40 dark:border-emerald-500/30 text-[10px]">
+              <Activity className="h-3 w-3 mr-0.5" />LIVE
+            </Badge>
+          )}
+          {!isAmm && !isMarketClosed && (() => {
             const boost = computeEarlyBirdMultiplier(new Date(), market.startAt, market.bettingCutoff);
             if (boost <= 1.05) return null;
             return (
@@ -156,9 +185,11 @@ export function WeeklyUpDownCard({
           <div>
             <span>Change: <span className={`font-mono ${delta >= 0 ? "text-green-500" : "text-red-500"}`}>{delta >= 0 ? "+" : ""}{delta.toLocaleString('en-US')} ({delta >= 0 ? "+" : ""}{pctDelta}%)</span></span>
           </div>
-          <div>
-            <span>Pool: <span className="font-mono text-violet-600 dark:text-violet-400">{market.totalPool.toLocaleString('en-US')}</span> credits</span>
-          </div>
+          {!isAmm && (
+            <div>
+              <span>Pool: <span className="font-mono text-violet-600 dark:text-violet-400">{market.totalPool.toLocaleString('en-US')}</span> credits</span>
+            </div>
+          )}
         </div>
 
         <div className="hidden sm:block text-[11px] text-muted-foreground space-y-1">
@@ -169,9 +200,11 @@ export function WeeklyUpDownCard({
             <span className="text-muted-foreground/40">&middot;</span>
             <span>Change: <span className={`font-mono ${delta >= 0 ? "text-green-500" : "text-red-500"}`}>{delta >= 0 ? "+" : ""}{delta.toLocaleString('en-US')} ({delta >= 0 ? "+" : ""}{pctDelta}%)</span></span>
           </div>
-          <div>
-            <span>Pool: <span className="font-mono text-violet-600 dark:text-violet-400">{market.totalPool.toLocaleString('en-US')}</span> credits</span>
-          </div>
+          {!isAmm && (
+            <div>
+              <span>Pool: <span className="font-mono text-violet-600 dark:text-violet-400">{market.totalPool.toLocaleString('en-US')}</span> credits</span>
+            </div>
+          )}
         </div>
       </Link>
 
@@ -187,13 +220,20 @@ export function WeeklyUpDownCard({
           <div className="h-2.5 rounded-full bg-red-500/25 dark:bg-red-500/20 overflow-hidden">
           <div
             className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all"
-            style={{ width: `${market.upPoolPercent}%` }}
+            style={{ width: `${upPoolPercent}%` }}
           />
         </div>
-        <div className="flex items-center justify-between text-[11px] mt-1">
-          <span className="text-green-500 font-semibold">Up {market.upMultiplier}x</span>
-          <span className="text-red-500 font-semibold">Down {market.downMultiplier}x</span>
-        </div>
+        {isAmm && upPrice != null && downPrice != null ? (
+          <div className="flex items-center justify-between text-[11px] mt-1">
+            <span className="text-green-500 font-semibold">Up {Math.round(upPrice * 100)}%</span>
+            <span className="text-red-500 font-semibold">Down {Math.round(downPrice * 100)}%</span>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between text-[11px] mt-1">
+            <span className="text-green-500 font-semibold">Up {upMult}x</span>
+            <span className="text-red-500 font-semibold">Down {downMult}x</span>
+          </div>
+        )}
       </div>
 
       <WeeklyUpDownActionButtons

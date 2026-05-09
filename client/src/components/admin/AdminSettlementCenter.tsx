@@ -45,6 +45,8 @@ interface PendingMarket {
   id: string;
   title: string;
   marketType: string;
+  /** Phase 4: 'amm' markets resolve via the LMSR settlement endpoint. */
+  engine?: "parimutuel" | "amm" | string | null;
   category: string | null;
   endAt: string;
   pool: number;
@@ -127,7 +129,8 @@ function ResolutionDialog({
   market: PendingMarket;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-}) {  const queryClient = useQueryClient();
+}) {
+  const queryClient = useQueryClient();
   const [selectedEntry, setSelectedEntry] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   const [showVoid, setShowVoid] = useState(false);
@@ -143,15 +146,21 @@ function ResolutionDialog({
     enabled: open,
   });
 
+  const isAmm = market.engine === "amm";
+
   const settleMutation = useMutation({
     mutationFn: async () => {
       const isNative = market.marketType !== "community";
-      const url = isNative
-        ? `/api/admin/native-markets/${market.id}/settle`
-        : `/api/admin/open-markets/${market.id}/settle`;
-      const body = isNative
+      const url = isAmm
+        ? `/api/admin/markets/${market.id}/amm-resolve`
+        : isNative
+          ? `/api/admin/native-markets/${market.id}/settle`
+          : `/api/admin/open-markets/${market.id}/settle`;
+      const body = isAmm
         ? { winnerEntryId: selectedEntry, notes }
-        : { winnerEntryId: selectedEntry, resolutionNotes: notes };
+        : isNative
+          ? { winnerEntryId: selectedEntry, notes }
+          : { winnerEntryId: selectedEntry, resolutionNotes: notes };
       const res = await fetchWithAuth(url, { method: "POST", body: JSON.stringify(body) });
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: "Unknown error" }));
@@ -182,10 +191,16 @@ function ResolutionDialog({
   const voidMutation = useMutation({
     mutationFn: async () => {
       const isNative = market.marketType !== "community";
-      const url = isNative
-        ? `/api/admin/native-markets/${market.id}/settle`
-        : `/api/admin/open-markets/${market.id}/void`;
-      const body = isNative ? { notes: voidReason } : { voidReason };
+      const url = isAmm
+        ? `/api/admin/markets/${market.id}/amm-resolve`
+        : isNative
+          ? `/api/admin/native-markets/${market.id}/settle`
+          : `/api/admin/open-markets/${market.id}/void`;
+      const body = isAmm
+        ? { voidMarket: true, notes: voidReason }
+        : isNative
+          ? { notes: voidReason }
+          : { voidReason };
       const res = await fetchWithAuth(url, { method: "POST", body: JSON.stringify(body) });
       if (!res.ok) throw new Error("Failed to void");
       return res.json();
@@ -217,9 +232,20 @@ function ResolutionDialog({
         <div className="space-y-4">
           <div className="flex items-center gap-4 flex-wrap text-sm text-muted-foreground">
             <MarketTypeBadge type={market.marketType} />
+            {isAmm && (
+              <Badge variant="outline" className="text-xs border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10">
+                LMSR / AMM
+              </Badge>
+            )}
             <span className="flex items-center gap-1"><Coins className="h-3.5 w-3.5" /> {market.pool} credits pool</span>
             <span className="flex items-center gap-1"><Users className="h-3.5 w-3.5" /> {market.uniqueBettors} bettors</span>
           </div>
+          {isAmm && (
+            <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-700 dark:text-emerald-300 leading-relaxed">
+              This is an AMM market. Settling pays each holder of the winning side
+              <span className="font-mono"> 1 credit per share</span>; voiding refunds every position at its cost basis. The house keeps the rest as market-maker P/L.
+            </div>
+          )}
 
           {previewLoading ? (
             <div className="flex items-center justify-center py-8">
@@ -450,7 +476,8 @@ export function AdminSettlementCenter() {
   const queryClient = useQueryClient();
   const [isVisible, setIsVisible] = useState(
     typeof document === "undefined" ? true : document.visibilityState !== "hidden",
-  );  useEffect(() => {
+  );
+  useEffect(() => {
     const handleVisibilityChange = () => {
       setIsVisible(document.visibilityState !== "hidden");
     };

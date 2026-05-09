@@ -49,6 +49,8 @@ export interface MyPredictionCardData {
   endAt: string;
   resolutionSummary?: string | null;
   hidden?: boolean;
+  /** Phase 4: AMM markets render different copy (shares-based, no per-bet projection). */
+  engine?: "parimutuel" | "amm" | string | null;
 }
 
 interface MyPredictionCardProps {

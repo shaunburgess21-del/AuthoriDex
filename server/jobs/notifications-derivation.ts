@@ -287,6 +287,7 @@ async function deriveMarketClosingSoon(): Promise<number> {
       slug: predictionMarkets.slug,
       title: predictionMarkets.title,
       marketType: predictionMarkets.marketType,
+      engine: predictionMarkets.engine,
       closeAt: predictionMarkets.closeAt,
       endAt: predictionMarkets.endAt,
     })
@@ -329,11 +330,14 @@ async function deriveMarketClosingSoon(): Promise<number> {
     // doesn't actually resolve until Sunday. Each market type now uses
     // language that matches what's actually closing — entries (jackpots
     // are buy-in tickets) vs. bets (yes/no positions on H2H / Up-Down).
-    const verb =
-      market.marketType === "jackpot"
-        ? "Entries close"
-        : "Betting closes";
-    const title = `${verb} in ${timing}`;
+    //
+    // Phase 4: AMM markets close 5 minutes before resolution (no
+    // multi-day lockout), so the copy frames the urgency differently:
+    // "Resolves in {timing} — last chance to trade".
+    const isAmm = market.engine === "amm";
+    const title = isAmm
+      ? `Resolves in ${timing} — last chance to trade`
+      : `${market.marketType === "jackpot" ? "Entries close" : "Betting closes"} in ${timing}`;
 
     // Deep-link to the right detail surface per market kind so the
     // notification CTA opens the page that actually shows their open
@@ -365,6 +369,7 @@ async function deriveMarketClosingSoon(): Promise<number> {
       metadata: {
         closeAt: closeAt.toISOString(),
         marketType: market.marketType,
+        engine: market.engine ?? "parimutuel",
       },
       idempotencyKey: `closing:${bet.userId}:${market.id}`,
     });

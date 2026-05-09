@@ -4,13 +4,39 @@ import { predictionMarkets, marketEntries, trackedPeople, trendingPeople } from 
 import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
 import { eq, and, desc, inArray, sql, gte } from "drizzle-orm";
 import { buildOpeningScores } from "../native-markets/openingScores";
-import { getWeeklyBettingCutoff as getWeeklyBettingCutoffForEndAt } from "../native-markets/lifecycle";
+import {
+  getMarketBettingCutoff,
+  getWeeklyBettingCutoff as getWeeklyBettingCutoffForEndAt,
+  type MarketEngine,
+} from "../native-markets/lifecycle";
 import { getWeekContext as getUtcWeekContext } from "../native-markets/week-context";
+import { seedAmmMarket } from "../services/amm-house";
 import { log } from "../log";
 
 const MARKET_GENERATOR_LOCK_KEY = 5_204;
 const MARKET_GENERATOR_RETRY_DELAY_MS = 15 * 60 * 1000;
 const MARKET_GENERATOR_MAX_RETRIES = 4;
+
+/**
+ * Phase 4: H2H + Up/Down weekly markets are created with engine='amm'
+ * starting from this week onwards. Existing parimutuel markets in
+ * flight finish parimutuel via the legacy resolver path; new markets
+ * use LMSR pricing + the Phase 3 buy/sell endpoints.
+ *
+ * Toggle by env var if we ever need to roll back: set
+ * AMM_NATIVE_FLIP_ENABLED=false to revert to parimutuel for all
+ * native types. Default = true.
+ */
+const AMM_NATIVE_FLIP_ENABLED =
+  (process.env.AMM_NATIVE_FLIP_ENABLED ?? "true").toLowerCase() !== "false";
+
+function nativeEngineFor(marketType: "updown" | "h2h" | "gainer" | "jackpot"): MarketEngine {
+  // Phase 4: only updown + h2h flip. Gainer + jackpot stay parimutuel
+  // until Phase 4b. Single source of truth so the generator + bet
+  // routes + resolver agree.
+  if (!AMM_NATIVE_FLIP_ENABLED) return "parimutuel";
+  return marketType === "updown" || marketType === "h2h" ? "amm" : "parimutuel";
+}
 
 export function getWeeklyBettingCutoff(endAt: Date): Date {
   return getWeeklyBettingCutoffForEndAt(endAt);
@@ -98,46 +124,65 @@ export async function generateWeeklyUpDown(): Promise<number> {
     }
   }
 
+  const engine = nativeEngineFor("updown");
   let created = 0;
   for (const person of people) {
     if (existingPersonIds.has(person.id)) continue;
-    const slug = `updown-${person.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-week-${weekNumber}`;
+    const baseSlug = `updown-${person.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-week-${weekNumber}`;
     const openScore = openingScoreMap.get(person.id);
 
-    const values = {
+    const baseValues = {
       marketType: "updown" as const,
+      engine,
       title: `${person.name}: Up or Down?`,
-      slug,
       personId: person.id,
       category: normalizeMarketCategory(person.category),
       visibility: "live" as const,
       status: "OPEN" as const,
       startAt: monday,
       endAt: sunday,
-      closeAt: getWeeklyBettingCutoff(sunday),
+      closeAt: getMarketBettingCutoff(sunday, engine),
       weekNumber,
       metadata: openScore ? { openingScore: { personId: person.id, score: openScore.score, snapshotAt: openScore.snapshotAt } } : undefined,
       featured: false,
     };
 
-    try {
-      const [market] = await db.insert(predictionMarkets).values(values).returning();
-      await db.insert(marketEntries).values([
-        { marketId: market.id, entryType: "custom", label: "Up", displayOrder: 0 },
-        { marketId: market.id, entryType: "custom", label: "Down", displayOrder: 1 },
-      ]);
-      created++;
-    } catch (slugErr: any) {
-      if (slugErr.code === "23505") {
-        const slugRetry = `${slug}-${randomUUID().slice(0, 6)}`;
-        const [market] = await db.insert(predictionMarkets).values({ ...values, slug: slugRetry }).returning();
-        await db.insert(marketEntries).values([
-          { marketId: market.id, entryType: "custom", label: "Up", displayOrder: 0 },
-          { marketId: market.id, entryType: "custom", label: "Down", displayOrder: 1 },
-        ]);
+    let attempt = 0;
+    while (attempt < 2) {
+      const slug = attempt === 0 ? baseSlug : `${baseSlug}-${randomUUID().slice(0, 6)}`;
+      try {
+        await db.transaction(async (tx) => {
+          const [market] = await tx
+            .insert(predictionMarkets)
+            .values({ ...baseValues, slug })
+            .returning({ id: predictionMarkets.id });
+          const entries = await tx
+            .insert(marketEntries)
+            .values([
+              { marketId: market.id, entryType: "custom", label: "Up", displayOrder: 0 },
+              { marketId: market.id, entryType: "custom", label: "Down", displayOrder: 1 },
+            ])
+            .returning({ id: marketEntries.id, displayOrder: marketEntries.displayOrder });
+          if (engine === "amm") {
+            const entryIdsInOrder = entries
+              .slice()
+              .sort((a, b) => a.displayOrder - b.displayOrder)
+              .map((e) => e.id);
+            await seedAmmMarket(
+              { marketId: market.id, marketType: "updown", entryIdsInOrder },
+              tx,
+            );
+          }
+        });
         created++;
-      } else {
-        log(`[MarketGenerator] updown slug error for ${person.name}: ${slugErr.message}`);
+        break;
+      } catch (slugErr: any) {
+        if (slugErr?.code === "23505" && attempt === 0) {
+          attempt++;
+          continue;
+        }
+        log(`[MarketGenerator] updown error for ${person.name}: ${slugErr?.message ?? slugErr}`);
+        break;
       }
     }
   }
@@ -184,18 +229,19 @@ export async function ensureUpDownMarketForInductee(person: {
     };
   }
 
-  const slug = `updown-${person.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-week-${weekNumber}`;
-  const values = {
+  const engine = nativeEngineFor("updown");
+  const baseSlug = `updown-${person.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-week-${weekNumber}`;
+  const baseValues = {
     marketType: "updown" as const,
+    engine,
     title: `${person.name}: Up or Down?`,
-    slug,
     personId: person.id,
     category: normalizeMarketCategory(person.category),
     visibility: "live" as const,
     status: "OPEN" as const,
     startAt: monday,
     endAt: sunday,
-    closeAt: getWeeklyBettingCutoff(sunday),
+    closeAt: getMarketBettingCutoff(sunday, engine),
     weekNumber,
     metadata: openScore
       ? {
@@ -209,34 +255,44 @@ export async function ensureUpDownMarketForInductee(person: {
     featured: false,
   };
 
-  try {
-    const [market] = await db.insert(predictionMarkets).values(values).returning();
-    await db.insert(marketEntries).values([
-      { marketId: market.id, entryType: "custom", label: "Up", displayOrder: 0 },
-      { marketId: market.id, entryType: "custom", label: "Down", displayOrder: 1 },
-    ]);
-    return "created";
-  } catch (slugErr: any) {
-    if (slugErr.code === "23505") {
-      try {
-        const slugRetry = `${slug}-${randomUUID().slice(0, 6)}`;
-        const [market] = await db
+  let attempt = 0;
+  while (attempt < 2) {
+    const slug = attempt === 0 ? baseSlug : `${baseSlug}-${randomUUID().slice(0, 6)}`;
+    try {
+      await db.transaction(async (tx) => {
+        const [market] = await tx
           .insert(predictionMarkets)
-          .values({ ...values, slug: slugRetry })
-          .returning();
-        await db.insert(marketEntries).values([
-          { marketId: market.id, entryType: "custom", label: "Up", displayOrder: 0 },
-          { marketId: market.id, entryType: "custom", label: "Down", displayOrder: 1 },
-        ]);
-        return "created";
-      } catch {
-        log(`[MarketGenerator] ensureUpDown retry failed for ${person.name}`);
-        return "failed";
+          .values({ ...baseValues, slug })
+          .returning({ id: predictionMarkets.id });
+        const entries = await tx
+          .insert(marketEntries)
+          .values([
+            { marketId: market.id, entryType: "custom", label: "Up", displayOrder: 0 },
+            { marketId: market.id, entryType: "custom", label: "Down", displayOrder: 1 },
+          ])
+          .returning({ id: marketEntries.id, displayOrder: marketEntries.displayOrder });
+        if (engine === "amm") {
+          const entryIdsInOrder = entries
+            .slice()
+            .sort((a, b) => a.displayOrder - b.displayOrder)
+            .map((e) => e.id);
+          await seedAmmMarket(
+            { marketId: market.id, marketType: "updown", entryIdsInOrder },
+            tx,
+          );
+        }
+      });
+      return "created";
+    } catch (slugErr: any) {
+      if (slugErr?.code === "23505" && attempt === 0) {
+        attempt++;
+        continue;
       }
+      log(`[MarketGenerator] ensureUpDown error for ${person.name}: ${slugErr?.message ?? slugErr}`);
+      return "failed";
     }
-    log(`[MarketGenerator] ensureUpDown error for ${person.name}: ${slugErr.message}`);
-    return "failed";
   }
+  return "failed";
 }
 
 /**
@@ -621,6 +677,7 @@ export async function generateWeeklyH2H(): Promise<number> {
       }
     }
 
+    const engine = nativeEngineFor("h2h");
     let createdCount = 0;
     for (const [personA, personB] of pairings) {
       const baseSlug = `h2h-${personA.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-vs-${personB.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-week-${weekNumber}`;
@@ -635,6 +692,7 @@ export async function generateWeeklyH2H(): Promise<number> {
 
       const [market] = await tx.insert(predictionMarkets).values({
         marketType: "h2h",
+        engine,
         title: `${personA.name} vs ${personB.name}`,
         slug,
         category: h2hCategory,
@@ -642,16 +700,31 @@ export async function generateWeeklyH2H(): Promise<number> {
         status: "OPEN",
         startAt: monday,
         endAt: sunday,
-        closeAt: getWeeklyBettingCutoff(sunday),
+        closeAt: getMarketBettingCutoff(sunday, engine),
         weekNumber,
         metadata: h2hMeta,
         featured: false,
       }).returning();
 
-      await tx.insert(marketEntries).values([
-        { marketId: market.id, entryType: "person", personId: personA.id, label: personA.name, displayOrder: 0, imageUrl: null },
-        { marketId: market.id, entryType: "person", personId: personB.id, label: personB.name, displayOrder: 1, imageUrl: null },
-      ]);
+      const entries = await tx
+        .insert(marketEntries)
+        .values([
+          { marketId: market.id, entryType: "person", personId: personA.id, label: personA.name, displayOrder: 0, imageUrl: null },
+          { marketId: market.id, entryType: "person", personId: personB.id, label: personB.name, displayOrder: 1, imageUrl: null },
+        ])
+        .returning({ id: marketEntries.id, displayOrder: marketEntries.displayOrder });
+
+      if (engine === "amm") {
+        const entryIdsInOrder = entries
+          .slice()
+          .sort((a, b) => a.displayOrder - b.displayOrder)
+          .map((e) => e.id);
+        await seedAmmMarket(
+          { marketId: market.id, marketType: "h2h", entryIdsInOrder },
+          tx,
+        );
+      }
+
       createdCount++;
       existingSlugs.add(slug);
     }

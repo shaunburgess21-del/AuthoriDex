@@ -56,7 +56,8 @@ import pLimit from "p-limit";
 import { buildOpeningScores } from "./native-markets/openingScores";
 import { generateWeeklyUpDown, generateWeeklyJackpot, generateWeeklyH2H, generateWeeklyGainer, getWeekContext, ensureWeeklyMarketsForCurrentWeek } from "./jobs/market-generator";
 import { voidMarketBets } from "./jobs/market-resolver";
-import { deriveNativeMarketLifecycle, getWeeklyBettingCutoff } from "./native-markets/lifecycle";
+import { deriveNativeMarketLifecycle, getWeeklyBettingCutoff, getMarketBettingCutoff } from "./native-markets/lifecycle";
+import { executeBuy, executeSell } from "./services/amm-trades";
 import { computeEarlyBirdMultiplier } from "./jobs/settlement-utils";
 import { recomputeCelebrityMetrics } from "./services/celebrity-metrics-recompute";
 import { z, ZodError } from "zod";
@@ -8537,6 +8538,7 @@ Only return the JSON object.`;
             marketTitle: predictionMarkets.title,
             marketStatus: predictionMarkets.status,
             marketType: predictionMarkets.marketType,
+            marketEngine: predictionMarkets.engine,
             marketCadence: predictionMarkets.cadence,
             marketCategory: predictionMarkets.category,
             baselineScore: predictionMarkets.baselineScore,
@@ -8601,6 +8603,7 @@ Only return the JSON object.`;
           marketTitle: b.marketTitle,
           marketStatus: b.marketStatus,
           marketType: b.marketType,
+          engine: b.marketEngine ?? 'parimutuel',
           marketCadence: isNative ? (b.marketCadence ?? 'weekly') : b.marketCadence,
           marketCategory: b.marketCategory,
           entryId: b.entryId,
@@ -9092,6 +9095,129 @@ Only return the JSON object.`;
     } catch (err: any) {
       console.error("[GET /api/markets/:id/amm-position] failed:", err);
       res.status(500).json({ error: "Failed to fetch AMM position" });
+    }
+  });
+
+  // GET /api/me/amm-positions
+  //
+  // Aggregated AMM positions across every market the caller has traded
+  // on. Powers the "Open" tab in My Predictions for AMM markets, where
+  // we want a single row per (market, entry) summarising netShares +
+  // current value + payout-if-win, instead of one row per buy/sell
+  // ticket. Returns only entries with a non-zero net position on an
+  // open or closed-but-not-yet-resolved AMM market.
+  app.get("/api/me/amm-positions", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.userId!;
+
+      const rows = await db
+        .select({
+          marketId: marketBets.marketId,
+          entryId: marketBets.entryId,
+          actionType: marketBets.actionType,
+          shareCount: marketBets.shareCount,
+          stakeAmount: marketBets.stakeAmount,
+          marketSlug: predictionMarkets.slug,
+          marketTitle: predictionMarkets.title,
+          marketStatus: predictionMarkets.status,
+          marketType: predictionMarkets.marketType,
+          marketCadence: predictionMarkets.cadence,
+          marketCategory: predictionMarkets.category,
+          marketEngine: predictionMarkets.engine,
+          marketStartAt: predictionMarkets.startAt,
+          marketEndAt: predictionMarkets.endAt,
+          entryLabel: marketEntries.label,
+          entryResolutionStatus: marketEntries.resolutionStatus,
+          personName: trendingPeople.name,
+          personAvatar: trendingPeople.avatar,
+        })
+        .from(marketBets)
+        .innerJoin(predictionMarkets, eq(marketBets.marketId, predictionMarkets.id))
+        .innerJoin(marketEntries, eq(marketBets.entryId, marketEntries.id))
+        .leftJoin(trendingPeople, eq(predictionMarkets.personId, trendingPeople.id))
+        .where(
+          and(
+            eq(marketBets.userId, userId),
+            eq(predictionMarkets.engine, "amm"),
+            sql`${marketBets.actionType} IN ('buy','sell')`,
+          ),
+        );
+
+      const ammMarketIds = Array.from(new Set(rows.map((r) => r.marketId)));
+      if (ammMarketIds.length === 0) {
+        return res.json({ positions: [] });
+      }
+
+      const stateRows = await db
+        .select()
+        .from(marketAmmState)
+        .where(sql`${marketAmmState.marketId} IN (${sql.join(ammMarketIds.map((id) => sql`${id}`), sql`, `)})`);
+      const stateByMarket = new Map(stateRows.map((s) => [s.marketId, s]));
+
+      const { summarizePosition, currentPrices } = await import(
+        "@shared/lib/amm/positions"
+      );
+
+      const grouped = new Map<string, typeof rows>();
+      for (const r of rows) {
+        const list = grouped.get(r.marketId) ?? [];
+        list.push(r);
+        grouped.set(r.marketId, list);
+      }
+
+      const positions: any[] = [];
+      for (const [marketId, marketRows] of grouped.entries()) {
+        const stateRow = stateByMarket.get(marketId);
+        if (!stateRow) continue;
+        const liquidityB = Number(stateRow.liquidityB);
+        const outcomeOrder = stateRow.outcomeOrder as string[];
+        const shareQuantities = stateRow.shareQuantities as Record<string, number>;
+        const prices = currentPrices({ liquidityB, outcomeOrder, shareQuantities });
+
+        const ammRows = marketRows.map((r) => ({
+          entryId: r.entryId,
+          actionType: r.actionType as "buy" | "sell",
+          shareCount: Number(r.shareCount ?? 0),
+          stakeAmount: r.stakeAmount,
+        }));
+        const summary = summarizePosition(ammRows);
+
+        for (const [entryId, slot] of summary.entries()) {
+          if (Math.abs(slot.netShares) <= 1e-9) continue;
+          const meta = marketRows.find((r) => r.entryId === entryId);
+          if (!meta) continue;
+          const currentPrice = prices[entryId] ?? 0;
+          const currentValue = slot.netShares * currentPrice;
+          const avgEntryPrice =
+            slot.netShares > 0 ? slot.netCreditsIn / slot.netShares : 0;
+          positions.push({
+            marketId,
+            marketSlug: meta.marketSlug,
+            marketTitle: meta.marketTitle,
+            marketStatus: meta.marketStatus,
+            marketType: meta.marketType,
+            marketCadence: meta.marketCadence,
+            marketCategory: meta.marketCategory,
+            marketEndAt: meta.marketEndAt,
+            marketStartAt: meta.marketStartAt,
+            entryId,
+            entryLabel: meta.entryLabel,
+            entryResolutionStatus: meta.entryResolutionStatus,
+            personName: meta.personName,
+            personAvatar: meta.personAvatar,
+            netShares: slot.netShares,
+            netCreditsIn: slot.netCreditsIn,
+            avgEntryPrice,
+            currentPrice,
+            currentValue,
+          });
+        }
+      }
+
+      res.json({ positions });
+    } catch (err: any) {
+      console.error("[GET /api/me/amm-positions] failed:", err);
+      res.status(500).json({ error: "Failed to fetch AMM positions" });
     }
   });
 
@@ -16776,10 +16902,10 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
     try {
       const authReq = req as AuthRequest;
       const { marketId } = req.params;
-      const { entryId, stakeAmount } = req.body;
+      const { entryId, stakeAmount, actionType, shares } = req.body ?? {};
 
-      if (!entryId || !stakeAmount || typeof stakeAmount !== "number" || stakeAmount <= 0) {
-        return res.status(400).json({ error: "Valid entryId and positive stakeAmount are required" });
+      if (!entryId) {
+        return res.status(400).json({ error: "entryId is required" });
       }
 
       if (!checkBetRateLimit(authReq.userId!)) {
@@ -16791,6 +16917,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           id: predictionMarkets.id,
           closeAt: predictionMarkets.closeAt,
           endAt: predictionMarkets.endAt,
+          engine: predictionMarkets.engine,
         })
         .from(predictionMarkets)
         .where(
@@ -16807,12 +16934,15 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         return res.status(404).json({ error: "Market not found or not open" });
       }
 
+      const isAmm = market.engine === "amm";
       const now = new Date();
       if (market.endAt) {
-        const bettingCutoff = getWeeklyBettingCutoff(market.endAt);
+        const bettingCutoff = getMarketBettingCutoff(market.endAt, isAmm ? "amm" : "parimutuel");
         if (now > bettingCutoff) {
           return res.status(400).json({
-            error: "Betting closes Friday at 23:59 UTC. This market is now locked.",
+            error: isAmm
+              ? "Trading is closed (5-minute pre-resolve cooldown). This market is now locked."
+              : "Betting closes Friday at 23:59 UTC. This market is now locked.",
             bettingCutoff: bettingCutoff.toISOString(),
           });
         }
@@ -16822,6 +16952,74 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         (market.endAt && new Date(market.endAt) < now)
       ) {
         return res.status(400).json({ error: "Betting is closed for this market" });
+      }
+
+      // AMM dispatch: buy/sell into the LMSR pool. Sell allowed any
+      // time before cutoff, even on the opposite side from your buy
+      // (each entry's position tracks independently). No hedge guard
+      // — AMM positions ARE hedge-aware via netShares.
+      if (isAmm) {
+        if (actionType === "sell") {
+          const sharesNum = Number(shares);
+          if (!Number.isFinite(sharesNum) || sharesNum <= 0) {
+            return res.status(400).json({ error: "shares must be a positive number for sell" });
+          }
+          const sellResult = await executeSell({
+            marketId: market.id,
+            userId: authReq.userId!,
+            entryId,
+            shares: sharesNum,
+          });
+          if ("error" in sellResult) {
+            return res.status(sellResult.status).json({ error: sellResult.message });
+          }
+          return res.json({
+            engine: "amm",
+            actionType: "sell",
+            stakeAmount: -sellResult.proceeds,
+            potentialPayout: 0,
+            sharesSold: sellResult.sharesSold,
+            proceeds: sellResult.proceeds,
+            pricePerShareAvg: sellResult.pricePerShareAvg,
+            newPrices: sellResult.newPrices,
+            newQ: sellResult.newQ,
+            remainingShares: sellResult.remainingShares,
+            remainingCredits: sellResult.userBalanceAfter,
+          });
+        }
+
+        const budget = Number(stakeAmount);
+        if (!Number.isInteger(budget) || budget <= 0) {
+          return res.status(400).json({ error: "Valid entryId and positive integer stakeAmount are required" });
+        }
+        const buyResult = await executeBuy({
+          marketId: market.id,
+          userId: authReq.userId!,
+          entryId,
+          creditBudget: budget,
+        });
+        if ("error" in buyResult) {
+          return res.status(buyResult.status).json({ error: buyResult.message });
+        }
+        return res.json({
+          engine: "amm",
+          actionType: "buy",
+          stakeAmount: buyResult.chargeCredits,
+          // 1 share pays 1 credit at settlement, so payout-if-win equals
+          // shares purchased. Keeps the existing client toast text valid.
+          potentialPayout: Math.floor(buyResult.sharesPurchased),
+          sharesPurchased: buyResult.sharesPurchased,
+          chargeCredits: buyResult.chargeCredits,
+          pricePerShareAvg: buyResult.pricePerShareAvg,
+          newPrices: buyResult.newPrices,
+          newQ: buyResult.newQ,
+          remainingCredits: buyResult.userBalanceAfter,
+        });
+      }
+
+      // Parimutuel path (legacy in-flight markets):
+      if (!stakeAmount || typeof stakeAmount !== "number" || stakeAmount <= 0) {
+        return res.status(400).json({ error: "Valid entryId and positive stakeAmount are required" });
       }
 
       // No-hedging rule for native updown: only one entry per user
@@ -16876,18 +17074,26 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       // Zod-validate the bet body. stakeAmount is capped at a generous ceiling
       // (10M credits) so a fat-fingered or malicious payload can't try to bet
       // BigInts / Infinity and confuse the downstream credit math.
+      // Phase 4: AMM markets accept actionType='sell' + shares for sell trades.
       const betSchema = z.object({
         entryId: z.string().min(1).max(128),
-        stakeAmount: z.number().int().positive().max(10_000_000),
+        stakeAmount: z.number().int().positive().max(10_000_000).optional(),
+        actionType: z.enum(["buy", "sell"]).optional(),
+        shares: z.number().positive().finite().max(1_000_000_000).optional(),
       });
-      let parsed: { entryId: string; stakeAmount: number };
+      let parsed: {
+        entryId: string;
+        stakeAmount?: number;
+        actionType?: "buy" | "sell";
+        shares?: number;
+      };
       try {
         parsed = betSchema.parse(req.body ?? {});
       } catch (err) {
         if (err instanceof ZodError) return sendZodError(res, err);
         return sendBadRequest(res, "Invalid bet body");
       }
-      const { entryId, stakeAmount } = parsed;
+      const { entryId, stakeAmount, actionType, shares } = parsed;
 
       if (!checkBetRateLimit(authReq.userId!)) {
         return res.status(429).json({ error: "You're moving fast! Try again in a moment" });
@@ -16899,6 +17105,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           closeAt: predictionMarkets.closeAt,
           endAt: predictionMarkets.endAt,
           marketType: predictionMarkets.marketType,
+          engine: predictionMarkets.engine,
         })
         .from(predictionMarkets)
         .where(
@@ -16915,12 +17122,15 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         return res.status(404).json({ error: "Market not found or not open" });
       }
 
+      const isAmm = market.engine === "amm";
       const now = new Date();
       if (market.endAt) {
-        const bettingCutoff = getWeeklyBettingCutoff(market.endAt);
+        const bettingCutoff = getMarketBettingCutoff(market.endAt, isAmm ? "amm" : "parimutuel");
         if (now > bettingCutoff) {
           return res.status(400).json({
-            error: "Betting closes Friday at 23:59 UTC. This market is now locked.",
+            error: isAmm
+              ? "Trading is closed (5-minute pre-resolve cooldown). This market is now locked."
+              : "Betting closes Friday at 23:59 UTC. This market is now locked.",
             bettingCutoff: bettingCutoff.toISOString(),
           });
         }
@@ -16930,6 +17140,66 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         (market.endAt && new Date(market.endAt) < now)
       ) {
         return res.status(400).json({ error: "Betting is closed for this market" });
+      }
+
+      if (isAmm) {
+        if (actionType === "sell") {
+          if (!shares || shares <= 0) {
+            return res.status(400).json({ error: "shares must be a positive number for sell" });
+          }
+          const sellResult = await executeSell({
+            marketId: market.id,
+            userId: authReq.userId!,
+            entryId,
+            shares,
+          });
+          if ("error" in sellResult) {
+            return res.status(sellResult.status).json({ error: sellResult.message });
+          }
+          return res.json({
+            engine: "amm",
+            actionType: "sell",
+            stakeAmount: -sellResult.proceeds,
+            potentialPayout: 0,
+            sharesSold: sellResult.sharesSold,
+            proceeds: sellResult.proceeds,
+            pricePerShareAvg: sellResult.pricePerShareAvg,
+            newPrices: sellResult.newPrices,
+            newQ: sellResult.newQ,
+            remainingShares: sellResult.remainingShares,
+            remainingCredits: sellResult.userBalanceAfter,
+          });
+        }
+
+        if (!stakeAmount || stakeAmount <= 0) {
+          return res.status(400).json({ error: "stakeAmount is required for buy" });
+        }
+        const buyResult = await executeBuy({
+          marketId: market.id,
+          userId: authReq.userId!,
+          entryId,
+          creditBudget: stakeAmount,
+        });
+        if ("error" in buyResult) {
+          return res.status(buyResult.status).json({ error: buyResult.message });
+        }
+        return res.json({
+          engine: "amm",
+          actionType: "buy",
+          stakeAmount: buyResult.chargeCredits,
+          potentialPayout: Math.floor(buyResult.sharesPurchased),
+          sharesPurchased: buyResult.sharesPurchased,
+          chargeCredits: buyResult.chargeCredits,
+          pricePerShareAvg: buyResult.pricePerShareAvg,
+          newPrices: buyResult.newPrices,
+          newQ: buyResult.newQ,
+          remainingCredits: buyResult.userBalanceAfter,
+        });
+      }
+
+      // Parimutuel path:
+      if (!stakeAmount || stakeAmount <= 0) {
+        return sendBadRequest(res, "Invalid bet body");
       }
 
       // No-hedging rule for native markets:
@@ -17576,9 +17846,47 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           .orderBy(marketEntries.displayOrder);
       }
 
+      // Phase 4: pull AMM state for any engine='amm' markets so cards
+      // can render live LMSR probabilities without a follow-up fetch.
+      const ammMarketIds = markets
+        .filter((m) => (m as any).engine === "amm")
+        .map((m) => m.id);
+      const ammStateByMarket = new Map<string, {
+        liquidityB: number;
+        outcomeOrder: string[];
+        shareQuantities: Record<string, number>;
+        houseSeedAmount: number;
+        totalUserCreditsIn: number;
+        prices: Record<string, number>;
+        updatedAt: string;
+      }>();
+      if (ammMarketIds.length > 0) {
+        const stateRows = await db
+          .select()
+          .from(marketAmmState)
+          .where(inArray(marketAmmState.marketId, ammMarketIds));
+        const { currentPrices } = await import("@shared/lib/amm/positions");
+        for (const r of stateRows) {
+          const liquidityB = Number(r.liquidityB);
+          const outcomeOrder = r.outcomeOrder as string[];
+          const shareQuantities = r.shareQuantities as Record<string, number>;
+          const prices = currentPrices({ liquidityB, outcomeOrder, shareQuantities });
+          ammStateByMarket.set(r.marketId, {
+            liquidityB,
+            outcomeOrder,
+            shareQuantities,
+            houseSeedAmount: r.houseSeedAmount,
+            totalUserCreditsIn: Number(r.totalUserCreditsIn),
+            prices,
+            updatedAt: r.updatedAt.toISOString(),
+          });
+        }
+      }
+
       const engagement = await getMarketEngagementPreview(marketIds);
-      const addLifecycleFields = (m: { endAt: Date | null }) => {
-        const lifecycle = deriveNativeMarketLifecycle(m.endAt, nowForCutoff);
+      const addLifecycleFields = (m: { endAt: Date | null; engine?: string | null }) => {
+        const engineKind: "parimutuel" | "amm" = m.engine === "amm" ? "amm" : "parimutuel";
+        const lifecycle = deriveNativeMarketLifecycle(m.endAt, nowForCutoff, engineKind);
         return {
           bettingCutoff: lifecycle.bettingCutoff?.toISOString() ?? null,
           resolutionDeadline: lifecycle.resolutionDeadline?.toISOString() ?? null,
@@ -17586,6 +17894,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           isCutoffPassed: lifecycle.isCutoffPassed,
         };
       };
+      const ammStateFor = (marketId: string) => ammStateByMarket.get(marketId) ?? null;
 
       if (type === 'updown' || type === 'jackpot') {
         const personIds = markets.map(m => m.personId).filter(Boolean) as string[];
@@ -17603,6 +17912,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           recentParticipants: engagement.recentParticipantsByMarket.get(m.id) || [],
           activeParticipantCount: engagement.activeParticipantCountByMarket.get(m.id) || 0,
           latestRationale: engagement.latestRationaleByMarket.get(m.id) || null,
+          ammState: ammStateFor(m.id),
         }));
         return res.json(enriched);
       }
@@ -17647,6 +17957,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
             activeParticipantCount: engagement.activeParticipantCountByMarket.get(m.id) || 0,
             latestRationale: engagement.latestRationaleByMarket.get(m.id) || null,
             ...(modelP1Percent !== undefined ? { modelP1Percent, modelConfidence } : {}),
+            ammState: ammStateFor(m.id),
           };
         });
         return res.json(enriched);
@@ -17659,6 +17970,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         recentParticipants: engagement.recentParticipantsByMarket.get(m.id) || [],
         activeParticipantCount: engagement.activeParticipantCountByMarket.get(m.id) || 0,
         latestRationale: engagement.latestRationaleByMarket.get(m.id) || null,
+        ammState: ammStateFor(m.id),
       })));
     } catch (error: any) {
       console.error("Error fetching native markets:", error.message);

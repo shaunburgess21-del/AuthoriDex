@@ -18,6 +18,14 @@ import { OutcomePathChart } from "@/components/predict/OutcomePathChart";
 import { RULES_CONTENT, RulesExplainer } from "@/components/predict/RulesContent";
 import { shouldRenderCrowdSentiment } from "@/lib/predict-display";
 import { estimateCreditsIfWin, computeEarlyBirdMultiplier } from "@/lib/parimutuel";
+import {
+  type ApiAmmStateBlock,
+  deriveBuyQuote,
+  deriveSellQuote,
+  pricesFor,
+  priceToPercent,
+  snapshotFromApi,
+} from "@/lib/ammClient";
 
 const MISSION_HEADERS: Record<string, string> = {
   jackpot: "Predict the exact Trend Score at week's end to win the pot.",
@@ -83,6 +91,19 @@ export interface StakeSelection {
   existingStake?: number;
   /** Market open time — used to calculate the early-bird boost indicator. */
   marketStartAt?: string;
+  /**
+   * Phase 4 (AMM markets only):
+   *   - `engine === 'amm'` flips the modal into LMSR mode: live price
+   *     quote, share-based payout framing, no early-bird pill.
+   *   - `ammState` is the canonical snapshot from the API; quotes are
+   *     computed off it client-side so we don't round-trip on every
+   *     keystroke.
+   *   - `ammNetShares` is the user's current netShares for THIS entry
+   *     (used to enable / disable the Sell tab).
+   */
+  engine?: "parimutuel" | "amm";
+  ammState?: ApiAmmStateBlock | null;
+  ammNetShares?: number;
 }
 
 interface StakeModalProps {
@@ -100,6 +121,12 @@ interface StakeModalProps {
     amount: number,
     meta: { confidence?: number; thesis?: string },
   ) => void | Promise<void>;
+  /**
+   * AMM-only sell handler. Called with a fractional share count when
+   * the user confirms in Sell mode. Parent should call
+   * `/api/native-markets/:id/bet` with `actionType:'sell'`.
+   */
+  onConfirmAmmSell?: (shares: number) => void | Promise<void>;
   walletBalance: number;
   /** Up/Down for `updown` markets, Yes/No for `community` markets.
    *  When provided, the modal renders an in-place toggle so a misclick on
@@ -116,11 +143,14 @@ export function StakeModal({
   selection,
   onConfirm,
   onConfirmWithMeta,
+  onConfirmAmmSell,
   walletBalance,
   onDirectionChange,
   onChangePick,
 }: StakeModalProps) {
   const [stakeAmount, setStakeAmount] = useState("");
+  const [ammMode, setAmmMode] = useState<"buy" | "sell">("buy");
+  const [sellShares, setSellShares] = useState("");
   const parsedAmount = parseInt(stakeAmount) || 0;
   const balanceAfter = walletBalance - parsedAmount;
   const confirmButtonRef = useRef<HTMLButtonElement>(null);
@@ -151,6 +181,22 @@ export function StakeModal({
   const isH2H = selection.type === "h2h";
   const isGainer = selection.type === "gainer";
   const isCommunity = selection.type === "community";
+  const isAmm = selection.engine === "amm";
+  const ammNetShares = Number(selection.ammNetShares ?? 0);
+  const canSellAmm = isAmm && ammNetShares > 1e-6 && !!onConfirmAmmSell;
+  const ammSnapshot = isAmm ? snapshotFromApi(selection.ammState ?? null) : null;
+  const ammPriceMap = ammSnapshot ? pricesFor(ammSnapshot) : null;
+  const ammEntryPrice =
+    isAmm && ammPriceMap && selection.entryId
+      ? ammPriceMap[selection.entryId] ?? null
+      : null;
+  const ammBuyQuote = isAmm && ammMode === "buy" && parsedAmount >= MIN_STAKE && selection.entryId
+    ? deriveBuyQuote(selection.ammState ?? null, selection.entryId, parsedAmount)
+    : null;
+  const parsedSellShares = Number(sellShares);
+  const ammSellQuote = isAmm && ammMode === "sell" && Number.isFinite(parsedSellShares) && parsedSellShares > 0 && selection.entryId
+    ? deriveSellQuote(selection.ammState ?? null, selection.entryId, Math.min(parsedSellShares, ammNetShares))
+    : null;
   const isCommunityNo = isCommunity && selection.direction === "no";
   // Yes/No badge + toggle is only meaningful for community-multi
   // markets. Binary community markets bake the side into the entry
@@ -202,11 +248,15 @@ export function StakeModal({
 
   const handleConfirm = async () => {
     if (submitting) return;
-    if (parsedAmount < MIN_STAKE || balanceAfter < 0) return;
 
-    // Capture button position before any await: the parent typically closes
-    // this modal in its mutation `onSuccess`, which unmounts the button and
-    // nulls the ref before confetti would otherwise fire.
+    const isAmmSell = isAmm && ammMode === "sell" && !!onConfirmAmmSell;
+    if (isAmmSell) {
+      const sharesToSell = Math.min(parsedSellShares, ammNetShares);
+      if (!Number.isFinite(sharesToSell) || sharesToSell <= 0) return;
+    } else {
+      if (parsedAmount < MIN_STAKE || balanceAfter < 0) return;
+    }
+
     let confettiOrigin: { x: number; y: number } | null = null;
     if (confirmButtonRef.current) {
       const rect = confirmButtonRef.current.getBoundingClientRect();
@@ -218,12 +268,18 @@ export function StakeModal({
 
     setSubmitting(true);
     try {
-      const result = onConfirmWithMeta
-        ? onConfirmWithMeta(parsedAmount, {
-            confidence: confidence || undefined,
-            thesis: thesis.trim() || undefined,
-          })
-        : onConfirm(parsedAmount);
+      let result: void | Promise<void>;
+      if (isAmmSell && onConfirmAmmSell) {
+        const sharesToSell = Math.min(parsedSellShares, ammNetShares);
+        result = onConfirmAmmSell(sharesToSell);
+      } else if (onConfirmWithMeta) {
+        result = onConfirmWithMeta(parsedAmount, {
+          confidence: confidence || undefined,
+          thesis: thesis.trim() || undefined,
+        });
+      } else {
+        result = onConfirm(parsedAmount);
+      }
 
       if (result && typeof (result as Promise<void>).then === "function") {
         await result;
@@ -238,6 +294,7 @@ export function StakeModal({
       }
 
       setStakeAmount("");
+      setSellShares("");
       setConfidence(0);
       setThesis("");
       setShowThesisSection(false);
@@ -253,6 +310,7 @@ export function StakeModal({
     <Dialog open={open} onOpenChange={(isOpen) => {
       if (!isOpen) {
         setStakeAmount("");
+        setSellShares("");
         setConfidence(0);
         setThesis("");
         setShowThesisSection(false);
@@ -504,7 +562,7 @@ export function StakeModal({
             );
           })()}
 
-          {selection.estimatedPayout && !isNaN(selection.estimatedPayout) && (
+          {!isAmm && selection.estimatedPayout && !isNaN(selection.estimatedPayout) && (
             <p className="text-xs text-muted-foreground text-center">
               Estimated Payout:{" "}
               <span className="font-mono font-medium text-green-700 dark:text-green-500">
@@ -522,7 +580,46 @@ export function StakeModal({
             </p>
           )}
 
-          {(() => {
+          {/* AMM live price + payout-if-win quote. Replaces the parimutuel
+              estimatedPayout pill on engine='amm' markets. Shares pay 1
+              credit each at settlement, so payout-if-win = floor(shares). */}
+          {isAmm && ammEntryPrice != null && (
+            <div className="rounded-md border border-violet-500/30 bg-violet-500/8 dark:bg-violet-500/5 px-3 py-2 text-xs space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Live price</span>
+                <span className="font-mono font-medium text-foreground">
+                  {priceToPercent(ammEntryPrice, 0)}{" "}
+                  <span className="text-muted-foreground/70 font-normal">
+                    ({ammEntryPrice.toFixed(3)} cr/share)
+                  </span>
+                </span>
+              </div>
+              {ammMode === "buy" && ammBuyQuote && ammBuyQuote.shares > 0 && (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">If you win</span>
+                  <span className="font-mono font-medium text-green-700 dark:text-green-500">
+                    ~{Math.floor(ammBuyQuote.shares).toLocaleString("en-US")} credits
+                    <span className="text-muted-foreground/70 font-normal">
+                      {" "}({ammBuyQuote.shares.toFixed(2)} shares)
+                    </span>
+                  </span>
+                </div>
+              )}
+              {ammMode === "sell" && ammSellQuote && (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Sell proceeds</span>
+                  <span className="font-mono font-medium text-foreground">
+                    ~{ammSellQuote.proceeds.toLocaleString("en-US")} credits
+                  </span>
+                </div>
+              )}
+              <p className="text-[10px] text-muted-foreground/70 italic">
+                Live LMSR price — updates as people trade. Buy now, sell any time before close.
+              </p>
+            </div>
+          )}
+
+          {!isAmm && (() => {
             let startRef = selection.marketStartAt ?? selection.baselineTimestamp;
             if (!startRef && selection.endAt) {
               const d = new Date(selection.endAt);
@@ -644,63 +741,152 @@ export function StakeModal({
             </div>
           )}
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Stake Amount</label>
-            <Input
-              type="number"
-              min={MIN_STAKE}
-              max={walletBalance}
-              placeholder="Enter credits to stake"
-              value={stakeAmount}
-              onChange={(e) => {
-                const v = e.target.value;
-                if (v === "") {
-                  setStakeAmount("");
-                  return;
-                }
-                const n = parseInt(v, 10);
-                if (Number.isNaN(n)) {
-                  setStakeAmount(v);
-                  return;
-                }
-                setStakeAmount(String(Math.min(Math.max(0, n), walletBalance)));
-              }}
-              className="font-mono"
-              data-testid="input-stake"
-            />
-          </div>
+          {isAmm && canSellAmm && (
+            <div className="flex gap-2 rounded-md border border-border/50 p-1 bg-muted/30">
+              <button
+                type="button"
+                onClick={() => setAmmMode("buy")}
+                className={`flex-1 py-1.5 rounded text-xs font-medium transition-colors ${
+                  ammMode === "buy"
+                    ? "bg-violet-600 text-white shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                data-testid="button-amm-tab-buy"
+              >
+                Buy
+              </button>
+              <button
+                type="button"
+                onClick={() => setAmmMode("sell")}
+                className={`flex-1 py-1.5 rounded text-xs font-medium transition-colors ${
+                  ammMode === "sell"
+                    ? "bg-violet-600 text-white shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                data-testid="button-amm-tab-sell"
+              >
+                Sell · {ammNetShares.toFixed(2)} shares
+              </button>
+            </div>
+          )}
 
-          <div className="flex gap-2">
-            {[100, 500, 1000].map((amount) => {
-              const capped = Math.min(amount, walletBalance);
-              return (
-                <Button
-                  key={amount}
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setStakeAmount(capped > 0 ? String(capped) : "")}
-                  title={capped < amount ? `Stakes ${capped.toLocaleString("en-US")} credits (your balance)` : undefined}
-                  className="flex-1"
-                  data-testid={`button-preset-${amount}`}
-                >
-                  {amount}
-                </Button>
-              );
-            })}
-          </div>
+          {isAmm && ammMode === "sell" ? (
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Shares to sell</label>
+              <Input
+                type="number"
+                min={0}
+                max={ammNetShares}
+                step="any"
+                placeholder={`Up to ${ammNetShares.toFixed(2)} shares`}
+                value={sellShares}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === "") {
+                    setSellShares("");
+                    return;
+                  }
+                  const n = Number(v);
+                  if (!Number.isFinite(n)) {
+                    setSellShares(v);
+                    return;
+                  }
+                  setSellShares(String(Math.max(0, Math.min(n, ammNetShares))));
+                }}
+                className="font-mono"
+                data-testid="input-amm-sell-shares"
+              />
+              <div className="flex gap-2">
+                {[0.25, 0.5, 1].map((frac) => {
+                  const amount = Math.max(0, ammNetShares * frac);
+                  return (
+                    <Button
+                      key={frac}
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSellShares(amount > 0 ? amount.toFixed(4) : "")}
+                      className="flex-1"
+                      data-testid={`button-sell-preset-${Math.round(frac * 100)}`}
+                    >
+                      {frac === 1 ? "All" : `${Math.round(frac * 100)}%`}
+                    </Button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">
+                  {isAmm ? "Credit budget" : "Stake Amount"}
+                </label>
+                <Input
+                  type="number"
+                  min={MIN_STAKE}
+                  max={walletBalance}
+                  placeholder="Enter credits to stake"
+                  value={stakeAmount}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v === "") {
+                      setStakeAmount("");
+                      return;
+                    }
+                    const n = parseInt(v, 10);
+                    if (Number.isNaN(n)) {
+                      setStakeAmount(v);
+                      return;
+                    }
+                    setStakeAmount(String(Math.min(Math.max(0, n), walletBalance)));
+                  }}
+                  className="font-mono"
+                  data-testid="input-stake"
+                />
+              </div>
+
+              <div className="flex gap-2">
+                {[100, 500, 1000].map((amount) => {
+                  const capped = Math.min(amount, walletBalance);
+                  return (
+                    <Button
+                      key={amount}
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setStakeAmount(capped > 0 ? String(capped) : "")}
+                      title={capped < amount ? `Stakes ${capped.toLocaleString("en-US")} credits (your balance)` : undefined}
+                      className="flex-1"
+                      data-testid={`button-preset-${amount}`}
+                    >
+                      {amount}
+                    </Button>
+                  );
+                })}
+              </div>
+            </>
+          )}
 
           <div className="flex items-center justify-between text-xs pt-2 border-t">
             <div>
               <span className="text-muted-foreground">Current Balance: </span>
               <span className="font-mono font-medium">{walletBalance.toLocaleString('en-US')}</span>
             </div>
-            <div>
-              <span className="text-muted-foreground">After Stake: </span>
-              <span className={`font-mono font-medium ${balanceAfter < 0 ? 'text-red-700 dark:text-red-500' : 'text-green-700 dark:text-green-500'}`}>
-                {balanceAfter >= 0 ? balanceAfter.toLocaleString('en-US') : 'Insufficient'}
-              </span>
-            </div>
+            {isAmm && ammMode === "sell" ? (
+              <div>
+                <span className="text-muted-foreground">After Sell: </span>
+                <span className="font-mono font-medium text-green-700 dark:text-green-500">
+                  +{(ammSellQuote?.proceeds ?? 0).toLocaleString('en-US')}
+                </span>
+              </div>
+            ) : (
+              <div>
+                <span className="text-muted-foreground">{isAmm ? "After Buy: " : "After Stake: "}</span>
+                <span className={`font-mono font-medium ${balanceAfter < 0 ? 'text-red-700 dark:text-red-500' : 'text-green-700 dark:text-green-500'}`}>
+                  {balanceAfter >= 0 ? balanceAfter.toLocaleString('en-US') : 'Insufficient'}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Highest-converting placement for the Buy Credits CTA — the
@@ -823,21 +1009,22 @@ export function StakeModal({
                 ref={confirmButtonRef}
                 onClick={handleConfirm}
                 className="flex-1 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
-                disabled={
-                  submitting ||
-                  !stakeAmount ||
-                  parsedAmount < MIN_STAKE ||
-                  balanceAfter < 0
-                }
+                disabled={(() => {
+                  if (submitting) return true;
+                  if (isAmm && ammMode === "sell") {
+                    return !parsedSellShares || parsedSellShares <= 0 || parsedSellShares > ammNetShares + 1e-6;
+                  }
+                  return !stakeAmount || parsedAmount < MIN_STAKE || balanceAfter < 0;
+                })()}
                 data-testid="button-confirm-stake"
               >
                 {submitting ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
-                    Placing…
+                    {isAmm && ammMode === "sell" ? "Selling…" : "Placing…"}
                   </>
                 ) : (
-                  "Confirm"
+                  isAmm && ammMode === "sell" ? "Sell" : (isAmm ? "Buy" : "Confirm")
                 )}
               </Button>
             )

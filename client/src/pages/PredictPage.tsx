@@ -1621,6 +1621,8 @@ export default function PredictPage() {
           activeParticipantCount: Number(m.activeParticipantCount || 0),
           recentParticipants: m.recentParticipants || [],
           bettingCutoff: m.bettingCutoff || null,
+          engine: m.engine ?? "parimutuel",
+          ammState: m.ammState ?? null,
         } as PredictionMarket;
       });
     }
@@ -1664,6 +1666,8 @@ export default function PredictPage() {
           bettingCutoff: m.bettingCutoff || null,
           modelP1Percent: typeof m.modelP1Percent === "number" ? m.modelP1Percent : undefined,
           modelConfidence: m.modelConfidence ?? undefined,
+          engine: m.engine ?? "parimutuel",
+          ammState: m.ammState ?? null,
         } as HeadToHeadMarket;
       });
     }
@@ -2135,6 +2139,7 @@ export default function PredictPage() {
       choice: choice === "up" ? "Trend Score UP" : "Trend Score DOWN",
       marketName: market.personName,
       marketId: market.id,
+      entryId,
       startScore: market.baselineScore,
       currentScore: market.currentScore,
       crowdSentiment: choice === "up" ? market.upPoolPercent : 100 - market.upPoolPercent,
@@ -2147,6 +2152,8 @@ export default function PredictPage() {
       bettingCutoff: market.bettingCutoff,
       isTopUp,
       existingStake: isTopUp ? existing?.stakeAmount : undefined,
+      engine: market.engine === "amm" ? "amm" : "parimutuel",
+      ammState: market.ammState ?? null,
     });
     openStakeModal();
   };
@@ -2212,6 +2219,8 @@ export default function PredictPage() {
       marketStartAt: market.startAt ?? undefined,
       isTopUp,
       existingStake: isTopUp ? existing?.stakeAmount : undefined,
+      engine: market.engine === "amm" ? "amm" : "parimutuel",
+      ammState: market.ammState ?? null,
     });
     openStakeModal();
   };

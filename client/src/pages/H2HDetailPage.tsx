@@ -30,6 +30,12 @@ import { computePayoutMultiplier, computeEarlyBirdMultiplier } from "@/lib/parim
 import { goBack } from "@/lib/goBack";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import {
+  type ApiAmmStateBlock,
+  pricesFor,
+  priceToPercent,
+  snapshotFromApi,
+} from "@/lib/ammClient";
+import {
   ArrowLeft,
   Swords,
   Clock,
@@ -39,6 +45,7 @@ import {
   Shield,
   Crown,
   Zap,
+  Activity,
 } from "lucide-react";
 
 interface HydratedH2H {
@@ -59,6 +66,19 @@ interface HydratedH2H {
   startAt?: string;
   endAt?: string;
   bettingCutoff?: string | null;
+  engine: "parimutuel" | "amm";
+  ammState: ApiAmmStateBlock | null;
+}
+
+interface AmmPositionRow {
+  entryId: string;
+  entryLabel: string;
+  entryResolutionStatus?: string;
+  netShares: number;
+  netCreditsIn: number;
+  avgEntryPrice: number;
+  currentPrice: number;
+  currentValue: number;
 }
 
 export default function H2HDetailPage() {
@@ -139,6 +159,21 @@ export default function H2HDetailPage() {
     );
     const totalParticipants = Number(market.activeParticipantCount || 0) || 0;
 
+    const engine: "parimutuel" | "amm" = market.engine === "amm" ? "amm" : "parimutuel";
+    const ammState: ApiAmmStateBlock | null = market.ammState ?? null;
+
+    let person1Percent: number;
+    if (engine === "amm" && ammState) {
+      const snap = snapshotFromApi(ammState);
+      const prices = snap ? pricesFor(snap) : null;
+      const p1Price = prices && e1.id ? Number(prices[e1.id] ?? 0) : 0;
+      const p2Price = prices && e2.id ? Number(prices[e2.id] ?? 0) : 0;
+      const sumP = p1Price + p2Price;
+      person1Percent = sumP > 0 ? Math.round((p1Price / sumP) * 100) : 50;
+    } else {
+      person1Percent = s1 + s2 === 0 ? 50 : Math.round((s1 / total) * 100);
+    }
+
     return {
       title: market.title || `${p1.name || "?"} vs ${p2.name || "?"}`,
       person1: {
@@ -161,14 +196,45 @@ export default function H2HDetailPage() {
       totalPool,
       person1Stake: s1,
       person2Stake: s2,
-      person1Percent: s1 + s2 === 0 ? 50 : Math.round((s1 / total) * 100),
+      person1Percent,
       totalParticipants,
       tieRule: market.tieRule || "refund",
       startAt: market.startAt,
       endAt: market.endAt,
       bettingCutoff: market.bettingCutoff || null,
+      engine,
+      ammState,
     };
   }, [market]);
+
+  const isAmm = hydrated?.engine === "amm";
+
+  const { data: ammPositionData } = useQuery<{ positions: AmmPositionRow[] }>({
+    queryKey: ["/api/markets", marketId, "amm-position"],
+    enabled: !!user && !!marketId && !!isAmm,
+    refetchInterval: (query) => {
+      if (typeof document !== "undefined" && document.hidden) return false;
+      const status = (query.state.data as any)?.marketStatus;
+      if (status && status !== "OPEN") return false;
+      return 30_000;
+    },
+  });
+
+  const ammPositionByEntry = useMemo(() => {
+    const map = new Map<string, AmmPositionRow>();
+    for (const p of ammPositionData?.positions ?? []) {
+      map.set(p.entryId, p);
+    }
+    return map;
+  }, [ammPositionData]);
+
+  const ammNetSharesFor = useCallback(
+    (entryId: string | undefined) => {
+      if (!entryId) return 0;
+      return Number(ammPositionByEntry.get(entryId)?.netShares ?? 0);
+    },
+    [ammPositionByEntry],
+  );
 
   const userMarketBets = useMemo(() => {
     if (!userBetsData || !marketId) return [] as any[];
@@ -234,10 +300,11 @@ export default function H2HDetailPage() {
         : (pickedStake / userStakeTotal) * hydrated.totalPool;
       const estimatedPayout = computePayoutMultiplier(hydrated.totalPool, pickedPool);
       const isTopUp = !!userPickSide;
+      const entryId = person === 1 ? hydrated.person1EntryId : hydrated.person2EntryId;
       setPendingSelection({
         type: "h2h",
         marketId,
-        entryId: person === 1 ? hydrated.person1EntryId : hydrated.person2EntryId,
+        entryId,
         choice: picked.name,
         marketName: hydrated.title,
         personName: picked.name,
@@ -252,11 +319,25 @@ export default function H2HDetailPage() {
         bettingCutoff: hydrated.bettingCutoff,
         isTopUp,
         existingStake: isTopUp ? userPickTotalStake : undefined,
+        engine: hydrated.engine,
+        ammState: hydrated.ammState,
+        ammNetShares: hydrated.engine === "amm" ? ammNetSharesFor(entryId) : 0,
       });
       setStakeModalOpen(true);
     },
-    [hydrated, isMarketClosed, userPickSide, marketId, userPickTotalStake]
+    [hydrated, isMarketClosed, userPickSide, marketId, userPickTotalStake, ammNetSharesFor]
   );
+
+  const invalidateAfterTrade = useCallback(async () => {
+    await Promise.all([
+      refreshProfile?.(),
+      queryClient.invalidateQueries({ queryKey: ["/api/native-markets/h2h"] }),
+      queryClient.invalidateQueries({ queryKey: ["/api/me/predictions"] }),
+      queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
+      queryClient.invalidateQueries({ queryKey: ["/api/markets", marketId, "my-position"] }),
+      queryClient.invalidateQueries({ queryKey: ["/api/markets", marketId, "amm-position"] }),
+    ]);
+  }, [queryClient, refreshProfile, marketId]);
 
   const betMutation = useMutation({
     mutationFn: async ({ entryId, stakeAmount }: { entryId: string; stakeAmount: number }) => {
@@ -276,17 +357,36 @@ export default function H2HDetailPage() {
       });
       setStakeModalOpen(false);
       setPendingSelection(null);
-      await Promise.all([
-        refreshProfile?.(),
-        queryClient.invalidateQueries({ queryKey: ["/api/native-markets/h2h"] }),
-        queryClient.invalidateQueries({ queryKey: ["/api/me/predictions"] }),
-        queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
-        queryClient.invalidateQueries({ queryKey: ["/api/markets", marketId, "my-position"] }),
-      ]);
+      await invalidateAfterTrade();
     },
     onError: (err: Error) => {
       hapticError();
       const { title, description } = parseApiError(err, "Failed to place prediction");
+      toast.error(title, { description });
+    },
+  });
+
+  const sellMutation = useMutation({
+    mutationFn: async ({ entryId, shares }: { entryId: string; shares: number }) => {
+      const res = await apiRequest("POST", `/api/native-markets/${marketId}/bet`, {
+        entryId,
+        actionType: "sell",
+        shares,
+      });
+      return res.json();
+    },
+    onSuccess: async () => {
+      hapticSuccess();
+      toast("Position sold", {
+        description: "Proceeds have been credited to your wallet.",
+      });
+      setStakeModalOpen(false);
+      setPendingSelection(null);
+      await invalidateAfterTrade();
+    },
+    onError: (err: Error) => {
+      hapticError();
+      const { title, description } = parseApiError(err, "Failed to sell position");
       toast.error(title, { description });
     },
   });
@@ -300,6 +400,48 @@ export default function H2HDetailPage() {
       });
     },
     [pendingSelection, betMutation]
+  );
+
+  const handleConfirmAmmSell = useCallback(
+    async (shares: number) => {
+      if (!pendingSelection?.entryId) return;
+      await sellMutation.mutateAsync({
+        entryId: pendingSelection.entryId,
+        shares,
+      });
+    },
+    [pendingSelection, sellMutation]
+  );
+
+  const openSellModal = useCallback(
+    (person: 1 | 2) => {
+      if (!hydrated || !isAmm) return;
+      const picked = person === 1 ? hydrated.person1 : hydrated.person2;
+      const opponent = person === 1 ? hydrated.person2 : hydrated.person1;
+      const entryId = person === 1 ? hydrated.person1EntryId : hydrated.person2EntryId;
+      const sentiment = person === 1 ? hydrated.person1Percent : 100 - hydrated.person1Percent;
+      setPendingSelection({
+        type: "h2h",
+        marketId,
+        entryId,
+        choice: picked.name,
+        marketName: hydrated.title,
+        personName: picked.name,
+        opponentName: opponent.name,
+        currentScore: picked.currentScore,
+        opponentScore: opponent.currentScore,
+        crowdSentiment: sentiment,
+        poolTotal: hydrated.totalPool,
+        tieRule: hydrated.tieRule ?? "refund",
+        endAt: hydrated.endAt,
+        bettingCutoff: hydrated.bettingCutoff,
+        engine: hydrated.engine,
+        ammState: hydrated.ammState,
+        ammNetShares: ammNetSharesFor(entryId),
+      });
+      setStakeModalOpen(true);
+    },
+    [hydrated, isAmm, marketId, ammNetSharesFor],
   );
 
   const { timeRemaining } = marketState;
@@ -532,6 +674,92 @@ export default function H2HDetailPage() {
               : null
           }
         />
+
+        {/* AMM live probability + per-side position card. Surfaces
+            netShares + avg entry price + current value, plus an
+            inline "Sell" button so users can close out without
+            hunting through MyPredictions. */}
+        {isAmm && (() => {
+          const ammSnap = snapshotFromApi(hydrated.ammState);
+          const ammPriceMap = ammSnap ? pricesFor(ammSnap) : null;
+          const p1Price = ammPriceMap && hydrated.person1EntryId ? Number(ammPriceMap[hydrated.person1EntryId] ?? 0) : 0;
+          const p2Price = ammPriceMap && hydrated.person2EntryId ? Number(ammPriceMap[hydrated.person2EntryId] ?? 0) : 0;
+          const p1Pos = hydrated.person1EntryId ? ammPositionByEntry.get(hydrated.person1EntryId) : undefined;
+          const p2Pos = hydrated.person2EntryId ? ammPositionByEntry.get(hydrated.person2EntryId) : undefined;
+          const hasAnyPosition = (p1Pos && p1Pos.netShares > 1e-6) || (p2Pos && p2Pos.netShares > 1e-6);
+
+          return (
+            <Card className="border-emerald-500/30 dark:border-emerald-500/20">
+              <div className="p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-sm font-semibold flex items-center gap-1.5">
+                    <Activity className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                    Live Market
+                  </h2>
+                  <Badge variant="outline" className="text-emerald-600 dark:text-emerald-400 border-emerald-500/40 dark:border-emerald-500/30 text-[10px]">
+                    LIVE
+                  </Badge>
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-center">
+                  <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 p-3">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{smartName(hydrated.person1.name)}</p>
+                    <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                      {priceToPercent(p1Price, 0)}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {p1Price.toFixed(3)} cr / share
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-purple-500/30 bg-purple-500/5 p-3">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{smartName(hydrated.person2.name)}</p>
+                    <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                      {priceToPercent(p2Price, 0)}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {p2Price.toFixed(3)} cr / share
+                    </p>
+                  </div>
+                </div>
+
+                {hasAnyPosition && (
+                  <div className="space-y-2 pt-2 border-t border-border/40">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Your position</p>
+                    {[
+                      { person: hydrated.person1, pos: p1Pos, side: 1 as const },
+                      { person: hydrated.person2, pos: p2Pos, side: 2 as const },
+                    ].map(({ person, pos, side }) => {
+                      if (!pos || pos.netShares <= 1e-6) return null;
+                      return (
+                        <div key={side} className="flex items-center justify-between gap-2 rounded-lg bg-muted/30 px-3 py-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-semibold truncate">{smartName(person.name)}</p>
+                            <p className="text-[11px] text-muted-foreground">
+                              {pos.netShares.toFixed(2)} shares · avg {pos.avgEntryPrice.toFixed(3)} cr
+                            </p>
+                            <p className="text-[11px] text-muted-foreground">
+                              ≈ {pos.currentValue.toFixed(2)} cr now · pays {pos.netShares.toFixed(2)} cr if win
+                            </p>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={isMarketClosed}
+                            onClick={() => openSellModal(side)}
+                          >
+                            Sell
+                          </Button>
+                        </div>
+                      );
+                    })}
+                    <p className="text-[10px] text-muted-foreground text-center">
+                      Current value is approximate — actual sell proceeds vary slightly with price impact.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </Card>
+          );
+        })()}
 
         {/* Path-to-win callout — mirrors the WhatNeedsToHappen pattern
             from Up/Down so users know exactly what gap their pick has
@@ -767,7 +995,7 @@ export default function H2HDetailPage() {
                   </Button>
                 </ClosedMarketActionTrigger>
               </div>
-              {!isMarketClosed && (() => {
+              {!isMarketClosed && !isAmm && (() => {
                 const startRef = hydrated?.endAt ? new Date(new Date(hydrated.endAt).getTime() - 7 * 24 * 60 * 60 * 1000).toISOString() : null;
                 const boost = computeEarlyBirdMultiplier(new Date(), startRef, hydrated?.bettingCutoff);
                 if (boost <= 1.05) return null;
@@ -778,6 +1006,12 @@ export default function H2HDetailPage() {
                   </p>
                 );
               })()}
+              {!isMarketClosed && isAmm && (
+                <p className="text-[11px] text-emerald-700 dark:text-emerald-400 text-center mt-2 flex items-center justify-center gap-1">
+                  <Activity className="h-3.5 w-3.5" />
+                  Live LMSR pricing — trade until 5 minutes before resolution
+                </p>
+              )}
             </>
           )}
         </div>
@@ -792,6 +1026,7 @@ export default function H2HDetailPage() {
           setPendingSelection(null);
         }}
         onConfirm={handleConfirmStake}
+        onConfirmAmmSell={isAmm ? handleConfirmAmmSell : undefined}
         walletBalance={walletCredits}
       />
     </div>

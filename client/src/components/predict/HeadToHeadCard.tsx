@@ -9,8 +9,9 @@ import type { ParticipantPreview } from "@/components/predict/ParticipantAvatarS
 import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { cn } from "@/lib/utils";
 import { multiplierFromPercent, formatMultiplier, computeEarlyBirdMultiplier } from "@/lib/parimutuel";
+import { type ApiAmmStateBlock, pricesFor, snapshotFromApi } from "@/lib/ammClient";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Check, ChevronRight, Zap } from "lucide-react";
+import { Activity, Check, ChevronRight, Zap } from "lucide-react";
 import { Link } from "wouter";
 import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
 
@@ -42,6 +43,13 @@ export interface HeadToHeadMarket {
   modelP1Percent?: number;
   /** Confidence bucket derived from the gap from 50/50. */
   modelConfidence?: "low" | "medium" | "high";
+  /** Phase 4: market engine — 'amm' flips the card into Polymarket-style
+   *  live probability rendering; 'parimutuel' (default) keeps the
+   *  pari-mutuel multipliers + pool view. */
+  engine?: "parimutuel" | "amm" | string | null;
+  /** Phase 4: live AMM state snapshot from the list endpoint. Used to
+   *  compute the live probability bar for AMM markets. */
+  ammState?: ApiAmmStateBlock | null;
 }
 
 export function smartName(fullName: string): string {
@@ -120,6 +128,26 @@ export function HeadToHeadCard({
       : "bg-[#7C3AED]/90 text-white border border-[#7C3AED]";
   const isHot = market.totalPool > 5000 || (market.totalBets ?? market.activeParticipantCount ?? 0) > 50;
 
+  // Phase 4: AMM markets render a live LMSR probability instead of the
+  // pari-mutuel pool ratio. We override `person1Percent` from the
+  // current AMM prices so the existing bar + percent labels just work
+  // without per-callsite changes.
+  const isAmm = market.engine === "amm";
+  const ammSnapshot = isAmm ? snapshotFromApi(market.ammState ?? null) : null;
+  const ammPrices = ammSnapshot ? pricesFor(ammSnapshot) : null;
+  let person1Percent = market.person1Percent;
+  if (isAmm && ammPrices && market.person1EntryId && market.person2EntryId) {
+    const p1 = Number(ammPrices[market.person1EntryId] ?? 0);
+    const p2 = Number(ammPrices[market.person2EntryId] ?? 0);
+    const total = p1 + p2;
+    if (total > 0) {
+      person1Percent = Math.round((p1 / total) * 100);
+    }
+  }
+  const person2Percent = 100 - person1Percent;
+  const ammP1Price = isAmm && ammPrices && market.person1EntryId ? ammPrices[market.person1EntryId] : null;
+  const ammP2Price = isAmm && ammPrices && market.person2EntryId ? ammPrices[market.person2EntryId] : null;
+
   return (
     <PredictCard testId={`card-h2h-${market.id}`} className={`relative overflow-hidden max-w-sm mx-auto ${isMarketClosed && !hasPicked ? 'opacity-75' : ''}`}>
       <div className="absolute inset-0 pointer-events-none">
@@ -138,7 +166,12 @@ export function HeadToHeadCard({
                 Hot
               </Badge>
             )}
-            {!isMarketClosed && (() => {
+            {isAmm && !isMarketClosed && (
+              <Badge variant="outline" className="text-emerald-600 dark:text-emerald-400 border-emerald-500/40 dark:border-emerald-500/30 text-[10px]">
+                <Activity className="h-3 w-3 mr-0.5" />LIVE
+              </Badge>
+            )}
+            {!isAmm && !isMarketClosed && (() => {
               const startRef = market.startAt ?? (market.endAt ? new Date(new Date(market.endAt).getTime() - 7 * 24 * 60 * 60 * 1000).toISOString() : null);
               const boost = computeEarlyBirdMultiplier(new Date(), startRef, market.bettingCutoff);
               if (boost <= 1.05) return null;
@@ -246,7 +279,7 @@ export function HeadToHeadCard({
                 >
                   <p className="text-sm font-semibold text-center">{smartName(market.person1.name)}</p>
                   <span className="text-[10px] font-mono text-muted-foreground">{market.person1.currentScore?.toLocaleString('en-US') || ''}</span>
-                  <span className="text-xs text-blue-600 dark:text-blue-400 font-semibold">{market.person1Percent}%</span>
+                  <span className="text-xs text-blue-600 dark:text-blue-400 font-semibold">{person1Percent}%</span>
                 </div>
               </ClosedMarketActionTrigger>
             );
@@ -267,7 +300,7 @@ export function HeadToHeadCard({
                 >
                   <p className="text-sm font-semibold text-center">{smartName(market.person2.name)}</p>
                   <span className="text-[10px] font-mono text-muted-foreground">{market.person2.currentScore?.toLocaleString('en-US') || ''}</span>
-                  <span className="text-xs text-purple-600 dark:text-purple-400 font-semibold">{100 - market.person1Percent}%</span>
+                  <span className="text-xs text-purple-600 dark:text-purple-400 font-semibold">{person2Percent}%</span>
                 </div>
               </ClosedMarketActionTrigger>
             );
@@ -277,15 +310,15 @@ export function HeadToHeadCard({
         <div className="h-2 rounded-full overflow-hidden mb-2 flex">
           <div
             className="h-full bg-gradient-to-r from-blue-500 to-blue-400"
-            style={{ width: `${market.person1Percent}%` }}
+            style={{ width: `${person1Percent}%` }}
           />
           <div
             className="h-full bg-gradient-to-l from-purple-500 to-purple-400"
-            style={{ width: `${100 - market.person1Percent}%` }}
+            style={{ width: `${person2Percent}%` }}
           />
         </div>
 
-        {typeof market.modelP1Percent === "number" && (
+        {!isAmm && typeof market.modelP1Percent === "number" && (
           <div className="flex items-center justify-center mb-2">
             <Tooltip>
               <TooltipTrigger asChild>
@@ -318,20 +351,33 @@ export function HeadToHeadCard({
           </div>
         )}
 
-        <div className="flex items-center justify-center mb-2">
-          <span className="text-sm font-semibold text-violet-700 dark:text-violet-500">
-            Pool: {market.totalPool.toLocaleString('en-US')} credits
-          </span>
-        </div>
+        {!isAmm && (
+          <div className="flex items-center justify-center mb-2">
+            <span className="text-sm font-semibold text-violet-700 dark:text-violet-500">
+              Pool: {market.totalPool.toLocaleString('en-US')} credits
+            </span>
+          </div>
+        )}
 
-        <div className="flex items-center justify-between px-2 text-[11px] font-semibold mb-2">
-          <span className="text-blue-600 dark:text-blue-400">
-            {smartName(market.person1.name)} {formatMultiplier(multiplierFromPercent(market.person1Percent))}
-          </span>
-          <span className="text-purple-600 dark:text-purple-400">
-            {smartName(market.person2.name)} {formatMultiplier(multiplierFromPercent(100 - market.person1Percent))}
-          </span>
-        </div>
+        {isAmm && ammP1Price != null && ammP2Price != null ? (
+          <div className="flex items-center justify-between px-2 text-[11px] font-semibold mb-2">
+            <span className="text-blue-600 dark:text-blue-400">
+              {smartName(market.person1.name)} {ammP1Price.toFixed(3)} cr
+            </span>
+            <span className="text-purple-600 dark:text-purple-400">
+              {smartName(market.person2.name)} {ammP2Price.toFixed(3)} cr
+            </span>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between px-2 text-[11px] font-semibold mb-2">
+            <span className="text-blue-600 dark:text-blue-400">
+              {smartName(market.person1.name)} {formatMultiplier(multiplierFromPercent(person1Percent))}
+            </span>
+            <span className="text-purple-600 dark:text-purple-400">
+              {smartName(market.person2.name)} {formatMultiplier(multiplierFromPercent(person2Percent))}
+            </span>
+          </div>
+        )}
 
         <div className="mt-auto">
           {hasPicked ? (

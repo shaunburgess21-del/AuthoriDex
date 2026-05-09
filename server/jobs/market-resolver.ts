@@ -4,6 +4,7 @@ import { eq, and, sql, inArray, lte, gte, desc, asc } from "drizzle-orm";
 import { log } from "../log";
 import { calculateSettlementPayouts, computeEarlyBirdMultiplier } from "./settlement-utils";
 import { scoreResolvedMarket } from "../agents/performanceUpdater";
+import { resolveAmmMarket } from "../services/amm-resolver";
 import { getAiModel, getChatCompletionTokenLimit } from "../config/ai-models";
 import { gamificationService } from "../services/gamification";
 import { createNotification } from "../services/notifications";
@@ -706,9 +707,14 @@ async function resolveUpDown(market: any): Promise<"resolved" | "voided" | "bloc
     percentChange: openSnap.score > 0 ? ((closeSnap.score - openSnap.score) / openSnap.score * 100).toFixed(2) + "%" : "N/A",
   };
 
+  const isAmm = market.engine === "amm";
+
   if (closeSnap.score === openSnap.score) {
     const tieRule = market.tieRule || "refund";
-    if (tieRule === "up_wins" || tieRule === "down_wins") {
+
+    // Tie-as-winner rule (legacy parimutuel only — AMM markets always
+    // void on a tie since the LMSR price doesn't break ties for us).
+    if (!isAmm && (tieRule === "up_wins" || tieRule === "down_wins")) {
       const tieWinnerId = tieRule === "up_wins" ? upEntry.id : downEntry.id;
       const tieWinnerLabel = tieRule === "up_wins" ? "Up" : "Down";
       const result = await settleMarketBets(market.id, tieWinnerId, {
@@ -719,6 +725,23 @@ async function resolveUpDown(market: any): Promise<"resolved" | "voided" | "bloc
       scoreResolvedMarket(market.id, tieWinnerId).catch(e => log(`[MarketResolver] Agent scoring failed: ${e}`));
       return "resolved";
     }
+
+    if (isAmm) {
+      const ammResult = await resolveAmmMarket({ marketId: market.id, voidMarket: true, settledBy: null });
+      if ("error" in ammResult) {
+        log(`[MarketResolver] updown ${market.id}: AMM void failed: ${ammResult.error} ${ammResult.message}`);
+        return "blocked";
+      }
+      await db.update(predictionMarkets).set({
+        resolveMethod: "auto",
+        voidReason: "Tie — score unchanged",
+        resolutionNotes: JSON.stringify({ ...evidence, outcome: "void_tie", tieRule, engine: "amm" }),
+        updatedAt: new Date(),
+      }).where(eq(predictionMarkets.id, market.id));
+      log(`[MarketResolver] updown ${market.id}: AMM VOID (tie), house P&L=${ammResult.creditedToHouse}`);
+      return "voided";
+    }
+
     const refunded = await voidMarketBets(market.id);
     await db.update(predictionMarkets).set({
       status: "VOID",
@@ -734,6 +757,27 @@ async function resolveUpDown(market: any): Promise<"resolved" | "voided" | "bloc
 
   const winnerId = closeSnap.score > openSnap.score ? upEntry.id : downEntry.id;
   const winnerLabel = closeSnap.score > openSnap.score ? "Up" : "Down";
+
+  if (isAmm) {
+    const ammResult = await resolveAmmMarket({
+      marketId: market.id,
+      winnerEntryId: winnerId,
+      settledBy: null,
+    });
+    if ("error" in ammResult) {
+      log(`[MarketResolver] updown ${market.id}: AMM resolve failed: ${ammResult.error} ${ammResult.message}`);
+      return "blocked";
+    }
+    await db.update(predictionMarkets).set({
+      resolveMethod: "auto",
+      resolutionNotes: JSON.stringify({ ...evidence, outcome: winnerLabel, engine: "amm" }),
+      updatedAt: new Date(),
+    }).where(eq(predictionMarkets.id, market.id));
+    scoreResolvedMarket(market.id, winnerId).catch(e => log(`[MarketResolver] Agent scoring failed: ${e}`));
+    log(`[MarketResolver] updown ${market.id}: AMM ${winnerLabel} wins (${openSnap.score} → ${closeSnap.score}), payoutLiability=${ammResult.payoutLiability}, house P&L=${ammResult.creditedToHouse}, settledUsers=${ammResult.settledUserCount}`);
+    return "resolved";
+  }
+
   const result = await settleMarketBets(market.id, winnerId, {
     resolveMethod: "auto",
     resolutionNotes: JSON.stringify({ ...evidence, outcome: winnerLabel }),
@@ -772,9 +816,11 @@ async function resolveH2H(market: any): Promise<"resolved" | "voided" | "blocked
     entryB: { personId: entryB.personId, label: entryB.label, score: closeB.score, snapshotAt: closeB.capturedAt.toISOString() },
   };
 
+  const isAmm = market.engine === "amm";
+
   if (closeA.score === closeB.score) {
     const tieRule = market.tieRule || "refund";
-    if (tieRule === "up_wins" || tieRule === "down_wins") {
+    if (!isAmm && (tieRule === "up_wins" || tieRule === "down_wins")) {
       const tieWinner = tieRule === "up_wins" ? entryA : entryB;
       const result = await settleMarketBets(market.id, tieWinner.id, {
         resolveMethod: "auto",
@@ -784,6 +830,23 @@ async function resolveH2H(market: any): Promise<"resolved" | "voided" | "blocked
       scoreResolvedMarket(market.id, tieWinner.id).catch(e => log(`[MarketResolver] Agent scoring failed: ${e}`));
       return "resolved";
     }
+
+    if (isAmm) {
+      const ammResult = await resolveAmmMarket({ marketId: market.id, voidMarket: true, settledBy: null });
+      if ("error" in ammResult) {
+        log(`[MarketResolver] h2h ${market.id}: AMM void failed: ${ammResult.error} ${ammResult.message}`);
+        return "blocked";
+      }
+      await db.update(predictionMarkets).set({
+        resolveMethod: "auto",
+        voidReason: "Tie — identical scores",
+        resolutionNotes: JSON.stringify({ ...evidence, outcome: "void_tie", tieRule, engine: "amm" }),
+        updatedAt: new Date(),
+      }).where(eq(predictionMarkets.id, market.id));
+      log(`[MarketResolver] h2h ${market.id}: AMM VOID (tie at ${closeA.score}), house P&L=${ammResult.creditedToHouse}`);
+      return "voided";
+    }
+
     const refunded = await voidMarketBets(market.id);
     await db.update(predictionMarkets).set({
       status: "VOID",
@@ -798,6 +861,27 @@ async function resolveH2H(market: any): Promise<"resolved" | "voided" | "blocked
   }
 
   const winner = closeA.score > closeB.score ? entryA : entryB;
+
+  if (isAmm) {
+    const ammResult = await resolveAmmMarket({
+      marketId: market.id,
+      winnerEntryId: winner.id,
+      settledBy: null,
+    });
+    if ("error" in ammResult) {
+      log(`[MarketResolver] h2h ${market.id}: AMM resolve failed: ${ammResult.error} ${ammResult.message}`);
+      return "blocked";
+    }
+    await db.update(predictionMarkets).set({
+      resolveMethod: "auto",
+      resolutionNotes: JSON.stringify({ ...evidence, outcome: winner.label, engine: "amm" }),
+      updatedAt: new Date(),
+    }).where(eq(predictionMarkets.id, market.id));
+    scoreResolvedMarket(market.id, winner.id).catch(e => log(`[MarketResolver] Agent scoring failed: ${e}`));
+    log(`[MarketResolver] h2h ${market.id}: AMM ${winner.label} wins (${closeA.score} vs ${closeB.score}), payoutLiability=${ammResult.payoutLiability}, house P&L=${ammResult.creditedToHouse}, settledUsers=${ammResult.settledUserCount}`);
+    return "resolved";
+  }
+
   const result = await settleMarketBets(market.id, winner.id, {
     resolveMethod: "auto",
     resolutionNotes: JSON.stringify({ ...evidence, outcome: winner.label }),

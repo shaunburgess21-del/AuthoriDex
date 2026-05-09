@@ -32,6 +32,12 @@ import { getUpDownWinningState, UP_DOWN_STATE_LABELS } from "@/lib/updownState";
 import { goBack } from "@/lib/goBack";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import {
+  type ApiAmmStateBlock,
+  pricesFor,
+  priceToPercent,
+  snapshotFromApi,
+} from "@/lib/ammClient";
+import {
   ArrowLeft,
   TrendingUp,
   TrendingDown,
@@ -41,7 +47,18 @@ import {
   BarChart3,
   ListChecks,
   Zap,
+  Activity,
 } from "lucide-react";
+
+interface AmmPositionRow {
+  entryId: string;
+  entryLabel: string;
+  netShares: number;
+  netCreditsIn: number;
+  avgEntryPrice: number;
+  currentPrice: number;
+  currentValue: number;
+}
 
 export default function UpDownDetailPage() {
   const [, params] = useRoute("/predict/updown/:marketId");
@@ -127,6 +144,19 @@ export default function UpDownDetailPage() {
     const totalPool = upStake + downStake;
     const totalParticipants = Number(market.activeParticipantCount || 0) || 0;
 
+    const engine: "parimutuel" | "amm" = market.engine === "amm" ? "amm" : "parimutuel";
+    const ammState: ApiAmmStateBlock | null = market.ammState ?? null;
+
+    let resolvedUpPercent = upPercent || 50;
+    if (engine === "amm" && ammState) {
+      const snap = snapshotFromApi(ammState);
+      const prices = snap ? pricesFor(snap) : null;
+      const upPrice = prices && upEntry?.id ? Number(prices[upEntry.id] ?? 0) : 0;
+      const downPrice = prices && downEntry?.id ? Number(prices[downEntry.id] ?? 0) : 0;
+      const sumP = upPrice + downPrice;
+      resolvedUpPercent = sumP > 0 ? Math.round((upPrice / sumP) * 100) : 50;
+    }
+
     return {
       personName: person.name || market.title?.replace(/: Up or Down\?$/, "") || "Unknown",
       personAvatar: person.avatar || "",
@@ -138,15 +168,46 @@ export default function UpDownDetailPage() {
       downEntryId: downEntry?.id,
       upMultiplier,
       downMultiplier,
-      upPercent: upPercent || 50,
+      upPercent: resolvedUpPercent,
       totalPool,
       totalParticipants,
       tieRule: market.tieRule || "refund",
       startAt: market.startAt,
       endAt: market.endAt,
       bettingCutoff: market.bettingCutoff || null,
+      engine,
+      ammState,
     };
   }, [market]);
+
+  const isAmm = hydrated?.engine === "amm";
+
+  const { data: ammPositionData } = useQuery<{ positions: AmmPositionRow[]; marketStatus?: string }>({
+    queryKey: ["/api/markets", marketId, "amm-position"],
+    enabled: !!user && !!marketId && !!isAmm,
+    refetchInterval: (query) => {
+      if (typeof document !== "undefined" && document.hidden) return false;
+      const status = (query.state.data as any)?.marketStatus;
+      if (status && status !== "OPEN") return false;
+      return 30_000;
+    },
+  });
+
+  const ammPositionByEntry = useMemo(() => {
+    const map = new Map<string, AmmPositionRow>();
+    for (const p of ammPositionData?.positions ?? []) {
+      map.set(p.entryId, p);
+    }
+    return map;
+  }, [ammPositionData]);
+
+  const ammNetSharesFor = useCallback(
+    (entryId: string | undefined) => {
+      if (!entryId) return 0;
+      return Number(ammPositionByEntry.get(entryId)?.netShares ?? 0);
+    },
+    [ammPositionByEntry],
+  );
 
   const userMarketBets = useMemo(() => {
     if (!userBetsData || !marketId) return [] as any[];
@@ -191,10 +252,11 @@ export default function UpDownDetailPage() {
         return;
       }
       const isTopUp = !!userPick;
+      const entryId = choice === "up" ? hydrated.upEntryId : hydrated.downEntryId;
       setPendingSelection({
         type: "updown",
         marketId,
-        entryId: choice === "up" ? hydrated.upEntryId : hydrated.downEntryId,
+        entryId,
         choice: choice.toUpperCase(),
         marketName: `${hydrated.personName}: Up or Down?`,
         personName: hydrated.personName,
@@ -210,11 +272,25 @@ export default function UpDownDetailPage() {
         bettingCutoff: hydrated.bettingCutoff,
         isTopUp,
         existingStake: isTopUp ? userPickTotalStake : undefined,
+        engine: hydrated.engine,
+        ammState: hydrated.ammState,
+        ammNetShares: hydrated.engine === "amm" ? ammNetSharesFor(entryId) : 0,
       });
       setStakeModalOpen(true);
     },
-    [hydrated, isMarketClosed, userPick, marketId, userPickTotalStake]
+    [hydrated, isMarketClosed, userPick, marketId, userPickTotalStake, ammNetSharesFor]
   );
+
+  const invalidateAfterTrade = useCallback(async () => {
+    await Promise.all([
+      refreshProfile?.(),
+      queryClient.invalidateQueries({ queryKey: ["/api/native-markets/updown"] }),
+      queryClient.invalidateQueries({ queryKey: ["/api/me/predictions"] }),
+      queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
+      queryClient.invalidateQueries({ queryKey: ["/api/markets", marketId, "my-position"] }),
+      queryClient.invalidateQueries({ queryKey: ["/api/markets", marketId, "amm-position"] }),
+    ]);
+  }, [queryClient, refreshProfile, marketId]);
 
   const betMutation = useMutation({
     mutationFn: async ({ entryId, stakeAmount }: { entryId: string; stakeAmount: number }) => {
@@ -234,17 +310,36 @@ export default function UpDownDetailPage() {
       });
       setStakeModalOpen(false);
       setPendingSelection(null);
-      await Promise.all([
-        refreshProfile?.(),
-        queryClient.invalidateQueries({ queryKey: ["/api/native-markets/updown"] }),
-        queryClient.invalidateQueries({ queryKey: ["/api/me/predictions"] }),
-        queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
-        queryClient.invalidateQueries({ queryKey: ["/api/markets", marketId, "my-position"] }),
-      ]);
+      await invalidateAfterTrade();
     },
     onError: (err: Error) => {
       hapticError();
       const { title, description } = parseApiError(err, "Failed to place prediction");
+      toast.error(title, { description });
+    },
+  });
+
+  const sellMutation = useMutation({
+    mutationFn: async ({ entryId, shares }: { entryId: string; shares: number }) => {
+      const res = await apiRequest("POST", `/api/native-markets/${marketId}/bet`, {
+        entryId,
+        actionType: "sell",
+        shares,
+      });
+      return res.json();
+    },
+    onSuccess: async () => {
+      hapticSuccess();
+      toast("Position sold", {
+        description: "Proceeds have been credited to your wallet.",
+      });
+      setStakeModalOpen(false);
+      setPendingSelection(null);
+      await invalidateAfterTrade();
+    },
+    onError: (err: Error) => {
+      hapticError();
+      const { title, description } = parseApiError(err, "Failed to sell position");
       toast.error(title, { description });
     },
   });
@@ -258,6 +353,46 @@ export default function UpDownDetailPage() {
       });
     },
     [pendingSelection, betMutation]
+  );
+
+  const handleConfirmAmmSell = useCallback(
+    async (shares: number) => {
+      if (!pendingSelection?.entryId) return;
+      await sellMutation.mutateAsync({
+        entryId: pendingSelection.entryId,
+        shares,
+      });
+    },
+    [pendingSelection, sellMutation]
+  );
+
+  const openSellModal = useCallback(
+    (choice: "up" | "down") => {
+      if (!hydrated || !isAmm) return;
+      const entryId = choice === "up" ? hydrated.upEntryId : hydrated.downEntryId;
+      setPendingSelection({
+        type: "updown",
+        marketId,
+        entryId,
+        choice: choice.toUpperCase(),
+        marketName: `${hydrated.personName}: Up or Down?`,
+        personName: hydrated.personName,
+        startScore: hydrated.baselineScore,
+        currentScore: hydrated.currentScore,
+        baselineScore: hydrated.baselineScore,
+        baselineTimestamp: hydrated.startAt,
+        crowdSentiment: choice === "up" ? hydrated.upPercent : 100 - hydrated.upPercent,
+        poolTotal: hydrated.totalPool,
+        tieRule: hydrated.tieRule,
+        endAt: hydrated.endAt,
+        bettingCutoff: hydrated.bettingCutoff,
+        engine: hydrated.engine,
+        ammState: hydrated.ammState,
+        ammNetShares: ammNetSharesFor(entryId),
+      });
+      setStakeModalOpen(true);
+    },
+    [hydrated, isAmm, marketId, ammNetSharesFor],
   );
 
   const handleDirectionChange = useCallback(
@@ -427,6 +562,92 @@ export default function UpDownDetailPage() {
           </div>
         </Card>
 
+        {/* AMM live probability + per-side position card. Surfaces
+            netShares + avg entry price + current value, plus an
+            inline "Sell" button so users can close out without
+            hunting through MyPredictions. */}
+        {isAmm && (() => {
+          const ammSnap = snapshotFromApi(hydrated.ammState);
+          const ammPriceMap = ammSnap ? pricesFor(ammSnap) : null;
+          const upPrice = ammPriceMap && hydrated.upEntryId ? Number(ammPriceMap[hydrated.upEntryId] ?? 0) : 0;
+          const downPrice = ammPriceMap && hydrated.downEntryId ? Number(ammPriceMap[hydrated.downEntryId] ?? 0) : 0;
+          const upPos = hydrated.upEntryId ? ammPositionByEntry.get(hydrated.upEntryId) : undefined;
+          const downPos = hydrated.downEntryId ? ammPositionByEntry.get(hydrated.downEntryId) : undefined;
+          const hasAnyPosition = (upPos && upPos.netShares > 1e-6) || (downPos && downPos.netShares > 1e-6);
+
+          return (
+            <Card className="border-emerald-500/30 dark:border-emerald-500/20">
+              <div className="p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-sm font-semibold flex items-center gap-1.5">
+                    <Activity className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                    Live Market
+                  </h2>
+                  <Badge variant="outline" className="text-emerald-600 dark:text-emerald-400 border-emerald-500/40 dark:border-emerald-500/30 text-[10px]">
+                    LIVE
+                  </Badge>
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-center">
+                  <div className="rounded-lg border border-green-500/30 bg-green-500/5 p-3">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Up</p>
+                    <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+                      {priceToPercent(upPrice, 0)}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {upPrice.toFixed(3)} cr / share
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-red-500/30 bg-red-500/5 p-3">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Down</p>
+                    <p className="text-2xl font-bold text-red-600 dark:text-red-400">
+                      {priceToPercent(downPrice, 0)}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {downPrice.toFixed(3)} cr / share
+                    </p>
+                  </div>
+                </div>
+
+                {hasAnyPosition && (
+                  <div className="space-y-2 pt-2 border-t border-border/40">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Your position</p>
+                    {[
+                      { label: "UP", pos: upPos, side: "up" as const },
+                      { label: "DOWN", pos: downPos, side: "down" as const },
+                    ].map(({ label, pos, side }) => {
+                      if (!pos || pos.netShares <= 1e-6) return null;
+                      return (
+                        <div key={side} className="flex items-center justify-between gap-2 rounded-lg bg-muted/30 px-3 py-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-semibold">{label} on {firstName}</p>
+                            <p className="text-[11px] text-muted-foreground">
+                              {pos.netShares.toFixed(2)} shares · avg {pos.avgEntryPrice.toFixed(3)} cr
+                            </p>
+                            <p className="text-[11px] text-muted-foreground">
+                              ≈ {pos.currentValue.toFixed(2)} cr now · pays {pos.netShares.toFixed(2)} cr if win
+                            </p>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={isMarketClosed}
+                            onClick={() => openSellModal(side)}
+                          >
+                            Sell
+                          </Button>
+                        </div>
+                      );
+                    })}
+                    <p className="text-[10px] text-muted-foreground text-center">
+                      Current value is approximate — actual sell proceeds vary slightly with price impact.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </Card>
+          );
+        })()}
+
         {/* Your Position — unified across all detail pages so the "what
             am I in for" panel feels the same on community, jackpot,
             updown, h2h, and race. We hide the CTA on Up/Down because
@@ -510,9 +731,11 @@ export default function UpDownDetailPage() {
                     <p className="text-sm font-semibold text-green-700 dark:text-green-500">
                       UP {hydrated.upPercent}%
                     </p>
-                    <p className="text-[10px] text-muted-foreground">
-                      {hydrated.upMultiplier}x payout
-                    </p>
+                    {!isAmm && (
+                      <p className="text-[10px] text-muted-foreground">
+                        {hydrated.upMultiplier}x payout
+                      </p>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -520,9 +743,11 @@ export default function UpDownDetailPage() {
                     <p className="text-sm font-semibold text-red-700 dark:text-red-500 text-right">
                       DOWN {100 - hydrated.upPercent}%
                     </p>
-                    <p className="text-[10px] text-muted-foreground text-right">
-                      {hydrated.downMultiplier}x payout
-                    </p>
+                    {!isAmm && (
+                      <p className="text-[10px] text-muted-foreground text-right">
+                        {hydrated.downMultiplier}x payout
+                      </p>
+                    )}
                   </div>
                   <div className="h-8 w-8 rounded-full bg-red-500/25 dark:bg-red-500/20 border border-red-500/50 dark:border-red-500/40 flex items-center justify-center">
                     <TrendingDown className="h-4 w-4 text-red-700 dark:text-red-500" />
@@ -635,7 +860,7 @@ export default function UpDownDetailPage() {
                   </Button>
                 </ClosedMarketActionTrigger>
               </div>
-              {!isMarketClosed && (() => {
+              {!isMarketClosed && !isAmm && (() => {
                 const boost = computeEarlyBirdMultiplier(new Date(), hydrated?.startAt, hydrated?.bettingCutoff);
                 if (boost <= 1.05) return null;
                 return (
@@ -645,6 +870,12 @@ export default function UpDownDetailPage() {
                   </p>
                 );
               })()}
+              {!isMarketClosed && isAmm && (
+                <p className="text-[11px] text-emerald-700 dark:text-emerald-400 text-center mt-2 flex items-center justify-center gap-1">
+                  <Activity className="h-3.5 w-3.5" />
+                  Live LMSR pricing — trade until 5 minutes before resolution
+                </p>
+              )}
             </>
           )}
         </div>
@@ -659,6 +890,7 @@ export default function UpDownDetailPage() {
           setPendingSelection(null);
         }}
         onConfirm={handleConfirmStake}
+        onConfirmAmmSell={isAmm ? handleConfirmAmmSell : undefined}
         walletBalance={walletCredits}
         onDirectionChange={handleDirectionChange}
       />

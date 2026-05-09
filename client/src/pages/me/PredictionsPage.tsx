@@ -1377,6 +1377,131 @@ function PredictionsTabPanel({
 
 // ---------- Tab: Open ----------
 
+interface AmmOpenPosition {
+  marketId: string;
+  marketSlug: string;
+  marketTitle: string;
+  marketStatus: string;
+  marketType: string;
+  marketCadence: string;
+  marketCategory: string;
+  marketEndAt: string;
+  marketStartAt: string;
+  entryId: string;
+  entryLabel: string;
+  personName: string | null;
+  personAvatar: string | null;
+  netShares: number;
+  netCreditsIn: number;
+  avgEntryPrice: number;
+  currentPrice: number;
+  currentValue: number;
+}
+
+function formatAmmCountdown(iso: string): string {
+  if (!iso) return "";
+  const end = new Date(iso).getTime();
+  if (Number.isNaN(end)) return "";
+  const diff = end - Date.now();
+  if (diff <= 0) return "Resolving";
+  const minutes = Math.floor(diff / 60_000);
+  if (minutes < 60) return `${minutes}m left`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h left`;
+  const days = Math.floor(hours / 24);
+  return `${days}d left`;
+}
+
+function AmmOpenPositionCard({
+  position,
+  onView,
+}: {
+  position: AmmOpenPosition;
+  onView: () => void;
+}) {
+  const projectedPnl = position.netShares - position.netCreditsIn;
+  const directionLabel = position.entryLabel?.toUpperCase?.() ?? position.entryLabel;
+  return (
+    <Card
+      className={cn(
+        "group relative overflow-hidden cursor-pointer border-white/5 bg-card/60 backdrop-blur-sm",
+        "transition-all duration-150 border-l-2 border-l-emerald-500/60",
+        "hover:border-white/10 hover:-translate-y-0.5 hover:shadow-md hover:bg-accent/5",
+      )}
+      onClick={onView}
+      data-testid={`amm-open-${position.marketId}-${position.entryId}`}
+    >
+      <div className="relative p-4 sm:p-5 space-y-3">
+        <div className="flex items-start gap-3">
+          <div className="flex-1 min-w-0">
+            <p className="font-medium text-sm leading-snug line-clamp-2">
+              {position.marketTitle || "AMM market"}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Holding{" "}
+              <span className="text-foreground font-medium">
+                {position.netShares.toFixed(2)} shares
+              </span>{" "}
+              of{" "}
+              <span className="text-foreground font-medium">{directionLabel}</span>
+            </p>
+          </div>
+          <Badge className="bg-emerald-500/25 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border-emerald-500/40 dark:border-emerald-500/30 text-[10px] shrink-0">
+            LIVE
+          </Badge>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2 text-xs">
+          <div>
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Cost basis</p>
+            <p className="font-mono font-semibold">{position.netCreditsIn.toFixed(2)} cr</p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Now ≈</p>
+            <p className="font-mono font-semibold">{position.currentValue.toFixed(2)} cr</p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">If win</p>
+            <p className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">
+              {position.netShares.toFixed(2)} cr
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[11px] text-muted-foreground">
+            {formatAmmCountdown(position.marketEndAt)}
+          </span>
+          <Badge
+            variant="outline"
+            className={cn(
+              "h-5 gap-1 text-[10px] font-normal",
+              projectedPnl >= 0
+                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300"
+                : "border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-300",
+            )}
+          >
+            {projectedPnl >= 0 ? "+" : ""}
+            {projectedPnl.toFixed(2)} potential
+          </Badge>
+        </div>
+
+        <Button
+          size="sm"
+          variant="outline"
+          className="w-full"
+          onClick={(e) => {
+            e.stopPropagation();
+            onView();
+          }}
+        >
+          View / Sell
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
 function OpenTabPanel({
   openBets,
   isLoading,
@@ -1392,16 +1517,42 @@ function OpenTabPanel({
   isPending: boolean;
   setLocation: (to: string) => void;
 }) {
-  const totalStake = useMemo(
-    () => openBets.reduce((sum, p) => sum + (p.stakeAmount || 0), 0),
-    [openBets],
+  const { data: ammPositionsData, isLoading: isLoadingAmm } = useQuery<{ positions: AmmOpenPosition[] }>({
+    queryKey: ["/api/me/amm-positions"],
+    refetchInterval: (query) => {
+      if (typeof document !== "undefined" && document.hidden) return false;
+      return 60_000;
+    },
+  });
+  const ammPositions = useMemo(
+    () => (ammPositionsData?.positions ?? []).filter((p) => Math.abs(p.netShares) > 1e-6),
+    [ammPositionsData],
   );
-  const projectedPayout = useMemo(
-    () => openBets.reduce((sum, p) => sum + (p.potentialPayout || 0), 0),
+
+  // Don't double-count: AMM markets are aggregated via /amm-positions, so
+  // hide their per-bet rows in the open list. Parimutuel rows continue
+  // to render through MyPredictionCard with the existing projected-PnL
+  // framing.
+  const parimutuelOpenBets = useMemo(
+    () => openBets.filter((p) => (p.engine ?? "parimutuel") !== "amm"),
     [openBets],
   );
 
-  if (isLoading) {
+  const totalStake = useMemo(
+    () =>
+      parimutuelOpenBets.reduce((sum, p) => sum + (p.stakeAmount || 0), 0) +
+      ammPositions.reduce((sum, p) => sum + (p.netCreditsIn || 0), 0),
+    [parimutuelOpenBets, ammPositions],
+  );
+  const projectedPayout = useMemo(
+    () =>
+      parimutuelOpenBets.reduce((sum, p) => sum + (p.potentialPayout || 0), 0) +
+      ammPositions.reduce((sum, p) => sum + (p.netShares || 0), 0),
+    [parimutuelOpenBets, ammPositions],
+  );
+  const totalOpenCount = parimutuelOpenBets.length + ammPositions.length;
+
+  if (isLoading || isLoadingAmm) {
     return (
       <div className="space-y-3">
         {Array.from({ length: 3 }).map((_, i) => (
@@ -1411,7 +1562,7 @@ function OpenTabPanel({
     );
   }
 
-  if (openBets.length === 0) {
+  if (totalOpenCount === 0) {
     return (
       <Card className="p-10 text-center space-y-4">
         <div className="inline-flex items-center justify-center h-16 w-16 rounded-2xl bg-orange-500/10 mx-auto">
@@ -1433,7 +1584,7 @@ function OpenTabPanel({
       <div className="grid grid-cols-3 gap-3">
         <Card className="p-3 text-center space-y-1 border-white/5 bg-card/60 backdrop-blur-sm">
           <Flame className="h-4 w-4 mx-auto text-orange-500" />
-          <p className="text-2xl font-mono font-bold tabular-nums">{openBets.length}</p>
+          <p className="text-2xl font-mono font-bold tabular-nums">{totalOpenCount}</p>
           <p className="text-[10px] uppercase tracking-wide text-muted-foreground leading-tight">
             Open positions
           </p>
@@ -1459,7 +1610,26 @@ function OpenTabPanel({
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {openBets.map((p) => (
+        {ammPositions.map((p) => (
+          <AmmOpenPositionCard
+            key={`amm-${p.marketId}-${p.entryId}`}
+            position={p}
+            onView={() => {
+              const path =
+                p.marketType === "h2h"
+                  ? `/predict/h2h/${p.marketId}`
+                  : p.marketType === "updown"
+                    ? `/predict/updown/${p.marketId}`
+                    : p.marketType === "race" || p.marketType === "gainer"
+                      ? `/predict/race/${p.marketId}`
+                      : p.marketSlug
+                        ? `/predict/${p.marketSlug}`
+                        : null;
+              if (path) setLocation(path);
+            }}
+          />
+        ))}
+        {parimutuelOpenBets.map((p) => (
           <MyPredictionCard
             key={p.betId}
             prediction={p}
