@@ -1708,7 +1708,11 @@ export default function PersonDetailPage() {
             {/* Community Insights */}
             <div className="mb-8">
               <Suspense fallback={<ProfileLazyFallback />}>
-                <LazyCommunityInsights personId={person.id} personName={person.name} />
+                <LazyCommunityInsights
+                  personId={person.id}
+                  personName={person.name}
+                  focusContextTitle={person.name}
+                />
               </Suspense>
             </div>
           </>

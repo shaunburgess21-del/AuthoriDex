@@ -1,17 +1,18 @@
 import { useCallback, useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { CommentAdapter, CommentItem, ThreadedComment, VoteType } from "./types";
+import type { CommentSort } from "./CommentSortHeader";
 import { buildThreadedComments } from "./buildThreadedComments";
 
-export type CommentSort = "top" | "newest";
-
-export interface UseCommentThreadResult {
+export interface UseCommentThreadInfiniteResult {
   comments: CommentItem[];
-  /** Count of publicly visible comments (excludes soft-deleted rows). */
   visibleCount: number;
   threaded: ThreadedComment[];
   isLoading: boolean;
+  isFetchingNextPage: boolean;
+  hasNextPage: boolean;
+  fetchNextPage: () => void;
   sort: CommentSort;
   setSort: (s: CommentSort) => void;
   composerBody: string;
@@ -29,8 +30,8 @@ export interface UseCommentThreadResult {
   resetComposer: () => void;
 }
 
-/** Adapter-driven hook used by every comment surface (card detail, insights overlay, etc.). */
-export function useCommentThread(adapter: CommentAdapter): UseCommentThreadResult {
+/** Paginated comment thread for full-screen focus mode (deduped merge of all pages). */
+export function useCommentThreadInfinite(adapter: CommentAdapter): UseCommentThreadInfiniteResult {
   const queryClient = useQueryClient();
   const [composerBody, setComposerBody] = useState("");
   const [sort, setSort] = useState<CommentSort>("top");
@@ -39,12 +40,38 @@ export function useCommentThread(adapter: CommentAdapter): UseCommentThreadResul
   const queryKey = adapter.queryKey;
   const userVotesKey = useMemo(() => [...queryKey, "user-votes"], [queryKey]);
 
-  const { data: rawComments = [], isLoading } = useQuery<CommentItem[]>({
-    queryKey,
-    queryFn: () => adapter.fetchList(),
+  const fetchPaged = adapter.fetchPaged;
+  if (!fetchPaged) {
+    throw new Error("useCommentThreadInfinite requires adapter.fetchPaged");
+  }
+
+  const infiniteKey = useMemo(() => [...queryKey, "infinite"] as const, [queryKey]);
+
+  const {
+    data,
+    isLoading,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+  } = useInfiniteQuery({
+    queryKey: [...infiniteKey, sort],
+    queryFn: async ({ pageParam }) => fetchPaged({ sort, cursor: pageParam as string | null }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+    enabled: !!fetchPaged,
   });
 
-  const { data: userVotesMap } = useQuery<Record<string, VoteType>>({
+  const rawComments = useMemo(() => {
+    const byId = new Map<string, CommentItem>();
+    for (const page of data?.pages ?? []) {
+      for (const c of page.items) {
+        byId.set(c.id, c);
+      }
+    }
+    return [...byId.values()];
+  }, [data]);
+
+  const { data: userVotesMap } = useQuery({
     queryKey: userVotesKey,
     queryFn: () => adapter.fetchUserVotes!(),
     enabled: !!adapter.fetchUserVotes,
@@ -60,12 +87,10 @@ export function useCommentThread(adapter: CommentAdapter): UseCommentThreadResul
 
   const threaded = useMemo<ThreadedComment[]>(() => buildThreadedComments(comments, sort), [comments, sort]);
 
-  // Count of publicly visible comments (excludes soft-deleted). Matches collapsed UI:
-  // hidden replies still count toward N.
   const visibleCount = useMemo(() => comments.filter((c) => !c.deletedAt).length, [comments]);
 
   const invalidateAll = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey });
+    queryClient.invalidateQueries({ queryKey: adapter.queryKey });
     if (adapter.fetchUserVotes) {
       queryClient.invalidateQueries({ queryKey: userVotesKey });
     }
@@ -91,51 +116,7 @@ export function useCommentThread(adapter: CommentAdapter): UseCommentThreadResul
 
   const voteMutation = useMutation({
     mutationFn: (input: { commentId: string; voteType: VoteType }) => adapter.voteComment(input),
-    onMutate: async ({ commentId, voteType }) => {
-      await queryClient.cancelQueries({ queryKey });
-      const previousComments = queryClient.getQueryData<CommentItem[]>(queryKey);
-
-      queryClient.setQueryData<CommentItem[]>(queryKey, (current) => {
-        if (!current) return current;
-        return current.map((comment) => {
-          if (comment.id !== commentId) return comment;
-          const previousVote = comment.userVote ?? null;
-          const nextVote = previousVote === voteType ? null : voteType;
-          let upvotes = comment.upvotes || 0;
-          let downvotes = comment.downvotes || 0;
-          if (previousVote === "up") upvotes = Math.max(upvotes - 1, 0);
-          if (previousVote === "down") downvotes = Math.max(downvotes - 1, 0);
-          if (nextVote === "up") upvotes += 1;
-          if (nextVote === "down") downvotes += 1;
-          return { ...comment, userVote: nextVote, upvotes, downvotes };
-        });
-      });
-
-      if (adapter.fetchUserVotes) {
-        const previousVotes = queryClient.getQueryData<Record<string, VoteType>>(userVotesKey);
-        queryClient.setQueryData<Record<string, VoteType>>(userVotesKey, (current) => {
-          const next = { ...(current || {}) };
-          const prev = next[commentId] ?? null;
-          if (prev === voteType) {
-            delete next[commentId];
-          } else {
-            next[commentId] = voteType;
-          }
-          return next;
-        });
-        return { previousComments, previousVotes };
-      }
-
-      return { previousComments };
-    },
-    onError: (error, _variables, context) => {
-      const ctx = context as { previousComments?: CommentItem[]; previousVotes?: Record<string, VoteType> } | undefined;
-      if (ctx?.previousComments) {
-        queryClient.setQueryData(queryKey, ctx.previousComments);
-      }
-      if (adapter.fetchUserVotes && ctx?.previousVotes !== undefined) {
-        queryClient.setQueryData(userVotesKey, ctx.previousVotes);
-      }
+    onError: (error) => {
       const isUnauthorized = error instanceof Error && /^401:/.test(error.message);
       toast.error("Error", {
         description: isUnauthorized ? "Failed to vote. Please sign in." : "Failed to vote. Please try again.",
@@ -172,72 +153,10 @@ export function useCommentThread(adapter: CommentAdapter): UseCommentThreadResul
       }
       return adapter.deleteComment(input);
     },
-    onMutate: async ({ commentId }) => {
-      await queryClient.cancelQueries({ queryKey });
-      if (adapter.fetchUserVotes) {
-        await queryClient.cancelQueries({ queryKey: userVotesKey });
-      }
-      const previousComments = queryClient.getQueryData<CommentItem[]>(queryKey);
-      const previousVotes = adapter.fetchUserVotes
-        ? queryClient.getQueryData<Record<string, VoteType>>(userVotesKey)
-        : undefined;
-      const optimisticDeletedAt = new Date().toISOString();
-
-      queryClient.setQueryData<CommentItem[]>(queryKey, (current) => {
-        if (!current) return current;
-        return current.map((comment) => (
-          comment.id === commentId
-            ? {
-              ...comment,
-              deletedAt: optimisticDeletedAt,
-              body: "",
-              username: "[deleted user]",
-              avatarUrl: null,
-              userVote: null,
-              parentVoteLabel: null,
-            }
-            : comment
-        ));
-      });
-
-      if (adapter.fetchUserVotes) {
-        queryClient.setQueryData<Record<string, VoteType>>(userVotesKey, (current) => {
-          if (!current) return current;
-          const next = { ...current };
-          delete next[commentId];
-          return next;
-        });
-      }
-
-      return { previousComments, previousVotes };
-    },
-    onError: (_error, _variables, context) => {
-      const ctx = context as { previousComments?: CommentItem[]; previousVotes?: Record<string, VoteType> } | undefined;
-      if (ctx?.previousComments) {
-        queryClient.setQueryData(queryKey, ctx.previousComments);
-      }
-      if (adapter.fetchUserVotes && ctx?.previousVotes !== undefined) {
-        queryClient.setQueryData(userVotesKey, ctx.previousVotes);
-      }
+    onError: () => {
       toast.error("Error", { description: "Failed to delete. Please sign in." });
     },
     onSuccess: (data, vars) => {
-      queryClient.setQueryData<CommentItem[]>(queryKey, (current) => {
-        if (!current) return current;
-        return current.map((comment) => (
-          comment.id === vars.commentId
-            ? {
-              ...comment,
-              deletedAt: data.deletedAt,
-              body: "",
-              username: "[deleted user]",
-              avatarUrl: null,
-              userVote: null,
-              parentVoteLabel: null,
-            }
-            : comment
-        ));
-      });
       adapter.onDeleteSuccess?.(data, vars);
     },
     onSettled: () => {
@@ -266,6 +185,9 @@ export function useCommentThread(adapter: CommentAdapter): UseCommentThreadResul
     visibleCount,
     threaded,
     isLoading,
+    isFetchingNextPage,
+    hasNextPage: !!hasNextPage,
+    fetchNextPage,
     sort,
     setSort,
     composerBody,

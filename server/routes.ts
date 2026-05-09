@@ -4901,13 +4901,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const limitRaw = Number(req.query.limit ?? 20);
       const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(Math.floor(limitRaw), 100)) : 20;
       const cursor = typeof req.query.cursor === "string" ? req.query.cursor : null;
-      const cursorDate = cursor ? new Date(cursor) : null;
+      const cursorDate = cursor && req.query.paginated !== "1" && req.query.paginated !== "true"
+        ? new Date(cursor)
+        : null;
+      const paginated = req.query.paginated === "1" || req.query.paginated === "true";
+
+      const encodePagedCursor = (payload: Record<string, unknown>): string =>
+        Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
+      const decodePagedCursor = (raw: string): Record<string, unknown> | null => {
+        try {
+          return JSON.parse(Buffer.from(raw, "base64url").toString("utf8")) as Record<string, unknown>;
+        } catch {
+          return null;
+        }
+      };
 
       const filters = [
         eq(unifiedComments.parentType, parsedParentType.data),
         eq(unifiedComments.parentId, resolvedParentId),
       ];
-      if (sort === "newest" && cursorDate && !Number.isNaN(cursorDate.getTime())) {
+
+      if (paginated && cursor) {
+        const decoded = decodePagedCursor(cursor);
+        if (!decoded || typeof decoded.v !== "string") {
+          return sendBadRequest(res, "Invalid cursor");
+        }
+        if (sort === "newest" && decoded.v === "n") {
+          const ca = typeof decoded.ca === "string" ? new Date(decoded.ca) : null;
+          const id = typeof decoded.id === "string" ? decoded.id : null;
+          if (!ca || Number.isNaN(ca.getTime()) || !id) {
+            return sendBadRequest(res, "Invalid cursor");
+          }
+          filters.push(
+            or(
+              lt(unifiedComments.createdAt, ca),
+              and(eq(unifiedComments.createdAt, ca), lt(unifiedComments.id, id)),
+            )!,
+          );
+        } else if (sort === "top" && decoded.v === "t") {
+          const nRaw = decoded.n;
+          const n = typeof nRaw === "number" ? nRaw : Number(nRaw);
+          const ca = typeof decoded.ca === "string" ? new Date(decoded.ca) : null;
+          const id = typeof decoded.id === "string" ? decoded.id : null;
+          if (!Number.isFinite(n) || !ca || Number.isNaN(ca.getTime()) || !id) {
+            return sendBadRequest(res, "Invalid cursor");
+          }
+          const netSql = sql`(${unifiedComments.upvotes} - ${unifiedComments.downvotes})`;
+          filters.push(
+            or(
+              lt(netSql, n),
+              and(eq(netSql, n), lt(unifiedComments.createdAt, ca)),
+              and(eq(netSql, n), eq(unifiedComments.createdAt, ca), lt(unifiedComments.id, id)),
+            )!,
+          );
+        } else {
+          return sendBadRequest(res, "Invalid cursor");
+        }
+      } else if (!paginated && sort === "newest" && cursorDate && !Number.isNaN(cursorDate.getTime())) {
         filters.push(lt(unifiedComments.createdAt, cursorDate));
       }
 
@@ -4932,6 +4982,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ? desc(unifiedComments.createdAt)
             : desc(sql`${unifiedComments.upvotes} - ${unifiedComments.downvotes}`),
           desc(unifiedComments.createdAt),
+          desc(unifiedComments.id),
         )
         .limit(limit);
 
@@ -4956,11 +5007,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
         comments: rows,
       });
 
-      res.json(rows.map(row => toUnifiedCommentItem(
+      const mapped = rows.map(row => toUnifiedCommentItem(
         row,
         userVoteMap.get(row.id) ?? null,
         parentVoteLabelMap.get(row.id) ?? null,
-      )));
+      ));
+
+      if (paginated) {
+        let nextCursor: string | null = null;
+        if (rows.length === limit) {
+          const last = rows[rows.length - 1]!;
+          if (sort === "newest") {
+            nextCursor = encodePagedCursor({
+              v: "n",
+              ca: last.createdAt.toISOString(),
+              id: last.id,
+            });
+          } else {
+            nextCursor = encodePagedCursor({
+              v: "t",
+              n: last.upvotes - last.downvotes,
+              ca: last.createdAt.toISOString(),
+              id: last.id,
+            });
+          }
+        }
+        return res.json({ items: mapped, nextCursor });
+      }
+
+      res.json(mapped);
     } catch (error: any) {
       console.error("Error fetching comments:", error);
       res.status(500).json({ error: "Failed to fetch comments" });

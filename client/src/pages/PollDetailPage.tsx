@@ -527,6 +527,7 @@ export default function PollDetailPage() {
             variant="inline"
             maxHeight="none"
             placeholder="Share your thoughts on this topic..."
+            focusContextTitle={poll.headline}
             onShare={handleShare}
           />
         </div>
@@ -536,6 +537,7 @@ export default function PollDetailPage() {
             entityType="poll"
             slug={slug || ""}
             placeholder="Share your thoughts on this topic..."
+            focusContextTitle={poll.headline}
             onShare={handleShare}
           />
         </div>

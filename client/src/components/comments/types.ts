@@ -26,6 +26,8 @@ export interface CommentItem {
 export interface CommentAdapter {
   queryKey: readonly unknown[];
   fetchList: () => Promise<CommentItem[]>;
+  /** Full-screen / paginated fetch (base64 cursor); omit on embedded surfaces. */
+  fetchPaged?: (input: { sort: "top" | "newest"; cursor: string | null }) => Promise<{ items: CommentItem[]; nextCursor: string | null }>;
   postComment: (input: { body: string; parentId: string | null }) => Promise<unknown>;
   voteComment: (input: { commentId: string; voteType: VoteType }) => Promise<unknown>;
   fetchUserVotes?: () => Promise<Record<string, VoteType>>;

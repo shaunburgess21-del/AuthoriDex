@@ -678,6 +678,7 @@ export default function OpinionPollDetailPage() {
             variant="inline"
             maxHeight="none"
             placeholder="Share your thoughts on this topic..."
+            focusContextTitle={poll.title}
             onShare={handleShare}
           />
         </div>
@@ -687,6 +688,7 @@ export default function OpinionPollDetailPage() {
             entityType="opinion-poll"
             slug={slug || ""}
             placeholder="Share your thoughts on this topic..."
+            focusContextTitle={poll.title}
             onShare={handleShare}
           />
         </div>

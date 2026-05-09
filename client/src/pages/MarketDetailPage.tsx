@@ -1883,7 +1883,11 @@ export default function MarketDetailPage() {
             </button>
 
             <div className="hidden md:block">
-              <CardComments entityType="open-market" slug={params.slug || ""} />
+              <CardComments
+                entityType="open-market"
+                slug={params.slug || ""}
+                focusContextTitle={market.title}
+              />
             </div>
           </>
         )}

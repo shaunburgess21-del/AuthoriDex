@@ -1,4 +1,5 @@
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { CommentsFocusShell } from "@/components/comments/CommentsFocusShell";
 import {
   Loader2,
   MoreVertical,
@@ -80,16 +81,22 @@ interface CommunityInsightsProps {
   parentExpanded?: boolean;
   onDetail?: () => void;
   onShare?: () => void;
+  /** Hide full-screen expand (e.g. snap view already expanded). */
+  disableFocusMode?: boolean;
+  /** Subtitle in focus shell header; defaults to personName. */
+  focusContextTitle?: string | null;
 }
 
 export function CommunityInsights({
   personId,
-  personName: _personName,
+  personName,
   compact = false,
   placeholder = "Share your thoughts on this topic...",
   parentExpanded = false,
   onDetail,
   onShare,
+  disableFocusMode = false,
+  focusContextTitle,
 }: CommunityInsightsProps) {
   const { user, isLoggedIn, profile } = useAuth();
   const [, setLocation] = useLocation();
@@ -105,6 +112,8 @@ export function CommunityInsights({
 
   const [drawerComment, setDrawerComment] = useState<CommentItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CommentItem | null>(null);
+  const [focusDiscussionOpen, setFocusDiscussionOpen] = useState(false);
+  const discussionExpandRef = useRef<HTMLButtonElement>(null);
   const [selectedInsightId, setSelectedInsightId] = useState<string | null>(null);
   const [expandedPosts, setExpandedPosts] = useState<Set<string>>(new Set());
   const [displayCount, setDisplayCount] = useState(PAGE_SIZE);
@@ -393,6 +402,8 @@ export function CommunityInsights({
           onSortChange={thread.setSort}
           onDetail={onDetail}
           onShare={onShare}
+          expandTriggerRef={disableFocusMode ? undefined : discussionExpandRef as React.Ref<HTMLButtonElement>}
+          onOpenFocusMode={disableFocusMode ? undefined : () => setFocusDiscussionOpen(true)}
         />
         {variant === "inline" ? (
           <>
@@ -444,6 +455,31 @@ export function CommunityInsights({
         onDeleteInsight={(insightId) => thread.deleteComment({ commentId: insightId })}
         isDeletingInsight={thread.isDeletePending}
       />
+
+      {!disableFocusMode && (
+        <CommentsFocusShell
+          open={focusDiscussionOpen}
+          onClose={() => {
+            setFocusDiscussionOpen(false);
+            window.setTimeout(() => discussionExpandRef.current?.focus(), 0);
+          }}
+          contextTitle={focusContextTitle ?? personName}
+        >
+          {focusDiscussionOpen ? (
+            <CommunityInsights
+              personId={personId}
+              personName={personName}
+              compact
+              disableFocusMode
+              focusContextTitle={focusContextTitle ?? personName}
+              placeholder={placeholder}
+              parentExpanded={false}
+              onDetail={onDetail}
+              onShare={onShare}
+            />
+          ) : null}
+        </CommentsFocusShell>
+      )}
     </>
   );
 }

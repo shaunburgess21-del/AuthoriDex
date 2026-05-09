@@ -600,6 +600,7 @@ export default function MatchupDetailPage() {
             variant="inline"
             maxHeight="none"
             placeholder="Share your thoughts on this matchup..."
+            focusContextTitle={matchup.title}
             onShare={handleShare}
           />
         </div>
@@ -609,6 +610,7 @@ export default function MatchupDetailPage() {
             entityType="matchup"
             slug={slug || ""}
             placeholder="Share your thoughts on this matchup..."
+            focusContextTitle={matchup.title}
             onShare={handleShare}
           />
         </div>

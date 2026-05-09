@@ -812,6 +812,7 @@ export function VoteSnapScrollView({
                                       compact
                                       placeholder="Add a comment..."
                                       parentExpanded={isExpanded}
+                                      disableFocusMode={isExpanded}
                                       onDetail={navigateToDetail}
                                       onShare={handleShare}
                                     />
@@ -823,6 +824,7 @@ export function VoteSnapScrollView({
                                       maxHeight="none"
                                       placeholder="Add a comment..."
                                       parentExpanded={isExpanded}
+                                      disableFocusMode={isExpanded}
                                       onDetail={navigateToDetail}
                                       onShare={handleShare}
                                     />

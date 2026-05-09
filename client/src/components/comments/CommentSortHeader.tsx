@@ -1,4 +1,5 @@
-import { MessageSquare, ArrowUpDown, Clock, ExternalLink, Share2 } from "lucide-react";
+import type { Ref } from "react";
+import { MessageSquare, ArrowUpDown, Clock, ExternalLink, Share2, Maximize2 } from "lucide-react";
 
 export type CommentCountLabel = "Discussion" | "Comments" | "Insights" | "Replies";
 export type CommentSort = "top" | "newest";
@@ -18,6 +19,9 @@ export interface CommentSortHeaderProps {
   onSortChange: (s: CommentSort) => void;
   onDetail?: () => void;
   onShare?: () => void;
+  /** Opens full-screen discussion focus layer (card detail / profile). */
+  onOpenFocusMode?: () => void;
+  expandTriggerRef?: Ref<HTMLButtonElement>;
 }
 
 export function CommentSortHeader({
@@ -28,6 +32,8 @@ export function CommentSortHeader({
   onSortChange,
   onDetail,
   onShare,
+  onOpenFocusMode,
+  expandTriggerRef,
 }: CommentSortHeaderProps) {
   const [singularCountWord, pluralCountWord] = COUNT_WORDS[countLabel];
   const inlineCountWord = count === 1 ? singularCountWord : pluralCountWord;
@@ -39,6 +45,18 @@ export function CommentSortHeader({
         <span className="text-sm font-semibold">
           {variant === "card" ? `${countLabel} (${count})` : `${count} ${inlineCountWord}`}
         </span>
+        {onOpenFocusMode && (
+          <button
+            ref={expandTriggerRef}
+            type="button"
+            onClick={onOpenFocusMode}
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400 hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            aria-label="Open discussion in full screen"
+            data-testid="button-discussion-expand"
+          >
+            <Maximize2 className="h-4 w-4" />
+          </button>
+        )}
       </div>
       <div className="inline-flex items-center rounded-lg bg-muted/50 p-0.5">
         <button
