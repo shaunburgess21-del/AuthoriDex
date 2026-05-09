@@ -8,7 +8,7 @@
  *
  * Design:
  *   - No LLM. Pure deterministic selection. Cost = $0.
- *   - Heavy upvote bias (90/10) — humans rarely downvote.
+ *   - Agents only cast upvotes — matches the human API (downvotes disabled).
  *   - Per-persona daily chance and per-day cap, derived from personaBand
  *     so we don't need a schema change.
  *   - Platform-wide ceiling per sweep so a misconfig can't flood.
@@ -30,7 +30,6 @@ import { isAgentsPaused } from "./runtime-state";
 import {
   getSimulationProfile,
   isV2SimulationProfile,
-  type AgentSimulationProfile,
   type SimulationPersonaBand,
 } from "./simulationProfile";
 
@@ -58,11 +57,6 @@ const PERSONA_LIKE_BEHAVIOUR: Record<
   sharp:     { chance: 0.10, min: 1, max: 1 },
   whale:     { chance: 0.065, min: 1, max: 1 },
 };
-
-/** 10% of the time, a like flips to a dislike. Matches the realistic
- *  small minority of downvote behaviour you see on Polymarket / Reddit
- *  thread comments. */
-const DOWNVOTE_RATE = 0.10;
 
 /** Count likes this agent has cast in the last 24h. Used to skip agents
  *  that already hit their per-day target — important because a Railway
@@ -150,15 +144,6 @@ function pickWeighted<T>(pool: T[]): T {
   }
   const start = Math.max(1, Math.floor(pool.length * 0.60));
   return pool[start + Math.floor(Math.random() * Math.max(1, pool.length - start))];
-}
-
-function pickVoteType(profile: AgentSimulationProfile): "up" | "down" {
-  // Sharp/whale very rarely downvote (more reserved). Noisy more likely
-  // to push the down button. Casual/liquidity stay near baseline.
-  let downRate = DOWNVOTE_RATE;
-  if (profile.personaBand === "sharp" || profile.personaBand === "whale") downRate *= 0.4;
-  if (profile.personaBand === "noisy") downRate *= 1.6;
-  return Math.random() < downRate ? "down" : "up";
 }
 
 export async function runCommentVoteSweep(): Promise<{
@@ -249,7 +234,7 @@ export async function runCommentVoteSweep(): Promise<{
 
       const target = pickWeighted(remaining);
       used.add(target.id);
-      const voteType = pickVoteType(simulation);
+      const voteType = "up" as const;
 
       try {
         // Insert WITHOUT onConflictDoNothing on purpose: if the unique
@@ -269,13 +254,12 @@ export async function runCommentVoteSweep(): Promise<{
           await tx
             .update(unifiedComments)
             .set({
-              upvotes: sql`${unifiedComments.upvotes} + ${voteType === "up" ? 1 : 0}`,
-              downvotes: sql`${unifiedComments.downvotes} + ${voteType === "down" ? 1 : 0}`,
+              upvotes: sql`${unifiedComments.upvotes} + 1`,
             })
             .where(eq(unifiedComments.id, target.id));
         });
         cast++;
-        if (voteType === "up") upvotes++; else downvotes++;
+        upvotes++;
         agentDidVote = true;
       } catch (err) {
         // Most common cause: unique violation from a concurrent vote.

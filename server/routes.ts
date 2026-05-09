@@ -481,6 +481,7 @@ async function getCommentParentVoteLabelMap(input: {
       vote.userId,
       { type: "approval_rating", rating: vote.rating },
     ])));
+    return labelByCommentId;
   }
 
   if (input.parentType === "open_market") {
@@ -3653,10 +3654,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       let xpResult;
       if (isNewVote) {
-        const actionKey = voteType === 'up' ? 'upvote_insight' : 'downvote_insight';
         try {
           xpResult = await gamificationService.awardXp(
-            userId, actionKey,
+            userId, "upvote_insight",
             `insight_vote_${id}_${userId}`,
             { insightId: id, voteType }
           );
@@ -5522,10 +5522,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       let xpResult;
       if (isNewVote && comment.parentType === "community_insight") {
-        const actionKey = voteType === 'up' ? 'upvote_insight' : 'downvote_insight';
         try {
           xpResult = await gamificationService.awardXp(
-            userId, actionKey,
+            userId, "upvote_insight",
             `comment_vote_${id}_${userId}`,
             { commentId: id, voteType }
           );

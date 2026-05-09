@@ -14,7 +14,8 @@ export function VoteLabel({ label }: VoteLabelProps) {
 
   if (label.type === "trending_poll") {
     const color = getSentimentPollChoiceColor(label.choice);
-    const text = getSentimentPollChoiceLabel(label.choice);
+    const text = getSentimentPollChoiceLabel(label.choice).trim();
+    if (!text) return null;
 
     return (
       <span className="text-xs font-medium shrink-0" style={{ color }}>
