@@ -135,7 +135,8 @@ const COMMENT_PARENT_TYPES = ["community_insight", "matchup", "trending_poll", "
 type CommentParentType = typeof COMMENT_PARENT_TYPES[number];
 
 const commentParentTypeSchema = z.enum(COMMENT_PARENT_TYPES);
-const commentVoteTypeSchema = z.enum(["up", "down"]);
+/** Allowed vote direction on POST /api/comments/:id/vote (downvotes disabled product-wide). */
+const commentVoteRequestSchema = z.literal("up");
 
 function isCommentsPaginatedQueryFlag(value: unknown): boolean {
   if (value === true || value === 1) return true;
@@ -3450,8 +3451,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = req.params;
       const { voteType } = req.body;
 
-      if (!voteType || !['up', 'down'].includes(voteType)) {
-        return res.status(400).json({ error: "Invalid vote type. Must be 'up' or 'down'" });
+      if (voteType === "down") {
+        return res.status(400).json({ error: "Downvotes are disabled" });
+      }
+      if (!voteType || voteType !== "up") {
+        return res.status(400).json({ error: "Invalid vote type. Must be 'up'" });
       }
 
       const userId = req.userId!; // Verified user ID from auth middleware
@@ -5252,9 +5256,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { id } = req.params;
-      const parsedVoteType = commentVoteTypeSchema.safeParse(req.body?.voteType);
+      const parsedVoteType = commentVoteRequestSchema.safeParse(req.body?.voteType);
       if (!parsedVoteType.success) {
-        return res.status(400).json({ error: "voteType must be 'up' or 'down'" });
+        const raw = req.body?.voteType;
+        if (raw === "down") {
+          return res.status(400).json({ error: "Downvotes are disabled" });
+        }
+        return res.status(400).json({ error: "voteType must be 'up'" });
       }
 
       const [comment] = await db
@@ -5275,7 +5283,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (comment.deletedAt) return res.status(410).json({ error: "Comment has been deleted" });
 
       const userId = req.userId!;
-      const voteType = parsedVoteType.data;
+      /** Cast: validated as `"up"` above; widened so counters stay correct for legacy rows that still store `"down"`. */
+      const voteType = parsedVoteType.data as unknown as Exclude<CommentVoteState, null>;
       const previousUpvotes = comment.upvotes;
       let nextVote: CommentVoteState = voteType;
       let isNewVote = false;

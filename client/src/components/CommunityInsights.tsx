@@ -4,7 +4,6 @@ import {
   Loader2,
   MoreVertical,
   Reply,
-  ThumbsDown,
   ThumbsUp,
 } from "lucide-react";
 import { useLocation } from "wouter";
@@ -511,7 +510,6 @@ function InsightCard({
   const downvotes = comment.downvotes || 0;
   const netVotes = upvotes - downvotes;
   const hasUpvoted = comment.userVote === "up";
-  const hasDownvoted = comment.userVote === "down";
   const isDeleted = Boolean(comment.deletedAt);
 
   const sentimentVote = isDeleted ? null : insight?.sentimentVote ?? null;
@@ -614,20 +612,6 @@ function InsightCard({
               >
                 <ThumbsUp className="h-3.5 w-3.5" />
                 {upvotes > 0 && <span>{upvotes}</span>}
-              </button>
-              <button
-                onClick={() => onVote("down")}
-                onPointerUp={(event) => event.currentTarget.blur()}
-                disabled={disabled}
-                className={`flex items-center gap-1 text-xs transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
-                  hasDownvoted
-                    ? "text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300"
-                    : "text-muted-foreground hover:text-rose-600 dark:hover:text-rose-400"
-                } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
-                data-testid={`button-downvote-${comment.id}`}
-              >
-                <ThumbsDown className="h-3.5 w-3.5" />
-                {downvotes > 0 && <span>{downvotes}</span>}
               </button>
               <button
                 type="button"

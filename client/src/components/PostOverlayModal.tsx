@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 import { Button } from "@/components/ui/button";
-import { Loader2, MessageCircle, MoreVertical, ThumbsDown, ThumbsUp, X } from "lucide-react";
+import { Loader2, MessageCircle, MoreVertical, ThumbsUp, X } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { navigateToLogin } from "@/lib/authReturn";
 import { formatTimeAgo } from "@/lib/formatDate";
@@ -208,7 +208,6 @@ function PostOverlayModalContent({
 
   const netVotes = insight.upvotes - insight.downvotes;
   const hasUpvoted = userVote === "up";
-  const hasDownvoted = userVote === "down";
   const isInsightDeleted = Boolean(insight.deletedAt);
 
   return (
@@ -300,22 +299,6 @@ function PostOverlayModalContent({
                       <ThumbsUp className="h-3.5 w-3.5" />
                       {(insight.upvotes || 0) > 0 && <span>{insight.upvotes}</span>}
                     </button>
-
-                    <button
-                      onClick={() => onVote(insight.id, "down")}
-                      onPointerUp={(event) => event.currentTarget.blur()}
-                      disabled={!user}
-                      className={`flex items-center gap-1 text-xs transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
-                        hasDownvoted
-                          ? "text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300"
-                          : "text-muted-foreground hover:text-rose-600 dark:hover:text-rose-400"
-                      } ${!user ? "opacity-50 cursor-not-allowed" : ""}`}
-                      aria-label="Downvote"
-                      data-testid="button-overlay-downvote"
-                    >
-                      <ThumbsDown className="h-3.5 w-3.5" />
-                      {(insight.downvotes || 0) > 0 && <span>{insight.downvotes}</span>}
-                    </button>
                   </>
                 )}
 
@@ -391,7 +374,6 @@ function PostOverlayModalContent({
                 getRowTestIds={(comment) => ({
                   root: `overlay-comment-${comment.id}`,
                   upvote: `button-overlay-comment-upvote-${comment.id}`,
-                  downvote: `button-overlay-comment-downvote-${comment.id}`,
                   reply: `button-overlay-comment-reply-${comment.id}`,
                 })}
               />

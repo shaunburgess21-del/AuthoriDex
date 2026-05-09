@@ -1,4 +1,4 @@
-import { ThumbsUp, ThumbsDown, Reply, MoreVertical } from "lucide-react";
+import { ThumbsUp, Reply, MoreVertical } from "lucide-react";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 import { VoteLabel } from "@/components/VoteLabel";
 import { Badge } from "@/components/ui/badge";
@@ -19,7 +19,6 @@ export interface CommentRowProps {
   testIds?: {
     root?: string;
     upvote?: string;
-    downvote?: string;
     reply?: string;
   };
 }
@@ -37,7 +36,6 @@ export function CommentRow({
   const isDeleted = Boolean(comment.deletedAt);
   const netVotes = (comment.upvotes || 0) - (comment.downvotes || 0);
   const hasUpvoted = comment.userVote === "up";
-  const hasDownvoted = comment.userVote === "down";
   const isNested = depth > 0;
   const visualDepth = Math.min(depth, MAX_COMMENT_VISUAL_DEPTH);
   const indentRem = isNested ? visualDepth * 1.75 : 0;
@@ -105,19 +103,6 @@ export function CommentRow({
               >
                 <ThumbsUp className="h-3.5 w-3.5" />
                 {(comment.upvotes || 0) > 0 && <span>{comment.upvotes}</span>}
-              </button>
-              <button
-                onClick={() => onVote("down")}
-                onPointerUp={(event) => event.currentTarget.blur()}
-                className={`flex items-center gap-1 text-xs transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
-                  hasDownvoted
-                    ? "text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300"
-                    : "text-muted-foreground hover:text-rose-600 dark:hover:text-rose-400"
-                }`}
-                data-testid={testIds?.downvote ?? `button-downvote-${comment.id}`}
-              >
-                <ThumbsDown className="h-3.5 w-3.5" />
-                {(comment.downvotes || 0) > 0 && <span>{comment.downvotes}</span>}
               </button>
               {showReplyButton && onReply && (
                 <button

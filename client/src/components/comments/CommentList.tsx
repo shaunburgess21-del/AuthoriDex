@@ -19,7 +19,6 @@ export interface CommentListProps {
   getRowTestIds?: (comment: CommentItem) => {
     root?: string;
     upvote?: string;
-    downvote?: string;
     reply?: string;
   };
 }
