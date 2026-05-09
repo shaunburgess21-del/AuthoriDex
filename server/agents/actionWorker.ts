@@ -8,6 +8,7 @@ import {
   scheduledAgentActions,
   agentConfigs,
   predictionMarkets,
+  marketAmmState,
   marketEntries,
   marketBets,
   profiles,
@@ -19,13 +20,18 @@ import {
   ACTION_WORKER_BATCH_SIZE,
   ACTION_WORKER_INTERVAL_MS,
   JACKPOT_AGENT_COLLISION_RANGE,
+  BASE_STAKE_AMOUNT,
+  MAX_AGENT_STAKE,
 } from "./constants";
 import { JACKPOT_TICKET_COST } from "../config/constants";
 import { WORLD_MARKETS_LLM_ENABLED } from "./constants";
 import type { PredictionDecision } from "./types";
 import { buildAgentActionStakeIdempotencyKey, buildAgentBetMetadata } from "./actionWorker-utils";
-import { getWeeklyBettingCutoff } from "../jobs/market-generator";
+import { getMarketBettingCutoff, type MarketEngine } from "../native-markets/lifecycle";
 import { isAgentsPaused } from "./runtime-state";
+import { executeBuy, type TradeError } from "../services/amm-trades";
+import { sizeAmmBudget } from "./sizing";
+import { type AmmStateSnapshot } from "@shared/lib/amm/positions";
 
 const STALE_IN_PROGRESS_TIMEOUT_MINUTES = 30;
 
@@ -140,6 +146,7 @@ async function executeAction(action: {
         category: predictionMarkets.category,
         personId: predictionMarkets.personId,
         endAt: predictionMarkets.endAt,
+        engine: predictionMarkets.engine,
       })
       .from(predictionMarkets)
       .where(eq(predictionMarkets.id, action.marketId))
@@ -184,12 +191,26 @@ async function executeAction(action: {
       return;
     }
 
-    const isWeeklyNative = ["updown", "h2h", "gainer"].includes(market.marketType);
+    // Engine-aware cutoff. Parimutuel keeps the legacy Friday-23:59 UTC
+    // wall; AMM markets use the configurable pre-resolve cooldown
+    // (see `server/native-markets/amm-settings.ts`). `getMarketBettingCutoff`
+    // dispatches on `engine` so we never enforce the wrong rule.
+    const isWeeklyNative = ["updown", "h2h", "gainer"].includes(market.marketType ?? "");
     if (isWeeklyNative && market.endAt) {
-      const cutoff = getWeeklyBettingCutoff(market.endAt);
+      const cutoff = getMarketBettingCutoff(
+        market.endAt,
+        (market.engine ?? "parimutuel") as MarketEngine,
+      );
       if (new Date() > cutoff) {
         await db.update(scheduledAgentActions)
-          .set({ status: "skipped", errorMessage: "Betting cutoff passed (Fri 23:59 UTC)", executedAt: new Date() })
+          .set({
+            status: "skipped",
+            errorMessage:
+              market.engine === "amm"
+                ? "Betting cutoff passed (AMM cooldown reached)"
+                : "Betting cutoff passed (Fri 23:59 UTC)",
+            executedAt: new Date(),
+          })
           .where(eq(scheduledAgentActions.id, action.id));
         return;
       }
@@ -235,22 +256,51 @@ async function executeAction(action: {
       return;
     }
 
-    // Check agent has enough credits
+    // Check agent has enough credits.
+    //
+    // For PARIMUTUEL the worker debits `action.stakeAmount` exactly, so the
+    // strict comparison below is the right gate. For AMM the worker only
+    // ever charges `<= sizeAmmBudget(...).creditBudget` which itself is
+    // `<= action.stakeAmount`; the strict check would reject bets that
+    // could actually have succeeded after sizing trimmed the budget. We
+    // defer the real check to `executeBuy`, which returns a clean
+    // `insufficient_credits` if the SQL guard rejects the debit.
     const [profile] = await db
       .select({ predictCredits: profiles.predictCredits })
       .from(profiles)
       .where(eq(profiles.id, agent.userId))
       .limit(1);
 
-    if (!profile || profile.predictCredits < action.stakeAmount) {
+    if (!profile) {
+      await markFailed(action.id, "Agent profile not found");
+      return;
+    }
+
+    if (market.engine !== "amm" && profile.predictCredits < action.stakeAmount) {
       await markFailed(action.id, "Insufficient agent credits");
+      return;
+    }
+
+    // ---------------------------------------------------------------------
+    // AMM dispatch (Phase 10). For LMSR markets we hand off to the same
+    // `executeBuy` helper that powers the human buy endpoint. The pool
+    // math, share-quantity update, credit ledger, and price recompute all
+    // live there — the worker only owns sizing (`sizeAmmBudget`) and the
+    // scheduledAgentActions bookkeeping (markExecuted / markFailed /
+    // markSkipped). Parimutuel markets continue down the legacy path
+    // below this block, untouched.
+    // ---------------------------------------------------------------------
+    if (market.engine === "amm") {
+      await executeAmmBuy(action, decision, agent, market, entry);
       return;
     }
 
     // Honour the decision's direction. "no" means the agent is shorting the
     // outcome (betting it will NOT happen) and the stake goes into the entry's
     // noStake pool. Defaults to "yes" so older queued actions without a
-    // direction stay backwards-compatible.
+    // direction stay backwards-compatible. AMM markets never reach here —
+    // direction translation happens upstream in `agentRunner` (binary AMM
+    // markets only have YES on each entry; "no on A" is just "yes on B").
     const direction: "yes" | "no" = decision.direction === "no" ? "no" : "yes";
 
     // Calculate potential payout (parimutuel). Mirror the human bet endpoint
@@ -403,6 +453,173 @@ async function executeAction(action: {
       console.error(`[ActionWorker] Action ${action.id} failed:`, err);
     }
   }
+}
+
+/**
+ * AMM bet path (Phase 10). Loads the market's AMM state, sizes the
+ * trade against `decision.confidence`, and delegates to `executeBuy`
+ * which owns the LMSR math, credit movement, marketBets insert, and
+ * credit_ledger row.
+ *
+ * Idempotency: we pass `betMetadata: {actionId}` into `executeBuy` so
+ * the worker's existing "already placed?" pre-check at the top of
+ * `executeAction` works for AMM bets too — a reclaim after the
+ * transaction commits but before `markExecuted` runs will short-
+ * circuit on the next pass instead of double-spending.
+ *
+ * `decision.direction === "no"` is impossible here in practice
+ * because `agentRunner` translates it to a YES on the opposing entry
+ * for binary AMM markets and abstains otherwise. The defensive guard
+ * stays in place so a stale queued action never silently buys the
+ * wrong side.
+ */
+async function executeAmmBuy(
+  action: {
+    id: string;
+    agentId: string;
+    marketId: string;
+    entryId: string;
+    decisionPayload: unknown;
+    stakeAmount: number;
+    actionType: string;
+  },
+  decision: PredictionDecision,
+  agent: typeof agentConfigs.$inferSelect,
+  market: { id: string; title: string | null; marketType: string | null },
+  entry: typeof marketEntries.$inferSelect,
+): Promise<void> {
+  if (decision.direction === "no") {
+    await db
+      .update(scheduledAgentActions)
+      .set({
+        status: "skipped",
+        errorMessage: "amm_no_direction_unsupported",
+        executedAt: new Date(),
+      })
+      .where(eq(scheduledAgentActions.id, action.id));
+    log(`[ActionWorker] AMM skipped: 'no' direction on AMM market ${action.marketId} action=${action.id}`);
+    return;
+  }
+
+  // Load the live AMM state (no FOR UPDATE here — `executeBuy` takes
+  // its own lock). We just need the snapshot for sizing.
+  const [stateRow] = await db
+    .select({
+      liquidityB: marketAmmState.liquidityB,
+      outcomeOrder: marketAmmState.outcomeOrder,
+      shareQuantities: marketAmmState.shareQuantities,
+    })
+    .from(marketAmmState)
+    .where(eq(marketAmmState.marketId, action.marketId))
+    .limit(1);
+
+  if (!stateRow) {
+    await markFailed(action.id, "AMM state row missing for market");
+    return;
+  }
+
+  const state: AmmStateSnapshot = {
+    liquidityB: Number(stateRow.liquidityB),
+    outcomeOrder: stateRow.outcomeOrder as string[],
+    shareQuantities: stateRow.shareQuantities as Record<string, number>,
+  };
+
+  // The runner already capped `stakeAmount` via `computeAgentStakeAmount`.
+  // We treat that as the maxBudget for the target-price walk: the agent
+  // never spends more than persona allows, but may spend less if their
+  // confidence target is reached cheaply. Floor at MIN_AMM_BUY_CREDITS=5
+  // (mirrored in sizeAmmBudget defaults).
+  const maxBudget = Math.max(
+    1,
+    Math.min(MAX_AGENT_STAKE, Math.round(action.stakeAmount || BASE_STAKE_AMOUNT)),
+  );
+
+  const sizing = sizeAmmBudget({
+    state,
+    entryId: action.entryId,
+    confidence: decision.confidence ?? 0.5,
+    maxBudget,
+  });
+
+  if (sizing.creditBudget === 0) {
+    const reason = sizing.abstainReason ?? "no_amm_edge";
+    await db
+      .update(scheduledAgentActions)
+      .set({
+        status: "skipped",
+        errorMessage: `amm_${reason}`,
+        executedAt: new Date(),
+      })
+      .where(eq(scheduledAgentActions.id, action.id));
+    log(
+      `[ActionWorker] AMM skipped (${reason}): agent=${agent.displayName} market=${action.marketId} entry=${entry.label} confidence=${decision.confidence} currentPrice=${sizing.currentPrice.toFixed(4)}`,
+    );
+    return;
+  }
+
+  const result = await executeBuy({
+    marketId: action.marketId,
+    userId: agent.userId,
+    entryId: action.entryId,
+    creditBudget: sizing.creditBudget,
+    agentId: agent.id,
+    betMetadata: buildAgentBetMetadata(action.id),
+  });
+
+  if ("error" in result) {
+    await handleAmmTradeError(action.id, result, agent, market.id);
+    return;
+  }
+
+  // Mirror the parimutuel path's totalPredictions bump. executeBuy
+  // doesn't touch the counter (humans get it elsewhere), but agents
+  // rely on it for analytics + persona pacing.
+  await db
+    .update(profiles)
+    .set({ totalPredictions: sql`${profiles.totalPredictions} + 1` })
+    .where(eq(profiles.id, agent.userId));
+
+  await markExecuted(action.id);
+
+  log(
+    `[ActionWorker] AMM executed: agent=${agent.displayName} market=${action.marketId} entry=${entry.label} confidence=${decision.confidence} sized=${sizing.creditBudget}/${maxBudget} (current=${sizing.currentPrice.toFixed(4)} target=${sizing.targetPrice.toFixed(4)} -> ${result.newSharePrice.toFixed(4)}, charge=${result.chargeCredits}, shares=${result.sharesPurchased.toFixed(4)})`,
+  );
+}
+
+/**
+ * Translate a structured `TradeError` from `executeBuy` into the right
+ * scheduledAgentActions terminal state. Validation/visibility/closed
+ * errors are user-environment skips, not bugs; insufficient credits
+ * is a hard fail (agent's wallet is empty).
+ */
+async function handleAmmTradeError(
+  actionId: string,
+  err: TradeError,
+  agent: typeof agentConfigs.$inferSelect,
+  marketId: string,
+): Promise<void> {
+  const skipKinds = new Set([
+    "validation",
+    "trade_too_small",
+    "market_closed",
+    "visibility_denied",
+    "not_amm",
+    "entry_not_found",
+    "market_not_found",
+  ]);
+  if (skipKinds.has(err.error)) {
+    await db
+      .update(scheduledAgentActions)
+      .set({
+        status: "skipped",
+        errorMessage: `amm_${err.error}: ${err.message}`,
+        executedAt: new Date(),
+      })
+      .where(eq(scheduledAgentActions.id, actionId));
+    log(`[ActionWorker] AMM skipped (${err.error}): agent=${agent.displayName} market=${marketId} -- ${err.message}`);
+    return;
+  }
+  await markFailed(actionId, `amm_${err.error}: ${err.message}`);
 }
 
 /**
