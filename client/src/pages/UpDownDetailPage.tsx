@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { lazy, Suspense, useState, useMemo, useCallback, useEffect } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -36,12 +36,23 @@ import {
   TrendingUp,
   TrendingDown,
   Clock,
-  Lock,
   Users,
   BarChart3,
   ListChecks,
   Zap,
 } from "lucide-react";
+
+const LazyCommunityInsights = lazy(() =>
+  import("@/components/CommunityInsights").then((m) => ({ default: m.CommunityInsights })),
+);
+
+function InsightsLazyFallback() {
+  return (
+    <div className="flex items-center justify-center py-12">
+      <div className="h-8 w-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+}
 
 export default function UpDownDetailPage() {
   const [, params] = useRoute("/predict/updown/:marketId");
@@ -545,6 +556,18 @@ export default function UpDownDetailPage() {
           tieRule={hydrated.tieRule}
           personName={hydrated.personName}
         />
+
+        {hydrated.personId.trim().length > 0 && (
+          <section className="mb-8 pt-2">
+            <Suspense fallback={<InsightsLazyFallback />}>
+              <LazyCommunityInsights
+                personId={hydrated.personId}
+                personName={hydrated.personName}
+                focusContextTitle={hydrated.personName}
+              />
+            </Suspense>
+          </section>
+        )}
 
         {/* Related markets — bottom of page so it's out of the way of
             the betting flow but discoverable once the user has read the
