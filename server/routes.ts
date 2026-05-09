@@ -12369,6 +12369,10 @@ Only return the JSON object.`;
         conditions.push(eq(profiles.isAgent, true));
       } else if (authorFilter === "humans") {
         conditions.push(sql`COALESCE(${profiles.isAgent}, false) = false`);
+        // Also exclude the AMM house sentinel — it's neither a human
+        // nor a regular simulation agent and should never appear in
+        // human-facing author filters.
+        conditions.push(sql`COALESCE(${profiles.isHouse}, false) = false`);
       }
       if (q.length > 0) {
         conditions.push(sql`${unifiedComments.body} ILIKE ${`%${q}%`}`);
@@ -19743,6 +19747,116 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       });
     } catch (err: any) {
       console.error("[AgentAdmin] pause toggle failed:", err);
+      res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
+    }
+  });
+
+  // ============================================================================
+  // AMM SMOKE TEST ENDPOINT (Phase 2 of the parimutuel -> AMM rebuild)
+  // ----------------------------------------------------------------------------
+  // Creates a one-off `engine='amm'` community market, seeds it via the
+  // house helper, and returns enough info to verify in Supabase that all
+  // four expected rows landed correctly:
+  //   - prediction_markets (engine='amm')
+  //   - market_entries (N rows)
+  //   - market_amm_state (q=0, b set, outcomeOrder matches entries)
+  //   - credit_ledger (amm_seed_debit against HOUSE_PROFILE_ID)
+  // ----------------------------------------------------------------------------
+  // Phase 3 (buy/sell) and Phase 4 (per-market-type rollout) will eventually
+  // make this redundant, but for now it's the only way to exercise Phase 2
+  // end-to-end on a deployed environment without a full UI.
+  // ============================================================================
+  app.post("/api/admin/amm/smoke-create-market", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { seedAmmMarket, HOUSE_PROFILE_ID } = await import("./services/amm-house");
+
+      const rawN = Number(req.body?.numOutcomes ?? 2);
+      const numOutcomes = Number.isInteger(rawN) && rawN >= 2 && rawN <= 10 ? rawN : 2;
+      const titleInput = typeof req.body?.title === "string" && req.body.title.trim()
+        ? String(req.body.title).slice(0, 200)
+        : `[AMM smoke] ${numOutcomes}-outcome test market`;
+      const targetMaxLossOverride = typeof req.body?.targetMaxLoss === "number"
+        && Number.isFinite(req.body.targetMaxLoss)
+        && req.body.targetMaxLoss > 0
+        ? Math.min(req.body.targetMaxLoss, 1_000_000)
+        : null;
+
+      const slug = `amm-smoke-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const now = new Date();
+      const closeAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+      const endAt = new Date(now.getTime() + 8 * 24 * 60 * 60 * 1000);
+
+      const result = await db.transaction(async (tx) => {
+        const [market] = await tx
+          .insert(predictionMarkets)
+          .values({
+            marketType: "community",
+            engine: "amm",
+            openMarketType: numOutcomes === 2 ? "binary" : "multi",
+            status: "OPEN",
+            visibility: "draft",
+            title: titleInput,
+            slug,
+            summary: "Phase 2 AMM schema smoke test. Safe to delete.",
+            startAt: now,
+            closeAt,
+            endAt,
+            createdBy: req.userId ?? null,
+            tags: ["amm-smoke"],
+          })
+          .returning({ id: predictionMarkets.id });
+
+        const entryRows = await tx
+          .insert(marketEntries)
+          .values(
+            Array.from({ length: numOutcomes }).map((_, i) => ({
+              marketId: market.id,
+              entryType: "custom",
+              label: `Outcome ${String.fromCharCode(65 + i)}`,
+              displayOrder: i,
+            })),
+          )
+          .returning({ id: marketEntries.id, label: marketEntries.label, displayOrder: marketEntries.displayOrder });
+
+        const entryIdsInOrder = entryRows
+          .slice()
+          .sort((a, b) => a.displayOrder - b.displayOrder)
+          .map((r) => r.id);
+
+        const seed = await seedAmmMarket(
+          {
+            marketId: market.id,
+            marketType: "community",
+            entryIdsInOrder,
+            targetMaxLoss: targetMaxLossOverride,
+          },
+          tx,
+        );
+
+        const [houseAfter] = await tx
+          .select({ predictCredits: profiles.predictCredits })
+          .from(profiles)
+          .where(eq(profiles.id, HOUSE_PROFILE_ID))
+          .limit(1);
+
+        return {
+          marketId: market.id,
+          slug,
+          numOutcomes,
+          entries: entryRows.map((r) => ({ id: r.id, label: r.label, displayOrder: r.displayOrder })),
+          liquidityB: seed.liquidityB,
+          houseSeedAmount: seed.houseSeedAmount,
+          seeded: seed.seeded,
+          houseBalanceAfter: houseAfter?.predictCredits ?? null,
+        };
+      });
+
+      console.log(
+        `[AmmAdmin] Smoke-created AMM market ${result.marketId} (N=${result.numOutcomes}, b=${result.liquidityB.toFixed(2)}, seed=${result.houseSeedAmount}, houseAfter=${result.houseBalanceAfter})`,
+      );
+      res.json({ ok: true, ...result });
+    } catch (err: any) {
+      console.error("[AmmAdmin] smoke-create-market failed:", err);
       res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
     }
   });

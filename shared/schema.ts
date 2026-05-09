@@ -831,6 +831,11 @@ export const profiles = pgTable("profiles", {
   totalPredictions: integer("total_predictions").notNull().default(0),
   winRate: real("win_rate").notNull().default(0),
   isAgent: boolean("is_agent").notNull().default(false),
+  // Sentinel flag for the singleton "house" account that seeds AMM markets
+  // with virtual liquidity. Only ever true for HOUSE_PROFILE_ID
+  // (00000000-0000-0000-0000-0000000000aa). User-facing listings should
+  // filter this out the same way they filter `isAgent`.
+  isHouse: boolean("is_house").notNull().default(false),
   lastActiveAt: timestamp("last_active_at"),
   // Set when the user accepts ToS + Privacy on /login/welcome. NULL means not
   // yet captured — used by the welcome screen to decide whether to show.
@@ -988,6 +993,11 @@ export type InsertProfileItemPrivacy = typeof profileItemPrivacy.$inferInsert;
 export const predictionMarkets = pgTable("prediction_markets", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   marketType: text("market_type").notNull(), // 'jackpot', 'updown', 'h2h', 'race', 'gainer', 'community'
+  // Pricing engine: 'parimutuel' (legacy pool-split) or 'amm' (LMSR shares).
+  // Defaults to parimutuel so existing markets and any code paths that
+  // forget to set this stay on the old engine. Phase 4+ flips specific
+  // market types to 'amm' as the rebuild rolls out.
+  engine: text("engine").notNull().default("parimutuel"),
   status: text("status").notNull().default("OPEN"), // 'OPEN', 'CLOSED_PENDING', 'RESOLVED', 'VOID'
   title: text("title").notNull(),
   slug: text("slug").notNull().unique(),
@@ -1090,6 +1100,16 @@ export const marketBets = pgTable("market_bets", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
   betMetadata: jsonb("bet_metadata"), // { confidence?: 1-5, thesis?: string, scoreAtEntry?: number }
   direction: text("direction").notNull().default("yes"), // "yes" | "no"
+  // AMM-only fields (NULL on legacy parimutuel rows).
+  // actionType: 'parimutuel' for pool-split bets; 'buy' / 'sell' for AMM
+  // share trades. Defaulted to 'parimutuel' so back-compat is automatic.
+  actionType: text("action_type").notNull().default("parimutuel"),
+  // Number of shares (positive for both buy and sell — sign is in actionType).
+  // Numeric not integer because LMSR uses fractional shares for smooth pricing.
+  shareCount: numeric("share_count"),
+  // Average price per share at the time of the trade. Useful for charts and
+  // the position card's "avg entry price" display.
+  pricePerShare: numeric("price_per_share"),
 }, (table) => ({
   marketStatusIdx: index("market_bets_market_status_idx").on(table.marketId, table.status),
   userStatusIdx: index("market_bets_user_status_idx").on(table.userId, table.status),
@@ -1108,9 +1128,14 @@ export type MarketBet = typeof marketBets.$inferSelect;
 export type InsertMarketBet = z.infer<typeof insertMarketBetSchema>;
 
 // Relations for prediction markets
-export const predictionMarketsRelations = relations(predictionMarkets, ({ many }) => ({
+export const predictionMarketsRelations = relations(predictionMarkets, ({ one, many }) => ({
   entries: many(marketEntries),
   bets: many(marketBets),
+  // Optional 1:1 — present only for engine='amm' markets.
+  ammState: one(marketAmmState, {
+    fields: [predictionMarkets.id],
+    references: [marketAmmState.marketId],
+  }),
 }));
 
 export const marketEntriesRelations = relations(marketEntries, ({ one, many }) => ({
@@ -1135,6 +1160,51 @@ export const marketBetsRelations = relations(marketBets, ({ one }) => ({
     references: [marketEntries.id],
   }),
 }));
+
+/**
+ * Per-market AMM (LMSR) state. Exists only for markets with
+ * `predictionMarkets.engine = 'amm'`; absent for legacy parimutuel
+ * markets. Created by `seedAmmMarket` at market open and mutated by
+ * every buy/sell (Phase 3).
+ *
+ * `liquidityB`: the LMSR liquidity parameter b. Set once at seed time
+ *   via `seedB(numOutcomes, targetMaxLoss)` and never changed.
+ *
+ * `outcomeOrder`: entryIds in the canonical order used to project the
+ *   `shareQuantities` JSONB into the flat `q: number[]` that the LMSR
+ *   engine in `shared/lib/amm/lmsr.ts` operates on. Stable for the
+ *   life of the market.
+ *
+ * `shareQuantities`: { [entryId]: number } — fractional share count
+ *   per entry. Always exactly the entries in `outcomeOrder`.
+ *
+ * `houseSeedAmount`: integer credits the house deposited to bootstrap
+ *   the AMM at q = 0 (= ceil(b · ln(N))). Returned (plus net user
+ *   credits in, minus payout liability) to house at settlement.
+ *
+ * `totalUserCreditsIn`: running net of buy costs minus sell proceeds.
+ *   Plumbed straight into `housePnL` at settlement so refunds, voids
+ *   and mid-flight sells all reconcile correctly.
+ */
+export const marketAmmState = pgTable("market_amm_state", {
+  marketId: varchar("market_id").primaryKey().references(() => predictionMarkets.id, { onDelete: "cascade" }),
+  liquidityB: numeric("liquidity_b").notNull(),
+  outcomeOrder: text("outcome_order").array().notNull(),
+  shareQuantities: jsonb("share_quantities").notNull(),
+  houseSeedAmount: integer("house_seed_amount").notNull(),
+  totalUserCreditsIn: numeric("total_user_credits_in").notNull().default("0"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const marketAmmStateRelations = relations(marketAmmState, ({ one }) => ({
+  market: one(predictionMarkets, {
+    fields: [marketAmmState.marketId],
+    references: [predictionMarkets.id],
+  }),
+}));
+
+export type MarketAmmState = typeof marketAmmState.$inferSelect;
+export type InsertMarketAmmState = typeof marketAmmState.$inferInsert;
 
 // ============================================================================
 // ADMIN AUDIT LOG (Immutable)

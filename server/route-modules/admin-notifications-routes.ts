@@ -129,7 +129,7 @@ async function resolveAudience(
     const rows = await db
       .select({ id: profiles.id })
       .from(profiles)
-      .where(eq(profiles.isAgent, false));
+      .where(and(eq(profiles.isAgent, false), eq(profiles.isHouse, false)));
     return rows.map((r) => r.id);
   }
 
@@ -141,6 +141,7 @@ async function resolveAudience(
       .where(
         and(
           eq(profiles.isAgent, false),
+          eq(profiles.isHouse, false),
           gt(profiles.lastActiveAt, thirtyDaysAgo),
         ),
       );
@@ -149,13 +150,14 @@ async function resolveAudience(
 
   if (kind === "placed_bet") {
     // Distinct human users who have ever placed a bet. We filter on
-    // profiles.isAgent = false on the join, which excludes simulated
-    // agent accounts even if they have rows in market_bets.
+    // profiles.isAgent = false (and isHouse = false to exclude the AMM
+    // sentinel) on the join, which excludes simulated agent accounts
+    // and the house even if they have rows in market_bets.
     const rows = await db
       .selectDistinct({ id: profiles.id })
       .from(profiles)
       .innerJoin(marketBets, eq(marketBets.userId, profiles.id))
-      .where(eq(profiles.isAgent, false));
+      .where(and(eq(profiles.isAgent, false), eq(profiles.isHouse, false)));
     return rows.map((r) => r.id);
   }
 
@@ -170,6 +172,7 @@ async function resolveAudience(
       .where(
         and(
           eq(profiles.isAgent, false),
+          eq(profiles.isHouse, false),
           sql`${audience.category} = ANY(${profiles.statedInterests})`,
         ),
       );
