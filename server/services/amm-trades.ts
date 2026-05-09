@@ -66,6 +66,15 @@ export interface ExecuteBuyInput {
   /** True when the caller is an admin. Bypasses the `visibility='live'`
    *  gate so admins can trade in draft (smoke-test) markets. */
   isAdmin?: boolean;
+  /** Optional agent attribution. Set when the caller is the agent
+   *  worker so the inserted `market_bets` row joins back to
+   *  `agent_configs` for Town Square + admin trade analytics. */
+  agentId?: string;
+  /** Optional JSONB metadata stamped onto the inserted `market_bets`
+   *  row. The agent worker passes `{actionId}` so its idempotency
+   *  check (`betMetadata->>'actionId' = ${id}`) catches reclaim-after-
+   *  commit races on AMM bets. */
+  betMetadata?: Record<string, unknown>;
 }
 
 export interface ExecuteBuyResult {
@@ -94,7 +103,7 @@ export async function executeBuy(
   input: ExecuteBuyInput,
   txOpt?: DbOrTx,
 ): Promise<ExecuteBuyResult | TradeError> {
-  const { marketId, userId, entryId, creditBudget, isAdmin = false } = input;
+  const { marketId, userId, entryId, creditBudget, isAdmin = false, agentId, betMetadata } = input;
 
   if (!Number.isInteger(creditBudget) || creditBudget < MIN_AMM_BUY_CREDITS) {
     return {
@@ -155,12 +164,14 @@ export async function executeBuy(
         marketId,
         entryId,
         userId,
+        agentId: agentId ?? null,
         stakeAmount: chargeCredits,
         actionType: "buy",
         shareCount: shares.toString(),
         pricePerShare: pricePerShareAvg.toString(),
         direction: "yes",
         status: "active",
+        betMetadata: betMetadata ?? null,
       })
       .returning({ id: marketBets.id });
 
@@ -170,9 +181,18 @@ export async function executeBuy(
       amount: -chargeCredits,
       walletType: "VIRTUAL",
       balanceAfter: updatedProfile.predictCredits,
-      source: "user_action",
+      // Audit trail: agent bets log under `agent_action` so the
+      // existing reconciliation reports + admin filters can split
+      // human flow from agent flow without joining `agent_configs`.
+      source: agentId ? "agent_action" : "user_action",
       idempotencyKey: `amm_buy_${insertedBet.id}`,
-      metadata: { marketId, entryId, betId: insertedBet.id, shares },
+      metadata: {
+        marketId,
+        entryId,
+        betId: insertedBet.id,
+        shares,
+        ...(agentId ? { agentId } : {}),
+      },
     });
 
     const newQObj = { ...newShareQuantities };
@@ -211,6 +231,10 @@ export interface ExecuteSellInput {
    *  current netShares for this entry. */
   shares: number;
   isAdmin?: boolean;
+  /** Optional agent attribution. Set when the caller is the agent
+   *  worker so the inserted `market_bets` sell row joins back to
+   *  `agent_configs` for Town Square + admin trade analytics. */
+  agentId?: string;
 }
 
 export interface ExecuteSellResult {
@@ -229,7 +253,7 @@ export async function executeSell(
   input: ExecuteSellInput,
   txOpt?: DbOrTx,
 ): Promise<ExecuteSellResult | TradeError> {
-  const { marketId, userId, entryId, shares, isAdmin = false } = input;
+  const { marketId, userId, entryId, shares, isAdmin = false, agentId } = input;
 
   if (!Number.isFinite(shares) || shares <= 0) {
     return {
@@ -330,6 +354,7 @@ export async function executeSell(
         marketId,
         entryId,
         userId,
+        agentId: agentId ?? null,
         stakeAmount: -proceeds,
         actionType: "sell",
         shareCount: sharesToSell.toString(),
@@ -347,9 +372,17 @@ export async function executeSell(
       amount: proceeds,
       walletType: "VIRTUAL",
       balanceAfter: updatedProfile.predictCredits,
-      source: "user_action",
+      // See `executeBuy` rationale: agent flows are tagged so audit
+      // queries can split human vs agent volume without joining agents.
+      source: agentId ? "agent_action" : "user_action",
       idempotencyKey: `amm_sell_${insertedBet.id}`,
-      metadata: { marketId, entryId, betId: insertedBet.id, shares: sharesToSell },
+      metadata: {
+        marketId,
+        entryId,
+        betId: insertedBet.id,
+        shares: sharesToSell,
+        ...(agentId ? { agentId } : {}),
+      },
     });
 
     const newQObj = { ...newShareQuantities };
