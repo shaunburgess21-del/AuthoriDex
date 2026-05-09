@@ -2,6 +2,8 @@ import type { ReactNode } from "react";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { ScrollMaskedChipRow } from "@/components/ScrollMaskedChipRow";
+import { FILTER_ROW_SEARCH_INPUT } from "@/lib/filterControlStyles";
+import { cn } from "@/lib/utils";
 
 interface CategoryRowWithSearchProps {
   children: ReactNode;
@@ -29,7 +31,7 @@ export function CategoryRowWithSearch({
           placeholder={placeholder}
           value={searchValue}
           onChange={(e) => onSearchChange(e.target.value)}
-          className="pl-10 h-9"
+          className={cn("pl-10 h-9", FILTER_ROW_SEARCH_INPUT)}
           data-testid={testId}
         />
       </div>

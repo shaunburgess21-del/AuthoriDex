@@ -95,6 +95,7 @@ import { UnifiedSectionHeader } from "@/components/UnifiedSectionHeader";
 import { WindowedDotIndicator } from "@/components/WindowedDotIndicator";
 import { ScrollMaskedChipRow } from "@/components/ScrollMaskedChipRow";
 import { CategoryRowWithSearch } from "@/components/CategoryRowWithSearch";
+import { FILTER_INACTIVE_PILL_VOTE, FILTER_INACTIVE_SECTION_TOGGLE } from "@/lib/filterControlStyles";
 import { VoteSnapScrollView, type SnapItem, type SnapSectionType } from "@/components/snap-scroll/VoteSnapScrollView";
 import {
   navigateToLogin,
@@ -1174,10 +1175,10 @@ function FilterChip({
   return (
     <button
       onClick={handleClick}
-      className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-all flex items-center gap-1.5 whitespace-nowrap ${
+      className={`rounded-full px-3 py-1.5 text-xs font-medium transition-all flex items-center gap-1.5 whitespace-nowrap ${
         isActive
-          ? "bg-cyan-500/25 dark:bg-cyan-500/20 border-cyan-500/50 dark:border-cyan-500/40 text-cyan-700 dark:text-cyan-300"
-          : "bg-muted/50 border-border/60 text-muted-foreground hover:border-foreground/30 dark:bg-slate-800/30 dark:border-slate-700/40 dark:text-slate-400 dark:hover:border-slate-600"
+          ? "border bg-cyan-500/25 dark:bg-cyan-500/20 border-cyan-500/50 dark:border-cyan-500/40 text-cyan-700 dark:text-cyan-300"
+          : FILTER_INACTIVE_PILL_VOTE
       }`}
       data-testid={getTestId()}
     >
@@ -2669,7 +2670,7 @@ export default function VotePage() {
                     ? "bg-cyan-500/25 dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border border-cyan-500/50 dark:border-cyan-400/40 shadow-sm shadow-cyan-500/30 dark:shadow-cyan-500/20"
                     : myVotesFilter === "hide-mine"
                       ? "bg-amber-500/15 dark:bg-amber-500/10 text-amber-600 dark:text-amber-500 border border-amber-500/50 dark:border-amber-500/40"
-                      : "bg-background text-muted-foreground hover:bg-muted/40 dark:hover:bg-white/5 border border-input"
+                      : "bg-background text-muted-foreground hover:bg-muted/40 dark:hover:bg-white/5 border border-border/60"
                 }`}
                 data-testid="toggle-my-votes-pill"
               >
@@ -2688,7 +2689,7 @@ export default function VotePage() {
                 className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all min-w-fit focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                   activeSection === section
                     ? "bg-cyan-500/25 dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border border-cyan-500/50 dark:border-cyan-400/40 shadow-sm shadow-cyan-500/30 dark:shadow-cyan-500/20"
-                    : "bg-muted/50 text-muted-foreground hover:bg-muted border border-border"
+                    : FILTER_INACTIVE_SECTION_TOGGLE
                 }`}
                 data-testid={`toggle-section-${section.toLowerCase().replace(/['\s]/g, '-')}`}
               >

@@ -1,5 +1,6 @@
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { FILTER_INACTIVE_PILL_PREDICT, FILTER_INACTIVE_PILL_VOTE, FILTER_ROW_SEARCH_INPUT } from "@/lib/filterControlStyles";
+import { cn } from "@/lib/utils";
 import { FilterDropdown } from "@/components/FilterDropdown";
 import { ScrollMaskedChipRow } from "@/components/ScrollMaskedChipRow";
 import { Search, Star, Flame, LayoutGrid, Cpu, Landmark, Briefcase, Trophy, Music2, Gamepad2, Video, UtensilsCrossed, Heart, Sparkles } from "lucide-react";
@@ -66,9 +67,7 @@ export function OverlayFilterBar({
   const activeClasses = isVote
     ? "bg-cyan-500/25 dark:bg-cyan-500/20 border-cyan-500/50 dark:border-cyan-500/40 text-cyan-700 dark:text-cyan-300"
     : "bg-violet-500/25 dark:bg-violet-500/20 text-violet-700 dark:text-violet-300 border border-violet-500/50 dark:border-violet-400/40";
-  const inactiveClasses = isVote
-    ? "bg-muted/50 border-border/60 text-muted-foreground hover:border-foreground/30 dark:bg-slate-800/30 dark:border-slate-700/40 dark:text-slate-400 dark:hover:border-slate-600"
-    : "bg-background/50 border border-border/50 text-muted-foreground hover:bg-muted/80 hover:border-violet-400/20";
+  const inactiveClasses = isVote ? FILTER_INACTIVE_PILL_VOTE : FILTER_INACTIVE_PILL_PREDICT;
 
   return (
     <div className="sticky top-0 z-10 px-4 py-3 border-b bg-background/95 backdrop-blur-sm">
@@ -87,7 +86,7 @@ export function OverlayFilterBar({
             placeholder={placeholder}
             value={searchValue}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="pl-10 h-9"
+            className={cn("pl-10 h-9", FILTER_ROW_SEARCH_INPUT)}
             data-testid={`${testIdPrefix}-search`}
           />
         </div>
@@ -129,7 +128,7 @@ export function OverlayFilterBar({
             placeholder={placeholder}
             value={searchValue}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="pl-10 h-9"
+            className={cn("pl-10 h-9", FILTER_ROW_SEARCH_INPUT)}
             data-testid={`${testIdPrefix}-search-desktop`}
           />
         </div>
