@@ -2181,6 +2181,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Full leaderboard strip for profile "Continue exploring" horizontal
+  // carousel (same ordering + slim shape as /neighbours, no /api/trending
+  // pagination cap).
+  app.get("/api/trending/:id/explore", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const people = await storage.getTrendingPeople();
+      const slimPeople = people.map((p) => ({
+        id: p.id,
+        name: p.name,
+        avatar: p.avatar,
+        rank: p.rank,
+        category: p.category,
+        trendScore: p.trendScore,
+        change24h: p.change24h,
+      }));
+      const focusIndex = people.findIndex((p) => p.id === id);
+      res.json({ people: slimPeople, focusIndex });
+    } catch (error) {
+      console.error("Error fetching trending explore strip:", error);
+      res.status(500).json({ error: "Failed to fetch explore strip" });
+    }
+  });
+
   app.post("/api/trending/context/batch", async (req, res) => {
     try {
       const { personIds } = req.body;

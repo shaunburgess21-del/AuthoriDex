@@ -42,6 +42,8 @@ interface RelatedMarketsProps {
   category?: string | null;
   /** Hard cap on cards shown; 6 fits one and a half screens on mobile. */
   limit?: number;
+  /** When true, show every candidate after filtering (e.g. Up/Down detail). */
+  showAllMarkets?: boolean;
   className?: string;
 }
 
@@ -169,6 +171,7 @@ export function RelatedMarkets({
   currentMarketId,
   category,
   limit = 6,
+  showAllMarkets = false,
   className,
 }: RelatedMarketsProps) {
   const endpoint = TYPE_ENDPOINT[type];
@@ -199,8 +202,12 @@ export function RelatedMarkets({
       return aMs - bMs;
     };
 
-    return [...sameCategory.sort(byEndSoonest), ...otherCategory.sort(byEndSoonest)].slice(0, limit);
-  }, [data, currentMarketId, category, type, limit]);
+    const merged = [
+      ...sameCategory.sort(byEndSoonest),
+      ...otherCategory.sort(byEndSoonest),
+    ];
+    return showAllMarkets ? merged : merged.slice(0, limit);
+  }, [data, currentMarketId, category, type, limit, showAllMarkets]);
 
   if (isLoading) {
     return (

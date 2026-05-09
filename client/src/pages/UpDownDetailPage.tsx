@@ -802,6 +802,7 @@ export default function UpDownDetailPage() {
           type="updown"
           currentMarketId={marketId}
           category={hydrated.category}
+          showAllMarkets
           className="pt-2"
         />
       </div>
