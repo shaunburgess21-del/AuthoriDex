@@ -20900,6 +20900,34 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         }]),
       );
 
+      // Pre-fetch entry labels for every market in one query so the
+      // admin Resolve modal can render without a second round-trip.
+      // Joined back per-market below.
+      const entriesRows = marketIds.length > 0
+        ? await db
+            .select({
+              id: marketEntries.id,
+              marketId: marketEntries.marketId,
+              label: marketEntries.label,
+              displayOrder: marketEntries.displayOrder,
+              resolutionStatus: marketEntries.resolutionStatus,
+            })
+            .from(marketEntries)
+            .where(inArray(marketEntries.marketId, marketIds))
+            .orderBy(asc(marketEntries.displayOrder))
+        : [];
+      const entriesByMarket = new Map<string, Array<{ id: string; label: string; displayOrder: number; resolutionStatus: string }>>();
+      for (const e of entriesRows) {
+        const list = entriesByMarket.get(e.marketId) ?? [];
+        list.push({
+          id: e.id,
+          label: e.label,
+          displayOrder: e.displayOrder,
+          resolutionStatus: e.resolutionStatus,
+        });
+        entriesByMarket.set(e.marketId, list);
+      }
+
       const { currentPrices } = await import("@shared/lib/amm/positions");
 
       const markets = rows.map((r) => {
@@ -20935,6 +20963,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           tradeCount: trade.tradeCount,
           totalVolume: trade.totalVolume,
           stateUpdatedAt: r.stateUpdatedAt?.toISOString() ?? null,
+          entries: entriesByMarket.get(r.id) ?? [],
         };
       });
 
@@ -21023,13 +21052,16 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       // Per-entry breakdown: payout liability + projected house P&L if
       // each side wins. expectedHousePnl is a single scalar weighted
       // by the AMM's own marginal prices (its best estimate of P(win)).
+      // O(N) lookup via Map — outcomeOrder.map × entries.find would be
+      // O(N²) and is wasteful even at N≈10.
+      const entriesById = new Map(entries.map((e) => [e.id, e]));
       let expectedHousePnl = 0;
       const entryBreakdown = outcomeOrder.map((eid, idx) => {
         const q = Number(shareQuantities[eid] ?? 0);
         const price = prices[eid] ?? 0;
         const pnlIfWinner = housePnL(qVec, liquidityB, idx, totalUserCreditsIn);
         expectedHousePnl += price * pnlIfWinner;
-        const meta = entries.find((e) => e.id === eid);
+        const meta = entriesById.get(eid);
         return {
           entryId: eid,
           label: meta?.label ?? null,
