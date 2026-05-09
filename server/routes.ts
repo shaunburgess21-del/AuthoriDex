@@ -20690,6 +20690,609 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
   });
 
   // ============================================================================
+  // AMM ADMIN DASHBOARD ENDPOINTS (Phase 5 of the parimutuel -> AMM rebuild)
+  // ----------------------------------------------------------------------------
+  // Read-only inspector + audit endpoints powering the admin AMM tab.
+  //
+  //   GET /api/admin/amm/house        — house wallet + aggregate P&L
+  //   GET /api/admin/amm/markets      — paginated AMM markets list
+  //   GET /api/admin/amm/markets/:id  — single-market inspector with per-entry
+  //                                     payout liability + projected house P&L
+  //   GET /api/admin/amm/trades       — recent AMM trades feed (paginated)
+  //   GET /api/admin/amm/health       — invariants audit (state vs bets,
+  //                                     settlement idempotency, house ledger)
+  //
+  // All gated by requireAdmin. No mutations — destructive actions still go
+  // through the existing /amm-resolve and /amm/settings endpoints.
+  // ============================================================================
+
+  app.get("/api/admin/amm/house", requireAuth, requireAdmin, async (_req: AuthRequest, res) => {
+    try {
+      const { HOUSE_PROFILE_ID } = await import("./services/amm-house");
+
+      const [houseProfile] = await db
+        .select({ id: profiles.id, predictCredits: profiles.predictCredits })
+        .from(profiles)
+        .where(eq(profiles.id, HOUSE_PROFILE_ID))
+        .limit(1);
+
+      // Aggregate ledger by AMM txn type. amm_seed_debit / amm_payout /
+      // amm_void_refund are negative on the house side (debits); other
+      // amm_* rows credit the house. A single grouped query keeps this
+      // O(1) regardless of trade volume.
+      const ledgerAgg = await db
+        .select({
+          txnType: creditLedger.txnType,
+          total: sql<string>`COALESCE(SUM(${creditLedger.amount}), 0)`,
+          count: sql<string>`COUNT(*)::int`,
+        })
+        .from(creditLedger)
+        .where(
+          and(
+            eq(creditLedger.userId, HOUSE_PROFILE_ID),
+            sql`${creditLedger.txnType} IN ('amm_seed_debit','amm_payout','amm_void_refund','amm_settle_credit','initial_grant')`,
+          ),
+        )
+        .groupBy(creditLedger.txnType);
+
+      const byType: Record<string, { total: number; count: number }> = {};
+      for (const r of ledgerAgg) {
+        byType[r.txnType] = { total: Number(r.total), count: Number(r.count) };
+      }
+      const seeded = -(byType.amm_seed_debit?.total ?? 0); // debits are negative
+      const settledCredits = byType.amm_settle_credit?.total ?? 0;
+      const paidOut = -(byType.amm_payout?.total ?? 0);
+      const refunded = -(byType.amm_void_refund?.total ?? 0);
+      const initialGrant = byType.initial_grant?.total ?? 0;
+
+      // Open exposure = sum of house_seed_amount across markets that
+      // are still OPEN or CLOSED_PENDING. These seeds will return at
+      // settlement (with house P&L baked in); until then, they're
+      // tied up.
+      const openExposureRows = await db
+        .select({
+          totalSeed: sql<string>`COALESCE(SUM(${marketAmmState.houseSeedAmount}), 0)`,
+          totalCreditsIn: sql<string>`COALESCE(SUM(${marketAmmState.totalUserCreditsIn}), 0)`,
+          marketCount: sql<string>`COUNT(*)::int`,
+        })
+        .from(marketAmmState)
+        .innerJoin(predictionMarkets, eq(marketAmmState.marketId, predictionMarkets.id))
+        .where(
+          and(
+            eq(predictionMarkets.engine, "amm"),
+            sql`${predictionMarkets.status} IN ('OPEN','CLOSED_PENDING')`,
+          ),
+        );
+      const openExposure = Number(openExposureRows[0]?.totalSeed ?? 0);
+      const openCreditsIn = Number(openExposureRows[0]?.totalCreditsIn ?? 0);
+      const openMarketCount = Number(openExposureRows[0]?.marketCount ?? 0);
+
+      // Realised P&L = settle credits returned to the house minus the
+      // seed debits for those same (now closed) markets. Equivalent to
+      // SUM(creditedToHouse - houseSeedAmount) over RESOLVED+VOID rows.
+      const resolvedAgg = await db
+        .select({
+          seedSum: sql<string>`COALESCE(SUM(${marketAmmState.houseSeedAmount}), 0)`,
+          marketCount: sql<string>`COUNT(*)::int`,
+        })
+        .from(marketAmmState)
+        .innerJoin(predictionMarkets, eq(marketAmmState.marketId, predictionMarkets.id))
+        .where(
+          and(
+            eq(predictionMarkets.engine, "amm"),
+            sql`${predictionMarkets.status} IN ('RESOLVED','VOID')`,
+          ),
+        );
+      const resolvedSeed = Number(resolvedAgg[0]?.seedSum ?? 0);
+      const resolvedMarketCount = Number(resolvedAgg[0]?.marketCount ?? 0);
+      const realisedPnl = settledCredits - resolvedSeed;
+
+      // Ledger reconciliation: profile.predict_credits should equal
+      // SUM(credit_ledger.amount) for the house user. Drift here is
+      // the most actionable health signal in the whole panel.
+      const totalLedger = await db
+        .select({ total: sql<string>`COALESCE(SUM(${creditLedger.amount}), 0)` })
+        .from(creditLedger)
+        .where(eq(creditLedger.userId, HOUSE_PROFILE_ID));
+      const ledgerSum = Number(totalLedger[0]?.total ?? 0);
+      const profileCredits = Number(houseProfile?.predictCredits ?? 0);
+      const drift = profileCredits - ledgerSum;
+      const reconciliationOk = Math.abs(drift) < 1; // allow sub-credit fp dust
+
+      res.json({
+        houseProfileId: HOUSE_PROFILE_ID,
+        houseBalance: profileCredits,
+        ledgerSum,
+        ledgerReconciliation: { profileCredits, ledgerSum, drift, ok: reconciliationOk },
+        aggregates: {
+          initialGrant,
+          totalSeeded: seeded,
+          totalSettledCredits: settledCredits,
+          totalPaidOut: paidOut,
+          totalRefunded: refunded,
+        },
+        openMarkets: {
+          count: openMarketCount,
+          totalSeedExposure: openExposure,
+          totalUserCreditsIn: openCreditsIn,
+        },
+        resolvedMarkets: {
+          count: resolvedMarketCount,
+          totalSeedDebited: resolvedSeed,
+          totalSettleCredited: settledCredits,
+          realisedPnl,
+        },
+      });
+    } catch (err: any) {
+      console.error("[AmmAdmin] house fetch failed:", err);
+      res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
+    }
+  });
+
+  app.get("/api/admin/amm/markets", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const limit = Math.max(1, Math.min(200, parseInt(String(req.query.limit ?? "50"), 10) || 50));
+      const offset = Math.max(0, parseInt(String(req.query.offset ?? "0"), 10) || 0);
+      const statusFilter = typeof req.query.status === "string" ? req.query.status : null;
+      const validStatuses = new Set(["OPEN", "CLOSED_PENDING", "RESOLVED", "VOID"]);
+
+      const conditions = [eq(predictionMarkets.engine, "amm")];
+      if (statusFilter && validStatuses.has(statusFilter)) {
+        conditions.push(eq(predictionMarkets.status, statusFilter));
+      }
+
+      const totalRows = await db
+        .select({ count: sql<string>`COUNT(*)::int` })
+        .from(predictionMarkets)
+        .where(and(...conditions));
+      const total = Number(totalRows[0]?.count ?? 0);
+
+      const rows = await db
+        .select({
+          id: predictionMarkets.id,
+          slug: predictionMarkets.slug,
+          title: predictionMarkets.title,
+          status: predictionMarkets.status,
+          marketType: predictionMarkets.marketType,
+          openMarketType: predictionMarkets.openMarketType,
+          visibility: predictionMarkets.visibility,
+          startAt: predictionMarkets.startAt,
+          endAt: predictionMarkets.endAt,
+          closeAt: predictionMarkets.closeAt,
+          resolvedAt: predictionMarkets.resolvedAt,
+          liquidityB: marketAmmState.liquidityB,
+          outcomeOrder: marketAmmState.outcomeOrder,
+          shareQuantities: marketAmmState.shareQuantities,
+          houseSeedAmount: marketAmmState.houseSeedAmount,
+          totalUserCreditsIn: marketAmmState.totalUserCreditsIn,
+          stateUpdatedAt: marketAmmState.updatedAt,
+        })
+        .from(predictionMarkets)
+        .innerJoin(marketAmmState, eq(marketAmmState.marketId, predictionMarkets.id))
+        .where(and(...conditions))
+        .orderBy(desc(predictionMarkets.endAt))
+        .limit(limit)
+        .offset(offset);
+
+      const marketIds = rows.map((r) => r.id);
+      const tradeAgg = marketIds.length > 0
+        ? await db
+            .select({
+              marketId: marketBets.marketId,
+              traderCount: sql<string>`COUNT(DISTINCT ${marketBets.userId})::int`,
+              tradeCount: sql<string>`COUNT(*)::int`,
+              totalVolume: sql<string>`COALESCE(SUM(ABS(${marketBets.stakeAmount})), 0)::numeric`,
+            })
+            .from(marketBets)
+            .where(
+              and(
+                inArray(marketBets.marketId, marketIds),
+                sql`${marketBets.actionType} IN ('buy','sell')`,
+              ),
+            )
+            .groupBy(marketBets.marketId)
+        : [];
+      const tradeAggByMarket = new Map(
+        tradeAgg.map((t) => [t.marketId, {
+          traderCount: Number(t.traderCount ?? 0),
+          tradeCount: Number(t.tradeCount ?? 0),
+          totalVolume: Number(t.totalVolume ?? 0),
+        }]),
+      );
+
+      const { currentPrices } = await import("@shared/lib/amm/positions");
+
+      const markets = rows.map((r) => {
+        const liquidityB = Number(r.liquidityB);
+        const outcomeOrder = (r.outcomeOrder as string[]) ?? [];
+        const shareQuantities = (r.shareQuantities as Record<string, number>) ?? {};
+        const totalUserCreditsIn = Number(r.totalUserCreditsIn);
+        const prices = currentPrices({ liquidityB, outcomeOrder, shareQuantities });
+        const qVals = outcomeOrder.map((id) => Number(shareQuantities[id] ?? 0));
+        const maxPayoutLiability = qVals.length === 0 ? 0 : Math.max(...qVals);
+        const trade = tradeAggByMarket.get(r.id) ?? { traderCount: 0, tradeCount: 0, totalVolume: 0 };
+
+        return {
+          id: r.id,
+          slug: r.slug,
+          title: r.title,
+          status: r.status,
+          marketType: r.marketType,
+          openMarketType: r.openMarketType,
+          visibility: r.visibility,
+          startAt: r.startAt?.toISOString() ?? null,
+          endAt: r.endAt?.toISOString() ?? null,
+          closeAt: r.closeAt?.toISOString() ?? null,
+          resolvedAt: r.resolvedAt?.toISOString() ?? null,
+          liquidityB,
+          outcomeOrder,
+          shareQuantities,
+          prices,
+          houseSeedAmount: r.houseSeedAmount,
+          totalUserCreditsIn,
+          maxPayoutLiability,
+          traderCount: trade.traderCount,
+          tradeCount: trade.tradeCount,
+          totalVolume: trade.totalVolume,
+          stateUpdatedAt: r.stateUpdatedAt?.toISOString() ?? null,
+        };
+      });
+
+      res.json({ markets, total, limit, offset });
+    } catch (err: any) {
+      console.error("[AmmAdmin] markets list failed:", err);
+      res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
+    }
+  });
+
+  app.get("/api/admin/amm/markets/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const [marketRow] = await db
+        .select({
+          id: predictionMarkets.id,
+          slug: predictionMarkets.slug,
+          title: predictionMarkets.title,
+          status: predictionMarkets.status,
+          marketType: predictionMarkets.marketType,
+          openMarketType: predictionMarkets.openMarketType,
+          visibility: predictionMarkets.visibility,
+          startAt: predictionMarkets.startAt,
+          endAt: predictionMarkets.endAt,
+          closeAt: predictionMarkets.closeAt,
+          resolvedAt: predictionMarkets.resolvedAt,
+          voidReason: predictionMarkets.voidReason,
+          settledBy: predictionMarkets.settledBy,
+          resolutionNotes: predictionMarkets.resolutionNotes,
+          engine: predictionMarkets.engine,
+          liquidityB: marketAmmState.liquidityB,
+          outcomeOrder: marketAmmState.outcomeOrder,
+          shareQuantities: marketAmmState.shareQuantities,
+          houseSeedAmount: marketAmmState.houseSeedAmount,
+          totalUserCreditsIn: marketAmmState.totalUserCreditsIn,
+          stateUpdatedAt: marketAmmState.updatedAt,
+        })
+        .from(predictionMarkets)
+        .innerJoin(marketAmmState, eq(marketAmmState.marketId, predictionMarkets.id))
+        .where(and(eq(predictionMarkets.id, id), eq(predictionMarkets.engine, "amm")))
+        .limit(1);
+
+      if (!marketRow) {
+        return res.status(404).json({ ok: false, error: "AMM market not found" });
+      }
+
+      const entries = await db
+        .select({
+          id: marketEntries.id,
+          label: marketEntries.label,
+          displayOrder: marketEntries.displayOrder,
+          resolutionStatus: marketEntries.resolutionStatus,
+          totalStake: marketEntries.totalStake,
+        })
+        .from(marketEntries)
+        .where(eq(marketEntries.marketId, id))
+        .orderBy(asc(marketEntries.displayOrder));
+
+      const tradeAgg = await db
+        .select({
+          traderCount: sql<string>`COUNT(DISTINCT ${marketBets.userId})::int`,
+          tradeCount: sql<string>`COUNT(*)::int`,
+          totalVolume: sql<string>`COALESCE(SUM(ABS(${marketBets.stakeAmount})), 0)::numeric`,
+        })
+        .from(marketBets)
+        .where(
+          and(
+            eq(marketBets.marketId, id),
+            sql`${marketBets.actionType} IN ('buy','sell')`,
+          ),
+        );
+      const traderCount = Number(tradeAgg[0]?.traderCount ?? 0);
+      const tradeCount = Number(tradeAgg[0]?.tradeCount ?? 0);
+      const totalVolume = Number(tradeAgg[0]?.totalVolume ?? 0);
+
+      const liquidityB = Number(marketRow.liquidityB);
+      const outcomeOrder = (marketRow.outcomeOrder as string[]) ?? [];
+      const shareQuantities = (marketRow.shareQuantities as Record<string, number>) ?? {};
+      const totalUserCreditsIn = Number(marketRow.totalUserCreditsIn);
+
+      const { currentPrices } = await import("@shared/lib/amm/positions");
+      const { housePnL } = await import("@shared/lib/amm/lmsr");
+      const prices = currentPrices({ liquidityB, outcomeOrder, shareQuantities });
+      const qVec = outcomeOrder.map((eid) => Number(shareQuantities[eid] ?? 0));
+
+      // Per-entry breakdown: payout liability + projected house P&L if
+      // each side wins. expectedHousePnl is a single scalar weighted
+      // by the AMM's own marginal prices (its best estimate of P(win)).
+      let expectedHousePnl = 0;
+      const entryBreakdown = outcomeOrder.map((eid, idx) => {
+        const q = Number(shareQuantities[eid] ?? 0);
+        const price = prices[eid] ?? 0;
+        const pnlIfWinner = housePnL(qVec, liquidityB, idx, totalUserCreditsIn);
+        expectedHousePnl += price * pnlIfWinner;
+        const meta = entries.find((e) => e.id === eid);
+        return {
+          entryId: eid,
+          label: meta?.label ?? null,
+          displayOrder: meta?.displayOrder ?? idx,
+          resolutionStatus: meta?.resolutionStatus ?? null,
+          q,
+          price,
+          payoutLiabilityIfWinner: q,
+          projectedHousePnlIfWinner: pnlIfWinner,
+        };
+      });
+
+      res.json({
+        market: {
+          id: marketRow.id,
+          slug: marketRow.slug,
+          title: marketRow.title,
+          status: marketRow.status,
+          marketType: marketRow.marketType,
+          openMarketType: marketRow.openMarketType,
+          visibility: marketRow.visibility,
+          engine: marketRow.engine,
+          startAt: marketRow.startAt?.toISOString() ?? null,
+          endAt: marketRow.endAt?.toISOString() ?? null,
+          closeAt: marketRow.closeAt?.toISOString() ?? null,
+          resolvedAt: marketRow.resolvedAt?.toISOString() ?? null,
+          voidReason: marketRow.voidReason ?? null,
+          settledBy: marketRow.settledBy ?? null,
+          resolutionNotes: marketRow.resolutionNotes ?? null,
+        },
+        ammState: {
+          liquidityB,
+          outcomeOrder,
+          shareQuantities,
+          houseSeedAmount: marketRow.houseSeedAmount,
+          totalUserCreditsIn,
+          prices,
+          stateUpdatedAt: marketRow.stateUpdatedAt?.toISOString() ?? null,
+        },
+        entries: entryBreakdown,
+        trades: {
+          traderCount,
+          tradeCount,
+          totalVolume,
+        },
+        houseProjections: {
+          expectedHousePnl,
+          maxPayoutLiability: qVec.length === 0 ? 0 : Math.max(...qVec),
+        },
+      });
+    } catch (err: any) {
+      console.error("[AmmAdmin] market detail failed:", err);
+      res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
+    }
+  });
+
+  app.get("/api/admin/amm/trades", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const limit = Math.max(1, Math.min(200, parseInt(String(req.query.limit ?? "50"), 10) || 50));
+      const offset = Math.max(0, parseInt(String(req.query.offset ?? "0"), 10) || 0);
+      const sideFilter = typeof req.query.side === "string" ? req.query.side : null;
+      const marketFilter = typeof req.query.marketId === "string" ? req.query.marketId : null;
+
+      const conditions = [
+        eq(predictionMarkets.engine, "amm"),
+        sql`${marketBets.actionType} IN ('buy','sell')`,
+      ];
+      if (sideFilter === "buy" || sideFilter === "sell") {
+        conditions.push(eq(marketBets.actionType, sideFilter));
+      }
+      if (marketFilter) {
+        conditions.push(eq(marketBets.marketId, marketFilter));
+      }
+
+      const totalRows = await db
+        .select({ count: sql<string>`COUNT(*)::int` })
+        .from(marketBets)
+        .innerJoin(predictionMarkets, eq(marketBets.marketId, predictionMarkets.id))
+        .where(and(...conditions));
+      const total = Number(totalRows[0]?.count ?? 0);
+
+      const rows = await db
+        .select({
+          id: marketBets.id,
+          createdAt: marketBets.createdAt,
+          userId: marketBets.userId,
+          marketId: marketBets.marketId,
+          entryId: marketBets.entryId,
+          actionType: marketBets.actionType,
+          shareCount: marketBets.shareCount,
+          stakeAmount: marketBets.stakeAmount,
+          pricePerShare: marketBets.pricePerShare,
+          status: marketBets.status,
+          marketTitle: predictionMarkets.title,
+          marketSlug: predictionMarkets.slug,
+          marketType: predictionMarkets.marketType,
+          entryLabel: marketEntries.label,
+          username: profiles.username,
+          isAgent: profiles.isAgent,
+          isHouse: profiles.isHouse,
+        })
+        .from(marketBets)
+        .innerJoin(predictionMarkets, eq(marketBets.marketId, predictionMarkets.id))
+        .innerJoin(marketEntries, eq(marketBets.entryId, marketEntries.id))
+        .leftJoin(profiles, eq(profiles.id, marketBets.userId))
+        .where(and(...conditions))
+        .orderBy(desc(marketBets.createdAt))
+        .limit(limit)
+        .offset(offset);
+
+      res.json({
+        trades: rows.map((r) => ({
+          id: r.id,
+          createdAt: r.createdAt?.toISOString() ?? null,
+          userId: r.userId,
+          username: r.username ?? null,
+          isAgent: !!r.isAgent,
+          isHouse: !!r.isHouse,
+          marketId: r.marketId,
+          marketSlug: r.marketSlug,
+          marketTitle: r.marketTitle,
+          marketType: r.marketType,
+          entryId: r.entryId,
+          entryLabel: r.entryLabel,
+          actionType: r.actionType,
+          shareCount: r.shareCount != null ? Number(r.shareCount) : null,
+          stakeAmount: r.stakeAmount,
+          pricePerShare: r.pricePerShare != null ? Number(r.pricePerShare) : null,
+          status: r.status,
+        })),
+        total,
+        limit,
+        offset,
+      });
+    } catch (err: any) {
+      console.error("[AmmAdmin] trades feed failed:", err);
+      res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
+    }
+  });
+
+  app.get("/api/admin/amm/health", requireAuth, requireAdmin, async (_req: AuthRequest, res) => {
+    try {
+      const { HOUSE_PROFILE_ID } = await import("./services/amm-house");
+      const audit = await import("./services/amm-audit");
+
+      // Pull every AMM market and its state row in one go. The
+      // left join handles the "missing state row" edge case
+      // implicitly — if a market has engine='amm' but no state
+      // row, downstream checks will treat shareQuantities as null
+      // and skip the share/credits drift calculations for it.
+      const stateRows = await db
+        .select({
+          marketId: predictionMarkets.id,
+          marketTitle: predictionMarkets.title,
+          marketStatus: predictionMarkets.status,
+          shareQuantities: marketAmmState.shareQuantities,
+          totalUserCreditsIn: marketAmmState.totalUserCreditsIn,
+          outcomeOrder: marketAmmState.outcomeOrder,
+        })
+        .from(predictionMarkets)
+        .leftJoin(marketAmmState, eq(marketAmmState.marketId, predictionMarkets.id))
+        .where(eq(predictionMarkets.engine, "amm"));
+
+      const ammMarketIds = stateRows.map((r) => r.marketId);
+
+      const betAgg = ammMarketIds.length > 0
+        ? await db
+            .select({
+              marketId: marketBets.marketId,
+              entryId: marketBets.entryId,
+              netShares: sql<string>`COALESCE(SUM(CASE WHEN ${marketBets.actionType} = 'buy' THEN ${marketBets.shareCount} WHEN ${marketBets.actionType} = 'sell' THEN -${marketBets.shareCount} ELSE 0 END), 0)`,
+              netStake: sql<string>`COALESCE(SUM(${marketBets.stakeAmount}), 0)`,
+            })
+            .from(marketBets)
+            .where(
+              and(
+                inArray(marketBets.marketId, ammMarketIds),
+                sql`${marketBets.actionType} IN ('buy','sell')`,
+              ),
+            )
+            .groupBy(marketBets.marketId, marketBets.entryId)
+        : [];
+
+      const states = stateRows.map((r) => ({
+        marketId: r.marketId,
+        marketTitle: r.marketTitle,
+        marketStatus: r.marketStatus,
+        shareQuantities: (r.shareQuantities as Record<string, number> | null) ?? null,
+        totalUserCreditsIn: r.totalUserCreditsIn != null ? Number(r.totalUserCreditsIn) : null,
+        outcomeOrder: (r.outcomeOrder as string[] | null) ?? null,
+      }));
+      const bets = betAgg.map((r) => ({
+        marketId: r.marketId,
+        entryId: r.entryId,
+        netShares: Number(r.netShares),
+        netStake: Number(r.netStake),
+      }));
+
+      const shareDrift = audit.detectShareDrift(states, bets);
+      const creditsDrift = audit.detectCreditsDrift(states, bets);
+
+      const closedMarkets = states.filter(
+        (m) => m.marketStatus === "RESOLVED" || m.marketStatus === "VOID",
+      );
+      const settleByKey = new Map<string, number>();
+      if (closedMarkets.length > 0) {
+        const closedKeys = closedMarkets.map((m) => `amm_settle_${m.marketId}`);
+        const settleRows = await db
+          .select({
+            idempotencyKey: creditLedger.idempotencyKey,
+            count: sql<string>`COUNT(*)::int`,
+          })
+          .from(creditLedger)
+          .where(
+            and(
+              eq(creditLedger.userId, HOUSE_PROFILE_ID),
+              eq(creditLedger.txnType, "amm_settle_credit"),
+              inArray(creditLedger.idempotencyKey, closedKeys),
+            ),
+          )
+          .groupBy(creditLedger.idempotencyKey);
+        for (const r of settleRows) settleByKey.set(r.idempotencyKey, Number(r.count));
+      }
+      const settlementIssues = audit.detectSettlementIssues(states, settleByKey);
+
+      const [houseProfile] = await db
+        .select({ predictCredits: profiles.predictCredits })
+        .from(profiles)
+        .where(eq(profiles.id, HOUSE_PROFILE_ID))
+        .limit(1);
+      const ledgerSumRows = await db
+        .select({ total: sql<string>`COALESCE(SUM(${creditLedger.amount}), 0)` })
+        .from(creditLedger)
+        .where(eq(creditLedger.userId, HOUSE_PROFILE_ID));
+      const recon = audit.reconcileHouseLedger(
+        Number(houseProfile?.predictCredits ?? 0),
+        Number(ledgerSumRows[0]?.total ?? 0),
+      );
+
+      const checks = [
+        audit.shareDriftCheck(shareDrift),
+        audit.creditsDriftCheck(creditsDrift),
+        audit.settlementIdempotencyCheck(settlementIssues, closedMarkets.length),
+        audit.reconciliationCheck(recon),
+      ];
+
+      res.json({
+        overall: audit.summariseOverallSeverity(checks),
+        checkedAt: new Date().toISOString(),
+        ammMarketCount: states.length,
+        tolerances: {
+          shares: audit.SHARE_DRIFT_TOLERANCE,
+          credits: audit.CREDITS_DRIFT_TOLERANCE,
+        },
+        checks,
+      });
+    } catch (err: any) {
+      console.error("[AmmAdmin] health audit failed:", err);
+      res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
+    }
+  });
+
+  // ============================================================================
   // AMM SMOKE TEST ENDPOINT (Phase 2 of the parimutuel -> AMM rebuild)
   // ----------------------------------------------------------------------------
   // Creates a one-off `engine='amm'` community market, seeds it via the

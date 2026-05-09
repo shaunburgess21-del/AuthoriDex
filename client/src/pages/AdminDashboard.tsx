@@ -67,6 +67,7 @@ import { AdminUnderratedOverrated } from "@/components/admin/AdminUnderratedOver
 import { AdminCurateProfile } from "@/components/admin/AdminCurateProfile";
 import { AdminInductionQueue } from "@/components/admin/AdminInductionQueue";
 import { AdminSettlementCenter } from "@/components/admin/AdminSettlementCenter";
+import { AdminAmmSection } from "@/components/admin/AdminAmmSection";
 import { AdminUserCreditHistory } from "@/components/admin/AdminUserCreditHistory";
 import { AdminLeaderboardDiff } from "@/components/admin/AdminLeaderboardDiff";
 import { AdminCategoriesSection } from "@/components/admin/AdminCategoriesSection";
@@ -2754,6 +2755,7 @@ export default function AdminDashboard() {
     { id: "voting" as const, label: "Voting CMS", icon: Megaphone },
     { id: "moderation" as const, label: "Moderation", icon: Shield },
     { id: "settlement" as const, label: "Settlement", icon: Gavel },
+    { id: "amm" as const, label: "AMM", icon: Activity },
     { id: "users" as const, label: "Users", icon: Users },
     { id: "agents" as const, label: "Agents", icon: Bot },
     { id: "categories" as const, label: "Categories", icon: Layers },
@@ -5894,6 +5896,11 @@ export default function AdminDashboard() {
         {/* Settlement Section */}
         {activeSection === "settlement" && (
           <AdminSettlementCenter />
+        )}
+
+        {/* AMM Section */}
+        {activeSection === "amm" && (
+          <AdminAmmSection />
         )}
 
         {/* Users Section */}

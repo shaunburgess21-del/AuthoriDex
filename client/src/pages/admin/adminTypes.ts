@@ -19,6 +19,7 @@ export type AdminSection =
   | "voting"
   | "moderation"
   | "settlement"
+  | "amm"
   | "users"
   | "agents"
   | "categories"
