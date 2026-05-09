@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { motion, AnimatePresence, useMotionValue, useTransform, animate as motionAnimate } from "framer-motion";
 import { ArrowLeft, ArrowUp, Inbox, MessageCircle, Plus, X } from "lucide-react";
 import { getCategoryStyle } from "@/components/CategoryPill";
-import { getMarketCategoryLabel } from "@shared/constants";
+import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
 import { sharePage } from "@/lib/share";
 import {
   navigateWithVoteList,
@@ -250,20 +250,34 @@ export function VoteSnapScrollView({
   const columnScrollRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [dismissCounter, setDismissCounter] = useState(0);
 
+  // Canonical category ids (same pipeline as buildSectionCategoryOptions / filters)
+  // so alias strings like "Food & Drink" vs "food-drink" collapse to one snap tab.
+  const normalizedItems = useMemo(
+    () =>
+      items.map((item) => ({
+        ...item,
+        category: normalizeMarketCategory(item.category),
+      })),
+    [items],
+  );
+
   // ── Categories ────────────────────────────────────────────────────────
   const categories = useMemo(() => {
     const cats = new Set<string>();
-    items.forEach((item) => cats.add(item.category));
-    return ["All", ...Array.from(cats)];
-  }, [items]);
+    normalizedItems.forEach((item) => cats.add(item.category));
+    const sorted = Array.from(cats).sort((a, b) =>
+      getMarketCategoryLabel(a).localeCompare(getMarketCategoryLabel(b)),
+    );
+    return ["All", ...sorted];
+  }, [normalizedItems]);
 
   const initialCategoryIdx = useMemo(() => {
     if (!initialItemId) return 0;
-    const item = items.find((i) => i.id === initialItemId);
+    const item = normalizedItems.find((i) => i.id === initialItemId);
     if (!item) return 0;
     const idx = categories.indexOf(item.category);
     return idx >= 0 ? idx : 0;
-  }, [initialItemId, items, categories]);
+  }, [initialItemId, normalizedItems, categories]);
 
   const [activeCategoryIdx, setActiveCategoryIdx] = useState(initialCategoryIdx);
   const [visualCategoryIdx, setVisualCategoryIdx] = useState(initialCategoryIdx);
@@ -291,13 +305,13 @@ export function VoteSnapScrollView({
 
   const categoryItems = useMemo(() => {
     const map = new Map<string, SnapItem[]>();
-    map.set("All", items);
+    map.set("All", normalizedItems);
     for (const cat of categories) {
       if (cat === "All") continue;
-      map.set(cat, items.filter((i) => i.category === cat));
+      map.set(cat, normalizedItems.filter((i) => i.category === cat));
     }
     return map;
-  }, [items, categories]);
+  }, [normalizedItems, categories]);
 
   // Windowed: [prev | null, current, next | null]
   const windowedCats = useMemo(() => {
