@@ -2,8 +2,17 @@
 // SerpApi Google Trends Provider (May 2026)
 // ============================================================================
 // Fetches Google Trends "Interest over time" timeseries via SerpApi's
-// google_trends engine. Designed for batched ingestion (up to 5 queries per
-// call) with a 24h fetch cadence — Google Trends itself only updates daily.
+// google_trends engine. One query per call (no batching) so each person's
+// 0-100 score is normalised against THEIR OWN peak, not against the loudest
+// person in a shared batch. Uses date=now 7-d for hourly resolution over the
+// past 7 days — this is what users see on the Google Trends UI for "Past 7
+// days" and produces the meaningful "current interest" reading.
+//
+// Why per-person and not batched? When you submit q=a,b,c,d,e to Google
+// Trends, ALL series are normalised against the single highest point across
+// all 5 queries combined. So if Trump is in a batch with Elon, Elon's score
+// gets crushed against Trump's biggest day. Per-person fetches eliminate
+// this cross-contamination at the cost of 5× more API calls.
 //
 // Also provides Topic ID autocomplete lookups for entity disambiguation
 // (see `fetchTrendsTopicSuggestions`).
@@ -16,8 +25,10 @@ const SERPAPI_API_KEY = process.env.SERPAPI_API_KEY;
 const SERPAPI_BASE_URL = "https://serpapi.com/search.json";
 const REQUEST_TIMEOUT_MS = 25_000;
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
-const MAX_QUERIES_PER_CALL = 5;
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+// Google Trends date window. "now 7-d" = past 7 days at hourly resolution
+// (~168 points). Matches the "Past 7 days" view on the Google Trends UI.
+const TRENDS_DATE_WINDOW = "now 7-d";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -165,21 +176,28 @@ async function setCache(cacheKey: string, data: any, personId?: string): Promise
 }
 
 // ---------------------------------------------------------------------------
-// fetchGoogleTrendsBatch — batched TIMESERIES fetch (up to 5 people per call)
+// fetchGoogleTrendsBatch — per-person TIMESERIES fetch (one query per call)
 // ---------------------------------------------------------------------------
 
 /**
- * Fetch Google Trends TIMESERIES data for a batch of people. The batch is
- * automatically chunked into groups of 5 (SerpApi's per-call limit for
- * TIMESERIES). Returns one result per person with the full timeseries,
- * latest interest value, 7d average, and 90d average.
+ * Fetch Google Trends TIMESERIES data for a list of people. Each person is
+ * fetched in their own SerpApi call (one query per call) so that the 0-100
+ * scaling is normalised per-person rather than against the loudest peak in
+ * a shared batch. Returns one result per person with the full hourly
+ * timeseries (~168 points over 7 days), a "latest" reading (mean of the
+ * most recent 24h), and a 7-day baseline average.
  *
  * People with a `googleTrendsTopicId` use the Topic ID (preferred for
  * disambiguation). Others fall back to name search with a warning.
+ *
+ * Note: `avg90d` is always 0 — the 7-day window does not contain 90 days
+ * of data. Trends mass is dormant in the score engine and not rendered in
+ * the UI, so this is safe. If we ever wire up a 90-day mass signal we can
+ * fetch it on a separate, slower cadence.
  */
 export async function fetchGoogleTrendsBatch(
   people: TrendsBatchInput[],
-  interBatchDelayMs = 500,
+  interCallDelayMs = 250,
 ): Promise<TrendsBatchResult[]> {
   if (!SERPAPI_API_KEY) {
     console.warn("[SerpApi Trends] SERPAPI_API_KEY not set — skipping Trends fetch");
@@ -188,45 +206,28 @@ export async function fetchGoogleTrendsBatch(
   if (people.length === 0) return [];
 
   const results: TrendsBatchResult[] = [];
-  const chunks: TrendsBatchInput[][] = [];
-  for (let i = 0; i < people.length; i += MAX_QUERIES_PER_CALL) {
-    chunks.push(people.slice(i, i + MAX_QUERIES_PER_CALL));
-  }
 
-  for (let ci = 0; ci < chunks.length; ci++) {
-    const chunk = chunks[ci];
-    const queryParts: string[] = [];
-    // Map query string → person IDs (plural: two people can share a name)
-    const queryToPersonIds = new Map<string, string[]>();
-
-    for (const p of chunk) {
-      const q = p.googleTrendsTopicId || p.name;
-      if (!p.googleTrendsTopicId) {
-        console.warn(`[SerpApi Trends] No Topic ID for "${p.name}" (${p.personId}) — falling back to name search`);
-      }
-      const existing = queryToPersonIds.get(q);
-      if (existing) {
-        existing.push(p.personId);
-      } else {
-        queryParts.push(q);
-        queryToPersonIds.set(q, [p.personId]);
-      }
+  for (let i = 0; i < people.length; i++) {
+    const p = people[i];
+    const q = p.googleTrendsTopicId || p.name;
+    if (!p.googleTrendsTopicId) {
+      console.warn(`[SerpApi Trends] No Topic ID for "${p.name}" (${p.personId}) — falling back to name search`);
     }
 
-    const cacheKey = `serpapi_trends:batch:${queryParts.join(",")}`;
+    const cacheKey = `serpapi_trends:person:${q}:${TRENDS_DATE_WINDOW}`;
     let data = await getCached(cacheKey);
 
     if (!data) {
       data = await serpApiFetch({
         engine: "google_trends",
-        q: queryParts.join(","),
+        q,
         data_type: "TIMESERIES",
-        date: "today 3-m",
+        date: TRENDS_DATE_WINDOW,
         tz: "0",
       });
 
       if (data) {
-        await setCache(cacheKey, data);
+        await setCache(cacheKey, data, p.personId);
       }
     }
 
@@ -237,52 +238,45 @@ export async function fetchGoogleTrendsBatch(
         values: Array<{ query: string; value: string; extracted_value: number }>;
       }>;
 
-      // Build per-query timeseries
-      const perQuery = new Map<string, TrendsTimeseriesPoint[]>();
-      for (const q of queryParts) perQuery.set(q, []);
-
+      const series: TrendsTimeseriesPoint[] = [];
       for (const point of timeline) {
-        const ts = new Date(parseInt(point.timestamp, 10) * 1000).toISOString().slice(0, 10);
-        for (const v of point.values) {
-          const series = perQuery.get(v.query);
-          if (series) {
-            series.push({ date: ts, interest: v.extracted_value ?? 0 });
-          }
-        }
+        const ts = new Date(parseInt(point.timestamp, 10) * 1000).toISOString();
+        // Only one query per call now, so just take the first value entry.
+        const v = point.values?.[0];
+        if (v) series.push({ date: ts, interest: v.extracted_value ?? 0 });
       }
 
-      for (const [q, series] of perQuery) {
-        const personIds = queryToPersonIds.get(q);
-        if (!personIds || personIds.length === 0 || series.length === 0) continue;
-
-        const latestInterest = series[series.length - 1]?.interest ?? 0;
-        const last7 = series.slice(-8, -1);
-        const avg7d = last7.length > 0
-          ? last7.reduce((s, p) => s + p.interest, 0) / last7.length
+      if (series.length > 0) {
+        // Mean of the most recent 24 hourly points = "today's average
+        // interest". Smoother and more meaningful than a single hourly
+        // sample, and matches what the user sees as the rightmost day on
+        // the Google Trends "Past 7 days" chart.
+        const last24 = series.slice(-24);
+        const latestInterest = last24.length > 0
+          ? last24.reduce((s, x) => s + x.interest, 0) / last24.length
           : 0;
-        const avg90d = series.length > 0
-          ? series.reduce((s, p) => s + p.interest, 0) / series.length
-          : 0;
+        // Mean across the full 7-day window — the baseline that "today"
+        // is compared against in momentum ratios.
+        const avg7d = series.reduce((s, x) => s + x.interest, 0) / series.length;
 
-        for (const personId of personIds) {
-          results.push({ personId, timeseries: series, latestInterest, avg7d, avg90d });
-        }
-      }
-    } else if (data) {
-      // SerpApi returned success but no timeline — people may be below Trends threshold
-      for (const p of chunk) {
         results.push({
           personId: p.personId,
-          timeseries: [],
-          latestInterest: 0,
-          avg7d: 0,
-          avg90d: 0,
+          timeseries: series,
+          latestInterest,
+          avg7d,
+          avg90d: 0, // not available in 7-day window; dormant signal
         });
+      } else {
+        results.push({ personId: p.personId, timeseries: [], latestInterest: 0, avg7d: 0, avg90d: 0 });
       }
+    } else if (data) {
+      // SerpApi returned success but no timeline — likely below Trends'
+      // entity threshold for the queried window.
+      results.push({ personId: p.personId, timeseries: [], latestInterest: 0, avg7d: 0, avg90d: 0 });
     }
 
-    if (ci < chunks.length - 1) {
-      await new Promise((r) => setTimeout(r, interBatchDelayMs));
+    if (i < people.length - 1) {
+      await new Promise((r) => setTimeout(r, interCallDelayMs));
     }
   }
 
