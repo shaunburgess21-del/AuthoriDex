@@ -147,7 +147,7 @@ const WIKI_MOMENTUM_LEVEL_COPY =
   "Level reflects how today's Wikipedia pageviews compare to this person's own 7-day daily average — Low = below typical, Medium = around or modestly above typical, High = at least 2× their typical day.";
 
 const TRENDS_LEVEL_COPY =
-  "Search interest scaled 0–100 against this person's own peak hour over the last 7 days. So 80 means they're at 80% of their own recent high — best for spotting when someone is surging vs their own baseline (e.g. 80 today after 40 yesterday). Each person has their own scale, so an 80 here isn't directly comparable to another person's 80. Low under 25, Medium 25–49, High 50+.";
+  "Low (under 25) = quiet day. Medium (25–49) = a normal level of attention. High (50+) = getting unusual attention. Scaled against this person's own trend history.";
 
 // Each level gets a distinct dot SHAPE on top of its colour so the indicator is
 // still unambiguous for users who can't rely on red/amber/green alone:
@@ -554,7 +554,7 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
           tooltip={
             <TouchTooltip
               side="top"
-              contentClassName="max-w-[280px] text-xs normal-case tracking-normal"
+              contentClassName="max-w-[240px] text-xs normal-case tracking-normal"
               content={TRENDS_LEVEL_COPY}
             >
               <Info className="h-3 w-3 text-muted-foreground/50 cursor-help" data-testid="icon-trends-tooltip" />
