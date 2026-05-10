@@ -7,6 +7,31 @@ Pre-condition: agents are still paused (kill switch ON) from Phase 0.
 
 ---
 
+## Lessons learned from the dry-run smoke (2026-05-10)
+
+Documented here so the production wake doesn't repeat them:
+
+1. **Worker tick is 2 minutes, not seconds.** `ACTION_WORKER_INTERVAL_MS = 2 * 60 * 1000`.
+   Don't expect a queued action to execute within 20 seconds — budget at least 2-4
+   minutes per worker tick. The runner ticks even less frequently.
+2. **Worker filter is strict on `visibility='live'`** (actionWorker.ts line 155).
+   The smoke endpoint `/api/admin/amm/smoke-create-market` creates markets at
+   `visibility='draft'`, which the worker correctly skips with `error_message =
+   "Market no longer live"`. Production AMM markets from the weekly cron always emit
+   `visibility: "live"` (verified across all 6 generator paths), so this only matters
+   for manually-created admin smoke markets.
+3. **Worker claim ordering is `execute_after ASC`** with batch size 20. If there's
+   a pre-existing queue of older pending actions, a freshly queued smoke can sit
+   waiting for several ticks. To force-jump the queue: `UPDATE ... SET execute_after
+   = NOW() - INTERVAL '1 day'`.
+4. **Toggling the kill switch off also wakes the runner.** Don't leave the switch
+   off any longer than needed — the runner will start queueing fresh actions on
+   live markets. During the dry-run the runner did not tick in our 9-minute window
+   purely by luck. For real ops, prefer to flip on → wait → flip off, with the
+   shortest possible window.
+
+---
+
 ## Step 1: Pre-flight cleanup (clear stale actions)
 
 Stale `scheduled_agent_actions` rows queued before the Phase 0 pause would
@@ -14,7 +39,7 @@ misfire on the new dual-engine code. Run the cleanup script to mark them
 `skipped` with reason `phase0_stale`:
 
 ```bash
-# Production DB (Supabase SQL editor or psql)
+# Production DB (Supabase SQL editor, psql, or Cursor's Supabase MCP)
 psql "$DATABASE_URL" -f scripts/phase10-cleanup-stale-actions.sql
 ```
 
@@ -30,39 +55,94 @@ proceeding — that suggests the kill switch wasn't fully effective.
 Goal: prove the full agent → AMM path works end-to-end on production data
 with one controlled bet, before unpausing the cohort.
 
-1. Run the smoke-test script:
+The original `phase10-smoke-queue-action.sql` targets `market_type='h2h'` AMM
+markets, which only appear after the weekly cron runs Mon 00:05 UTC. If you're
+running the smoke **before** that cron has fired (e.g. at the dry-run stage),
+use the manual create-then-queue flow below instead.
+
+### Variant A — there's already a live AMM h2h market (post-cron)
+
+```bash
+psql "$DATABASE_URL" -f scripts/phase10-smoke-queue-action.sql
+```
+
+### Variant B — no live AMM markets yet (pre-cron / dry run)
+
+1. Spin up an OPEN AMM smoke market via the helper:
 
    ```bash
-   psql "$DATABASE_URL" -f scripts/phase10-smoke-queue-action.sql
+   npm run amm:create-open
    ```
 
-   Output: a `RAISE NOTICE` with `action_id`, `agent_id`, `market_id`, `entry_id`,
-   and a verification SELECT showing one new `phase10_smoke` row in `pending`.
+   Note the `marketId` and `entries[0].id` from the output.
 
-2. Briefly unpause agents (admin Agents tab toggle → OFF).
-   Worker polls every 2 minutes (`ACTION_WORKER_INTERVAL_MS`), so wait up to 2 min.
+2. Promote it to `visibility='live'` (the smoke endpoint creates `draft`,
+   which the worker filters out — see lessons-learned #2):
 
-3. Re-pause agents (admin Agents tab toggle → ON).
+   ```sql
+   UPDATE prediction_markets SET visibility = 'live' WHERE id = '<marketId>';
+   ```
 
-4. Verify the bet executed:
+3. Queue a single agent action against entry A. Pick a V2 cohort agent with
+   ≥200 credits, and **backdate `execute_after`** to jump the queue (see
+   lessons-learned #3):
+
+   ```sql
+   INSERT INTO scheduled_agent_actions (
+     agent_id, market_id, entry_id, action_type, decision_payload,
+     stake_amount, execute_after, status
+   )
+   SELECT ac.id, '<marketId>', '<entryAId>', 'predict',
+     jsonb_build_object('abstain', false, 'entryId', '<entryAId>',
+       'confidence', 0.85, 'direction', 'yes', 'source', 'phase10_smoke'),
+     200, NOW() - INTERVAL '1 day', 'pending'
+   FROM agent_configs ac JOIN profiles p ON p.id = ac.user_id
+   WHERE ac.is_active = true
+     AND ac.simulation_profile ->> 'cohortId' = 'v2-2026-prelaunch'
+     AND p.predict_credits >= 200
+   ORDER BY p.predict_credits DESC
+   LIMIT 1;
+   ```
+
+### Then for either variant
+
+1. Briefly unpause agents (admin Agents tab toggle → OFF).
+   Worker polls every 2 minutes; budget **2-4 minutes** before action transitions.
+   Don't flip back too soon (see lessons-learned #1).
+
+2. Verify the bet executed:
    - **Admin > AMM > Trades**: new row with the smoke agent's name in the Trader column,
      entry matching the smoke target, credits formatted as `+X` (green).
    - **Admin > AMM > Markets**: the market's price for the chosen entry has moved upward.
    - **Admin > AMM > Health**: click "Run audit". All four checks should be green.
    - Railway logs: `[ActionWorker] AMM executed: agent=...`
 
-5. Confirm the action row landed in `executed`:
+3. Re-pause agents (admin Agents tab toggle → ON).
+
+4. Confirm the action row landed in `executed`:
 
    ```sql
    SELECT id, status, error_message, executed_at
    FROM scheduled_agent_actions
-   WHERE (decision_payload ->> 'source') = 'phase10_smoke'
+   WHERE (decision_payload ->> 'source') LIKE 'phase10_smoke%'
    ORDER BY created_at DESC LIMIT 5;
    ```
 
    Expect `status = 'executed'`, `error_message = NULL`.
 
+5. **(Variant B only) Clean up the smoke market** so it doesn't sit live and
+   confuse users:
+
+   ```bash
+   npm run amm:void -- <marketId>
+   ```
+
+   Verify quietEdge balance is back to 50,000, house balance is back to its
+   pre-smoke value, market status = `VOID`, bet status = `void`.
+
 **If anything is red**: do NOT proceed to step 3. Diagnose first.
+- `status = 'skipped'` with `errorMessage = 'Market no longer live'` →
+  market is `visibility='draft'`. Promote to `live` (Variant B step 2).
 - `status = 'skipped'` with `errorMessage = 'amm_no_edge'` → cohort confidence is too
   low for the chosen market; pick a different market and retry.
 - `status = 'failed'` with any AMM error → real bug; check logs and rollback.
@@ -74,16 +154,32 @@ with one controlled bet, before unpausing the cohort.
 
 When the smoke test is green:
 
-1. Open the admin **AMM > Health** tab (browser tab visible — polling pauses on hidden tabs).
+1. **Wait for the weekly cron** if you haven't already. The AMM updown + h2h
+   markets the cohort will trade on are auto-generated **Mon 00:05 UTC**. Wake
+   the cohort *after* this so they enter a clean week. Confirm the cron ran:
 
-2. Open admin **AMM > Trades** in a second browser tab.
+   ```sql
+   SELECT engine, market_type, COUNT(*)
+   FROM prediction_markets
+   WHERE status = 'OPEN' AND end_at > NOW()
+   GROUP BY engine, market_type ORDER BY engine, market_type;
+   ```
 
-3. Flip the agent kill switch **OFF** in admin Agents tab.
+   Expect rows for `amm/updown`, `amm/h2h`, `parimutuel/gainer`,
+   `parimutuel/jackpot`. If `amm/*` rows are missing, the cron didn't fire —
+   investigate via Railway logs (`[MarketGenerator]` lines) or trigger
+   `/api/cron/generate-weekly-markets` manually before proceeding.
 
-4. **First 60 minutes — actively monitor**:
+2. Open the admin **AMM > Health** tab (browser tab visible — polling pauses on hidden tabs).
+
+3. Open admin **AMM > Trades** in a second browser tab.
+
+4. Flip the agent kill switch **OFF** in admin Agents tab.
+
+5. **First 60 minutes — actively monitor**:
    - Agent runner sweeps every 30 minutes (default). Expect 1-2 sweeps in the first hour.
-   - Trades tab will fill up as the worker drains the queue.
-   - **`edgeBand = 0.10`** means no single agent moves a market price by more than 10pp.
+   - Worker ticks every 2 minutes; trades tab fills as it drains the queue.
+   - **`DEFAULT_AGENT_EDGE_BAND = 0.10`** caps the per-trade price impact at 10pp.
    - **Per-agent budget cap is `MAX_AGENT_STAKE = 300`** (unchanged from parimutuel).
 
 5. Sanity checks during the soak:
