@@ -1281,6 +1281,10 @@ export default function AdminDashboard() {
   const [serperAuditResults, setSerperAuditResults] = useState<any>(null);
   const [serperAuditLoading, setSerperAuditLoading] = useState(false);
   const [serperAuditExpanded, setSerperAuditExpanded] = useState(false);
+  const [trendsAuditResults, setTrendsAuditResults] = useState<any>(null);
+  const [trendsAuditLoading, setTrendsAuditLoading] = useState(false);
+  const [trendsAuditExpanded, setTrendsAuditExpanded] = useState(false);
+  const [trendsAuditFilter, setTrendsAuditFilter] = useState<"all" | "no_data" | "stale" | "zero_data" | "missing_topic_id" | "ok">("all");
   const [serperAuditFilter, setSerperAuditFilter] = useState<
     "all" | "zero_results" | "no_cache" | "stale" | "ok"
   >("all");
@@ -7191,6 +7195,151 @@ export default function AdminDashboard() {
                                           )}
                                         </button>
                                       )}
+                                    </td>
+                                  </tr>
+                                ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="p-3 rounded-lg border">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-muted-foreground">Google Trends Audit</span>
+                      <div className="flex items-center gap-2">
+                        {trendsAuditResults && (
+                          <button
+                            type="button"
+                            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                            onClick={() => setTrendsAuditExpanded(prev => !prev)}
+                          >
+                            {trendsAuditResults.issueCount} issue{trendsAuditResults.issueCount !== 1 ? "s" : ""} / {trendsAuditResults.total} total
+                            {trendsAuditExpanded ? <ChevronUp className="inline h-3 w-3 ml-1" /> : <ChevronDown className="inline h-3 w-3 ml-1" />}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 rounded bg-primary/10 px-2 py-1 text-xs font-medium text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
+                          disabled={trendsAuditLoading}
+                          onClick={async () => {
+                            setTrendsAuditLoading(true);
+                            try {
+                              const headers = await getAuthHeaders();
+                              const resp = await fetch("/api/admin/trends-audit", {
+                                method: "POST",
+                                headers,
+                              });
+                              if (!resp.ok) throw new Error(await resp.text());
+                              const data = await resp.json();
+                              setTrendsAuditResults(data);
+                              setTrendsAuditExpanded(true);
+                              setTrendsAuditFilter("all");
+                            } catch (err: any) {
+                              console.error("Trends audit failed:", err);
+                            } finally {
+                              setTrendsAuditLoading(false);
+                            }
+                          }}
+                        >
+                          {trendsAuditLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
+                          {trendsAuditLoading ? "Auditing..." : "Run Audit"}
+                        </button>
+                      </div>
+                    </div>
+
+                    {trendsAuditExpanded && trendsAuditResults?.results && (
+                      <div className="mt-3">
+                        <div className="flex flex-wrap gap-1.5 mb-2">
+                          {(["all", "no_data", "stale", "zero_data", "missing_topic_id", "ok"] as const).map((f) => {
+                            const count =
+                              f === "all"
+                                ? trendsAuditResults.results.length
+                                : trendsAuditResults.results.filter((r: any) => r.status === f).length;
+                            const label =
+                              f === "all" ? "All" :
+                              f === "no_data" ? "No Data" :
+                              f === "stale" ? "Stale" :
+                              f === "zero_data" ? "Zero Data" :
+                              f === "missing_topic_id" ? "Missing Topic ID" :
+                              "OK";
+                            return (
+                              <button
+                                key={f}
+                                type="button"
+                                className={cn(
+                                  "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium transition-colors border",
+                                  trendsAuditFilter === f
+                                    ? "bg-primary text-primary-foreground border-primary"
+                                    : "bg-background text-muted-foreground border-border hover:bg-muted/50"
+                                )}
+                                onClick={() => setTrendsAuditFilter(f)}
+                              >
+                                {label}
+                                <span className="opacity-70">({count})</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        <div className="max-h-80 overflow-y-auto rounded border bg-background/50 text-xs">
+                          <table className="w-full">
+                            <thead>
+                              <tr className="border-b text-muted-foreground sticky top-0 bg-background">
+                                <th className="px-2 py-1.5 text-left font-medium">Name</th>
+                                <th className="px-2 py-1.5 text-left font-medium">Topic ID</th>
+                                <th className="px-2 py-1.5 text-right font-medium">Latest</th>
+                                <th className="px-2 py-1.5 text-right font-medium">7d Avg</th>
+                                <th className="px-2 py-1.5 text-right font-medium">Last Fetch</th>
+                                <th className="px-2 py-1.5 text-left font-medium">Status</th>
+                                <th className="px-2 py-1.5 text-left font-medium">Note</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {trendsAuditResults.results
+                                .filter((r: any) => trendsAuditFilter === "all" || r.status === trendsAuditFilter)
+                                .map((r: any) => (
+                                  <tr
+                                    key={r.personId}
+                                    className={cn(
+                                      "border-b last:border-0",
+                                      r.status === "ok" ? "opacity-50" : "hover:bg-muted/30"
+                                    )}
+                                  >
+                                    <td className="px-2 py-1.5 font-medium whitespace-nowrap">{r.name}</td>
+                                    <td className="px-2 py-1.5 text-muted-foreground font-mono max-w-[140px] truncate" title={r.googleTrendsTopicId || "(none)"}>
+                                      {r.googleTrendsTopicId || <span className="italic">none</span>}
+                                    </td>
+                                    <td className="px-2 py-1.5 text-right tabular-nums">
+                                      {r.latestInterest != null ? r.latestInterest : "—"}
+                                    </td>
+                                    <td className="px-2 py-1.5 text-right tabular-nums">
+                                      {r.avg7d != null ? r.avg7d : "—"}
+                                    </td>
+                                    <td className="px-2 py-1.5 text-right text-muted-foreground whitespace-nowrap">
+                                      {r.ageHours != null ? `${r.ageHours}h ago` : "—"}
+                                    </td>
+                                    <td className="px-2 py-1.5">
+                                      <Badge
+                                        variant="outline"
+                                        className={cn("text-[10px]", {
+                                          "border-green-500/60 dark:border-green-500/50 text-green-500": r.status === "ok",
+                                          "border-red-500/60 dark:border-red-500/50 text-red-500": r.status === "zero_data" || r.status === "no_data",
+                                          "border-yellow-500/60 dark:border-yellow-500/50 text-yellow-500": r.status === "stale" || r.status === "missing_topic_id",
+                                        })}
+                                      >
+                                        {r.status === "ok" ? "OK"
+                                          : r.status === "zero_data" ? "Zero Data"
+                                          : r.status === "no_data" ? "No Data"
+                                          : r.status === "stale" ? "Stale"
+                                          : "Missing Topic ID"}
+                                      </Badge>
+                                    </td>
+                                    <td className="px-2 py-1.5 text-muted-foreground max-w-[280px]">
+                                      {r.note ? (
+                                        <span className="text-[10px] leading-tight block" title={r.note}>{r.note}</span>
+                                      ) : "—"}
                                     </td>
                                   </tr>
                                 ))}

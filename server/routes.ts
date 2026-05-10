@@ -12269,6 +12269,159 @@ Only return the JSON object.`;
     }
   });
 
+  // ============ ADMIN: GOOGLE TRENDS AUDIT ============
+  // Read-only health check across the roster. Reports per-person Topic ID
+  // coverage, latest interest values, and last-fetch freshness, derived
+  // entirely from already-stored snapshots — no external API calls.
+  let _trendsAuditRunning = false;
+
+  app.post("/api/admin/trends-audit", requireAuth, requireAdmin, async (_req: AuthRequest, res) => {
+    if (_trendsAuditRunning) {
+      return res.status(429).json({ error: "Trends audit is already running. Please wait." });
+    }
+    _trendsAuditRunning = true;
+
+    try {
+      type TrendsAuditStatus = "ok" | "missing_topic_id" | "zero_data" | "no_data" | "stale";
+      interface TrendsAuditEntry {
+        personId: string;
+        name: string;
+        googleTrendsTopicId: string | null;
+        hasTopicId: boolean;
+        latestInterest: number | null;
+        avg7d: number | null;
+        lastFetchAt: string | null;
+        ageHours: number | null;
+        status: TrendsAuditStatus;
+        note: string | null;
+      }
+
+      const STALE_THRESHOLD_HOURS = 24;
+
+      const people = await db
+        .select({
+          id: trackedPeople.id,
+          name: trackedPeople.name,
+          googleTrendsTopicId: trackedPeople.googleTrendsTopicId,
+        })
+        .from(trackedPeople)
+        .orderBy(trackedPeople.name);
+
+      // One DB round-trip — DISTINCT ON pulls each person's most recent
+      // snapshot that actually carries trends data (snapshots written when
+      // the 12h gate is closed don't have it, so we skip those here).
+      const latestSnapshots = await db.execute(sql`
+        SELECT DISTINCT ON (person_id)
+          person_id,
+          timestamp,
+          diagnostics
+        FROM trend_snapshots
+        WHERE diagnostics::jsonb->'raw'->'trendsInterest' IS NOT NULL
+          AND diagnostics::jsonb->'raw'->>'trendsInterest' != 'null'
+        ORDER BY person_id, timestamp DESC
+      `);
+
+      const snapshotByPerson = new Map<string, { timestamp: Date; diagnostics: any }>();
+      for (const row of latestSnapshots.rows as any[]) {
+        snapshotByPerson.set(row.person_id, {
+          timestamp: new Date(row.timestamp),
+          diagnostics: row.diagnostics,
+        });
+      }
+
+      const now = Date.now();
+      const results: TrendsAuditEntry[] = people.map(p => {
+        const hasTopicId = !!(p.googleTrendsTopicId && p.googleTrendsTopicId.trim());
+        const snap = snapshotByPerson.get(p.id);
+
+        if (!snap) {
+          return {
+            personId: p.id,
+            name: p.name,
+            googleTrendsTopicId: p.googleTrendsTopicId ?? null,
+            hasTopicId,
+            latestInterest: null,
+            avg7d: null,
+            lastFetchAt: null,
+            ageHours: null,
+            status: "no_data",
+            note: hasTopicId
+              ? "No Trends snapshot has been written yet. Wait for the next 12h cycle."
+              : "No Topic ID and no Trends snapshot. Set a Topic ID via the celebrity edit modal.",
+          };
+        }
+
+        const raw = snap.diagnostics?.raw ?? {};
+        const latestInterest = Number(raw.trendsInterest ?? 0);
+        const avg7d = Number(raw.trendsAvg7d ?? 0);
+        const ageHours = (now - snap.timestamp.getTime()) / (1000 * 60 * 60);
+        const lastFetchAt = snap.timestamp.toISOString();
+
+        let status: TrendsAuditStatus;
+        let note: string | null = null;
+
+        if (ageHours > STALE_THRESHOLD_HOURS) {
+          status = "stale";
+          note = `Last fetch was ${Math.round(ageHours)}h ago — overdue (12h cadence).`;
+        } else if (latestInterest === 0) {
+          status = "zero_data";
+          note = hasTopicId
+            ? "Topic ID set but interest is 0 — Topic ID may be wrong or this person is below Trends' visibility threshold."
+            : "No Topic ID and zero search interest — set a Topic ID for accurate matching.";
+        } else if (!hasTopicId) {
+          status = "missing_topic_id";
+          note = "Working via name search fallback — set a Topic ID for more accurate disambiguation.";
+        } else {
+          status = "ok";
+        }
+
+        return {
+          personId: p.id,
+          name: p.name,
+          googleTrendsTopicId: p.googleTrendsTopicId ?? null,
+          hasTopicId,
+          latestInterest,
+          avg7d: Math.round(avg7d * 10) / 10,
+          lastFetchAt,
+          ageHours: Math.round(ageHours * 10) / 10,
+          status,
+          note,
+        };
+      });
+
+      const summary = { ok: 0, missing_topic_id: 0, zero_data: 0, no_data: 0, stale: 0 };
+      for (const r of results) summary[r.status]++;
+      const issueCount = results.length - summary.ok;
+
+      // Sort: worst issues first, OK rows at the bottom.
+      const order: Record<TrendsAuditStatus, number> = {
+        no_data: 0,
+        stale: 1,
+        zero_data: 2,
+        missing_topic_id: 3,
+        ok: 4,
+      };
+      results.sort((a, b) => {
+        const d = (order[a.status] ?? 9) - (order[b.status] ?? 9);
+        if (d !== 0) return d;
+        return a.name.localeCompare(b.name);
+      });
+
+      res.json({
+        total: results.length,
+        issueCount,
+        summary,
+        generatedAt: new Date().toISOString(),
+        results,
+      });
+    } catch (error: any) {
+      console.error("Error in trends audit:", error);
+      res.status(500).json({ error: "Trends audit failed" });
+    } finally {
+      _trendsAuditRunning = false;
+    }
+  });
+
   // ============ ADMIN: SERPER SEARCH LIVE PROBE ============
 
   app.post("/api/admin/serper-refresh", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
