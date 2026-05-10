@@ -1,8 +1,13 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, createElement } from "react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { toast } from "sonner";
 import { useXpBurst } from "@/components/XpBurstProvider";
+import { StreakToast } from "@/components/StreakToast";
+import {
+  STREAK_TOAST_DELAY_MS,
+  STREAK_TOAST_DURATION_MS,
+} from "@/lib/streak-config";
 
 export type Capability = 
   | 'can_vote_sentiment'
@@ -174,6 +179,12 @@ export function useXpCelebration(enabled: boolean = true) {
   const { trigger: triggerXpBurst } = useXpBurst();
   const prevRef = useRef<{ xp: number; rank: string; userId: string } | null>(null);
   const firedLoginBurstRef = useRef<string | null>(null);
+  // Per-UTC-day dedupe key for the streak toast. Reset on user change so an
+  // account switch in the same browser session doesn't suppress the toast
+  // for the new user. The XP-payload dedupe (firedLoginBurstRef) covers
+  // multi-render cases; this ref additionally guards against a same-user,
+  // same-day refetch surfacing the same payload again.
+  const firedStreakToastRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!stats) return;
@@ -190,6 +201,7 @@ export function useXpCelebration(enabled: boolean = true) {
       prevRef.current !== null && prevRef.current.userId !== currentUserId;
     if (userChanged) {
       firedLoginBurstRef.current = null;
+      firedStreakToastRef.current = null;
     }
 
     // Daily-login + streak-bonus: fire a burst the first time we see an xp
@@ -201,6 +213,33 @@ export function useXpCelebration(enabled: boolean = true) {
       if (firedLoginBurstRef.current !== key) {
         firedLoginBurstRef.current = key;
         triggerXpBurst(stats.xp.xpAwarded, undefined, stats.xp.reason);
+      }
+
+      // Streak check-in toast — fires alongside the burst (delayed slightly
+      // so the two don't compete visually). Dedupe key combines UTC date +
+      // user so a same-day refetch doesn't re-surface, but a fresh UTC day
+      // (or account switch) gets a fresh toast.
+      const utcToday = new Date().toISOString().split("T")[0];
+      const streakKey = `${currentUserId}:${utcToday}`;
+      if (firedStreakToastRef.current !== streakKey) {
+        firedStreakToastRef.current = streakKey;
+        const xpAwarded = stats.xp.xpAwarded;
+        const reason = stats.xp.reason;
+        const currentStreak = stats.currentStreak;
+        // setTimeout intentionally not cleaned up: a sub-400ms unmount is
+        // unlikely, and the dedupe ref above keeps a re-fire harmless.
+        setTimeout(() => {
+          toast.custom(
+            (id) =>
+              createElement(StreakToast, {
+                currentStreak,
+                xpAwarded,
+                reason,
+                onClose: () => toast.dismiss(id),
+              }),
+            { duration: STREAK_TOAST_DURATION_MS },
+          );
+        }, STREAK_TOAST_DELAY_MS);
       }
     }
 
