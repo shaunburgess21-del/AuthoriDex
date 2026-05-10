@@ -435,7 +435,7 @@ function InductionCandidateCard({
         </div>
         <div className="mt-1.5 text-xs text-muted-foreground">
           <span className="text-slate-400">
-            {isVoted ? `${candidate.votes.toLocaleString('en-US')} votes` : "Votes"}
+            {candidate.votes.toLocaleString('en-US')} votes
           </span>
         </div>
       </div>
