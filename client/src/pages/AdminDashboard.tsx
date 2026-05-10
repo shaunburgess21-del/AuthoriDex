@@ -163,12 +163,13 @@ function sourceStatusTooltip(provider: string, status: string | null | undefined
   return base;
 }
 
-type BrandAssetVariant = "default" | "vote" | "predict";
+type BrandAssetVariant = "default" | "vote" | "predict" | "circle";
 
 const BRAND_ASSET_VARIANTS: Record<BrandAssetVariant, { from: string; to: string }> = {
   default: { from: "#06b6d4", to: "#2563eb" },
   vote: { from: "#22d3ee", to: "#0d9488" },
   predict: { from: "#8b5cf6", to: "#6d28d9" },
+  circle: { from: "#06b6d4", to: "#2563eb" },
 };
 
 function RelatedCelebritiesField({
@@ -1164,13 +1165,25 @@ export default function AdminDashboard() {
 
   const buildBrandLogoSvgMarkup = useCallback((variant: BrandAssetVariant) => {
     const colors = BRAND_ASSET_VARIANTS[variant];
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <defs>
+    const defs = `<defs>
     <linearGradient id="bg-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="${colors.from}"/>
       <stop offset="100%" stop-color="${colors.to}"/>
     </linearGradient>
-  </defs>
+  </defs>`;
+    if (variant === "circle") {
+      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  ${defs}
+  <circle cx="256" cy="256" r="256" fill="url(#bg-gradient)"/>
+  <g transform="translate(6, 6) scale(5.0)">
+    <path d="M50 12L82 40L50 58L18 40L50 12Z" fill="white" opacity="0.95"/>
+    <path d="M50 58L82 40L82 62L50 80L18 62L18 40L50 58Z" fill="white" opacity="0.6"/>
+    <rect x="22" y="82" width="56" height="6" rx="3" fill="white" opacity="0.85"/>
+  </g>
+</svg>`;
+    }
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  ${defs}
   <rect width="512" height="512" rx="64" fill="url(#bg-gradient)"/>
   <g transform="translate(25.6, 25.6) scale(4.608)">
     <path d="M50 12L82 40L50 58L18 40L50 12Z" fill="white" opacity="0.95"/>
@@ -1181,7 +1194,9 @@ export default function AdminDashboard() {
   }, []);
 
   const getBrandAssetFilenameBase = useCallback((variant: BrandAssetVariant) => {
-    return variant === "default" ? "voxdex-logo" : `voxdex-logo-${variant}`;
+    if (variant === "default") return "voxdex-logo";
+    if (variant === "circle") return "voxdex-favicon";
+    return `voxdex-logo-${variant}`;
   }, []);
 
   const downloadBrandLogoSvg = useCallback(() => {
@@ -6124,6 +6139,7 @@ export default function AdminDashboard() {
                       <SelectItem value="default">Default (Blue)</SelectItem>
                       <SelectItem value="vote">Vote (Cyan)</SelectItem>
                       <SelectItem value="predict">Predict (Purple)</SelectItem>
+                      <SelectItem value="circle">Circle (Favicon)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

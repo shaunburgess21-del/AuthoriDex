@@ -1,4 +1,4 @@
-# VoxDex - The Vox Populi Index
+# VoxDex - The Vox Populi
 
 ## Overview
 VoxDex is a real-time platform for tracking trending celebrities and influencers globally. It aggregates data from various sources to provide live trend rankings, unified trend scores, and percentage changes. The platform aims to be a leading tool for analyzing global fame, offering search, filter, sort, and detailed analytics capabilities, inspired by financial tracking and social trending interfaces. Key features include prediction markets and gamified user interactions.

@@ -10,9 +10,9 @@ export default defineConfig({
     runtimeErrorOverlay(),
     VitePWA({
       registerType: "autoUpdate",
-      includeAssets: ["voxdex-logo.svg"],
+      includeAssets: ["voxdex-logo.svg", "voxdex-favicon.svg"],
       manifest: {
-        name: "VoxDex - Vox Populi Index",
+        name: "VoxDex - Vox Populi",
         short_name: "VoxDex",
         description:
           "Track how famous people are trending. Vote, predict, and earn XP.",

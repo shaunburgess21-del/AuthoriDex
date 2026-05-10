@@ -319,7 +319,7 @@ export function registerOgRoutes(app: Express): void {
   app.get("/api/og/image/default.png", async (_req: Request, res: Response) => {
     try {
       const png = await renderOgImage(
-        "Vox Populi Index",
+        "Vox Populi",
         "Track. Predict. Win.",
         "VoxDex",
       );
@@ -492,7 +492,7 @@ export function registerOgRoutes(app: Express): void {
     res.setHeader("Cache-Control", "public, max-age=600");
     res.send(
       renderOgHtml({
-        title: `${SITE_NAME} — Vox Populi Index`,
+        title: `${SITE_NAME} — Vox Populi`,
         description: DEFAULT_DESCRIPTION,
         canonicalUrl: SITE_URL,
         imageUrl: `${SITE_URL}/api/og/image/default.png`,
