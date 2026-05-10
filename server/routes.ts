@@ -193,10 +193,23 @@ function entryIsAboveUpdown(label: string, displayOrder: number): boolean {
   return l.includes("above") || l.includes("yes") || displayOrder === 0;
 }
 
-/** Compare stored DB category text to a canonical registry id (handles legacy title-case vs kebab-case). */
-function storedMatchesCanonicalCategory(stored: string | null | undefined, canonicalId: string): boolean {
+/** Compare stored DB category text to a canonical registry id (handles legacy title-case vs kebab-case).
+ *
+ * If `currentLabel` is provided (the live label from `content_categories.label`), an exact
+ * case-insensitive match against that label also counts. This covers admin-renamed labels
+ * whose new wording no longer normalises back to the registry id (e.g. id=`media`, label=`Media & Podcast`
+ * normalises to `media-and-podcast`). */
+function storedMatchesCanonicalCategory(
+  stored: string | null | undefined,
+  canonicalId: string,
+  currentLabel?: string | null,
+): boolean {
   if (stored == null || stored === "") return false;
-  return normalizeMarketCategory(stored) === canonicalId;
+  const trimmedStored = stored.trim();
+  if (currentLabel && trimmedStored.toLowerCase() === currentLabel.trim().toLowerCase()) {
+    return true;
+  }
+  return normalizeMarketCategory(trimmedStored) === canonicalId;
 }
 
 type CategoryUsageBreakdown = {
@@ -232,18 +245,19 @@ function usageBreakdownForId(
     marketCats: { category: string | null }[];
     trendingPeopleCats: { id: string; category: string | null }[];
   },
+  currentLabel?: string | null,
 ): CategoryUsageBreakdown {
   const cnt = (rows: { category: string | null }[]) =>
-    rows.filter((r) => storedMatchesCanonicalCategory(r.category, canonicalId)).length;
+    rows.filter((r) => storedMatchesCanonicalCategory(r.category, canonicalId, currentLabel)).length;
 
   const celebRows = buckets.trackedPeopleCats.filter((r) =>
-    storedMatchesCanonicalCategory(r.category, canonicalId),
+    storedMatchesCanonicalCategory(r.category, canonicalId, currentLabel),
   );
   const celebrities = celebRows.length;
   const celebIds = new Set(celebRows.map((r) => r.id));
 
   const trendingMatching = buckets.trendingPeopleCats.filter((r) =>
-    storedMatchesCanonicalCategory(r.category, canonicalId),
+    storedMatchesCanonicalCategory(r.category, canonicalId, currentLabel),
   );
   // Avoid double-counting the same person: leaderboard cache mirrors tracked_people for synced rows.
   const leaderboardRows = trendingMatching.filter((r) => !celebIds.has(r.id)).length;
@@ -10443,7 +10457,7 @@ Only return the JSON object.`;
       };
 
       const payload = rows.map((row) => {
-        const usage = usageBreakdownForId(row.id, b);
+        const usage = usageBreakdownForId(row.id, b, row.label);
         return {
           id: row.id,
           label: row.label,
@@ -10522,12 +10536,58 @@ Only return the JSON object.`;
         return res.status(404).json({ error: "Category not found." });
       }
 
+      const newLabel = parsed.data.label;
+      const oldLabel = row.label;
+
       await db
         .update(contentCategories)
-        .set({ label: parsed.data.label })
+        .set({ label: newLabel })
         .where(eq(contentCategories.id, id));
 
-      res.json({ ok: true, id, label: parsed.data.label });
+      // Cascade-rename: any row in the dependent tables whose stored category text loosely
+      // resolves to this canonical id (legacy title-case, kebab-case, the previous label, or
+      // the current label) is updated to the new label so downstream consumers (leaderboard,
+      // admin lists, polls, markets) stay in sync. Idempotent — re-saving the same label
+      // backfills any rows missed by previous renames.
+      const renameTargets = [
+        { name: "trackedPeople", table: trackedPeople, column: trackedPeople.category },
+        { name: "trendingPeople", table: trendingPeople, column: trendingPeople.category },
+        { name: "trendingPolls", table: trendingPolls, column: trendingPolls.category },
+        { name: "opinionPolls", table: opinionPolls, column: opinionPolls.category },
+        { name: "matchups", table: matchups, column: matchups.category },
+        { name: "inductionCandidates", table: inductionCandidates, column: inductionCandidates.category },
+        { name: "predictionMarkets", table: predictionMarkets, column: predictionMarkets.category },
+      ] as const;
+
+      const cascade: Record<string, number> = {};
+      for (const target of renameTargets) {
+        const distinctRows = await db
+          .selectDistinct({ category: target.column })
+          .from(target.table as any);
+        const matchingOldValues = distinctRows
+          .map((r) => r.category)
+          .filter(
+            (v): v is string =>
+              typeof v === "string" &&
+              v !== newLabel &&
+              (storedMatchesCanonicalCategory(v, id, oldLabel) ||
+                storedMatchesCanonicalCategory(v, id, newLabel)),
+          );
+
+        if (matchingOldValues.length === 0) {
+          cascade[target.name] = 0;
+          continue;
+        }
+
+        const updated = await db
+          .update(target.table as any)
+          .set({ category: newLabel })
+          .where(inArray(target.column, matchingOldValues))
+          .returning({ value: target.column });
+        cascade[target.name] = updated.length;
+      }
+
+      res.json({ ok: true, id, label: newLabel, cascade });
     } catch (error: any) {
       console.error("[admin/categories] update:", error);
       res.status(500).json({ error: "Failed to update category" });
@@ -10562,7 +10622,7 @@ Only return the JSON object.`;
         trendingPeopleCats: buckets[6],
       };
 
-      const usage = usageBreakdownForId(id, b);
+      const usage = usageBreakdownForId(id, b, row.label);
       const total = sumCategoryUsage(usage);
       if (total > 0) {
         return res.status(409).json({
@@ -10662,14 +10722,14 @@ Only return the JSON object.`;
       ]);
 
       const filterMap = <T extends { category: string | null }>(rows: T[]) =>
-        rows.filter((r) => storedMatchesCanonicalCategory(r.category, id)).slice(0, LIMIT);
+        rows.filter((r) => storedMatchesCanonicalCategory(r.category, id, row.label)).slice(0, LIMIT);
 
       const celebritiesMatching = peopleRows.filter((r) =>
-        storedMatchesCanonicalCategory(r.category, id),
+        storedMatchesCanonicalCategory(r.category, id, row.label),
       );
       const celebIdsHere = new Set(celebritiesMatching.map((r) => r.id));
       const leaderboardSupplementary = leaderboardRows
-        .filter((r) => storedMatchesCanonicalCategory(r.category, id))
+        .filter((r) => storedMatchesCanonicalCategory(r.category, id, row.label))
         .filter((r) => !celebIdsHere.has(r.id))
         .slice(0, LIMIT);
 

@@ -113,12 +113,29 @@ export function AdminCategoriesSection({ enabled }: { enabled: boolean }) {
   const renameMutation = useMutation({
     mutationFn: async ({ id, label }: { id: string; label: string }) => {
       const res = await apiRequest("PATCH", `/api/admin/categories/${encodeURIComponent(id)}`, { label });
-      return res.json();
+      return (await res.json()) as {
+        ok: boolean;
+        id: string;
+        label: string;
+        cascade?: Record<string, number>;
+      };
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       setEditingLabel(null);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/categories"] });
-      toast.success("Category renamed");
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/categories", result.id, "contents"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/celebrities"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leaderboard"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/trending"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tracked-people"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/opinion-polls"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/matchups"] });
+      const totalMigrated = Object.values(result.cascade ?? {}).reduce((sum, n) => sum + (n || 0), 0);
+      if (totalMigrated > 0) {
+        toast.success(`Renamed to "${result.label}" — updated ${totalMigrated} reference${totalMigrated === 1 ? "" : "s"}.`);
+      } else {
+        toast.success(`Renamed to "${result.label}".`);
+      }
     },
     onError: (err) => {
       toast.error(formatAdminApiError(err));
@@ -160,9 +177,9 @@ export function AdminCategoriesSection({ enabled }: { enabled: boolean }) {
       <div>
         <h2 className="text-2xl font-bold">Categories</h2>
         <p className="text-muted-foreground">
-          Manage canonical categories. Deleting is allowed only when no celebrities, polls, face-offs, induction
-          candidates, prediction markets, or leaderboard rows reference the category (matched loosely for legacy
-          title-case vs kebab-case values).
+          Manage canonical categories. Renaming the display label cascades to celebrities, polls, face-offs,
+          induction candidates, prediction markets, and the leaderboard cache. Deleting is allowed only when no
+          rows reference the category (matched loosely for legacy title-case vs kebab-case values).
         </p>
       </div>
 
@@ -261,11 +278,7 @@ export function AdminCategoriesSection({ enabled }: { enabled: boolean }) {
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
                         const trimmed = editingLabel.trim();
-                        if (
-                          trimmed &&
-                          trimmed !== selectedCategory.label &&
-                          !renameMutation.isPending
-                        ) {
+                        if (trimmed && !renameMutation.isPending) {
                           renameMutation.mutate({ id: selectedCategory.id, label: trimmed });
                         }
                       } else if (e.key === "Escape") {
@@ -281,10 +294,11 @@ export function AdminCategoriesSection({ enabled }: { enabled: boolean }) {
                       type="button"
                       size="sm"
                       variant="default"
-                      disabled={
-                        !editingLabel.trim() ||
-                        editingLabel.trim() === selectedCategory.label ||
-                        renameMutation.isPending
+                      disabled={!editingLabel.trim() || renameMutation.isPending}
+                      title={
+                        editingLabel.trim() === selectedCategory.label
+                          ? "Re-save to backfill any existing rows that still use the old label"
+                          : "Save and propagate to all references"
                       }
                       onClick={() =>
                         renameMutation.mutate({
