@@ -19686,41 +19686,151 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
 
   // ============ ADMIN: CURATE PROFILE MANAGEMENT ============
 
-  // GET /api/admin/vote/curate-profile - List all curate profile cards for admin
+  // GET /api/admin/vote/curate-profile - List curate profile cards for admin
   app.get("/api/admin/vote/curate-profile", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const results = await db
-        .select({
-          id: trendingPeople.id,
-          name: trendingPeople.name,
-          category: trendingPeople.category,
-          avatar: trendingPeople.avatar,
-          rank: trendingPeople.rank,
-          curateVisibility: celebrityMetrics.curateVisibility,
-        })
-        .from(trendingPeople)
-        .leftJoin(celebrityMetrics, eq(trendingPeople.id, celebrityMetrics.celebrityId))
-        .orderBy(asc(trendingPeople.rank));
+      const source = req.query.source === "induction" ? "induction" : "leaderboard";
 
-      const imageStats = await db
-        .select({
-          personId: celebrityImages.personId,
-          imageCount: count(),
-          totalVotes: sql<number>`COALESCE(SUM(${celebrityImages.votesUp}), 0)`,
-        })
-        .from(celebrityImages)
-        .groupBy(celebrityImages.personId);
+      let results: Array<{
+        id: string;
+        name: string;
+        category: string | null;
+        avatar: string | null;
+        rank: number | null;
+        curateVisibility: string | null;
+      }> = [];
 
-      const imageMap = new Map(imageStats.map(s => [s.personId, { imageCount: Number(s.imageCount), totalVotes: Number(s.totalVotes) }]));
+      if (source === "leaderboard") {
+        results = await db
+          .select({
+            id: trendingPeople.id,
+            name: trendingPeople.name,
+            category: trendingPeople.category,
+            avatar: trendingPeople.avatar,
+            rank: trendingPeople.rank,
+            curateVisibility: celebrityMetrics.curateVisibility,
+          })
+          .from(trendingPeople)
+          .leftJoin(celebrityMetrics, eq(trendingPeople.id, celebrityMetrics.celebrityId))
+          .orderBy(asc(trendingPeople.rank));
+      } else {
+        const candidates = await db
+          .select({
+            candidateId: inductionCandidates.id,
+            name: inductionCandidates.displayName,
+            category: inductionCandidates.category,
+          })
+          .from(inductionCandidates)
+          .where(eq(inductionCandidates.isActive, true))
+          .orderBy(asc(inductionCandidates.displayName));
 
-      const data = results.map(r => ({
+        const candidateNames = Array.from(new Set(candidates.map((c) => c.name.trim()))).filter(Boolean);
+        const trackedRows = candidateNames.length
+          ? await db
+              .select({
+                id: trackedPeople.id,
+                name: trackedPeople.name,
+                category: trackedPeople.category,
+                avatar: trackedPeople.avatar,
+              })
+              .from(trackedPeople)
+              .where(inArray(trackedPeople.name, candidateNames))
+          : [];
+        const trackedByName = new Map(trackedRows.map((tp) => [tp.name.trim().toLowerCase(), tp]));
+
+        for (const candidate of candidates) {
+          const key = candidate.name.trim().toLowerCase();
+          if (trackedByName.has(key)) continue;
+
+          const inserted = await db
+            .insert(trackedPeople)
+            .values({
+              name: candidate.name.trim(),
+              category: candidate.category || "Other",
+              status: "induction",
+              imageSlug: generateImageSlug(candidate.name),
+            })
+            .onConflictDoNothing()
+            .returning({
+              id: trackedPeople.id,
+              name: trackedPeople.name,
+              category: trackedPeople.category,
+              avatar: trackedPeople.avatar,
+            });
+
+          const trackedRow =
+            inserted[0] ||
+            (
+              await db
+                .select({
+                  id: trackedPeople.id,
+                  name: trackedPeople.name,
+                  category: trackedPeople.category,
+                  avatar: trackedPeople.avatar,
+                })
+                .from(trackedPeople)
+                .where(eq(trackedPeople.name, candidate.name.trim()))
+                .limit(1)
+            )[0];
+          if (!trackedRow) continue;
+
+          trackedByName.set(key, trackedRow);
+          await db.insert(celebrityMetrics).values({ celebrityId: trackedRow.id }).onConflictDoNothing();
+        }
+
+        const personIds = Array.from(new Set(Array.from(trackedByName.values()).map((tp) => tp.id)));
+        const metricRows = personIds.length
+          ? await db
+              .select({
+                celebrityId: celebrityMetrics.celebrityId,
+                curateVisibility: celebrityMetrics.curateVisibility,
+              })
+              .from(celebrityMetrics)
+              .where(inArray(celebrityMetrics.celebrityId, personIds))
+          : [];
+        const metricMap = new Map(metricRows.map((row) => [row.celebrityId, row.curateVisibility]));
+
+        results = candidates
+          .map((candidate) => {
+            const tracked = trackedByName.get(candidate.name.trim().toLowerCase());
+            if (!tracked) return null;
+            return {
+              id: tracked.id,
+              name: tracked.name,
+              category: tracked.category || candidate.category || "Other",
+              avatar: tracked.avatar ?? null,
+              rank: null,
+              curateVisibility: metricMap.get(tracked.id) ?? "live",
+            };
+          })
+          .filter((row): row is NonNullable<typeof row> => !!row);
+      }
+
+      const personIds = results.map((r) => r.id);
+      const imageStats = personIds.length
+        ? await db
+            .select({
+              personId: celebrityImages.personId,
+              imageCount: count(),
+              totalVotes: sql<number>`COALESCE(SUM(${celebrityImages.votesUp}), 0)`,
+            })
+            .from(celebrityImages)
+            .where(inArray(celebrityImages.personId, personIds))
+            .groupBy(celebrityImages.personId)
+        : [];
+
+      const imageMap = new Map(
+        imageStats.map((s) => [s.personId, { imageCount: Number(s.imageCount), totalVotes: Number(s.totalVotes) }]),
+      );
+
+      const data = results.map((r) => ({
         ...r,
-        curateVisibility: r.curateVisibility || 'live',
+        curateVisibility: r.curateVisibility || "live",
         imageCount: imageMap.get(r.id)?.imageCount || 0,
         totalVotes: imageMap.get(r.id)?.totalVotes || 0,
       }));
 
-      res.json({ data, totalCount: data.length });
+      res.json({ data, totalCount: data.length, source });
     } catch (error: any) {
       console.error("Error fetching admin curate profile cards:", error);
       res.status(500).json({ error: "Failed to fetch curate profile cards" });

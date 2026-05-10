@@ -24,6 +24,8 @@ interface CurateCard {
   totalVotes: number;
 }
 
+type CurateSource = "leaderboard" | "induction";
+
 interface CelebrityImageData {
   id: string;
   personId: string;
@@ -37,6 +39,7 @@ interface CelebrityImageData {
 
 export function AdminCurateProfile() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [profileSource, setProfileSource] = useState<CurateSource>("leaderboard");
   const [visibilityFilter, setVisibilityFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [editingCard, setEditingCard] = useState<CurateCard | null>(null);
@@ -54,8 +57,17 @@ export function AdminCurateProfile() {
     return () => window.removeEventListener("keydown", onKey);
   }, [lightboxImage]);
 
+  useEffect(() => {
+    setEditingCard(null);
+    setCategoryFilter("all");
+  }, [profileSource]);
+
   const { data, isLoading } = useQuery<{ data: CurateCard[]; totalCount: number }>({
-    queryKey: ['/api/admin/vote/curate-profile'],
+    queryKey: ["/api/admin/vote/curate-profile", profileSource],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/admin/vote/curate-profile?source=${profileSource}`);
+      return res.json();
+    },
   });
 
   const { data: imagesData, isLoading: imagesLoading } = useQuery<{ data: CelebrityImageData[] }>({
@@ -166,6 +178,18 @@ export function AdminCurateProfile() {
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-3 mb-4">
+            <Select
+              value={profileSource}
+              onValueChange={(value: CurateSource) => setProfileSource(value)}
+            >
+              <SelectTrigger className="w-[190px]" data-testid="select-curate-source">
+                <SelectValue placeholder="Population" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="leaderboard">Main Leaderboard</SelectItem>
+                <SelectItem value="induction">Induction Queue</SelectItem>
+              </SelectContent>
+            </Select>
             <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -202,6 +226,7 @@ export function AdminCurateProfile() {
 
           <div className="text-sm text-muted-foreground mb-3">
             Showing {filteredCards.length} of {cards.length} profiles
+            {profileSource === "induction" ? " from the induction queue" : " from the main leaderboard"}
           </div>
 
           {isLoading ? (
