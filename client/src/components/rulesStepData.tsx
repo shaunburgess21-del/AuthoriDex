@@ -82,7 +82,7 @@ export const VOTE_RULES_STEPS: Record<string, RulesStepConfig> = {
       {
         icon: <ListChecks />,
         headline: "Multiple Choice Polls",
-        body: "Community-created polls with multiple options. Pick the one you agree with most.",
+        body: "Vote on polls with multiple options and choose the answer you agree with most.",
       },
       {
         icon: <BarChart3 />,
