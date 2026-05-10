@@ -54,12 +54,20 @@ export function useCategoryRegistry(): CategoryRegistry {
     const categories = data;
     const byId = new Map<string, RegistryCategory>();
     const byLabel = new Map<string, RegistryCategory>();
+    // Maps a normalised slug derived from a registry label back to the canonical id.
+    // Lets callers resolve cached/legacy values like "media-and-podcast" (the slug form
+    // of a renamed label "Media & Podcast") back to the canonical id "media".
+    const byNormalisedLabel = new Map<string, RegistryCategory>();
 
     for (const row of categories) {
       if (!row?.id) continue;
       byId.set(row.id, row);
       if (row.label) {
         byLabel.set(row.label.trim().toLowerCase(), row);
+        const normalisedLabel = normalizeMarketCategory(row.label);
+        if (normalisedLabel) {
+          byNormalisedLabel.set(normalisedLabel, row);
+        }
       }
     }
 
@@ -75,6 +83,8 @@ export function useCategoryRegistry(): CategoryRegistry {
 
       const normalised = normalizeMarketCategory(trimmed);
       if (byId.has(normalised)) return normalised;
+      const normalisedLabelHit = byNormalisedLabel.get(normalised);
+      if (normalisedLabelHit) return normalisedLabelHit.id;
       return normalised;
     };
 

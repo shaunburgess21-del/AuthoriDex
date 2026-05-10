@@ -4647,6 +4647,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .filter(Boolean),
         ),
       );
+      // Note: we intentionally return the normalised slug (e.g. "media-and-podcast" for
+      // a label like "Media & Podcast") rather than the canonical content_categories id.
+      // The leaderboard filter at /api/leaderboard matches by `normalizeMarketCategory`
+      // both sides, so the dropdown's `value` must round-trip through that same normalisation.
+      // The client uses `useCategoryRegistry` to render the registry label for these slugs.
       res.json(normalized);
     } catch (error) {
       console.error("Error fetching leaderboard categories:", error);
