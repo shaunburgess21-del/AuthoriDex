@@ -17,9 +17,11 @@ const navItems: NavItem[] = [
 export function BottomNav() {
   const [location] = useLocation();
   // Keep the nav glued to the visual viewport's bottom edge as Chrome's
-  // bottom toolbar shows/hides — without this the layout viewport
-  // anchored `bottom-0` leaves a transparent strip below the nav after
-  // scroll-down. See useVisualViewportOffset for full rationale.
+  // bottom toolbar shows/hides. The hook returns a signed delta —
+  // positive when the visual viewport extends below the layout
+  // viewport (toolbar collapsed → translate down to close the gap),
+  // negative when it ends above (translate up). See
+  // useVisualViewportOffset for the full rationale.
   const viewportOffset = useVisualViewportOffset();
 
   // Auth flow pages own the full mobile viewport (centered card layout, no
@@ -44,7 +46,7 @@ export function BottomNav() {
       className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background/95 backdrop-blur-xl md:hidden"
       style={{
         paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-        transform: viewportOffset > 0 ? `translateY(-${viewportOffset}px)` : undefined,
+        transform: viewportOffset !== 0 ? `translateY(${viewportOffset}px)` : undefined,
         willChange: 'transform',
       }}
       aria-label="Navigation"
