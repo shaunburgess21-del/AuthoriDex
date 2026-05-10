@@ -10504,6 +10504,36 @@ Only return the JSON object.`;
     }
   });
 
+  app.patch("/api/admin/categories/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const parsed = z.object({
+        label: z
+          .string()
+          .transform((s) => s.trim())
+          .pipe(z.string().min(1).max(120)),
+      }).safeParse(req.body);
+      if (!parsed.success) {
+        return sendZodError(res, parsed.error);
+      }
+
+      const [row] = await db.select().from(contentCategories).where(eq(contentCategories.id, id));
+      if (!row) {
+        return res.status(404).json({ error: "Category not found." });
+      }
+
+      await db
+        .update(contentCategories)
+        .set({ label: parsed.data.label })
+        .where(eq(contentCategories.id, id));
+
+      res.json({ ok: true, id, label: parsed.data.label });
+    } catch (error: any) {
+      console.error("[admin/categories] update:", error);
+      res.status(500).json({ error: "Failed to update category" });
+    }
+  });
+
   app.delete("/api/admin/categories/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;

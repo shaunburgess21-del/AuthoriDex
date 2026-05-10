@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Trash2 } from "lucide-react";
+import { Check, Loader2, Pencil, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -71,6 +71,7 @@ export function AdminCategoriesSection({ enabled }: { enabled: boolean }) {
   const [newId, setNewId] = useState("");
   const [newLabel, setNewLabel] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [editingLabel, setEditingLabel] = useState<string | null>(null);
 
   const { data: categories, isLoading: listLoading } = useQuery({
     queryKey: ["/api/admin/categories"],
@@ -109,6 +110,21 @@ export function AdminCategoriesSection({ enabled }: { enabled: boolean }) {
     },
   });
 
+  const renameMutation = useMutation({
+    mutationFn: async ({ id, label }: { id: string; label: string }) => {
+      const res = await apiRequest("PATCH", `/api/admin/categories/${encodeURIComponent(id)}`, { label });
+      return res.json();
+    },
+    onSuccess: () => {
+      setEditingLabel(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/categories"] });
+      toast.success("Category renamed");
+    },
+    onError: (err) => {
+      toast.error(formatAdminApiError(err));
+    },
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       const res = await apiRequest("DELETE", `/api/admin/categories/${encodeURIComponent(id)}`);
@@ -134,6 +150,10 @@ export function AdminCategoriesSection({ enabled }: { enabled: boolean }) {
     if (!categories?.length || !selectedId) return;
     if (!categories.some((c) => c.id === selectedId)) setSelectedId(null);
   }, [categories, selectedId]);
+
+  useEffect(() => {
+    setEditingLabel(null);
+  }, [selectedId]);
 
   return (
     <div className="space-y-6">
@@ -231,15 +251,96 @@ export function AdminCategoriesSection({ enabled }: { enabled: boolean }) {
 
         <Card className="min-h-[320px]">
           <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-            <div>
+            <div className="flex-1 min-w-0">
               <CardTitle>Details</CardTitle>
-              <CardDescription>
-                {selectedCategory
-                  ? `${selectedCategory.label} (${selectedCategory.id})`
-                  : "Select a category on the left"}
-              </CardDescription>
+              {selectedCategory && editingLabel !== null ? (
+                <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <Input
+                    value={editingLabel}
+                    onChange={(e) => setEditingLabel(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        const trimmed = editingLabel.trim();
+                        if (
+                          trimmed &&
+                          trimmed !== selectedCategory.label &&
+                          !renameMutation.isPending
+                        ) {
+                          renameMutation.mutate({ id: selectedCategory.id, label: trimmed });
+                        }
+                      } else if (e.key === "Escape") {
+                        setEditingLabel(null);
+                      }
+                    }}
+                    autoFocus
+                    className="h-8 max-w-xs"
+                    data-testid="input-edit-category-label"
+                  />
+                  <div className="flex items-center gap-1">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="default"
+                      disabled={
+                        !editingLabel.trim() ||
+                        editingLabel.trim() === selectedCategory.label ||
+                        renameMutation.isPending
+                      }
+                      onClick={() =>
+                        renameMutation.mutate({
+                          id: selectedCategory.id,
+                          label: editingLabel.trim(),
+                        })
+                      }
+                      data-testid="button-save-category"
+                    >
+                      {renameMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <>
+                          <Check className="h-4 w-4 mr-1" />
+                          Save
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      disabled={renameMutation.isPending}
+                      onClick={() => setEditingLabel(null)}
+                      data-testid="button-cancel-edit-category"
+                    >
+                      <X className="h-4 w-4 mr-1" />
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <CardDescription className="flex items-center gap-2 flex-wrap">
+                  <span>
+                    {selectedCategory
+                      ? `${selectedCategory.label} (${selectedCategory.id})`
+                      : "Select a category on the left"}
+                  </span>
+                  {selectedCategory && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2"
+                      onClick={() => setEditingLabel(selectedCategory.label)}
+                      title="Edit display label"
+                      data-testid="button-edit-category"
+                    >
+                      <Pencil className="h-3.5 w-3.5 mr-1" />
+                      Edit
+                    </Button>
+                  )}
+                </CardDescription>
+              )}
             </div>
-            {selectedCategory && (
+            {selectedCategory && editingLabel === null && (
               <Button
                 type="button"
                 variant="destructive"
