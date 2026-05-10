@@ -7,6 +7,7 @@ import { useState, useEffect, useRef } from "react";
 import { formatDelta, compactVotes, getApprovalColor } from "@/lib/formatNumber";
 import { ThumbsUp, Star, Zap, TrendingUp, TrendingDown, Check, X } from "lucide-react";
 import { getCategoryTextColor } from "@/components/CategoryPill";
+import { useCategoryRegistry } from "@/hooks/useCategoryRegistry";
 import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
 import { useAuth } from "@/contexts/AuthContext";
@@ -82,6 +83,7 @@ export function LeaderboardRow({
 }: LeaderboardRowProps) {
   const { user } = useAuth();
   const userId = user?.id ?? null;
+  const categoryRegistry = useCategoryRegistry();
   const [sentimentScore, setSentimentScore] = useState<number | null>(null);
   const [hasEverVoted, setHasEverVoted] = useState(getHasEverVoted);
 
@@ -214,11 +216,15 @@ export function LeaderboardRow({
           <h3 className="font-semibold text-sm sm:text-base truncate" data-testid={`text-name-${person.id}`}>
             {person.name}
           </h3>
-          {person.category && (
-            <p className={`hidden md:block text-sm truncate ${getCategoryTextColor(person.category)}`}>
-              {person.category}
-            </p>
-          )}
+          {person.category && (() => {
+            const canonicalCategoryId = categoryRegistry.resolveCanonicalId(person.category);
+            const displayCategoryLabel = categoryRegistry.getDisplayLabel(person.category);
+            return (
+              <p className={`hidden md:block text-sm truncate ${getCategoryTextColor(person.category, canonicalCategoryId)}`}>
+                {displayCategoryLabel}
+              </p>
+            );
+          })()}
           <p className="md:hidden text-[11px] text-muted-foreground leading-tight truncate">
             {activeTab === "fame" && (
               <span className="font-mono">

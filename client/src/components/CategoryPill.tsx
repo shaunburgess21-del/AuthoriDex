@@ -113,8 +113,19 @@ function hashString(input: string): number {
   return h;
 }
 
-export function getCategoryStyle(category: string) {
-  const normalized = normalizeMarketCategory(category);
+/**
+ * Resolve the colour palette for a category.
+ *
+ * `canonicalIdOverride` lets callers (typically wired through `useCategoryRegistry`)
+ * pass the registry-resolved canonical id directly when the stored text has been
+ * renamed away from its slug (e.g. id=`media`, stored label=`Media & Podcast`).
+ * Without this override we'd normalise to `media-and-podcast`, miss both the
+ * canonical and extra style maps, and fall back to the dynamic hash palette.
+ */
+export function getCategoryStyle(category: string, canonicalIdOverride?: string) {
+  const normalized = (canonicalIdOverride && canonicalIdOverride.trim())
+    ? canonicalIdOverride.trim()
+    : normalizeMarketCategory(category);
   if (normalized in CATEGORY_STYLES) {
     return CATEGORY_STYLES[normalized as CanonicalMarketCategory];
   }
@@ -125,9 +136,8 @@ export function getCategoryStyle(category: string) {
   return DYNAMIC_CATEGORY_STYLES[hashString(normalized) % DYNAMIC_CATEGORY_STYLES.length];
 }
 
-export function getCategoryTextColor(category: string) {
-  const style = getCategoryStyle(category);
-  return style.text;
+export function getCategoryTextColor(category: string, canonicalIdOverride?: string) {
+  return getCategoryStyle(category, canonicalIdOverride).text;
 }
 
 const SIZE_CLASSES = {

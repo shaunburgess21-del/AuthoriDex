@@ -71,6 +71,7 @@ import { TrendingPerson } from "@shared/schema";
 import { useIntersectionObserver } from "@/hooks/useIntersectionObserver";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { useLeaderboardCategories } from "@/hooks/useLeaderboardCategories";
+import { useCategoryRegistry } from "@/hooks/useCategoryRegistry";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useLocation, Link } from "wouter";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
@@ -1131,6 +1132,7 @@ export default function HomePage() {
   const [, setLocation] = useLocation();
   const isMobile = useIsMobile();
   const leaderboardCategories = useLeaderboardCategories();
+  const categoryRegistry = useCategoryRegistry();
 
   useEffect(() => {
     if (window.location.hash === "#leaderboard") {
@@ -1664,6 +1666,14 @@ export default function HomePage() {
   });
 
   const hasActiveFilters = searchQuery || category !== "all";
+  const resolveCategoryLabel = useCallback(
+    (id: string): string => {
+      const registryHit = categoryRegistry.byId.get(id);
+      if (registryHit?.label) return registryHit.label;
+      return categoryRegistry.getDisplayLabel(id);
+    },
+    [categoryRegistry],
+  );
   const leaderboardFilterCategories = useMemo(() => {
     const pinned = [
       { value: "all", label: "All Categories" },
@@ -1671,20 +1681,20 @@ export default function HomePage() {
     ];
     const dynamic = Array.from(leaderboardCategories ?? [])
       .filter((id) => id && id !== "all" && id !== "favorites" && id !== "trending")
-      .sort((a, b) => getMarketCategoryLabel(a).localeCompare(getMarketCategoryLabel(b)))
-      .map((id) => ({ value: id, label: getMarketCategoryLabel(id) }));
+      .sort((a, b) => resolveCategoryLabel(a).localeCompare(resolveCategoryLabel(b)))
+      .map((id) => ({ value: id, label: resolveCategoryLabel(id) }));
     if (category !== "all" && category !== "favorites" && category !== "trending" && !dynamic.some((c) => c.value === category)) {
-      dynamic.unshift({ value: category, label: getMarketCategoryLabel(category) });
+      dynamic.unshift({ value: category, label: resolveCategoryLabel(category) });
     }
     return [...pinned, ...dynamic];
-  }, [leaderboardCategories, category]);
+  }, [leaderboardCategories, category, resolveCategoryLabel]);
 
   const activeCategoryLabel = useMemo(() => {
     if (category === "all") return "All Categories";
     if (category === "favorites") return "Favorites";
     if (category === "trending") return "Trending";
-    return getMarketCategoryLabel(category);
-  }, [category]);
+    return resolveCategoryLabel(category);
+  }, [category, resolveCategoryLabel]);
 
   const insightSignals = useMemo<InsightSignal[]>(() => {
     if (!selectedInsightMomentum?.signals) return [];
