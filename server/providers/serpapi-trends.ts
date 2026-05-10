@@ -185,7 +185,8 @@ async function setCache(cacheKey: string, data: any, personId?: string): Promise
  * scaling is normalised per-person rather than against the loudest peak in
  * a shared batch. Returns one result per person with the full hourly
  * timeseries (~168 points over 7 days), a "latest" reading (mean of the
- * most recent 24h), and a 7-day baseline average.
+ * most recent ~4h, picked for intra-day responsiveness at our 12h cadence),
+ * and a 7-day baseline average (used by the future Trends Momentum card).
  *
  * People with a `googleTrendsTopicId` use the Topic ID (preferred for
  * disambiguation). Others fall back to name search with a warning.
@@ -247,16 +248,19 @@ export async function fetchGoogleTrendsBatch(
       }
 
       if (series.length > 0) {
-        // Mean of the most recent 24 hourly points = "today's average
-        // interest". Smoother and more meaningful than a single hourly
-        // sample, and matches what the user sees as the rightmost day on
-        // the Google Trends "Past 7 days" chart.
-        const last24 = series.slice(-24);
-        const latestInterest = last24.length > 0
-          ? last24.reduce((s, x) => s + x.interest, 0) / last24.length
+        // Mean of the most recent 4 hourly points (~last 4h) = "current
+        // interest". Tight enough that a 12h-cadence morning fetch and
+        // evening fetch reflect different states of the day (capturing
+        // intra-day rises and falls), while still smoothing out single-
+        // point hourly noise. Falls back to whatever points exist if
+        // fewer than 4 are returned.
+        const lastWindow = series.slice(-4);
+        const latestInterest = lastWindow.length > 0
+          ? lastWindow.reduce((s, x) => s + x.interest, 0) / lastWindow.length
           : 0;
-        // Mean across the full 7-day window — the baseline that "today"
-        // is compared against in momentum ratios.
+        // Mean across the full 7-day window — the baseline that "current"
+        // is compared against in momentum ratios. Computed for free off
+        // the same call; consumed by the future Trends Momentum card.
         const avg7d = series.reduce((s, x) => s + x.interest, 0) / series.length;
 
         results.push({
