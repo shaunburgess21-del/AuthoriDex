@@ -1144,7 +1144,9 @@ export default function AdminDashboard() {
   const { user, isAdmin, profileLoading, profile } = useAuth();
   // Compensate for Chrome's collapsing bottom toolbar so the mobile
   // admin nav (rendered fixed at the bottom below) stays glued to the
-  // visible bottom edge instead of leaving a transparent strip.
+  // visible bottom edge instead of leaving a transparent strip. The
+  // hook returns a signed delta — applied verbatim via translateY,
+  // so positive values push the nav down and negative push it up.
   const adminNavViewportOffset = useVisualViewportOffset();
   const [brandAssetVariant, setBrandAssetVariant] = useState<BrandAssetVariant>("default");
   const [activeSection, setActiveSectionRaw] = useState<AdminSection>(() => {
@@ -3293,7 +3295,7 @@ export default function AdminDashboard() {
         className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card/95 backdrop-blur-xl"
         style={{
           paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-          transform: adminNavViewportOffset > 0 ? `translateY(-${adminNavViewportOffset}px)` : undefined,
+          transform: adminNavViewportOffset !== 0 ? `translateY(${adminNavViewportOffset}px)` : undefined,
           willChange: 'transform',
         }}
         aria-label="Admin section navigation"
