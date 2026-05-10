@@ -2282,8 +2282,13 @@ export default function HomePage() {
                   
                   {/* All loaded message */}
                   {!hasNextPage && allPeople.length > 0 && (
-                    <div className="p-4 border-t text-center text-muted-foreground text-sm">
-                      Showing all {allPeople.length} results
+                    <div className="p-4 border-t text-center text-muted-foreground text-sm space-y-2">
+                      <p>Showing all {allPeople.length} results</p>
+                      <p>
+                        Don't see who you're looking for? Vote them onto the leaderboard via the{" "}
+                        <Link href="/vote/induction" className="text-cyan-600 dark:text-cyan-400 hover:underline font-medium">Induction Queue</Link>
+                        {" "}&mdash; the top candidate gets inducted every week.
+                      </p>
                     </div>
                   )}
                   
