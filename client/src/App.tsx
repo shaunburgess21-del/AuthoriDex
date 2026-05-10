@@ -89,6 +89,7 @@ const InductionQueuePage = lazyWithRetry(() => import("@/pages/InductionQueuePag
 const CategoryRaceDetailPage = lazyWithRetry(() => import("@/pages/CategoryRaceDetailPage"));
 const UpDownDetailPage = lazyWithRetry(() => import("@/pages/UpDownDetailPage"));
 const H2HDetailPage = lazyWithRetry(() => import("@/pages/H2HDetailPage"));
+const HowItWorksPage = lazyWithRetry(() => import("@/pages/HowItWorksPage"));
 const NotFound = lazyWithRetry(() => import("@/pages/not-found"));
 
 function PageFallback() {
@@ -149,6 +150,7 @@ function Router() {
         <Route path="/admin/announcements" component={AdminNotificationsPage} />
         <Route path="/admin/announcements/legacy" component={AdminAnnouncementsPage} />
         <Route path="/admin" component={AdminDashboard} />
+        <Route path="/how-it-works" component={HowItWorksPage} />
         <Route component={NotFound} />
       </Switch>
     </Suspense>
