@@ -1536,6 +1536,7 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
       if (shouldFetchTrends) {
         resetSerpApiTrendsRunStats();
         const trendsStart = Date.now();
+        let trendsFetchOk = false;
         try {
           const batchInput = people.map(p => ({
             personId: p.id,
@@ -1546,13 +1547,29 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           for (const r of results) trendsDataMap.set(r.personId, r);
           const trendsStats = getSerpApiTrendsRunStats();
           console.log(`[Ingest] Google Trends: ${results.length}/${people.length} people, ${trendsStats.callsAttempted} API calls, ${trendsStats.finalFailures} failures, ${Date.now() - trendsStart}ms`);
+          trendsFetchOk = true;
+          // Coverage-based status (mirrors news/serper). "OK" when most of the
+          // roster came back with usable data, "DEGRADED" when partial,
+          // "FAILED" when nothing useful returned.
+          const coveredCount = results.filter(r => r.timeseries.length > 0).length;
+          const coverage = people.length > 0 ? coveredCount / people.length : 0;
+          if (coveredCount === 0) sourceStatuses.trends = "FAILED";
+          else if (coverage >= 0.7) sourceStatuses.trends = "OK";
+          else sourceStatuses.trends = "DEGRADED";
         } catch (e) {
           console.error("[Ingest] Google Trends batch fetch failed:", (e as Error).message);
+          if (!trendsFetchOk) sourceStatuses.trends = "FAILED";
         }
         sourceTimings.trends = Date.now() - trendsStart;
+      } else {
+        // Gate is closed — fetch is intentionally skipped this cycle (12h
+        // cadence). Surface as SKIPPED so the System Tools panel renders
+        // it as a neutral grey pill rather than disappearing entirely.
+        sourceStatuses.trends = "SKIPPED";
       }
     } else if (!isSerpApiTrendsConfigured()) {
       console.log("[Ingest] Google Trends: SERPAPI_API_KEY not set — skipping");
+      sourceStatuses.trends = "SKIPPED";
     }
 
     for (const person of people) {

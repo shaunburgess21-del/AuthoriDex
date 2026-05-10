@@ -139,6 +139,7 @@ const SOURCE_LABELS = {
   mediastack: "News (Mediastack)",
   gdelt: "News (GDELT)",
   serper: "Search (Serper)",
+  trends: "Search (Google Trends)",
 } as const;
 
 // Shared color mapping for the per-run W/M/G/S letter badges and any other
@@ -156,6 +157,9 @@ function sourceStatusColor(status: string | null | undefined): string {
 function sourceStatusTooltip(provider: string, status: string | null | undefined): string {
   const base = `${provider}: ${status ?? "—"}`;
   if (status === "THROTTLED") return `${base} (cache-only mode — Mediastack budget hard-stop active)`;
+  if (status === "SKIPPED" && provider === "Google Trends") {
+    return `${base} (12h fetch cadence — Google Trends is fetched separately, not every cycle)`;
+  }
   return base;
 }
 
@@ -6399,6 +6403,7 @@ export default function AdminDashboard() {
                                     <span title={sourceStatusTooltip("Mediastack", run.sourceStatuses.mediastack)} className={cn("text-[10px]", sourceStatusColor(run.sourceStatuses.mediastack))}>M</span>
                                     <span title={sourceStatusTooltip("GDELT", run.sourceStatuses.gdelt)} className={cn("text-[10px]", sourceStatusColor(run.sourceStatuses.gdelt))}>G</span>
                                     <span title={sourceStatusTooltip("Serper", run.sourceStatuses.serper)} className={cn("text-[10px]", sourceStatusColor(run.sourceStatuses.serper))}>S</span>
+                                    <span title={sourceStatusTooltip("Google Trends", run.sourceStatuses.trends)} className={cn("text-[10px]", sourceStatusColor(run.sourceStatuses.trends))}>T</span>
                                   </div>
                                 )}
                                 {run.status === "locked_out" && <Badge variant="outline" className="text-[10px] text-yellow-500 py-0">locked</Badge>}
@@ -6436,16 +6441,23 @@ export default function AdminDashboard() {
                         {Object.entries(engineHealth.sourceHealth.statuses as Record<string, string>).map(([source, status]) => {
                           const label = SOURCE_LABELS[source as keyof typeof SOURCE_LABELS]
                             ?? source.charAt(0).toUpperCase() + source.slice(1);
+                          // Dot + text colour mirrors the per-run badge
+                          // palette so SKIPPED / THROTTLED render as
+                          // intentional (grey / blue) rather than red.
+                          const dotColor =
+                            status === "OK" || status === "OK_FALLBACK" ? "bg-green-500" :
+                            status === "DEGRADED" ? "bg-yellow-500" :
+                            status === "THROTTLED" ? "bg-blue-500" :
+                            status === "SKIPPED" ? "bg-muted-foreground" :
+                            "bg-red-500";
+                          const textColor = sourceStatusColor(status);
+                          const tooltip = sourceStatusTooltip(label, status);
                           return (
-                            <div key={source} className="flex items-center justify-between text-sm p-2 rounded border">
+                            <div key={source} className="flex items-center justify-between text-sm p-2 rounded border" title={tooltip}>
                               <span className="font-medium">{label}</span>
                               <div className="flex items-center gap-2">
-                                <div className={cn("h-2 w-2 rounded-full",
-                                  status === "OK" ? "bg-green-500" : status === "DEGRADED" ? "bg-yellow-500" : "bg-red-500"
-                                )} />
-                                <span className={cn("text-xs",
-                                  status === "OK" ? "text-green-500" : status === "DEGRADED" ? "text-yellow-500" : "text-red-500"
-                                )}>{status}</span>
+                                <div className={cn("h-2 w-2 rounded-full", dotColor)} />
+                                <span className={cn("text-xs", textColor)}>{status}</span>
                                 {engineHealth.sourceHealth.timings?.[source] && (
                                   <span className="text-xs text-muted-foreground">({Math.round(engineHealth.sourceHealth.timings[source] / 1000)}s)</span>
                                 )}
