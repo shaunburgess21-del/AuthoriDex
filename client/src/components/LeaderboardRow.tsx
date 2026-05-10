@@ -387,7 +387,7 @@ export function LeaderboardRow({
                 Trend Score
               </p>
             </div>
-            <div className="w-[80px] shrink-0 flex justify-end">
+            <div className="w-[88px] shrink-0 flex justify-end">
               {hasVoted && sentimentScore != null ? (
                 <Popover modal>
                   <PopoverTrigger asChild>
