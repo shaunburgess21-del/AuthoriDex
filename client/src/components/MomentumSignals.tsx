@@ -490,19 +490,17 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
     : "steady";
   const trendsValue = hasTrendsData ? `${trendsInterest}` : "—";
   const trendsUnit = hasTrendsData ? "interest score" : "awaiting data";
+  // Activity-card visual convention: no 7-day-avg footer (that belongs on
+  // the Momentum cards). Only show the warm-up notice when we have no data
+  // yet. The 7-day baseline is still computed and persisted server-side
+  // for the future Trends Momentum card.
   const trendsFooter = !hasTrendsData
     ? (
         <p className="text-[10px] text-muted-foreground/60 pt-0.5" data-testid="text-trends-warmup">
           Awaiting first Google Trends data
         </p>
       )
-    : signals.trends && signals.trends.avg7d > 0
-      ? (
-          <p className="text-[10px] text-muted-foreground/60 pt-0.5" data-testid="text-trends-avg">
-            7-day avg: {signals.trends.avg7d.toFixed(1)}
-          </p>
-        )
-      : null;
+    : null;
 
   return (
     <div id="momentum-signals" className="mt-8 space-y-5" data-testid="section-momentum-signals">
