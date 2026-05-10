@@ -19,7 +19,7 @@ const STEPS: readonly OnboardingStep[] = [
 
     heading: "Explore Rankings",
 
-    description: "Real-time leaderboards of the world's most talked-about people.",
+    description: "Live leaderboards of the people shaping culture, media, and global conversation.",
 
     gradient: "from-sky-500 to-blue-600",
 
