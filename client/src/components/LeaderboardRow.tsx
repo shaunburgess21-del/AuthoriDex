@@ -393,7 +393,7 @@ export function LeaderboardRow({
                   <PopoverTrigger asChild>
                     <button
                       type="button"
-                      className="no-default-hover-elevate no-default-active-elevate font-mono font-bold text-lg sm:text-xl tabular-nums cursor-pointer"
+                      className="no-default-hover-elevate no-default-active-elevate font-mono font-bold text-lg sm:text-xl tabular-nums cursor-pointer pr-3"
                       aria-label={`Rated ${person.name} ${sentimentScore}/5`}
                       onClick={(e) => e.stopPropagation()}
                       data-testid={`button-vote-icon-${person.id}`}
