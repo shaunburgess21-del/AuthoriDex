@@ -34,9 +34,10 @@ export interface KnowledgeTab {
 }
 
 export const KNOWLEDGE_TABS: KnowledgeTab[] = [
-  // Smoked-chrome / cool graphite — matches the Daily Movers pulse-card-blue
-  // neutral silver palette in client/src/index.css.
-  { id: "xp", label: "XP", icon: Zap, accent: "#94A3B8" },
+  // Bright peak of Daily Movers top bar — see `.pulse-card-blue::before` in
+  // client/src/index.css (white ~70% at center). How It Works uses theme-aware
+  // Tailwind for the XP tab/section so light mode stays readable.
+  { id: "xp", label: "XP", icon: Zap, accent: "#FFFFFF" },
   // Theme blue — same as the Trending leaderboard + VoxPulse widget.
   { id: "ranks", label: "Ranks", icon: Crown, accent: "#3C83F6" },
   // Amber/gold — currency feel; mirrors the "Impact" accent on /me/votes.

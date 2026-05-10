@@ -58,13 +58,25 @@ function KnowledgeTabsBar({
             >
               {isActive && (
                 <span
-                  className="absolute bottom-0 left-1 right-1 h-[2px] rounded-full"
-                  style={{ backgroundColor: tab.accent }}
+                  className={
+                    tab.id === "xp"
+                      ? "absolute bottom-0 left-1 right-1 h-[2px] rounded-full bg-slate-600 dark:bg-white"
+                      : "absolute bottom-0 left-1 right-1 h-[2px] rounded-full"
+                  }
+                  style={
+                    tab.id === "xp" ? undefined : { backgroundColor: tab.accent }
+                  }
                 />
               )}
               <Icon
-                className="h-[16px] w-[16px] sm:h-[18px] sm:w-[18px]"
-                style={isActive ? { color: tab.accent } : undefined}
+                className={
+                  isActive && tab.id === "xp"
+                    ? "h-[16px] w-[16px] sm:h-[18px] sm:w-[18px] text-slate-600 dark:text-white"
+                    : "h-[16px] w-[16px] sm:h-[18px] sm:w-[18px]"
+                }
+                style={
+                  isActive && tab.id !== "xp" ? { color: tab.accent } : undefined
+                }
               />
               {tab.label}
             </button>
@@ -91,8 +103,12 @@ function SectionHeading({
   return (
     <div className="space-y-1">
       <h2
-        className="text-2xl font-semibold tracking-tight"
-        style={{ color: accentFor(id) }}
+        className={
+          id === "xp"
+            ? "text-2xl font-semibold tracking-tight text-slate-700 dark:text-white"
+            : "text-2xl font-semibold tracking-tight"
+        }
+        style={id === "xp" ? undefined : { color: accentFor(id) }}
       >
         {title}
       </h2>
@@ -101,15 +117,25 @@ function SectionHeading({
   );
 }
 
-function StatPill({
-  label,
-  value,
-  accent,
-}: {
-  label: string;
-  value: string;
-  accent: string;
-}) {
+function StatPill(
+  props:
+    | { label: string; value: string; variant: "xp-chrome" }
+    | { label: string; value: string; accent: string; variant?: "default" },
+) {
+  if (props.variant === "xp-chrome") {
+    const { label, value } = props;
+    return (
+      <div className="flex items-center justify-between rounded-lg border border-slate-300 bg-slate-100 px-3 py-2 dark:border-white/35 dark:bg-white/[0.06]">
+        <span className="text-xs uppercase tracking-wide text-muted-foreground">
+          {label}
+        </span>
+        <span className="font-mono text-sm font-semibold text-slate-800 dark:text-white">
+          {value}
+        </span>
+      </div>
+    );
+  }
+  const { label, value, accent } = props;
   return (
     <div
       className="flex items-center justify-between rounded-lg border px-3 py-2"
@@ -133,7 +159,6 @@ function formatCap(cap: number | null): string {
 }
 
 function XpActionTable({ rows }: { rows: XpActionRow[] }) {
-  const accent = accentFor("xp");
   return (
     <div className="overflow-hidden rounded-xl border">
       <table className="w-full text-sm">
@@ -158,10 +183,7 @@ function XpActionTable({ rows }: { rows: XpActionRow[] }) {
                 </code>
               </td>
               <td className="px-3 py-2 text-right">
-                <span
-                  className="font-mono font-semibold"
-                  style={{ color: accent }}
-                >
+                <span className="font-mono font-semibold text-slate-700 dark:text-white">
                   {row.xpValue > 0 ? `+${row.xpValue}` : row.xpValue}
                 </span>
               </td>
@@ -180,7 +202,6 @@ function XpActionTable({ rows }: { rows: XpActionRow[] }) {
 }
 
 function XpSection() {
-  const accent = accentFor("xp");
   const grouped = useMemo(() => {
     const order: XpActionRow["category"][] = [
       "Voting",
@@ -213,9 +234,13 @@ function XpSection() {
       />
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <StatPill label="Tracked actions" value={String(totalActions)} accent={accent} />
-        <StatPill label="Theoretical daily max" value={`${maxDaily.toLocaleString()} XP`} accent={accent} />
-        <StatPill label="Highest single award" value="+100 XP (Win)" accent={accent} />
+        <StatPill label="Tracked actions" value={String(totalActions)} variant="xp-chrome" />
+        <StatPill
+          label="Theoretical daily max"
+          value={`${maxDaily.toLocaleString()} XP`}
+          variant="xp-chrome"
+        />
+        <StatPill label="Highest single award" value="+100 XP (Win)" variant="xp-chrome" />
       </div>
 
       <Card className="space-y-3 p-4">
