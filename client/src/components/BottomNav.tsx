@@ -1,5 +1,6 @@
 import { Home, TrendingUp, Vote } from "lucide-react";
 import { useLocation, Link } from "wouter";
+import { useVisualViewportOffset } from "@/hooks/useVisualViewportOffset";
 
 interface NavItem {
   path: string;
@@ -15,6 +16,11 @@ const navItems: NavItem[] = [
 
 export function BottomNav() {
   const [location] = useLocation();
+  // Keep the nav glued to the visual viewport's bottom edge as Chrome's
+  // bottom toolbar shows/hides — without this the layout viewport
+  // anchored `bottom-0` leaves a transparent strip below the nav after
+  // scroll-down. See useVisualViewportOffset for full rationale.
+  const viewportOffset = useVisualViewportOffset();
 
   // Auth flow pages own the full mobile viewport (centered card layout, no
   // app-shell padding) so the fixed nav covers their bottom content — most
@@ -36,7 +42,11 @@ export function BottomNav() {
   return (
     <nav 
       className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background/95 backdrop-blur-xl md:hidden"
-      style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+      style={{
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        transform: viewportOffset > 0 ? `translateY(-${viewportOffset}px)` : undefined,
+        willChange: 'transform',
+      }}
       aria-label="Navigation"
       data-testid="nav-bottom"
     >

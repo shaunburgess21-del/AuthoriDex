@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { getSupabase } from "@/lib/supabase";
+import { useVisualViewportOffset } from "@/hooks/useVisualViewportOffset";
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts";
 import { 
   LayoutDashboard, 
@@ -1141,6 +1142,10 @@ export default function AdminDashboard() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { user, isAdmin, profileLoading, profile } = useAuth();
+  // Compensate for Chrome's collapsing bottom toolbar so the mobile
+  // admin nav (rendered fixed at the bottom below) stays glued to the
+  // visible bottom edge instead of leaving a transparent strip.
+  const adminNavViewportOffset = useVisualViewportOffset();
   const [brandAssetVariant, setBrandAssetVariant] = useState<BrandAssetVariant>("default");
   const [activeSection, setActiveSectionRaw] = useState<AdminSection>(() => {
     const saved = sessionStorage.getItem("admin_active_section");
@@ -3286,7 +3291,11 @@ export default function AdminDashboard() {
           without squishing labels into 2 lines. */}
       <nav
         className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card/95 backdrop-blur-xl"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+        style={{
+          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+          transform: adminNavViewportOffset > 0 ? `translateY(-${adminNavViewportOffset}px)` : undefined,
+          willChange: 'transform',
+        }}
         aria-label="Admin section navigation"
       >
         <div
