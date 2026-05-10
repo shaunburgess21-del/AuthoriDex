@@ -920,7 +920,7 @@ function DiscourseCard({
             >
               {getSentimentPollChoiceLabel("support")}
             </span>
-            <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
+            <div className="flex-1 h-4 md:h-3 bg-white/5 rounded-full overflow-hidden self-center">
               <div 
                 className="h-full bg-[#00C853] rounded-full transition-all duration-500"
                 style={{ width: `${topic.approvePercent}%` }}
@@ -937,7 +937,7 @@ function DiscourseCard({
             >
               {getSentimentPollChoiceLabel("neutral")}
             </span>
-            <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
+            <div className="flex-1 h-4 md:h-3 bg-white/5 rounded-full overflow-hidden self-center">
               <div 
                 className="h-full bg-slate-400 rounded-full transition-all duration-500"
                 style={{ width: `${topic.neutralPercent}%` }}
@@ -954,7 +954,7 @@ function DiscourseCard({
             >
               {getSentimentPollChoiceLabel("oppose")}
             </span>
-            <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
+            <div className="flex-1 h-4 md:h-3 bg-white/5 rounded-full overflow-hidden self-center">
               <div 
                 className="h-full bg-[#FF0000] rounded-full transition-all duration-500"
                 style={{ width: `${topic.disapprovePercent}%` }}
@@ -963,17 +963,27 @@ function DiscourseCard({
             <span className="text-sm text-muted-foreground w-10 text-right">{topic.disapprovePercent}%</span>
           </div>
           
-          <div className="flex items-center justify-between mt-2 pt-3 border-t border-white/10">
-            <div className="min-w-0">
+          <div className="mt-2 flex items-center gap-2 pt-3 border-t border-white/10">
+            <div className="flex-1 min-w-0">
+              <button
+                type="button"
+                onClick={handleChangeVote}
+                className="text-xs text-muted-foreground hover:text-red-600 dark:hover:text-red-400 transition-colors underline-offset-4 hover:underline truncate"
+                data-testid={`button-change-vote-${topic.id}`}
+              >
+                Remove vote
+              </button>
+            </div>
+            <div className="flex-1 min-w-0 text-center">
               {topic.slug &&
                 (onNavigateToPollDetail ? (
                   <button
                     type="button"
                     onClick={onNavigateToPollDetail}
-                    className="text-xs text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors underline-offset-4 hover:underline text-left"
+                    className="text-xs text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors underline-offset-4 hover:underline"
                     data-testid={`link-poll-view-more-${topic.id}`}
                   >
-                    View more details
+                    More details
                   </button>
                 ) : (
                   <Link
@@ -981,26 +991,20 @@ function DiscourseCard({
                     className="text-xs text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors underline-offset-4 hover:underline inline-block"
                     data-testid={`link-poll-view-more-${topic.id}`}
                   >
-                    View more details
+                    More details
                   </Link>
                 ))}
             </div>
-            <div
-              className="px-2 py-0.5 rounded-full text-xs font-medium border bg-white/5 border-white/20"
-              style={{ color: voted ? getSentimentPollChoiceColor(voted) : undefined }}
-              data-testid={`badge-voted-${topic.id}`}
-            >
-              {voted ? getSentimentPollChoiceLabel(voted) : "You voted"}
+            <div className="flex-1 min-w-0 flex justify-end">
+              <div
+                className="px-2 py-0.5 rounded-full text-xs font-medium border bg-white/5 border-white/20"
+                style={{ color: voted ? getSentimentPollChoiceColor(voted) : undefined }}
+                data-testid={`badge-voted-${topic.id}`}
+              >
+                {voted ? getSentimentPollChoiceLabel(voted) : "You voted"}
+              </div>
             </div>
           </div>
-          
-          <button
-            onClick={handleChangeVote}
-            className="text-xs text-slate-400 hover:text-white transition-colors underline-offset-4 hover:underline text-center"
-            data-testid={`button-change-vote-${topic.id}`}
-          >
-            Change your vote
-          </button>
         </div>
       )}
     </Card>
