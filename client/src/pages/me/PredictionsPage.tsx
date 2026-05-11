@@ -1435,7 +1435,7 @@ function AmmOpenPositionCard({
         <div className="flex items-start gap-3">
           <div className="flex-1 min-w-0">
             <p className="font-medium text-sm leading-snug line-clamp-2">
-              {position.marketTitle || "AMM market"}
+              {position.marketTitle || "Open prediction"}
             </p>
             <p className="text-xs text-muted-foreground mt-1">
               Holding{" "}

@@ -334,9 +334,9 @@ export function MyPredictionCard({
             <Badge
               variant="outline"
               className="text-[10px] px-1.5 py-0 border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-              title="LMSR / AMM market — settled at 1 credit per winning share"
+              title="Live-priced market — each winning share pays 1 credit at settlement"
             >
-              LMSR
+              Live price
             </Badge>
           )}
           {hidden && (

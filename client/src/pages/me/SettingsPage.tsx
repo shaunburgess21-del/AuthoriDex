@@ -406,20 +406,22 @@ export default function SettingsPage() {
             </div>
 
             {/* AMM Sprint 1 — Phase 15.C.2.
-                Open AMM positions disclose live conviction (which side,
-                how many shares). Some users want their settled record
-                visible without showing the live book. This toggle
-                controls just the "where am I sitting right now" view;
-                settled history (wins, losses, AMM exits) stays public
-                because that's how rank is earned. */}
+                Open positions disclose live conviction (which side, how
+                many shares). Some users want their settled record visible
+                without showing the live book. This toggle controls just
+                the "where am I sitting right now" view; settled history
+                (wins, losses, sells) stays public because that's how rank
+                is earned. Copy avoids the "AMM" jargon — users don't
+                think of it as an engine, they think of it as "my open
+                predictions". */}
             <div className="flex items-center justify-between pt-2 border-t border-border/60">
               <div className="space-y-0.5">
-                <Label>Show Open AMM Positions</Label>
+                <Label>Show open predictions</Label>
                 <p className="text-xs text-muted-foreground">
-                  When off, hides your open positions on your profile and
-                  anonymises your trades on the market activity feed,
-                  Town Square, and the leaderboard. Settled history
-                  stays public.
+                  When off, hides your open predictions on your profile
+                  and anonymises your activity on market feeds, Town
+                  Square, and the leaderboard. Your settled prediction
+                  history stays public.
                 </p>
               </div>
               <div className="flex items-center gap-2 shrink-0">

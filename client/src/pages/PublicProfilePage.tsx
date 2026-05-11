@@ -281,7 +281,7 @@ function OpenPositionsSection({ username }: { username: string }) {
         <div>
           <h2 className="font-semibold">Open Positions</h2>
           <p className="text-[11px] text-muted-foreground mt-0.5">
-            Live mark-to-market across every AMM market{isOwnProfile ? " you're currently in" : ""}.
+            Live value across every open prediction{isOwnProfile ? " you're currently in" : ""}.
           </p>
         </div>
         {positions.length > 0 && (

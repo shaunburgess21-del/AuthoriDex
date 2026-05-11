@@ -557,8 +557,8 @@ export default function UserLeaderboardPage() {
                   </span>
                 </TooltipTrigger>
                 <TooltipContent side="top" className="max-w-[220px] text-xs">
-                  Realised P&amp;L (settled bets &amp; AMM exits) plus live
-                  mark-to-market on open AMM positions.
+                  Realised P&amp;L (settled predictions &amp; exits) plus the
+                  live value of open positions.
                 </TooltipContent>
               </Tooltip>
             </div>

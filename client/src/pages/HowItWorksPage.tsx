@@ -410,8 +410,9 @@ function CreditsSection() {
             immediately.
           </li>
           <li>
-            <strong className="text-foreground">AMM payouts.</strong> Winning
-            predictions return Credits to your balance via the market settler.
+            <strong className="text-foreground">Prediction payouts.</strong>{" "}
+            Winning predictions return Credits to your balance when the
+            market settles.
           </li>
           <li>
             <strong className="text-foreground">Purchase.</strong> Buy more
@@ -429,7 +430,8 @@ function CreditsSection() {
         <p className="text-sm text-muted-foreground">
           Every prediction debits Credits from your balance and writes to the
           immutable <code className="text-foreground">credit_ledger</code>. Stake
-          size is your call; the AMM determines the payout if you win.
+          size is your call; the live market price determines your payout if
+          you win.
         </p>
       </Card>
 
@@ -681,8 +683,8 @@ function PredictSection() {
         <h3 className="font-semibold">How prediction markets work</h3>
         <ul className="space-y-2 text-sm text-muted-foreground">
           <li>
-            Every market is priced by an automated market maker (AMM). The
-            price moves as people stake on either side.
+            Every market has a live price for each outcome. The price moves
+            as people back either side — buying pushes that side up.
           </li>
           <li>
             Your stake is debited from your Credits balance the moment you

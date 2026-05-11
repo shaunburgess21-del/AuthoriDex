@@ -162,7 +162,7 @@ export interface PredictSurfaceRow {
 
 export const PREDICT_SURFACES: PredictSurfaceRow[] = [
   { surface: "Place a prediction (any market)", where: "/predict and per-market detail pages", xpActionKey: "place_prediction", notes: "Costs Credits (the stake)." },
-  { surface: "Prediction settles in your favour", where: "Awarded automatically by the market resolver", xpActionKey: "prediction_win", notes: "AMM payout returns Credits to your balance." },
+  { surface: "Prediction settles in your favour", where: "Awarded automatically by the market resolver", xpActionKey: "prediction_win", notes: "Winning shares pay 1 credit each back to your balance." },
   { surface: "Suggest a world / open market", where: "/predict → suggest, then admin review", xpActionKey: "submit_suggestion" },
   { surface: "Your market suggestion is approved", where: "Bonus when admins publish your suggested market", xpActionKey: "suggestion_approved" },
 ];
