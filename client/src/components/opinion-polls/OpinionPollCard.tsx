@@ -385,12 +385,12 @@ export function OpinionPollCard({
                   e.stopPropagation();
                   setExpandedImage({ url: poll.imageUrl!, alt: poll.title });
                 }}
-                className="h-14 w-14 rounded-lg overflow-hidden shrink-0 bg-muted dark:bg-slate-800 cursor-zoom-in border-0 p-0"
+                className="h-16 w-16 rounded-md overflow-hidden shrink-0 bg-muted dark:bg-slate-800 cursor-zoom-in border-0 p-0"
               >
                 <img src={poll.imageUrl} alt={poll.title} className="w-full h-full object-cover" />
               </button>
             ) : (
-              <div className="h-14 w-14 rounded-lg bg-gradient-to-br from-slate-700/50 to-slate-800/50 flex items-center justify-center shrink-0">
+              <div className="h-16 w-16 rounded-md bg-gradient-to-br from-slate-700/50 to-slate-800/50 flex items-center justify-center shrink-0">
                 <ListChecks className="h-5 w-5 text-slate-400" />
               </div>
             )
