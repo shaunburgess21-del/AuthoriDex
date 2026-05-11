@@ -65,7 +65,7 @@ export function AvatarHeightHeadline({
     return () => ro.disconnect();
   }, [measure]);
 
-  const safeH = avatarHeight > 0 ? avatarHeight : 56;
+  const safeH = avatarHeight > 0 ? avatarHeight : 64;
   const safeW = textWidth > 0 ? textWidth : 280;
 
   const { ref: titleRef, fontSizePx } = useFitTextBlockToHeight({
@@ -80,6 +80,8 @@ export function AvatarHeightHeadline({
   const titleStyle: CSSProperties = {
     fontSize: fontSizePx,
     lineHeight: 1.2,
+    maxHeight: safeH,
+    overflow: "hidden",
     ...(serif ? { fontFamily: "ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif" } : {}),
   };
 

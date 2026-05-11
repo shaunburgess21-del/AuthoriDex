@@ -36,6 +36,7 @@ export function useFitTextBlockToHeight({
     el.style.whiteSpace = "normal";
     el.style.wordBreak = "break-word";
     el.style.overflow = "hidden";
+    el.style.maxHeight = `${maxHeightPx}px`;
     el.style.lineHeight = String(lineHeight);
     if (fontFamily) el.style.fontFamily = fontFamily;
 
