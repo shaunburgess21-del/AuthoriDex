@@ -32,15 +32,15 @@ import { useEffect, useState } from "react";
  * Returns 0 when the API is unavailable (older browsers, SSR) so
  * callers fall through to plain `bottom: 0` behaviour.
  *
- * Why three event sources:
+ * Event sources (all rAF-throttled via `schedule`):
  *   - `vv.resize` fires when the toolbar finishes its show/hide
  *     animation (and on keyboard open/close).
  *   - `vv.scroll` fires on visual-viewport pans (pinch-zoom).
- *   - `window.scroll` is the only signal that ticks during the
- *     toolbar's animation itself on WebKit; without it the nav
- *     would only snap into place at the endpoints and visibly lag
- *     mid-scroll. All three funnel through the same rAF schedule
- *     so we never recompute more than once per frame.
+ *   - `window.scroll` ticks during the toolbar animation itself on
+ *     WebKit; without it the nav would lag mid-scroll.
+ *   - `window.resize` fires when `innerHeight` changes without a
+ *     useful `vv.scroll` tick on some Chrome/WebKit builds.
+ *   - `orientationchange` clears stale offsets after rotation.
  */
 export function useVisualViewportOffset(): number {
   const [offset, setOffset] = useState(0);
@@ -67,11 +67,15 @@ export function useVisualViewportOffset(): number {
     vv.addEventListener("resize", schedule);
     vv.addEventListener("scroll", schedule);
     window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+    window.addEventListener("orientationchange", schedule);
 
     return () => {
       vv.removeEventListener("resize", schedule);
       vv.removeEventListener("scroll", schedule);
       window.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+      window.removeEventListener("orientationchange", schedule);
       if (frame !== 0) window.cancelAnimationFrame(frame);
     };
   }, []);
