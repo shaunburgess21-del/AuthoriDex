@@ -1,5 +1,15 @@
 import { forwardRef } from "react";
-import { TrendingUp, TrendingDown, Trophy, Target, Flame } from "lucide-react";
+import {
+  TrendingUp,
+  TrendingDown,
+  Trophy,
+  Target,
+  Flame,
+  ShoppingCart,
+  Banknote,
+  Activity,
+  Clock,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -40,7 +50,73 @@ export interface ShareCardPortfolioData {
   bestCategory?: string | null;
 }
 
-export type ShareCardData = ShareCardWinData | ShareCardPortfolioData;
+/**
+ * "Just bought / sold" share card. Captures the high-emotion moment of
+ * placing or closing an AMM position, with the LMSR-specific shape (shares
+ * + price/share rather than parimutuel stake + multiplier).
+ *
+ * Pricing is in 0..1 share-price units (LMSR convention); the layout
+ * formats it as a percentage for legibility on the card.
+ */
+export interface ShareCardTradeData {
+  variant: "trade";
+  actionType: "buy" | "sell";
+  username: string;
+  personName: string | null;
+  personAvatar: string | null;
+  marketTitle: string;
+  category?: string | null;
+  /** Display label of the entry the user backed (e.g. "UP", "DOWN", candidate name). */
+  entryLabel: string;
+  direction: "up" | "down" | "other";
+  /** Shares bought (buy) or sold (sell). Fractional allowed. */
+  shares: number;
+  /** Average fill price for the trade, 0..1. */
+  pricePerShare: number;
+  /** Buy: credits charged. Sell: credits proceeds. Always positive. */
+  stakeAmount: number;
+  /** Buy only — floor(shares). Used to render "pays X if win". */
+  potentialPayout?: number;
+}
+
+/**
+ * "Currently holding" share card. Snapshot of an open AMM position with
+ * live mark-to-market, cost basis, and unrealised P&L. Designed to be
+ * shareable both from /me/predictions Open tab and the public profile's
+ * Open Positions panel.
+ *
+ * Caller is responsible for computing currentValue / cost basis / etc.
+ * from the same source as the in-app surface so the share card and the
+ * on-screen card agree.
+ */
+export interface ShareCardPositionData {
+  variant: "position";
+  username: string;
+  personName: string | null;
+  personAvatar: string | null;
+  marketTitle: string;
+  category?: string | null;
+  entryLabel: string;
+  direction: "up" | "down" | "other";
+  netShares: number;
+  /** Weighted-avg entry price in 0..1 (matches Sprint 1 server math). */
+  avgEntryPrice: number;
+  /** Live LMSR mid for this entry, 0..1. */
+  currentPrice: number;
+  costBasis: number;
+  /** netShares * currentPrice. */
+  currentValue: number;
+  /** floor(netShares) — payout if entry wins. */
+  potentialPayout: number;
+  /** ISO close time. Used to render the countdown chip. */
+  endAt: string;
+}
+
+export type ShareCardData =
+  | ShareCardWinData
+  | ShareCardPortfolioData
+  | ShareCardTradeData
+  | ShareCardPositionData;
 
 interface ShareCardProps {
   data: ShareCardData;
@@ -121,12 +197,55 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(function Sha
 
       {data.variant === "win" ? (
         <WinLayout data={data} isLandscape={isLandscape} />
-      ) : (
+      ) : data.variant === "portfolio" ? (
         <PortfolioLayout data={data} isLandscape={isLandscape} />
+      ) : data.variant === "trade" ? (
+        <TradeLayout data={data} isLandscape={isLandscape} />
+      ) : (
+        <PositionLayout data={data} isLandscape={isLandscape} />
       )}
     </div>
   );
 });
+
+// Direction-aware colours used by every AMM variant. Up = emerald,
+// Down = rose, other (candidate names on Race) = violet.
+function directionColors(direction: "up" | "down" | "other") {
+  if (direction === "up") return { accent: "#10B981", label: "UP", Icon: TrendingUp };
+  if (direction === "down") return { accent: "#F43F5E", label: "DOWN", Icon: TrendingDown };
+  return { accent: "#A855F7", label: "PICKED", Icon: Target };
+}
+
+// Format the LMSR 0..1 share-price as a percentage with no decimals —
+// matches how the in-app Live Market panel renders prices.
+function formatPricePct(p: number): string {
+  if (!Number.isFinite(p)) return "—";
+  return `${Math.round(p * 100)}%`;
+}
+
+// Rough "Xd Xh remaining" countdown for the Position card. We deliberately
+// avoid live-ticking values inside a snapshot card; the share is a frozen
+// moment. Mirrors `formatAmmCountdown` from PredictionsPage so the
+// in-app card and the share card never disagree about wording.
+function formatRemaining(endIso: string): string {
+  if (!endIso) return "Open market";
+  const end = new Date(endIso).getTime();
+  if (!Number.isFinite(end)) return "Open market";
+  const now = Date.now();
+  const ms = end - now;
+  // Past close time but still in the user's open positions list means
+  // the resolver hasn't fired yet. Match the on-screen "Resolving"
+  // wording from PredictionsPage so users don't see a misleading
+  // "0m left" frozen in the share card.
+  if (ms <= 0) return "Resolving";
+  const totalH = Math.floor(ms / 3_600_000);
+  const days = Math.floor(totalH / 24);
+  const hours = totalH % 24;
+  if (days > 0) return `${days}d ${hours}h left`;
+  if (hours > 0) return `${hours}h left`;
+  const mins = Math.floor((ms % 3_600_000) / 60_000);
+  return `${Math.max(1, mins)}m left`;
+}
 
 // ---------------- Win variant ----------------
 
@@ -488,6 +607,474 @@ function PortfolioLayout({
       <Footer />
     </div>
   );
+}
+
+// ---------------- Trade variant ----------------
+
+function TradeLayout({
+  data,
+  isLandscape,
+}: {
+  data: ShareCardTradeData;
+  isLandscape: boolean;
+}) {
+  const { accent: directionAccent, label: directionLabel, Icon: DirectionIcon } =
+    directionColors(data.direction);
+
+  const isBuy = data.actionType === "buy";
+  // Action accent paints the headline pill: buys lean into the direction
+  // colour (it's the conviction story), sells use amber to read as
+  // "closing / cashing out" without conflicting with the direction tile.
+  const actionAccent = isBuy ? directionAccent : "#F59E0B";
+  const ActionIcon = isBuy ? ShoppingCart : Banknote;
+  // Eyebrow copy. UP/DOWN markets get the directional verb; H2H / Race
+  // picks (direction === "other") would otherwise render "Just backed
+  // PICKED" which reads weirdly — drop the placeholder word and let
+  // the big hero name carry the meaning.
+  const hasDirectionalVerb = data.direction === "up" || data.direction === "down";
+  const eyebrow = isBuy
+    ? hasDirectionalVerb
+      ? `Just backed ${directionLabel}`
+      : "Just backed"
+    : hasDirectionalVerb
+      ? `Sold ${directionLabel}`
+      : "Just sold";
+  const resultHeadline = isBuy ? "Shares bought" : "Position sold";
+  const resultValueLabel = isBuy ? "shares" : "shares sold";
+  const sharesRounded = Math.max(0, Math.round(data.shares));
+  const pricePct = formatPricePct(data.pricePerShare);
+  const stakeLine = isBuy
+    ? `${data.stakeAmount.toLocaleString()} cr in @ ${pricePct}`
+    : `${data.stakeAmount.toLocaleString()} cr out @ ${pricePct}`;
+
+  return (
+    <div
+      className={cn(
+        "relative flex flex-col h-full w-full",
+        isLandscape ? "px-14 py-12" : "px-20 py-20",
+      )}
+    >
+      <Header />
+
+      <div
+        className={cn(
+          "flex flex-1 gap-10 mt-10",
+          isLandscape ? "flex-row items-center" : "flex-col items-stretch justify-center",
+        )}
+      >
+        {/* Person hero */}
+        <div
+          className={cn(
+            "flex items-center gap-6 shrink-0",
+            isLandscape ? "w-[42%]" : "w-full",
+          )}
+        >
+          <AvatarSquare
+            name={data.personName || "Unknown"}
+            avatar={data.personAvatar}
+            size={isLandscape ? 160 : 200}
+          />
+          <div className="flex flex-col gap-2 min-w-0">
+            <p
+              className={cn(
+                "uppercase tracking-[0.25em] text-white/60 font-medium",
+                isLandscape ? "text-[16px]" : "text-[18px]",
+              )}
+            >
+              {eyebrow}
+            </p>
+            <p
+              className={cn(
+                "font-bold leading-tight truncate",
+                isLandscape ? "text-[44px]" : "text-[56px]",
+              )}
+              style={{ fontFamily: "'Space Grotesk', ui-sans-serif, system-ui" }}
+            >
+              {data.personName || "—"}
+            </p>
+          </div>
+        </div>
+
+        {/* Result block */}
+        <div className={cn("flex flex-col gap-6", isLandscape ? "flex-1" : "w-full")}>
+          <div
+            className="rounded-3xl border p-8"
+            style={{
+              borderColor: `${actionAccent}55`,
+              background: `linear-gradient(135deg, ${actionAccent}20 0%, rgba(255,255,255,0.03) 100%)`,
+            }}
+          >
+            <div className="flex items-center gap-3 mb-3">
+              <div
+                className="flex items-center justify-center rounded-xl"
+                style={{
+                  background: `${actionAccent}22`,
+                  color: actionAccent,
+                  width: isLandscape ? 48 : 56,
+                  height: isLandscape ? 48 : 56,
+                }}
+              >
+                <ActionIcon
+                  style={{ width: isLandscape ? 28 : 32, height: isLandscape ? 28 : 32 }}
+                />
+              </div>
+              <p
+                className={cn(
+                  "uppercase tracking-[0.2em] font-semibold",
+                  isLandscape ? "text-[15px]" : "text-[17px]",
+                )}
+                style={{ color: actionAccent }}
+              >
+                {resultHeadline}
+              </p>
+            </div>
+            <p
+              className={cn(
+                "font-bold leading-tight",
+                isLandscape ? "text-[72px]" : "text-[96px]",
+              )}
+              style={{
+                fontFamily: "'JetBrains Mono', ui-monospace, monospace",
+                color: "#FFFFFF",
+                lineHeight: 1,
+              }}
+            >
+              {sharesRounded.toLocaleString()}
+            </p>
+            <p
+              className={cn(
+                "text-white/70 mt-1",
+                isLandscape ? "text-[18px]" : "text-[22px]",
+              )}
+            >
+              {resultValueLabel} · {stakeLine}
+            </p>
+            {isBuy && typeof data.potentialPayout === "number" && data.potentialPayout > 0 && (
+              <div
+                className={cn(
+                  "flex items-center gap-3 mt-4 text-white/80",
+                  isLandscape ? "text-[18px]" : "text-[22px]",
+                )}
+              >
+                <div
+                  className="flex items-center justify-center rounded-lg"
+                  style={{
+                    background: `${directionAccent}1A`,
+                    color: directionAccent,
+                    width: isLandscape ? 36 : 44,
+                    height: isLandscape ? 36 : 44,
+                  }}
+                >
+                  <DirectionIcon
+                    style={{ width: isLandscape ? 20 : 24, height: isLandscape ? 20 : 24 }}
+                  />
+                </div>
+                <span>
+                  Pays{" "}
+                  <span
+                    className="font-bold text-white"
+                    style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}
+                  >
+                    {data.potentialPayout.toLocaleString()}
+                  </span>{" "}
+                  cr if {payoutWinCopy(data.direction, data.entryLabel)}
+                </span>
+              </div>
+            )}
+          </div>
+
+          <p
+            className={cn(
+              "text-white/80 leading-snug line-clamp-2",
+              isLandscape ? "text-[20px]" : "text-[26px]",
+            )}
+          >
+            “{data.marketTitle}”
+          </p>
+        </div>
+      </div>
+
+      <Footer entryLabel={data.entryLabel} category={data.category} />
+    </div>
+  );
+}
+
+// ---------------- Position variant ----------------
+
+function PositionLayout({
+  data,
+  isLandscape,
+}: {
+  data: ShareCardPositionData;
+  isLandscape: boolean;
+}) {
+  const { accent: directionAccent, label: directionLabel, Icon: DirectionIcon } =
+    directionColors(data.direction);
+
+  // Sprint 1's WAC-accurate P&L formula: for users who have partially
+  // sold, `costBasis` (= netCreditsIn) understates the remaining
+  // inventory's cost. The on-screen open-positions panel uses the
+  // weighted-avg-entry formula instead so the share card has to too —
+  // otherwise a partial-sell trader would see a different P&L on the
+  // card vs the profile page.
+  const unrealised = (data.currentPrice - data.avgEntryPrice) * data.netShares;
+  const unrealisedPositive = unrealised >= 0;
+  const unrealisedColor = unrealisedPositive ? "#34D399" : "#F87171";
+  // Display cost = avg entry × remaining shares (the notional value
+  // of the still-held inventory). Using `data.costBasis` (netCreditsIn)
+  // here would produce a "cost X cr @ Y% avg" line where X / shares
+  // doesn't equal Y for partial-sell users.
+  const displayedCost = Math.max(0, Math.round(data.avgEntryPrice * data.netShares));
+  const sharesRounded = Math.max(0, Math.round(data.netShares));
+  const avgPct = formatPricePct(data.avgEntryPrice);
+  const nowPct = formatPricePct(data.currentPrice);
+  const remaining = formatRemaining(data.endAt);
+
+  return (
+    <div
+      className={cn(
+        "relative flex flex-col h-full w-full",
+        isLandscape ? "px-14 py-12" : "px-20 py-20",
+      )}
+    >
+      <Header />
+
+      <div
+        className={cn(
+          "flex flex-1 gap-10 mt-10",
+          isLandscape ? "flex-row items-center" : "flex-col items-stretch justify-center",
+        )}
+      >
+        {/* Person hero + countdown chip below the avatar block */}
+        <div
+          className={cn(
+            "flex flex-col gap-5 shrink-0",
+            isLandscape ? "w-[42%]" : "w-full",
+          )}
+        >
+          <div className="flex items-center gap-6">
+            <AvatarSquare
+              name={data.personName || "Unknown"}
+              avatar={data.personAvatar}
+              size={isLandscape ? 160 : 200}
+            />
+            <div className="flex flex-col gap-2 min-w-0">
+              <p
+                className={cn(
+                  "uppercase tracking-[0.25em] text-white/60 font-medium",
+                  isLandscape ? "text-[16px]" : "text-[18px]",
+                )}
+              >
+                {data.direction === "up" || data.direction === "down"
+                  ? `Holding ${directionLabel}`
+                  : "Holding"}
+              </p>
+              <p
+                className={cn(
+                  "font-bold leading-tight truncate",
+                  isLandscape ? "text-[44px]" : "text-[56px]",
+                )}
+                style={{ fontFamily: "'Space Grotesk', ui-sans-serif, system-ui" }}
+              >
+                {data.personName || "—"}
+              </p>
+            </div>
+          </div>
+          <div
+            className="inline-flex self-start items-center gap-2 rounded-full border px-4 py-2 text-white/80"
+            style={{
+              borderColor: "rgba(255,255,255,0.15)",
+              background: "rgba(255,255,255,0.05)",
+            }}
+          >
+            <Clock style={{ width: isLandscape ? 18 : 22, height: isLandscape ? 18 : 22 }} />
+            <span
+              className={cn(
+                "font-semibold",
+                isLandscape ? "text-[16px]" : "text-[20px]",
+              )}
+              style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}
+            >
+              {remaining}
+            </span>
+          </div>
+        </div>
+
+        {/* Position block */}
+        <div className={cn("flex flex-col gap-6", isLandscape ? "flex-1" : "w-full")}>
+          <div
+            className="rounded-3xl border p-8"
+            style={{
+              borderColor: `${directionAccent}55`,
+              background: `linear-gradient(135deg, ${directionAccent}20 0%, rgba(255,255,255,0.03) 100%)`,
+            }}
+          >
+            <div className="flex items-center gap-3 mb-3">
+              <div
+                className="flex items-center justify-center rounded-xl"
+                style={{
+                  background: `${directionAccent}22`,
+                  color: directionAccent,
+                  width: isLandscape ? 48 : 56,
+                  height: isLandscape ? 48 : 56,
+                }}
+              >
+                <Activity
+                  style={{ width: isLandscape ? 28 : 32, height: isLandscape ? 28 : 32 }}
+                />
+              </div>
+              <p
+                className={cn(
+                  "uppercase tracking-[0.2em] font-semibold",
+                  isLandscape ? "text-[15px]" : "text-[17px]",
+                )}
+                style={{ color: directionAccent }}
+              >
+                Live position
+              </p>
+            </div>
+            <p
+              className={cn(
+                "font-bold leading-tight",
+                isLandscape ? "text-[72px]" : "text-[96px]",
+              )}
+              style={{
+                fontFamily: "'JetBrains Mono', ui-monospace, monospace",
+                color: "#FFFFFF",
+                lineHeight: 1,
+              }}
+            >
+              {sharesRounded.toLocaleString()}
+            </p>
+            <p
+              className={cn(
+                "text-white/70 mt-1",
+                isLandscape ? "text-[18px]" : "text-[22px]",
+              )}
+            >
+              shares · cost {displayedCost.toLocaleString()} cr @ {avgPct} avg
+            </p>
+
+            {/* Live MTM row — cost basis, current value, unrealised delta */}
+            <div
+              className={cn(
+                "grid grid-cols-3 gap-4 mt-6 pt-6 border-t border-white/10",
+                isLandscape ? "text-[16px]" : "text-[20px]",
+              )}
+            >
+              <div className="flex flex-col gap-1">
+                <span
+                  className="uppercase tracking-[0.15em] text-white/50"
+                  style={{ fontSize: isLandscape ? 12 : 14 }}
+                >
+                  Now
+                </span>
+                <span
+                  className="font-bold text-white"
+                  style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}
+                >
+                  {Math.round(data.currentValue).toLocaleString()} cr
+                </span>
+              </div>
+              <div className="flex flex-col gap-1">
+                <span
+                  className="uppercase tracking-[0.15em] text-white/50"
+                  style={{ fontSize: isLandscape ? 12 : 14 }}
+                >
+                  Market
+                </span>
+                <span
+                  className="font-bold text-white"
+                  style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}
+                >
+                  {nowPct}
+                </span>
+              </div>
+              <div className="flex flex-col gap-1">
+                <span
+                  className="uppercase tracking-[0.15em] text-white/50"
+                  style={{ fontSize: isLandscape ? 12 : 14 }}
+                >
+                  P&amp;L
+                </span>
+                <span
+                  className="font-bold"
+                  style={{
+                    fontFamily: "'JetBrains Mono', ui-monospace, monospace",
+                    color: unrealisedColor,
+                  }}
+                >
+                  {unrealisedPositive ? "+" : ""}
+                  {Math.round(unrealised).toLocaleString()}
+                </span>
+              </div>
+            </div>
+
+            {data.potentialPayout > 0 && (
+              <div
+                className={cn(
+                  "flex items-center gap-3 mt-6 text-white/80",
+                  isLandscape ? "text-[18px]" : "text-[22px]",
+                )}
+              >
+                <div
+                  className="flex items-center justify-center rounded-lg"
+                  style={{
+                    background: `${directionAccent}1A`,
+                    color: directionAccent,
+                    width: isLandscape ? 36 : 44,
+                    height: isLandscape ? 36 : 44,
+                  }}
+                >
+                  <DirectionIcon
+                    style={{ width: isLandscape ? 20 : 24, height: isLandscape ? 20 : 24 }}
+                  />
+                </div>
+                <span>
+                  Pays{" "}
+                  <span
+                    className="font-bold text-white"
+                    style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}
+                  >
+                    {data.potentialPayout.toLocaleString()}
+                  </span>{" "}
+                  cr if {payoutWinCopy(data.direction, data.entryLabel)}
+                </span>
+              </div>
+            )}
+          </div>
+
+          <p
+            className={cn(
+              "text-white/80 leading-snug line-clamp-2",
+              isLandscape ? "text-[20px]" : "text-[26px]",
+            )}
+          >
+            “{data.marketTitle}”
+          </p>
+        </div>
+      </div>
+
+      <Footer entryLabel={data.entryLabel} category={data.category} />
+    </div>
+  );
+}
+
+// "if X wins" tail for the payout chip. UP/DOWN markets get the
+// directional word; H2H / Race picks (direction "other") drop the
+// placeholder "PICKED" wording and use the entry label instead
+// ("if Bill Gates wins").
+function payoutWinCopy(
+  direction: "up" | "down" | "other",
+  entryLabel: string,
+): string {
+  if (direction === "up" || direction === "down") {
+    return `${direction === "up" ? "up" : "down"} wins`;
+  }
+  if (entryLabel && entryLabel.trim().length > 0) {
+    return `${entryLabel} wins`;
+  }
+  return "it wins";
 }
 
 // ---------------- Shared bits ----------------

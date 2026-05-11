@@ -15,6 +15,8 @@ import { MarketActivityFeed } from "@/components/predict/MarketActivityFeed";
 import { MarketResolutionInfo } from "@/components/predict/MarketResolutionInfo";
 import { MyPositionCard } from "@/components/predict/MyPositionCard";
 import { ShareIconButton } from "@/components/predict/ShareIconButton";
+import { useShareCard } from "@/contexts/ShareCardContext";
+import { buildTradeShareData } from "@/lib/share-data";
 import { RelatedMarkets } from "@/components/predict/RelatedMarkets";
 import { MuteMarketToggle } from "@/components/predict/MuteMarketToggle";
 import { H2HWhatNeedsToHappen } from "@/components/predict/WhatNeedsToHappen";
@@ -96,6 +98,7 @@ export default function H2HDetailPage() {
   const walletCredits = profile?.predictCredits ?? 0;
   const queryClient = useQueryClient();
   const { trigger: triggerXpBurst } = useXpBurst();
+  const { openShareCard } = useShareCard();
 
   const [stakeModalOpen, setStakeModalOpen] = useState(false);
   const [pendingSelection, setPendingSelection] = useState<StakeSelection | null>(null);
@@ -354,9 +357,56 @@ export default function H2HDetailPage() {
       if (data?.xp?.xpAwarded) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }
-      toast("Prediction placed!", {
-        description: "Your head-to-head prediction has been recorded.",
-      });
+      // AMM-gated share moment. H2H trades are always one of two named
+      // people — we resolve which side via the entryId from
+      // `pendingSelection` so the share card hero is the right face.
+      const isAmmTrade = data?.engine === "amm";
+      if (isAmmTrade && hydrated && pendingSelection?.entryId) {
+        const picked =
+          pendingSelection.entryId === hydrated.person1EntryId
+            ? hydrated.person1
+            : hydrated.person2;
+        const shares = Number(data?.sharesPurchased) || 0;
+        const chargeCredits = Number(data?.chargeCredits) || 0;
+        const pricePerShare = Number(data?.pricePerShareAvg) || 0;
+        const tradeData = buildTradeShareData({
+          actionType: "buy",
+          username: profile?.username || "you",
+          personName: picked.name,
+          personAvatar: picked.avatar || null,
+          marketTitle: hydrated.title,
+          category: hydrated.category,
+          entryLabel: picked.name,
+          // H2H is "candidate A vs candidate B" — neither side is "up"
+          // or "down" in the directional sense, so the trade card
+          // uses the neutral "other" accent (violet) for both.
+          direction: "other",
+          shares,
+          pricePerShare,
+          stakeAmount: chargeCredits,
+        });
+        const origin = typeof window !== "undefined" ? window.location.origin : "";
+        const pathname = typeof window !== "undefined" ? window.location.pathname : "";
+        const shareUrl = `${origin}${pathname}`;
+        const fallbackText = `I just backed ${picked.name} on "${hydrated.title}" on VoxDex!\n${shareUrl}`;
+        toast("Prediction placed!", {
+          description: `${Math.round(shares).toLocaleString()} ${picked.name} shares · ${chargeCredits.toLocaleString()} cr`,
+          action: {
+            label: "Share",
+            onClick: () =>
+              openShareCard({
+                data: tradeData,
+                fallbackText,
+                shareUrl,
+                filenameBase: `voxdex-trade-${(data?.betId ?? "buy").toString().slice(0, 8)}`,
+              }),
+          },
+        });
+      } else {
+        toast("Prediction placed!", {
+          description: "Your head-to-head prediction has been recorded.",
+        });
+      }
       setStakeModalOpen(false);
       setPendingSelection(null);
       await invalidateAfterTrade();
@@ -377,11 +427,51 @@ export default function H2HDetailPage() {
       });
       return res.json();
     },
-    onSuccess: async () => {
+    onSuccess: async (data) => {
       hapticSuccess();
-      toast("Position sold", {
-        description: "Proceeds have been credited to your wallet.",
-      });
+      if (hydrated && pendingSelection?.entryId) {
+        const picked =
+          pendingSelection.entryId === hydrated.person1EntryId
+            ? hydrated.person1
+            : hydrated.person2;
+        const shares = Number(data?.sharesSold) || 0;
+        const proceeds = Number(data?.proceeds) || 0;
+        const pricePerShare = Number(data?.pricePerShareAvg) || 0;
+        const tradeData = buildTradeShareData({
+          actionType: "sell",
+          username: profile?.username || "you",
+          personName: picked.name,
+          personAvatar: picked.avatar || null,
+          marketTitle: hydrated.title,
+          category: hydrated.category,
+          entryLabel: picked.name,
+          direction: "other",
+          shares,
+          pricePerShare,
+          stakeAmount: proceeds,
+        });
+        const origin = typeof window !== "undefined" ? window.location.origin : "";
+        const pathname = typeof window !== "undefined" ? window.location.pathname : "";
+        const shareUrl = `${origin}${pathname}`;
+        const fallbackText = `Just took ${proceeds} credits off the table on "${hydrated.title}" on VoxDex!\n${shareUrl}`;
+        toast("Position sold", {
+          description: `Sold ${Math.round(shares).toLocaleString()} ${picked.name} shares · +${proceeds.toLocaleString()} cr`,
+          action: {
+            label: "Share",
+            onClick: () =>
+              openShareCard({
+                data: tradeData,
+                fallbackText,
+                shareUrl,
+                filenameBase: `voxdex-trade-${(data?.betId ?? "sell").toString().slice(0, 8)}`,
+              }),
+          },
+        });
+      } else {
+        toast("Position sold", {
+          description: "Proceeds have been credited to your wallet.",
+        });
+      }
       setStakeModalOpen(false);
       setPendingSelection(null);
       await invalidateAfterTrade();

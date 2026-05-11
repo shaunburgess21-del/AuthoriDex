@@ -17690,6 +17690,11 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           betId: result.betId,
           sharesPurchased: result.sharesPurchased,
           chargeCredits: result.chargeCredits,
+          // Sprint 2: returned for share-card parity with the native-
+          // markets bet route so the client can render "X shares @ Y%"
+          // on the trade share preview without recomputing from
+          // chargeCredits/shares.
+          pricePerShareAvg: result.pricePerShareAvg,
           newPrices: result.newPrices,
           userBalanceAfter: result.userBalanceAfter,
         });

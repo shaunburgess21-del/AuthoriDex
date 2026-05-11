@@ -34,6 +34,8 @@ import { MarketDetailSkeleton } from "@/components/predict/MarketDetailSkeleton"
 import { RelatedMarkets } from "@/components/predict/RelatedMarkets";
 import { MuteMarketToggle } from "@/components/predict/MuteMarketToggle";
 import { getCommunityMarketStatusMessage } from "@/lib/marketClosedMessaging";
+import { useShareCard } from "@/contexts/ShareCardContext";
+import { buildTradeShareData } from "@/lib/share-data";
 import { goBack } from "@/lib/goBack";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import {
@@ -621,6 +623,7 @@ export default function MarketDetailPage() {
   const { user, profile, isLoggedIn, refreshProfile } = useAuth();
   const queryClient = useQueryClient();
   const { trigger: triggerXpBurst } = useXpBurst();
+  const { openShareCard } = useShareCard();
   const marketCommentCount = useCommentCount("open-market", params.slug || "");
 
   const urlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
@@ -768,14 +771,74 @@ export default function MarketDetailPage() {
     },
     onSuccess: async (data: any) => {
       const isAmmTrade = data?.engine === "amm";
-      toast(
-        isAmmTrade ? "Shares purchased" : "Prediction placed!",
-        {
-          description: isAmmTrade && Number.isFinite(Number(data?.sharesPurchased))
-            ? `You bought ${Number(data.sharesPurchased).toFixed(2)} shares for ${data.chargeCredits ?? "—"} credits.`
-            : "Your prediction has been recorded.",
-        },
-      );
+      if (isAmmTrade && market) {
+        // Find the entry the user picked so we can use its label as the
+        // share-card eyebrow. `selectedEntry` is still the most recent
+        // pick at this point (we only reset it after invalidate runs).
+        const pickedEntry = market.entries?.find((e) => e.id === selectedEntry);
+        const entryLabel = pickedEntry?.label || selectedDirection.toUpperCase();
+        const lowerLabel = entryLabel.toLowerCase();
+        // Community markets are often binary (Yes / No). We map Yes/Up
+        // to the emerald direction accent and No/Down to rose; anything
+        // else falls back to "other" (violet).
+        const direction: "up" | "down" | "other" =
+          lowerLabel === "yes" || lowerLabel === "up"
+            ? "up"
+            : lowerLabel === "no" || lowerLabel === "down"
+              ? "down"
+              : "other";
+        const shares = Number(data?.sharesPurchased) || 0;
+        const chargeCredits = Number(data?.chargeCredits) || 0;
+        // Belt-and-braces: native-markets returns pricePerShareAvg
+        // explicitly; community open-markets started returning it in
+        // the same Sprint 2 commit. If a stale build is still in flight
+        // we derive avg fill price from chargeCredits / shares.
+        const pricePerShare =
+          Number(data?.pricePerShareAvg) ||
+          (shares > 0 ? chargeCredits / shares : 0);
+        const tradeData = buildTradeShareData({
+          actionType: "buy",
+          username: profile?.username || "you",
+          // Community markets may or may not be linked to a person.
+          // When unlinked we leave personName null — the share card
+          // falls back to a "—" hero and lets the market title carry
+          // the meaning.
+          personName: market.linkedPersonName ?? null,
+          personAvatar: market.linkedPersonAvatar ?? market.coverImageUrl ?? null,
+          marketTitle: market.title,
+          category: market.category ?? null,
+          entryLabel,
+          direction,
+          shares,
+          pricePerShare,
+          stakeAmount: chargeCredits,
+        });
+        const origin = typeof window !== "undefined" ? window.location.origin : "";
+        const shareUrl = `${origin}/markets/${market.slug}`;
+        const fallbackText = `I just backed ${entryLabel} on "${market.title}" on VoxDex!\n${shareUrl}`;
+        toast("Shares purchased", {
+          description: `${Math.round(shares).toLocaleString()} ${entryLabel} shares · ${chargeCredits.toLocaleString()} cr`,
+          action: {
+            label: "Share",
+            onClick: () =>
+              openShareCard({
+                data: tradeData,
+                fallbackText,
+                shareUrl,
+                filenameBase: `voxdex-trade-${(data?.betId ?? "buy").toString().slice(0, 8)}`,
+              }),
+          },
+        });
+      } else {
+        toast(
+          isAmmTrade ? "Shares purchased" : "Prediction placed!",
+          {
+            description: isAmmTrade && Number.isFinite(Number(data?.sharesPurchased))
+              ? `You bought ${Number(data.sharesPurchased).toFixed(2)} shares for ${data.chargeCredits ?? "—"} credits.`
+              : "Your prediction has been recorded.",
+          },
+        );
+      }
       if (data?.xp?.xpAwarded) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }

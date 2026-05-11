@@ -20,6 +20,8 @@ import { MarketResolutionInfo } from "@/components/predict/MarketResolutionInfo"
 import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
 import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
 import { ShareIconButton } from "@/components/predict/ShareIconButton";
+import { useShareCard } from "@/contexts/ShareCardContext";
+import { buildTradeShareData } from "@/lib/share-data";
 import { RelatedMarkets } from "@/components/predict/RelatedMarkets";
 import { MuteMarketToggle } from "@/components/predict/MuteMarketToggle";
 import { Button } from "@/components/ui/button";
@@ -86,6 +88,7 @@ export default function UpDownDetailPage() {
   const walletCredits = profile?.predictCredits ?? 0;
   const queryClient = useQueryClient();
   const { trigger: triggerXpBurst } = useXpBurst();
+  const { openShareCard } = useShareCard();
 
   const [stakeModalOpen, setStakeModalOpen] = useState(false);
   const [pendingSelection, setPendingSelection] = useState<StakeSelection | null>(null);
@@ -318,9 +321,52 @@ export default function UpDownDetailPage() {
       if (data?.xp?.xpAwarded) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }
-      toast("Prediction placed!", {
-        description: "Your Up/Down prediction has been recorded.",
-      });
+      // AMM-gated share moment. For parimutuel the existing static toast
+      // stays — the share card variants are LMSR-specific (shares + fill
+      // price), so we don't pretend pari trades fit the same mould.
+      const isAmmTrade = data?.engine === "amm";
+      if (isAmmTrade && hydrated && pendingSelection) {
+        const choice = pendingSelection.choice.toLowerCase();
+        const direction: "up" | "down" | "other" =
+          choice === "up" ? "up" : choice === "down" ? "down" : "other";
+        const shares = Number(data?.sharesPurchased) || 0;
+        const chargeCredits = Number(data?.chargeCredits) || 0;
+        const pricePerShare = Number(data?.pricePerShareAvg) || 0;
+        const tradeData = buildTradeShareData({
+          actionType: "buy",
+          username: profile?.username || "you",
+          personName: hydrated.personName,
+          personAvatar: hydrated.personAvatar || null,
+          marketTitle: `${hydrated.personName}: Up or Down?`,
+          category: hydrated.category,
+          entryLabel: pendingSelection.choice,
+          direction,
+          shares,
+          pricePerShare,
+          stakeAmount: chargeCredits,
+        });
+        const origin = typeof window !== "undefined" ? window.location.origin : "";
+        const pathname = typeof window !== "undefined" ? window.location.pathname : "";
+        const shareUrl = `${origin}${pathname}`;
+        const fallbackText = `I just backed ${pendingSelection.choice} on "${hydrated.personName}: Up or Down?" on VoxDex!\n${shareUrl}`;
+        toast("Prediction placed!", {
+          description: `${Math.round(shares).toLocaleString()} ${pendingSelection.choice} shares · ${chargeCredits.toLocaleString()} cr`,
+          action: {
+            label: "Share",
+            onClick: () =>
+              openShareCard({
+                data: tradeData,
+                fallbackText,
+                shareUrl,
+                filenameBase: `voxdex-trade-${(data?.betId ?? "buy").toString().slice(0, 8)}`,
+              }),
+          },
+        });
+      } else {
+        toast("Prediction placed!", {
+          description: "Your Up/Down prediction has been recorded.",
+        });
+      }
       setStakeModalOpen(false);
       setPendingSelection(null);
       await invalidateAfterTrade();
@@ -341,11 +387,53 @@ export default function UpDownDetailPage() {
       });
       return res.json();
     },
-    onSuccess: async () => {
+    onSuccess: async (data) => {
       hapticSuccess();
-      toast("Position sold", {
-        description: "Proceeds have been credited to your wallet.",
-      });
+      // Sell is always AMM (parimutuel has no sell). Build a `trade`
+      // share card with actionType="sell" — same headline DNA as the
+      // buy card, but emphasises proceeds-out instead of stake-in.
+      if (hydrated && pendingSelection) {
+        const choice = pendingSelection.choice.toLowerCase();
+        const direction: "up" | "down" | "other" =
+          choice === "up" ? "up" : choice === "down" ? "down" : "other";
+        const shares = Number(data?.sharesSold) || 0;
+        const proceeds = Number(data?.proceeds) || 0;
+        const pricePerShare = Number(data?.pricePerShareAvg) || 0;
+        const tradeData = buildTradeShareData({
+          actionType: "sell",
+          username: profile?.username || "you",
+          personName: hydrated.personName,
+          personAvatar: hydrated.personAvatar || null,
+          marketTitle: `${hydrated.personName}: Up or Down?`,
+          category: hydrated.category,
+          entryLabel: pendingSelection.choice,
+          direction,
+          shares,
+          pricePerShare,
+          stakeAmount: proceeds,
+        });
+        const origin = typeof window !== "undefined" ? window.location.origin : "";
+        const pathname = typeof window !== "undefined" ? window.location.pathname : "";
+        const shareUrl = `${origin}${pathname}`;
+        const fallbackText = `Just took ${proceeds} credits off the table on "${hydrated.personName}: Up or Down?" on VoxDex!\n${shareUrl}`;
+        toast("Position sold", {
+          description: `Sold ${Math.round(shares).toLocaleString()} ${pendingSelection.choice} shares · +${proceeds.toLocaleString()} cr`,
+          action: {
+            label: "Share",
+            onClick: () =>
+              openShareCard({
+                data: tradeData,
+                fallbackText,
+                shareUrl,
+                filenameBase: `voxdex-trade-${(data?.betId ?? "sell").toString().slice(0, 8)}`,
+              }),
+          },
+        });
+      } else {
+        toast("Position sold", {
+          description: "Proceeds have been credited to your wallet.",
+        });
+      }
       setStakeModalOpen(false);
       setPendingSelection(null);
       await invalidateAfterTrade();

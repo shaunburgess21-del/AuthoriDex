@@ -32,6 +32,8 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MyVoteCard, type MyVoteCardData } from "@/components/me/MyVoteCard";
+import { useShareCard } from "@/contexts/ShareCardContext";
+import { buildPositionShareData, inferDirection } from "@/lib/share-data";
 
 interface PublicProfile {
   username: string;
@@ -203,8 +205,14 @@ interface PublicAmmPosition {
   marketTitle: string;
   marketStatus: string;
   marketType: string;
+  marketCategory?: string | null;
   entryId: string;
   entryLabel: string;
+  // Sprint 2: returned by `loadAmmPositionsFor` so the per-row Share
+  // button can build a `position` share card with the right hero. May
+  // be null for community markets without a linked person.
+  personName?: string | null;
+  personAvatar?: string | null;
   netShares: number;
   netCreditsIn: number;
   /** Weighted-average buy cost per share (NOT netCreditsIn/netShares,
@@ -231,6 +239,52 @@ function OpenPositionsSection({ username }: { username: string }) {
   const [sortKey, setSortKey] = useState<PositionsSortKey>("pnl");
   const { profile: viewer } = useAuth();
   const isOwnProfile = viewer?.username === username;
+  const { openShareCard } = useShareCard();
+
+  // Build a `position` share card for one of this user's open
+  // positions. Mirrors the same helper used on /me/predictions so the
+  // share card output is identical whether the user opened it from
+  // their own dashboard or from their public profile.
+  const handleShare = (p: PublicAmmPosition) => {
+    const direction = inferDirection(p.entryLabel);
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const sharePath =
+      p.marketType === "h2h"
+        ? `/predict/h2h/${p.marketId}`
+        : p.marketType === "updown"
+          ? `/predict/updown/${p.marketId}`
+          : p.marketType === "race" || p.marketType === "gainer"
+            ? `/predict/race/${p.marketId}`
+            : p.marketSlug
+              ? `/markets/${p.marketSlug}`
+              : "/predict";
+    const shareUrl = `${origin}${sharePath}`;
+    const tradeData = buildPositionShareData({
+      username,
+      personName: p.personName ?? null,
+      personAvatar: p.personAvatar ?? null,
+      marketTitle: p.marketTitle,
+      category: p.marketCategory ?? null,
+      entryLabel: p.entryLabel,
+      direction,
+      netShares: p.netShares,
+      avgEntryPrice: p.avgEntryPrice,
+      currentPrice: p.currentPrice,
+      costBasis: p.netCreditsIn,
+      currentValue: p.currentValue,
+      // Community markets can be open-ended; the share card renders
+      // "Open market" on a blank endAt rather than a misleading
+      // "0m left" countdown.
+      endAt: p.marketEndAt ?? "",
+    });
+    const fallbackText = `Holding ${Math.round(p.netShares)} ${p.entryLabel} shares on "${p.marketTitle}" on VoxDex.\n${shareUrl}`;
+    openShareCard({
+      data: tradeData,
+      fallbackText,
+      shareUrl,
+      filenameBase: `voxdex-position-${p.marketId.slice(0, 8)}-${p.entryId.slice(0, 6)}`,
+    });
+  };
 
   const { data, isLoading, error } = useQuery<PublicAmmPositionsResponse>({
     queryKey: ["/api/users", username, "amm-positions"],
@@ -358,24 +412,39 @@ function OpenPositionsSection({ username }: { username: string }) {
                     </span>
                   </div>
                 </div>
-                <div className="text-right shrink-0">
-                  <div
-                    className={`text-sm font-semibold ${
-                      pnl > 0
-                        ? "text-emerald-600 dark:text-emerald-400"
-                        : pnl < 0
-                          ? "text-red-600 dark:text-red-400"
-                          : "text-muted-foreground"
-                    }`}
+                <div className="flex items-center gap-2 shrink-0">
+                  <div className="text-right">
+                    <div
+                      className={`text-sm font-semibold ${
+                        pnl > 0
+                          ? "text-emerald-600 dark:text-emerald-400"
+                          : pnl < 0
+                            ? "text-red-600 dark:text-red-400"
+                            : "text-muted-foreground"
+                      }`}
+                    >
+                      {pnl > 0 ? "+" : ""}
+                      {Math.round(pnl).toLocaleString()}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground">
+                      {pnl >= 0 ? "+" : ""}
+                      {pnlPct.toFixed(1)}%
+                    </div>
+                  </div>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                    aria-label="Share this position"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleShare(p);
+                    }}
+                    data-testid={`public-position-share-${p.marketId}-${p.entryId}`}
                   >
-                    {pnl > 0 ? "+" : ""}
-                    {Math.round(pnl).toLocaleString()}
-                  </div>
-                  <div className="text-[10px] text-muted-foreground">
-                    {pnl >= 0 ? "+" : ""}
-                    {pnlPct.toFixed(1)}%
-                  </div>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <Share2 className="h-3.5 w-3.5" />
+                  </Button>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                 </div>
               </div>
             );

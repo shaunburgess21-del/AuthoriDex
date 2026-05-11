@@ -34,6 +34,8 @@ import { computePayoutMultiplier, computeEarlyBirdMultiplier } from "@/lib/parim
 import { pricesFor, priceToPercent, snapshotFromApi } from "@/lib/ammClient";
 import { AmmPriceHistoryChart } from "@/components/predict/AmmPriceHistoryChart";
 import { MarketActivityFeed } from "@/components/predict/MarketActivityFeed";
+import { useShareCard } from "@/contexts/ShareCardContext";
+import { buildTradeShareData } from "@/lib/share-data";
 import {
   ArrowLeft,
   Crown,
@@ -73,10 +75,16 @@ export default function CategoryRaceDetailPage() {
   const walletCredits = profile?.predictCredits ?? 0;
   const queryClient = useQueryClient();
   const { trigger: triggerXpBurst } = useXpBurst();
+  const { openShareCard } = useShareCard();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [stakeModalOpen, setStakeModalOpen] = useState(false);
   const [pendingSelection, setPendingSelection] = useState<StakeSelection | null>(null);
+  // Race trades target one of N candidates — `pendingSelection.choice`
+  // is the candidate name, but we also need the avatar for the share
+  // card hero. Captured at click-time alongside the pending selection;
+  // read once in the buy onSuccess, then dropped on close.
+  const pendingShareCandidateRef = useRef<GainerCandidate | null>(null);
   const candidateSearchRef = useRef<HTMLInputElement | null>(null);
 
   const { data: allGainerMarkets, isLoading } = useQuery<any[]>({
@@ -278,6 +286,7 @@ export default function CategoryRaceDetailPage() {
         : totalPool > 0
           ? Math.round((candidateStake / totalPool) * 100)
           : 0;
+      pendingShareCandidateRef.current = candidate;
       setPendingSelection({
         type: "gainer",
         marketId,
@@ -315,14 +324,55 @@ export default function CategoryRaceDetailPage() {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }
       const isAmmTrade = data?.engine === "amm";
-      toast(
-        isAmmTrade ? "Shares purchased" : "Prediction placed!",
-        {
-          description: isAmmTrade && Number.isFinite(Number(data?.sharesPurchased))
-            ? `You bought ${Number(data.sharesPurchased).toFixed(2)} shares for ${data.chargeCredits ?? "—"} credits.`
-            : "Your top gainer prediction has been recorded.",
-        },
-      );
+      const candidate = pendingShareCandidateRef.current;
+      if (isAmmTrade && candidate) {
+        const shares = Number(data?.sharesPurchased) || 0;
+        const chargeCredits = Number(data?.chargeCredits) || 0;
+        const pricePerShare = Number(data?.pricePerShareAvg) || 0;
+        const tradeData = buildTradeShareData({
+          actionType: "buy",
+          username: profile?.username || "you",
+          personName: candidate.name,
+          personAvatar: candidate.avatar || null,
+          marketTitle: `Category Race: ${categoryLabel}`,
+          category: market ? normalizeMarketCategory(market.category || "misc") : null,
+          entryLabel: candidate.name,
+          // Race entries are multi-candidate picks, not a binary
+          // up/down call — render the share card with the neutral
+          // violet accent rather than emerald/rose.
+          direction: "other",
+          shares,
+          pricePerShare,
+          stakeAmount: chargeCredits,
+        });
+        const origin = typeof window !== "undefined" ? window.location.origin : "";
+        const pathname = typeof window !== "undefined" ? window.location.pathname : "";
+        const shareUrl = `${origin}${pathname}`;
+        const fallbackText = `I just backed ${candidate.name} in the ${categoryLabel} Race on VoxDex!\n${shareUrl}`;
+        toast("Shares purchased", {
+          description: `${Math.round(shares).toLocaleString()} ${candidate.name} shares · ${chargeCredits.toLocaleString()} cr`,
+          action: {
+            label: "Share",
+            onClick: () =>
+              openShareCard({
+                data: tradeData,
+                fallbackText,
+                shareUrl,
+                filenameBase: `voxdex-trade-${(data?.betId ?? "buy").toString().slice(0, 8)}`,
+              }),
+          },
+        });
+      } else {
+        toast(
+          isAmmTrade ? "Shares purchased" : "Prediction placed!",
+          {
+            description: isAmmTrade && Number.isFinite(Number(data?.sharesPurchased))
+              ? `You bought ${Number(data.sharesPurchased).toFixed(2)} shares for ${data.chargeCredits ?? "—"} credits.`
+              : "Your top gainer prediction has been recorded.",
+          },
+        );
+      }
+      pendingShareCandidateRef.current = null;
       setStakeModalOpen(false);
       setPendingSelection(null);
       await Promise.all([

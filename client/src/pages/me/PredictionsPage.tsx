@@ -32,8 +32,8 @@ import { MyPredictionCard, type MyPredictionCardData } from "@/components/me/MyP
 import { DoughnutChart, type DoughnutSegment } from "@/components/charts/DoughnutChart";
 import { useItemVisibility } from "@/hooks/useItemVisibility";
 import { cn } from "@/lib/utils";
-import { ShareCardModal } from "@/components/share/ShareCardModal";
-import type { ShareCardData } from "@/components/share/ShareCard";
+import { useShareCard } from "@/contexts/ShareCardContext";
+import { buildPositionShareData, inferDirection } from "@/lib/share-data";
 import { inferPredictionDirection } from "@/pages/me/predictions-utils";
 
 type UserPrediction = MyPredictionCardData;
@@ -210,12 +210,11 @@ export default function PredictionsPage() {
   const [categoryFilter, setCategoryFilterState] = useState<string>(getInitialCategoryFilter);
   const [hiddenOnly, setHiddenOnlyState] = useState<boolean>(getInitialHiddenOnly);
   const { copiedId, copy } = useCopyToClipboard();
-  const [shareModal, setShareModal] = useState<{
-    data: ShareCardData;
-    fallbackText?: string;
-    shareUrl?: string;
-    filenameBase?: string;
-  } | null>(null);
+  // Sprint 2: share modal is mounted once at app root via
+  // <ShareCardProvider> and triggered through `useShareCard()`. The
+  // local state-driven mount that used to live here is gone — every
+  // share entry point now flows through the global context.
+  const { openShareCard } = useShareCard();
 
   const writeQuery = (patch: Record<string, string | null>) => {
     if (typeof window === "undefined") return;
@@ -335,7 +334,7 @@ export default function PredictionsPage() {
     const mappedDirection: "up" | "down" | "other" =
       direction === "up" ? "up" : direction === "down" ? "down" : "other";
     const fallbackText = `I won +${pnl.toLocaleString()} credits on "${p.marketTitle}" on VoxDex!\n${window.location.origin}/markets/${p.marketSlug}`;
-    setShareModal({
+    openShareCard({
       data: {
         variant: "win",
         personName: p.personName,
@@ -357,13 +356,54 @@ export default function PredictionsPage() {
     });
   };
 
+  const handleSharePosition = (p: AmmOpenPosition) => {
+    // Build a "live position" share card from the same fields rendered
+    // on the card itself, so the share image and the on-screen card
+    // never disagree about cost basis / current value.
+    const direction = inferDirection(p.entryLabel);
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const sharePath =
+      p.marketType === "h2h"
+        ? `/predict/h2h/${p.marketId}`
+        : p.marketType === "updown"
+          ? `/predict/updown/${p.marketId}`
+          : p.marketType === "race" || p.marketType === "gainer"
+            ? `/predict/race/${p.marketId}`
+            : p.marketSlug
+              ? `/markets/${p.marketSlug}`
+              : "/predict";
+    const shareUrl = `${origin}${sharePath}`;
+    const tradeData = buildPositionShareData({
+      username: profile?.username || "you",
+      personName: p.personName,
+      personAvatar: p.personAvatar,
+      marketTitle: p.marketTitle,
+      category: p.marketCategory,
+      entryLabel: p.entryLabel,
+      direction,
+      netShares: p.netShares,
+      avgEntryPrice: p.avgEntryPrice,
+      currentPrice: p.currentPrice,
+      costBasis: p.netCreditsIn,
+      currentValue: p.currentValue,
+      endAt: p.marketEndAt,
+    });
+    const fallbackText = `Holding ${Math.round(p.netShares)} ${p.entryLabel} shares on "${p.marketTitle}" on VoxDex.\n${shareUrl}`;
+    openShareCard({
+      data: tradeData,
+      fallbackText,
+      shareUrl,
+      filenameBase: `voxdex-position-${p.marketId.slice(0, 8)}-${p.entryId.slice(0, 6)}`,
+    });
+  };
+
   const handleSharePortfolio = (stats: PredictionStats) => {
     const fallbackText = `My VoxDex predictions: ${stats.winRate}% win rate | ${
       stats.netCredits >= 0 ? "+" : ""
     }${stats.netCredits.toLocaleString()} net credits | ${stats.total} predictions\n${
       window.location.origin
     }/predict`;
-    setShareModal({
+    openShareCard({
       data: {
         variant: "portfolio",
         username: profile?.username || "voxdex",
@@ -483,20 +523,12 @@ export default function PredictionsPage() {
             onToggleVisibility={handleToggleVisibility}
             isPending={visibility.isPending}
             setLocation={setLocation}
+            onSharePosition={handleSharePosition}
           />
         )}
       </div>
-
-      <ShareCardModal
-        open={shareModal !== null}
-        onOpenChange={(next) => {
-          if (!next) setShareModal(null);
-        }}
-        data={shareModal?.data ?? null}
-        fallbackText={shareModal?.fallbackText}
-        shareUrl={shareModal?.shareUrl}
-        filenameBase={shareModal?.filenameBase}
-      />
+      {/* ShareCardModal lives at app root via <ShareCardProvider> (App.tsx);
+          this page just dispatches into the global mount via `openShareCard`. */}
     </div>
   );
 }
@@ -1415,9 +1447,15 @@ function formatAmmCountdown(iso: string): string {
 function AmmOpenPositionCard({
   position,
   onView,
+  onShare,
 }: {
   position: AmmOpenPosition;
   onView: () => void;
+  // Sprint 2: side-by-side Share affordance next to View / Sell. We
+  // accept a handler rather than wiring `useShareCard()` here so the
+  // parent can attach username + market URL context the card itself
+  // doesn't have.
+  onShare: () => void;
 }) {
   const projectedPnl = position.netShares - position.netCreditsIn;
   const directionLabel = position.entryLabel?.toUpperCase?.() ?? position.entryLabel;
@@ -1486,17 +1524,32 @@ function AmmOpenPositionCard({
           </Badge>
         </div>
 
-        <Button
-          size="sm"
-          variant="outline"
-          className="w-full"
-          onClick={(e) => {
-            e.stopPropagation();
-            onView();
-          }}
-        >
-          View / Sell
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            className="flex-1"
+            onClick={(e) => {
+              e.stopPropagation();
+              onView();
+            }}
+          >
+            View / Sell
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="shrink-0 px-3"
+            aria-label="Share this position"
+            onClick={(e) => {
+              e.stopPropagation();
+              onShare();
+            }}
+            data-testid={`amm-open-share-${position.marketId}-${position.entryId}`}
+          >
+            <Share2 className="h-3.5 w-3.5" />
+          </Button>
+        </div>
       </div>
     </Card>
   );
@@ -1509,6 +1562,7 @@ function OpenTabPanel({
   onToggleVisibility,
   isPending,
   setLocation,
+  onSharePosition,
 }: {
   openBets: UserPrediction[];
   isLoading: boolean;
@@ -1516,6 +1570,10 @@ function OpenTabPanel({
   onToggleVisibility: (p: UserPrediction, hidden: boolean) => void;
   isPending: boolean;
   setLocation: (to: string) => void;
+  // Sprint 2: parent owns the share-card dispatch so the username +
+  // origin live alongside the other handlers (handleShareWin /
+  // handleSharePortfolio), keeping the surface here read-only.
+  onSharePosition: (p: AmmOpenPosition) => void;
 }) {
   const { data: ammPositionsData, isLoading: isLoadingAmm } = useQuery<{ positions: AmmOpenPosition[] }>({
     queryKey: ["/api/me/amm-positions"],
@@ -1627,6 +1685,7 @@ function OpenTabPanel({
                         : null;
               if (path) setLocation(path);
             }}
+            onShare={() => onSharePosition(p)}
           />
         ))}
         {parimutuelOpenBets.map((p) => (

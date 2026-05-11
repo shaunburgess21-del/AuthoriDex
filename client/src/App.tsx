@@ -13,6 +13,7 @@ import { Footer } from "@/components/Footer";
 import { PWAUpdatePrompt } from "@/components/PWAUpdatePrompt";
 import { ScrollToTop } from "@/components/ScrollToTop";
 import { XpBurstProvider } from "@/components/XpBurstProvider";
+import { ShareCardProvider } from "@/contexts/ShareCardContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useXpCelebration } from "@/hooks/useGamification";
 import { useNotificationsRealtime } from "@/hooks/useNotificationsRealtime";
@@ -334,9 +335,15 @@ function App() {
               <XpBurstProvider>
                 {/* Watcher is inside XpBurstProvider so useXpCelebration can fire daily-login bursts via useXpBurst. */}
                 <XpCelebrationWatcher />
-                <ErrorBoundary>
-                  <Router />
-                </ErrorBoundary>
+                {/* ShareCard modal is mounted once at app root so every
+                    surface (post-trade toast, open positions, settled
+                    wins, leaderboard) opens the same instance via
+                    `useShareCard()`. */}
+                <ShareCardProvider>
+                  <ErrorBoundary>
+                    <Router />
+                  </ErrorBoundary>
+                </ShareCardProvider>
               </XpBurstProvider>
               <Footer />
               <BottomNav />
