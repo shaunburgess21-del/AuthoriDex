@@ -18825,13 +18825,33 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       const jan1 = new Date(now.getUTCFullYear(), 0, 1);
       const weekNumber = Math.ceil(((now.getTime() - jan1.getTime()) / 86400000 + jan1.getUTCDay() + 1) / 7);
 
+      // Allow one parimutuel + one AMM race per (category, week) so
+      // Phase 14.4 can run a dry-run AMM race alongside the existing
+      // parimutuel ones. The dedup key is (category, engine) — same
+      // category with the same engine still 409s, since that's a true
+      // double-create.
       const existingGainers = await db.select().from(predictionMarkets).where(and(
         eq(predictionMarkets.marketType, "gainer"),
         eq(predictionMarkets.weekNumber, weekNumber)
       ));
-      const existingGainer = existingGainers.find((market) => normalizeMarketCategory(market.category) === normalizedCategory);
-      if (existingGainer) {
-        return res.status(409).json({ error: `A Category Race market for ${getMarketCategoryLabel(normalizedCategory)} already exists this week`, existingId: existingGainer.id });
+      const sameCategory = existingGainers.filter(
+        (market) => normalizeMarketCategory(market.category) === normalizedCategory,
+      );
+      const sameCategorySameEngine = sameCategory.find(
+        (market) => (market.engine ?? "parimutuel") === resolvedEngine,
+      );
+      if (sameCategorySameEngine) {
+        return res.status(409).json({
+          error: `A ${resolvedEngine === "amm" ? "AMM" : "parimutuel"} Category Race for ${getMarketCategoryLabel(normalizedCategory)} already exists this week`,
+          existingId: sameCategorySameEngine.id,
+        });
+      }
+      if (sameCategory.length > 0) {
+        const other = sameCategory[0];
+        const otherEngine = (other.engine ?? "parimutuel") === "amm" ? "AMM" : "parimutuel";
+        console.log(
+          `[admin/native-markets/gainer] Creating ${resolvedEngine} race for ${normalizedCategory} alongside existing ${otherEngine} race ${other.id} (Phase 14.4 dry-run path).`,
+        );
       }
 
       const persons = await db.select().from(trackedPeople).where(inArray(trackedPeople.id, personIds));
