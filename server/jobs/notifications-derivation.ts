@@ -218,7 +218,14 @@ async function deriveFavoriteHotMovers(): Promise<number> {
   }
 
   const bucket = dayBucket();
-  const cooldownSince = sql`NOW() - INTERVAL '${HOT_MOVER_ROLLING_COOLDOWN_HOURS} hours'`;
+  // Build the interval via `make_interval` so the cooldown hours can
+  // ride in as a real query parameter. The previous form,
+  // `INTERVAL '${HOT_MOVER_ROLLING_COOLDOWN_HOURS} hours'`, expanded
+  // the variable as a parameter *inside* a string literal — Postgres
+  // doesn't substitute `$N` inside quotes, so the query came out as
+  // `INTERVAL '$5 hours'` and Postgres rejected it on every tick,
+  // silently breaking favourite-hot-mover notifications.
+  const cooldownSince = sql`NOW() - make_interval(hours => ${HOT_MOVER_ROLLING_COOLDOWN_HOURS})`;
   let inserted = 0;
 
   for (const fav of favs) {
