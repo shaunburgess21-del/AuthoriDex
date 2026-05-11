@@ -1874,15 +1874,14 @@ export default function HomePage() {
               </div>
 
               <div id="leaderboard" className="scroll-mt-24" />
-              <Card className="overflow-hidden">
+              <Card className="overflow-visible">
                 <div className="relative isolate overflow-hidden rounded-t-xl">
                   {/* Same accent as .pulse-card-voxdex::before: 3px top bar only; overflow clips rounded-corner lip */}
                   <div
                     className="pointer-events-none absolute inset-x-0 top-0 z-10 h-[3px] bg-[linear-gradient(90deg,transparent_0%,rgb(59,130,246)_50%,transparent_100%)]"
                     aria-hidden
                   />
-                  <div className="relative z-[2]">
-                    <CardHeader className="flex flex-col gap-4 space-y-0 bg-card/95 pb-4 pt-5">
+                  <CardHeader className="relative z-[2] flex flex-col gap-4 space-y-0 bg-card/95 pb-4 pt-5">
                       <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                         <div className="flex-1">
                           <div className="flex items-center justify-between gap-2">
@@ -1903,8 +1902,13 @@ export default function HomePage() {
                         </div>
                       </div>
                     </CardHeader>
-                    <div className="sticky top-16 z-30 border-b border-border/60 px-3 py-2.5 bg-card/95 backdrop-blur-md">
-                  <div className="flex min-h-10 w-full items-stretch overflow-hidden rounded-lg bg-muted/50" data-testid="toggle-leaderboard-tabs">
+                </div>
+                <div
+                  className="sticky top-16 z-30 border-b border-border/60 bg-card/95 backdrop-blur-md"
+                  data-testid="leaderboard-sticky-toolbar"
+                >
+                  <div className="border-b border-border/60 px-3 py-2.5">
+                    <div className="flex min-h-10 w-full items-stretch overflow-hidden rounded-lg bg-muted/50" data-testid="toggle-leaderboard-tabs">
                     <div
                       className={`relative flex flex-1 min-w-0 items-center justify-center rounded-l-lg rounded-r-none px-4 py-1.5 text-[15px] font-medium transition-all ${
                         leaderboardTab === "fame"
@@ -2085,9 +2089,9 @@ export default function HomePage() {
                         )}
                       </div>
                     </div>
+                    </div>
                   </div>
-                </div>
-                  <div className="pl-3 pr-4 sm:pr-6 py-4 border-b bg-muted/30">
+                  <div className="pl-3 pr-4 sm:pr-6 py-4 bg-muted/30">
                     <div className="space-y-3">
                       <div className="flex items-center gap-2">
                         <FilterDropdown
@@ -2204,7 +2208,6 @@ export default function HomePage() {
                         </div>
                       )}
                     </div>
-                  </div>
                   </div>
                 </div>
                 <CardContent className="p-0">
