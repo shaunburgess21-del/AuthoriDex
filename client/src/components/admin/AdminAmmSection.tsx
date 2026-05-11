@@ -613,8 +613,19 @@ function MarketRowExpanded({ marketId }: { marketId: string }) {
   );
 }
 
+// Market types the AMM engine actually drives. Jackpot stays parimutuel
+// per Phase 9 plan, so it's deliberately omitted from the filter chips.
+const AMM_MARKET_TYPE_FILTERS = [
+  { value: "", label: "All" },
+  { value: "updown", label: "Up/Down" },
+  { value: "h2h", label: "H2H" },
+  { value: "community", label: "Community" },
+  { value: "gainer", label: "Gainer" },
+] as const;
+
 function MarketsTab() {
   const [statusFilter, setStatusFilter] = useState<string>("");
+  const [typeFilter, setTypeFilter] = useState<string>("");
   const [page, setPage] = useState(0);
   const limit = 25;
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -622,12 +633,13 @@ function MarketsTab() {
   const isVisible = useDocumentVisible();
 
   const { data, isLoading } = useQuery<AmmMarketsList>({
-    queryKey: ["/api/admin/amm/markets", statusFilter, page],
+    queryKey: ["/api/admin/amm/markets", statusFilter, typeFilter, page],
     queryFn: async () => {
       const params = new URLSearchParams();
       params.set("limit", String(limit));
       params.set("offset", String(page * limit));
       if (statusFilter) params.set("status", statusFilter);
+      if (typeFilter) params.set("marketType", typeFilter);
       const res = await apiRequest("GET", `/api/admin/amm/markets?${params}`);
       return res.json();
     },
@@ -657,7 +669,7 @@ function MarketsTab() {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-sm text-muted-foreground">Filter:</span>
+        <span className="text-sm text-muted-foreground w-12">Status:</span>
         {(["", "OPEN", "CLOSED_PENDING", "RESOLVED", "VOID"] as const).map((s) => (
           <Button
             key={s || "all"}
@@ -675,6 +687,23 @@ function MarketsTab() {
         <span className="ml-auto text-xs text-muted-foreground">
           {total} market{total === 1 ? "" : "s"}
         </span>
+      </div>
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-sm text-muted-foreground w-12">Type:</span>
+        {AMM_MARKET_TYPE_FILTERS.map((t) => (
+          <Button
+            key={t.value || "all"}
+            variant={typeFilter === t.value ? "default" : "outline"}
+            size="sm"
+            onClick={() => {
+              setTypeFilter(t.value);
+              setPage(0);
+            }}
+            data-testid={`filter-type-${t.value || "all"}`}
+          >
+            {t.label}
+          </Button>
+        ))}
       </div>
 
       {isLoading || !data ? (

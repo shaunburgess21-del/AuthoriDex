@@ -21526,11 +21526,20 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       const limit = Math.max(1, Math.min(200, parseInt(String(req.query.limit ?? "50"), 10) || 50));
       const offset = Math.max(0, parseInt(String(req.query.offset ?? "0"), 10) || 0);
       const statusFilter = typeof req.query.status === "string" ? req.query.status : null;
+      const typeFilter = typeof req.query.marketType === "string" ? req.query.marketType : null;
       const validStatuses = new Set(["OPEN", "CLOSED_PENDING", "RESOLVED", "VOID"]);
+      // Whitelist of market types the AMM engine actually drives. Jackpot
+      // stays parimutuel-only per Phase 9 plan, so it's intentionally
+      // excluded — but we still accept it in the whitelist so a future
+      // jackpot-AMM flip wouldn't break the filter.
+      const validMarketTypes = new Set(["updown", "h2h", "community", "gainer", "jackpot"]);
 
       const conditions = [eq(predictionMarkets.engine, "amm")];
       if (statusFilter && validStatuses.has(statusFilter)) {
         conditions.push(eq(predictionMarkets.status, statusFilter));
+      }
+      if (typeFilter && validMarketTypes.has(typeFilter)) {
+        conditions.push(eq(predictionMarkets.marketType, typeFilter));
       }
 
       const totalRows = await db
