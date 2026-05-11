@@ -13,6 +13,7 @@ import { runDataIngestion, hydrateTrendingPeopleFromSnapshots } from "./jobs/ing
 import { startLiveTickScheduler, setLastFullRefreshAt, applySnapBackDampening } from "./jobs/live-tick";
 import { startNotificationsDerivationScheduler } from "./jobs/notifications-derivation";
 import { startMarketResolverScheduler } from "./jobs/market-resolver";
+import { startAmmPriceSamplerScheduler } from "./jobs/amm-price-sampler";
 import { startAgentRunnerScheduler } from "./agents/agentRunner";
 import { startActionWorkerScheduler } from "./agents/actionWorker";
 import { generateAllWeeklyMarkets, startMarketGeneratorScheduler } from "./jobs/market-generator";
@@ -709,6 +710,13 @@ async function startServer() {
     // same 10-min cadence; advisory-locked so multiple processes are safe.
     if (!SERVERLESS_MODE) {
       startScheduler("NotificationsDerivation", startNotificationsDerivationScheduler);
+    }
+
+    // Start AMM price sampler (records LMSR price snapshots every 5 min
+    // on open AMM markets so the price-history chart stays smooth even
+    // on quiet markets). Trades themselves also write snapshots inline.
+    if (!SERVERLESS_MODE) {
+      startScheduler("AmmPriceSampler", startAmmPriceSamplerScheduler);
     }
 
     // Start market auto-resolver (resolves expired prediction markets every 5 min)

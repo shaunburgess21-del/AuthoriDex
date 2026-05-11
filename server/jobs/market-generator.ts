@@ -30,12 +30,24 @@ const MARKET_GENERATOR_MAX_RETRIES = 4;
 const AMM_NATIVE_FLIP_ENABLED =
   (process.env.AMM_NATIVE_FLIP_ENABLED ?? "true").toLowerCase() !== "false";
 
+// Phase 14 (Category Races to AMM): gated so we can flip gainer alone
+// without touching updown/h2h. Defaults OFF so the first cutover is
+// explicit — once the operator sets `AMM_GAINER_FLIP_ENABLED=true`,
+// the next `generateWeeklyGainer` cycle creates AMM races with
+// LMSR seed liquidity.
+const AMM_GAINER_FLIP_ENABLED =
+  (process.env.AMM_GAINER_FLIP_ENABLED ?? "false").toLowerCase() === "true";
+
 function nativeEngineFor(marketType: "updown" | "h2h" | "gainer" | "jackpot"): MarketEngine {
-  // Phase 4: only updown + h2h flip. Gainer + jackpot stay parimutuel
-  // until Phase 4b. Single source of truth so the generator + bet
-  // routes + resolver agree.
+  // Phase 4: updown + h2h ship as AMM by default.
+  // Phase 14: gainer ships as AMM when AMM_GAINER_FLIP_ENABLED=true
+  //           (off by default so the cutover is an explicit ops step).
+  // Jackpot stays parimutuel — the share-vs-ticket mental models don't
+  // overlap and there's no LMSR analogue for exact-score prediction.
   if (!AMM_NATIVE_FLIP_ENABLED) return "parimutuel";
-  return marketType === "updown" || marketType === "h2h" ? "amm" : "parimutuel";
+  if (marketType === "updown" || marketType === "h2h") return "amm";
+  if (marketType === "gainer") return AMM_GAINER_FLIP_ENABLED ? "amm" : "parimutuel";
+  return "parimutuel";
 }
 
 export function getWeeklyBettingCutoff(endAt: Date): Date {
@@ -816,6 +828,7 @@ export async function generateWeeklyGainer(): Promise<{ created: number; updated
     }
   }
 
+  const engine = nativeEngineFor("gainer");
   let created = 0;
   let updated = 0;
   let skippedTooFew = 0;
@@ -830,7 +843,10 @@ export async function generateWeeklyGainer(): Promise<{ created: number; updated
 
     if (existingCategories.has(cat)) {
       try {
-        const [existingMarket] = await db.select({ id: predictionMarkets.id })
+        const [existingMarket] = await db.select({
+          id: predictionMarkets.id,
+          engine: predictionMarkets.engine,
+        })
           .from(predictionMarkets)
           .where(and(
             eq(predictionMarkets.marketType, "gainer"),
@@ -848,19 +864,35 @@ export async function generateWeeklyGainer(): Promise<{ created: number; updated
         const missing = ranked.filter(p => !existingPersonIds.has(p.id));
 
         if (missing.length > 0) {
-          const startOrder = currentEntries.length;
-          await db.insert(marketEntries).values(
-            missing.map((person, idx) => ({
-              marketId: existingMarket.id,
-              entryType: "person" as const,
-              personId: person.id,
-              label: person.name,
-              displayOrder: startOrder + idx,
-              imageUrl: person.avatar,
-            }))
-          );
-          updated++;
-          log(`[MarketGenerator:Gainer] Backfilled ${missing.length} entries into ${cat} (market ${existingMarket.id})`);
+          // AMM markets seed their LMSR state with a fixed `outcomeOrder`
+          // at creation time. Inserting new `market_entries` rows after
+          // the fact would leave them in the DB but absent from the AMM
+          // state, so any buy on those entries would fail with
+          // "not in this market's AMM outcomeOrder". Refuse to backfill
+          // and surface a loud log so operators can void + recreate the
+          // market if a missing candidate is critical.
+          if (existingMarket.engine === "amm") {
+            log(
+              `[MarketGenerator:Gainer][WARN] Skipping backfill of ${missing.length} entries ` +
+              `into AMM market ${existingMarket.id} (${cat}). New candidates this week: ` +
+              `${missing.map((p) => p.name).join(", ")}. AMM markets have a fixed outcome ` +
+              `set — void and recreate if these need to participate.`,
+            );
+          } else {
+            const startOrder = currentEntries.length;
+            await db.insert(marketEntries).values(
+              missing.map((person, idx) => ({
+                marketId: existingMarket.id,
+                entryType: "person" as const,
+                personId: person.id,
+                label: person.name,
+                displayOrder: startOrder + idx,
+                imageUrl: person.avatar,
+              }))
+            );
+            updated++;
+            log(`[MarketGenerator:Gainer] Backfilled ${missing.length} entries into ${cat} (market ${existingMarket.id})`);
+          }
         } else {
           log(`[MarketGenerator:Gainer] ${cat}: already up-to-date (${currentEntries.length} entries)`);
         }
@@ -885,17 +917,18 @@ export async function generateWeeklyGainer(): Promise<{ created: number; updated
 
     try {
       await db.transaction(async (tx) => {
-        try {
+        const insertMarketAndEntries = async (finalSlug: string) => {
           const [market] = await tx.insert(predictionMarkets).values({
             marketType: "gainer",
+            engine,
             title,
-            slug,
+            slug: finalSlug,
             category: cat,
             visibility: "live",
             status: "OPEN",
             startAt: monday,
             endAt: sunday,
-            closeAt: getWeeklyBettingCutoff(sunday),
+            closeAt: getMarketBettingCutoff(sunday, engine),
             weekNumber,
             metadata: gainerMeta,
             featured: false,
@@ -908,34 +941,30 @@ export async function generateWeeklyGainer(): Promise<{ created: number; updated
             displayOrder: idx,
             imageUrl: person.avatar,
           }));
-          await tx.insert(marketEntries).values(entryValues);
+          const insertedEntries = await tx
+            .insert(marketEntries)
+            .values(entryValues)
+            .returning({ id: marketEntries.id, displayOrder: marketEntries.displayOrder });
+          if (engine === "amm") {
+            const entryIdsInOrder = insertedEntries
+              .slice()
+              .sort((a, b) => a.displayOrder - b.displayOrder)
+              .map((e) => e.id);
+            await seedAmmMarket(
+              { marketId: market.id, marketType: "gainer", entryIdsInOrder },
+              tx,
+            );
+          }
+          return market;
+        };
+
+        try {
+          await insertMarketAndEntries(slug);
           created++;
         } catch (slugErr: any) {
           if (slugErr.code === "23505") {
             slug = `${slug}-${randomUUID().slice(0, 6)}`;
-            const [market] = await tx.insert(predictionMarkets).values({
-              marketType: "gainer",
-              title,
-              slug,
-              category: cat,
-              visibility: "live",
-              status: "OPEN",
-              startAt: monday,
-              endAt: sunday,
-              closeAt: getWeeklyBettingCutoff(sunday),
-              weekNumber,
-              metadata: gainerMeta,
-              featured: false,
-            }).returning();
-            const entryValues = ranked.map((person, idx) => ({
-              marketId: market.id,
-              entryType: "person" as const,
-              personId: person.id,
-              label: person.name,
-              displayOrder: idx,
-              imageUrl: person.avatar,
-            }));
-            await tx.insert(marketEntries).values(entryValues);
+            await insertMarketAndEntries(slug);
             created++;
           } else {
             throw slugErr;
@@ -946,7 +975,7 @@ export async function generateWeeklyGainer(): Promise<{ created: number; updated
       log(`[MarketGenerator:Gainer] Failed for ${cat}: ${txErr.message}`);
     }
   }
-  log(`[MarketGenerator:Gainer] Done: created=${created}, updated=${updated}, skippedTooFew=${skippedTooFew}, usedFallback=${usedFallback}`);
+  log(`[MarketGenerator:Gainer] Done: engine=${engine}, created=${created}, updated=${updated}, skippedTooFew=${skippedTooFew}, usedFallback=${usedFallback}`);
   return { created, updated };
 }
 

@@ -10,6 +10,14 @@ export interface MarketCycleStripProps {
   /** Sunday 23:59 UTC resolution time when results are announced. */
   resolveAt?: string | Date | null;
   variant?: MarketCycleStripVariant;
+  /**
+   * Engine of the underlying market. AMM markets allow continuous
+   * buying *and* selling all week, so the parimutuel "Entries close"
+   * phrasing (which implies a one-shot opt-in) reads wrong. We swap
+   * the verb to "Trading closes" / "Trading closed" while keeping the
+   * timestamps identical. Defaults to parimutuel for legacy callers.
+   */
+  engine?: "amm" | "parimutuel";
   className?: string;
 }
 
@@ -36,6 +44,7 @@ export function MarketCycleStrip({
   bettingCutoff,
   resolveAt,
   variant = "compact",
+  engine = "parimutuel",
   className,
 }: MarketCycleStripProps) {
   const cycle = useMarketCycle({
@@ -60,12 +69,15 @@ export function MarketCycleStrip({
       ? "text-amber-600 dark:text-amber-400"
       : "text-foreground";
 
+  const isAmm = engine === "amm";
+
   if (variant === "compact") {
     return (
       <CompactStrip
         status={cycle.status}
         cutoffLabel={cutoffLabelShort}
         resolveLabel={resolveLabelShort}
+        isAmm={isAmm}
         className={className}
       />
     );
@@ -77,6 +89,7 @@ export function MarketCycleStrip({
         status={cycle.status}
         cutoffLabel={cutoffLabelFull}
         resolveLabel={resolveLabelFull}
+        isAmm={isAmm}
         className={className}
       />
     );
@@ -89,6 +102,7 @@ export function MarketCycleStrip({
       urgencyClass={urgencyClass}
       cutoffLabel={cutoffLabelFull}
       resolveLabel={resolveLabelFull}
+      isAmm={isAmm}
       className={className}
     />
   );
@@ -98,11 +112,13 @@ function CompactStrip({
   status,
   cutoffLabel,
   resolveLabel,
+  isAmm,
   className,
 }: {
   status: "OPEN" | "ENTRIES_CLOSED" | "RESOLVED";
   cutoffLabel: string;
   resolveLabel: string;
+  isAmm: boolean;
   className?: string;
 }) {
   if (status === "RESOLVED") {
@@ -133,7 +149,7 @@ function CompactStrip({
       >
         <span className="flex items-center gap-1.5">
           <Lock className="h-3 w-3 shrink-0 text-amber-600 dark:text-amber-500" />
-          <span>Entries closed</span>
+          <span>{isAmm ? "Trading closed" : "Entries closed"}</span>
         </span>
         <span className="hidden sm:inline text-muted-foreground/70">·</span>
         <span className="pl-[18px] sm:pl-0">
@@ -153,7 +169,8 @@ function CompactStrip({
       <span className="flex items-center gap-1.5">
         <LockOpen className="h-3 w-3 shrink-0 text-amber-600 dark:text-amber-500" />
         <span>
-          Entries close <span className="font-medium text-foreground">{cutoffLabel}</span>
+          {isAmm ? "Trading closes" : "Entries close"}{" "}
+          <span className="font-medium text-foreground">{cutoffLabel}</span>
         </span>
       </span>
       <span className="hidden sm:inline text-muted-foreground/70">·</span>
@@ -170,6 +187,7 @@ function FullStrip({
   urgencyClass,
   cutoffLabel,
   resolveLabel,
+  isAmm,
   className,
 }: {
   status: "OPEN" | "ENTRIES_CLOSED" | "RESOLVED";
@@ -177,6 +195,7 @@ function FullStrip({
   urgencyClass: string;
   cutoffLabel: string;
   resolveLabel: string;
+  isAmm: boolean;
   className?: string;
 }) {
   if (status === "RESOLVED") {
@@ -215,7 +234,13 @@ function FullStrip({
         )}
         <div className="flex-1 min-w-0">
           <span className="text-muted-foreground">
-            {status === "OPEN" ? "Entries close " : "Entries closed "}
+            {status === "OPEN"
+              ? isAmm
+                ? "Trading closes "
+                : "Entries close "
+              : isAmm
+                ? "Trading closed "
+                : "Entries closed "}
           </span>
           {status === "OPEN" ? (
             <>
@@ -259,11 +284,13 @@ function ModalStrip({
   status,
   cutoffLabel,
   resolveLabel,
+  isAmm,
   className,
 }: {
   status: "OPEN" | "ENTRIES_CLOSED" | "RESOLVED";
   cutoffLabel: string;
   resolveLabel: string;
+  isAmm: boolean;
   className?: string;
 }) {
   if (status === "RESOLVED") {
@@ -297,7 +324,13 @@ function ModalStrip({
           <Lock className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-500" />
         )}
         <span>
-          {status === "OPEN" ? "Entries close " : "Entries closed "}
+          {status === "OPEN"
+            ? isAmm
+              ? "Trading closes "
+              : "Entries close "
+            : isAmm
+              ? "Trading closed "
+              : "Entries closed "}
           <span className="font-medium text-foreground">{cutoffLabel}</span>
         </span>
       </span>

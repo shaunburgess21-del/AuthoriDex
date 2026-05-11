@@ -151,3 +151,62 @@ export function deriveSellQuote(
   if (!Number.isFinite(shares) || shares <= 0) return null;
   return quoteSellMath(snap, entryId, shares);
 }
+
+// ---------------------------------------------------------------------------
+// Price history (Phase 12)
+// ---------------------------------------------------------------------------
+
+export type PriceHistoryBucket = "5m" | "1h" | "1d";
+
+export interface PriceHistoryPoint {
+  /** Bucket-aligned ISO timestamp. */
+  bucket: string;
+  entryId: string;
+  /** Marginal price in [0, 1]. */
+  price: number;
+}
+
+export interface PriceHistoryResponse {
+  engine: string;
+  bucket: PriceHistoryBucket;
+  points: PriceHistoryPoint[];
+}
+
+/**
+ * Fetch AMM price history for a market. Cards typically request
+ * `{ bucket: "1h", from: -7d }` for sparklines; detail pages use
+ * `{ bucket: "5m", from: -7d }` for high-resolution charts.
+ *
+ * Returns `null` from the hook while loading and on parimutuel
+ * markets (where `points` is empty by design). Caller should handle
+ * empty array by falling back to "current price as flat line" so a
+ * brand-new market doesn't show a blank chart.
+ */
+export function usePriceHistory(
+  marketId: string | null | undefined,
+  options: {
+    bucket?: PriceHistoryBucket;
+    fromMs?: number;
+    enabled?: boolean;
+    refetchMs?: number;
+  } = {},
+) {
+  const { bucket = "1h", fromMs, enabled = true, refetchMs } = options;
+  const from = fromMs ? new Date(Date.now() - fromMs).toISOString() : undefined;
+  return useQuery<PriceHistoryResponse>({
+    queryKey: ["/api/markets", marketId, "price-history", bucket, from ?? "default"],
+    enabled: !!marketId && enabled,
+    refetchInterval: refetchMs ?? false,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      params.set("bucket", bucket);
+      if (from) params.set("from", from);
+      const res = await fetch(`/api/markets/${marketId}/price-history?${params}`);
+      if (!res.ok) {
+        throw new Error(`price-history ${res.status}`);
+      }
+      return res.json();
+    },
+  });
+}

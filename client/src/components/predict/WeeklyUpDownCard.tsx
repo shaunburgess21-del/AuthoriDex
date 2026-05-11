@@ -3,6 +3,7 @@ import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { WeeklyUpDownNameBlock } from "@/components/WeeklyUpDownNameBlock";
 import { WeeklyUpDownActionButtons } from "@/components/predict/WeeklyUpDownActionButtons";
+import { AmmPriceSparkline } from "@/components/predict/AmmPriceSparkline";
 import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
 import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
 import { PredictCard } from "@/components/predict/PredictCard";
@@ -107,12 +108,12 @@ export function WeeklyUpDownCard({
               <Star className="h-3 w-3 mr-0.5" />Featured
             </Badge>
           )}
-          {(market.totalPool > 5000 || (market.totalBets ?? 0) > 50) && (
+          {!isAmm && (market.totalPool > 5000 || (market.totalBets ?? 0) > 50) && (
             <Badge variant="outline" className="text-orange-600 dark:text-orange-400 border-orange-500/40 dark:border-orange-500/30 text-[10px]">
               <Flame className="h-3 w-3 mr-0.5" />Hot
             </Badge>
           )}
-          {market.totalPool < 100 && (
+          {!isAmm && market.totalPool < 100 && (
             <Badge variant="outline" className="text-amber-600 dark:text-amber-400 border-amber-500/40 dark:border-amber-500/30 text-[10px]">
               Thin Pool
             </Badge>
@@ -156,6 +157,7 @@ export function WeeklyUpDownCard({
         bettingCutoff={market.bettingCutoff ?? null}
         resolveAt={market.endAt ?? null}
         variant="compact"
+        engine={isAmm ? "amm" : "parimutuel"}
         className="mb-2"
       />
 
@@ -213,6 +215,7 @@ export function WeeklyUpDownCard({
         <ParticipantAvatarStack
           participants={market.recentParticipants}
           totalCount={market.totalBets ?? market.activeParticipantCount ?? 0}
+          engine={isAmm ? "amm" : "parimutuel"}
         />
       </div>
 
@@ -225,7 +228,19 @@ export function WeeklyUpDownCard({
         </div>
         {isAmm && upPrice != null && downPrice != null ? (
           <div className="flex items-center justify-between text-[11px] mt-1">
-            <span className="text-green-500 font-semibold">Up {Math.round(upPrice * 100)}%</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-green-500 font-semibold">Up {Math.round(upPrice * 100)}%</span>
+              {market.upEntryId && (
+                <AmmPriceSparkline
+                  marketId={market.id}
+                  entryId={market.upEntryId}
+                  fallbackPrice={upPrice}
+                  width={56}
+                  height={16}
+                  className="stroke-green-500 dark:stroke-green-400"
+                />
+              )}
+            </div>
             <span className="text-red-500 font-semibold">Down {Math.round(downPrice * 100)}%</span>
           </div>
         ) : (

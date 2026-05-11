@@ -31,6 +31,8 @@ import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { goBack } from "@/lib/goBack";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { computePayoutMultiplier, computeEarlyBirdMultiplier } from "@/lib/parimutuel";
+import { pricesFor, priceToPercent, snapshotFromApi } from "@/lib/ammClient";
+import { AmmPriceHistoryChart } from "@/components/predict/AmmPriceHistoryChart";
 import {
   ArrowLeft,
   Crown,
@@ -42,6 +44,7 @@ import {
   Lock,
   BarChart3,
   Zap,
+  Activity,
 } from "lucide-react";
 
 type GainerCandidate = {
@@ -146,6 +149,16 @@ export default function CategoryRaceDetailPage() {
     if (!allGainerMarkets) return null;
     return allGainerMarkets.find((m: any) => m.id === marketId) || null;
   }, [allGainerMarkets, marketId]);
+
+  const isAmm = (market as any)?.engine === "amm";
+  const ammSnapshot = useMemo(
+    () => (isAmm ? snapshotFromApi((market as any)?.ammState ?? null) : null),
+    [isAmm, market],
+  );
+  const ammPriceMap = useMemo(
+    () => (ammSnapshot ? pricesFor(ammSnapshot) : null),
+    [ammSnapshot],
+  );
 
   const candidates = useMemo((): GainerCandidate[] => {
     if (!market) return [];
@@ -258,9 +271,12 @@ export default function CategoryRaceDetailPage() {
       const isTopUp = priorStake > 0;
       const candidateStake = Number(candidate.totalStake || 0);
       const estimatedPayout = computePayoutMultiplier(totalPool, candidateStake);
-      const crowdSentiment = totalPool > 0
-        ? Math.round((candidateStake / totalPool) * 100)
-        : 0;
+      // On AMM races the "crowd sentiment" % is just the LMSR price.
+      const crowdSentiment = isAmm && ammPriceMap && candidate.entryId
+        ? Math.round(Number(ammPriceMap[candidate.entryId] ?? 0) * 100)
+        : totalPool > 0
+          ? Math.round((candidateStake / totalPool) * 100)
+          : 0;
       setPendingSelection({
         type: "gainer",
         marketId,
@@ -276,10 +292,12 @@ export default function CategoryRaceDetailPage() {
         bettingCutoff: market?.bettingCutoff || null,
         isTopUp,
         existingStake: isTopUp ? priorStake : undefined,
+        engine: isAmm ? "amm" : "parimutuel",
+        ammState: isAmm ? ((market as any)?.ammState ?? null) : null,
       } as StakeSelection);
       setStakeModalOpen(true);
     },
-    [isMarketClosed, marketId, categoryLabel, totalPool, market, serverResolutionDeadline, existingStakeFor]
+    [isMarketClosed, marketId, categoryLabel, totalPool, market, serverResolutionDeadline, existingStakeFor, isAmm, ammPriceMap]
   );
 
   const betMutation = useMutation({
@@ -295,9 +313,15 @@ export default function CategoryRaceDetailPage() {
       if (data?.xp?.xpAwarded) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }
-      toast("Prediction placed!", {
-        description: "Your top gainer prediction has been recorded.",
-      });
+      const isAmmTrade = data?.engine === "amm";
+      toast(
+        isAmmTrade ? "Shares purchased" : "Prediction placed!",
+        {
+          description: isAmmTrade && Number.isFinite(Number(data?.sharesPurchased))
+            ? `You bought ${Number(data.sharesPurchased).toFixed(2)} shares for ${data.chargeCredits ?? "—"} credits.`
+            : "Your top gainer prediction has been recorded.",
+        },
+      );
       setStakeModalOpen(false);
       setPendingSelection(null);
       await Promise.all([
@@ -305,10 +329,8 @@ export default function CategoryRaceDetailPage() {
         queryClient.invalidateQueries({ queryKey: ["/api/native-markets/gainer"] }),
         queryClient.invalidateQueries({ queryKey: ["/api/me/predictions"] }),
         queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
-        // Invalidate the per-market my-position cache so the "Your
-        // Position" panel above the leaderboard rerenders with the
-        // freshly-placed bet without a manual reload.
         queryClient.invalidateQueries({ queryKey: ["/api/markets", marketId, "my-position"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/markets", marketId, "price-history"] }),
       ]);
     },
     onError: (err: Error) => {
@@ -388,9 +410,12 @@ export default function CategoryRaceDetailPage() {
           bettingCutoff={market?.bettingCutoff ?? null}
           resolveAt={market?.endAt ?? null}
           variant="full"
+          engine={isAmm ? "amm" : "parimutuel"}
         />
 
-        {/* Hero Stats */}
+        {/* Hero Stats — Pool tile is meaningless on AMM races (LMSR
+            liquidity is house-seeded, not crowd-funded) so we hide it
+            and collapse to a two-column layout. */}
         <Card className="relative overflow-hidden border-violet-500/30 dark:border-violet-500/20">
           <div className="absolute inset-0 bg-gradient-to-r from-violet-500/5 via-transparent to-fuchsia-500/5" />
           <div className="relative p-4 md:p-5">
@@ -398,13 +423,15 @@ export default function CategoryRaceDetailPage() {
               <CategoryPill category={normalizeMarketCategory(market.category || "misc")} />
             </div>
 
-            <div className="grid grid-cols-3 gap-3 text-center">
-              <div>
-                <p className="text-lg md:text-xl font-bold text-violet-600 dark:text-violet-400">
-                  {totalPool.toLocaleString("en-US")}
-                </p>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Pool</p>
-              </div>
+            <div className={`grid ${isAmm ? "grid-cols-2" : "grid-cols-3"} gap-3 text-center`}>
+              {!isAmm && (
+                <div>
+                  <p className="text-lg md:text-xl font-bold text-violet-600 dark:text-violet-400">
+                    {totalPool.toLocaleString("en-US")}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Pool</p>
+                </div>
+              )}
               <div>
                 <p className="text-lg md:text-xl font-bold">{candidates.length}</p>
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
@@ -414,7 +441,7 @@ export default function CategoryRaceDetailPage() {
               <div>
                 <p className="text-lg md:text-xl font-bold">{totalParticipants}</p>
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                  Participants
+                  {isAmm ? "Traders" : "Participants"}
                 </p>
               </div>
             </div>
@@ -457,6 +484,91 @@ export default function CategoryRaceDetailPage() {
             leaderPercentGain={candidates[0].percentGain}
           />
         )}
+
+        {/* AMM Live Market — surfaces the top-5 LMSR prices so users
+            see market consensus at a glance before scrolling the full
+            leaderboard. */}
+        {isAmm && ammPriceMap && candidates.length > 0 && (
+          <Card className="border-emerald-500/30 dark:border-emerald-500/20">
+            <div className="p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-semibold flex items-center gap-1.5">
+                  <Activity className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  Live Market
+                </h2>
+                <Badge variant="outline" className="text-emerald-600 dark:text-emerald-400 border-emerald-500/40 dark:border-emerald-500/30 text-[10px]">
+                  LIVE
+                </Badge>
+              </div>
+              <div className="space-y-1.5">
+                {[...candidates]
+                  .filter(c => c.entryId)
+                  .map(c => ({
+                    ...c,
+                    livePrice: Number(ammPriceMap[c.entryId!] ?? 0),
+                  }))
+                  .sort((a, b) => b.livePrice - a.livePrice)
+                  .slice(0, 6)
+                  .map(c => {
+                    const pct = Math.max(0, Math.min(100, Math.round(c.livePrice * 100)));
+                    return (
+                      <div key={c.entryId} className="flex items-center gap-3 text-sm">
+                        <span className="w-[35%] sm:w-[30%] truncate font-medium">{c.name}</span>
+                        <div className="flex-1 h-5 rounded-md overflow-hidden border border-emerald-500/25 bg-slate-900/80">
+                          <div
+                            className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400"
+                            style={{ width: `${Math.max(pct, 1)}%` }}
+                          />
+                        </div>
+                        <span className="font-mono font-bold w-10 text-right tabular-nums">{pct}%</span>
+                        <span className="font-mono text-[10px] text-muted-foreground w-14 text-right tabular-nums hidden sm:block">
+                          {c.livePrice.toFixed(3)} cr
+                        </span>
+                      </div>
+                    );
+                  })}
+              </div>
+              <p className="text-[10px] text-muted-foreground/70 mt-3 text-center">
+                Live LMSR pricing — each share pays 1 credit if the candidate wins.
+              </p>
+            </div>
+          </Card>
+        )}
+
+        {/* AMM Price History — week-long market consensus drift. We
+            only render the top 6 candidates BY CURRENT LMSR PRICE so
+            the chart matches the Live Market panel above it, rather
+            than mixing the leaderboard score ordering with the market
+            price ordering. */}
+        {isAmm && candidates.length > 0 && (() => {
+          const palette = ["#10b981", "#3b82f6", "#a855f7", "#f59e0b", "#ef4444", "#06b6d4"];
+          const series = [...candidates]
+            .filter(c => c.entryId)
+            .map(c => ({
+              entryId: c.entryId!,
+              label: c.name,
+              livePrice: Number(ammPriceMap?.[c.entryId!] ?? 0),
+            }))
+            .sort((a, b) => b.livePrice - a.livePrice)
+            .slice(0, palette.length)
+            .map((c, i) => ({ entryId: c.entryId, label: c.label, color: palette[i] }));
+          return (
+            <Card className="border-border/50">
+              <div className="p-4">
+                <h2 className="text-sm font-semibold flex items-center gap-1.5 mb-3">
+                  <Activity className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  Market Price This Week
+                </h2>
+                <AmmPriceHistoryChart
+                  marketId={marketId}
+                  series={series}
+                  livePrices={ammPriceMap ?? {}}
+                  height={220}
+                />
+              </div>
+            </Card>
+          );
+        })()}
 
         {/* Race Leaderboard */}
         <div>
@@ -607,39 +719,43 @@ export default function CategoryRaceDetailPage() {
               Race Insights
             </h2>
 
-            {/* Pool Distribution */}
-            <div className="mb-4">
-              <p className="text-xs text-muted-foreground mb-2 font-medium uppercase tracking-wider">
-                Pool Distribution
-              </p>
-              <div className="space-y-1.5">
-                {candidates.slice(0, 5).map((c) => {
-                  const stakeTotal = candidates.reduce(
-                    (sum, x) => sum + (x.totalStake || 0),
-                    0
-                  );
-                  const pct =
-                    stakeTotal > 0
-                      ? Math.round(((c.totalStake || 0) / stakeTotal) * 100)
-                      : 0;
-                  return (
-                    <div key={c.entryId || c.name} className="flex items-center gap-2">
-                      <PersonAvatar name={c.name} avatar={c.avatar} className="h-6 w-6" />
-                      <span className="text-xs truncate flex-1">{c.name}</span>
-                      <div className="w-24 h-2 rounded-full bg-muted overflow-hidden">
-                        <div
-                          className="h-full bg-violet-500/60 rounded-full transition-all"
-                          style={{ width: `${Math.max(pct, 2)}%` }}
-                        />
+            {/* Pool Distribution — parimutuel-only. On AMM races
+                the equivalent signal is the LMSR price, which lives
+                in the Live Market panel above this card. */}
+            {!isAmm && (
+              <div className="mb-4">
+                <p className="text-xs text-muted-foreground mb-2 font-medium uppercase tracking-wider">
+                  Pool Distribution
+                </p>
+                <div className="space-y-1.5">
+                  {candidates.slice(0, 5).map((c) => {
+                    const stakeTotal = candidates.reduce(
+                      (sum, x) => sum + (x.totalStake || 0),
+                      0
+                    );
+                    const pct =
+                      stakeTotal > 0
+                        ? Math.round(((c.totalStake || 0) / stakeTotal) * 100)
+                        : 0;
+                    return (
+                      <div key={c.entryId || c.name} className="flex items-center gap-2">
+                        <PersonAvatar name={c.name} avatar={c.avatar} className="h-6 w-6" />
+                        <span className="text-xs truncate flex-1">{c.name}</span>
+                        <div className="w-24 h-2 rounded-full bg-muted overflow-hidden">
+                          <div
+                            className="h-full bg-violet-500/60 rounded-full transition-all"
+                            style={{ width: `${Math.max(pct, 2)}%` }}
+                          />
+                        </div>
+                        <span className="text-[10px] text-muted-foreground font-mono w-8 text-right">
+                          {pct}%
+                        </span>
                       </div>
-                      <span className="text-[10px] text-muted-foreground font-mono w-8 text-right">
-                        {pct}%
-                      </span>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Momentum */}
             <div>
@@ -691,6 +807,7 @@ export default function CategoryRaceDetailPage() {
           bettingCutoff={serverCutoff}
           closeTime={serverResolutionDeadline ? new Date(serverResolutionDeadline).toUTCString().replace(/ GMT$/, " UTC") : undefined}
           categoryLabel={categoryLabel}
+          engine={isAmm ? "amm" : "parimutuel"}
         />
 
         {/* Related markets — bottom-of-page so it's out of the way of

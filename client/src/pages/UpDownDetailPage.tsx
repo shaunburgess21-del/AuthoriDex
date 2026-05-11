@@ -14,6 +14,7 @@ import { OutcomePathChart } from "@/components/predict/OutcomePathChart";
 import { WhatNeedsToHappen } from "@/components/predict/WhatNeedsToHappen";
 import { MyPositionCard } from "@/components/predict/MyPositionCard";
 import { MarketDetailSkeleton } from "@/components/predict/MarketDetailSkeleton";
+import { AmmPriceHistoryChart } from "@/components/predict/AmmPriceHistoryChart";
 import { MarketResolutionInfo } from "@/components/predict/MarketResolutionInfo";
 import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
 import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
@@ -505,6 +506,7 @@ export default function UpDownDetailPage() {
           bettingCutoff={hydrated.bettingCutoff}
           resolveAt={hydrated.endAt}
           variant="full"
+          engine={isAmm ? "amm" : "parimutuel"}
         />
 
         {/* Hero */}
@@ -536,7 +538,7 @@ export default function UpDownDetailPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-4 gap-3 text-center">
+            <div className={`grid ${isAmm ? "grid-cols-3" : "grid-cols-4"} gap-3 text-center`}>
               <div>
                 <p className="text-sm md:text-base font-bold font-mono">
                   {hydrated.baselineScore.toLocaleString("en-US")}
@@ -553,20 +555,22 @@ export default function UpDownDetailPage() {
                   Current
                 </p>
               </div>
-              <div>
-                <p className="text-sm md:text-base font-bold text-violet-600 dark:text-violet-400">
-                  {hydrated.totalPool.toLocaleString("en-US")}
-                </p>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                  Pool
-                </p>
-              </div>
+              {!isAmm && (
+                <div>
+                  <p className="text-sm md:text-base font-bold text-violet-600 dark:text-violet-400">
+                    {hydrated.totalPool.toLocaleString("en-US")}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                    Pool
+                  </p>
+                </div>
+              )}
               <div>
                 <p className="text-sm md:text-base font-bold">
                   {hydrated.totalParticipants}
                 </p>
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                  Players
+                  {isAmm ? "Traders" : "Players"}
                 </p>
               </div>
             </div>
@@ -627,15 +631,36 @@ export default function UpDownDetailPage() {
                       { label: "DOWN", pos: downPos, side: "down" as const },
                     ].map(({ label, pos, side }) => {
                       if (!pos || pos.netShares <= 1e-6) return null;
+                      // Unrealised PnL = current mark-to-market value minus
+                      // net credits paid in. Buy = positive netCreditsIn.
+                      // We label both gain/loss explicitly so the user
+                      // doesn't have to do the arithmetic in their head.
+                      const unrealisedPnl = pos.currentValue - pos.netCreditsIn;
+                      const maxProfitIfWin = pos.netShares - pos.netCreditsIn;
+                      const pnlColor =
+                        unrealisedPnl >= 0
+                          ? "text-green-700 dark:text-green-500"
+                          : "text-red-700 dark:text-red-500";
                       return (
                         <div key={side} className="flex items-center justify-between gap-2 rounded-lg bg-muted/30 px-3 py-2">
                           <div className="min-w-0 flex-1">
                             <p className="text-sm font-semibold">{label} on {firstName}</p>
                             <p className="text-[11px] text-muted-foreground">
-                              {pos.netShares.toFixed(2)} shares · avg {pos.avgEntryPrice.toFixed(3)} cr
+                              {pos.netShares.toFixed(2)} shares · avg {pos.avgEntryPrice.toFixed(3)} cr · cost {pos.netCreditsIn.toFixed(0)} cr
                             </p>
                             <p className="text-[11px] text-muted-foreground">
-                              ≈ {pos.currentValue.toFixed(2)} cr now · pays {pos.netShares.toFixed(2)} cr if win
+                              ≈ {pos.currentValue.toFixed(2)} cr now ·{" "}
+                              <span className={`font-mono font-medium ${pnlColor}`}>
+                                {unrealisedPnl >= 0 ? "+" : ""}
+                                {unrealisedPnl.toFixed(2)} cr
+                              </span>
+                            </p>
+                            <p className="text-[11px] text-muted-foreground">
+                              Pays {pos.netShares.toFixed(2)} cr if win ·{" "}
+                              <span className="text-green-700 dark:text-green-500">
+                                {maxProfitIfWin >= 0 ? "+" : ""}
+                                {maxProfitIfWin.toFixed(2)} net
+                              </span>
                             </p>
                           </div>
                           <Button
@@ -685,6 +710,34 @@ export default function UpDownDetailPage() {
           }
         />
 
+        {/* AMM Price History - the market consensus over time. Shown
+            above the underlying Trend Score chart so users see the
+            *market's* signal first, then the input data. Parimutuel
+            markets skip this card. */}
+        {isAmm && hydrated.upEntryId && hydrated.downEntryId && (() => {
+          const ammSnap = snapshotFromApi(hydrated.ammState);
+          const livePrices = ammSnap ? pricesFor(ammSnap) : {};
+          return (
+            <Card className="border-border/50">
+              <div className="p-4">
+                <h2 className="text-sm font-semibold flex items-center gap-1.5 mb-3">
+                  <Activity className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  Market Price This Week
+                </h2>
+                <AmmPriceHistoryChart
+                  marketId={marketId}
+                  series={[
+                    { entryId: hydrated.upEntryId!, label: "UP", color: "#10b981" },
+                    { entryId: hydrated.downEntryId!, label: "DOWN", color: "#ef4444" },
+                  ]}
+                  livePrices={livePrices}
+                  height={220}
+                />
+              </div>
+            </Card>
+          );
+        })()}
+
         {/* Trend Score Chart */}
         <Card className="border-border/50">
           <div className="p-4">
@@ -715,62 +768,63 @@ export default function UpDownDetailPage() {
           />
         )}
 
-        {/* Pool sentiment */}
-        <Card className="border-border/50">
-          <div className="p-4">
-            <h2 className="text-sm font-semibold flex items-center gap-1.5 mb-3">
-              <Users className="h-4 w-4 text-violet-600 dark:text-violet-400" />
-              Pool sentiment
-            </h2>
-            <div className="space-y-3">
-              <div className="h-4 rounded-full overflow-hidden flex">
-                <div
-                  className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all"
-                  style={{ width: `${hydrated.upPercent}%` }}
-                />
-                <div
-                  className="h-full bg-gradient-to-l from-red-500 to-red-400 transition-all"
-                  style={{ width: `${100 - hydrated.upPercent}%` }}
-                />
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="h-8 w-8 rounded-full bg-green-500/25 dark:bg-green-500/20 border border-green-500/50 dark:border-green-500/40 flex items-center justify-center">
-                    <TrendingUp className="h-4 w-4 text-green-700 dark:text-green-500" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-green-700 dark:text-green-500">
-                      UP {hydrated.upPercent}%
-                    </p>
-                    {!isAmm && (
+        {/* Pool sentiment - parimutuel only. For AMM the live LMSR
+            price panel above already conveys the same information
+            (and uses the correct underlying signal), so we hide this
+            entirely to avoid double-rendering the same %. */}
+        {!isAmm && (
+          <Card className="border-border/50">
+            <div className="p-4">
+              <h2 className="text-sm font-semibold flex items-center gap-1.5 mb-3">
+                <Users className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+                Pool sentiment
+              </h2>
+              <div className="space-y-3">
+                <div className="h-4 rounded-full overflow-hidden flex">
+                  <div
+                    className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all"
+                    style={{ width: `${hydrated.upPercent}%` }}
+                  />
+                  <div
+                    className="h-full bg-gradient-to-l from-red-500 to-red-400 transition-all"
+                    style={{ width: `${100 - hydrated.upPercent}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="h-8 w-8 rounded-full bg-green-500/25 dark:bg-green-500/20 border border-green-500/50 dark:border-green-500/40 flex items-center justify-center">
+                      <TrendingUp className="h-4 w-4 text-green-700 dark:text-green-500" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-green-700 dark:text-green-500">
+                        UP {hydrated.upPercent}%
+                      </p>
                       <p className="text-[10px] text-muted-foreground">
                         {hydrated.upMultiplier}x payout
                       </p>
-                    )}
+                    </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div>
-                    <p className="text-sm font-semibold text-red-700 dark:text-red-500 text-right">
-                      DOWN {100 - hydrated.upPercent}%
-                    </p>
-                    {!isAmm && (
+                  <div className="flex items-center gap-2">
+                    <div>
+                      <p className="text-sm font-semibold text-red-700 dark:text-red-500 text-right">
+                        DOWN {100 - hydrated.upPercent}%
+                      </p>
                       <p className="text-[10px] text-muted-foreground text-right">
                         {hydrated.downMultiplier}x payout
                       </p>
-                    )}
-                  </div>
-                  <div className="h-8 w-8 rounded-full bg-red-500/25 dark:bg-red-500/20 border border-red-500/50 dark:border-red-500/40 flex items-center justify-center">
-                    <TrendingDown className="h-4 w-4 text-red-700 dark:text-red-500" />
+                    </div>
+                    <div className="h-8 w-8 rounded-full bg-red-500/25 dark:bg-red-500/20 border border-red-500/50 dark:border-red-500/40 flex items-center justify-center">
+                      <TrendingDown className="h-4 w-4 text-red-700 dark:text-red-500" />
+                    </div>
                   </div>
                 </div>
+                <p className="text-[11px] text-muted-foreground text-center">
+                  Based on current pool distribution across {hydrated.totalParticipants} participants
+                </p>
               </div>
-              <p className="text-[11px] text-muted-foreground text-center">
-                Based on current pool distribution across {hydrated.totalParticipants} participants
-              </p>
             </div>
-          </div>
-        </Card>
+          </Card>
+        )}
 
         {/* How This Resolves */}
         <MarketResolutionInfo
@@ -780,6 +834,7 @@ export default function UpDownDetailPage() {
           bettingCutoff={hydrated.bettingCutoff}
           tieRule={hydrated.tieRule}
           personName={hydrated.personName}
+          engine={isAmm ? "amm" : "parimutuel"}
         />
 
         {hydrated.personId.trim().length > 0 && (

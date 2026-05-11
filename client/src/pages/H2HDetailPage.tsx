@@ -10,6 +10,7 @@ import { StakeModal, type StakeSelection } from "@/components/StakeModal";
 import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
 import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
 import { MarketDetailSkeleton } from "@/components/predict/MarketDetailSkeleton";
+import { AmmPriceHistoryChart } from "@/components/predict/AmmPriceHistoryChart";
 import { MarketResolutionInfo } from "@/components/predict/MarketResolutionInfo";
 import { MyPositionCard } from "@/components/predict/MyPositionCard";
 import { ShareIconButton } from "@/components/predict/ShareIconButton";
@@ -519,6 +520,7 @@ export default function H2HDetailPage() {
           bettingCutoff={hydrated.bettingCutoff}
           resolveAt={hydrated.endAt}
           variant="full"
+          engine={isAmm ? "amm" : "parimutuel"}
         />
 
         {/* Hero – Side-by-side portraits */}
@@ -616,22 +618,27 @@ export default function H2HDetailPage() {
               </div>
             </div>
 
-            {/* Quick stats */}
-            <div className="grid grid-cols-3 gap-3 text-center">
-              <div>
-                <p className="text-lg md:text-xl font-bold text-violet-600 dark:text-violet-400">
-                  {hydrated.totalPool.toLocaleString("en-US")}
-                </p>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                  Pool
-                </p>
-              </div>
+            {/* Quick stats. On AMM markets the "Pool" stat is
+                meaningless (LMSR liquidity is seeded by the house,
+                not by player stakes) and always reads as zero — we
+                hide it and collapse to a two-column layout. */}
+            <div className={`grid ${isAmm ? "grid-cols-2" : "grid-cols-3"} gap-3 text-center`}>
+              {!isAmm && (
+                <div>
+                  <p className="text-lg md:text-xl font-bold text-violet-600 dark:text-violet-400">
+                    {hydrated.totalPool.toLocaleString("en-US")}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                    Pool
+                  </p>
+                </div>
+              )}
               <div>
                 <p className="text-lg md:text-xl font-bold">
                   {hydrated.totalParticipants}
                 </p>
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                  Participants
+                  {isAmm ? "Traders" : "Participants"}
                 </p>
               </div>
               <div>
@@ -729,15 +736,36 @@ export default function H2HDetailPage() {
                       { person: hydrated.person2, pos: p2Pos, side: 2 as const },
                     ].map(({ person, pos, side }) => {
                       if (!pos || pos.netShares <= 1e-6) return null;
+                      // Unrealised PnL = current mark-to-market value minus
+                      // net credits paid in. Buy = positive netCreditsIn.
+                      // We label both gain/loss explicitly so the user
+                      // doesn't have to do the arithmetic in their head.
+                      const unrealisedPnl = pos.currentValue - pos.netCreditsIn;
+                      const maxProfitIfWin = pos.netShares - pos.netCreditsIn;
+                      const pnlColor =
+                        unrealisedPnl >= 0
+                          ? "text-green-700 dark:text-green-500"
+                          : "text-red-700 dark:text-red-500";
                       return (
                         <div key={side} className="flex items-center justify-between gap-2 rounded-lg bg-muted/30 px-3 py-2">
                           <div className="min-w-0 flex-1">
                             <p className="text-sm font-semibold truncate">{smartName(person.name)}</p>
                             <p className="text-[11px] text-muted-foreground">
-                              {pos.netShares.toFixed(2)} shares · avg {pos.avgEntryPrice.toFixed(3)} cr
+                              {pos.netShares.toFixed(2)} shares · avg {pos.avgEntryPrice.toFixed(3)} cr · cost {pos.netCreditsIn.toFixed(0)} cr
                             </p>
                             <p className="text-[11px] text-muted-foreground">
-                              ≈ {pos.currentValue.toFixed(2)} cr now · pays {pos.netShares.toFixed(2)} cr if win
+                              ≈ {pos.currentValue.toFixed(2)} cr now ·{" "}
+                              <span className={`font-mono font-medium ${pnlColor}`}>
+                                {unrealisedPnl >= 0 ? "+" : ""}
+                                {unrealisedPnl.toFixed(2)} cr
+                              </span>
+                            </p>
+                            <p className="text-[11px] text-muted-foreground">
+                              Pays {pos.netShares.toFixed(2)} cr if win ·{" "}
+                              <span className="text-green-700 dark:text-green-500">
+                                {maxProfitIfWin >= 0 ? "+" : ""}
+                                {maxProfitIfWin.toFixed(2)} net
+                              </span>
                             </p>
                           </div>
                           <Button
@@ -772,6 +800,34 @@ export default function H2HDetailPage() {
             opponentScore={userPickSide === 1 ? hydrated.person2.currentScore : hydrated.person1.currentScore}
           />
         )}
+
+        {/* AMM Price History - week-over-week market consensus. Sits
+            above the Score Comparison so users see the market signal
+            first, then the underlying trend-score gap. Parimutuel H2H
+            markets skip this. */}
+        {isAmm && hydrated.person1EntryId && hydrated.person2EntryId && (() => {
+          const ammSnap = snapshotFromApi(hydrated.ammState);
+          const livePrices = ammSnap ? pricesFor(ammSnap) : {};
+          return (
+            <Card className="border-border/50">
+              <div className="p-4">
+                <h2 className="text-sm font-semibold flex items-center gap-1.5 mb-3">
+                  <Activity className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  Market Price This Week
+                </h2>
+                <AmmPriceHistoryChart
+                  marketId={marketId}
+                  series={[
+                    { entryId: hydrated.person1EntryId!, label: hydrated.person1.name, color: "#3b82f6" },
+                    { entryId: hydrated.person2EntryId!, label: hydrated.person2.name, color: "#a855f7" },
+                  ]}
+                  livePrices={livePrices}
+                  height={220}
+                />
+              </div>
+            </Card>
+          );
+        })()}
 
         {/* Score Comparison */}
         <Card className="border-border/50">
@@ -859,56 +915,61 @@ export default function H2HDetailPage() {
           </div>
         </Card>
 
-        {/* Crowd Picks */}
-        <Card className="border-border/50">
-          <div className="p-4">
-            <h2 className="text-sm font-semibold flex items-center gap-1.5 mb-3">
-              <Users className="h-4 w-4 text-violet-600 dark:text-violet-400" />
-              Crowd Picks
-            </h2>
-            <div className="space-y-3">
-              <div className="h-4 rounded-full overflow-hidden flex">
-                <div
-                  className="h-full bg-gradient-to-r from-blue-500 to-blue-400 transition-all"
-                  style={{ width: `${hydrated.person1Percent}%` }}
-                />
-                <div
-                  className="h-full bg-gradient-to-l from-purple-500 to-purple-400 transition-all"
-                  style={{ width: `${100 - hydrated.person1Percent}%` }}
-                />
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <PersonAvatar
-                    name={hydrated.person1.name}
-                    avatar={hydrated.person1.avatar}
-                    className="h-8 w-8"
+        {/* Crowd Picks - parimutuel only. For AMM markets the same
+            percentage already appears in the Live Market panel + the
+            Score Comparison block, so this would be a third copy of
+            the same data. Hidden to keep the page concise. */}
+        {!isAmm && (
+          <Card className="border-border/50">
+            <div className="p-4">
+              <h2 className="text-sm font-semibold flex items-center gap-1.5 mb-3">
+                <Users className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+                Crowd Picks
+              </h2>
+              <div className="space-y-3">
+                <div className="h-4 rounded-full overflow-hidden flex">
+                  <div
+                    className="h-full bg-gradient-to-r from-blue-500 to-blue-400 transition-all"
+                    style={{ width: `${hydrated.person1Percent}%` }}
                   />
-                  <div>
-                    <p className="text-sm font-semibold text-blue-600 dark:text-blue-400">
-                      {smartName(hydrated.person1.name)} {hydrated.person1Percent}%
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div>
-                    <p className="text-sm font-semibold text-purple-600 dark:text-purple-400 text-right">
-                      {100 - hydrated.person1Percent}% {smartName(hydrated.person2.name)}
-                    </p>
-                  </div>
-                  <PersonAvatar
-                    name={hydrated.person2.name}
-                    avatar={hydrated.person2.avatar}
-                    className="h-8 w-8"
+                  <div
+                    className="h-full bg-gradient-to-l from-purple-500 to-purple-400 transition-all"
+                    style={{ width: `${100 - hydrated.person1Percent}%` }}
                   />
                 </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <PersonAvatar
+                      name={hydrated.person1.name}
+                      avatar={hydrated.person1.avatar}
+                      className="h-8 w-8"
+                    />
+                    <div>
+                      <p className="text-sm font-semibold text-blue-600 dark:text-blue-400">
+                        {smartName(hydrated.person1.name)} {hydrated.person1Percent}%
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div>
+                      <p className="text-sm font-semibold text-purple-600 dark:text-purple-400 text-right">
+                        {100 - hydrated.person1Percent}% {smartName(hydrated.person2.name)}
+                      </p>
+                    </div>
+                    <PersonAvatar
+                      name={hydrated.person2.name}
+                      avatar={hydrated.person2.avatar}
+                      className="h-8 w-8"
+                    />
+                  </div>
+                </div>
+                <p className="text-[11px] text-muted-foreground text-center">
+                  Based on current pool distribution across {hydrated.totalParticipants} participants
+                </p>
               </div>
-              <p className="text-[11px] text-muted-foreground text-center">
-                Based on current pool distribution across {hydrated.totalParticipants} participants
-              </p>
             </div>
-          </div>
-        </Card>
+          </Card>
+        )}
 
         {/* How This Resolves */}
         <MarketResolutionInfo
@@ -918,6 +979,7 @@ export default function H2HDetailPage() {
           tieRule={hydrated.tieRule}
           person1Name={hydrated.person1.name}
           person2Name={hydrated.person2.name}
+          engine={isAmm ? "amm" : "parimutuel"}
         />
 
         {/* Related markets — bottom-of-page so it's out of the way of

@@ -935,7 +935,25 @@ async function resolveGainer(market: any): Promise<"resolved" | "voided" | "bloc
     })),
   };
 
+  const isAmm = market.engine === "amm";
+
   if (gains.length >= 2 && Math.abs(gains[0].pctChange - gains[1].pctChange) < 0.001) {
+    if (isAmm) {
+      const ammResult = await resolveAmmMarket({ marketId: market.id, voidMarket: true, settledBy: null });
+      if ("error" in ammResult) {
+        log(`[MarketResolver] gainer ${market.id}: AMM void failed: ${ammResult.error} ${ammResult.message}`);
+        return "blocked";
+      }
+      await db.update(predictionMarkets).set({
+        resolveMethod: "auto",
+        voidReason: "Tie — identical top gain percentage",
+        resolutionNotes: JSON.stringify({ ...evidence, outcome: "void_tie", engine: "amm" }),
+        updatedAt: new Date(),
+      }).where(eq(predictionMarkets.id, market.id));
+      log(`[MarketResolver] gainer ${market.id}: AMM VOID (tied at ${gains[0].pctChange.toFixed(2)}%), house P&L=${ammResult.creditedToHouse}`);
+      return "voided";
+    }
+
     const refunded = await voidMarketBets(market.id);
     await db.update(predictionMarkets).set({
       status: "VOID",
@@ -950,6 +968,27 @@ async function resolveGainer(market: any): Promise<"resolved" | "voided" | "bloc
   }
 
   const winner = gains[0].entry;
+
+  if (isAmm) {
+    const ammResult = await resolveAmmMarket({
+      marketId: market.id,
+      winnerEntryId: winner.id,
+      settledBy: null,
+    });
+    if ("error" in ammResult) {
+      log(`[MarketResolver] gainer ${market.id}: AMM resolve failed: ${ammResult.error} ${ammResult.message}`);
+      return "blocked";
+    }
+    await db.update(predictionMarkets).set({
+      resolveMethod: "auto",
+      resolutionNotes: JSON.stringify({ ...evidence, outcome: winner.label, engine: "amm" }),
+      updatedAt: new Date(),
+    }).where(eq(predictionMarkets.id, market.id));
+    scoreResolvedMarket(market.id, winner.id).catch(e => log(`[MarketResolver] Agent scoring failed: ${e}`));
+    log(`[MarketResolver] gainer ${market.id}: AMM ${winner.label} wins (+${gains[0].pctChange.toFixed(2)}%), payoutLiability=${ammResult.payoutLiability}, house P&L=${ammResult.creditedToHouse}, settledUsers=${ammResult.settledUserCount}`);
+    return "resolved";
+  }
+
   const result = await settleMarketBets(market.id, winner.id, {
     resolveMethod: "auto",
     resolutionNotes: JSON.stringify({ ...evidence, outcome: winner.label }),

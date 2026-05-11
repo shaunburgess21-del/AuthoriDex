@@ -1728,6 +1728,8 @@ export default function PredictPage() {
           recentParticipants: m.recentParticipants || [],
           bettingCutoff: m.bettingCutoff || null,
           teaser: typeof m.teaser === "string" && m.teaser.trim() ? m.teaser.trim() : null,
+          engine: m.engine || "parimutuel",
+          ammState: m.ammState ?? null,
         } as TopGainerMarket;
       });
     }
@@ -2244,6 +2246,7 @@ export default function PredictPage() {
     }
 
     const categoryLabel = getMarketCategoryLabel(market.category);
+    const isAmm = market.engine === "amm";
 
     const candidateStake = Number(candidate.totalStake || 0);
     const estimatedPayout = computePayoutMultiplier(market.totalPool, candidateStake);
@@ -2280,6 +2283,8 @@ export default function PredictPage() {
       marketStartAt: market.startAt ?? undefined,
       isTopUp,
       existingStake: isTopUp ? priorStake : undefined,
+      engine: isAmm ? "amm" : "parimutuel",
+      ammState: isAmm ? ((market.ammState as any) ?? null) : null,
     });
     openStakeModal();
   };

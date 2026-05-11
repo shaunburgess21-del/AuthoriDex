@@ -5,7 +5,7 @@ import { storage } from "./storage";
 import { getBaselineDiagnostics } from "./utils/baseline";
 import { db } from "./db";
 import { syncWinningAvatarForPerson } from "./lib/curateAvatar";
-import { anonVoteBudget, trendSnapshots, trackedPeople, communityInsights, insightVotes, comments as unifiedComments, commentVotes, matchups, votes, voteActions, xpActions, xpLedger, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, marketAmmState, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, contentCategories, userCategoryEngagement, emailUnsubscribeState, insertCommunityInsightSchema, insertInsightVoteSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
+import { anonVoteBudget, trendSnapshots, trackedPeople, communityInsights, insightVotes, comments as unifiedComments, commentVotes, matchups, votes, voteActions, xpActions, xpLedger, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, marketAmmState, ammPriceSnapshots, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, contentCategories, userCategoryEngagement, emailUnsubscribeState, insertCommunityInsightSchema, insertInsightVoteSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
 import { validateSuggestionPayload, SUGGESTION_TYPES } from "@shared/suggestionSchemas";
 import { normaliseSocialHandles, SOCIAL_HANDLE_KEYS } from "@shared/handleNormalise";
 import { eq, desc, and, gt, sql, count, gte, lte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull, isNull } from "drizzle-orm";
@@ -9140,6 +9140,106 @@ Only return the JSON object.`;
     }
   });
 
+  // GET /api/markets/:id/price-history
+  //
+  // Time-bucketed marginal LMSR price history for an AMM market.
+  // Returns one entry per (bucket, outcome) so the client can render a
+  // multi-series line chart without further aggregation.
+  //
+  // Query params:
+  //   bucket  '5m' | '1h' | '1d'   default: 1h
+  //   from    ISO timestamp        default: now - 7d
+  //   to      ISO timestamp        default: now
+  //
+  // Quiet markets that have no snapshot inside the window get an empty
+  // array — caller should fall back to "current price as flat line".
+  // Public (no auth) because price history is non-PII and used on
+  // cards before login.
+  app.get("/api/markets/:id/price-history", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const bucket = (req.query.bucket as string) || "1h";
+      const allowedBuckets = ["5m", "1h", "1d"] as const;
+      if (!(allowedBuckets as readonly string[]).includes(bucket)) {
+        return res
+          .status(400)
+          .json({ error: `Invalid bucket. Allowed: ${allowedBuckets.join(", ")}` });
+      }
+
+      const defaultFrom = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const fromDate = req.query.from ? new Date(req.query.from as string) : defaultFrom;
+      const toDate = req.query.to ? new Date(req.query.to as string) : new Date();
+      if (
+        !Number.isFinite(fromDate.getTime()) ||
+        !Number.isFinite(toDate.getTime()) ||
+        fromDate >= toDate
+      ) {
+        return res.status(400).json({ error: "Invalid from/to range" });
+      }
+
+      // Verify the market exists + is AMM before scanning snapshots,
+      // so we 404 the lookup instead of returning an empty array for
+      // a typo'd id.
+      const [market] = await db
+        .select({
+          id: predictionMarkets.id,
+          engine: predictionMarkets.engine,
+        })
+        .from(predictionMarkets)
+        .where(eq(predictionMarkets.id, id))
+        .limit(1);
+      if (!market) {
+        return res.status(404).json({ error: "Market not found" });
+      }
+      if (market.engine !== "amm") {
+        return res.json({ engine: market.engine, bucket, points: [] });
+      }
+
+      // Aggregate to one row per (bucket, outcome). `date_trunc`
+      // doesn't support fractional intervals like "5 minutes", so for
+      // the 5m bucket we round to the nearest 5-min epoch slot via
+      // arithmetic on the unix epoch. The 1h / 1d paths use the cheap
+      // built-in `date_trunc('hour'|'day', recorded_at)` form.
+      // `truncUnit` is server-controlled (whitelist above) so injection
+      // is not possible; we still keep the SQL as a literal template
+      // and only swap the trunc expression.
+      const bucketExpr =
+        bucket === "5m"
+          ? sql`to_timestamp(floor(extract(epoch from recorded_at) / 300) * 300)`
+          : bucket === "1h"
+            ? sql`date_trunc('hour', recorded_at)`
+            : sql`date_trunc('day', recorded_at)`;
+
+      const rows = await db.execute<{
+        bucket: Date;
+        entry_id: string;
+        price: string;
+      }>(sql`
+        SELECT
+          ${bucketExpr} AS bucket,
+          entry_id,
+          AVG(price::numeric)::text AS price
+        FROM ${ammPriceSnapshots}
+        WHERE market_id = ${id}
+          AND recorded_at >= ${fromDate}
+          AND recorded_at <= ${toDate}
+        GROUP BY 1, 2
+        ORDER BY 1 ASC, 2 ASC
+      `);
+
+      const points = (rows.rows ?? []).map((r: any) => ({
+        bucket: new Date(r.bucket).toISOString(),
+        entryId: r.entry_id,
+        price: Number(r.price),
+      }));
+
+      res.json({ engine: "amm", bucket, points });
+    } catch (err: any) {
+      console.error("[GET /api/markets/:id/price-history] failed:", err);
+      res.status(500).json({ error: "Failed to fetch price history" });
+    }
+  });
+
   // GET /api/me/amm-positions
   //
   // Aggregated AMM positions across every market the caller has traded
@@ -15854,6 +15954,50 @@ Target length: about 90-150 words.`;
       const engagement = await getMarketEngagementPreview(marketIds);
       const relatedMap = await getRelatedPeopleForCards("world_market", marketIds);
 
+      // Phase 13: batch-fetch AMM state for community AMM markets so
+      // cards can show live LMSR prices alongside the parimutuel
+      // entries field. Markets without AMM state (parimutuel) get
+      // `ammState: null` so the client `isAmm` check still works.
+      const ammMarketIds = markets.filter(m => m.engine === "amm").map(m => m.id);
+      const ammStateByMarket = new Map<string, {
+        liquidityB: number;
+        outcomeOrder: string[];
+        shareQuantities: Record<string, number>;
+        houseSeedAmount?: number;
+        totalUserCreditsIn?: number;
+        prices?: Record<string, number>;
+        updatedAt?: string;
+      }>();
+      if (ammMarketIds.length > 0) {
+        const rows = await db
+          .select({
+            marketId: marketAmmState.marketId,
+            liquidityB: marketAmmState.liquidityB,
+            outcomeOrder: marketAmmState.outcomeOrder,
+            shareQuantities: marketAmmState.shareQuantities,
+            houseSeedAmount: marketAmmState.houseSeedAmount,
+            totalUserCreditsIn: marketAmmState.totalUserCreditsIn,
+            updatedAt: marketAmmState.updatedAt,
+          })
+          .from(marketAmmState)
+          .where(inArray(marketAmmState.marketId, ammMarketIds));
+        const { currentPrices: cp } = await import("@shared/lib/amm/positions");
+        for (const r of rows) {
+          const liquidityB = Number(r.liquidityB);
+          const outcomeOrder = r.outcomeOrder as string[];
+          const shareQuantities = r.shareQuantities as Record<string, number>;
+          ammStateByMarket.set(r.marketId, {
+            liquidityB,
+            outcomeOrder,
+            shareQuantities,
+            houseSeedAmount: r.houseSeedAmount ?? undefined,
+            totalUserCreditsIn: Number(r.totalUserCreditsIn),
+            prices: cp({ liquidityB, outcomeOrder, shareQuantities }),
+            updatedAt: r.updatedAt?.toISOString?.(),
+          });
+        }
+      }
+
       const result = markets.map((m) => ({
         ...m,
         entries: entriesByMarket.get(m.id) || [],
@@ -15864,6 +16008,7 @@ Target length: about 90-150 words.`;
         latestRationale: engagement.latestRationaleByMarket.get(m.id) || null,
         relatedPersonIds: (relatedMap[m.id] || []).map(rp => rp.id),
         relatedPeople: relatedMap[m.id] || [],
+        ammState: m.engine === "amm" ? ammStateByMarket.get(m.id) ?? null : null,
       }));
 
       res.json(result);
@@ -15881,6 +16026,7 @@ Target length: about 90-150 words.`;
         .select({
           id: predictionMarkets.id,
           marketType: predictionMarkets.marketType,
+          engine: predictionMarkets.engine,
           status: predictionMarkets.status,
           title: predictionMarkets.title,
           slug: predictionMarkets.slug,
@@ -15928,6 +16074,48 @@ Target length: about 90-150 words.`;
 
       if (!market) {
         return res.status(404).json({ error: "Market not found" });
+      }
+
+      // Phase 13: surface the LMSR state block on AMM community markets
+      // so the detail page can render live prices + price history. Reuses
+      // the same canonical shape exposed by /api/markets/:id.
+      let ammStateBlock: {
+        liquidityB: number;
+        outcomeOrder: string[];
+        shareQuantities: Record<string, number>;
+        houseSeedAmount?: number;
+        totalUserCreditsIn?: number;
+        prices?: Record<string, number>;
+        updatedAt?: string;
+      } | null = null;
+      if (market.engine === "amm") {
+        const [stateRow] = await db
+          .select({
+            liquidityB: marketAmmState.liquidityB,
+            outcomeOrder: marketAmmState.outcomeOrder,
+            shareQuantities: marketAmmState.shareQuantities,
+            houseSeedAmount: marketAmmState.houseSeedAmount,
+            totalUserCreditsIn: marketAmmState.totalUserCreditsIn,
+            updatedAt: marketAmmState.updatedAt,
+          })
+          .from(marketAmmState)
+          .where(eq(marketAmmState.marketId, market.id))
+          .limit(1);
+        if (stateRow) {
+          const { currentPrices: cp } = await import("@shared/lib/amm/positions");
+          const liquidityB = Number(stateRow.liquidityB);
+          const outcomeOrder = stateRow.outcomeOrder as string[];
+          const shareQuantities = stateRow.shareQuantities as Record<string, number>;
+          ammStateBlock = {
+            liquidityB,
+            outcomeOrder,
+            shareQuantities,
+            houseSeedAmount: stateRow.houseSeedAmount,
+            totalUserCreditsIn: Number(stateRow.totalUserCreditsIn),
+            prices: cp({ liquidityB, outcomeOrder, shareQuantities }),
+            updatedAt: stateRow.updatedAt?.toISOString?.(),
+          };
+        }
       }
 
       const entries = await db
@@ -16012,6 +16200,7 @@ Target length: about 90-150 words.`;
         linkedPersonAvatar,
         resolutionSummary,
         jackpotWinners,
+        ammState: ammStateBlock,
       });
     } catch (error) {
       console.error("[Open Markets] Detail error:", error);
@@ -16070,57 +16259,81 @@ Target length: about 90-150 words.`;
         .where(eq(predictionMarkets.marketType, "community"));
       const nextCmsOrder = (cmsMax?.max || 0) + 1;
 
-      const [createdMarket] = await db
-        .insert(predictionMarkets)
-        .values({
-          marketType: "community",
-          title,
-          slug,
-          openMarketType,
-          teaser: teaser || null,
-          summary: summary || null,
-          description: description || null,
-          category: category || null,
-          tags: tags || null,
-          coverImageUrl: coverImageUrl || null,
-          sourceUrl: sourceUrl || null,
-          featured: featured || false,
-          timezone: timezone || "UTC",
-          startAt: startAt ? new Date(startAt) : new Date(),
-          endAt: new Date(endAt),
-          closeAt: closeAt ? new Date(closeAt) : null,
-          resolutionCriteria: resolutionCriteria || null,
-          resolutionSources: resolutionSources || null,
-          resolveMethod: resolveMethod || null,
-          rules: rules || null,
-          underlying: underlying || null,
-          metric: metric || null,
-          strike: strike ? String(strike) : null,
-          unit: unit || null,
-          createdBy: authReq.userId,
-          status: "OPEN",
-          personId: personId || null,
-          isLive: isLive !== false,
-          visibility: ["draft", "live", "inactive", "archived"].includes(visibility) ? visibility : "live",
-          inactiveMessage: inactiveMessage || null,
-          cmsDisplayOrder: nextCmsOrder,
-        })
-        .returning();
+      // Phase 13: community markets are created as AMM by default.
+      // The flag mirrors AMM_NATIVE_FLIP_ENABLED so we can flip back
+      // to parimutuel quickly if the rollout uncovers issues.
+      const ammCommunityEnabled =
+        (process.env.AMM_COMMUNITY_FLIP_ENABLED ?? "true").toLowerCase() !== "false";
+      const useAmm = ammCommunityEnabled && (openMarketType === "binary" || openMarketType === "multi");
 
-      const createdEntries = await db
-        .insert(marketEntries)
-        .values(
-          entryList.map((e: any, i: number) => ({
-            marketId: createdMarket.id,
-            entryType: e.personId ? "person" : "custom" as const,
-            personId: e.personId || null,
-            label: e.label,
-            description: e.description || null,
-            displayOrder: e.displayOrder ?? i,
-            imageUrl: e.imageUrl || null,
-          }))
-        )
-        .returning();
+      const { createdMarket, createdEntries } = await db.transaction(async (tx) => {
+        const [createdMarket] = await tx
+          .insert(predictionMarkets)
+          .values({
+            marketType: "community",
+            engine: useAmm ? "amm" : "parimutuel",
+            title,
+            slug,
+            openMarketType,
+            teaser: teaser || null,
+            summary: summary || null,
+            description: description || null,
+            category: category || null,
+            tags: tags || null,
+            coverImageUrl: coverImageUrl || null,
+            sourceUrl: sourceUrl || null,
+            featured: featured || false,
+            timezone: timezone || "UTC",
+            startAt: startAt ? new Date(startAt) : new Date(),
+            endAt: new Date(endAt),
+            closeAt: closeAt ? new Date(closeAt) : null,
+            resolutionCriteria: resolutionCriteria || null,
+            resolutionSources: resolutionSources || null,
+            resolveMethod: resolveMethod || null,
+            rules: rules || null,
+            underlying: underlying || null,
+            metric: metric || null,
+            strike: strike ? String(strike) : null,
+            unit: unit || null,
+            createdBy: authReq.userId,
+            status: "OPEN",
+            personId: personId || null,
+            isLive: isLive !== false,
+            visibility: ["draft", "live", "inactive", "archived"].includes(visibility) ? visibility : "live",
+            inactiveMessage: inactiveMessage || null,
+            cmsDisplayOrder: nextCmsOrder,
+          })
+          .returning();
+
+        const createdEntries = await tx
+          .insert(marketEntries)
+          .values(
+            entryList.map((e: any, i: number) => ({
+              marketId: createdMarket.id,
+              entryType: e.personId ? "person" : "custom" as const,
+              personId: e.personId || null,
+              label: e.label,
+              description: e.description || null,
+              displayOrder: e.displayOrder ?? i,
+              imageUrl: e.imageUrl || null,
+            }))
+          )
+          .returning();
+
+        if (useAmm) {
+          const { seedAmmMarket } = await import("./services/amm-house");
+          const entryIdsInOrder = createdEntries
+            .slice()
+            .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
+            .map((e) => e.id);
+          await seedAmmMarket(
+            { marketId: createdMarket.id, marketType: "community", entryIdsInOrder },
+            tx,
+          );
+        }
+
+        return { createdMarket, createdEntries };
+      });
 
       if (Array.isArray(relatedPersonIds)) {
         await syncRelatedPeople("world_market", createdMarket.id, relatedPersonIds.filter(Boolean));
@@ -17079,6 +17292,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       const [market] = await db
         .select({
           id: predictionMarkets.id,
+          engine: predictionMarkets.engine,
           closeAt: predictionMarkets.closeAt,
           endAt: predictionMarkets.endAt,
           openMarketType: predictionMarkets.openMarketType,
@@ -17109,6 +17323,39 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         (market.endAt && new Date(market.endAt) < now)
       ) {
         return res.status(400).json({ error: "Betting is closed for this market" });
+      }
+
+      // Phase 13: AMM community markets reuse the LMSR buy path. We
+      // ignore `direction` (AMM markets pick a side by choosing the
+      // entry directly — there is no separate Yes/No on a single
+      // entry) and treat `stakeAmount` as the integer credit budget,
+      // matching `/api/markets/:id/buy`.
+      if (market.engine === "amm") {
+        const { executeBuy } = await import("./services/amm-trades");
+        const budget = Math.floor(Number(stakeAmount));
+        if (!Number.isInteger(budget) || budget <= 0) {
+          return res.status(400).json({ error: "stakeAmount must be a positive integer" });
+        }
+        const result = await executeBuy({
+          marketId: market.id,
+          userId: authReq.userId!,
+          entryId,
+          creditBudget: budget,
+        });
+        if ("error" in result) {
+          return res
+            .status(result.status)
+            .json({ error: result.error, message: result.message });
+        }
+        return res.json({
+          ok: true,
+          engine: "amm",
+          betId: result.betId,
+          sharesPurchased: result.sharesPurchased,
+          chargeCredits: result.chargeCredits,
+          newPrices: result.newPrices,
+          userBalanceAfter: result.userBalanceAfter,
+        });
       }
 
       // No-hedging rule for community markets:
@@ -18532,14 +18779,38 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
 
   app.post("/api/admin/native-markets/gainer", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const { category, personIds, visibility = "live", featured = false } = req.body;
+      const { category, personIds, visibility = "live", featured = false, engine: requestedEngine } = req.body;
       const normalizedCategory = normalizeMarketCategory(category);
+
+      // Phase 14: same flip semantics as `nativeEngineFor("gainer")` in the
+      // weekly generator. Operator can override per-call via `engine` body
+      // param to spin up a single AMM smoke market while the flag is off.
+      const ammNativeEnabled =
+        (process.env.AMM_NATIVE_FLIP_ENABLED ?? "true").toLowerCase() !== "false";
+      const ammGainerFlip =
+        (process.env.AMM_GAINER_FLIP_ENABLED ?? "false").toLowerCase() === "true";
+      const defaultGainerEngine: "amm" | "parimutuel" =
+        ammNativeEnabled && ammGainerFlip ? "amm" : "parimutuel";
+      const resolvedEngine: "amm" | "parimutuel" =
+        requestedEngine === "amm" || requestedEngine === "parimutuel"
+          ? requestedEngine
+          : defaultGainerEngine;
 
       if (!CANONICAL_MARKET_CATEGORIES.includes(normalizedCategory as typeof CANONICAL_MARKET_CATEGORIES[number])) {
         return res.status(400).json({ error: "Invalid category" });
       }
       if (!personIds || !Array.isArray(personIds) || personIds.length === 0) {
         return res.status(400).json({ error: "At least one person ID required" });
+      }
+      // AMM requires at least 2 outcomes to seed an LMSR market (a
+      // 1-outcome AMM is degenerate — every share would be worth 1
+      // credit at open). Fail fast with a clear message instead of
+      // letting seedAmmMarket throw mid-transaction.
+      if (resolvedEngine === "amm" && personIds.length < 2) {
+        return res.status(400).json({
+          error: "amm_requires_min_2_outcomes",
+          message: "AMM Category Race markets need at least 2 candidates.",
+        });
       }
       const now = new Date();
       const dayOfWeek = now.getUTCDay();
@@ -18591,52 +18862,66 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       }
       const gainerMetadata = gainerOpeningScores.length > 0 ? { openingScores: gainerOpeningScores } : undefined;
 
-      let market: any;
-      try {
-        [market] = await db.insert(predictionMarkets).values({
-          marketType: "gainer",
-          title,
-          slug,
-          category: normalizedCategory,
-          visibility,
-          featured,
-          status: "OPEN",
-          startAt: monday,
-          endAt: sunday,
-          weekNumber,
-          metadata: gainerMetadata,
-        }).returning();
-      } catch (slugErr: any) {
-        if (slugErr.code === '23505') {
-          slug = `${slug}-${randomUUID().slice(0, 6)}`;
-          [market] = await db.insert(predictionMarkets).values({
+      const market = await db.transaction(async (tx) => {
+        const insertMarket = async (finalSlug: string) => {
+          const [created] = await tx.insert(predictionMarkets).values({
             marketType: "gainer",
+            engine: resolvedEngine,
             title,
-            slug,
+            slug: finalSlug,
             category: normalizedCategory,
             visibility,
             featured,
             status: "OPEN",
             startAt: monday,
             endAt: sunday,
+            closeAt: getMarketBettingCutoff(sunday, resolvedEngine),
             weekNumber,
             metadata: gainerMetadata,
           }).returning();
-        } else {
-          throw slugErr;
+          return created;
+        };
+
+        let createdMarket: any;
+        try {
+          createdMarket = await insertMarket(slug);
+        } catch (slugErr: any) {
+          if (slugErr.code === "23505") {
+            slug = `${slug}-${randomUUID().slice(0, 6)}`;
+            createdMarket = await insertMarket(slug);
+          } else {
+            throw slugErr;
+          }
         }
-      }
 
-      const entryValues = persons.map((person, idx) => ({
-        marketId: market.id,
-        entryType: "person" as const,
-        personId: person.id,
-        label: person.name,
-        displayOrder: idx,
-        imageUrl: person.avatar,
-      }));
+        const entryValues = persons.map((person, idx) => ({
+          marketId: createdMarket.id,
+          entryType: "person" as const,
+          personId: person.id,
+          label: person.name,
+          displayOrder: idx,
+          imageUrl: person.avatar,
+        }));
 
-      await db.insert(marketEntries).values(entryValues);
+        const createdEntries = await tx
+          .insert(marketEntries)
+          .values(entryValues)
+          .returning({ id: marketEntries.id, displayOrder: marketEntries.displayOrder });
+
+        if (resolvedEngine === "amm") {
+          const { seedAmmMarket } = await import("./services/amm-house");
+          const entryIdsInOrder = createdEntries
+            .slice()
+            .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
+            .map((e) => e.id);
+          await seedAmmMarket(
+            { marketId: createdMarket.id, marketType: "gainer", entryIdsInOrder },
+            tx,
+          );
+        }
+
+        return createdMarket;
+      });
 
       await db.insert(adminAuditLog).values({
         adminId: req.userId!,
@@ -18644,7 +18929,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         actionType: "create",
         targetTable: "prediction_markets",
         targetId: market.id,
-        metadata: { type: "gainer", category, personCount: personIds.length },
+        metadata: { type: "gainer", category, personCount: personIds.length, engine: resolvedEngine },
       });
 
       res.json(market);
@@ -19728,6 +20013,17 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       );
       if (!market) return res.status(404).json({ error: "H2H market not found" });
 
+      // AMM markets seed their LMSR state with a fixed entry-id list at
+      // creation time. Deleting and re-inserting market_entries here
+      // would orphan the AMM state's outcomeOrder and break trading on
+      // the new entries. Operators should void and recreate instead.
+      if (market.engine === "amm") {
+        return res.status(409).json({
+          error: "amm_entries_immutable",
+          message: "This H2H market is an AMM market with fixed outcomes. Void and recreate the market to change participants.",
+        });
+      }
+
       const [personA] = await db.select().from(trackedPeople).where(eq(trackedPeople.id, personAId));
       const [personB] = await db.select().from(trackedPeople).where(eq(trackedPeople.id, personBId));
       if (!personA || !personB) return res.status(404).json({ error: "Person not found" });
@@ -19764,6 +20060,17 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         and(eq(predictionMarkets.id, id), eq(predictionMarkets.marketType, "gainer"))
       );
       if (!market) return res.status(404).json({ error: "Gainer market not found" });
+
+      // AMM markets seed their LMSR state with a fixed entry-id list at
+      // creation time. Wiping + re-inserting market_entries here would
+      // leave the AMM outcomeOrder pointing at deleted IDs and the new
+      // entries un-tradeable. Operators should void and recreate.
+      if (market.engine === "amm") {
+        return res.status(409).json({
+          error: "amm_entries_immutable",
+          message: "This Category Race is an AMM market with fixed outcomes. Void and recreate the market to change candidates.",
+        });
+      }
 
       const persons = await db.select().from(trackedPeople).where(inArray(trackedPeople.id, personIds));
       if (persons.length !== personIds.length) {

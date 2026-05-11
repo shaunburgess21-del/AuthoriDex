@@ -578,47 +578,76 @@ export async function dispatchApproval(
         throw new Error("open_market approval requires at least one entry.");
       }
 
-      const [created] = await db
-        .insert(predictionMarkets)
-        .values({
-          marketType: "community",
-          status: "OPEN",
-          title: p.title,
-          slug: p.slug,
-          openMarketType: p.openMarketType,
-          category: p.category,
-          description: p.description,
-          teaser: p.teaser,
-          summary: p.summary,
-          coverImageUrl: p.coverImageUrl,
-          sourceUrl: p.sourceUrl,
-          featured: p.featured,
-          timezone: p.timezone,
-          startAt: p.startAt,
-          endAt: p.endAt,
-          closeAt: p.closeAt,
-          personId: p.personId,
-          isLive: p.isLive,
-          visibility: p.visibility,
-          underlying: p.underlying,
-          metric: p.metric,
-          strike: p.strike,
-          unit: p.unit,
-          createdBy: adminId,
-        })
-        .returning();
+      // Phase 13: community markets approved via the suggestion flow
+      // get the same AMM treatment as admin-created markets.
+      // `AMM_COMMUNITY_FLIP_ENABLED=false` reverts to parimutuel.
+      const ammCommunityEnabled =
+        (process.env.AMM_COMMUNITY_FLIP_ENABLED ?? "true").toLowerCase() !== "false";
+      const useAmm =
+        ammCommunityEnabled &&
+        (p.openMarketType === "binary" || p.openMarketType === "multi");
 
-      await db.insert(marketEntries).values(
-        p.entries.map((e, i) => ({
-          marketId: created.id,
-          entryType: e.personId ? ("person" as const) : ("custom" as const),
-          personId: e.personId,
-          label: e.label,
-          description: e.description,
-          displayOrder: i,
-          imageUrl: e.imageUrl,
-        }))
-      );
+      const created = await db.transaction(async (tx) => {
+        const [row] = await tx
+          .insert(predictionMarkets)
+          .values({
+            marketType: "community",
+            engine: useAmm ? "amm" : "parimutuel",
+            status: "OPEN",
+            title: p.title,
+            slug: p.slug,
+            openMarketType: p.openMarketType,
+            category: p.category,
+            description: p.description,
+            teaser: p.teaser,
+            summary: p.summary,
+            coverImageUrl: p.coverImageUrl,
+            sourceUrl: p.sourceUrl,
+            featured: p.featured,
+            timezone: p.timezone,
+            startAt: p.startAt,
+            endAt: p.endAt,
+            closeAt: p.closeAt,
+            personId: p.personId,
+            isLive: p.isLive,
+            visibility: p.visibility,
+            underlying: p.underlying,
+            metric: p.metric,
+            strike: p.strike,
+            unit: p.unit,
+            createdBy: adminId,
+          })
+          .returning();
+
+        const insertedEntries = await tx
+          .insert(marketEntries)
+          .values(
+            p.entries.map((e, i) => ({
+              marketId: row.id,
+              entryType: e.personId ? ("person" as const) : ("custom" as const),
+              personId: e.personId,
+              label: e.label,
+              description: e.description,
+              displayOrder: i,
+              imageUrl: e.imageUrl,
+            })),
+          )
+          .returning({ id: marketEntries.id, displayOrder: marketEntries.displayOrder });
+
+        if (useAmm) {
+          const { seedAmmMarket } = await import("./amm-house");
+          const entryIdsInOrder = insertedEntries
+            .slice()
+            .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
+            .map((e) => e.id);
+          await seedAmmMarket(
+            { marketId: row.id, marketType: "community", entryIdsInOrder },
+            tx,
+          );
+        }
+
+        return row;
+      });
 
       await db.insert(adminAuditLog).values({
         adminId,

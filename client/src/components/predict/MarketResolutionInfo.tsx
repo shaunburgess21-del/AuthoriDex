@@ -47,6 +47,12 @@ interface MarketResolutionInfoProps {
   categoryLabel?: string;
   /** Community only — caller-supplied free-form Yes/No criteria. */
   resolutionCriteria?: string;
+  /**
+   * Engine of the underlying market. Drives the "Entries close" /
+   * "Trading closes" verb swap so AMM markets read correctly.
+   * Defaults to parimutuel for legacy callers.
+   */
+  engine?: "amm" | "parimutuel";
   compact?: boolean;
 }
 
@@ -93,6 +99,7 @@ export function MarketResolutionInfo({
   person2Name,
   categoryLabel,
   resolutionCriteria,
+  engine = "parimutuel",
   compact = false,
 }: MarketResolutionInfoProps) {
   const tieLabel = TIE_RULE_LABELS[tieRule] || "All positions refunded";
@@ -102,6 +109,8 @@ export function MarketResolutionInfo({
       : "Auto-calculated from VoxDex trend engine";
   const predictionsCloseLabel = formatBettingCutoffUtc(bettingCutoff) ?? BETTING_CUTOFF_FALLBACK;
   const resultsLabel = closeTime || "Sun 23:59 UTC";
+  const isAmm = engine === "amm";
+  const closeLabelVerb = isAmm ? "Trading closes" : "Entries close";
 
   const Bullets = (() => {
     if (mode === "h2h") {
@@ -193,7 +202,7 @@ export function MarketResolutionInfo({
       <div className="text-[11px] text-muted-foreground space-y-0.5 leading-snug">
         <p>
           <Lock className="inline h-3 w-3 text-amber-500 mr-1" />
-          Entries close: <span className="font-medium text-foreground">{predictionsCloseLabel}</span>
+          {closeLabelVerb}: <span className="font-medium text-foreground">{predictionsCloseLabel}</span>
         </p>
         <p>
           <Trophy className="inline h-3 w-3 text-violet-500 mr-1" />
@@ -255,7 +264,7 @@ export function MarketResolutionInfo({
       <div className="text-[11px] text-muted-foreground space-y-1.5 leading-snug">
         <Bullet icon={<Lock className="h-3 w-3 text-amber-500" />}>
           <span>
-            Entries close: <span className="font-medium text-foreground">{predictionsCloseLabel}</span>
+            {closeLabelVerb}: <span className="font-medium text-foreground">{predictionsCloseLabel}</span>
           </span>
         </Bullet>
         <Bullet icon={<Trophy className="h-3 w-3 text-violet-500" />}>

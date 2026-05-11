@@ -35,6 +35,20 @@ const MISSION_HEADERS: Record<string, string> = {
   community: "Cast your vote on this real-world prediction.",
 };
 
+/**
+ * AMM markets trade continuously and pay 1 credit per winning share,
+ * so the parimutuel "back your champion" / "will their score be higher"
+ * framing under-sells the mechanics. We swap in a share-based mission
+ * line for the two market types currently flipped to AMM (h2h, updown).
+ * Gainer / jackpot / community fall through to MISSION_HEADERS until
+ * their AMM flip lands in a later phase.
+ */
+const AMM_MISSION_HEADERS: Record<string, string> = {
+  updown:
+    "Buy UP or DOWN shares. Each winning share pays 1 credit at close. Trade until 5 min before close.",
+  h2h: "Buy shares of your pick. Winning shares pay 1 credit each at close. Sell anytime before close.",
+};
+
 export interface StakeSelection {
   type: string;
   choice: string;
@@ -231,7 +245,9 @@ export function StakeModal({
   const dialogTitleText = topUpHeading ?? "Confirm Prediction";
   const missionText = isTopUp
     ? "Adding more credits compounds onto your existing position."
-    : (MISSION_HEADERS[selection.type] || "Place your prediction on this market.");
+    : isAmm && AMM_MISSION_HEADERS[selection.type]
+      ? AMM_MISSION_HEADERS[selection.type]
+      : MISSION_HEADERS[selection.type] || "Place your prediction on this market.";
 
   const fireConfetti = (origin: { x: number; y: number }) => {
     confetti({
@@ -352,6 +368,7 @@ export function StakeModal({
             bettingCutoff={selection.bettingCutoff ?? null}
             resolveAt={selection.endAt ?? null}
             variant="modal"
+            engine={isAmm ? "amm" : "parimutuel"}
           />
         )}
 
@@ -582,42 +599,85 @@ export function StakeModal({
 
           {/* AMM live price + payout-if-win quote. Replaces the parimutuel
               estimatedPayout pill on engine='amm' markets. Shares pay 1
-              credit each at settlement, so payout-if-win = floor(shares). */}
-          {isAmm && ammEntryPrice != null && (
-            <div className="rounded-md border border-violet-500/30 bg-violet-500/8 dark:bg-violet-500/5 px-3 py-2 text-xs space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Live price</span>
-                <span className="font-mono font-medium text-foreground">
-                  {priceToPercent(ammEntryPrice, 0)}{" "}
-                  <span className="text-muted-foreground/70 font-normal">
-                    ({ammEntryPrice.toFixed(3)} cr/share)
-                  </span>
-                </span>
-              </div>
-              {ammMode === "buy" && ammBuyQuote && ammBuyQuote.shares > 0 && (
+              credit each at settlement, so payout-if-win = floor(shares).
+              When the buy is large enough to move the marginal price by
+              >= 1pp we surface a "Final price" slippage row so traders
+              can see they're walking up the curve. */}
+          {isAmm && ammEntryPrice != null && (() => {
+            // Slippage = marginal price after the trade lands minus the
+            // current pre-trade price. We render it only on meaningful
+            // moves (>= 1pp) to avoid noise on small trades that just
+            // round to the same percent label.
+            const buyFinalPrice =
+              ammMode === "buy" && ammBuyQuote && ammBuyQuote.shares > 0 && selection.entryId
+                ? Number(ammBuyQuote.newPrices[selection.entryId] ?? 0)
+                : null;
+            const sellFinalPrice =
+              ammMode === "sell" && ammSellQuote && selection.entryId
+                ? Number(ammSellQuote.newPrices[selection.entryId] ?? 0)
+                : null;
+            const finalPrice = buyFinalPrice ?? sellFinalPrice;
+            const showSlippage =
+              finalPrice != null && Math.abs(finalPrice - ammEntryPrice) >= 0.01;
+            return (
+              <div className="rounded-md border border-violet-500/30 bg-violet-500/8 dark:bg-violet-500/5 px-3 py-2 text-xs space-y-1">
                 <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">If you win</span>
-                  <span className="font-mono font-medium text-green-700 dark:text-green-500">
-                    ~{Math.floor(ammBuyQuote.shares).toLocaleString("en-US")} credits
+                  <span className="text-muted-foreground">Live price</span>
+                  <span className="font-mono font-medium text-foreground">
+                    {priceToPercent(ammEntryPrice, 0)}{" "}
                     <span className="text-muted-foreground/70 font-normal">
-                      {" "}({ammBuyQuote.shares.toFixed(2)} shares)
+                      ({ammEntryPrice.toFixed(3)} cr/share)
                     </span>
                   </span>
                 </div>
-              )}
-              {ammMode === "sell" && ammSellQuote && (
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Sell proceeds</span>
-                  <span className="font-mono font-medium text-foreground">
-                    ~{ammSellQuote.proceeds.toLocaleString("en-US")} credits
-                  </span>
-                </div>
-              )}
-              <p className="text-[10px] text-muted-foreground/70 italic">
-                Live LMSR price — updates as people trade. Buy now, sell any time before close.
-              </p>
-            </div>
-          )}
+                {ammMode === "buy" && ammBuyQuote && ammBuyQuote.shares > 0 && (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">You receive</span>
+                      <span className="font-mono font-medium text-foreground">
+                        ~{ammBuyQuote.shares.toFixed(2)} shares
+                        <span className="text-muted-foreground/70 font-normal">
+                          {" "}(avg {ammBuyQuote.pricePerShareAvg.toFixed(3)} cr)
+                        </span>
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">If you win</span>
+                      <span className="font-mono font-medium text-green-700 dark:text-green-500">
+                        ~{Math.floor(ammBuyQuote.shares).toLocaleString("en-US")} credits
+                        <span className="text-muted-foreground/70 font-normal">
+                          {" "}(+{Math.max(0, Math.floor(ammBuyQuote.shares) - ammBuyQuote.chargeCredits).toLocaleString("en-US")} net)
+                        </span>
+                      </span>
+                    </div>
+                  </>
+                )}
+                {ammMode === "sell" && ammSellQuote && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Sell proceeds</span>
+                    <span className="font-mono font-medium text-foreground">
+                      ~{ammSellQuote.proceeds.toLocaleString("en-US")} credits
+                    </span>
+                  </div>
+                )}
+                {showSlippage && finalPrice != null && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Final price</span>
+                    <span className="font-mono font-medium text-amber-700 dark:text-amber-400">
+                      {priceToPercent(ammEntryPrice, 0)} → {priceToPercent(finalPrice, 0)}
+                      <span className="text-muted-foreground/70 font-normal">
+                        {" "}({finalPrice > ammEntryPrice ? "+" : ""}
+                        {((finalPrice - ammEntryPrice) * 100).toFixed(1)}pp)
+                      </span>
+                    </span>
+                  </div>
+                )}
+                <p className="text-[10px] text-muted-foreground/70 italic">
+                  Live LMSR price — updates as people trade. Buy now, sell any time before close.
+                </p>
+              </div>
+            );
+          })()}
 
           {!isAmm && (() => {
             let startRef = selection.marketStartAt ?? selection.baselineTimestamp;
@@ -658,30 +718,31 @@ export function StakeModal({
             );
           })()}
 
-          {(shouldRenderCrowdSentiment(selection.crowdSentiment) ||
-            (typeof selection.poolTotal === "number" && selection.poolTotal > 0)) && (
-            <p className="text-xs text-muted-foreground text-center">
-              {typeof selection.poolTotal === "number" && selection.poolTotal > 0 && (
-                <>
-                  Pool:{" "}
-                  <span className="font-mono font-medium text-foreground">
-                    {selection.poolTotal.toLocaleString("en-US")} credits
-                  </span>
-                </>
-              )}
-              {typeof selection.poolTotal === "number" &&
-                selection.poolTotal > 0 &&
-                shouldRenderCrowdSentiment(selection.crowdSentiment) && (
-                  <span className="text-muted-foreground/70"> · </span>
+          {!isAmm &&
+            (shouldRenderCrowdSentiment(selection.crowdSentiment) ||
+              (typeof selection.poolTotal === "number" && selection.poolTotal > 0)) && (
+              <p className="text-xs text-muted-foreground text-center">
+                {typeof selection.poolTotal === "number" && selection.poolTotal > 0 && (
+                  <>
+                    Pool:{" "}
+                    <span className="font-mono font-medium text-foreground">
+                      {selection.poolTotal.toLocaleString("en-US")} credits
+                    </span>
+                  </>
                 )}
-              {shouldRenderCrowdSentiment(selection.crowdSentiment) && (
-                <>
-                  <span className="font-mono font-medium text-foreground">{selection.crowdSentiment}%</span>{" "}
-                  backing your pick
-                </>
-              )}
-            </p>
-          )}
+                {typeof selection.poolTotal === "number" &&
+                  selection.poolTotal > 0 &&
+                  shouldRenderCrowdSentiment(selection.crowdSentiment) && (
+                    <span className="text-muted-foreground/70"> · </span>
+                  )}
+                {shouldRenderCrowdSentiment(selection.crowdSentiment) && (
+                  <>
+                    <span className="font-mono font-medium text-foreground">{selection.crowdSentiment}%</span>{" "}
+                    backing your pick
+                  </>
+                )}
+              </p>
+            )}
 
           {isUpDown && (() => {
             // Prose uses personName so we say "UP wins if Bieber..."
@@ -931,6 +992,7 @@ export function StakeModal({
             bettingCutoff={selection.bettingCutoff}
             tieRule={selection.tieRule || "refund"}
             personName={selection.personName ?? selection.marketName}
+            engine={isAmm ? "amm" : "parimutuel"}
             compact
           />
         )}

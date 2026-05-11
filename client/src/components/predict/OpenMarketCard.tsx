@@ -12,6 +12,7 @@ import { Link, useLocation } from "wouter";
 import { Check, ChevronRight, Clock, Lock, Trophy, XCircle, RotateCcw, X, ExternalLink } from "lucide-react";
 import { computePayoutMultiplier, formatMultiplier } from "@/lib/parimutuel";
 import { resolveMarketHeadlineImageUrl } from "@/lib/predictMarketImage";
+import { pricesFor, snapshotFromApi, type ApiAmmStateBlock } from "@/lib/ammClient";
 
 function MarketAvatar({ market }: { market: any }) {
   const imgUrl = resolveMarketHeadlineImageUrl(market);
@@ -173,13 +174,24 @@ function PendingBetLinkRow({ entryLabel, stakeAmount, href, onTopUp }: { entryLa
 }
 
 function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel, onNavigate, onPickEntry, isMarketClosed, isInactive = false, inactiveMessage, userBetResult, userBetsPerEntry, onFilterCategory, categoryRaceMap, leaderboardCategories, onBrowseFullScreen }: { market: any; entries: any[]; totalPool: number; participants: number; timeLabel: string; onNavigate: (slug: string, pick?: string, direction?: string) => void; /** When provided, tapping the "Your pick" pin opens the StakeModal in topUp mode instead of routing to the detail page. */ onPickEntry?: (market: any, entry: any, direction: "yes" | "no") => void; isMarketClosed: boolean; isInactive?: boolean; inactiveMessage?: string; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number }; userBetsPerEntry?: Map<string, { yesStake: number; noStake: number }>; onFilterCategory?: (cat: string) => void; categoryRaceMap?: Map<string, string>; leaderboardCategories?: Set<string>; onBrowseFullScreen?: () => void }) {
+  const isAmm = market.engine === "amm";
+  const ammSnap = isAmm ? snapshotFromApi((market.ammState as ApiAmmStateBlock | null | undefined) ?? null) : null;
+  const ammPrices = ammSnap ? pricesFor(ammSnap) : null;
   const yesEntry = entries.find((e: any) => e.label === "Yes") || entries[0];
   const noEntry = entries.find((e: any) => e.label === "No") || entries[1];
   const yesStake = Number(yesEntry?.totalStake || 0);
   const noStake = Number(noEntry?.totalStake || 0);
   const total = yesStake + noStake || 1;
-  const yesPercent = Math.round((yesStake / total) * 100);
-  const noPercent = 100 - yesPercent;
+  // AMM markets price each share class via LMSR, not pool share.
+  // We override the % display so the bar matches the live market.
+  const ammYesPrice = ammPrices && yesEntry?.id ? Number(ammPrices[yesEntry.id] ?? 0) : 0;
+  const ammNoPrice = ammPrices && noEntry?.id ? Number(ammPrices[noEntry.id] ?? 0) : 0;
+  const yesPercent = isAmm
+    ? Math.max(0, Math.min(100, Math.round(ammYesPrice * 100)))
+    : Math.round((yesStake / total) * 100);
+  const noPercent = isAmm
+    ? Math.max(0, Math.min(100, Math.round(ammNoPrice * 100)))
+    : 100 - Math.round((yesStake / total) * 100);
   // Multipliers use raw stakes (not the rounded percent) so thin pools
   // like 1 vs 999 don't collapse to a misleading 1.9x default.
   // 0.95 haircut matches MarketDetailPage so card and detail agree.
@@ -229,9 +241,11 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
         </div>
 
         <div className="max-md:mt-1">
-          <div className="flex items-center justify-center mb-1.5">
-            <span className="text-sm font-semibold text-muted-foreground">Pool: {totalPool.toLocaleString('en-US')} credits</span>
-          </div>
+          {!isAmm && (
+            <div className="flex items-center justify-center mb-1.5">
+              <span className="text-sm font-semibold text-muted-foreground">Pool: {totalPool.toLocaleString('en-US')} credits</span>
+            </div>
+          )}
 
           {isMarketClosed ? (
             <Button className="w-full bg-muted text-muted-foreground cursor-not-allowed" disabled>
@@ -276,14 +290,14 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
                 onClick={() => onNavigate(market.slug, 'yes')}
                 data-testid={`button-yes-${market.slug}`}
               >
-                Yes {formatMultiplier(yesMultiplier)}
+                Yes {isAmm ? `${yesPercent}%` : formatMultiplier(yesMultiplier)}
               </Button>
               <Button
                 className="!min-h-0 px-4 py-3.5 md:py-2.5 bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20"
                 onClick={() => onNavigate(market.slug, 'no')}
                 data-testid={`button-no-${market.slug}`}
               >
-                No {formatMultiplier(noMultiplier)}
+                No {isAmm ? `${noPercent}%` : formatMultiplier(noMultiplier)}
               </Button>
             </div>
           )}
@@ -429,22 +443,40 @@ function MultiMarketEntryRow({
           </Link>
         )
       ) : !isMarketClosed ? (
-        <div className="flex gap-1 md:gap-1.5 shrink-0">
-          <button
-            className={`${buttonClass} bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20`}
-            onClick={(e) => handlePick(e, "yes")}
-            data-testid={`button-yes-${entry.id}`}
-          >
-            {compact ? "Yes" : `Yes ${formatMultiplier(entry.yesMultiplier)}`}
-          </button>
-          <button
-            className={`${buttonClass} bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20`}
-            onClick={(e) => handlePick(e, "no")}
-            data-testid={`button-no-${entry.id}`}
-          >
-            {compact ? "No" : `No ${formatMultiplier(entry.noMultiplier)}`}
-          </button>
-        </div>
+        market.engine === "amm" ? (
+          // AMM markets price each outcome as its own share class, so
+          // the row gets a single "Buy" button instead of the Yes/No
+          // pair. The label shows price/share (cr) on the drawer view
+          // and just "Buy" in the compact card preview.
+          <div className="flex shrink-0">
+            <button
+              className={`${buttonClass} w-[72px] md:w-[80px] bg-emerald-500/10 border border-emerald-500/50 text-emerald-600 hover:border-emerald-500/80 hover:bg-emerald-500/20`}
+              onClick={(e) => handlePick(e, "yes")}
+              data-testid={`button-buy-${entry.id}`}
+            >
+              {compact
+                ? "Buy"
+                : `${Number(entry.ammPrice ?? 0).toFixed(2)} cr`}
+            </button>
+          </div>
+        ) : (
+          <div className="flex gap-1 md:gap-1.5 shrink-0">
+            <button
+              className={`${buttonClass} bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20`}
+              onClick={(e) => handlePick(e, "yes")}
+              data-testid={`button-yes-${entry.id}`}
+            >
+              {compact ? "Yes" : `Yes ${formatMultiplier(entry.yesMultiplier)}`}
+            </button>
+            <button
+              className={`${buttonClass} bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20`}
+              onClick={(e) => handlePick(e, "no")}
+              data-testid={`button-no-${entry.id}`}
+            >
+              {compact ? "No" : `No ${formatMultiplier(entry.noMultiplier)}`}
+            </button>
+          </div>
+        )
       ) : (
         <span className="text-xs text-muted-foreground shrink-0 w-24 text-right">{entry.yesPct}% Yes / {entry.noPct}% No</span>
       )}
@@ -458,6 +490,10 @@ function MultiMarketCard({ market, entries, participants, timeLabel, onNavigate,
   const [, setLocation] = useLocation();
   const [optionsDrawerOpen, setOptionsDrawerOpen] = useState(false);
 
+  const isAmm = market.engine === "amm";
+  const ammSnap = isAmm ? snapshotFromApi((market.ammState as ApiAmmStateBlock | null | undefined) ?? null) : null;
+  const ammPrices = ammSnap ? pricesFor(ammSnap) : null;
+
   const totalEntryStake = entries.reduce((sum: number, e: any) => sum + Number(e.totalStake || 0) + Number(e.noStake || 0), 0) || 1;
   const hasPendingResult = userBetResult?.result === "pending";
 
@@ -466,17 +502,23 @@ function MultiMarketCard({ market, entries, participants, timeLabel, onNavigate,
   // computePayoutMultiplier already falls back to DEFAULT_PAYOUT_MULTIPLIER
   // when pool or stake is 0, so no extra null-guarding is needed — empty
   // entries show "Yes 1.9x" / "No 1.9x" exactly like the binary card.
+  // For AMM markets `pct` is overridden with the LMSR marginal price so
+  // the bars/sort order match the live market.
   const enriched = entries.map((e: any) => {
     const yesStake = Number(e.totalStake || 0);
     const noStake = Number(e.noStake || 0);
     const entryPool = yesStake + noStake;
+    const ammPrice = ammPrices ? Number(ammPrices[e.id] ?? 0) : 0;
     return {
       ...e,
-      pct: Math.round((entryPool / totalEntryStake) * 100),
+      pct: isAmm
+        ? Math.max(0, Math.min(100, Math.round(ammPrice * 100)))
+        : Math.round((entryPool / totalEntryStake) * 100),
       yesPct: entryPool > 0 ? Math.round((yesStake / entryPool) * 100) : 50,
       noPct: entryPool > 0 ? 100 - Math.round((yesStake / entryPool) * 100) : 50,
       yesMultiplier: +(computePayoutMultiplier(entryPool, yesStake) * 0.95).toFixed(1),
       noMultiplier: +(computePayoutMultiplier(entryPool, noStake) * 0.95).toFixed(1),
+      ammPrice,
     };
   });
 
@@ -525,8 +567,10 @@ function MultiMarketCard({ market, entries, participants, timeLabel, onNavigate,
         {/* Polymarket-style total pool readout — gives users a quick sense of
             how much liquidity the market has accumulated. We sum across all
             entries (live stake only, excluding seed) so it tracks real money.
-            Hidden when the pool is empty to avoid a noisy "0 in pool" line. */}
-        {totalEntryStake > 1 && (
+            Hidden when the pool is empty to avoid a noisy "0 in pool" line.
+            AMM markets price each share class via LMSR rather than a shared
+            pool, so this volume line doesn't apply. */}
+        {!isAmm && totalEntryStake > 1 && (
           <span className="text-[11px] text-muted-foreground tabular-nums" data-testid={`pool-volume-${market.slug}`}>
             {totalEntryStake.toLocaleString("en-US")} in pool
           </span>

@@ -19,8 +19,16 @@ import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { CardComments, useCommentCount } from "@/components/comments/CardComments";
 import { CommentsBottomSheet } from "@/components/snap-scroll/CommentsBottomSheet";
 import { computePayoutMultiplier, formatMultiplier } from "@/lib/parimutuel";
+import {
+  type ApiAmmStateBlock,
+  deriveBuyQuote,
+  pricesFor,
+  priceToPercent,
+  snapshotFromApi,
+} from "@/lib/ammClient";
 import { resolveMarketHeadlineImageUrl } from "@/lib/predictMarketImage";
 import { MyPositionCard, myPositionQueryKey } from "@/components/predict/MyPositionCard";
+import { AmmPriceHistoryChart } from "@/components/predict/AmmPriceHistoryChart";
 import { MarketDetailSkeleton } from "@/components/predict/MarketDetailSkeleton";
 import { RelatedMarkets } from "@/components/predict/RelatedMarkets";
 import { MuteMarketToggle } from "@/components/predict/MuteMarketToggle";
@@ -51,6 +59,7 @@ import {
   MessageSquare,
   ChevronRight,
   CreditCard,
+  Activity,
 } from "lucide-react";
 
 const MIN_STAKE = 5;
@@ -115,6 +124,15 @@ interface MarketData {
   id: string;
   marketType: string;
   openMarketType: "binary" | "multi" | "updown";
+  /**
+   * Underlying market engine. Community markets created post Phase 13
+   * default to 'amm'; legacy markets remain 'parimutuel'. The detail
+   * page swaps in live LMSR pricing + sell affordances when this is
+   * 'amm'.
+   */
+  engine?: "amm" | "parimutuel" | string;
+  /** LMSR state block, only present for engine='amm' markets. */
+  ammState?: ApiAmmStateBlock | null;
   status: "OPEN" | "CLOSED_PENDING" | "RESOLVED" | "VOID";
   title: string;
   slug: string;
@@ -710,11 +728,21 @@ export default function MarketDetailPage() {
 
   const isCommunityMarket = market?.marketType === "community";
   const isJackpotMarket = market?.marketType === "jackpot";
+  const isAmm = market?.engine === "amm";
   const effectiveOpenMarketType: "binary" | "multi" | "updown" = market?.openMarketType
     ? market.openMarketType
     : market?.marketType === "updown"
       ? "updown"
       : "multi";
+
+  const ammSnapshot = useMemo(
+    () => (isAmm ? snapshotFromApi(market?.ammState ?? null) : null),
+    [isAmm, market?.ammState],
+  );
+  const ammPriceMap = useMemo(
+    () => (ammSnapshot ? pricesFor(ammSnapshot) : null),
+    [ammSnapshot],
+  );
 
   const betMutation = useMutation({
     mutationFn: async ({ entryId, stakeAmount: amount, direction }: { entryId: string; stakeAmount: number; direction: "yes" | "no" }) => {
@@ -738,7 +766,15 @@ export default function MarketDetailPage() {
       return res.json();
     },
     onSuccess: async (data: any) => {
-      toast("Prediction placed!", { description: "Your prediction has been recorded." });
+      const isAmmTrade = data?.engine === "amm";
+      toast(
+        isAmmTrade ? "Shares purchased" : "Prediction placed!",
+        {
+          description: isAmmTrade && Number.isFinite(Number(data?.sharesPurchased))
+            ? `You bought ${Number(data.sharesPurchased).toFixed(2)} shares for ${data.chargeCredits ?? "—"} credits.`
+            : "Your prediction has been recorded.",
+        },
+      );
       if (data?.xp?.xpAwarded) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }
@@ -752,6 +788,7 @@ export default function MarketDetailPage() {
         queryClient.invalidateQueries({ queryKey: ["/api/me/predictions"] }),
         queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
         market?.id ? queryClient.invalidateQueries({ queryKey: myPositionQueryKey(market.id) }) : Promise.resolve(),
+        market?.id ? queryClient.invalidateQueries({ queryKey: ["/api/markets", market.id, "price-history"] }) : Promise.resolve(),
       ]);
       setSelectedEntry(null);
       setSelectedDirection("yes");
@@ -859,8 +896,27 @@ export default function MarketDetailPage() {
 
   const entriesWithPercentages = useMemo(() => {
     if (!market?.entries) return [];
+    // On AMM markets we override the parimutuel pool-share percentages
+    // with live LMSR marginal prices so the bars + labels match what
+    // the user pays per share. `displayStake` is kept (parimutuel-only
+    // signal) so any non-AMM callers below still get a number.
+    if (isAmm && ammPriceMap) {
+      return market.entries.map((e) => {
+        const price = Number(ammPriceMap[e.id] ?? 0);
+        const pct = Math.max(0, Math.min(100, Math.round(price * 100)));
+        return {
+          ...e,
+          percentage: pct,
+          displayStake: e.totalStake || 0,
+          yesPercentage: pct,
+          noPercentage: Math.max(0, 100 - pct),
+          yesMultiplier: 0,
+          noMultiplier: 0,
+        };
+      });
+    }
     return getEntryPercentages(market.entries);
-  }, [market?.entries]);
+  }, [market?.entries, isAmm, ammPriceMap]);
 
   const totalPool = useMemo(() => {
     if (!market) return 0;
@@ -879,6 +935,9 @@ export default function MarketDetailPage() {
     if (!selectedEntry || !stakeAmount || !market) return null;
     const amount = Number(stakeAmount);
     if (isNaN(amount) || amount <= 0) return null;
+    // AMM markets compute a deterministic LMSR quote; the parimutuel
+    // projection below does not apply.
+    if (isAmm) return null;
     if (market.marketType === "community") {
       return calculateProjectedPayout(market.entries || [], selectedEntry, amount, selectedDirection);
     }
@@ -889,7 +948,23 @@ export default function MarketDetailPage() {
       : entry.percentage / 100;
     const payout = (amount / Math.max(pctFraction, 0.01)) * 0.95;
     return Math.round(payout);
-  }, [selectedEntry, stakeAmount, selectedDirection, entriesWithPercentages, market]);
+  }, [selectedEntry, stakeAmount, selectedDirection, entriesWithPercentages, market, isAmm]);
+
+  // AMM buy quote — preview-only LMSR quote built off the live `ammState`
+  // snapshot. Mirrors the modal's `ammBuyQuote` so the inline form on
+  // this page shows share count + max payout + slippage without any
+  // backend round-trip.
+  const ammBuyQuote = useMemo(() => {
+    if (!isAmm || !selectedEntry || !market?.ammState) return null;
+    const amount = Number(stakeAmount);
+    if (!Number.isFinite(amount) || amount <= 0) return null;
+    return deriveBuyQuote(market.ammState, selectedEntry, amount);
+  }, [isAmm, selectedEntry, stakeAmount, market?.ammState]);
+  const ammEntryPrice = useMemo(() => {
+    if (!isAmm || !ammPriceMap || !selectedEntry) return null;
+    const p = ammPriceMap[selectedEntry];
+    return Number.isFinite(p) ? Number(p) : null;
+  }, [isAmm, ammPriceMap, selectedEntry]);
 
   const handlePlaceBet = () => {
     if (!isLoggedIn) {
@@ -1204,6 +1279,89 @@ export default function MarketDetailPage() {
           />
         )}
 
+        {/* AMM Live Market panel — surfaces the canonical LMSR price
+            for each outcome. For multi markets we show a vertical
+            list of bars; for binary we show two equal tiles. This
+            replaces the parimutuel "Pool sentiment" patterns on
+            community AMM markets. */}
+        {isAmm && ammPriceMap && market.entries && market.entries.length > 0 && (
+          <Card className="p-4 mb-6 border-emerald-500/30 dark:border-emerald-500/20" data-testid="section-amm-live-market">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold flex items-center gap-1.5">
+                <Activity className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                Live Market
+              </h2>
+              <Badge variant="outline" className="text-emerald-600 dark:text-emerald-400 border-emerald-500/40 dark:border-emerald-500/30 text-[10px]">
+                LIVE
+              </Badge>
+            </div>
+            {effectiveOpenMarketType === "multi" ? (
+              <div className="space-y-2">
+                {[...entriesWithPercentages].sort((a, b) => b.percentage - a.percentage).map((entry) => {
+                  const livePrice = Number(ammPriceMap[entry.id] ?? 0);
+                  return (
+                    <div key={entry.id} className="flex items-center gap-3 text-sm" data-testid={`amm-live-row-${entry.id}`}>
+                      <span className="w-[35%] sm:w-[30%] truncate font-medium">{entry.label}</span>
+                      <div className="flex-1 h-5 rounded-md overflow-hidden border border-blue-500/25 bg-slate-900/80">
+                        <div
+                          className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400"
+                          style={{ width: `${Math.max(entry.percentage, 1)}%` }}
+                        />
+                      </div>
+                      <span className="font-mono font-bold text-sm w-12 text-right">{entry.percentage}%</span>
+                      <span className="font-mono text-[10px] text-muted-foreground w-14 text-right tabular-nums hidden sm:block">
+                        {livePrice.toFixed(3)} cr
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                {[...entriesWithPercentages].sort((a, b) => a.displayOrder - b.displayOrder).map((entry) => {
+                  const livePrice = Number(ammPriceMap[entry.id] ?? 0);
+                  return (
+                    <div key={entry.id} className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 text-center" data-testid={`amm-live-tile-${entry.id}`}>
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wider truncate">{entry.label}</p>
+                      <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 font-mono">{entry.percentage}%</p>
+                      <p className="text-[10px] text-muted-foreground tabular-nums">{livePrice.toFixed(3)} cr / share</p>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <p className="text-[10px] text-muted-foreground/70 mt-3 text-center">
+              Live LMSR pricing — each share pays 1 credit if the outcome wins.
+            </p>
+          </Card>
+        )}
+
+        {/* AMM price history chart — shows market consensus drift.
+            Sits above the place-prediction form so users see the
+            trend before they trade. */}
+        {isAmm && market.entries && market.entries.length > 0 && (() => {
+          const palette = ["#10b981", "#3b82f6", "#a855f7", "#f59e0b", "#ef4444", "#06b6d4", "#ec4899", "#84cc16"];
+          const series = market.entries
+            .slice()
+            .sort((a, b) => a.displayOrder - b.displayOrder)
+            .slice(0, palette.length)
+            .map((e, i) => ({ entryId: e.id, label: e.label, color: palette[i] }));
+          return (
+            <Card className="p-4 mb-6 border-border/50" data-testid="section-amm-price-history">
+              <h2 className="text-sm font-semibold flex items-center gap-1.5 mb-3">
+                <Activity className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                Market Price History
+              </h2>
+              <AmmPriceHistoryChart
+                marketId={market.id}
+                series={series}
+                livePrices={ammPriceMap ?? {}}
+                height={220}
+              />
+            </Card>
+          );
+        })()}
+
         {isOpen && !isInactive && (
           <Card
             ref={placePredictionSectionRef}
@@ -1313,6 +1471,36 @@ export default function MarketDetailPage() {
                           description: "You've already taken the other direction on this option. Top up your existing pick instead.",
                         });
                       };
+
+                      // AMM markets have no Yes/No direction — each
+                      // entry is its own share class. Render a single
+                      // "Buy" affordance that swaps to the live LMSR
+                      // price instead of the parimutuel multiplier.
+                      if (isAmm) {
+                        const livePrice = ammPriceMap ? Number(ammPriceMap[entry.id] ?? 0) : 0;
+                        return (
+                          <button
+                            type="button"
+                            key={entry.id}
+                            onClick={() => { setSelectedEntry(entry.id); setSelectedDirection("yes"); }}
+                            className={`w-full flex items-center gap-2.5 p-2.5 rounded-lg border transition-all text-left ${
+                              isEntrySelected
+                                ? "border-violet-500/60 bg-violet-500/10 dark:bg-violet-500/8"
+                                : "border-border/50 hover:bg-muted/15"
+                            }`}
+                            data-testid={`pick-row-${entry.id}`}
+                          >
+                            <span className="text-sm font-medium truncate flex-1 min-w-0">{entry.label}</span>
+                            <span className="text-sm font-mono font-semibold text-foreground w-12 text-right shrink-0">
+                              {entry.percentage}%
+                            </span>
+                            <span className="text-[11px] font-mono text-muted-foreground w-16 text-right shrink-0 tabular-nums">
+                              {livePrice.toFixed(3)} cr
+                            </span>
+                          </button>
+                        );
+                      }
+
                       return (
                         <div
                           key={entry.id}
@@ -1398,9 +1586,41 @@ export default function MarketDetailPage() {
                   </div>
                 )}
 
+                {isAmm && ammBuyQuote && (() => {
+                  const newPrice = Number(ammBuyQuote.newPrices[selectedEntry!] ?? 0);
+                  const oldPrice = Number(ammEntryPrice ?? 0);
+                  const slippagePp = (newPrice - oldPrice) * 100;
+                  const maxPayout = Math.floor(ammBuyQuote.shares);
+                  const netIfWin = Math.max(0, maxPayout - ammBuyQuote.chargeCredits);
+                  return (
+                    <div className="p-3 rounded-lg bg-emerald-500/8 dark:bg-emerald-500/5 border border-emerald-500/30 dark:border-emerald-500/20 space-y-1" data-testid="text-amm-quote">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Shares</span>
+                        <span className="font-mono font-bold text-emerald-700 dark:text-emerald-300">~{ammBuyQuote.shares.toFixed(2)}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Max payout if wins</span>
+                        <span className="font-mono font-bold text-emerald-700 dark:text-emerald-300">
+                          ~{maxPayout.toLocaleString("en-US")} cr (+{netIfWin.toLocaleString("en-US")} net)
+                        </span>
+                      </div>
+                      {Math.abs(slippagePp) >= 1 && (
+                        <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                          <span>Price impact</span>
+                          <span className="font-mono">
+                            {(oldPrice * 100).toFixed(0)}% → {(newPrice * 100).toFixed(1)}% ({slippagePp >= 0 ? "+" : ""}{slippagePp.toFixed(1)}pp)
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 {creditsBanner}
 
-                <p className="text-[10px] text-muted-foreground/50 text-center">Final payout may differ as the pool changes.</p>
+                {!isAmm && (
+                  <p className="text-[10px] text-muted-foreground/50 text-center">Final payout may differ as the pool changes.</p>
+                )}
 
                 <Button
                   className="w-full bg-gradient-to-r from-violet-700 to-violet-600 hover:from-violet-600 hover:to-violet-500 text-white"
@@ -1424,8 +1644,11 @@ export default function MarketDetailPage() {
                     if (!selectedEntry) return "Select an outcome";
                     if (!stakeAmount || Number(stakeAmount) <= 0) return "Enter stake amount";
                     if (insufficientCredits) return "Not enough credits";
-                    const sideLabel = selectedDirection === "no" ? "No" : "Yes";
                     const entryLabel = entriesWithPercentages.find(e => e.id === selectedEntry)?.label || "...";
+                    if (isAmm) {
+                      return `Buy ${entryLabel} shares`;
+                    }
+                    const sideLabel = selectedDirection === "no" ? "No" : "Yes";
                     return isTopUp
                       ? `Add to your ${sideLabel} on ${entryLabel} stake`
                       : `Place ${sideLabel} on ${entryLabel}`;
@@ -1440,11 +1663,12 @@ export default function MarketDetailPage() {
                     {entriesWithPercentages.sort((a, b) => a.displayOrder - b.displayOrder).map((entry) => {
                       const isSelected = selectedEntry === entry.id;
                       const isYesLike = entry.label.toLowerCase() === "yes" || entry.label.toLowerCase() === "above" || entry.displayOrder === 0;
-                      // Per the no-hedging rule, binary markets allow
-                      // only one entry per user. We grey out the other
-                      // entry when the user already has a pick so they
-                      // see the constraint up-front.
-                      const isLockedOut = !!userPickedEntryId && userPickedEntryId !== entry.id;
+                      // Per the no-hedging rule, binary parimutuel
+                      // markets allow only one entry per user. AMM
+                      // markets price each share class independently
+                      // so users can freely take either side — no
+                      // lockout there.
+                      const isLockedOut = !isAmm && !!userPickedEntryId && userPickedEntryId !== entry.id;
                       const colorClass = isLockedOut
                         ? isYesLike
                           ? "bg-[#00C853]/5 border-[#00C853]/30 text-[#00C853]/40 cursor-not-allowed"
@@ -1508,9 +1732,41 @@ export default function MarketDetailPage() {
                   </div>
                 )}
 
+                {isAmm && ammBuyQuote && (() => {
+                  const newPrice = Number(ammBuyQuote.newPrices[selectedEntry!] ?? 0);
+                  const oldPrice = Number(ammEntryPrice ?? 0);
+                  const slippagePp = (newPrice - oldPrice) * 100;
+                  const maxPayout = Math.floor(ammBuyQuote.shares);
+                  const netIfWin = Math.max(0, maxPayout - ammBuyQuote.chargeCredits);
+                  return (
+                    <div className="p-3 rounded-lg bg-emerald-500/8 dark:bg-emerald-500/5 border border-emerald-500/30 dark:border-emerald-500/20 space-y-1" data-testid="text-amm-quote">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Shares</span>
+                        <span className="font-mono font-bold text-emerald-700 dark:text-emerald-300">~{ammBuyQuote.shares.toFixed(2)}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Max payout if wins</span>
+                        <span className="font-mono font-bold text-emerald-700 dark:text-emerald-300">
+                          ~{maxPayout.toLocaleString("en-US")} cr (+{netIfWin.toLocaleString("en-US")} net)
+                        </span>
+                      </div>
+                      {Math.abs(slippagePp) >= 1 && (
+                        <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                          <span>Price impact</span>
+                          <span className="font-mono">
+                            {(oldPrice * 100).toFixed(0)}% → {(newPrice * 100).toFixed(1)}% ({slippagePp >= 0 ? "+" : ""}{slippagePp.toFixed(1)}pp)
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 {creditsBanner}
 
-                <p className="text-[10px] text-muted-foreground/50 text-center">Final payout may differ as the pool changes.</p>
+                {!isAmm && (
+                  <p className="text-[10px] text-muted-foreground/50 text-center">Final payout may differ as the pool changes.</p>
+                )}
 
                 <Button
                   className="w-full bg-gradient-to-r from-violet-700 to-violet-600 hover:from-violet-600 hover:to-violet-500 text-white"
@@ -1534,6 +1790,10 @@ export default function MarketDetailPage() {
                     if (!selectedEntry) return "Select an outcome";
                     if (!stakeAmount || Number(stakeAmount) <= 0) return "Enter stake amount";
                     if (insufficientCredits) return "Not enough credits";
+                    if (isAmm) {
+                      const entryLabel = entriesWithPercentages.find(e => e.id === selectedEntry)?.label || "your pick";
+                      return `Buy ${entryLabel} shares`;
+                    }
                     if (isTopUp) {
                       const entryLabel = entriesWithPercentages.find(e => e.id === selectedEntry)?.label || "your pick";
                       return `Add to your ${entryLabel} stake`;
@@ -1718,7 +1978,15 @@ export default function MarketDetailPage() {
           </Card>
         )}
 
-        {!isJackpotMarket && (
+        {/* The legacy "Outcomes" / "Final pool split" card is a
+            parimutuel-era surface (uses pool % as the signal). For
+            AMM markets the Live Market panel above renders the same
+            info using LMSR prices, so we suppress this card while
+            the market is open. On resolved AMM markets we still keep
+            the historical view since `entriesWithPercentages` is
+            already AMM-aware and the headline flips to "Final pool
+            split". */}
+        {!isJackpotMarket && !(isAmm && isOpen) && (
         <Card className="p-5 mb-6" data-testid="section-outcomes">
           {/* On open markets the percentages are an investing signal
               (live crowd odds). Once resolved they're a historical
@@ -1772,16 +2040,18 @@ export default function MarketDetailPage() {
         </Card>
         )}
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6" data-testid="section-stats">
-          <Card className="p-3 text-center">
-            <Zap className="h-4 w-4 text-violet-700 dark:text-violet-500 mx-auto mb-1" />
-            <p className="text-lg font-bold font-mono" data-testid="text-total-pool">{formatNumber(totalPool)}</p>
-            <p className="text-xs text-muted-foreground">Total Pool</p>
-          </Card>
+        <div className={`grid grid-cols-2 ${isAmm ? "sm:grid-cols-3" : "sm:grid-cols-4"} gap-3 mb-6`} data-testid="section-stats">
+          {!isAmm && (
+            <Card className="p-3 text-center">
+              <Zap className="h-4 w-4 text-violet-700 dark:text-violet-500 mx-auto mb-1" />
+              <p className="text-lg font-bold font-mono" data-testid="text-total-pool">{formatNumber(totalPool)}</p>
+              <p className="text-xs text-muted-foreground">Total Pool</p>
+            </Card>
+          )}
           <Card className="p-3 text-center">
             <Users className="h-4 w-4 text-violet-700 dark:text-violet-500 mx-auto mb-1" />
             <p className="text-lg font-bold font-mono" data-testid="text-total-participants">{formatNumber(totalParticipants)}</p>
-            <p className="text-xs text-muted-foreground">Participants</p>
+            <p className="text-xs text-muted-foreground">{isAmm ? "Traders" : "Participants"}</p>
           </Card>
           <Card className="p-3 text-center">
             <Gavel className="h-4 w-4 text-violet-700 dark:text-violet-500 mx-auto mb-1" />

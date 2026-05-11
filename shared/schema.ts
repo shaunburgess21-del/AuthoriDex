@@ -1211,6 +1211,73 @@ export type MarketAmmState = typeof marketAmmState.$inferSelect;
 export type InsertMarketAmmState = z.infer<typeof insertMarketAmmStateSchema>;
 
 // ============================================================================
+// AMM PRICE SNAPSHOTS (Phase 12)
+// ============================================================================
+
+/**
+ * Append-only history of marginal AMM prices per (market, outcome).
+ *
+ * Two writers populate this table:
+ *  - `trade`: invoked from `executeBuy` / `executeSell` after the
+ *    transaction commits. Writes one row per outcome so the chart
+ *    reflects *all* outcomes moving in lockstep (LMSR sums to 1).
+ *  - `sampler`: a 5-minute cron over every OPEN AMM market that
+ *    inserts a row only when no `trade` snapshot for that market has
+ *    landed in the last 5 minutes. Keeps the chart visually smooth
+ *    on quiet markets without unbounded growth on noisy ones.
+ *
+ * Read path: `/api/markets/:id/price-history?bucket=5m|1h|1d&from=...`
+ * uses `date_trunc(bucket, recorded_at)` to compress per-bucket so
+ * one row per (bucket, outcome) ships to the client. Sparklines on
+ * cards request `?bucket=1h&from=now-7d`. Detail-page charts use
+ * `5m`. The retention story is "all rows until we feel pressure" —
+ * the bucket index covers the only access pattern we have.
+ */
+export const ammPriceSnapshots = pgTable(
+  "amm_price_snapshots",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    marketId: varchar("market_id")
+      .notNull()
+      .references(() => predictionMarkets.id, { onDelete: "cascade" }),
+    /**
+     * Entry / outcome id. Stored as the canonical entry uuid so it
+     * joins cleanly with marketEntries and matches what callers
+     * already index by on the client.
+     */
+    entryId: varchar("entry_id").notNull(),
+    /**
+     * Marginal LMSR price for this outcome at write time. Stored as
+     * numeric so we don't lose precision on long-tail markets where
+     * 1e-6 differences matter for the chart.
+     */
+    price: numeric("price").notNull(),
+    /** Either 'trade' (post-trade hook) or 'sampler' (cron). */
+    source: text("source").notNull(),
+    recordedAt: timestamp("recorded_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    marketTimeIdx: index("amm_price_snapshots_market_time_idx").on(
+      t.marketId,
+      t.recordedAt,
+    ),
+  }),
+);
+
+export const ammPriceSnapshotsRelations = relations(
+  ammPriceSnapshots,
+  ({ one }) => ({
+    market: one(predictionMarkets, {
+      fields: [ammPriceSnapshots.marketId],
+      references: [predictionMarkets.id],
+    }),
+  }),
+);
+
+export type AmmPriceSnapshot = typeof ammPriceSnapshots.$inferSelect;
+export type InsertAmmPriceSnapshot = typeof ammPriceSnapshots.$inferInsert;
+
+// ============================================================================
 // ADMIN AUDIT LOG (Immutable)
 // ============================================================================
 

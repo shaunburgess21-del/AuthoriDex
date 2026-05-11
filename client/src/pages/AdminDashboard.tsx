@@ -1416,6 +1416,10 @@ export default function AdminDashboard() {
   const [gainerCategory, setGainerCategory] = useState<string>("tech");
   const [gainerPersonIds, setGainerPersonIds] = useState<string[]>([]);
   const [gainerPersonSearch, setGainerPersonSearch] = useState("");
+  // Engine selector for Phase 14 rollout. AMM is the target state but
+  // until AMM_GAINER_FLIP_ENABLED is on by default we let operators
+  // pick per-market so we can run a one-week dry run before flipping.
+  const [gainerEngine, setGainerEngine] = useState<"amm" | "parimutuel">("amm");
   const [showOpinionPollModal, setShowOpinionPollModal] = useState(false);
   const [editingOpinionPoll, setEditingOpinionPoll] = useState<any | null>(null);
   const [opinionPollFilter, setOpinionPollFilter] = useState<string>("all");
@@ -4443,7 +4447,7 @@ export default function AdminDashboard() {
                         <RefreshCw className={`h-4 w-4 mr-1 ${generateGainerMutation.isPending ? "animate-spin" : ""}`} />
                         {generateGainerMutation.isPending ? "Generating..." : "Generate All"}
                       </Button>
-                      <Button onClick={() => { setGainerPersonIds([]); setGainerPersonSearch(""); setGainerCategory("tech"); setGainerModalOpen(true); }} size="sm" data-testid="button-create-gainer">
+                      <Button onClick={() => { setGainerPersonIds([]); setGainerPersonSearch(""); setGainerCategory("tech"); setGainerEngine("amm"); setGainerModalOpen(true); }} size="sm" data-testid="button-create-gainer">
                         <Plus className="h-4 w-4 mr-1" />New Gainer
                       </Button>
                     </div>
@@ -4496,7 +4500,7 @@ export default function AdminDashboard() {
                         <div className="text-center py-8 text-muted-foreground">
                           <TrendingUp className="h-12 w-12 mx-auto mb-3 opacity-50" />
                           <p>No Category Race markets yet</p>
-                          <Button className="mt-4" onClick={() => { setGainerPersonIds([]); setGainerCategory("tech"); setGainerModalOpen(true); }} data-testid="button-create-first-gainer">
+                          <Button className="mt-4" onClick={() => { setGainerPersonIds([]); setGainerCategory("tech"); setGainerEngine("amm"); setGainerModalOpen(true); }} data-testid="button-create-first-gainer">
                             <Plus className="h-4 w-4 mr-2" />Create First Market
                           </Button>
                         </div>
@@ -4593,6 +4597,32 @@ export default function AdminDashboard() {
                     </Select>
                   </div>
                   <div>
+                    <Label>Engine</Label>
+                    <div className="mt-1 inline-flex rounded-md border bg-muted/40 p-0.5">
+                      <button
+                        type="button"
+                        className={`px-3 py-1.5 text-xs font-medium rounded-sm transition-colors ${gainerEngine === "amm" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                        onClick={() => setGainerEngine("amm")}
+                        data-testid="button-gainer-engine-amm"
+                      >
+                        AMM (LMSR)
+                      </button>
+                      <button
+                        type="button"
+                        className={`px-3 py-1.5 text-xs font-medium rounded-sm transition-colors ${gainerEngine === "parimutuel" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                        onClick={() => setGainerEngine("parimutuel")}
+                        data-testid="button-gainer-engine-parimutuel"
+                      >
+                        Parimutuel
+                      </button>
+                    </div>
+                    <p className="mt-1.5 text-xs text-muted-foreground">
+                      {gainerEngine === "amm"
+                        ? "AMM races trade as shares with LMSR pricing. House seeds initial liquidity. Trading closes 5 minutes before resolution."
+                        : "Parimutuel races pool stakes and pay out by share of pool. Boost is active early in the week. Entries close Friday 23:59 UTC."}
+                    </p>
+                  </div>
+                  <div>
                     <div className="flex items-center justify-between gap-2">
                       <Label>Linked Celebrities ({gainerPersonIds.length})</Label>
                       <div className="flex items-center gap-2">
@@ -4648,9 +4678,21 @@ export default function AdminDashboard() {
                 </div>
                 <DialogFooter>
                   <Button variant="outline" onClick={() => setGainerModalOpen(false)} data-testid="button-cancel-gainer">Cancel</Button>
-                  <Button onClick={() => createGainerMutation.mutate({ category: gainerCategory, personIds: gainerPersonIds })} disabled={gainerPersonIds.length === 0 || createGainerMutation.isPending} data-testid="button-submit-gainer">
+                  <Button
+                    onClick={() => createGainerMutation.mutate({
+                      category: gainerCategory,
+                      personIds: gainerPersonIds,
+                      engine: gainerEngine,
+                    })}
+                    disabled={
+                      gainerPersonIds.length === 0
+                      || createGainerMutation.isPending
+                      || (gainerEngine === "amm" && gainerPersonIds.length < 2)
+                    }
+                    data-testid="button-submit-gainer"
+                  >
                     {createGainerMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
-                    Create Market
+                    Create {gainerEngine === "amm" ? "AMM" : "Parimutuel"} Market
                   </Button>
                 </DialogFooter>
               </DialogContent>

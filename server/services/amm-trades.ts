@@ -22,6 +22,7 @@
 
 import { and, eq, sql } from "drizzle-orm";
 import {
+  ammPriceSnapshots,
   creditLedger,
   marketAmmState,
   marketBets,
@@ -202,6 +203,8 @@ export async function executeBuy(
     for (let i = 0; i < state.outcomeOrder.length; i++) {
       newPrices[state.outcomeOrder[i]] = newPricesArr[i];
     }
+
+    await writePriceSnapshots(tx, marketId, newPrices, "trade");
 
     return {
       betId: insertedBet.id,
@@ -393,6 +396,8 @@ export async function executeSell(
       newPrices[state.outcomeOrder[i]] = newPricesArr[i];
     }
 
+    await writePriceSnapshots(tx, marketId, newPrices, "trade");
+
     return {
       betId: insertedBet.id,
       sharesSold: sharesToSell,
@@ -408,6 +413,50 @@ export async function executeSell(
 
   if (txOpt) return run(txOpt);
   return db.transaction(async (tx) => run(tx as DbOrTx));
+}
+
+// ---------------------------------------------------------------------------
+// Price-snapshot writer (Phase 12)
+// ---------------------------------------------------------------------------
+
+/**
+ * Append one snapshot row per outcome into `amm_price_snapshots`. Used
+ * by both buy/sell paths (`source = 'trade'`) and by the price sampler
+ * cron (`source = 'sampler'`).
+ *
+ * Inserts happen inside the same transaction as the trade so we either
+ * record the full post-trade price vector or none of it. A bulk insert
+ * keeps round-trip count constant per trade regardless of outcome
+ * count.
+ *
+ * Defensive: invalid prices (non-finite, negative, > 1 + epsilon) are
+ * skipped rather than crashing the trade. The chart can survive missing
+ * points; the trade must not fail because of a chart-feed quirk.
+ */
+export async function writePriceSnapshots(
+  tx: DbOrTx,
+  marketId: string,
+  prices: Record<string, number>,
+  source: "trade" | "sampler",
+): Promise<void> {
+  const rows: Array<{
+    marketId: string;
+    entryId: string;
+    price: string;
+    source: string;
+  }> = [];
+  for (const [entryId, price] of Object.entries(prices)) {
+    if (!Number.isFinite(price)) continue;
+    if (price < 0 || price > 1 + 1e-6) continue;
+    rows.push({
+      marketId,
+      entryId,
+      price: price.toString(),
+      source,
+    });
+  }
+  if (rows.length === 0) return;
+  await tx.insert(ammPriceSnapshots).values(rows);
 }
 
 // ---------------------------------------------------------------------------

@@ -26,6 +26,7 @@ import { computePrediction, computeJackpotPrediction } from "./decisionEngine";
 import { computeWorldMarketPrediction } from "./worldMarketEngine";
 import { JACKPOT_TICKET_COST } from "../config/constants";
 import { getWeeklyBettingCutoff } from "../jobs/market-generator";
+import { getMarketBettingCutoff } from "../native-markets/lifecycle";
 import type {
   AgentConfigData,
   MarketWithEntries,
@@ -505,10 +506,16 @@ async function runAgentBatchOnce(): Promise<{
       };
 
       // --- Friday cutoff for all weekly native markets ---
+      // AMM markets trade until 5 min before resolution, parimutuel
+      // markets stop at Friday 23:59 UTC. Use the engine-aware helper
+      // so AMM gainer (Phase 14) gets the full week, not a 2-day
+      // cutoff from the parimutuel rule.
       const isWeeklyNative = ["jackpot", "updown", "h2h", "gainer"].includes(market.marketType);
       if (isWeeklyNative && market.endAt) {
         const bufferMs = JACKPOT_AGENT_MIN_BUFFER_HOURS * 60 * 60 * 1000;
-        const cutoff = getWeeklyBettingCutoff(market.endAt);
+        const cutoff = market.engine === "amm"
+          ? getMarketBettingCutoff(market.endAt, "amm")
+          : getWeeklyBettingCutoff(market.endAt);
         if (now.getTime() >= cutoff.getTime() - bufferMs) {
           skipped++;
           continue;
@@ -664,9 +671,13 @@ async function runAgentBatchOnce(): Promise<{
         // (1) "no" direction has no AMM equivalent. On a binary market we
         //     can translate to a YES on the OTHER entry (the prices sum
         //     to 1, so betting against A is identical to betting for B).
-        //     On non-binary AMM markets there is no clean translation —
-        //     skip those defensively (today none exist on AMM, but the
-        //     guard keeps us safe if multi-outcome AMM ships later).
+        //     On multi-outcome AMM markets (category races shipped in
+        //     Phase 14, community multi shipped in Phase 13) there's no
+        //     clean translation since rejecting one outcome doesn't
+        //     uniquely identify which of the remaining N-1 to back.
+        //     Documented gap: agents skip "no" on >2-way AMM markets.
+        //     They participate only when the decision is "yes" with a
+        //     specific outcome. The skip is logged for observability.
         if (decision.direction === "no") {
           if (entries.length === 2) {
             const otherEntry = entries.find((e) => e.id !== decision.entryId);

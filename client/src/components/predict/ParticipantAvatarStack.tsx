@@ -11,13 +11,24 @@ export interface ParticipantPreview {
 export function ParticipantAvatarStack({
   participants = [],
   totalCount = 0,
+  engine = "parimutuel",
 }: {
   participants?: ParticipantPreview[];
   totalCount?: number;
+  /**
+   * For AMM markets we relabel "participants" -> "traders" because
+   * users open *and* close positions throughout the week (so the
+   * parimutuel "participant" framing reads wrong). Phase 12 will
+   * replace this with a credit-volume number, at which point this
+   * label can be revisited.
+   */
+  engine?: "amm" | "parimutuel";
 }) {
   if (participants.length === 0 && totalCount <= 0) {
     return null;
   }
+
+  const noun = engine === "amm" ? "trader" : "participant";
 
   return (
     <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -33,7 +44,8 @@ export function ParticipantAvatarStack({
         ))}
       </div>
       <span>
-        {totalCount} participant{totalCount === 1 ? "" : "s"}
+        {totalCount} {noun}
+        {totalCount === 1 ? "" : "s"}
       </span>
     </div>
   );

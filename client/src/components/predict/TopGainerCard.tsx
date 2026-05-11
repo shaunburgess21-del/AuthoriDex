@@ -44,6 +44,11 @@ export interface TopGainerMarket {
   recentParticipants?: ParticipantPreview[];
   bettingCutoff?: string | null;
   teaser?: string | null;
+  /** Engine driving this market — controls whether parimutuel pool /
+   *  early-bird / "Hot" affordances render. */
+  engine?: "amm" | "parimutuel" | string;
+  /** LMSR state block — present only for engine='amm'. */
+  ammState?: unknown;
 }
 
 export type CategoryRacePredictionSummary = { pickLabel: string; stakeAmount: number };
@@ -124,7 +129,10 @@ export function TopGainerCard({
   const visibleCandidateCount = market.candidateCount ?? market.allCandidates?.length ?? market.totalEntries ?? market.leaders.length;
   const canPick = !isPredicted;
   const racePlace = predictionSummary ? findPickRacePlace(market, predictionSummary.pickLabel) : null;
-  const isHot = market.totalPool > 5000 || (market.totalBets ?? market.activeParticipantCount ?? 0) > 50;
+  const isAmm = market.engine === "amm";
+  // "Hot" + early-bird are parimutuel-only signals. On AMM races
+  // there is no pool to heat up and no boost multiplier.
+  const isHot = !isAmm && (market.totalPool > 5000 || (market.totalBets ?? market.activeParticipantCount ?? 0) > 50);
 
   const handlePlacePrediction = () => {
     onShowAllCandidates?.(market);
@@ -142,7 +150,7 @@ export function TopGainerCard({
               Hot
             </Badge>
           )}
-          {!isMarketClosed && (() => {
+          {!isMarketClosed && !isAmm && (() => {
             const startRef = market.startAt ?? (market.endAt ? new Date(new Date(market.endAt).getTime() - 7 * 24 * 60 * 60 * 1000).toISOString() : null);
             const boost = computeEarlyBirdMultiplier(new Date(), startRef, market.bettingCutoff);
             if (boost <= 1.05) return null;
@@ -165,6 +173,7 @@ export function TopGainerCard({
         resolveAt={market.endAt ?? null}
         variant="compact"
         className="mb-2"
+        engine={isAmm ? "amm" : "parimutuel"}
       />
 
       <Link
@@ -235,11 +244,13 @@ export function TopGainerCard({
         )}
       </div>
 
-      <div className="mb-2">
-        <span className="text-sm font-semibold text-muted-foreground">
-          Pool: {market.totalPool.toLocaleString('en-US')} credits
-        </span>
-      </div>
+      {!isAmm && (
+        <div className="mb-2">
+          <span className="text-sm font-semibold text-muted-foreground">
+            Pool: {market.totalPool.toLocaleString('en-US')} credits
+          </span>
+        </div>
+      )}
 
       <div className="mt-auto space-y-2">
         {isPredicted ? (

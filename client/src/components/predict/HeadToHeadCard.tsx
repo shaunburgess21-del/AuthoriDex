@@ -4,6 +4,7 @@ import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
 import { PredictCard } from "@/components/predict/PredictCard";
+import { AmmPriceSparkline } from "@/components/predict/AmmPriceSparkline";
 import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
 import type { ParticipantPreview } from "@/components/predict/ParticipantAvatarStack";
 import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
@@ -161,7 +162,7 @@ export function HeadToHeadCard({
             <Badge variant="outline" className="text-violet-600 dark:text-violet-400 border-violet-500/40 dark:border-violet-500/30 text-[10px]">
               Weekly
             </Badge>
-            {isHot && (
+            {isHot && !isAmm && (
               <Badge variant="outline" className="text-orange-600 dark:text-orange-400 border-orange-500/40 dark:border-orange-500/30 text-[10px]">
                 Hot
               </Badge>
@@ -194,6 +195,7 @@ export function HeadToHeadCard({
           bettingCutoff={market.bettingCutoff ?? null}
           resolveAt={market.endAt ?? null}
           variant="compact"
+          engine={isAmm ? "amm" : "parimutuel"}
           className="mb-2"
         />
 
@@ -360,13 +362,25 @@ export function HeadToHeadCard({
         )}
 
         {isAmm && ammP1Price != null && ammP2Price != null ? (
-          <div className="flex items-center justify-between px-2 text-[11px] font-semibold mb-2">
-            <span className="text-blue-600 dark:text-blue-400">
-              {smartName(market.person1.name)} {ammP1Price.toFixed(3)} cr
-            </span>
-            <span className="text-purple-600 dark:text-purple-400">
-              {smartName(market.person2.name)} {ammP2Price.toFixed(3)} cr
-            </span>
+          // R3: name is already shown above in big text. Just show
+          // the per-share price here as muted secondary info so the
+          // headline %% stays primary and we don't print "Peter Thiel"
+          // three times on one card. We tuck a small sparkline of the
+          // person-1 series in between so users get a 7-day price feel
+          // at a glance without enlarging the card.
+          <div className="flex items-center justify-between px-2 text-[10px] mb-2 text-muted-foreground">
+            <span>{ammP1Price.toFixed(3)} cr/share</span>
+            {market.person1EntryId && (
+              <AmmPriceSparkline
+                marketId={market.id}
+                entryId={market.person1EntryId}
+                fallbackPrice={ammP1Price}
+                width={56}
+                height={16}
+                className="stroke-blue-500 dark:stroke-blue-400"
+              />
+            )}
+            <span>{ammP2Price.toFixed(3)} cr/share</span>
           </div>
         ) : (
           <div className="flex items-center justify-between px-2 text-[11px] font-semibold mb-2">
