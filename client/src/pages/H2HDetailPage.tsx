@@ -662,6 +662,7 @@ export default function H2HDetailPage() {
         <MyPositionCard
           marketId={marketId}
           marketType="h2h"
+          isAmm={isAmm}
           ctaLabel={
             userPickSide
               ? `Add to your ${userPickSide === 1 ? hydrated.person1.name : hydrated.person2.name} stake`

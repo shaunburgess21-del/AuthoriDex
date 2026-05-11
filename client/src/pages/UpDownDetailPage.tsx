@@ -694,6 +694,7 @@ export default function UpDownDetailPage() {
         <MyPositionCard
           marketId={marketId}
           marketType="updown"
+          isAmm={isAmm}
           ctaLabel={
             userPick ? `Add to your ${userPick.toUpperCase()} stake` : undefined
           }

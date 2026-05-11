@@ -172,6 +172,13 @@ export async function executeBuy(
         pricePerShare: pricePerShareAvg.toString(),
         direction: "yes",
         status: "active",
+        // 1 share pays 1 credit at resolution, so the maximum payout if this
+        // entry wins equals the share count. Persisting it lets the unified
+        // MyPositionCard render "Payout if win" without reaching into AMM
+        // internals, and keeps reconciliation / CSV exports honest. Floored
+        // to match the integer column type — fractional shares lose at most
+        // 0.999 cr of headline payout, well within rounding tolerance.
+        potentialPayout: Math.floor(shares),
         betMetadata: betMetadata ?? null,
       })
       .returning({ id: marketBets.id });

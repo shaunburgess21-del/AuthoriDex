@@ -1261,6 +1261,7 @@ export default function MarketDetailPage() {
             marketId={market.id}
             marketType={market.marketType}
             marketStatus={market.status}
+            isAmm={isAmm}
             hideCta={!isOpen}
             onAddEntry={() => {
               // Scroll the place-prediction section into view, then

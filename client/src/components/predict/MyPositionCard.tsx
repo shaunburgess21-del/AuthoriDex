@@ -135,6 +135,14 @@ export interface MyPositionCardProps {
    * Optional — bodies degrade to the at-entry snapshot when omitted.
    */
   livePoolContext?: LivePoolContext | null;
+  /**
+   * AMM markets pay a fixed 1 cr per winning share — there's no pool to
+   * shift, so the "Estimated payout (pool may shift)" copy is actively
+   * misleading. When true, the per-kind body renders a deterministic
+   * "Payout if win" instead and uses `bet.potentialPayout` (= floor of
+   * share count) without trying to interpolate from pari-mutuel sizes.
+   */
+  isAmm?: boolean;
   className?: string;
 }
 
@@ -148,6 +156,7 @@ export function MyPositionCard({
   ctaLabel,
   hideCta,
   livePoolContext,
+  isAmm,
   className,
 }: MyPositionCardProps) {
   const { isLoggedIn } = useAuth();
@@ -228,11 +237,11 @@ export function MyPositionCard({
         ) : marketType === "jackpot" ? (
           <JackpotBody position={position} />
         ) : marketType === "updown" ? (
-          <UpDownBody position={position} livePoolContext={livePoolContext ?? null} />
+          <UpDownBody position={position} livePoolContext={livePoolContext ?? null} isAmm={!!isAmm} />
         ) : marketType === "h2h" ? (
-          <H2HBody position={position} livePoolContext={livePoolContext ?? null} />
+          <H2HBody position={position} livePoolContext={livePoolContext ?? null} isAmm={!!isAmm} />
         ) : marketType === "race" || marketType === "gainer" ? (
-          <RaceBody position={position} livePoolContext={livePoolContext ?? null} />
+          <RaceBody position={position} livePoolContext={livePoolContext ?? null} isAmm={!!isAmm} />
         ) : (
           <GenericBody position={position} />
         )}
@@ -589,20 +598,46 @@ function liveMultiplierFrom(ctx: LivePoolContext | null): number | null {
 }
 
 /**
- * Right-aligned "Estimated payout" column shared by UpDown / H2H / Race
- * open bodies. Shows the live estimate when available, otherwise the
- * at-entry snapshot. Surfaces drift from entry as a small chip so users
- * can see the pari-mutuel multiplier moving with the pool.
+ * Right-aligned payout column shared by UpDown / H2H / Race open bodies.
+ *
+ * Two flavours:
+ *   - pari-mutuel: shows the live estimate (or at-entry snapshot fallback),
+ *     surfaces drift from entry, and warns "pool may shift" because the
+ *     final payout depends on the closing pool composition.
+ *   - AMM (`isAmm`): each winning share pays exactly 1 cr at resolution,
+ *     so the payout is deterministic. We just show "Payout if win" with
+ *     no live-multiplier shenanigans and no drift chip.
  */
 function EstimatedPayoutColumn({
   stake,
   atEntryPayout,
   liveMultiplier,
+  isAmm,
 }: {
   stake: number;
   atEntryPayout: number;
   liveMultiplier: number | null;
+  isAmm?: boolean;
 }) {
+  if (isAmm) {
+    return (
+      <div className="text-right shrink-0 min-w-[5.5rem]">
+        <p className="text-[10px] text-muted-foreground uppercase tracking-wide leading-none">
+          Payout if win
+        </p>
+        <p
+          className="font-mono font-semibold text-sm tabular-nums text-violet-600 dark:text-violet-400 leading-tight mt-0.5"
+          data-testid="text-my-position-amm-payout"
+        >
+          {atEntryPayout.toLocaleString("en-US")}
+        </p>
+        <p className="text-[10px] text-muted-foreground/70 leading-none mt-1">
+          1 cr per share
+        </p>
+      </div>
+    );
+  }
+
   const liveEstimate = liveMultiplier != null ? Math.round(stake * liveMultiplier) : null;
   const display = liveEstimate ?? atEntryPayout;
   const drift = liveEstimate != null ? liveEstimate - atEntryPayout : null;
@@ -640,9 +675,11 @@ function EstimatedPayoutColumn({
 function UpDownBody({
   position,
   livePoolContext,
+  isAmm,
 }: {
   position: MyPositionResponse;
   livePoolContext: LivePoolContext | null;
+  isAmm: boolean;
 }) {
   const bet = position.bets[0];
   if (!bet) return null;
@@ -698,6 +735,7 @@ function UpDownBody({
         stake={bet.stakeAmount}
         atEntryPayout={bet.potentialPayout ?? 0}
         liveMultiplier={liveMultiplierFrom(livePoolContext)}
+        isAmm={isAmm}
       />
     </div>
   );
@@ -706,9 +744,11 @@ function UpDownBody({
 function H2HBody({
   position,
   livePoolContext,
+  isAmm,
 }: {
   position: MyPositionResponse;
   livePoolContext: LivePoolContext | null;
+  isAmm: boolean;
 }) {
   const bet = position.bets[0];
   if (!bet) return null;
@@ -727,6 +767,7 @@ function H2HBody({
         stake={bet.stakeAmount}
         atEntryPayout={bet.potentialPayout ?? 0}
         liveMultiplier={liveMultiplierFrom(livePoolContext)}
+        isAmm={isAmm}
       />
     </div>
   );
@@ -735,9 +776,11 @@ function H2HBody({
 function RaceBody({
   position,
   livePoolContext,
+  isAmm,
 }: {
   position: MyPositionResponse;
   livePoolContext: LivePoolContext | null;
+  isAmm: boolean;
 }) {
   // Race detail page already renders a leaderboard with rank info, so
   // this body stays minimal — just confirm the pick + payout. The
@@ -759,6 +802,7 @@ function RaceBody({
         stake={bet.stakeAmount}
         atEntryPayout={bet.potentialPayout ?? 0}
         liveMultiplier={liveMultiplierFrom(livePoolContext)}
+        isAmm={isAmm}
       />
     </div>
   );

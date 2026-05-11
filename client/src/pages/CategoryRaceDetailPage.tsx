@@ -456,6 +456,7 @@ export default function CategoryRaceDetailPage() {
         <MyPositionCard
           marketId={marketId}
           marketType="race"
+          isAmm={isAmm}
           ctaLabel="Back another candidate"
           onAddEntry={() => {
             const input = candidateSearchRef.current;
