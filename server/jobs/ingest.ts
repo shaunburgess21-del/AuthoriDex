@@ -2027,6 +2027,14 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           v: SNAPSHOT_DIAGNOSTICS_VERSION,
           raw: {
             wiki: wiki?.pageviews24h ?? 0,
+            // Day-over-day baseline for the Wiki Pulse 24h pill — sourced from
+            // Wikimedia's own daily breakdown rather than a 24h-old snapshot.
+            // The snapshot-comparison approach was unreliable because the
+            // "most-recent published day" only rolls forward once per ~24h,
+            // so neighbouring hourly snapshots almost always carried the same
+            // daily count and the pill rendered an em-dash. See routes.ts
+            // wiki delta computation for how this is consumed.
+            wikiPrevDay: wiki?.pageviewsPrevDay ?? null,
             wiki7d: wiki?.averageDaily7d ?? 0,
             wikiMomentumAvg7d: wikiAvg7dExcludingToday,
             wikiMomentumRatio,

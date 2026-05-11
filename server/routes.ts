@@ -2678,9 +2678,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         : 0;
       const newsDeltaPct = Math.abs(rawNewsDeltaPct) <= DELTA_DEAD_ZONE_PCT ? 0 : rawNewsDeltaPct;
 
-      const rawWikiDeltaPct = snap24hAgo && snap24hAgo.wikiPageviews != null && snap24hAgo.wikiPageviews > 0
-        ? Math.round(((latest.wikiPageviews! - snap24hAgo.wikiPageviews!) / snap24hAgo.wikiPageviews!) * 100)
-        : 0;
+      // Wiki Pulse 24h delta — prefer the Wikimedia day-over-day reading
+      // that we now persist into `diagnostics.raw.wikiPrevDay` at ingest
+      // time (see server/providers/wiki.ts → `pageviewsPrevDay` and
+      // server/jobs/ingest.ts where it's stored). Comparing two snapshots
+      // 24h apart looks like the right thing to do but is broken in
+      // practice: Wikimedia's published "most-recent day" only rolls
+      // forward roughly once per 24h, so neighbouring hourly snapshots
+      // almost always share the same daily count. A May 2026 audit showed
+      // 155 of 160 people with wiki_pageviews unchanged for 37h straight,
+      // which made the pill render an em-dash for ~97% of leaderboard
+      // entries even when day-over-day movement was real. Falling back to
+      // the snapshot-diff path keeps older snapshots (pre-`wikiPrevDay`)
+      // rendering deltas during the rollout.
+      const wikiPrevDayDiag = diag?.raw?.wikiPrevDay;
+      const wikiPrevDayValid = typeof wikiPrevDayDiag === "number" && wikiPrevDayDiag > 0;
+      const rawWikiDeltaPct = wikiPrevDayValid && latest.wikiPageviews != null
+        ? Math.round(((latest.wikiPageviews - wikiPrevDayDiag) / wikiPrevDayDiag) * 100)
+        : snap24hAgo && snap24hAgo.wikiPageviews != null && snap24hAgo.wikiPageviews > 0
+          ? Math.round(((latest.wikiPageviews! - snap24hAgo.wikiPageviews!) / snap24hAgo.wikiPageviews!) * 100)
+          : 0;
       const wikiDeltaPct = Math.abs(rawWikiDeltaPct) <= DELTA_DEAD_ZONE_PCT ? 0 : rawWikiDeltaPct;
 
       // Wiki 3-day Falling/Rising: need 4 daily values for 3 day-over-day % changes

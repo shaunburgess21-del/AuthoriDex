@@ -54,6 +54,15 @@ async function fetchWithTimeout(
 export interface WikiPageviewData {
   article: string;
   pageviews24h: number;
+  // Pageviews for the day immediately before `pageviews24h`'s reference day.
+  // Used by the Wiki Pulse pill to compute a true day-over-day delta directly
+  // from Wikimedia's daily breakdown, instead of comparing two snapshots taken
+  // 24h apart. The snapshot-comparison approach was unreliable because the
+  // Wikimedia "most-recent published day" only rolls forward ~once per 24h,
+  // which often left the 20–28h-ago snapshot carrying the *same* daily count
+  // as the latest snapshot — producing a fake "0%" / em-dash for most people.
+  // `null` when fewer than 2 days of data are available (very rare).
+  pageviewsPrevDay: number | null;
   pageviews7d: number;
   averageDaily7d: number;
   delta: number;
@@ -215,7 +224,17 @@ export async function fetchWikiPageviews(
     const pageviews7d = combinedDailyViews.reduce((sum, item) => sum + item.views, 0);
     const averageDaily7d = pageviews7d / combinedDailyViews.length;
     const pageviews24h = combinedDailyViews[combinedDailyViews.length - 1]?.views || 0;
-    
+    // The day immediately before `pageviews24h`'s reference day. Powering the
+    // Wiki Pulse 24h delta directly from Wikimedia's daily array sidesteps
+    // the snapshot-stickiness issue that made the pill em-dash for ~97% of
+    // people (the "most-recent published day" only rolls forward once every
+    // ~24h, so neighbouring hourly snapshots almost always carry the same
+    // daily count).
+    const pageviewsPrevDay =
+      combinedDailyViews.length >= 2
+        ? combinedDailyViews[combinedDailyViews.length - 2]?.views ?? null
+        : null;
+
     const delta = averageDaily7d > 0 
       ? ((pageviews24h - averageDaily7d) / averageDaily7d)
       : 0;
@@ -223,6 +242,7 @@ export async function fetchWikiPageviews(
     const result: WikiPageviewData = {
       article: wikiSlug,
       pageviews24h,
+      pageviewsPrevDay,
       pageviews7d,
       averageDaily7d,
       delta,
