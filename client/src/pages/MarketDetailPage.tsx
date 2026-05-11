@@ -29,6 +29,7 @@ import {
 import { resolveMarketHeadlineImageUrl } from "@/lib/predictMarketImage";
 import { MyPositionCard, myPositionQueryKey } from "@/components/predict/MyPositionCard";
 import { AmmPriceHistoryChart } from "@/components/predict/AmmPriceHistoryChart";
+import { MarketActivityFeed } from "@/components/predict/MarketActivityFeed";
 import { MarketDetailSkeleton } from "@/components/predict/MarketDetailSkeleton";
 import { RelatedMarkets } from "@/components/predict/RelatedMarkets";
 import { MuteMarketToggle } from "@/components/predict/MuteMarketToggle";
@@ -1361,6 +1362,14 @@ export default function MarketDetailPage() {
             </Card>
           );
         })()}
+
+        {/* Live trade feed for this market — keeps community markets in
+            sync with the rest of the platform's social surfaces. */}
+        {market.id && (
+          <div className="mb-6">
+            <MarketActivityFeed marketId={market.id} />
+          </div>
+        )}
 
         {isOpen && !isInactive && (
           <Card

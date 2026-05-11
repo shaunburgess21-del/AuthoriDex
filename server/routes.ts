@@ -4938,35 +4938,92 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 50, 1), 100);
       const userId = req.userId;
 
-      // Build period filter on settledAt
+      // Build period filter on settledAt. Also keep the cutoff as a
+      // Date so we can pass it to the AMM helper (which can't easily
+      // share the same `sql` fragment because it aggregates in JS).
       let periodFilter = sql`TRUE`;
+      let settledAfter: Date | undefined;
       if (period === 'today') {
-        periodFilter = sql`${marketBets.settledAt} >= NOW() - INTERVAL '1 day'`;
+        settledAfter = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        periodFilter = sql`${marketBets.settledAt} >= ${settledAfter}`;
       } else if (period === 'week') {
-        periodFilter = sql`${marketBets.settledAt} >= NOW() - INTERVAL '7 days'`;
+        settledAfter = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+        periodFilter = sql`${marketBets.settledAt} >= ${settledAfter}`;
       } else if (period === 'month') {
-        periodFilter = sql`${marketBets.settledAt} >= NOW() - INTERVAL '30 days'`;
+        settledAfter = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+        periodFilter = sql`${marketBets.settledAt} >= ${settledAfter}`;
       }
 
-      // Aggregate P&L per user from resolved bets
+      // Realised P&L and volume on parimutuel bets only — the AMM
+      // contribution (P&L + turnover) flows through the helper below
+      // so partial-exit avg-cost accounting stays correct.
+      //
+      //   parimutuelPnl    SUM(payout − stake) over won/lost rows.
+      //   parimutuelVolume SUM(stake) over won/lost rows.
+      //   winCount         COUNT(*) on status='won' (parimutuel or
+      //                    AMM buy resolved YES). AMM sells aren't
+      //                    wins.
+      //   totalResolved    COUNT(*) on status IN (won, lost) — the
+      //                    win-rate denominator. Excludes 'settled'
+      //                    (AMM partial exits): the underlying buy
+      //                    will resolve later and count then.
       const statsRows = await db
         .select({
           userId: marketBets.userId,
-          profitLoss: sql<number>`
-            SUM(CASE WHEN ${marketBets.status} = 'won' THEN COALESCE(${marketBets.payoutAmount}, ${marketBets.potentialPayout}, 0) - ${marketBets.stakeAmount}
-                     WHEN ${marketBets.status} = 'lost' THEN -${marketBets.stakeAmount}
-                     ELSE 0 END)`.as('profit_loss'),
-          volume: sql<number>`SUM(${marketBets.stakeAmount})`.as('volume'),
+          parimutuelPnl: sql<number>`
+            SUM(CASE
+                  WHEN ${marketBets.actionType} = 'parimutuel' AND ${marketBets.status} = 'won'
+                    THEN COALESCE(${marketBets.payoutAmount}, ${marketBets.potentialPayout}, 0) - ${marketBets.stakeAmount}
+                  WHEN ${marketBets.actionType} = 'parimutuel' AND ${marketBets.status} = 'lost'
+                    THEN -${marketBets.stakeAmount}
+                  ELSE 0
+                END)`.as('parimutuel_pnl'),
+          parimutuelVolume: sql<number>`SUM(CASE
+            WHEN ${marketBets.actionType} = 'parimutuel' AND ${marketBets.status} IN ('won','lost')
+              THEN ${marketBets.stakeAmount}
+            ELSE 0
+          END)`.as('parimutuel_volume'),
           winCount: sql<number>`COUNT(*) FILTER (WHERE ${marketBets.status} = 'won')`.as('win_count'),
           totalResolved: sql<number>`COUNT(*) FILTER (WHERE ${marketBets.status} IN ('won', 'lost'))`.as('total_resolved'),
         })
         .from(marketBets)
         .where(and(
-          inArray(marketBets.status, ['won', 'lost']),
+          inArray(marketBets.status, ['won', 'lost', 'settled']),
           periodFilter
         ))
         .groupBy(marketBets.userId)
-        .having(sql`COUNT(*) FILTER (WHERE ${marketBets.status} IN ('won', 'lost')) > 0`);
+        .having(sql`COUNT(*) FILTER (WHERE ${marketBets.status} IN ('won', 'lost', 'settled')) > 0`);
+
+      // AMM realised + unrealised P&L for everyone with AMM activity.
+      // No userIds filter: we want AMM-only traders (no resolved
+      // parimutuel bets) to appear on the board too. The helper does
+      // weighted-avg-cost accounting and honours `settledAfter` for
+      // realised contributions; unrealised MTM is always current state.
+      const { loadAmmAggregatePnlPerUser } = await import(
+        "./services/amm-positions"
+      );
+      const ammByUser = await loadAmmAggregatePnlPerUser({ settledAfter });
+
+      // Fold AMM-only traders into statsRows so they appear on the
+      // board with zero parimutuel P&L. Without this, fresh AMM-only
+      // traders would be invisible until their first parimutuel bet
+      // resolved. For time-filtered boards we require some in-window
+      // turnover — otherwise stale, never-touched-this-period accounts
+      // would clutter the rankings at zero P&L.
+      const statsByUser = new Map(statsRows.map((r) => [r.userId, r]));
+      for (const [userId, ammPnl] of ammByUser.entries()) {
+        if (statsByUser.has(userId)) continue;
+        if (settledAfter && ammPnl.turnover < 1) continue;
+        const synthetic = {
+          userId,
+          parimutuelPnl: 0,
+          parimutuelVolume: 0,
+          winCount: 0,
+          totalResolved: 0,
+        };
+        statsByUser.set(userId, synthetic);
+        statsRows.push(synthetic);
+      }
 
       if (statsRows.length === 0) {
         return res.json({ data: [], total: 0, userEntry: null });
@@ -4980,6 +5037,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           username: profiles.username,
           avatarUrl: profiles.avatarUrl,
           isPublic: profiles.isPublic,
+          positionsPublic: profiles.positionsPublic,
           rank: profiles.rank,
           createdAt: profiles.createdAt,
           isAgent: profiles.isAgent,
@@ -4990,12 +5048,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .where(inArray(profiles.id, userIds));
       const profileMap = new Map(profileRows.map(p => [p.id, p]));
 
-      // Sort by profitLoss desc, then volume desc, then earliest account creation as tiebreaker
+      const realisedFor = (uid: string): number => {
+        const sr = statsByUser.get(uid);
+        const amm = ammByUser.get(uid);
+        return (
+          (Number(sr?.parimutuelPnl) || 0) +
+          (amm?.realisedFromSells ?? 0) +
+          (amm?.realisedFromResolution ?? 0)
+        );
+      };
+      // Unrealised P&L is current-state with no period semantics
+      // (today's MTM is the same number whether you ask "today" or
+      // "all-time"). Folding it into the time-filtered boards would
+      // let stale open positions dominate "today", so unrealised
+      // only contributes to the all-time ranking. Time-filtered
+      // periods are pure realised P&L (parimutuel resolutions + AMM
+      // sells + AMM resolutions in window).
+      const includeUnrealised = period === 'all';
+      const unrealisedFor = (uid: string): number =>
+        includeUnrealised ? (ammByUser.get(uid)?.unrealised ?? 0) : 0;
+      const volumeFor = (uid: string): number => {
+        const sr = statsByUser.get(uid);
+        const amm = ammByUser.get(uid);
+        return (Number(sr?.parimutuelVolume) || 0) + (amm?.turnover ?? 0);
+      };
+
+      // Sort by total P&L (realised + unrealised) desc, then volume,
+      // then earliest account creation as tiebreaker. Using totalPnl
+      // keeps "paper gains while still in the trade" on equal footing
+      // with "realised at settle" — that's the whole point of the AMM
+      // leaderboard rewrite.
       statsRows.sort((a, b) => {
-        const pnlDiff = (Number(b.profitLoss) || 0) - (Number(a.profitLoss) || 0);
+        const aTotal = realisedFor(a.userId) + unrealisedFor(a.userId);
+        const bTotal = realisedFor(b.userId) + unrealisedFor(b.userId);
+        const pnlDiff = bTotal - aTotal;
         if (pnlDiff !== 0) return pnlDiff;
 
-        const volDiff = (Number(b.volume) || 0) - (Number(a.volume) || 0);
+        const volDiff = volumeFor(b.userId) - volumeFor(a.userId);
         if (volDiff !== 0) return volDiff;
 
         const aCreatedAt = profileMap.get(a.userId)?.createdAt?.getTime?.() ?? Number.MAX_SAFE_INTEGER;
@@ -5005,14 +5094,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return a.userId.localeCompare(b.userId);
       });
 
-      // Build ranked list, apply search filter
       const searchLower = search.trim().toLowerCase();
       const ranked = statsRows
         .map((r, i) => {
           const profile = profileMap.get(r.userId);
           const isViewer = userId === r.userId;
           const isPublic = profile?.isPublic ?? true;
-          const shouldRevealIdentity = isPublic || isViewer;
+          // positionsPublic=false anonymises identity on the
+          // leaderboard while still letting their P&L count toward
+          // the ranking — rank is earned regardless of visibility.
+          const positionsPublic = profile?.positionsPublic ?? true;
+          const shouldRevealIdentity =
+            isViewer || (isPublic && positionsPublic);
+          const realisedPnl = realisedFor(r.userId);
+          const unrealisedPnl = unrealisedFor(r.userId);
           return {
             rank: i + 1,
             userId: r.userId,
@@ -5024,8 +5119,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
             userRank: profile?.rank || 'Citizen',
             currentStreak: profile?.currentStreak || 0,
             lastActiveAt: profile?.lastActiveAt || null,
-            profitLoss: Number(r.profitLoss) || 0,
-            volume: Number(r.volume) || 0,
+            // `profitLoss` stays as the sortable total (= realised +
+            // unrealised) for back-compat with the existing UI. The
+            // split is exposed on `realisedPnl` / `unrealisedPnl` so
+            // tooltips can show the breakdown.
+            profitLoss: realisedPnl + unrealisedPnl,
+            realisedPnl,
+            unrealisedPnl,
+            totalPnl: realisedPnl + unrealisedPnl,
+            volume: volumeFor(r.userId),
             winCount: Number(r.winCount) || 0,
             totalResolved: Number(r.totalResolved) || 0,
             winRate: Number(r.totalResolved) > 0 ? Math.round((Number(r.winCount) / Number(r.totalResolved)) * 100) : 0,
@@ -7127,7 +7229,7 @@ Only return the JSON object.`;
   app.patch("/api/profile/me", requireAuth, async (req: AuthRequest, res) => {
     try {
       const userId = req.userId!;
-      const { username, avatarUrl, isPublic } = req.body;
+      const { username, avatarUrl, isPublic, positionsPublic } = req.body;
       
       // Build update object with only provided fields
       const updateData: Partial<Profile> = {};
@@ -7145,6 +7247,10 @@ Only return the JSON object.`;
       }
       if (avatarUrl !== undefined) updateData.avatarUrl = avatarUrl;
       if (isPublic !== undefined) updateData.isPublic = isPublic;
+      // AMM Sprint 1, Phase 15.C.2: per-user open-position visibility.
+      if (typeof positionsPublic === "boolean") {
+        updateData.positionsPublic = positionsPublic;
+      }
       
       if (Object.keys(updateData).length === 0) {
         return res.status(400).json({ error: "No fields to update" });
@@ -7484,15 +7590,67 @@ Only return the JSON object.`;
         });
       }
 
+      // Parimutuel-side stats (P&L + volume). AMM contribution lands
+      // via `loadAmmAggregatePnlForUser` below — keeping the two
+      // engines split here avoids the double-count trap with AMM
+      // partial exits (where naive `SUM(CASE)` would credit sell
+      // proceeds twice).
+      //
+      //   parimutuelPnl    Resolved parimutuel P&L (payout − stake on
+      //                    won, −stake on lost).
+      //   parimutuelVolume Settled parimutuel turnover (stake on
+      //                    won/lost rows).
+      //   totalBets        Count of settled+resolved rows across all
+      //                    engines (display-only stat).
+      //   biggestWin       MAX(payout − stake) on won rows, parimutuel
+      //                    or AMM. AMM sells aren't wins — they're
+      //                    partial exits, not eligible.
       const [betStats] = await db
         .select({
-          profitLoss: sql<number>`COALESCE(SUM(CASE WHEN ${marketBets.status} = 'won' THEN COALESCE(${marketBets.payoutAmount}, ${marketBets.potentialPayout}, 0) - ${marketBets.stakeAmount} WHEN ${marketBets.status} = 'lost' THEN -${marketBets.stakeAmount} ELSE 0 END), 0)`.as("profit_loss"),
-          volume: sql<number>`COALESCE(SUM(${marketBets.stakeAmount}), 0)`.as("volume"),
-          totalBets: sql<number>`COUNT(*)::int`.as("total_bets"),
-          biggestWin: sql<number>`COALESCE(MAX(CASE WHEN ${marketBets.status} = 'won' THEN COALESCE(${marketBets.payoutAmount}, ${marketBets.potentialPayout}, 0) - ${marketBets.stakeAmount} ELSE 0 END), 0)`.as("biggest_win"),
+          parimutuelPnl: sql<number>`COALESCE(SUM(
+            CASE
+              WHEN ${marketBets.actionType} = 'parimutuel' AND ${marketBets.status} = 'won'
+                THEN COALESCE(${marketBets.payoutAmount}, ${marketBets.potentialPayout}, 0) - ${marketBets.stakeAmount}
+              WHEN ${marketBets.actionType} = 'parimutuel' AND ${marketBets.status} = 'lost'
+                THEN -${marketBets.stakeAmount}
+              ELSE 0
+            END
+          ), 0)`.as("parimutuel_pnl"),
+          parimutuelVolume: sql<number>`COALESCE(SUM(
+            CASE
+              WHEN ${marketBets.actionType} = 'parimutuel' AND ${marketBets.status} IN ('won','lost')
+                THEN ${marketBets.stakeAmount}
+              ELSE 0
+            END
+          ), 0)`.as("parimutuel_volume"),
+          totalBets: sql<number>`COUNT(*) FILTER (
+            WHERE ${marketBets.status} IN ('won','lost','settled')
+          )::int`.as("total_bets"),
+          biggestWin: sql<number>`COALESCE(MAX(
+            CASE
+              WHEN ${marketBets.status} = 'won'
+                THEN COALESCE(${marketBets.payoutAmount}, ${marketBets.potentialPayout}, 0) - ${marketBets.stakeAmount}
+              ELSE 0
+            END
+          ), 0)`.as("biggest_win"),
         })
         .from(marketBets)
-        .where(and(eq(marketBets.userId, baseProfile.id), inArray(marketBets.status, ["won", "lost"])));
+        .where(eq(marketBets.userId, baseProfile.id));
+
+      // AMM realised + open-position totals via the avg-cost helper.
+      // Settled history (realisedFromSells + realisedFromResolution) is
+      // public for everyone; `openPositionsValue` / `openPositionsCount`
+      // are aggregate totals that stay public even when the user has
+      // hidden their per-position detail via `positionsPublic=false`
+      // (the toggle hides the LIST, not the totals).
+      const { loadAmmAggregatePnlForUser } = await import(
+        "./services/amm-positions"
+      );
+      const ammPnl = await loadAmmAggregatePnlForUser(baseProfile.id);
+      const profitLoss =
+        Number(betStats?.parimutuelPnl ?? 0) +
+        ammPnl.realisedFromSells +
+        ammPnl.realisedFromResolution;
 
       // Subtract hidden items from the denormalized counters so the public view
       // reflects only what the user has chosen to expose. /api/profile/me stays
@@ -7519,7 +7677,9 @@ Only return the JSON object.`;
         (baseProfile.totalPredictions ?? 0) - Number(privacyCounts?.hiddenPredictions ?? 0),
       );
 
-      // Return full public profile
+      const totalVolume =
+        Number(betStats?.parimutuelVolume ?? 0) + ammPnl.turnover;
+
       res.json({
         username: baseProfile.username,
         avatarUrl: baseProfile.avatarUrl,
@@ -7532,10 +7692,16 @@ Only return the JSON object.`;
         isPublic: true,
         createdAt: baseProfile.createdAt,
         agentProfile,
-        profitLoss: Number(betStats?.profitLoss ?? 0),
-        volume: Number(betStats?.volume ?? 0),
+        profitLoss,
+        // Surface the split so the client can render "Realised X +
+        // unrealised Y" tooltips without recomputing from raw bets.
+        realisedPnl: profitLoss,
+        unrealisedPnl: ammPnl.unrealised,
+        volume: totalVolume,
         totalBets: Number(betStats?.totalBets ?? 0),
         biggestWin: Number(betStats?.biggestWin ?? 0),
+        openPositionsValue: ammPnl.openPositionsValue,
+        openPositionsCount: ammPnl.openPositionsCount,
       });
     } catch (error: any) {
       console.error("Error fetching public profile:", error.message);
@@ -7550,10 +7716,25 @@ Only return the JSON object.`;
       const limit = Math.min(Number(req.query.limit) || 50, 100);
       const offset = Number(req.query.offset) || 0;
 
-      const [user] = await db.select({ id: profiles.id, isPublic: profiles.isPublic, isAgent: profiles.isAgent })
+      const [user] = await db.select({
+        id: profiles.id,
+        isPublic: profiles.isPublic,
+        positionsPublic: profiles.positionsPublic,
+        isAgent: profiles.isAgent,
+      })
         .from(profiles).where(eq(profiles.username, username)).limit(1);
       if (!user) return res.status(404).json({ error: "User not found" });
       if (!user.isPublic) return res.status(403).json({ error: "Profile is private" });
+
+      // Phase 15.C.3 privacy: the Active tab leaks "where the user is
+      // sitting right now" the same way the Open Positions panel does.
+      // When positionsPublic=false, return an empty page for active
+      // bets (matches the spirit of the toggle) while keeping settled
+      // history visible — that's how the rest of the platform earns
+      // rank, so it stays public regardless.
+      if (tab === "active" && user.positionsPublic === false) {
+        return res.json({ bets: [], offset, limit, hasMore: false });
+      }
 
       const { getSimulationProfile, shouldShowPublicConfidence } = await import("./agents/simulationProfile");
       let agentSimulationProfile: import("./agents/simulationProfile").AgentSimulationProfile | null = null;
@@ -7569,9 +7750,14 @@ Only return the JSON object.`;
         }
       }
 
+      // Settled tab includes AMM sells: those land in `marketBets` with
+      // `status='settled'` at creation (proceeds are the payout, the
+      // companion buy row holds the cost basis). Without 'settled' they
+      // would silently disappear from the user's history, leaving only
+      // the buy half of every closed AMM round-trip.
       const statusFilter = tab === "active"
         ? eq(marketBets.status, "active")
-        : inArray(marketBets.status, ["won", "lost", "void", "refunded"]);
+        : inArray(marketBets.status, ["won", "lost", "void", "refunded", "settled"]);
 
       const bets = await db
         .select({
@@ -7581,6 +7767,9 @@ Only return the JSON object.`;
           payoutAmount: marketBets.payoutAmount,
           betStatus: marketBets.status,
           direction: marketBets.direction,
+          actionType: marketBets.actionType,
+          shareCount: marketBets.shareCount,
+          pricePerShare: marketBets.pricePerShare,
           betCreatedAt: marketBets.createdAt,
           settledAt: marketBets.settledAt,
           betMetadata: marketBets.betMetadata,
@@ -7611,10 +7800,37 @@ Only return the JSON object.`;
         .offset(offset);
 
       const formatted = bets.map(b => {
-        const payout = b.betStatus === "won" ? (b.payoutAmount ?? b.potentialPayout ?? 0) : 0;
-        const pnl = b.betStatus === "won" ? payout - b.stakeAmount
-          : b.betStatus === "lost" ? -b.stakeAmount
-          : 0;
+        const actionType = (b.actionType ?? "parimutuel") as "parimutuel" | "buy" | "sell";
+        const shareCount = b.shareCount != null ? Number(b.shareCount) : null;
+        const pricePerShare = b.pricePerShare != null ? Number(b.pricePerShare) : null;
+
+        // Per-row P&L. NB: avg-cost accounting across (market, entry)
+        // happens in the headline-stats aggregation; this per-row math
+        // is the simpler "cash flow on this ticket" view, which is
+        // exact for users who never partially exited and reasonable
+        // (though not strictly cost-basis-accurate) for users who did.
+        //   parimutuel won  -> payout − stake
+        //   parimutuel lost -> −stake
+        //   AMM buy won     -> payoutAmount − stake (resolver wrote
+        //                       payoutAmount based on remaining shares,
+        //                       so this stays accurate even after a
+        //                       partial sell)
+        //   AMM buy lost    -> −stake (whole row was a loss; partial-
+        //                       sell cost-basis correction lands on
+        //                       the matching sell row)
+        //   AMM sell settled-> proceeds in (shown as "Sold for X")
+        let payout = 0;
+        let pnl = 0;
+        if (actionType === "sell" && b.betStatus === "settled") {
+          payout = Number(b.payoutAmount ?? 0);
+          pnl = payout;
+        } else if (b.betStatus === "won") {
+          payout = Number(b.payoutAmount ?? b.potentialPayout ?? 0);
+          pnl = payout - b.stakeAmount;
+        } else if (b.betStatus === "lost") {
+          pnl = -b.stakeAmount;
+        }
+
         const meta = b.betMetadata as Record<string, any> | null;
         const displayEntryLabel =
           b.marketType === "community" && b.direction === "no"
@@ -7631,6 +7847,9 @@ Only return the JSON object.`;
           payout,
           pnl,
           status: b.betStatus,
+          actionType,
+          shareCount,
+          pricePerShare,
           confidence: (() => {
             const rawConfidence = b.confidence ? Number(b.confidence) : meta?.confidence ?? null;
             if (!user.isAgent) return rawConfidence;
@@ -9245,6 +9464,119 @@ Only return the JSON object.`;
     }
   });
 
+  // GET /api/markets/:id/recent-trades
+  //
+  // Public per-market activity feed (last 50 trades, cursor-paginated
+  // by `createdAt`). Powers the "Recent Trades" panel on each market
+  // detail page so visitors can see depth + flow without joining the
+  // market or pulling up a separate page.
+  //
+  // Returns rows for AMM buys/sells (status IN active/settled) AND
+  // legacy parimutuel bets on the same market. Direction-tagged so
+  // the client can colour each row appropriately.
+  //
+  // Privacy: users with `positionsPublic=false` are anonymised — the
+  // trade row stays visible (keeps the market transparent) but
+  // identifying fields are nulled out and the displayName becomes
+  // "Private Predictor".
+  //
+  // Caching: short HTTP cache (15s, matches the client poll interval)
+  // mirrors the price-history endpoint hardening so a hot market
+  // doesn't get flood-routed to the DB.
+  app.get("/api/markets/:id/recent-trades", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const limit = Math.min(
+        Math.max(parseInt(req.query.limit as string) || 50, 1),
+        100,
+      );
+      const cursorRaw =
+        typeof req.query.cursor === "string" ? req.query.cursor : null;
+      const cursorDate = cursorRaw ? new Date(cursorRaw) : null;
+      if (cursorDate && Number.isNaN(cursorDate.getTime())) {
+        return res
+          .status(400)
+          .json({ error: "cursor must be a valid ISO timestamp" });
+      }
+
+      const conditions = [
+        eq(marketBets.marketId, id),
+        inArray(marketBets.status, ["active", "settled"]),
+      ];
+      if (cursorDate) {
+        conditions.push(sql`${marketBets.createdAt} < ${cursorDate}`);
+      }
+
+      const rows = await db
+        .select({
+          betId: marketBets.id,
+          createdAt: marketBets.createdAt,
+          stakeAmount: marketBets.stakeAmount,
+          actionType: marketBets.actionType,
+          shareCount: marketBets.shareCount,
+          pricePerShare: marketBets.pricePerShare,
+          payoutAmount: marketBets.payoutAmount,
+          direction: marketBets.direction,
+          entryLabel: marketEntries.label,
+          userId: profiles.id,
+          username: profiles.username,
+          avatarUrl: profiles.avatarUrl,
+          isAgent: profiles.isAgent,
+          isProfilePublic: profiles.isPublic,
+          positionsPublic: profiles.positionsPublic,
+        })
+        .from(marketBets)
+        .innerJoin(marketEntries, eq(marketBets.entryId, marketEntries.id))
+        .innerJoin(profiles, eq(marketBets.userId, profiles.id))
+        .where(and(...conditions))
+        .orderBy(desc(marketBets.createdAt))
+        .limit(limit);
+
+      const trades = rows.map((r) => {
+        // Respect both global isPublic and the new positionsPublic flag
+        // — either being false hides the user. Trade content stays so
+        // market depth is still readable.
+        const reveal = r.isProfilePublic && r.positionsPublic;
+        return {
+          id: r.betId,
+          createdAt: r.createdAt,
+          actionType: (r.actionType ?? "parimutuel") as
+            | "parimutuel"
+            | "buy"
+            | "sell",
+          direction: r.direction,
+          entryLabel: r.entryLabel,
+          shareCount: r.shareCount != null ? Number(r.shareCount) : null,
+          pricePerShare:
+            r.pricePerShare != null ? Number(r.pricePerShare) : null,
+          stakeAmount: r.stakeAmount,
+          payoutAmount: r.payoutAmount ?? null,
+          displayName: reveal ? r.username ?? "Anonymous" : "Private Predictor",
+          username: reveal ? r.username : null,
+          avatarUrl: reveal ? r.avatarUrl : null,
+          isAgent: r.isAgent,
+        };
+      });
+
+      // 15s cache aligns with the client poll cadence; protects the DB
+      // from accidental fetch loops the same way price-history does.
+      res.setHeader(
+        "Cache-Control",
+        "public, max-age=15, stale-while-revalidate=30",
+      );
+      res.json({
+        trades,
+        nextCursor:
+          trades.length === limit
+            ? trades[trades.length - 1].createdAt
+            : null,
+      });
+    } catch (err: any) {
+      console.error("[GET /api/markets/:id/recent-trades] failed:", err);
+      res.status(500).json({ error: "Failed to fetch recent trades" });
+    }
+  });
+
   // GET /api/me/amm-positions
   //
   // Aggregated AMM positions across every market the caller has traded
@@ -9253,123 +9585,60 @@ Only return the JSON object.`;
   // current value + payout-if-win, instead of one row per buy/sell
   // ticket. Returns only entries with a non-zero net position on an
   // open or closed-but-not-yet-resolved AMM market.
+  //
+  // Aggregation logic lives in `server/services/amm-positions.ts` so
+  // the public `/api/users/:username/amm-positions` endpoint and the
+  // profile/leaderboard headline stats can reuse the same math.
   app.get("/api/me/amm-positions", requireAuth, async (req: AuthRequest, res) => {
     try {
-      const userId = req.userId!;
-
-      const rows = await db
-        .select({
-          marketId: marketBets.marketId,
-          entryId: marketBets.entryId,
-          actionType: marketBets.actionType,
-          shareCount: marketBets.shareCount,
-          stakeAmount: marketBets.stakeAmount,
-          marketSlug: predictionMarkets.slug,
-          marketTitle: predictionMarkets.title,
-          marketStatus: predictionMarkets.status,
-          marketType: predictionMarkets.marketType,
-          marketCadence: predictionMarkets.cadence,
-          marketCategory: predictionMarkets.category,
-          marketEngine: predictionMarkets.engine,
-          marketStartAt: predictionMarkets.startAt,
-          marketEndAt: predictionMarkets.endAt,
-          entryLabel: marketEntries.label,
-          entryResolutionStatus: marketEntries.resolutionStatus,
-          personName: trendingPeople.name,
-          personAvatar: trendingPeople.avatar,
-        })
-        .from(marketBets)
-        .innerJoin(predictionMarkets, eq(marketBets.marketId, predictionMarkets.id))
-        .innerJoin(marketEntries, eq(marketBets.entryId, marketEntries.id))
-        .leftJoin(trendingPeople, eq(predictionMarkets.personId, trendingPeople.id))
-        .where(
-          and(
-            eq(marketBets.userId, userId),
-            eq(predictionMarkets.engine, "amm"),
-            sql`${marketBets.actionType} IN ('buy','sell')`,
-            // Open tab only — exclude markets that have already paid out
-            // (RESOLVED) or refunded (VOID). Settlement zeros out user
-            // share value either way, so showing those rows here would
-            // double-count credits the user already received in their
-            // wallet.
-            sql`${predictionMarkets.status} IN ('OPEN','CLOSED_PENDING')`,
-          ),
-        );
-
-      const ammMarketIds = Array.from(new Set(rows.map((r) => r.marketId)));
-      if (ammMarketIds.length === 0) {
-        return res.json({ positions: [] });
-      }
-
-      const stateRows = await db
-        .select()
-        .from(marketAmmState)
-        .where(sql`${marketAmmState.marketId} IN (${sql.join(ammMarketIds.map((id) => sql`${id}`), sql`, `)})`);
-      const stateByMarket = new Map(stateRows.map((s) => [s.marketId, s]));
-
-      const { summarizePosition, currentPrices } = await import(
-        "@shared/lib/amm/positions"
-      );
-
-      const grouped = new Map<string, typeof rows>();
-      for (const r of rows) {
-        const list = grouped.get(r.marketId) ?? [];
-        list.push(r);
-        grouped.set(r.marketId, list);
-      }
-
-      const positions: any[] = [];
-      for (const [marketId, marketRows] of grouped.entries()) {
-        const stateRow = stateByMarket.get(marketId);
-        if (!stateRow) continue;
-        const liquidityB = Number(stateRow.liquidityB);
-        const outcomeOrder = stateRow.outcomeOrder as string[];
-        const shareQuantities = stateRow.shareQuantities as Record<string, number>;
-        const prices = currentPrices({ liquidityB, outcomeOrder, shareQuantities });
-
-        const ammRows = marketRows.map((r) => ({
-          entryId: r.entryId,
-          actionType: r.actionType as "buy" | "sell",
-          shareCount: Number(r.shareCount ?? 0),
-          stakeAmount: r.stakeAmount,
-        }));
-        const summary = summarizePosition(ammRows);
-
-        for (const [entryId, slot] of summary.entries()) {
-          if (Math.abs(slot.netShares) <= 1e-9) continue;
-          const meta = marketRows.find((r) => r.entryId === entryId);
-          if (!meta) continue;
-          const currentPrice = prices[entryId] ?? 0;
-          const currentValue = slot.netShares * currentPrice;
-          const avgEntryPrice =
-            slot.netShares > 0 ? slot.netCreditsIn / slot.netShares : 0;
-          positions.push({
-            marketId,
-            marketSlug: meta.marketSlug,
-            marketTitle: meta.marketTitle,
-            marketStatus: meta.marketStatus,
-            marketType: meta.marketType,
-            marketCadence: meta.marketCadence,
-            marketCategory: meta.marketCategory,
-            marketEndAt: meta.marketEndAt,
-            marketStartAt: meta.marketStartAt,
-            entryId,
-            entryLabel: meta.entryLabel,
-            entryResolutionStatus: meta.entryResolutionStatus,
-            personName: meta.personName,
-            personAvatar: meta.personAvatar,
-            netShares: slot.netShares,
-            netCreditsIn: slot.netCreditsIn,
-            avgEntryPrice,
-            currentPrice,
-            currentValue,
-          });
-        }
-      }
-
+      const { loadAmmPositionsFor } = await import("./services/amm-positions");
+      const positions = await loadAmmPositionsFor(req.userId!);
       res.json({ positions });
     } catch (err: any) {
       console.error("[GET /api/me/amm-positions] failed:", err);
+      res.status(500).json({ error: "Failed to fetch AMM positions" });
+    }
+  });
+
+  // GET /api/users/:username/amm-positions
+  //
+  // Public view of another user's open AMM book. Powers the "Open
+  // Positions" panel on /u/:username. Returns the same row shape as
+  // /api/me/amm-positions so the client can share rendering code.
+  //
+  // Privacy contract (matches Sprint 1 plan Phase 15.C):
+  //   - Unknown user                -> 404
+  //   - Private profile (isPublic=false) OR positions hidden
+  //     (positionsPublic=false)     -> 200 with `{ positions: [] }`
+  //     and `positionsPublic=false`. We do NOT 403, because that would
+  //     leak the existence of an open book.
+  //   - Public + positions public   -> full payload
+  app.get("/api/users/:username/amm-positions", async (req, res) => {
+    try {
+      const { username } = req.params;
+      const [user] = await db
+        .select({
+          id: profiles.id,
+          isPublic: profiles.isPublic,
+          positionsPublic: profiles.positionsPublic,
+        })
+        .from(profiles)
+        .where(eq(profiles.username, username))
+        .limit(1);
+      if (!user) return res.status(404).json({ error: "User not found" });
+
+      // Soft-hide: same payload shape for both private and "no
+      // positions", so the panel renders an empty state in either case
+      // without leaking which condition triggered it.
+      if (!user.isPublic || !user.positionsPublic) {
+        return res.json({ positions: [], positionsPublic: false });
+      }
+
+      const { loadAmmPositionsFor } = await import("./services/amm-positions");
+      const positions = await loadAmmPositionsFor(user.id);
+      res.json({ positions, positionsPublic: true });
+    } catch (err: any) {
+      console.error("[GET /api/users/:username/amm-positions] failed:", err);
       res.status(500).json({ error: "Failed to fetch AMM positions" });
     }
   });
@@ -18512,6 +18781,11 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       const requestedLimit = typeof _req.query.limit === "string" ? parseInt(_req.query.limit, 10) : 20;
       const queryLimit = Math.max(1, Math.min(requestedLimit || 20, 100));
 
+      // Town Square shows BOTH parimutuel and AMM activity. AMM buys land
+      // in `status='active'` (until market resolves) and AMM sells land
+      // in `status='settled'` (immediately). Without `settled` the feed
+      // would silently drop every sell, so an active AMM trader's exits
+      // would never appear.
       const recentBets = await db
         .select({
           id: marketBets.id,
@@ -18519,12 +18793,16 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           entryId: marketBets.entryId,
           userId: marketBets.userId,
           stakeAmount: marketBets.stakeAmount,
+          actionType: marketBets.actionType,
+          shareCount: marketBets.shareCount,
+          pricePerShare: marketBets.pricePerShare,
+          payoutAmount: marketBets.payoutAmount,
           confidence: marketBets.confidence,
           createdAt: marketBets.createdAt,
           betMetadata: marketBets.betMetadata,
         })
         .from(marketBets)
-        .where(eq(marketBets.status, "active"))
+        .where(inArray(marketBets.status, ["active", "settled"]))
         .orderBy(desc(marketBets.createdAt))
         .limit(queryLimit);
 
@@ -18547,6 +18825,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
             avatarUrl: profiles.avatarUrl,
             isAgent: profiles.isAgent,
             isPublic: profiles.isPublic,
+            positionsPublic: profiles.positionsPublic,
           })
           .from(profiles)
           .where(and(inArray(profiles.id, userIds), eq(profiles.isHouse, false))),
@@ -18590,7 +18869,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           const market = marketMap.get(bet.marketId);
           const entry = entryMap.get(bet.entryId);
 
-          if (!market || !entry) return null;
+          if (!profile || !market || !entry) return null;
           if (market.status !== "OPEN") return null;
           if (!["live", "inactive"].includes(market.visibility || "")) return null;
 
@@ -18610,22 +18889,42 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
               : null;
           }
 
+          const actionType = (bet.actionType ?? "parimutuel") as
+            | "parimutuel"
+            | "buy"
+            | "sell";
+
+          // Phase 15.C.3 privacy enforcement: anonymise rows when the
+          // user has hidden their positions. The trade itself stays in
+          // the feed (market activity is the point of Town Square);
+          // only the identifying fields collapse to "Private Predictor".
+          const positionsHidden = profile?.positionsPublic === false;
+          const profilePrivate = profile?.isPublic === false;
+          const reveal = !positionsHidden && !profilePrivate;
+
           return {
             id: bet.id,
             createdAt: bet.createdAt,
             stakeAmount: bet.stakeAmount,
+            actionType,
+            shareCount: bet.shareCount != null ? Number(bet.shareCount) : null,
+            pricePerShare:
+              bet.pricePerShare != null ? Number(bet.pricePerShare) : null,
+            payoutAmount: bet.payoutAmount ?? null,
             confidence: displayConfidence,
             choiceLabel: entry.label,
             marketId: market.id,
             marketTitle: market.title,
             marketSlug: market.slug,
             marketType: market.marketType,
-            username: profile?.username || null,
-            displayName: profile?.username || "Anonymous",
-            avatarUrl: profile?.avatarUrl || null,
+            username: reveal ? profile?.username || null : null,
+            displayName: reveal
+              ? profile?.username || "Anonymous"
+              : "Private Predictor",
+            avatarUrl: reveal ? profile?.avatarUrl || null : null,
             isAgent: profile?.isAgent ?? false,
-            isPublic: profile?.isPublic ?? false,
-            rationale: rationale || null,
+            isPublic: reveal,
+            rationale: reveal ? rationale || null : null,
           };
         })
         .filter(Boolean);

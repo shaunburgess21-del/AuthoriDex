@@ -15,6 +15,7 @@ import { WhatNeedsToHappen } from "@/components/predict/WhatNeedsToHappen";
 import { MyPositionCard } from "@/components/predict/MyPositionCard";
 import { MarketDetailSkeleton } from "@/components/predict/MarketDetailSkeleton";
 import { AmmPriceHistoryChart } from "@/components/predict/AmmPriceHistoryChart";
+import { MarketActivityFeed } from "@/components/predict/MarketActivityFeed";
 import { MarketResolutionInfo } from "@/components/predict/MarketResolutionInfo";
 import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
 import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
@@ -737,6 +738,10 @@ export default function UpDownDetailPage() {
             </Card>
           );
         })()}
+
+        {/* Live trade feed — Up/Down trades flow heavily right around
+            resolution windows, so seeing the late book matters here. */}
+        <MarketActivityFeed marketId={marketId} />
 
         {/* Trend Score Chart */}
         <Card className="border-border/50">

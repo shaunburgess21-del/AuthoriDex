@@ -53,7 +53,14 @@ interface LeaderboardUser {
   userRank: string;
   currentStreak?: number;
   lastActiveAt?: string | null;
+  /** Total P&L (realised + unrealised). Same value as `totalPnl`; kept for back-compat. */
   profitLoss: number;
+  /** Settled bets only: parimutuel + AMM buys at resolve + AMM sells. */
+  realisedPnl?: number;
+  /** Live mark-to-market on open AMM positions. */
+  unrealisedPnl?: number;
+  /** realisedPnl + unrealisedPnl. Drives the ranking. */
+  totalPnl?: number;
   volume: number;
   winCount: number;
   totalResolved: number;
@@ -123,27 +130,63 @@ function RankCell({ rank }: { rank: number }) {
   );
 }
 
-function PnLCell({ value }: { value: number }) {
+function PnLCell({
+  value,
+  realised,
+  unrealised,
+}: {
+  value: number;
+  /** Settled-bet P&L; if provided, shown in a hover tooltip alongside unrealised. */
+  realised?: number;
+  /** Live MTM on open AMM positions; rounded for display. */
+  unrealised?: number;
+}) {
+  // Only show the split tooltip when both pieces are present AND there's
+  // actually something to disclose — i.e. the user has at least one
+  // open AMM trade contributing unrealised P&L. Hides the tooltip on
+  // pure-parimutuel rows where the split would just be "X / 0".
+  const hasSplit =
+    realised !== undefined &&
+    unrealised !== undefined &&
+    Math.abs(unrealised) >= 1;
+  const fmt = (n: number) =>
+    `${n > 0 ? "+" : ""}${Math.round(n).toLocaleString("en-US")}`;
+
+  let body: React.ReactNode;
   if (value > 0) {
-    return (
+    body = (
       <div className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-mono text-sm tabular-nums">
         <TrendingUp className="h-3.5 w-3.5 shrink-0" />
-        +{value.toLocaleString("en-US")}
+        +{Math.round(value).toLocaleString("en-US")}
       </div>
     );
-  }
-  if (value < 0) {
-    return (
+  } else if (value < 0) {
+    body = (
       <div className="flex items-center gap-1 text-red-600 dark:text-red-400 font-mono text-sm tabular-nums">
         <TrendingDown className="h-3.5 w-3.5 shrink-0" />
-        {value.toLocaleString("en-US")}
+        {Math.round(value).toLocaleString("en-US")}
+      </div>
+    );
+  } else {
+    body = (
+      <div className="flex items-center gap-1 text-muted-foreground font-mono text-sm tabular-nums">
+        <Minus className="h-3.5 w-3.5 shrink-0" />0
       </div>
     );
   }
+
+  if (!hasSplit) return body;
+
   return (
-    <div className="flex items-center gap-1 text-muted-foreground font-mono text-sm tabular-nums">
-      <Minus className="h-3.5 w-3.5 shrink-0" />0
-    </div>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className="cursor-help">{body}</div>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="text-xs">
+        <div>Realised: {fmt(realised ?? 0)} cr</div>
+        <div>Unrealised: {fmt(unrealised ?? 0)} cr</div>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -273,7 +316,11 @@ function UserRow({
       </div>
 
       <div className="shrink-0 min-w-[90px] text-right">
-        <PnLCell value={user.profitLoss} />
+        <PnLCell
+          value={user.profitLoss}
+          realised={user.realisedPnl}
+          unrealised={user.unrealisedPnl}
+        />
         <p className="text-[10px] text-muted-foreground mt-0.5">credits</p>
       </div>
 
@@ -509,8 +556,9 @@ export default function UserLeaderboardPage() {
                     <Info className="h-3 w-3 text-muted-foreground/50" />
                   </span>
                 </TooltipTrigger>
-                <TooltipContent side="top" className="max-w-[200px] text-xs">
-                  Net credits won (payouts minus stakes)
+                <TooltipContent side="top" className="max-w-[220px] text-xs">
+                  Realised P&amp;L (settled bets &amp; AMM exits) plus live
+                  mark-to-market on open AMM positions.
                 </TooltipContent>
               </Tooltip>
             </div>

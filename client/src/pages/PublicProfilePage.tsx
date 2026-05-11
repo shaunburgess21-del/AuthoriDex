@@ -27,7 +27,9 @@ function getRankProgress(xp: number, ranks: RankRow[] | undefined) {
 import {
   ArrowLeft, User, Trophy, Vote, TrendingUp, Calendar, Lock, Sparkles,
   Shield, BarChart3, Coins, Target, ChevronRight, Loader2, Share2, Check,
+  ArrowUpDown, EyeOff,
 } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MyVoteCard, type MyVoteCardData } from "@/components/me/MyVoteCard";
 
@@ -44,9 +46,22 @@ interface PublicProfile {
   createdAt?: string;
   message?: string;
   profitLoss?: number;
+  /** Same as profitLoss (= parimutuel realised + AMM realised-from-
+   *  sells + AMM realised-from-resolution). Surfaced as its own
+   *  field so future UX can split realised vs. unrealised without
+   *  another contract change. */
+  realisedPnl?: number;
+  /** Sum of (currentPrice − avgEntryPrice) × netShares across every
+   *  open AMM position. Positive when the user's open book is up
+   *  relative to its weighted-avg cost basis. */
+  unrealisedPnl?: number;
   volume?: number;
   totalBets?: number;
   biggestWin?: number;
+  /** Live mark-to-market value of every open AMM position (sum of netShares*currentPrice). */
+  openPositionsValue?: number;
+  /** Count of distinct (market, entry) rows with non-zero net shares. */
+  openPositionsCount?: number;
   agentProfile?: {
     displayName: string;
     bio?: string | null;
@@ -68,6 +83,10 @@ interface BetRecord {
   payout: number;
   pnl: number;
   status: string;
+  /** "parimutuel" for legacy pool bets, "buy"/"sell" for AMM trades. */
+  actionType?: "parimutuel" | "buy" | "sell";
+  shareCount?: number | null;
+  pricePerShare?: number | null;
   confidence: number | null;
   thesis: string | null;
   predictedScore: number | null;
@@ -178,6 +197,195 @@ function PublicVotesSection({ username }: { username: string }) {
   );
 }
 
+interface PublicAmmPosition {
+  marketId: string;
+  marketSlug: string;
+  marketTitle: string;
+  marketStatus: string;
+  marketType: string;
+  entryId: string;
+  entryLabel: string;
+  netShares: number;
+  netCreditsIn: number;
+  /** Weighted-average buy cost per share (NOT netCreditsIn/netShares,
+   *  which understates avg cost for partial-sell users). */
+  avgEntryPrice: number;
+  currentPrice: number;
+  /** netShares × currentPrice. */
+  currentValue: number;
+  /** (currentPrice − avgEntryPrice) × netShares, computed server-side
+   *  so the panel doesn't have to redo the math. */
+  unrealisedPnl: number;
+  marketEndAt: string | null;
+}
+
+interface PublicAmmPositionsResponse {
+  positions: PublicAmmPosition[];
+  positionsPublic: boolean;
+}
+
+type PositionsSortKey = "pnl" | "shares" | "endAt";
+
+function OpenPositionsSection({ username }: { username: string }) {
+  const [, setLocation] = useLocation();
+  const [sortKey, setSortKey] = useState<PositionsSortKey>("pnl");
+  const { profile: viewer } = useAuth();
+  const isOwnProfile = viewer?.username === username;
+
+  const { data, isLoading, error } = useQuery<PublicAmmPositionsResponse>({
+    queryKey: ["/api/users", username, "amm-positions"],
+    queryFn: async () => {
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch(`/api/users/${username}/amm-positions`, {
+        headers: authHeaders,
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch positions");
+      return res.json();
+    },
+    enabled: !!username,
+    // Live price moves every trade — same refresh cadence as the
+    // dashboard's open positions tab to stay in sync without polling
+    // hard. Server adds a short Cache-Control as defense in depth.
+    refetchInterval: 30_000,
+  });
+
+  const positionsPublic = data?.positionsPublic ?? true;
+  const positions = data?.positions ?? [];
+
+  // Don't render the section at all for an unknown viewer of a
+  // pari-mutuel-only profile (no positions, public) — the page is
+  // already busy. Keep it visible on own profile so the user can
+  // confirm visibility state.
+  const shouldHide =
+    !isLoading &&
+    !error &&
+    positionsPublic &&
+    positions.length === 0 &&
+    !isOwnProfile;
+  if (shouldHide) return null;
+
+  const sorted = [...positions].sort((a, b) => {
+    if (sortKey === "shares") return Math.abs(b.netShares) - Math.abs(a.netShares);
+    if (sortKey === "endAt") {
+      const aEnd = a.marketEndAt ? new Date(a.marketEndAt).getTime() : Infinity;
+      const bEnd = b.marketEndAt ? new Date(b.marketEndAt).getTime() : Infinity;
+      return aEnd - bEnd;
+    }
+    return b.unrealisedPnl - a.unrealisedPnl;
+  });
+
+  return (
+    <Card className="p-6">
+      <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
+        <div>
+          <h2 className="font-semibold">Open Positions</h2>
+          <p className="text-[11px] text-muted-foreground mt-0.5">
+            Live mark-to-market across every AMM market{isOwnProfile ? " you're currently in" : ""}.
+          </p>
+        </div>
+        {positions.length > 0 && (
+          <div className="flex items-center gap-1 p-0.5 bg-muted rounded-lg text-xs">
+            {([
+              { key: "pnl", label: "P&L" },
+              { key: "shares", label: "Shares" },
+              { key: "endAt", label: "Ends" },
+            ] as const).map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setSortKey(key)}
+                className={`px-2.5 py-1 rounded-md transition-colors flex items-center gap-1 ${
+                  sortKey === key
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <ArrowUpDown className="h-3 w-3" />
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {isLoading ? (
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      ) : error ? (
+        <div className="text-center py-8 text-destructive text-sm">
+          Failed to load open positions
+        </div>
+      ) : !positionsPublic ? (
+        <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground text-sm">
+          <EyeOff className="h-4 w-4" />
+          Positions hidden
+        </div>
+      ) : positions.length === 0 ? (
+        <div className="text-center py-8 text-muted-foreground text-sm">
+          No open positions
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {sorted.map((p) => {
+            const pnl = p.unrealisedPnl;
+            const costBasis = p.netShares * p.avgEntryPrice;
+            const pnlPct = costBasis > 0 ? (pnl / costBasis) * 100 : 0;
+            return (
+              <div
+                key={`${p.marketId}-${p.entryId}`}
+                className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors cursor-pointer group"
+                onClick={() => setLocation(`/markets/${p.marketSlug}`)}
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-sm font-medium truncate">
+                      {p.marketTitle}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+                    <span className="text-violet-600 dark:text-violet-400 font-medium">
+                      {p.entryLabel}
+                    </span>
+                    <span>
+                      {Math.round(Math.abs(p.netShares)).toLocaleString()} shares
+                    </span>
+                    <span>
+                      avg {Math.round(p.avgEntryPrice * 100)}%
+                    </span>
+                    <span className="text-cyan-600 dark:text-cyan-400">
+                      now {Math.round(p.currentPrice * 100)}%
+                    </span>
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div
+                    className={`text-sm font-semibold ${
+                      pnl > 0
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : pnl < 0
+                          ? "text-red-600 dark:text-red-400"
+                          : "text-muted-foreground"
+                    }`}
+                  >
+                    {pnl > 0 ? "+" : ""}
+                    {Math.round(pnl).toLocaleString()}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground">
+                    {pnl >= 0 ? "+" : ""}
+                    {pnlPct.toFixed(1)}%
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function BetHistorySection({ username, isAgent }: { username: string; isAgent?: boolean }) {
   const [tab, setTab] = useState<"settled" | "active">("settled");
   const [, setLocation] = useLocation();
@@ -236,57 +444,82 @@ function BetHistorySection({ username, isAgent }: { username: string; isAgent?: 
         </div>
       ) : (
         <div className="space-y-2">
-          {bets.map((bet) => (
-            <div
-              key={bet.betId}
-              className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors cursor-pointer group"
-              onClick={() => setLocation(`/markets/${bet.marketSlug}`)}
-            >
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-0.5">
+          {bets.map((bet) => {
+            const actionType = bet.actionType ?? "parimutuel";
+            const isAmmSell = actionType === "sell";
+            const isAmmBuy = actionType === "buy";
+            const pricePct = bet.pricePerShare != null
+              ? `${Math.round(bet.pricePerShare * 100)}%`
+              : null;
+            const shareCountLabel = bet.shareCount != null
+              ? Math.round(bet.shareCount).toLocaleString()
+              : null;
+            return (
+              <div
+                key={bet.betId}
+                className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors cursor-pointer group"
+                onClick={() => setLocation(`/markets/${bet.marketSlug}`)}
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    {bet.status === "won" && (
+                      <Badge variant="outline" className="bg-emerald-500/15 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/40 dark:border-emerald-500/30 text-[10px] px-1.5 py-0">Won</Badge>
+                    )}
+                    {bet.status === "lost" && (
+                      <Badge variant="outline" className="bg-red-500/15 dark:bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/40 dark:border-red-500/30 text-[10px] px-1.5 py-0">Lost</Badge>
+                    )}
+                    {bet.status === "active" && (
+                      <Badge variant="outline" className="bg-blue-500/15 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/40 dark:border-blue-500/30 text-[10px] px-1.5 py-0">Active</Badge>
+                    )}
+                    {bet.status === "settled" && isAmmSell && (
+                      <Badge variant="outline" className="bg-amber-500/15 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/40 dark:border-amber-500/30 text-[10px] px-1.5 py-0">Sold</Badge>
+                    )}
+                    {(bet.status === "void" || bet.status === "refunded") && (
+                      <Badge variant="outline" className="bg-gray-500/15 dark:bg-gray-500/10 text-gray-600 dark:text-gray-400 border-gray-500/40 dark:border-gray-500/30 text-[10px] px-1.5 py-0">Void</Badge>
+                    )}
+                    <span className="text-sm font-medium truncate">{bet.marketTitle}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span className="text-violet-600 dark:text-violet-400 font-medium">
+                      {bet.predictedScore != null
+                        ? bet.entryLabel
+                        : isAmmBuy && shareCountLabel
+                          ? `Bought ${shareCountLabel} shares of ${bet.entryLabel}${pricePct ? ` @ ${pricePct}` : ""}`
+                          : isAmmSell && shareCountLabel
+                            ? `Sold ${shareCountLabel} shares of ${bet.entryLabel}${pricePct ? ` @ ${pricePct}` : ""}`
+                            : bet.marketType === 'updown'
+                              ? `Picked: ${bet.entryLabel}`
+                              : `Backed: ${bet.entryLabel}`}
+                    </span>
+                    {bet.predictedScore != null && (
+                      <span className="text-amber-600 dark:text-amber-400">Score: {Number(bet.predictedScore).toLocaleString()}</span>
+                    )}
+                    {!isAgent && bet.confidence != null && (
+                      <span className="text-cyan-600 dark:text-cyan-400">{Math.round(bet.confidence * 100)}% conf</span>
+                    )}
+                    {!isAmmSell && (
+                      <span>{bet.stakeAmount.toLocaleString()} credits</span>
+                    )}
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
                   {bet.status === "won" && (
-                    <Badge variant="outline" className="bg-emerald-500/15 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/40 dark:border-emerald-500/30 text-[10px] px-1.5 py-0">Won</Badge>
+                    <span className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">+{bet.pnl.toLocaleString()}</span>
                   )}
                   {bet.status === "lost" && (
-                    <Badge variant="outline" className="bg-red-500/15 dark:bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/40 dark:border-red-500/30 text-[10px] px-1.5 py-0">Lost</Badge>
+                    <span className="text-sm font-semibold text-red-600 dark:text-red-400">{bet.pnl.toLocaleString()}</span>
+                  )}
+                  {bet.status === "settled" && isAmmSell && (
+                    <span className="text-sm font-semibold text-amber-600 dark:text-amber-400">+{Math.round(bet.pnl).toLocaleString()}</span>
                   )}
                   {bet.status === "active" && (
-                    <Badge variant="outline" className="bg-blue-500/15 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/40 dark:border-blue-500/30 text-[10px] px-1.5 py-0">Active</Badge>
+                    <span className="text-sm text-muted-foreground">{bet.stakeAmount.toLocaleString()}</span>
                   )}
-                  {(bet.status === "void" || bet.status === "refunded") && (
-                    <Badge variant="outline" className="bg-gray-500/15 dark:bg-gray-500/10 text-gray-600 dark:text-gray-400 border-gray-500/40 dark:border-gray-500/30 text-[10px] px-1.5 py-0">Void</Badge>
-                  )}
-                  <span className="text-sm font-medium truncate">{bet.marketTitle}</span>
-                </div>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <span className="text-violet-600 dark:text-violet-400 font-medium">
-                    {bet.predictedScore != null ? bet.entryLabel
-                      : bet.marketType === 'updown' ? `Picked: ${bet.entryLabel}`
-                      : `Backed: ${bet.entryLabel}`}
-                  </span>
-                  {bet.predictedScore != null && (
-                    <span className="text-amber-600 dark:text-amber-400">Score: {Number(bet.predictedScore).toLocaleString()}</span>
-                  )}
-                  {!isAgent && bet.confidence != null && (
-                    <span className="text-cyan-600 dark:text-cyan-400">{Math.round(bet.confidence * 100)}% conf</span>
-                  )}
-                  <span>{bet.stakeAmount.toLocaleString()} credits</span>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity" />
                 </div>
               </div>
-              <div className="text-right shrink-0">
-                {bet.status === "won" && (
-                  <span className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">+{bet.pnl.toLocaleString()}</span>
-                )}
-                {bet.status === "lost" && (
-                  <span className="text-sm font-semibold text-red-600 dark:text-red-400">{bet.pnl.toLocaleString()}</span>
-                )}
-                {bet.status === "active" && (
-                  <span className="text-sm text-muted-foreground">{bet.stakeAmount.toLocaleString()}</span>
-                )}
-                <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity" />
-              </div>
-            </div>
-          ))}
+            );
+          })}
           {data?.hasMore && (
             <p className="text-center text-xs text-muted-foreground pt-2">Showing first {bets.length} results</p>
           )}
@@ -466,6 +699,32 @@ export default function PublicProfilePage() {
             </div>
           )}
 
+          {/* Open AMM positions highlight (mark-to-market + unrealised
+              P&L). Skipped when the user has no open AMM book so
+              parimutuel-only profiles don't get an empty/zero tile.
+              The unrealised P&L delta is the most useful number on
+              this tile — it's what changes when prices move. */}
+          {(profile.openPositionsCount ?? 0) > 0 && (
+            <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-500/8 dark:bg-blue-500/5 border border-blue-500/15">
+              <BarChart3 className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
+              <span className="text-sm text-blue-600 dark:text-blue-400 font-medium">
+                Open positions: {profile.openPositionsCount} ({Math.round(profile.openPositionsValue ?? 0).toLocaleString()} cr live value)
+              </span>
+              {profile.unrealisedPnl != null && Math.abs(profile.unrealisedPnl) >= 1 && (
+                <span
+                  className={`ml-auto text-sm font-semibold ${
+                    profile.unrealisedPnl > 0
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : "text-red-600 dark:text-red-400"
+                  }`}
+                >
+                  {profile.unrealisedPnl > 0 ? "+" : ""}
+                  {Math.round(profile.unrealisedPnl).toLocaleString()} cr
+                </span>
+              )}
+            </div>
+          )}
+
           {/* Votes Cast */}
           {(profile.totalVotes ?? 0) > 0 && (
             <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/30">
@@ -509,6 +768,12 @@ export default function PublicProfilePage() {
               </div>
             </div>
           </Card>
+
+        {/* Open AMM Positions — live MTM book. Sits between headline
+            stats and the longer-form Prediction History so the
+            "what are they sitting on right now" question is the first
+            thing a visitor sees. */}
+        {username && <OpenPositionsSection username={username} />}
 
         {/* Public Votes */}
         {username && <PublicVotesSection username={username} />}

@@ -822,6 +822,10 @@ export const profiles = pgTable("profiles", {
   avatarUrl: text("avatar_url"),
   avatarSeed: text("avatar_seed"),
   isPublic: boolean("is_public").notNull().default(true),
+  // Controls visibility of *open* AMM positions and the user's identity
+  // on per-market trade feeds, Town Square, and the leaderboard. Settled
+  // history stays public regardless. Migration: 0055.
+  positionsPublic: boolean("positions_public").notNull().default(true),
   role: text("role").notNull().default("user"), // 'user', 'admin', 'moderator'
   rank: text("rank").notNull().default("Citizen"), // From ranks table: Citizen, Verified, etc.
   xpPoints: integer("xp_points").notNull().default(0),

@@ -46,6 +46,7 @@ export default function SettingsPage() {
   const [username, setUsername] = useState(profile?.username || "");
   const [avatarUrl, setAvatarUrl] = useState(profile?.avatarUrl || "");
   const [isPublic, setIsPublic] = useState(profile?.isPublic ?? true);
+  const [positionsPublic, setPositionsPublic] = useState(profile?.positionsPublic ?? true);
   const [hasLocalChanges, setHasLocalChanges] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
@@ -82,10 +83,11 @@ export default function SettingsPage() {
     setUsername(profile.username || "");
     setAvatarUrl(profile.avatarUrl || "");
     setIsPublic(profile.isPublic);
+    setPositionsPublic(profile.positionsPublic ?? true);
   }, [profile, hasLocalChanges]);
 
   const updateProfileMutation = useMutation({
-    mutationFn: async (data: { username?: string; isPublic?: boolean }) => {
+    mutationFn: async (data: { username?: string; isPublic?: boolean; positionsPublic?: boolean }) => {
       const response = await apiRequest("PATCH", "/api/profile/me", data);
       return response.json();
     },
@@ -112,13 +114,15 @@ export default function SettingsPage() {
   // "Unsaved" forever after every avatar swap.
   const isDirty = profile
     ? normalize(username) !== normalize(profile.username) ||
-      isPublic !== profile.isPublic
+      isPublic !== profile.isPublic ||
+      positionsPublic !== (profile.positionsPublic ?? true)
     : false;
 
   const handleSaveProfile = () => {
     updateProfileMutation.mutate({
       username,
       isPublic,
+      positionsPublic,
     });
   };
 
@@ -397,6 +401,38 @@ export default function SettingsPage() {
                     setIsPublic(checked);
                   }}
                   data-testid="switch-public-profile"
+                />
+              </div>
+            </div>
+
+            {/* AMM Sprint 1 — Phase 15.C.2.
+                Open AMM positions disclose live conviction (which side,
+                how many shares). Some users want their settled record
+                visible without showing the live book. This toggle
+                controls just the "where am I sitting right now" view;
+                settled history (wins, losses, AMM exits) stays public
+                because that's how rank is earned. */}
+            <div className="flex items-center justify-between pt-2 border-t border-border/60">
+              <div className="space-y-0.5">
+                <Label>Show Open AMM Positions</Label>
+                <p className="text-xs text-muted-foreground">
+                  When off, hides your open positions on your profile and
+                  anonymises your trades on the market activity feed,
+                  Town Square, and the leaderboard. Settled history
+                  stays public.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Badge variant={positionsPublic ? "default" : "secondary"}>
+                  {positionsPublic ? "Public" : "Hidden"}
+                </Badge>
+                <Switch
+                  checked={positionsPublic}
+                  onCheckedChange={(checked) => {
+                    setHasLocalChanges(true);
+                    setPositionsPublic(checked);
+                  }}
+                  data-testid="switch-positions-public"
                 />
               </div>
             </div>

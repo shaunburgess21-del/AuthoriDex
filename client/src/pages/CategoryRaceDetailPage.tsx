@@ -33,6 +33,7 @@ import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { computePayoutMultiplier, computeEarlyBirdMultiplier } from "@/lib/parimutuel";
 import { pricesFor, priceToPercent, snapshotFromApi } from "@/lib/ammClient";
 import { AmmPriceHistoryChart } from "@/components/predict/AmmPriceHistoryChart";
+import { MarketActivityFeed } from "@/components/predict/MarketActivityFeed";
 import {
   ArrowLeft,
   Crown,
@@ -569,6 +570,10 @@ export default function CategoryRaceDetailPage() {
             </Card>
           );
         })()}
+
+        {/* Live trade feed — sits right under the price chart so the
+            "who is moving the price" story is immediately readable. */}
+        <MarketActivityFeed marketId={marketId} />
 
         {/* Race Leaderboard */}
         <div>

@@ -11,6 +11,7 @@ import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActi
 import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
 import { MarketDetailSkeleton } from "@/components/predict/MarketDetailSkeleton";
 import { AmmPriceHistoryChart } from "@/components/predict/AmmPriceHistoryChart";
+import { MarketActivityFeed } from "@/components/predict/MarketActivityFeed";
 import { MarketResolutionInfo } from "@/components/predict/MarketResolutionInfo";
 import { MyPositionCard } from "@/components/predict/MyPositionCard";
 import { ShareIconButton } from "@/components/predict/ShareIconButton";
@@ -828,6 +829,9 @@ export default function H2HDetailPage() {
             </Card>
           );
         })()}
+
+        {/* Live trade feed for this H2H matchup. */}
+        <MarketActivityFeed marketId={marketId} />
 
         {/* Score Comparison */}
         <Card className="border-border/50">

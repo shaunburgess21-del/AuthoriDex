@@ -14,6 +14,11 @@ interface ActivityItem {
   id: string;
   createdAt: string;
   stakeAmount: number;
+  /** "parimutuel" for legacy pool bets, "buy"/"sell" for AMM trades. */
+  actionType?: "parimutuel" | "buy" | "sell";
+  shareCount?: number | null;
+  pricePerShare?: number | null;
+  payoutAmount?: number | null;
   confidence: number | null;
   choiceLabel: string;
   marketId: string;
@@ -133,57 +138,101 @@ export default function TownSquarePage() {
         ) : (
           <Card className="border-violet-500/10 bg-card/95">
             <div className="divide-y divide-border/50">
-              {activity.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/30 cursor-pointer focus-within:bg-muted/30"
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => setLocation(getRecentActivityMarketPath(item.marketSlug, item.marketType, item.marketId))}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      setLocation(getRecentActivityMarketPath(item.marketSlug, item.marketType, item.marketId));
-                    }
-                  }}
-                >
-                  <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
-                    <UserSocialAvatar
-                      displayName={item.displayName}
-                      avatarUrl={item.avatarUrl}
-                      isAgent={item.isAgent}
-                      className="h-9 w-9"
-                      onClick={item.username && item.isPublic ? () => setLocation(`/u/${item.username}`) : undefined}
-                    />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="mb-1 flex items-center gap-2 flex-wrap">
-                      <button
-                        className={`text-sm font-medium ${item.username && item.isPublic ? "hover:underline cursor-pointer" : "cursor-default"}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          item.username && item.isPublic && setLocation(`/u/${item.username}`);
-                        }}
-                        aria-disabled={!(item.username && item.isPublic)}
-                      >
-                        {item.displayName}
-                      </button>
-                      <span className="text-[11px] text-muted-foreground">{formatActivityAge(item.createdAt)}</span>
+              {activity.map((item) => {
+                const actionType = item.actionType ?? "parimutuel";
+                const isAmmBuy = actionType === "buy";
+                const isAmmSell = actionType === "sell";
+                const pricePct =
+                  item.pricePerShare != null
+                    ? `${Math.round(item.pricePerShare * 100)}%`
+                    : null;
+                const shareCountLabel =
+                  item.shareCount != null
+                    ? Math.round(item.shareCount).toLocaleString()
+                    : null;
+                // Buys are green, sells amber, parimutuel neutral — keeps the
+                // visual feel of an order book without shouting.
+                const dotColor = isAmmBuy
+                  ? "bg-emerald-500"
+                  : isAmmSell
+                    ? "bg-amber-500"
+                    : "bg-muted-foreground/50";
+                const proceeds =
+                  isAmmSell && item.payoutAmount != null
+                    ? Math.round(item.payoutAmount).toLocaleString("en-US")
+                    : null;
+                return (
+                  <div
+                    key={item.id}
+                    className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/30 cursor-pointer focus-within:bg-muted/30"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setLocation(getRecentActivityMarketPath(item.marketSlug, item.marketType, item.marketId))}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setLocation(getRecentActivityMarketPath(item.marketSlug, item.marketType, item.marketId));
+                      }
+                    }}
+                  >
+                    <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+                      <UserSocialAvatar
+                        displayName={item.displayName}
+                        avatarUrl={item.avatarUrl}
+                        isAgent={item.isAgent}
+                        className="h-9 w-9"
+                        onClick={item.username && item.isPublic ? () => setLocation(`/u/${item.username}`) : undefined}
+                      />
                     </div>
-                    <p className="text-sm text-foreground line-clamp-1 hover:underline">
-                      backed <span className="font-semibold">{item.choiceLabel}</span> on {item.marketTitle}
-                    </p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {item.stakeAmount.toLocaleString("en-US")} credits{!item.isAgent && item.confidence != null ? ` • ${(item.confidence * 100).toFixed(0)}% confidence` : ""}
-                    </p>
-                    {item.rationale && (
-                      <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
-                        "{item.rationale}"
+                    <div className="min-w-0 flex-1">
+                      <div className="mb-1 flex items-center gap-2 flex-wrap">
+                        <span className={`h-2 w-2 rounded-full ${dotColor}`} aria-hidden="true" />
+                        <button
+                          className={`text-sm font-medium ${item.username && item.isPublic ? "hover:underline cursor-pointer" : "cursor-default"}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            item.username && item.isPublic && setLocation(`/u/${item.username}`);
+                          }}
+                          aria-disabled={!(item.username && item.isPublic)}
+                        >
+                          {item.displayName}
+                        </button>
+                        <span className="text-[11px] text-muted-foreground">{formatActivityAge(item.createdAt)}</span>
+                      </div>
+                      <p className="text-sm text-foreground line-clamp-1 hover:underline">
+                        {isAmmBuy && shareCountLabel ? (
+                          <>
+                            bought <span className="font-semibold">{shareCountLabel} shares</span> of{" "}
+                            <span className="font-semibold">{item.choiceLabel}</span>
+                            {pricePct ? <> @ {pricePct}</> : null} on {item.marketTitle}
+                          </>
+                        ) : isAmmSell && shareCountLabel ? (
+                          <>
+                            sold <span className="font-semibold">{shareCountLabel} shares</span> of{" "}
+                            <span className="font-semibold">{item.choiceLabel}</span>
+                            {pricePct ? <> @ {pricePct}</> : null} on {item.marketTitle}
+                          </>
+                        ) : (
+                          <>
+                            backed <span className="font-semibold">{item.choiceLabel}</span> on {item.marketTitle}
+                          </>
+                        )}
                       </p>
-                    )}
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {isAmmSell && proceeds
+                          ? `${proceeds} credits in`
+                          : `${item.stakeAmount.toLocaleString("en-US")} credits`}
+                        {!item.isAgent && item.confidence != null ? ` • ${(item.confidence * 100).toFixed(0)}% confidence` : ""}
+                      </p>
+                      {item.rationale && (
+                        <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
+                          "{item.rationale}"
+                        </p>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </Card>
         )}

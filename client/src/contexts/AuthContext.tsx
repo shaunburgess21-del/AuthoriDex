@@ -18,6 +18,8 @@ export interface UserProfile {
   totalVotes: number;
   totalPredictions: number;
   winRate: number;
+  /** AMM open-position visibility (Sprint 1 phase 15.C). Defaults to true. */
+  positionsPublic?: boolean;
   lastActiveAt: string | null;
   tosAcceptedAt: string | null;
   // Phase 1 Interest Picker fields. statedInterests is the user's selected
