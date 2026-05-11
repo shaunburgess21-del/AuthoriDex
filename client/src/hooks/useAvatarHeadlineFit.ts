@@ -35,10 +35,12 @@ export function useFitTextBlockToHeight({
     el.style.maxWidth = "100%";
     el.style.whiteSpace = "normal";
     el.style.wordBreak = "break-word";
-    el.style.overflow = "hidden";
-    el.style.maxHeight = `${maxHeightPx}px`;
     el.style.lineHeight = String(lineHeight);
     if (fontFamily) el.style.fontFamily = fontFamily;
+    // Unclamp while searching: with max-height applied, some engines report a
+    // clipped scrollHeight and the binary search picks too large a font.
+    el.style.maxHeight = "none";
+    el.style.overflow = "hidden";
 
     let lo = minFontPx;
     let hi = Math.max(lo, maxFontPx);
@@ -57,6 +59,8 @@ export function useFitTextBlockToHeight({
     }
 
     el.style.fontSize = `${best}px`;
+    el.style.maxHeight = `${maxHeightPx}px`;
+    el.style.overflow = "hidden";
     setFontSizePx(best);
   }, [text, maxHeightPx, maxWidthPx, minFontPx, maxFontPx, lineHeight, fontFamily]);
 

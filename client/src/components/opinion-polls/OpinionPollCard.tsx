@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext, type MouseEvent } from "react";
+import { useState, useEffect, useContext, type KeyboardEvent, type MouseEvent } from "react";
 import { Link, useLocation } from "wouter";
 import { Users, ListChecks, CheckCircle2, MessageSquare, X } from "lucide-react";
 import { Drawer } from "vaul";
@@ -378,17 +378,25 @@ export function OpinionPollCard({
           linkTestId={`link-opinion-detail-${poll.id}`}
           avatar={
             poll.imageUrl ? (
-              <button
-                type="button"
+              <div
+                role="button"
+                tabIndex={0}
                 aria-label="View larger image"
                 onClick={(e) => {
                   e.stopPropagation();
                   setExpandedImage({ url: poll.imageUrl!, alt: poll.title });
                 }}
-                className="h-16 w-16 rounded-md overflow-hidden shrink-0 bg-muted dark:bg-slate-800 cursor-zoom-in border-0 p-0"
+                onKeyDown={(e: KeyboardEvent) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setExpandedImage({ url: poll.imageUrl!, alt: poll.title });
+                  }
+                }}
+                className="h-16 w-16 rounded-md overflow-hidden shrink-0 bg-muted dark:bg-slate-800 cursor-zoom-in outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
                 <img src={poll.imageUrl} alt={poll.title} className="w-full h-full object-cover" />
-              </button>
+              </div>
             ) : (
               <div className="h-16 w-16 rounded-md bg-gradient-to-br from-slate-700/50 to-slate-800/50 flex items-center justify-center shrink-0">
                 <ListChecks className="h-5 w-5 text-slate-400" />
