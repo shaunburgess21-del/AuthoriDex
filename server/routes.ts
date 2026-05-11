@@ -9976,8 +9976,38 @@ Only return the JSON object.`;
       const runs24h = runs24hResult.rows?.[0] || { total_runs: 0, completed: 0, failed: 0, locked_out: 0, currently_running: 0 };
 
       // Source health from the latest successful run
-      const latestSourceTimings = lastSuccessfulRun?.sourceTimings || null;
-      const latestSourceStatuses = lastSuccessfulRun?.sourceStatuses || null;
+      const latestSourceTimings = lastSuccessfulRun?.sourceTimings
+        ? { ...(lastSuccessfulRun.sourceTimings as Record<string, number>) }
+        : null;
+      const latestSourceStatuses = lastSuccessfulRun?.sourceStatuses
+        ? { ...(lastSuccessfulRun.sourceStatuses as Record<string, string>) }
+        : null;
+      // For sources that run on a slower cadence than the hourly ingest
+      // (e.g. Google Trends every 12h), the most recent run usually shows
+      // SKIPPED. That's technically correct but makes the panel
+      // pessimistically read as "Trends is down". Substitute the most
+      // recent run that actually fetched the source so the panel reflects
+      // the *health* of the source, not the cadence gating.
+      const latestSourceLastRefreshAt: Record<string, string> = {};
+      if (latestSourceStatuses) {
+        const SLOW_CADENCE_SOURCES = ["trends"] as const;
+        for (const src of SLOW_CADENCE_SOURCES) {
+          if (latestSourceStatuses[src] === "SKIPPED") {
+            const recentNonSkipped = recentRuns.find((r: any) => {
+              const st = r.sourceStatuses?.[src];
+              return st === "OK" || st === "OK_FALLBACK" || st === "DEGRADED" || st === "FAILED";
+            });
+            if (recentNonSkipped) {
+              latestSourceStatuses[src] = recentNonSkipped.sourceStatuses[src];
+              if (recentNonSkipped.sourceTimings?.[src] != null && latestSourceTimings) {
+                latestSourceTimings[src] = recentNonSkipped.sourceTimings[src];
+              }
+              const refreshAt = recentNonSkipped.finishedAt || recentNonSkipped.startedAt;
+              if (refreshAt) latestSourceLastRefreshAt[src] = refreshAt;
+            }
+          }
+        }
+      }
 
       res.json({
         timestamp: now.toISOString(),
@@ -10015,6 +10045,7 @@ Only return the JSON object.`;
         sourceHealth: {
           timings: latestSourceTimings,
           statuses: latestSourceStatuses,
+          lastRefreshAt: latestSourceLastRefreshAt,
           lastRunHealthSummary: lastSuccessfulRun?.healthSummary || null,
           liveStateMachine: (() => {
             const h = getCurrentHealthSnapshot();
@@ -12681,26 +12712,41 @@ Only return the JSON object.`;
         .from(trackedPeople)
         .orderBy(trackedPeople.name);
 
-      // One DB round-trip — DISTINCT ON pulls each person's most recent
-      // snapshot that actually carries trends data (snapshots written when
-      // the 12h gate is closed don't have it, so we skip those here).
-      const latestSnapshots = await db.execute(sql`
-        SELECT DISTINCT ON (person_id)
-          person_id,
-          timestamp,
-          diagnostics
-        FROM trend_snapshots
-        WHERE diagnostics::jsonb->'raw'->'trendsInterest' IS NOT NULL
-          AND diagnostics::jsonb->'raw'->>'trendsInterest' != 'null'
-        ORDER BY person_id, timestamp DESC
-      `);
-
+      // Per-person batched lookups. Each query uses the
+      // (person_id, timestamp DESC) index for a fast seek-and-stop, then
+      // post-filters on the JSONB field. Previously we did a single table-
+      // wide DISTINCT ON which had to JSONB-filter every row in
+      // trend_snapshots and hit the Postgres statement timeout once the
+      // table grew large enough.
       const snapshotByPerson = new Map<string, { timestamp: Date; diagnostics: any }>();
-      for (const row of latestSnapshots.rows as any[]) {
-        snapshotByPerson.set(row.person_id, {
-          timestamp: new Date(row.timestamp),
-          diagnostics: row.diagnostics,
-        });
+      const CONCURRENCY = 10;
+      for (let i = 0; i < people.length; i += CONCURRENCY) {
+        const batch = people.slice(i, i + CONCURRENCY);
+        await Promise.all(
+          batch.map(async (p) => {
+            const [row] = await db
+              .select({
+                timestamp: trendSnapshots.timestamp,
+                diagnostics: trendSnapshots.diagnostics,
+              })
+              .from(trendSnapshots)
+              .where(
+                and(
+                  eq(trendSnapshots.personId, p.id),
+                  sql`diagnostics::jsonb->'raw'->'trendsInterest' IS NOT NULL`,
+                  sql`diagnostics::jsonb->'raw'->>'trendsInterest' != 'null'`,
+                ),
+              )
+              .orderBy(desc(trendSnapshots.timestamp))
+              .limit(1);
+            if (row) {
+              snapshotByPerson.set(p.id, {
+                timestamp: new Date(row.timestamp),
+                diagnostics: row.diagnostics,
+              });
+            }
+          }),
+        );
       }
 
       const now = Date.now();

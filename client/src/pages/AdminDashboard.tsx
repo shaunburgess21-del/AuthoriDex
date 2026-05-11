@@ -6513,7 +6513,25 @@ export default function AdminDashboard() {
                             status === "SKIPPED" ? "bg-muted-foreground" :
                             "bg-red-500";
                           const textColor = sourceStatusColor(status);
-                          const tooltip = sourceStatusTooltip(label, status);
+                          // Some sources run on a slower cadence than the
+                          // hourly ingest (e.g. Google Trends every 12h).
+                          // For those, the backend substitutes the most
+                          // recent run that actually fetched the source so
+                          // the indicator reflects health, not cadence
+                          // gating. Show a small "X ago" hint when the
+                          // displayed status is from an older run.
+                          const lastRefreshIso = (engineHealth.sourceHealth.lastRefreshAt as Record<string, string> | undefined)?.[source];
+                          let ageLabel: string | null = null;
+                          if (lastRefreshIso) {
+                            const ageMs = Date.now() - new Date(lastRefreshIso).getTime();
+                            const ageHours = ageMs / (60 * 60 * 1000);
+                            ageLabel = ageHours < 1
+                              ? `${Math.max(1, Math.round(ageMs / 60000))}m ago`
+                              : `${Math.round(ageHours)}h ago`;
+                          }
+                          const tooltip = ageLabel
+                            ? `${sourceStatusTooltip(label, status)} · last refreshed ${ageLabel}`
+                            : sourceStatusTooltip(label, status);
                           return (
                             <div key={source} className="flex items-center justify-between text-sm p-2 rounded border" title={tooltip}>
                               <span className="font-medium">{label}</span>
@@ -6522,6 +6540,9 @@ export default function AdminDashboard() {
                                 <span className={cn("text-xs", textColor)}>{status}</span>
                                 {engineHealth.sourceHealth.timings?.[source] && (
                                   <span className="text-xs text-muted-foreground">({Math.round(engineHealth.sourceHealth.timings[source] / 1000)}s)</span>
+                                )}
+                                {ageLabel && (
+                                  <span className="text-[10px] text-muted-foreground/70" title={`Last actual fetch ${ageLabel}`}>· {ageLabel}</span>
                                 )}
                               </div>
                             </div>
