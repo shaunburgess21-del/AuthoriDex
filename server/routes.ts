@@ -18865,6 +18865,22 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       const title = `Category Race: ${getMarketCategoryLabel(normalizedCategory)}`;
       let slug = `gainer-${normalizedCategory}-week-${weekNumber}`;
 
+      // Pre-check the slug BEFORE entering the transaction. In Postgres,
+      // a failed insert inside a transaction aborts the whole tx and any
+      // subsequent statements are rejected with "current transaction is
+      // aborted" — the inner retry-with-suffix path can't recover. With
+      // the (category, engine) dedup now allowing a parimutuel + AMM
+      // race to coexist, the slug WILL collide for the second engine and
+      // we have to disambiguate up front.
+      const existingSlug = await db
+        .select({ id: predictionMarkets.id })
+        .from(predictionMarkets)
+        .where(eq(predictionMarkets.slug, slug))
+        .limit(1);
+      if (existingSlug.length > 0) {
+        slug = `${slug}-${resolvedEngine === "amm" ? "amm" : "pari"}-${randomUUID().slice(0, 6)}`;
+      }
+
       const gainerSnapRows = personIds.length > 0
         ? await db.execute(sql`
             SELECT DISTINCT ON (person_id) person_id, fame_index, timestamp
@@ -18883,36 +18899,22 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       const gainerMetadata = gainerOpeningScores.length > 0 ? { openingScores: gainerOpeningScores } : undefined;
 
       const market = await db.transaction(async (tx) => {
-        const insertMarket = async (finalSlug: string) => {
-          const [created] = await tx.insert(predictionMarkets).values({
-            marketType: "gainer",
-            engine: resolvedEngine,
-            title,
-            slug: finalSlug,
-            category: normalizedCategory,
-            visibility,
-            featured,
-            status: "OPEN",
-            startAt: monday,
-            endAt: sunday,
-            closeAt: getMarketBettingCutoff(sunday, resolvedEngine),
-            weekNumber,
-            metadata: gainerMetadata,
-          }).returning();
-          return created;
-        };
-
-        let createdMarket: any;
-        try {
-          createdMarket = await insertMarket(slug);
-        } catch (slugErr: any) {
-          if (slugErr.code === "23505") {
-            slug = `${slug}-${randomUUID().slice(0, 6)}`;
-            createdMarket = await insertMarket(slug);
-          } else {
-            throw slugErr;
-          }
-        }
+        const [created] = await tx.insert(predictionMarkets).values({
+          marketType: "gainer",
+          engine: resolvedEngine,
+          title,
+          slug,
+          category: normalizedCategory,
+          visibility,
+          featured,
+          status: "OPEN",
+          startAt: monday,
+          endAt: sunday,
+          closeAt: getMarketBettingCutoff(sunday, resolvedEngine),
+          weekNumber,
+          metadata: gainerMetadata,
+        }).returning();
+        const createdMarket = created;
 
         const entryValues = persons.map((person, idx) => ({
           marketId: createdMarket.id,
