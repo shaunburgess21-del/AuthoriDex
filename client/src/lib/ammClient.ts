@@ -173,6 +173,20 @@ export interface PriceHistoryResponse {
 }
 
 /**
+ * Bucket size in ms for snap-alignment of the sliding `from` window.
+ * MUST match (or be coarser than) the server-side bucket size so the
+ * React Query key only changes when a meaningful new window opens,
+ * not on every render. Without snapping, `Date.now()` ticks the key
+ * every render → infinite refetch loop → DoS on the server (see the
+ * May 2026 incident on market 95fee1eb).
+ */
+const BUCKET_ALIGN_MS: Record<PriceHistoryBucket, number> = {
+  "5m": 5 * 60 * 1000,
+  "1h": 60 * 60 * 1000,
+  "1d": 24 * 60 * 60 * 1000,
+};
+
+/**
  * Fetch AMM price history for a market. Cards typically request
  * `{ bucket: "1h", from: -7d }` for sparklines; detail pages use
  * `{ bucket: "5m", from: -7d }` for high-resolution charts.
@@ -181,6 +195,12 @@ export interface PriceHistoryResponse {
  * markets (where `points` is empty by design). Caller should handle
  * empty array by falling back to "current price as flat line" so a
  * brand-new market doesn't show a blank chart.
+ *
+ * Implementation note: the `from` parameter is bucket-aligned so the
+ * React Query key is stable across renders. A naive
+ * `new Date(Date.now() - fromMs).toISOString()` would change every
+ * render, defeating the query cache and producing an infinite fetch
+ * loop. Snap to the bucket boundary instead.
  */
 export function usePriceHistory(
   marketId: string | null | undefined,
@@ -192,16 +212,26 @@ export function usePriceHistory(
   } = {},
 ) {
   const { bucket = "1h", fromMs, enabled = true, refetchMs } = options;
-  const from = fromMs ? new Date(Date.now() - fromMs).toISOString() : undefined;
+  const align = BUCKET_ALIGN_MS[bucket] ?? 60 * 60 * 1000;
+  const fromAligned = fromMs
+    ? new Date(Math.floor((Date.now() - fromMs) / align) * align).toISOString()
+    : undefined;
   return useQuery<PriceHistoryResponse>({
-    queryKey: ["/api/markets", marketId, "price-history", bucket, from ?? "default"],
+    queryKey: [
+      "/api/markets",
+      marketId,
+      "price-history",
+      bucket,
+      fromAligned ?? "default",
+    ],
     enabled: !!marketId && enabled,
     refetchInterval: refetchMs ?? false,
+    refetchIntervalInBackground: false,
     staleTime: 60_000,
     queryFn: async () => {
       const params = new URLSearchParams();
       params.set("bucket", bucket);
-      if (from) params.set("from", from);
+      if (fromAligned) params.set("from", fromAligned);
       const res = await fetch(`/api/markets/${marketId}/price-history?${params}`);
       if (!res.ok) {
         throw new Error(`price-history ${res.status}`);

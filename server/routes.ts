@@ -9233,6 +9233,11 @@ Only return the JSON object.`;
         price: Number(r.price),
       }));
 
+      // Defense in depth: a short HTTP cache prevents accidental client
+      // request loops from flooding the DB (see May 2026 incident). The
+      // payload is non-PII; safe to share across users. 30s is well
+      // under the smallest bucket (5m) so freshness is unaffected.
+      res.setHeader("Cache-Control", "public, max-age=30, stale-while-revalidate=60");
       res.json({ engine: "amm", bucket, points });
     } catch (err: any) {
       console.error("[GET /api/markets/:id/price-history] failed:", err);
