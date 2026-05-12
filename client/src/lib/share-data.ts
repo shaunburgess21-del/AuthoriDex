@@ -252,6 +252,13 @@ export function fireAmmTradeToast(args: FireAmmTradeToastArgs): void {
 
   toast(title, {
     description,
+    // 6s instead of Sonner's 4s default so the Share action stays
+    // clickable on mobile — testers reported the previous 4s window
+    // disappeared before they could even register the toast, let alone
+    // tap "Share". The persistent share icon on MyPositionCard is the
+    // durable fallback; this just gives the in-moment shortcut a
+    // realistic interaction budget without becoming intrusive.
+    duration: 6000,
     action: {
       label: "Share",
       onClick: () =>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Copy, Download, Loader2, Share2, Square, RectangleHorizontal } from "lucide-react";
 import {
   Dialog,
@@ -57,6 +57,17 @@ export function ShareCardModal({
   const [pendingAction, setPendingAction] = useState<null | "share" | "copy" | "download">(null);
   const [copied, setCopied] = useState(false);
   const [copiedText, setCopiedText] = useState(false);
+  // Cached blob from pre-generation. When the user clicks "Share" we use
+  // this directly so `navigator.share()` is called within the click's
+  // user-activation window. Without this the awaited generate() blows the
+  // gesture budget on first click (1–2s for fonts + image decode) and
+  // Chrome silently rejects the file-share intent, dropping us into the
+  // clipboard fallback instead of the native share sheet.
+  const cachedBlobRef = useRef<Blob | null>(null);
+  // Tracks the (data, aspect) the cached blob corresponds to so we can
+  // invalidate it on switch. Kept as refs (not state) to avoid re-renders.
+  const cachedDataRef = useRef<ShareCardData | null>(null);
+  const cachedAspectRef = useRef<ShareAspect | null>(null);
 
   // Reset state whenever the modal opens for a new data set. Avoids stale
   // "Copied" ticks after re-opening.
@@ -65,11 +76,18 @@ export function ShareCardModal({
       setCopied(false);
       setCopiedText(false);
       setPendingAction(null);
+      cachedBlobRef.current = null;
+      cachedDataRef.current = null;
+      cachedAspectRef.current = null;
     }
   }, [open, data]);
 
   const dims = SHARE_DIMENSIONS[aspect];
-  const { cardRef, generate, generating } = useShareCardImage({
+  // `generating` is intentionally not destructured — we manage the
+  // user-visible "generating" UX via `pendingAction` so the spinner can be
+  // bound to the specific button (Share / Copy image / Download) the user
+  // tapped, rather than blocking all three at once.
+  const { cardRef, generate } = useShareCardImage({
     width: dims.width,
     height: dims.height,
   });
@@ -86,9 +104,77 @@ export function ShareCardModal({
 
   const filename = `${filenameBase}-${aspect}.png`;
 
-  const runGenerate = async (): Promise<Blob | null> => {
+  // Responsive preview width. The card is rendered at full size off-screen,
+  // then scaled into a wrapper that fits inside the dialog's content area.
+  // On mobile the dialog is full-width with p-6 (48px total side padding);
+  // on sm+ it caps at max-w-lg (512px) → 464px usable. We clamp to 420 so
+  // the desktop layout doesn't change. The previous fixed 420 was forcing
+  // the (grid) dialog wider than the viewport on phones, cutting off the
+  // preview and the action buttons on the right edge.
+  const [previewMaxWidth, setPreviewMaxWidth] = useState(420);
+  useEffect(() => {
+    if (!open) return;
+    const compute = () => {
+      if (typeof window === "undefined") return;
+      // Mirror the Dialog's own sizing: full-width minus 32px horizontal
+      // gutter on phones (no rounded edges), capped at max-w-lg (512px) on
+      // sm+. Subtract p-6 padding (24px each side = 48px total).
+      const vw = window.innerWidth;
+      const dialogOuter = Math.min(vw, 512);
+      const usable = Math.max(0, dialogOuter - 48);
+      setPreviewMaxWidth(Math.max(240, Math.min(420, usable)));
+    };
+    compute();
+    window.addEventListener("resize", compute);
+    return () => window.removeEventListener("resize", compute);
+  }, [open]);
+  const previewScale = previewMaxWidth / dims.width;
+  const previewHeight = dims.height * previewScale;
+
+  const cacheValid = () =>
+    cachedBlobRef.current !== null &&
+    cachedDataRef.current === data &&
+    cachedAspectRef.current === aspect;
+
+  // Pre-generate the share blob whenever the modal opens (or aspect / data
+  // changes). Runs after a short delay so the off-screen card's avatar +
+  // fonts have a chance to decode — the first toBlob() call on a freshly
+  // mounted card can otherwise take >1s, which is what was killing the
+  // navigator.share user-gesture window on first click.
+  useEffect(() => {
+    if (!open || !data) return;
+    if (cacheValid()) return;
+    let cancelled = false;
+    const t = window.setTimeout(async () => {
+      try {
+        const blob = await generate();
+        if (cancelled) return;
+        cachedBlobRef.current = blob;
+        cachedDataRef.current = data;
+        cachedAspectRef.current = aspect;
+      } catch (err) {
+        // Pre-warm failure is non-fatal — the click handler will retry.
+        // eslint-disable-next-line no-console
+        console.warn("[ShareCardModal] pre-warm generate failed", err);
+      }
+    }, 350);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, data, aspect, generate]);
+
+  const ensureBlob = async (): Promise<Blob | null> => {
+    if (cacheValid()) {
+      return cachedBlobRef.current;
+    }
     try {
-      return await generate();
+      const blob = await generate();
+      cachedBlobRef.current = blob;
+      cachedDataRef.current = data;
+      cachedAspectRef.current = aspect;
+      return blob;
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error("[ShareCardModal] generate failed", err);
@@ -102,7 +188,7 @@ export function ShareCardModal({
   const handleShare = async () => {
     if (pendingAction) return;
     setPendingAction("share");
-    const blob = await runGenerate();
+    const blob = await ensureBlob();
     if (!blob) {
       setPendingAction(null);
       return;
@@ -124,7 +210,7 @@ export function ShareCardModal({
   const handleCopyImage = async () => {
     if (pendingAction) return;
     setPendingAction("copy");
-    const blob = await runGenerate();
+    const blob = await ensureBlob();
     if (!blob) {
       setPendingAction(null);
       return;
@@ -145,7 +231,7 @@ export function ShareCardModal({
   const handleDownload = async () => {
     if (pendingAction) return;
     setPendingAction("download");
-    const blob = await runGenerate();
+    const blob = await ensureBlob();
     setPendingAction(null);
     if (!blob) return;
     downloadBlob(blob, filename);
@@ -164,15 +250,16 @@ export function ShareCardModal({
     }
   };
 
-  // Scale the (real-size) card into the preview slot. The preview slot has
-  // a fixed max-width; we compute the scale factor so the whole card fits.
-  const previewMaxWidth = 420;
-  const previewScale = previewMaxWidth / dims.width;
-  const previewHeight = dims.height * previewScale;
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl">
+      {/* `overflow-x-hidden` + `min-w-0` keep the dialog from being pushed
+          wider than the viewport by the fixed-size preview wrapper. The
+          dialog uses `grid` internally and grid items default to
+          `min-content` width, which was the root cause of the right-edge
+          cut-off testers reported on mobile. We avoid `overflow-hidden`
+          so vertical content (header + preview + button row) can still
+          extend naturally on short viewports. */}
+      <DialogContent className="max-w-xl overflow-x-hidden">
         <DialogHeader>
           <DialogTitle>Share your card</DialogTitle>
           <DialogDescription>
@@ -181,7 +268,7 @@ export function ShareCardModal({
         </DialogHeader>
 
         {/* Aspect toggle */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 min-w-0">
           <AspectButton
             active={aspect === "square"}
             onClick={() => setAspect("square")}
@@ -198,7 +285,8 @@ export function ShareCardModal({
           />
         </div>
 
-        {/* Preview */}
+        {/* Preview — width is responsive (clamped to 420 on desktop,
+            shrinks on mobile so it never exceeds the dialog body). */}
         <div
           className="relative mx-auto overflow-hidden rounded-xl border border-white/10 bg-[#0B0B1B] shadow-[0_10px_30px_-15px_rgba(0,0,0,0.6)]"
           style={{
@@ -220,8 +308,11 @@ export function ShareCardModal({
           )}
         </div>
 
-        {/* Action buttons */}
-        <div className="flex flex-wrap items-center gap-2 pt-2">
+        {/* Action buttons — `min-w-0` so wrapping kicks in cleanly on
+            narrow viewports (the previous layout would overflow the
+            dialog's right edge when "Download" + "Copy text" didn't
+            quite fit on the share row). */}
+        <div className="flex flex-wrap items-center gap-2 pt-2 min-w-0">
           {availability.native && (
             <Button
               onClick={handleShare}
@@ -273,7 +364,7 @@ export function ShareCardModal({
             <Button
               variant="ghost"
               onClick={handleCopyText}
-              className="ml-auto gap-2 text-xs"
+              className="gap-2 text-xs"
               data-testid="share-card-copy-text"
             >
               {copiedText ? (

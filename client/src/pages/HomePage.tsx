@@ -2546,6 +2546,15 @@ export default function HomePage() {
             tieRule: market.tieRule,
             endAt: market.endAt || undefined,
             bettingCutoff: market.bettingCutoff,
+            // Bug fix: thread engine + ammState back through on direction
+            // toggle. Without these the StakeModal falls back to parimutuel
+            // UI ("Early Bird Boost", estimated payout multiplier) the
+            // moment a user flips Up ↔ Down inside an AMM market that
+            // was opened from the leaderboard. The cast mirrors the open
+            // handler — `updownMarkets` types `ammState` as `unknown` so
+            // we trust the server-supplied shape here.
+            engine: market.engine === "amm" ? "amm" : "parimutuel",
+            ammState: (market.ammState ?? null) as StakeSelection["ammState"],
           });
         }}
       />
