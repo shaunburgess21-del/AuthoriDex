@@ -2728,8 +2728,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (fresh.newsEmaHeld || fresh.newsFloorApplied) staleFlags.newsHeld = true;
       if (fresh.searchEmaHeld || fresh.searchFloorApplied) staleFlags.searchHeld = true;
 
-      // 24h change for pills; small dead zone to avoid noisy ±1% flicker
-      const DELTA_DEAD_ZONE_PCT = 2;
+      // 24h change for pills; tiny dead zone to clip true zero-noise only.
+      // Lowered from 2% → 1% (May 2026) so smaller-but-real movements on
+      // low-volume signals (e.g. a 6 → 7 article uptick on a mid-tier
+      // celeb) surface as a real "+X% rising" instead of collapsing to
+      // em-dash. The 1% floor still protects against rounding flicker
+      // because the percentage values are themselves integer-rounded.
+      const DELTA_DEAD_ZONE_PCT = 1;
       const rawSearchDeltaPct = snap24hAgo && snap24hAgo.searchVolume > 0
         ? Math.round(((latest.searchVolume - snap24hAgo.searchVolume) / snap24hAgo.searchVolume) * 100)
         : 0;

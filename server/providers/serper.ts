@@ -464,24 +464,30 @@ export async function fetchSerperNewsCount(name: string, personId?: string): Pro
       return JSON.parse(cached.responseData);
     }
 
-    _serperFallbackCallsAttempted++;
-    const response24h = await serperFetch("https://google.serper.dev/news", {
-      method: "POST",
-      headers: {
-        "X-API-KEY": SERPER_API_KEY,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        q: `"${name}"`,
-        num: 100,
-        gl: "us",
-        hl: "en",
-        tbs: "qdr:d",
-      }),
-    });
+    // Same cap-detection pagination as `fetchSerperNewsCount24h` — see the
+    // explanatory comment above SERPER_NEWS_PAGE_SIZE. The 24h count is the
+    // value that flows into the News Activity pill and its 24h delta, so
+    // de-capping it here matters even on this legacy tiered-mode path.
+    const all24h: SerperNewsRawArticle[] = [];
+    for (let page = 1; page <= SERPER_NEWS_MAX_PAGES; page++) {
+      if (page > 1) {
+        await new Promise(r => setTimeout(r, SERPER_NEWS_INTER_PAGE_DELAY_MS));
+      }
+      const pageArticles = await fetchSerperNewsPage(name, page);
+      if (!pageArticles || pageArticles.length === 0) break;
+      all24h.push(...pageArticles);
+      if (pageArticles.length < SERPER_NEWS_PAGE_SIZE) break;
+    }
 
     await new Promise(r => setTimeout(r, 300));
 
+    // 7d is intentionally NOT paginated. It feeds the 7-day baseline used
+    // by News Momentum, which already multiplies the raw 7d response by
+    // 2.5 to approximate the true weekly count (the cap and multiplier
+    // roughly cancel out on average). Paginating 7d as well would double
+    // the legacy-path call budget for a signal that's smoothed across
+    // a week anyway. Worth revisiting if News Momentum accuracy starts
+    // mattering more.
     const response7d = await serperFetch("https://google.serper.dev/news", {
       method: "POST",
       headers: {
@@ -496,11 +502,11 @@ export async function fetchSerperNewsCount(name: string, personId?: string): Pro
         tbs: "qdr:w",
       }),
     });
+    _serperFallbackCallsAttempted++;
 
-    const data24h = response24h.ok ? await response24h.json() : { news: [] };
     const data7d = response7d.ok ? await response7d.json() : { news: [] };
 
-    const articleCount24h = data24h.news?.length || 0;
+    const articleCount24h = all24h.length;
     const rawArticleCount7d = data7d.news?.length || 0;
     const articleCount7d = Math.round(rawArticleCount7d * 2.5);
     const averageDaily7d = articleCount7d / 7;
@@ -508,13 +514,13 @@ export async function fetchSerperNewsCount(name: string, personId?: string): Pro
       ? ((articleCount24h - averageDaily7d) / averageDaily7d)
       : (articleCount24h > 0 ? 1 : 0);
 
-    const topHeadlines = (data24h.news || [])
+    const topHeadlines = all24h
       .slice(0, 3)
-      .map((a: any) => a.title || "");
+      .map((a) => a.title || "");
 
-    const articles = (data24h.news || [])
-      .filter((a: any) => !!a.link)
-      .map((a: any) => ({
+    const articles = all24h
+      .filter((a) => !!a.link)
+      .map((a) => ({
         url: a.link as string,
         title: a.title as string | undefined,
         publishedAt: a.date as string | undefined,
@@ -575,6 +581,56 @@ export async function fetchSerperNewsBatch(
  * Uses a separate cache key (`serper:newscount_24h:NAME`) so it can't pollute
  * the full-fat cache consumed by the legacy tiered-mode Serper fallback.
  */
+/**
+ * Serper's News endpoint silently caps responses at 10 results per page
+ * regardless of the `num` value sent in the request (empirically confirmed:
+ * 338 of 345 production cache rows returned arrays of length exactly 10
+ * despite `num: 100`). The cap left ~42% of mature people with identical
+ * `news_count` versus 24h ago — collapsing the News Activity pill to an
+ * em-dash for any celeb whose Mediastack signal was small enough that
+ * Serper's 10-cap dominated the deduped URL union.
+ *
+ * SERPER_NEWS_PAGE_SIZE matches the observed cap. When a page returns
+ * exactly this many results, we treat that as "cap hit" and paginate
+ * forward. Bounded by SERPER_NEWS_MAX_PAGES so a high-volume celeb
+ * adds at most 2 extra calls (up to ~30 articles total), which is
+ * plenty of resolution for the delta pill.
+ */
+const SERPER_NEWS_PAGE_SIZE = 10;
+const SERPER_NEWS_MAX_PAGES = 3;
+const SERPER_NEWS_INTER_PAGE_DELAY_MS = 200;
+
+interface SerperNewsRawArticle {
+  link?: string;
+  title?: string;
+  date?: string;
+}
+
+async function fetchSerperNewsPage(
+  name: string,
+  page: number,
+): Promise<SerperNewsRawArticle[] | null> {
+  _serperFallbackCallsAttempted++;
+  const response = await serperFetch("https://google.serper.dev/news", {
+    method: "POST",
+    headers: {
+      "X-API-KEY": SERPER_API_KEY!,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      q: `"${name}"`,
+      num: 100,
+      gl: "us",
+      hl: "en",
+      tbs: "qdr:d",
+      ...(page > 1 ? { page } : {}),
+    }),
+  });
+  if (!response.ok) return null;
+  const data = await response.json();
+  return (data?.news as SerperNewsRawArticle[]) ?? [];
+}
+
 export async function fetchSerperNewsCount24h(name: string, personId?: string): Promise<SerperNewsCountData | null> {
   if (!SERPER_API_KEY) return null;
 
@@ -587,32 +643,30 @@ export async function fetchSerperNewsCount24h(name: string, personId?: string): 
       return JSON.parse(cached.responseData);
     }
 
-    _serperFallbackCallsAttempted++;
-    const response24h = await serperFetch("https://google.serper.dev/news", {
-      method: "POST",
-      headers: {
-        "X-API-KEY": SERPER_API_KEY,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        q: `"${name}"`,
-        num: 100,
-        gl: "us",
-        hl: "en",
-        tbs: "qdr:d",
-      }),
-    });
+    // Paginate while each page returns the per-page cap, capped at
+    // SERPER_NEWS_MAX_PAGES. Most people stop after page 1 (genuine
+    // low volume) or page 2 (true count in 11-20 range). Only the
+    // highest-volume celebs end up paying the full 3-call cost.
+    const allArticles: SerperNewsRawArticle[] = [];
+    for (let page = 1; page <= SERPER_NEWS_MAX_PAGES; page++) {
+      if (page > 1) {
+        await new Promise(r => setTimeout(r, SERPER_NEWS_INTER_PAGE_DELAY_MS));
+      }
+      const pageArticles = await fetchSerperNewsPage(name, page);
+      if (!pageArticles || pageArticles.length === 0) break;
+      allArticles.push(...pageArticles);
+      if (pageArticles.length < SERPER_NEWS_PAGE_SIZE) break;
+    }
 
-    const data24h = response24h.ok ? await response24h.json() : { news: [] };
-    const articleCount24h = data24h.news?.length || 0;
+    const articleCount24h = allArticles.length;
 
-    const topHeadlines = (data24h.news || [])
+    const topHeadlines = allArticles
       .slice(0, 3)
-      .map((a: any) => a.title || "");
+      .map((a) => a.title || "");
 
-    const articles = (data24h.news || [])
-      .filter((a: any) => !!a.link)
-      .map((a: any) => ({
+    const articles = allArticles
+      .filter((a) => !!a.link)
+      .map((a) => ({
         url: a.link as string,
         title: a.title as string | undefined,
         publishedAt: a.date as string | undefined,
