@@ -473,8 +473,13 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
   await loadLastRunMetaFromDB();
 
   try {
-    const people = await db.select().from(trackedPeople);
-    console.log(`[Ingest] Found ${people.length} tracked people`);
+    // Only main-leaderboard celebrities belong in fame ingest / trending_people.
+    // Shadow rows with status "induction" exist for Curate Profile + voting and must not be scored here.
+    const people = await db
+      .select()
+      .from(trackedPeople)
+      .where(eq(trackedPeople.status, "main_leaderboard"));
+    console.log(`[Ingest] Found ${people.length} main-leaderboard tracked people`);
 
     let wikiStart = Date.now();
     const wikiData = await fetchBatchWikiPageviews(
@@ -2781,7 +2786,7 @@ export async function hydrateTrendingPeopleFromSnapshots(): Promise<boolean> {
         tp.category,
         tp.bio
       FROM trend_snapshots ts
-      JOIN tracked_people tp ON tp.id = ts.person_id
+      JOIN tracked_people tp ON tp.id = ts.person_id AND tp.status = 'main_leaderboard'
       WHERE ts.run_id = ${runId}
         AND ts.score_version = ${SCORE_VERSION}
       ORDER BY ts.fame_index DESC NULLS LAST
@@ -2822,23 +2827,31 @@ export async function hydrateTrendingPeopleFromSnapshots(): Promise<boolean> {
       }
     });
 
-    const trackedCountRaw = await db.execute(sql`SELECT COUNT(*) as count FROM tracked_people`);
+    const trackedCountRaw = await db.execute(
+      sql`SELECT COUNT(*) as count FROM tracked_people WHERE status = 'main_leaderboard'`,
+    );
     const trackedRows = Array.isArray(trackedCountRaw) ? trackedCountRaw : (trackedCountRaw as any).rows ?? [];
     const trackedCount = parseInt((trackedRows[0] as any)?.count || '0', 10);
 
-    const coveragePct = trackedCount > 0 ? Math.round(rows.length / trackedCount * 100) : 100;
+    const coveragePct = trackedCount > 0 ? Math.round((rows.length / trackedCount) * 100) : 100;
 
     if (coveragePct < 90) {
-      console.error(`[Boot] ABORT hydration: only ${rows.length}/${trackedCount} rows available (${coveragePct}% coverage, need >=90%). Rolling back to prevent serving incomplete data.`);
+      console.error(
+        `[Boot] ABORT hydration: only ${rows.length}/${trackedCount} main-leaderboard rows available (${coveragePct}% coverage, need >=90%). Rolling back to prevent serving incomplete data.`,
+      );
       await db.delete(trendingPeople);
       return false;
     }
 
     if (rows.length < trackedCount) {
-      console.warn(`[Boot] WARNING: Hydrated ${rows.length}/${trackedCount} rows (${coveragePct}% coverage). Some people may be missing from the leaderboard.`);
+      console.warn(
+        `[Boot] WARNING: Hydrated ${rows.length}/${trackedCount} main-leaderboard rows (${coveragePct}% coverage). Some people may be missing from the leaderboard.`,
+      );
     }
 
-    console.log(`[Boot] Successfully hydrated trending_people with ${rows.length}/${trackedCount} rows from run ${runId}`);
+    console.log(
+      `[Boot] Successfully hydrated trending_people with ${rows.length}/${trackedCount} main-leaderboard rows from run ${runId}`,
+    );
     return true;
   } catch (err) {
     console.error("[Boot] Failed to hydrate trending_people:", err);
