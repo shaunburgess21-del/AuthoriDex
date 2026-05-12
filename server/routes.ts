@@ -3162,11 +3162,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const trendsMomentumRatio = Number(trendsDiag?.raw?.trendsMomentumRatio ?? 0);
       const trendsMomentumLevel = computeMomentumLevel(trendsMomentumRatio);
 
-      const persistedTrendsMomentumScore = Number(trendsDiag?.velocityComponents?.trendsMomentum ?? 0);
-      const prevTrendsMomentumRaw = prevDiag?.velocityComponents?.trendsMomentum;
-      const prevTrendsMomentumScore = typeof prevTrendsMomentumRaw === "number" ? prevTrendsMomentumRaw : null;
-      const rawTrendsDeltaPct = prevTrendsMomentumScore !== null && prevTrendsMomentumScore > 0
-        ? Math.round(((persistedTrendsMomentumScore - prevTrendsMomentumScore) / prevTrendsMomentumScore) * 100)
+      // Day-over-day delta for the Google Trends Activity pill — sourced
+      // from the SerpApi 7-day hourly window (latest 4h mean vs 24-28h-ago
+      // 4h mean), both captured into `diagnostics.raw` at ingest time so
+      // the delta is computable from a single snapshot. This replaces the
+      // previous velocity-component-based delta which was wired to the
+      // dormant `trendsMomentum` score (weight 0 in the engine) and was
+      // therefore always 0 — leaving the Trends pill em-dashed and the
+      // Google Trends chip absent from the leaderboard popup's Growth /
+      // Cooling lists. Mirrors the Wiki Pulse fix: pull both ends of the
+      // comparison from the same provider response so we don't depend on
+      // a 24h-ago snapshot that may carry a stale carried-forward value.
+      const trendsPrevDayInterest = Number(trendsDiag?.raw?.trendsPrevDayInterest ?? 0);
+      const rawTrendsDeltaPct = trendsPrevDayInterest > 0 && trendsInterest > 0
+        ? Math.round(((trendsInterest - trendsPrevDayInterest) / trendsPrevDayInterest) * 100)
         : 0;
       const trendsDeltaPct = Math.abs(rawTrendsDeltaPct) <= DELTA_DEAD_ZONE_PCT ? 0 : rawTrendsDeltaPct;
 

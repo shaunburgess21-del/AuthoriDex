@@ -49,6 +49,15 @@ export interface TrendsBatchResult {
   personId: string;
   timeseries: TrendsTimeseriesPoint[];
   latestInterest: number;
+  // Mean of the 4 hourly points covering 24-28 hours before "now" — the
+  // direct day-over-day comparator for `latestInterest`. Both windows are
+  // drawn from the same SerpApi response so they live on the same 0-100
+  // normalisation scale, which makes their ratio meaningful. Powers the
+  // Wiki-Pulse-style 24h delta pill on the Google Trends Activity card
+  // (see server/routes.ts → trendsDeltaPct). 0 when fewer than 28 hourly
+  // points are available (very rare; first few hours of a brand-new
+  // Topic ID).
+  prevDayInterest: number;
   avg7d: number;
   avg90d: number;
 }
@@ -258,6 +267,16 @@ export async function fetchGoogleTrendsBatch(
         const latestInterest = lastWindow.length > 0
           ? lastWindow.reduce((s, x) => s + x.interest, 0) / lastWindow.length
           : 0;
+        // Mean of the same-sized 4h window shifted back 24h (points
+        // 24-28h before "now") — the day-over-day comparator. Lives on
+        // the same 0-100 normalised scale as `latestInterest` because
+        // it comes from the same SerpApi response, so dividing one by
+        // the other gives a meaningful percentage. Powers the 24h delta
+        // pill on the Google Trends Activity card.
+        const prevWindow = series.length >= 28 ? series.slice(-28, -24) : [];
+        const prevDayInterest = prevWindow.length > 0
+          ? prevWindow.reduce((s, x) => s + x.interest, 0) / prevWindow.length
+          : 0;
         // Mean across the full 7-day window — the baseline that "current"
         // is compared against in momentum ratios. Computed for free off
         // the same call; consumed by the future Trends Momentum card.
@@ -267,16 +286,17 @@ export async function fetchGoogleTrendsBatch(
           personId: p.personId,
           timeseries: series,
           latestInterest,
+          prevDayInterest,
           avg7d,
           avg90d: 0, // not available in 7-day window; dormant signal
         });
       } else {
-        results.push({ personId: p.personId, timeseries: [], latestInterest: 0, avg7d: 0, avg90d: 0 });
+        results.push({ personId: p.personId, timeseries: [], latestInterest: 0, prevDayInterest: 0, avg7d: 0, avg90d: 0 });
       }
     } else if (data) {
       // SerpApi returned success but no timeline — likely below Trends'
       // entity threshold for the queried window.
-      results.push({ personId: p.personId, timeseries: [], latestInterest: 0, avg7d: 0, avg90d: 0 });
+      results.push({ personId: p.personId, timeseries: [], latestInterest: 0, prevDayInterest: 0, avg7d: 0, avg90d: 0 });
     }
 
     if (i < people.length - 1) {

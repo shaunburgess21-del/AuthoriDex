@@ -2023,6 +2023,13 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
 
         // Google Trends momentum diagnostics (May 2026 — display-only, dormant)
         const trendsInterestLatest = trends?.latestInterest ?? 0;
+        // Day-over-day baseline for the Trends Activity 24h pill — the mean
+        // interest 24-28h before "now", drawn from the same SerpApi 7-day
+        // window as `latestInterest`. Persisting both on the same snapshot
+        // means the delta is always computable from a single row, so the
+        // pill stays accurate across the 12h trends fetch cadence (no
+        // snapshot-diff dependency, no cache-stickiness issues).
+        const trendsPrevDayInterest = trends?.prevDayInterest ?? 0;
         const trendsAvg7d = trends?.avg7d ?? 0;
         const trendsAvg90d = trends?.avg90d ?? 0;
         const trendsMomentumRatio = trendsAvg7d > 0 && trendsInterestLatest > 0
@@ -2048,6 +2055,7 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
             wikiMomentumLevel,
             ...(trends ? {
               trendsInterest: trendsInterestLatest,
+              trendsPrevDayInterest,
               trendsAvg7d,
               trendsMass90d: trendsAvg90d,
               trendsMomentumRatio,
