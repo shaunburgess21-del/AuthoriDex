@@ -204,6 +204,34 @@ export function StakeModal({
     isAmm && ammPriceMap && selection.entryId
       ? ammPriceMap[selection.entryId] ?? null
       : null;
+  /**
+   * Polymarket pass: AMM binary-market helpers used by the hero tiles
+   * at the top of the modal and by the price chips on the in-modal
+   * Up/Down toggle.
+   *
+   * `oppositeEntryId` is the *other* outcome on a binary AMM market —
+   * derived from the snapshot's outcomeOrder so callers don't need to
+   * thread both entry IDs. For multi-outcome AMM markets this will
+   * pick whichever non-selected entry comes first, which is fine
+   * because the hero tiles only render for binary types (updown/h2h).
+   *
+   * `ammPickPrice` / `ammOppositePrice` flow into the hero tiles.
+   * `ammUpPrice` / `ammDownPrice` are derived from those for the
+   * Up/Down toggle's price chips so the values are always consistent
+   * regardless of which side the user currently has selected.
+   */
+  const oppositeEntryId =
+    isAmm && ammSnapshot && selection.entryId
+      ? (ammSnapshot.outcomeOrder ?? []).find((id) => id !== selection.entryId) ?? null
+      : null;
+  const ammOppositePrice =
+    isAmm && ammPriceMap && oppositeEntryId
+      ? ammPriceMap[oppositeEntryId] ?? null
+      : null;
+  // `ammUpPrice` / `ammDownPrice` are defined further down, after `isUp`
+  // / `isDown` are computed from `selection.choice`. They use those
+  // booleans to map "currently selected entry's price" → UP or DOWN
+  // slot regardless of which side the user has picked.
   const ammBuyQuote = isAmm && ammMode === "buy" && parsedAmount >= MIN_STAKE && selection.entryId
     ? deriveBuyQuote(selection.ammState ?? null, selection.entryId, parsedAmount)
     : null;
@@ -222,6 +250,21 @@ export function StakeModal({
     (selection.openMarketType == null || selection.openMarketType === "multi");
   const isUp = selection.choice.includes("UP");
   const isDown = selection.choice.includes("DOWN");
+
+  // Polymarket pass: per-side prices for the in-modal Up/Down toggle's
+  // cost-per-share chips. We derive them from the currently-selected
+  // entry's price + the opposite entry's price (defined above) so the
+  // toggle stays consistent regardless of which side the user is on.
+  const ammUpPrice: number | null = isAmm
+    ? isUp
+      ? ammEntryPrice
+      : ammOppositePrice
+    : null;
+  const ammDownPrice: number | null = isAmm
+    ? isDown
+      ? ammEntryPrice
+      : ammOppositePrice
+    : null;
 
   const isTopUp = !!selection.isTopUp;
   // Header copy. On a follow-up bet we surface "Add to your X stake" so users
@@ -373,6 +416,77 @@ export function StakeModal({
         )}
 
         <div className="py-2 space-y-4">
+          {/* Polymarket pass: hero "Live Market" tiles for binary AMM
+              markets (updown + h2h). Puts the live price front-and-centre
+              so the user can confirm what they're paying per share before
+              their eye even reaches the pick card. The picked side gets
+              a stronger border + tint so the modal doubles as a
+              "you're on UP at 56%" confirmation. */}
+          {isAmm && (isUpDown || isH2H) && ammPriceMap && (() => {
+            const pickPrice = ammEntryPrice;
+            const oppositePrice = ammOppositePrice;
+            if (pickPrice == null || oppositePrice == null) return null;
+
+            let pickLabel: string;
+            let oppositeLabel: string;
+            let pickClass: string;
+            let oppositeClass: string;
+            if (isUpDown) {
+              pickLabel = isUp ? "UP" : "DOWN";
+              oppositeLabel = isUp ? "DOWN" : "UP";
+              const upTone =
+                "border-[#00C853]/60 bg-[#00C853]/15 text-[#00C853]";
+              const downTone =
+                "border-[#FF0000]/60 bg-[#FF0000]/15 text-[#FF0000]";
+              const upMuted =
+                "border-[#00C853]/25 bg-[#00C853]/5 text-[#00C853]/70";
+              const downMuted =
+                "border-[#FF0000]/25 bg-[#FF0000]/5 text-[#FF0000]/70";
+              pickClass = isUp ? upTone : downTone;
+              oppositeClass = isUp ? downMuted : upMuted;
+            } else {
+              pickLabel = selection.personName ?? "Your pick";
+              oppositeLabel = selection.opponentName ?? "Opponent";
+              pickClass =
+                "border-violet-500/60 bg-violet-500/15 text-violet-700 dark:text-violet-300";
+              oppositeClass =
+                "border-border/40 bg-muted/30 text-muted-foreground";
+            }
+
+            return (
+              <div className="grid grid-cols-2 gap-2" data-testid="amm-hero-tiles">
+                <div
+                  className={`rounded-lg border-2 px-3 py-2.5 ${pickClass}`}
+                  data-testid="amm-hero-tile-pick"
+                >
+                  <p className="text-[10px] font-semibold uppercase tracking-wide truncate">
+                    {pickLabel}
+                  </p>
+                  <p className="text-2xl font-bold leading-tight font-mono">
+                    {priceToPercent(pickPrice, 0)}
+                  </p>
+                  <p className="text-[10px] font-mono opacity-70">
+                    {pickPrice.toFixed(3)} cr/share
+                  </p>
+                </div>
+                <div
+                  className={`rounded-lg border px-3 py-2.5 ${oppositeClass}`}
+                  data-testid="amm-hero-tile-opposite"
+                >
+                  <p className="text-[10px] font-semibold uppercase tracking-wide truncate">
+                    {oppositeLabel}
+                  </p>
+                  <p className="text-2xl font-bold leading-tight font-mono">
+                    {priceToPercent(oppositePrice, 0)}
+                  </p>
+                  <p className="text-[10px] font-mono opacity-70">
+                    {oppositePrice.toFixed(3)} cr/share
+                  </p>
+                </div>
+              </div>
+            );
+          })()}
+
           <Card className="p-3 bg-violet-500/8 dark:bg-violet-500/5 border-violet-500/20">
             <p className="text-xs text-muted-foreground mb-1">{selection.marketName}</p>
             {isUpDown ? (
@@ -435,26 +549,52 @@ export function StakeModal({
                 the other side is closing the modal and the lock-out chip
                 already greys out the opposite button on the card. */}
             {isUpDown && onDirectionChange && !isTopUp && (
+              /* Polymarket pass: AMM markets get cost-per-share appended to
+                 each side of the toggle so the user sees the price at the
+                 choice point. Mirrors the YES/NO button pattern from
+                 Polymarket's mobile flow. Parimutuel markets keep the
+                 single-line label-only variant — they don't have a
+                 fixed per-share price. */
               <div className="flex gap-2 mt-2">
                 <button
                   onClick={() => onDirectionChange("up")}
-                  className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md text-xs font-medium border transition-all ${
+                  className={`flex-1 flex flex-col items-center justify-center gap-0.5 ${
+                    isAmm ? "py-2" : "py-1.5"
+                  } rounded-md text-xs font-medium border transition-all ${
                     isUp
                       ? "bg-[#00C853]/20 border-[#00C853]/60 text-[#00C853]"
                       : "bg-transparent border-slate-700 text-slate-600 dark:text-slate-400 hover:border-[#00C853]/40 hover:text-[#00C853]/60"
                   }`}
+                  data-testid="stake-modal-toggle-up"
                 >
-                  <TrendingUp className="h-3 w-3" /> Up
+                  <span className="inline-flex items-center gap-1">
+                    <TrendingUp className="h-3 w-3" /> Up
+                  </span>
+                  {isAmm && ammUpPrice != null && (
+                    <span className="text-[10px] font-mono opacity-80">
+                      {ammUpPrice.toFixed(2)} cr
+                    </span>
+                  )}
                 </button>
                 <button
                   onClick={() => onDirectionChange("down")}
-                  className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md text-xs font-medium border transition-all ${
+                  className={`flex-1 flex flex-col items-center justify-center gap-0.5 ${
+                    isAmm ? "py-2" : "py-1.5"
+                  } rounded-md text-xs font-medium border transition-all ${
                     isDown
                       ? "bg-[#FF0000]/20 border-[#FF0000]/60 text-[#FF0000]"
                       : "bg-transparent border-slate-700 text-slate-600 dark:text-slate-400 hover:border-[#FF0000]/40 hover:text-[#FF0000]/60"
                   }`}
+                  data-testid="stake-modal-toggle-down"
                 >
-                  <TrendingDown className="h-3 w-3" /> Down
+                  <span className="inline-flex items-center gap-1">
+                    <TrendingDown className="h-3 w-3" /> Down
+                  </span>
+                  {isAmm && ammDownPrice != null && (
+                    <span className="text-[10px] font-mono opacity-80">
+                      {ammDownPrice.toFixed(2)} cr
+                    </span>
+                  )}
                 </button>
               </div>
             )}
@@ -597,87 +737,11 @@ export function StakeModal({
             </p>
           )}
 
-          {/* AMM live price + payout-if-win quote. Replaces the parimutuel
-              estimatedPayout pill on engine='amm' markets. Shares pay 1
-              credit each at settlement, so payout-if-win = floor(shares).
-              When the buy is large enough to move the marginal price by
-              >= 1pp we surface a "Final price" slippage row so traders
-              can see they're walking up the curve. */}
-          {isAmm && ammEntryPrice != null && (() => {
-            // Slippage = marginal price after the trade lands minus the
-            // current pre-trade price. We render it only on meaningful
-            // moves (>= 1pp) to avoid noise on small trades that just
-            // round to the same percent label.
-            const buyFinalPrice =
-              ammMode === "buy" && ammBuyQuote && ammBuyQuote.shares > 0 && selection.entryId
-                ? Number(ammBuyQuote.newPrices[selection.entryId] ?? 0)
-                : null;
-            const sellFinalPrice =
-              ammMode === "sell" && ammSellQuote && selection.entryId
-                ? Number(ammSellQuote.newPrices[selection.entryId] ?? 0)
-                : null;
-            const finalPrice = buyFinalPrice ?? sellFinalPrice;
-            const showSlippage =
-              finalPrice != null && Math.abs(finalPrice - ammEntryPrice) >= 0.01;
-            return (
-              <div className="rounded-md border border-violet-500/30 bg-violet-500/8 dark:bg-violet-500/5 px-3 py-2 text-xs space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Live price</span>
-                  <span className="font-mono font-medium text-foreground">
-                    {priceToPercent(ammEntryPrice, 0)}{" "}
-                    <span className="text-muted-foreground/70 font-normal">
-                      ({ammEntryPrice.toFixed(3)} cr/share)
-                    </span>
-                  </span>
-                </div>
-                {ammMode === "buy" && ammBuyQuote && ammBuyQuote.shares > 0 && (
-                  <>
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">You receive</span>
-                      <span className="font-mono font-medium text-foreground">
-                        ~{ammBuyQuote.shares.toFixed(2)} shares
-                        <span className="text-muted-foreground/70 font-normal">
-                          {" "}(avg {ammBuyQuote.pricePerShareAvg.toFixed(3)} cr)
-                        </span>
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">If you win</span>
-                      <span className="font-mono font-medium text-green-700 dark:text-green-500">
-                        ~{Math.floor(ammBuyQuote.shares).toLocaleString("en-US")} credits
-                        <span className="text-muted-foreground/70 font-normal">
-                          {" "}(+{Math.max(0, Math.floor(ammBuyQuote.shares) - ammBuyQuote.chargeCredits).toLocaleString("en-US")} net)
-                        </span>
-                      </span>
-                    </div>
-                  </>
-                )}
-                {ammMode === "sell" && ammSellQuote && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Sell proceeds</span>
-                    <span className="font-mono font-medium text-foreground">
-                      ~{ammSellQuote.proceeds.toLocaleString("en-US")} credits
-                    </span>
-                  </div>
-                )}
-                {showSlippage && finalPrice != null && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Final price</span>
-                    <span className="font-mono font-medium text-amber-700 dark:text-amber-400">
-                      {priceToPercent(ammEntryPrice, 0)} → {priceToPercent(finalPrice, 0)}
-                      <span className="text-muted-foreground/70 font-normal">
-                        {" "}({finalPrice > ammEntryPrice ? "+" : ""}
-                        {((finalPrice - ammEntryPrice) * 100).toFixed(1)}pp)
-                      </span>
-                    </span>
-                  </div>
-                )}
-                <p className="text-[10px] text-muted-foreground/70 italic">
-                  Live LMSR price — updates as people trade. Buy now, sell any time before close.
-                </p>
-              </div>
-            );
-          })()}
+          {/* Polymarket pass: the AMM receipt (Payout / shares / final
+              price) now renders BELOW the credit input so it updates
+              directly under what the user is typing. Find the restyled
+              block right after the input + presets. The slot here keeps
+              parimutuel's Early Bird Boost pill in place below. */}
 
           {!isAmm && (() => {
             let startRef = selection.marketStartAt ?? selection.baselineTimestamp;
@@ -927,6 +991,119 @@ export function StakeModal({
               </div>
             </>
           )}
+
+          {/* Polymarket pass: restyled AMM receipt. Big "Payout if win"
+              number is the hero; share count + avg price are demoted to
+              a secondary line. Lives directly under the input + presets
+              so the receipt updates immediately as the user types — the
+              same pattern Polymarket uses with their "To win $X" line.
+              Slippage warning still surfaces on >=1pp moves. */}
+          {isAmm && ammEntryPrice != null && (() => {
+            const buyFinalPrice =
+              ammMode === "buy" && ammBuyQuote && ammBuyQuote.shares > 0 && selection.entryId
+                ? Number(ammBuyQuote.newPrices[selection.entryId] ?? 0)
+                : null;
+            const sellFinalPrice =
+              ammMode === "sell" && ammSellQuote && selection.entryId
+                ? Number(ammSellQuote.newPrices[selection.entryId] ?? 0)
+                : null;
+            const finalPrice = buyFinalPrice ?? sellFinalPrice;
+            const showSlippage =
+              finalPrice != null && Math.abs(finalPrice - ammEntryPrice) >= 0.01;
+
+            const isBuyMode = ammMode === "buy";
+            const hasBuyQuote = isBuyMode && ammBuyQuote && ammBuyQuote.shares > 0;
+            const hasSellQuote = !isBuyMode && ammSellQuote;
+            // Direction-aware label for the "shares" line so it reads
+            // naturally on Up/Down ("226 UP shares") and falls back to
+            // a neutral "shares" everywhere else.
+            const sideShareLabel = isUpDown
+              ? isUp
+                ? "UP shares"
+                : "DOWN shares"
+              : "shares";
+
+            // Receipt header copy switches between buy and sell to make
+            // the primary number unambiguous: "Payout if win" in buy
+            // mode, "Sell proceeds" in sell mode.
+            const heroLabel = isBuyMode ? "PAYOUT IF WIN" : "SELL PROCEEDS";
+
+            return (
+              <div
+                className="rounded-md border border-violet-500/30 bg-violet-500/8 dark:bg-violet-500/5 px-3 py-2.5 text-xs space-y-2"
+                data-testid="amm-receipt-card"
+              >
+                <div className="flex items-end justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      {heroLabel}
+                    </p>
+                    {hasBuyQuote && ammBuyQuote ? (
+                      <p className="text-2xl font-bold leading-tight font-mono text-green-700 dark:text-green-500">
+                        ~{Math.floor(ammBuyQuote.shares).toLocaleString("en-US")}{" "}
+                        <span className="text-base font-medium">cr</span>
+                      </p>
+                    ) : hasSellQuote && ammSellQuote ? (
+                      <p className="text-2xl font-bold leading-tight font-mono text-green-700 dark:text-green-500">
+                        +{ammSellQuote.proceeds.toLocaleString("en-US")}{" "}
+                        <span className="text-base font-medium">cr</span>
+                      </p>
+                    ) : (
+                      <p className="text-2xl font-bold leading-tight font-mono text-muted-foreground/50">
+                        — cr
+                      </p>
+                    )}
+                  </div>
+                  {hasBuyQuote && ammBuyQuote && (
+                    <span
+                      className="shrink-0 inline-flex items-center rounded-full bg-green-500/15 text-green-700 dark:text-green-400 px-2 py-0.5 text-[10px] font-mono font-semibold"
+                      data-testid="amm-receipt-net"
+                    >
+                      +{Math.max(0, Math.floor(ammBuyQuote.shares) - ammBuyQuote.chargeCredits).toLocaleString("en-US")} net
+                    </span>
+                  )}
+                </div>
+
+                {hasBuyQuote && ammBuyQuote && (
+                  <p className="text-[11px] font-mono text-muted-foreground border-t border-violet-500/15 pt-1.5">
+                    {ammBuyQuote.shares.toFixed(2)} {sideShareLabel}
+                    <span className="text-muted-foreground/70">
+                      {" · avg "}
+                      {ammBuyQuote.pricePerShareAvg.toFixed(3)} cr/share
+                    </span>
+                  </p>
+                )}
+
+                {hasSellQuote && ammSellQuote && (
+                  <p className="text-[11px] font-mono text-muted-foreground border-t border-violet-500/15 pt-1.5">
+                    Selling {Math.min(parsedSellShares, ammNetShares).toFixed(2)} {sideShareLabel}
+                    <span className="text-muted-foreground/70">
+                      {" @ ~"}
+                      {ammEntryPrice.toFixed(3)} cr/share
+                    </span>
+                  </p>
+                )}
+
+                {!hasBuyQuote && !hasSellQuote && (
+                  <p className="text-[11px] text-muted-foreground/70 italic border-t border-violet-500/15 pt-1.5">
+                    {isBuyMode
+                      ? "Enter a credit amount to see your potential payout."
+                      : "Enter shares to sell to see proceeds."}
+                  </p>
+                )}
+
+                {showSlippage && finalPrice != null && (
+                  <p className="text-[10px] font-mono text-amber-700 dark:text-amber-400 flex items-center gap-1">
+                    Final price {priceToPercent(ammEntryPrice, 0)} → {priceToPercent(finalPrice, 0)}
+                    <span className="text-amber-700/70 dark:text-amber-400/70">
+                      ({finalPrice > ammEntryPrice ? "+" : ""}
+                      {((finalPrice - ammEntryPrice) * 100).toFixed(1)}pp)
+                    </span>
+                  </p>
+                )}
+              </div>
+            );
+          })()}
 
           <div className="flex items-center justify-between text-xs pt-2 border-t">
             <div>

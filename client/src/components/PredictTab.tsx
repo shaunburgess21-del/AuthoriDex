@@ -1095,6 +1095,29 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
         selection={pendingSelection}
         onConfirm={handleConfirmStake}
         walletBalance={walletCredits}
+        onDirectionChange={(dir) => {
+          /* Sprint 4 (Polymarket pass): adding the in-modal Up/Down
+             toggle here too so the experience is consistent with
+             HomePage / PredictPage. The toggle now also carries
+             cost-per-share chips for AMM markets, so users on a
+             person's detail page can comparison-shop without closing
+             the modal. weeklyMarket is the only updown market in
+             scope for this tab (one market per person per week). */
+          if (!pendingSelection || pendingSelection.type !== "updown") return;
+          if (dir !== "up" && dir !== "down") return;
+          if (!weeklyMarket) return;
+          const entryId = dir === "up" ? weeklyMarket.upEntryId : weeklyMarket.downEntryId;
+          if (!entryId) return;
+          setPendingSelection({
+            ...pendingSelection,
+            choice: dir === "up" ? "Trend Score UP" : "Trend Score DOWN",
+            entryId,
+            crowdSentiment: dir === "up" ? weeklyMarket.upPoolPercent : 100 - weeklyMarket.upPoolPercent,
+            estimatedPayout: dir === "up" ? weeklyMarket.upMultiplier : weeklyMarket.downMultiplier,
+            engine: weeklyMarket.engine === "amm" ? "amm" : "parimutuel",
+            ammState: weeklyMarket.ammState ?? null,
+          });
+        }}
       />
 
       {(["predictions", "community", "jackpot", "updown", "h2h", "gainer"] as const).map((key) => {
