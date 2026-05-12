@@ -1,6 +1,7 @@
 import { db } from "../db";
 import { trackedPeople, trendSnapshots, apiCache } from "@shared/schema";
 import { gte, and, eq, sql } from "drizzle-orm";
+
 import { computeTrendScore } from "../scoring/trendScore";
 
 /**
@@ -49,8 +50,13 @@ export async function runQuickScoring(): Promise<QuickScoreOutput> {
   let errors = 0;
 
   try {
-    const people = await db.select().from(trackedPeople);
-    console.log(`[QuickScore] Found ${people.length} tracked people`);
+    // Preview-only quick scoring runs against the same cohort as ingest:
+    // main-leaderboard people. Induction shadow rows are excluded.
+    const people = await db
+      .select()
+      .from(trackedPeople)
+      .where(eq(trackedPeople.status, "main_leaderboard"));
+    console.log(`[QuickScore] Found ${people.length} main-leaderboard tracked people`);
 
     const cachedData = await db.select().from(apiCache).where(
       sql`${apiCache.provider} IN ('wiki', 'gdelt', 'serper', 'x')`

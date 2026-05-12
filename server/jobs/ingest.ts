@@ -448,7 +448,9 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     const snapshotRows = Array.isArray(existingSnapshotCount) ? existingSnapshotCount : (existingSnapshotCount as any).rows ?? [];
     const existingCount = parseInt((snapshotRows[0] as any)?.count || '0', 10);
 
-    const trackedCount = await db.execute(sql`SELECT COUNT(*) as count FROM tracked_people`);
+    const trackedCount = await db.execute(
+      sql`SELECT COUNT(*) as count FROM tracked_people WHERE status = 'main_leaderboard'`,
+    );
     const trackedRows = Array.isArray(trackedCount) ? trackedCount : (trackedCount as any).rows ?? [];
     const totalTracked = parseInt((trackedRows[0] as any)?.count || '0', 10);
 

@@ -4623,7 +4623,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           tp.category,
           tp.bio
         FROM trend_snapshots ts
-        JOIN tracked_people tp ON tp.id = ts.person_id
+        JOIN tracked_people tp ON tp.id = ts.person_id AND tp.status = 'main_leaderboard'
         WHERE ts.run_id = ${fallbackRunId}
           AND ts.score_version = ${SCORE_VERSION}
         ORDER BY ts.fame_index DESC NULLS LAST
@@ -5865,11 +5865,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Admin endpoint to refresh all celebrity profiles with source-grounded generation
+  // Admin endpoint to refresh all celebrity profiles with source-grounded generation.
+  // Filter to main-leaderboard only so induction shadow rows don't burn OpenAI / API quota.
   app.post("/api/admin/refresh-all-profiles", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const people = await db.select().from(trackedPeople);
-      console.log(`[Admin] Starting profile refresh for ${people.length} celebrities...`);
+      const people = await db
+        .select()
+        .from(trackedPeople)
+        .where(eq(trackedPeople.status, "main_leaderboard"));
+      console.log(`[Admin] Starting profile refresh for ${people.length} main-leaderboard celebrities...`);
 
       const BATCH_SIZE = 5;
       const DELAY_MS = 2000;

@@ -1,11 +1,16 @@
 import { db } from "./db";
 import { trackedPeople, type TrackedPerson, type TrendingPerson } from "@shared/schema";
+import { eq } from "drizzle-orm";
 import { getOrGenerateCelebrityProfile } from "./services/profile-generator";
 
 async function refreshAllProfiles() {
-  console.log("Starting bulk profile refresh for all celebrities...");
-  
-  const people = await db.select().from(trackedPeople);
+  console.log("Starting bulk profile refresh for all main-leaderboard celebrities...");
+
+  // Skip induction shadow rows; profile generation hits paid APIs (OpenAI etc.).
+  const people = await db
+    .select()
+    .from(trackedPeople)
+    .where(eq(trackedPeople.status, "main_leaderboard"));
   console.log(`Found ${people.length} celebrities to refresh.`);
   
   let successCount = 0;

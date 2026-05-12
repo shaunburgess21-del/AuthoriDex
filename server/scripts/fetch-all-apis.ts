@@ -1,5 +1,6 @@
 import { db } from "../db";
 import { trackedPeople, apiCache } from "@shared/schema";
+import { eq } from "drizzle-orm";
 import { fetchSerperData } from "../providers/serper";
 // NOTE (Jan 2026): X API removed from trend score engine due to cost constraints.
 // X API keys preserved for future Platform Insights feature.
@@ -7,10 +8,14 @@ import { fetchSerperData } from "../providers/serper";
 import { runQuickScoring } from "../jobs/quick-score";
 
 async function fetchAllApiData() {
-  console.log("🚀 Starting full API data fetch for all celebrities...\n");
+  console.log("🚀 Starting full API data fetch for all main-leaderboard celebrities...\n");
   console.log("ℹ️  Note: X API disabled for trend scoring (kept for Platform Insights)\n");
 
-  const people = await db.select().from(trackedPeople);
+  // Induction shadow rows must not consume Serper / external quota.
+  const people = await db
+    .select()
+    .from(trackedPeople)
+    .where(eq(trackedPeople.status, "main_leaderboard"));
   console.log(`📊 Found ${people.length} celebrities to process\n`);
 
   console.log("=" .repeat(60));
