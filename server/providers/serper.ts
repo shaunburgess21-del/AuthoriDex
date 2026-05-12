@@ -452,6 +452,57 @@ export interface SerperNewsCountData {
   articles?: Array<{ url: string; title?: string; publishedAt?: string }>;
 }
 
+/**
+ * Serper's News endpoint silently caps responses at 10 results per page
+ * regardless of the `num` value sent in the request (empirically confirmed
+ * May 2026: 338 of 345 production cache rows returned arrays of length
+ * exactly 10 despite `num: 100`). The cap left ~42% of mature people with
+ * identical `news_count` versus 24h ago — collapsing the News Activity
+ * pill to an em-dash for any celeb whose Mediastack signal was small
+ * enough that Serper's 10-cap dominated the deduped URL union.
+ *
+ * SERPER_NEWS_PAGE_SIZE matches the observed cap. When a page returns
+ * exactly this many results, we treat that as "cap hit" and paginate
+ * forward via Serper's standard `page` request parameter. Bounded by
+ * SERPER_NEWS_MAX_PAGES so a high-volume celeb adds at most 2 extra
+ * calls (up to ~30 articles total), which is plenty of resolution for
+ * the delta pill on the Momentum Signals card.
+ */
+const SERPER_NEWS_PAGE_SIZE = 10;
+const SERPER_NEWS_MAX_PAGES = 3;
+const SERPER_NEWS_INTER_PAGE_DELAY_MS = 200;
+
+interface SerperNewsRawArticle {
+  link?: string;
+  title?: string;
+  date?: string;
+}
+
+async function fetchSerperNewsPage(
+  name: string,
+  page: number,
+): Promise<SerperNewsRawArticle[] | null> {
+  _serperFallbackCallsAttempted++;
+  const response = await serperFetch("https://google.serper.dev/news", {
+    method: "POST",
+    headers: {
+      "X-API-KEY": SERPER_API_KEY!,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      q: `"${name}"`,
+      num: 100,
+      gl: "us",
+      hl: "en",
+      tbs: "qdr:d",
+      ...(page > 1 ? { page } : {}),
+    }),
+  });
+  if (!response.ok) return null;
+  const data = await response.json();
+  return (data?.news as SerperNewsRawArticle[]) ?? [];
+}
+
 export async function fetchSerperNewsCount(name: string, personId?: string): Promise<SerperNewsCountData | null> {
   if (!SERPER_API_KEY) return null;
 
@@ -464,10 +515,10 @@ export async function fetchSerperNewsCount(name: string, personId?: string): Pro
       return JSON.parse(cached.responseData);
     }
 
-    // Same cap-detection pagination as `fetchSerperNewsCount24h` — see the
-    // explanatory comment above SERPER_NEWS_PAGE_SIZE. The 24h count is the
-    // value that flows into the News Activity pill and its 24h delta, so
-    // de-capping it here matters even on this legacy tiered-mode path.
+    // Cap-detection pagination — see the explanatory comment above
+    // SERPER_NEWS_PAGE_SIZE. The 24h count is what flows into the News
+    // Activity pill and its 24h delta, so de-capping matters even on
+    // this legacy tiered-mode path.
     const all24h: SerperNewsRawArticle[] = [];
     for (let page = 1; page <= SERPER_NEWS_MAX_PAGES; page++) {
       if (page > 1) {
@@ -580,57 +631,11 @@ export async function fetchSerperNewsBatch(
  *
  * Uses a separate cache key (`serper:newscount_24h:NAME`) so it can't pollute
  * the full-fat cache consumed by the legacy tiered-mode Serper fallback.
- */
-/**
- * Serper's News endpoint silently caps responses at 10 results per page
- * regardless of the `num` value sent in the request (empirically confirmed:
- * 338 of 345 production cache rows returned arrays of length exactly 10
- * despite `num: 100`). The cap left ~42% of mature people with identical
- * `news_count` versus 24h ago — collapsing the News Activity pill to an
- * em-dash for any celeb whose Mediastack signal was small enough that
- * Serper's 10-cap dominated the deduped URL union.
  *
- * SERPER_NEWS_PAGE_SIZE matches the observed cap. When a page returns
- * exactly this many results, we treat that as "cap hit" and paginate
- * forward. Bounded by SERPER_NEWS_MAX_PAGES so a high-volume celeb
- * adds at most 2 extra calls (up to ~30 articles total), which is
- * plenty of resolution for the delta pill.
+ * Paginates the 24h call the same way as `fetchSerperNewsCount` to defeat
+ * Serper's 10-per-page cap — see SERPER_NEWS_PAGE_SIZE above for the full
+ * explanation.
  */
-const SERPER_NEWS_PAGE_SIZE = 10;
-const SERPER_NEWS_MAX_PAGES = 3;
-const SERPER_NEWS_INTER_PAGE_DELAY_MS = 200;
-
-interface SerperNewsRawArticle {
-  link?: string;
-  title?: string;
-  date?: string;
-}
-
-async function fetchSerperNewsPage(
-  name: string,
-  page: number,
-): Promise<SerperNewsRawArticle[] | null> {
-  _serperFallbackCallsAttempted++;
-  const response = await serperFetch("https://google.serper.dev/news", {
-    method: "POST",
-    headers: {
-      "X-API-KEY": SERPER_API_KEY!,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      q: `"${name}"`,
-      num: 100,
-      gl: "us",
-      hl: "en",
-      tbs: "qdr:d",
-      ...(page > 1 ? { page } : {}),
-    }),
-  });
-  if (!response.ok) return null;
-  const data = await response.json();
-  return (data?.news as SerperNewsRawArticle[]) ?? [];
-}
-
 export async function fetchSerperNewsCount24h(name: string, personId?: string): Promise<SerperNewsCountData | null> {
   if (!SERPER_API_KEY) return null;
 
