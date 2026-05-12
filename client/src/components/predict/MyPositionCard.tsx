@@ -390,17 +390,21 @@ function PositionHeader({
         // positions. Lives next to the header rather than inside the
         // body so it survives the per-kind layout switches (UpDown vs
         // Race etc.) and never competes with the live-payout chip.
-        <Button
-          type="button"
-          variant="outline"
-          size="icon"
-          className="h-8 w-8 shrink-0 border-violet-500/30 hover:bg-violet-500/10"
-          onClick={onShare}
-          aria-label="Share this position"
-          data-testid="button-share-position"
-        >
-          <Share2 className="h-4 w-4 text-violet-600 dark:text-violet-400" />
-        </Button>
+        // Tooltip is the discovery hint — the icon alone could read
+        // as "send" or "navigate" without context.
+        <TouchTooltip content="Share this position">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-8 w-8 shrink-0 border-violet-500/30 hover:bg-violet-500/10"
+            onClick={onShare}
+            aria-label="Share this position"
+            data-testid="button-share-position"
+          >
+            <Share2 className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+          </Button>
+        </TouchTooltip>
       )}
 
       {showResult && settled && (

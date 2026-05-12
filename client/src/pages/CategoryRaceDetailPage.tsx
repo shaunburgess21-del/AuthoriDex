@@ -570,7 +570,11 @@ export default function CategoryRaceDetailPage() {
                 username: profile?.username || "you",
                 personName: candidate?.name ?? pos.entryLabel ?? null,
                 personAvatar: candidate?.avatar ?? null,
-                marketTitle: `Category Race · ${categoryLabel}`,
+                // Match the existing trade share format on this page
+                // ("Category Race: <Label>") so the buy / position
+                // share-card titles read identically for the same
+                // market.
+                marketTitle: `Category Race: ${categoryLabel}`,
                 category: categoryLabel,
                 entryLabel: candidate?.name ?? pos.entryLabel,
                 direction: "other",

@@ -2038,14 +2038,22 @@ export default function PredictPage() {
             (c) => c.entryId === variables.entryId,
           );
           if (market && candidate) {
+            // Use the human-friendly category label (e.g. "Tech &
+            // business") rather than the normalized code ("tech") so
+            // the share card and toast read naturally — mirrors what
+            // CategoryRaceDetailPage already does for its own share.
+            const categoryLabel = getMarketCategoryLabel(market.category);
             fireAmmTradeToast({
               response: data,
               actionType: "buy",
               username: profile?.username || "you",
               personName: candidate.name ?? null,
               personAvatar: candidate.avatar ?? null,
-              marketTitle: `Category Race · ${market.category}`,
-              category: market.category,
+              // Match the existing share format on the dedicated Race
+              // detail page ("Category Race: <Label>") so the carousel
+              // and detail-page shares read identically.
+              marketTitle: `Category Race: ${categoryLabel}`,
+              category: categoryLabel,
               entryLabel: candidate.name,
               direction: "other",
               openShareCard,
