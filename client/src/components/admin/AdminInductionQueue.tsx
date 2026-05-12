@@ -10,6 +10,15 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Plus, Check, X, Search, Trash2, Edit2, ImagePlus, Loader2 } from "lucide-react";
@@ -139,6 +148,8 @@ interface InductionCandidate {
   isActive: boolean;
 }
 
+type PendingInductionAction = { kind: "approve" | "delete"; candidate: InductionCandidate };
+
 type AdminCategoryRow = { id: string; label: string; sortOrder: number };
 
 export function AdminInductionQueue() {
@@ -149,6 +160,7 @@ export function AdminInductionQueue() {
   const [formData, setFormData] = useState<InductionFormData>({ ...EMPTY_FORM });
   const [pendingGalleryFiles, setPendingGalleryFiles] = useState<File[]>([]);
   const [trendsLookupLoading, setTrendsLookupLoading] = useState(false);
+  const [pendingDestructiveAction, setPendingDestructiveAction] = useState<PendingInductionAction | null>(null);
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
 
   const { data: adminCategoryRows } = useQuery<AdminCategoryRow[]>({
@@ -274,6 +286,21 @@ export function AdminInductionQueue() {
     },
     onError: () => toast.error("Failed to delete candidate"),
   });
+
+  const confirmPendingDestructiveAction = () => {
+    if (!pendingDestructiveAction) return;
+    const { kind, candidate } = pendingDestructiveAction;
+    const clearPending = () => setPendingDestructiveAction(null);
+    if (kind === "approve") {
+      approveMutation.mutate(candidate.id, { onSettled: clearPending });
+    } else {
+      deleteMutation.mutate(candidate.id, { onSettled: clearPending });
+    }
+  };
+
+  const isPendingDestructiveConfirm =
+    (pendingDestructiveAction?.kind === "approve" && approveMutation.isPending) ||
+    (pendingDestructiveAction?.kind === "delete" && deleteMutation.isPending);
 
   const openEdit = (c: InductionCandidate) => {
     setEditCandidate(c);
@@ -429,7 +456,7 @@ export function AdminInductionQueue() {
                         )}
                       </td>
                       <td className="p-3">
-                        <div className="flex items-center justify-end gap-1">
+                        <div className="flex items-center justify-end gap-2">
                           {candidate.isActive && (
                             <>
                               <DesktopActionTooltip content="Approve and add this candidate to the main leaderboard (full profile).">
@@ -437,7 +464,7 @@ export function AdminInductionQueue() {
                                   size="icon"
                                   variant="ghost"
                                   className="text-emerald-600 dark:text-emerald-400"
-                                  onClick={() => approveMutation.mutate(candidate.id)}
+                                  onClick={() => setPendingDestructiveAction({ kind: "approve", candidate })}
                                   disabled={approveMutation.isPending}
                                   aria-label="Approve"
                                   data-testid={`button-approve-${candidate.id}`}
@@ -473,7 +500,7 @@ export function AdminInductionQueue() {
                             size="icon"
                             variant="ghost"
                             className="text-red-600 dark:text-red-400"
-                            onClick={() => deleteMutation.mutate(candidate.id)}
+                            onClick={() => setPendingDestructiveAction({ kind: "delete", candidate })}
                             disabled={deleteMutation.isPending}
                             aria-label="Delete"
                             data-testid={`button-delete-${candidate.id}`}
@@ -787,6 +814,52 @@ export function AdminInductionQueue() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={!!pendingDestructiveAction}
+        onOpenChange={(open) => {
+          if (!open) setPendingDestructiveAction(null);
+        }}
+      >
+        <AlertDialogContent onClick={(e) => e.stopPropagation()}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pendingDestructiveAction?.kind === "delete" ? "Delete candidate?" : "Add to main leaderboard?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div>
+                {pendingDestructiveAction?.kind === "approve" ? (
+                  <>
+                    Add{" "}
+                    <span className="font-medium text-foreground">{pendingDestructiveAction.candidate.displayName}</span> to
+                    the main leaderboard? This creates their full FameDex profile and native modules (Underrated/Overrated,
+                    Curate Profile, etc.).
+                  </>
+                ) : pendingDestructiveAction?.kind === "delete" ? (
+                  <>
+                    Permanently delete{" "}
+                    <span className="font-medium text-foreground">{pendingDestructiveAction.candidate.displayName}</span> from
+                    the induction queue? This cannot be undone.
+                  </>
+                ) : null}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel type="button" disabled={isPendingDestructiveConfirm}>
+              Cancel
+            </AlertDialogCancel>
+            <Button
+              type="button"
+              variant={pendingDestructiveAction?.kind === "delete" ? "destructive" : "default"}
+              onClick={confirmPendingDestructiveAction}
+              disabled={isPendingDestructiveConfirm}
+            >
+              {pendingDestructiveAction?.kind === "delete" ? "Delete" : "Add to leaderboard"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
