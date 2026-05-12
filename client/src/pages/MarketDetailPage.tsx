@@ -814,7 +814,12 @@ export default function MarketDetailPage() {
           stakeAmount: chargeCredits,
         });
         const origin = typeof window !== "undefined" ? window.location.origin : "";
-        const shareUrl = `${origin}/markets/${market.slug}`;
+        // Sprint 3: prefer the per-bet share URL so community-market
+        // shares preview the trade variant. Falls back to the market
+        // page URL on missing betId (legacy pari-mutuel rows).
+        const shareUrl = data?.betId
+          ? `${origin}/share/bet/${data.betId}`
+          : `${origin}/markets/${market.slug}`;
         const fallbackText = `I just backed ${entryLabel} on "${market.title}" on VoxDex!\n${shareUrl}`;
         toast("Shares purchased", {
           description: `${Math.round(shares).toLocaleString()} ${entryLabel} shares · ${chargeCredits.toLocaleString()} cr`,

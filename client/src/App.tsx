@@ -91,6 +91,9 @@ const CategoryRaceDetailPage = lazyWithRetry(() => import("@/pages/CategoryRaceD
 const UpDownDetailPage = lazyWithRetry(() => import("@/pages/UpDownDetailPage"));
 const H2HDetailPage = lazyWithRetry(() => import("@/pages/H2HDetailPage"));
 const HowItWorksPage = lazyWithRetry(() => import("@/pages/HowItWorksPage"));
+const ShareBetRedirect = lazyWithRetry(
+  () => import("@/pages/ShareBetRedirect"),
+);
 const NotFound = lazyWithRetry(() => import("@/pages/not-found"));
 
 function PageFallback() {
@@ -152,6 +155,10 @@ function Router() {
         <Route path="/admin/announcements/legacy" component={AdminAnnouncementsPage} />
         <Route path="/admin" component={AdminDashboard} />
         <Route path="/how-it-works" component={HowItWorksPage} />
+        {/* Sprint 3: per-bet share URL. Bots are intercepted at the
+            Vercel edge and routed to the OG image endpoint; humans hit
+            this page which redirects to the canonical market page. */}
+        <Route path="/share/bet/:betId" component={ShareBetRedirect} />
         <Route component={NotFound} />
       </Switch>
     </Suspense>

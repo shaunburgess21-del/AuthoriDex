@@ -387,7 +387,11 @@ export default function H2HDetailPage() {
         });
         const origin = typeof window !== "undefined" ? window.location.origin : "";
         const pathname = typeof window !== "undefined" ? window.location.pathname : "";
-        const shareUrl = `${origin}${pathname}`;
+        // Sprint 3: per-bet share URL so the H2H preview shows the
+        // picked candidate + price chip in chat clients.
+        const shareUrl = data?.betId
+          ? `${origin}/share/bet/${data.betId}`
+          : `${origin}${pathname}`;
         const fallbackText = `I just backed ${picked.name} on "${hydrated.title}" on VoxDex!\n${shareUrl}`;
         toast("Prediction placed!", {
           description: `${Math.round(shares).toLocaleString()} ${picked.name} shares · ${chargeCredits.toLocaleString()} cr`,
@@ -452,7 +456,10 @@ export default function H2HDetailPage() {
         });
         const origin = typeof window !== "undefined" ? window.location.origin : "";
         const pathname = typeof window !== "undefined" ? window.location.pathname : "";
-        const shareUrl = `${origin}${pathname}`;
+        // Sprint 3: per-bet share URL points at the sell bet row.
+        const shareUrl = data?.betId
+          ? `${origin}/share/bet/${data.betId}`
+          : `${origin}${pathname}`;
         const fallbackText = `Just took ${proceeds} credits off the table on "${hydrated.title}" on VoxDex!\n${shareUrl}`;
         toast("Position sold", {
           description: `Sold ${Math.round(shares).toLocaleString()} ${picked.name} shares · +${proceeds.toLocaleString()} cr`,

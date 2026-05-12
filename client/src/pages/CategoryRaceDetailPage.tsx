@@ -347,7 +347,11 @@ export default function CategoryRaceDetailPage() {
         });
         const origin = typeof window !== "undefined" ? window.location.origin : "";
         const pathname = typeof window !== "undefined" ? window.location.pathname : "";
-        const shareUrl = `${origin}${pathname}`;
+        // Sprint 3: per-bet URL so Race shares preview the candidate
+        // pick + current leader chip row.
+        const shareUrl = data?.betId
+          ? `${origin}/share/bet/${data.betId}`
+          : `${origin}${pathname}`;
         const fallbackText = `I just backed ${candidate.name} in the ${categoryLabel} Race on VoxDex!\n${shareUrl}`;
         toast("Shares purchased", {
           description: `${Math.round(shares).toLocaleString()} ${candidate.name} shares · ${chargeCredits.toLocaleString()} cr`,

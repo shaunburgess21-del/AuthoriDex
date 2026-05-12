@@ -109,6 +109,17 @@
       "destination": "https://authoridex-production.up.railway.app/api/og/matchups/:slug"
     },
     {
+      "source": "/share/bet/:betId",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": "(?i).*(facebookexternalhit|twitterbot|linkedinbot|slackbot|discordbot|whatsapp|telegrambot|skypeuripreview|pinterest|redditbot|embedly|quora link preview|iframely|mastodon|nuzzel|vkshare|tumblr).*"
+        }
+      ],
+      "destination": "https://authoridex-production.up.railway.app/api/og/share/bet/:betId"
+    },
+    {
       "source": "/((?!api/|attached_assets/|.*\\.).*)",
       "destination": "/index.html"
     }

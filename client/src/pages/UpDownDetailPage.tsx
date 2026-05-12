@@ -347,7 +347,13 @@ export default function UpDownDetailPage() {
         });
         const origin = typeof window !== "undefined" ? window.location.origin : "";
         const pathname = typeof window !== "undefined" ? window.location.pathname : "";
-        const shareUrl = `${origin}${pathname}`;
+        // Sprint 3: prefer the per-bet share URL so link previews
+        // render a trade-flavoured OG image. Fall back to the market
+        // page if `betId` is missing (defensive — every AMM trade has
+        // a betId, but pari rows during the legacy window may not).
+        const shareUrl = data?.betId
+          ? `${origin}/share/bet/${data.betId}`
+          : `${origin}${pathname}`;
         const fallbackText = `I just backed ${pendingSelection.choice} on "${hydrated.personName}: Up or Down?" on VoxDex!\n${shareUrl}`;
         toast("Prediction placed!", {
           description: `${Math.round(shares).toLocaleString()} ${pendingSelection.choice} shares · ${chargeCredits.toLocaleString()} cr`,
@@ -414,7 +420,12 @@ export default function UpDownDetailPage() {
         });
         const origin = typeof window !== "undefined" ? window.location.origin : "";
         const pathname = typeof window !== "undefined" ? window.location.pathname : "";
-        const shareUrl = `${origin}${pathname}`;
+        // Sprint 3: per-bet share URL for sells too. `data.betId` here
+        // refers to the *sell* bet row that executeSell wrote, so the
+        // preview renders the amber "SOLD" variant.
+        const shareUrl = data?.betId
+          ? `${origin}/share/bet/${data.betId}`
+          : `${origin}${pathname}`;
         const fallbackText = `Just took ${proceeds} credits off the table on "${hydrated.personName}: Up or Down?" on VoxDex!\n${shareUrl}`;
         toast("Position sold", {
           description: `Sold ${Math.round(shares).toLocaleString()} ${pendingSelection.choice} shares · +${proceeds.toLocaleString()} cr`,
