@@ -47,3 +47,7 @@ A `.env` file must exist in the workspace root. Critical entries:
 4. **Schedulers warning**: On boot you'll see `[Schedulers] FATAL MISCONFIG — DISABLE_SCHEDULERS=true but no CRON_SECRET is set`. This is safe to ignore in local dev — it just means no background ingestion jobs run.
 
 5. **No separate frontend build step needed for dev**: Vite runs in middleware mode inside Express, so `npm run dev` handles everything.
+
+6. **Anonymous voting works without Supabase auth**: Endpoints like `/api/celebrity/:id/value-vote` and `/api/matchups/:id/vote` support anonymous voting via session cookie (`fdx_sid`). This allows testing core voting flows without real Supabase credentials. To test, insert a person into `trending_people` and POST with `{"vote": "underrated"}`.
+
+7. **Database schema push**: After `npm install`, push the schema with `DATABASE_URL=postgresql://voxdex:voxdex_dev_pw@localhost:5432/voxdex npx drizzle-kit push --force`.
