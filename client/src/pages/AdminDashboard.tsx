@@ -1267,6 +1267,10 @@ export default function AdminDashboard() {
   const setModerationSubTab = (tab: string) => { sessionStorage.setItem("admin_moderation_tab", tab); setModerationSubTabRaw(tab); };
   const [searchQuery, setSearchQuery] = useState("");
   const [celebritySearch, setCelebritySearch] = useState("");
+  // Status filter for the admin Celebrities list. Default to main_leaderboard so
+  // the count matches the public leaderboard; induction shadow rows used by
+  // Curate Profile are still browsable via the dropdown.
+  const [celebrityStatusFilter, setCelebrityStatusFilter] = useState<"main_leaderboard" | "induction" | "all">("main_leaderboard");
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [creditAdjustment, setCreditAdjustment] = useState({ amount: 0, reason: "" });
   const [showCreditModal, setShowCreditModal] = useState(false);
@@ -2720,11 +2724,26 @@ export default function AdminDashboard() {
     !rwMarketSearch.trim() &&
     rwSortBy === "manual";
 
-  const filteredCelebrities = useMemo(() => celebrities?.filter(c =>
-    celebritySearch === "" ||
-    c.name.toLowerCase().includes(celebritySearch.toLowerCase()) ||
-    c.category.toLowerCase().includes(celebritySearch.toLowerCase())
-  ) ?? [], [celebrities, celebritySearch]);
+  const filteredCelebrities = useMemo(() => celebrities?.filter(c => {
+    if (celebrityStatusFilter !== "all" && c.status !== celebrityStatusFilter) return false;
+    if (celebritySearch === "") return true;
+    return (
+      c.name.toLowerCase().includes(celebritySearch.toLowerCase()) ||
+      c.category.toLowerCase().includes(celebritySearch.toLowerCase())
+    );
+  }) ?? [], [celebrities, celebritySearch, celebrityStatusFilter]);
+
+  const celebrityStatusCounts = useMemo(() => {
+    const counts = { main_leaderboard: 0, induction: 0, all: 0 };
+    if (celebrities) {
+      for (const c of celebrities) {
+        counts.all += 1;
+        if (c.status === "main_leaderboard") counts.main_leaderboard += 1;
+        else if (c.status === "induction") counts.induction += 1;
+      }
+    }
+    return counts;
+  }, [celebrities]);
 
   const rwMarkets = useMemo(() => {
     let list = (markets || []).filter(m => m.marketType === "community");
@@ -3715,7 +3734,7 @@ export default function AdminDashboard() {
               </Button>
             </div>
 
-            <div className="flex items-center gap-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
               <div className="relative flex-1 max-w-md">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -3726,13 +3745,40 @@ export default function AdminDashboard() {
                   data-testid="input-celebrity-search"
                 />
               </div>
+              <Select
+                value={celebrityStatusFilter}
+                onValueChange={(v) => setCelebrityStatusFilter(v as "main_leaderboard" | "induction" | "all")}
+              >
+                <SelectTrigger className="w-full sm:w-[220px]" data-testid="select-celebrity-status-filter">
+                  <SelectValue placeholder="Filter by status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="main_leaderboard" data-testid="filter-option-main">
+                    Main Leaderboard ({celebrityStatusCounts.main_leaderboard})
+                  </SelectItem>
+                  <SelectItem value="induction" data-testid="filter-option-induction">
+                    Induction Queue ({celebrityStatusCounts.induction})
+                  </SelectItem>
+                  <SelectItem value="all" data-testid="filter-option-all">
+                    All ({celebrityStatusCounts.all})
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <Card>
               <CardHeader>
                 <CardTitle>Celebrity List</CardTitle>
                 <CardDescription>
-                  {filteredCelebrities ? `${filteredCelebrities.length} celebrities found` : "Loading..."}
+                  {celebrities
+                    ? `${filteredCelebrities.length} ${
+                        celebrityStatusFilter === "main_leaderboard"
+                          ? "main leaderboard"
+                          : celebrityStatusFilter === "induction"
+                            ? "induction queue"
+                            : "total"
+                      } celebrit${filteredCelebrities.length === 1 ? "y" : "ies"} found`
+                    : "Loading..."}
                 </CardDescription>
               </CardHeader>
               <CardContent>
