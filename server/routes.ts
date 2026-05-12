@@ -1070,6 +1070,68 @@ function buildCelebrityLargePublicUrl(supabaseUrl: string, slug: string, filenam
   return `${supabaseUrl}/storage/v1/object/public/celebrity-large/${encodeURIComponent(slug)}/${filename}`;
 }
 
+function buildLeadersLargePublicUrl(supabaseUrl: string, slug: string, filename: string): string {
+  return `${supabaseUrl}/storage/v1/object/public/leaders-large/${encodeURIComponent(slug)}/${filename}`;
+}
+
+/**
+ * Materialize files under `celebrity-large/{slug}/` (or legacy `leaders-large/{slug}/`) into
+ * `celebrity_images` so Curate Profile admin counts and editing match Induction Queue storage.
+ */
+async function syncInductionGalleryFromStorageToCelebrityImages(personId: string, slug: string): Promise<void> {
+  const trimmed = (slug || "").trim();
+  if (!trimmed) return;
+  const supabaseUrl = process.env.SUPABASE_URL;
+  if (!supabaseUrl) return;
+
+  const slotFileRe = /^([1-5])\.(webp|jpg|jpeg|png)$/i;
+
+  type SlotFile = { slot: number; name: string; publicUrl: string };
+  const collectFromBucket = async (bucket: "celebrity-large" | "leaders-large"): Promise<SlotFile[]> => {
+    const { data: listed, error } = await supabaseServer.storage.from(bucket).list(trimmed);
+    if (error || !listed?.length) return [];
+    const acc: SlotFile[] = [];
+    for (const file of listed) {
+      const m = slotFileRe.exec(file.name);
+      if (!m) continue;
+      const slot = parseInt(m[1], 10);
+      const publicUrl =
+        bucket === "celebrity-large"
+          ? buildCelebrityLargePublicUrl(supabaseUrl, trimmed, file.name)
+          : buildLeadersLargePublicUrl(supabaseUrl, trimmed, file.name);
+      acc.push({ slot, name: file.name, publicUrl });
+    }
+    return acc.sort((a, b) => a.slot - b.slot);
+  };
+
+  let files = await collectFromBucket("celebrity-large");
+  if (files.length === 0) {
+    files = await collectFromBucket("leaders-large");
+  }
+  if (files.length === 0) return;
+
+  const existingRows = await db
+    .select({ imageUrl: celebrityImages.imageUrl })
+    .from(celebrityImages)
+    .where(eq(celebrityImages.personId, personId));
+  const existingUrls = new Set(existingRows.map((r) => r.imageUrl));
+
+  for (const f of files) {
+    if (existingUrls.has(f.publicUrl)) continue;
+    await db.insert(celebrityImages).values({
+      personId,
+      imageUrl: f.publicUrl,
+      source: "induction_storage_sync",
+      isPrimary: false,
+      votesUp: 0,
+      votesDown: 0,
+    });
+    existingUrls.add(f.publicUrl);
+  }
+
+  await syncWinningAvatarForPerson(personId);
+}
+
 function occupiedInductionGallerySlots(files: { name: string }[] | null | undefined): Set<number> {
   const slots = new Set<number>();
   for (const file of files ?? []) {
@@ -20638,6 +20700,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
             candidateId: inductionCandidates.id,
             name: inductionCandidates.displayName,
             category: inductionCandidates.category,
+            imageSlug: inductionCandidates.imageSlug,
           })
           .from(inductionCandidates)
           .where(eq(inductionCandidates.isActive, true))
@@ -20651,50 +20714,85 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
                 name: trackedPeople.name,
                 category: trackedPeople.category,
                 avatar: trackedPeople.avatar,
+                imageSlug: trackedPeople.imageSlug,
+                status: trackedPeople.status,
               })
               .from(trackedPeople)
               .where(inArray(trackedPeople.name, candidateNames))
           : [];
-        const trackedByName = new Map(trackedRows.map((tp) => [tp.name.trim().toLowerCase(), tp]));
+        type TrackedForInductionCurate = {
+          id: string;
+          name: string;
+          category: string;
+          avatar: string | null;
+          imageSlug: string | null;
+          status: string;
+        };
+        const trackedByName = new Map<string, TrackedForInductionCurate>(
+          trackedRows.map((tp) => [tp.name.trim().toLowerCase(), tp]),
+        );
 
         for (const candidate of candidates) {
-          const key = candidate.name.trim().toLowerCase();
-          if (trackedByName.has(key)) continue;
+          const name = candidate.name.trim();
+          const key = name.toLowerCase();
+          const resolvedSlug = (candidate.imageSlug?.trim() || generateImageSlug(name)) || null;
 
-          const inserted = await db
-            .insert(trackedPeople)
-            .values({
-              name: candidate.name.trim(),
-              category: candidate.category || "Other",
-              status: "induction",
-              imageSlug: generateImageSlug(candidate.name),
-            })
-            .onConflictDoNothing()
-            .returning({
-              id: trackedPeople.id,
-              name: trackedPeople.name,
-              category: trackedPeople.category,
-              avatar: trackedPeople.avatar,
-            });
+          if (!trackedByName.has(key)) {
+            const inserted = await db
+              .insert(trackedPeople)
+              .values({
+                name,
+                category: candidate.category || "Other",
+                status: "induction",
+                imageSlug: resolvedSlug,
+              })
+              .onConflictDoNothing()
+              .returning({
+                id: trackedPeople.id,
+                name: trackedPeople.name,
+                category: trackedPeople.category,
+                avatar: trackedPeople.avatar,
+                imageSlug: trackedPeople.imageSlug,
+                status: trackedPeople.status,
+              });
 
-          const trackedRow =
-            inserted[0] ||
-            (
+            const trackedRow =
+              inserted[0] ||
+              (
+                await db
+                  .select({
+                    id: trackedPeople.id,
+                    name: trackedPeople.name,
+                    category: trackedPeople.category,
+                    avatar: trackedPeople.avatar,
+                    imageSlug: trackedPeople.imageSlug,
+                    status: trackedPeople.status,
+                  })
+                  .from(trackedPeople)
+                  .where(eq(trackedPeople.name, name))
+                  .limit(1)
+              )[0];
+            if (!trackedRow) continue;
+
+            trackedByName.set(key, trackedRow);
+            await db.insert(celebrityMetrics).values({ celebrityId: trackedRow.id }).onConflictDoNothing();
+          } else {
+            const existing = trackedByName.get(key)!;
+            if (
+              existing.status === "induction" &&
+              resolvedSlug &&
+              (existing.imageSlug || "") !== resolvedSlug
+            ) {
               await db
-                .select({
-                  id: trackedPeople.id,
-                  name: trackedPeople.name,
-                  category: trackedPeople.category,
-                  avatar: trackedPeople.avatar,
-                })
-                .from(trackedPeople)
-                .where(eq(trackedPeople.name, candidate.name.trim()))
-                .limit(1)
-            )[0];
-          if (!trackedRow) continue;
-
-          trackedByName.set(key, trackedRow);
-          await db.insert(celebrityMetrics).values({ celebrityId: trackedRow.id }).onConflictDoNothing();
+                .update(trackedPeople)
+                .set({ imageSlug: resolvedSlug })
+                .where(eq(trackedPeople.id, existing.id));
+              trackedByName.set(key, {
+                ...existing,
+                imageSlug: resolvedSlug,
+              });
+            }
+          }
         }
 
         const personIds = Array.from(new Set(Array.from(trackedByName.values()).map((tp) => tp.id)));
@@ -20708,6 +20806,32 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
               .where(inArray(celebrityMetrics.celebrityId, personIds))
           : [];
         const metricMap = new Map(metricRows.map((row) => [row.celebrityId, row.curateVisibility]));
+
+        for (const candidate of candidates) {
+          const key = candidate.name.trim().toLowerCase();
+          const tracked = trackedByName.get(key);
+          if (!tracked || tracked.status !== "induction") continue;
+          const slugForSync = (candidate.imageSlug?.trim() || generateImageSlug(candidate.name.trim())) || "";
+          if (slugForSync) {
+            await syncInductionGalleryFromStorageToCelebrityImages(tracked.id, slugForSync);
+          }
+        }
+
+        const inductionIds = Array.from(trackedByName.values())
+          .filter((t) => t.status === "induction")
+          .map((t) => t.id);
+        if (inductionIds.length) {
+          const refreshed = await db
+            .select({ id: trackedPeople.id, avatar: trackedPeople.avatar })
+            .from(trackedPeople)
+            .where(inArray(trackedPeople.id, inductionIds));
+          const avMap = new Map(refreshed.map((r) => [r.id, r.avatar]));
+          for (const [k, v] of trackedByName.entries()) {
+            if (v.status === "induction" && avMap.has(v.id)) {
+              trackedByName.set(k, { ...v, avatar: avMap.get(v.id) ?? null });
+            }
+          }
+        }
 
         results = candidates
           .map((candidate) => {
@@ -21415,6 +21539,66 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       const supabaseUrl = process.env.SUPABASE_URL;
       if (!supabaseUrl) return res.status(503).json({ error: "SUPABASE_URL not configured" });
       const publicUrl = buildCelebrityLargePublicUrl(supabaseUrl, slug, `${slot}.webp`);
+
+      const displayName = candidate.displayName.trim();
+      const [tp] = await db
+        .select({
+          id: trackedPeople.id,
+          status: trackedPeople.status,
+        })
+        .from(trackedPeople)
+        .where(eq(trackedPeople.name, displayName))
+        .limit(1);
+
+      let personId: string | null = null;
+      if (tp?.status === "induction") {
+        personId = tp.id;
+      } else if (!tp) {
+        const resolvedSlug = (candidate.imageSlug?.trim() || generateImageSlug(displayName)) || slug;
+        const insertedTp = await db
+          .insert(trackedPeople)
+          .values({
+            name: displayName,
+            category: candidate.category || "Other",
+            status: "induction",
+            imageSlug: resolvedSlug,
+          })
+          .onConflictDoNothing()
+          .returning({ id: trackedPeople.id, status: trackedPeople.status });
+
+        const row =
+          insertedTp[0] ||
+          (
+            await db
+              .select({ id: trackedPeople.id, status: trackedPeople.status })
+              .from(trackedPeople)
+              .where(eq(trackedPeople.name, displayName))
+              .limit(1)
+          )[0];
+        if (row?.status === "induction") {
+          personId = row.id;
+          await db.insert(celebrityMetrics).values({ celebrityId: row.id }).onConflictDoNothing();
+        }
+      }
+
+      if (personId) {
+        const [dup] = await db
+          .select({ id: celebrityImages.id })
+          .from(celebrityImages)
+          .where(and(eq(celebrityImages.personId, personId), eq(celebrityImages.imageUrl, publicUrl)))
+          .limit(1);
+        if (!dup) {
+          await db.insert(celebrityImages).values({
+            personId,
+            imageUrl: publicUrl,
+            source: "induction_storage_upload",
+            isPrimary: false,
+            votesUp: 0,
+            votesDown: 0,
+          });
+        }
+        await syncWinningAvatarForPerson(personId);
+      }
 
       res.json({ success: true, slot, publicUrl });
     } catch (error: any) {
