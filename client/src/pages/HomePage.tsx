@@ -66,6 +66,8 @@ import { hapticSuccess, hapticError } from "@/lib/haptic";
 import { useXpBurst } from "@/components/XpBurstProvider";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { getMarketBaselineScore, type MarketBaselineSource } from "@/lib/predict-market-baseline";
+import { fireAmmTradeToast } from "@/lib/share-data";
+import { useShareCard } from "@/contexts/ShareCardContext";
 import { computePayoutMultiplier } from "@/lib/parimutuel";
 import { TrendingPerson } from "@shared/schema";
 import { useIntersectionObserver } from "@/hooks/useIntersectionObserver";
@@ -1161,6 +1163,9 @@ export default function HomePage() {
   // now mirrors that single source of truth so balance + post-bet
   // validation behave identically.
   const { user, profile, refreshProfile } = useAuth();
+  // Sprint 3.1: home leaderboard buys fire AMM trade toasts with a
+  // Share action that dispatches into the global ShareCard modal.
+  const { openShareCard } = useShareCard();
   const { trigger: triggerXpBurst } = useXpBurst();
   const walletCredits = profile?.predictCredits ?? 0;
 
@@ -1197,6 +1202,7 @@ export default function HomePage() {
         id: m.id,
         personId: m.personId || "",
         personName: person.name || m.title?.replace(/: Up or Down\?$/, "") || "Unknown",
+        personAvatar: (person.imageUrl as string | null) ?? null,
         currentScore,
         startScore: baselineScore,
         baselineScore,
@@ -1210,6 +1216,13 @@ export default function HomePage() {
         startAt: (m.startAt as string) || null,
         endAt: (m.endAt as string) || null,
         tieRule: (m.tieRule as string) || "refund",
+        // Sprint 3.1: thread engine + ammState through so the
+        // StakeModal renders LMSR UI (live price, sell mode, no
+        // "Early Bird Boost") for AMM markets and the buy mutation
+        // can build the AMM-flavoured share-card toast.
+        engine: (m.engine as string) === "amm" ? "amm" : "parimutuel",
+        ammState: (m as { ammState?: unknown }).ammState ?? null,
+        category: (m.category as string | null) ?? null,
       };
     });
   }, [nativeUpdownData]);
@@ -1310,6 +1323,12 @@ export default function HomePage() {
       bettingCutoff: market.bettingCutoff,
       isTopUp,
       existingStake: isTopUp ? existing.stakeAmount : undefined,
+      // Sprint 3.1: AMM-aware modal. Without these the StakeModal
+      // falls back to parimutuel UI (Early Bird Boost / 2.0x stake
+      // payout copy) even on AMM markets — the bug that surfaced on
+      // home leaderboard taps during external testing.
+      engine: market.engine === "amm" ? "amm" : "parimutuel",
+      ammState: (market.ammState ?? null) as StakeSelection["ammState"],
     });
     refreshProfile?.().catch(() => {});
     setStakeModalOpen(true);
@@ -1331,7 +1350,37 @@ export default function HomePage() {
       if (data?.xp?.xpAwarded) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }
-      toast("Prediction placed!", { description: "Your weekly up/down prediction has been recorded." });
+      // Sprint 3.1: AMM responses get the shareable trade toast that
+      // Sprint 2 added on the detail pages. Parimutuel responses keep
+      // the legacy static description so we don't claim a Share moment
+      // on engines that don't have the LMSR data to back a trade card.
+      const isAmmTrade = data?.engine === "amm";
+      const market = updownMarkets.find(
+        (m) => String(m.id) === String(variables.marketId),
+      );
+      if (isAmmTrade && market) {
+        const choice =
+          variables.entryId === market.downEntryId ? "DOWN" : "UP";
+        const origin =
+          typeof window !== "undefined" ? window.location.origin : "";
+        fireAmmTradeToast({
+          response: data,
+          actionType: "buy",
+          username: profile?.username || "you",
+          personName: market.personName ?? null,
+          personAvatar: market.personAvatar ?? null,
+          marketTitle: `${market.personName}: Up or Down?`,
+          category: market.category,
+          entryLabel: choice,
+          direction: choice === "DOWN" ? "down" : "up",
+          openShareCard,
+          fallbackShareUrl: `${origin}/predict/updown/${market.id}`,
+        });
+      } else {
+        toast("Prediction placed!", {
+          description: "Your weekly up/down prediction has been recorded.",
+        });
+      }
       setStakeModalOpen(false);
       setPendingSelection(null);
       await Promise.all([

@@ -7,6 +7,7 @@ import {
   HelpCircle,
   Plus,
   RotateCcw,
+  Share2,
   Target,
   Trophy,
   Wallet,
@@ -143,6 +144,19 @@ export interface MyPositionCardProps {
    * share count) without trying to interpolate from pari-mutuel sizes.
    */
   isAmm?: boolean;
+  /**
+   * Sprint 3.1 — persistent Share affordance for AMM open positions.
+   *
+   * When provided AND the market is AMM AND the position is still open,
+   * the header renders a small Share2 icon button. Clicking calls the
+   * parent's handler, which is expected to dispatch a `position`
+   * share-card payload into the global ShareCardModal via
+   * `useShareCard()`. Per the plan we don't render this on parimutuel
+   * positions — we don't have a parimutuel position share variant yet
+   * and the deterministic AMM share-payout makes the AMM card the
+   * honest one.
+   */
+  onShare?: () => void;
   className?: string;
 }
 
@@ -157,6 +171,7 @@ export function MyPositionCard({
   hideCta,
   livePoolContext,
   isAmm,
+  onShare,
   className,
 }: MyPositionCardProps) {
   const { isLoggedIn } = useAuth();
@@ -227,6 +242,7 @@ export function MyPositionCard({
         bets={position.bets}
         showResult={showResult}
         isVoid={isVoid}
+        onShare={isAmm && isOpen ? onShare : undefined}
       />
 
       {/* Body: per-kind details for open markets, settled summary for
@@ -282,6 +298,11 @@ interface PositionHeaderProps {
   bets?: MyPositionBet[];
   showResult?: boolean;
   isVoid?: boolean;
+  /**
+   * Sprint 3.1 — when defined, render a Share2 icon button next to
+   * the result/payout block. Parent gates this on AMM + open already.
+   */
+  onShare?: () => void;
 }
 
 function PositionHeader({
@@ -290,6 +311,7 @@ function PositionHeader({
   bets,
   showResult,
   isVoid,
+  onShare,
 }: PositionHeaderProps) {
   // Aggregate per-bet payout/profit across the user's settled bets
   // for the right-aligned summary on resolved markets. For active
@@ -362,6 +384,24 @@ function PositionHeader({
           </p>
         </div>
       </div>
+
+      {!showResult && onShare && (
+        // Sprint 3.1: persistent Share affordance for AMM open
+        // positions. Lives next to the header rather than inside the
+        // body so it survives the per-kind layout switches (UpDown vs
+        // Race etc.) and never competes with the live-payout chip.
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className="h-8 w-8 shrink-0 border-violet-500/30 hover:bg-violet-500/10"
+          onClick={onShare}
+          aria-label="Share this position"
+          data-testid="button-share-position"
+        >
+          <Share2 className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+        </Button>
+      )}
 
       {showResult && settled && (
         <div className="text-right shrink-0">

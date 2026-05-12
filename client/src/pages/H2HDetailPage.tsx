@@ -16,7 +16,7 @@ import { MarketResolutionInfo } from "@/components/predict/MarketResolutionInfo"
 import { MyPositionCard } from "@/components/predict/MyPositionCard";
 import { ShareIconButton } from "@/components/predict/ShareIconButton";
 import { useShareCard } from "@/contexts/ShareCardContext";
-import { buildTradeShareData } from "@/lib/share-data";
+import { buildTradeShareData, buildPositionShareData } from "@/lib/share-data";
 import { RelatedMarkets } from "@/components/predict/RelatedMarkets";
 import { MuteMarketToggle } from "@/components/predict/MuteMarketToggle";
 import { H2HWhatNeedsToHappen } from "@/components/predict/WhatNeedsToHappen";
@@ -779,6 +779,49 @@ export default function H2HDetailPage() {
                 }
               : null
           }
+          // Sprint 3.1: persistent Share for AMM open positions. Picks
+          // the biggest open side (H2H bars hedging across both
+          // entries, but we tolerate it defensively). Person info
+          // resolves from the entry the position is on.
+          onShare={(() => {
+            if (!isAmm) return undefined;
+            const positions = (ammPositionData?.positions ?? []).filter(
+              (p) => p.netShares > 1e-6,
+            );
+            if (positions.length === 0) return undefined;
+            const pos = positions.reduce((biggest, p) =>
+              p.currentValue > biggest.currentValue ? p : biggest,
+            );
+            return () => {
+              const onPerson1 = pos.entryId === hydrated.person1EntryId;
+              const person = onPerson1 ? hydrated.person1 : hydrated.person2;
+              const data = buildPositionShareData({
+                username: profile?.username || "you",
+                personName: person.name ?? null,
+                personAvatar: person.avatar ?? null,
+                marketTitle: hydrated.title,
+                category: hydrated.category,
+                entryLabel: pos.entryLabel,
+                direction: "other",
+                netShares: pos.netShares,
+                avgEntryPrice: pos.avgEntryPrice,
+                currentPrice: pos.currentPrice,
+                costBasis: pos.netCreditsIn,
+                currentValue: pos.currentValue,
+                endAt: hydrated.endAt || "",
+              });
+              const origin =
+                typeof window !== "undefined" ? window.location.origin : "";
+              const pathname =
+                typeof window !== "undefined" ? window.location.pathname : "";
+              openShareCard({
+                data,
+                fallbackText: `I'm holding ${Math.floor(pos.netShares)} shares on ${pos.entryLabel} in "${hydrated.title}" on VoxDex!\n${origin}${pathname}`,
+                shareUrl: `${origin}${pathname}`,
+                filenameBase: `voxdex-position-${marketId.slice(0, 8)}`,
+              });
+            };
+          })()}
         />
 
         {/* AMM live probability + per-side position card. Surfaces

@@ -35,7 +35,7 @@ import { RelatedMarkets } from "@/components/predict/RelatedMarkets";
 import { MuteMarketToggle } from "@/components/predict/MuteMarketToggle";
 import { getCommunityMarketStatusMessage } from "@/lib/marketClosedMessaging";
 import { useShareCard } from "@/contexts/ShareCardContext";
-import { buildTradeShareData } from "@/lib/share-data";
+import { buildTradeShareData, buildPositionShareData } from "@/lib/share-data";
 import { goBack } from "@/lib/goBack";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import {
@@ -748,6 +748,28 @@ export default function MarketDetailPage() {
     [ammSnapshot],
   );
 
+  // Sprint 3.1: parallel AMM position query so the persistent Share
+  // button on MyPositionCard can build an honest position payload
+  // (netShares, avgEntryPrice, currentPrice). Endpoint returns
+  // `{ positions: [] }` for parimutuel markets, so it's safe to leave
+  // enabled even when the engine flips post-mount.
+  const { data: ammPositionData } = useQuery<{
+    positions: Array<{
+      entryId: string;
+      entryLabel: string;
+      netShares: number;
+      netCreditsIn: number;
+      avgEntryPrice: number;
+      currentPrice: number;
+      currentValue: number;
+    }>;
+  }>({
+    queryKey: ["/api/markets", market?.id, "amm-position"],
+    enabled: !!market?.id && !!isAmm,
+    staleTime: 30_000,
+    retry: false,
+  });
+
   const betMutation = useMutation({
     mutationFn: async ({ entryId, stakeAmount: amount, direction }: { entryId: string; stakeAmount: number; direction: "yes" | "no" }) => {
       if (!market) {
@@ -1346,6 +1368,59 @@ export default function MarketDetailPage() {
                 }
               }, 250);
             }}
+            // Sprint 3.1: persistent Share affordance for AMM open
+            // positions on community markets. Picks the biggest
+            // currently-valued position across all entries.
+            onShare={(() => {
+              if (!isAmm) return undefined;
+              const positions = (ammPositionData?.positions ?? []).filter(
+                (p) => p.netShares > 1e-6,
+              );
+              if (positions.length === 0) return undefined;
+              const pos = positions.reduce((biggest, p) =>
+                p.currentValue > biggest.currentValue ? p : biggest,
+              );
+              return () => {
+                const entry = market.entries?.find(
+                  (e: any) => e.id === pos.entryId,
+                ) as any;
+                const person = entry?.person ?? null;
+                const isBinary = market.openMarketType === "binary";
+                const data = buildPositionShareData({
+                  username: profile?.username || "you",
+                  personName: person?.name ?? null,
+                  personAvatar: person?.avatar ?? null,
+                  marketTitle: market.title,
+                  category: market.category ?? null,
+                  entryLabel: pos.entryLabel,
+                  direction: isBinary
+                    ? pos.entryLabel.toLowerCase() === "no"
+                      ? "down"
+                      : "up"
+                    : "other",
+                  netShares: pos.netShares,
+                  avgEntryPrice: pos.avgEntryPrice,
+                  currentPrice: pos.currentPrice,
+                  costBasis: pos.netCreditsIn,
+                  currentValue: pos.currentValue,
+                  endAt: market.endAt || "",
+                });
+                const origin =
+                  typeof window !== "undefined"
+                    ? window.location.origin
+                    : "";
+                const pathname =
+                  typeof window !== "undefined"
+                    ? window.location.pathname
+                    : "";
+                openShareCard({
+                  data,
+                  fallbackText: `I'm holding ${Math.floor(pos.netShares)} shares on "${market.title}" on VoxDex!\n${origin}${pathname}`,
+                  shareUrl: `${origin}${pathname}`,
+                  filenameBase: `voxdex-position-${market.id.slice(0, 8)}`,
+                });
+              };
+            })()}
           />
         )}
 

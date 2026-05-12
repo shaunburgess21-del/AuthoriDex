@@ -32,6 +32,8 @@ import { getSupabase } from "@/lib/supabase";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { getMarketBaselineScore } from "@/lib/predict-market-baseline";
 import { getCanonicalNativeCycle } from "@/lib/nativeMarketLifecycle";
+import { fireAmmTradeToast } from "@/lib/share-data";
+import { useShareCard } from "@/contexts/ShareCardContext";
 import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
 import { WeeklyUpDownActionButtons } from "@/components/predict/WeeklyUpDownActionButtons";
 import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
@@ -1264,6 +1266,10 @@ export default function PredictPage() {
   const queryClient = useQueryClient();
   const { trigger: triggerXpBurst } = useXpBurst();
   const { user, profile, refreshProfile } = useAuth();
+  // Sprint 3.1: predict carousel buys (UpDown, H2H, Race, community)
+  // fire AMM trade toasts with a Share action that dispatches into the
+  // global ShareCard modal.
+  const { openShareCard } = useShareCard();
   const { favoriteIds } = useFavorites();
   const raceMap = useCategoryRaceMap();
   const leaderboardCats = useLeaderboardCategories();
@@ -1897,9 +1903,6 @@ export default function PredictPage() {
       if (data?.xp?.xpAwarded) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }
-      toast("Prediction placed!", { description: "Your weekly up/down prediction has been recorded." });
-      setStakeModalOpen(false);
-      setPendingSelection(null);
 
       const market = hydratedMarkets.find((m) => String(m.id) === String(variables.marketId));
       let entryLabel = "Up";
@@ -1907,6 +1910,33 @@ export default function PredictPage() {
         if (variables.entryId === market.downEntryId) entryLabel = "Down";
         else if (variables.entryId === market.upEntryId) entryLabel = "Up";
       }
+
+      // Sprint 3.1: AMM responses get the shareable trade toast that
+      // the detail pages already use. Parimutuel keeps the static
+      // description because there's no LMSR data to back a trade card.
+      if (data?.engine === "amm" && market) {
+        const origin =
+          typeof window !== "undefined" ? window.location.origin : "";
+        fireAmmTradeToast({
+          response: data,
+          actionType: "buy",
+          username: profile?.username || "you",
+          personName: market.personName ?? null,
+          personAvatar: market.personAvatar ?? null,
+          marketTitle: `${market.personName}: Up or Down?`,
+          category: market.category,
+          entryLabel: entryLabel.toUpperCase(),
+          direction: entryLabel.toLowerCase() === "down" ? "down" : "up",
+          openShareCard,
+          fallbackShareUrl: `${origin}/predict/updown/${market.id}`,
+        });
+      } else {
+        toast("Prediction placed!", {
+          description: "Your weekly up/down prediction has been recorded.",
+        });
+      }
+      setStakeModalOpen(false);
+      setPendingSelection(null);
 
       const seededStats = {
         total: 1,
@@ -1969,7 +1999,68 @@ export default function PredictPage() {
       if (data?.xp?.xpAwarded) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }
-      toast("Prediction placed!", { description: variables.marketType === "h2h" ? "Your head-to-head prediction has been recorded." : "Your top gainer prediction has been recorded." });
+
+      // Sprint 3.1: AMM-aware share toast for H2H + Gainer (Race). The
+      // detail pages have their own handler, but the carousel was
+      // still on the legacy static toast.
+      if (data?.engine === "amm") {
+        const origin =
+          typeof window !== "undefined" ? window.location.origin : "";
+        if (variables.marketType === "h2h") {
+          const market = hydratedH2H.find(
+            (m) => String(m.id) === String(variables.marketId),
+          );
+          if (market) {
+            const pickedFirst = variables.entryId === market.person1EntryId;
+            const picked = pickedFirst ? market.person1 : market.person2;
+            const entryLabel =
+              (pickedFirst ? market.person1EntryLabel : market.person2EntryLabel) ??
+              picked.name;
+            fireAmmTradeToast({
+              response: data,
+              actionType: "buy",
+              username: profile?.username || "you",
+              personName: picked.name ?? null,
+              personAvatar: picked.avatar ?? null,
+              marketTitle: market.title,
+              category: market.category,
+              entryLabel,
+              direction: "other",
+              openShareCard,
+              fallbackShareUrl: `${origin}/predict/h2h/${market.id}`,
+            });
+          }
+        } else {
+          const market = hydratedGainers.find(
+            (m) => String(m.id) === String(variables.marketId),
+          );
+          const candidate = market?.allCandidates?.find(
+            (c) => c.entryId === variables.entryId,
+          );
+          if (market && candidate) {
+            fireAmmTradeToast({
+              response: data,
+              actionType: "buy",
+              username: profile?.username || "you",
+              personName: candidate.name ?? null,
+              personAvatar: candidate.avatar ?? null,
+              marketTitle: `Category Race · ${market.category}`,
+              category: market.category,
+              entryLabel: candidate.name,
+              direction: "other",
+              openShareCard,
+              fallbackShareUrl: `${origin}/predict/gainer/${market.id}`,
+            });
+          }
+        }
+      } else {
+        toast("Prediction placed!", {
+          description:
+            variables.marketType === "h2h"
+              ? "Your head-to-head prediction has been recorded."
+              : "Your top gainer prediction has been recorded.",
+        });
+      }
       setStakeModalOpen(false);
       setPendingSelection(null);
       await Promise.all([
@@ -2002,12 +2093,58 @@ export default function PredictPage() {
       const res = await apiRequest("POST", `/api/open-markets/${slug}/bet`, { entryId, stakeAmount, direction });
       return res.json();
     },
-    onSuccess: async (data: any) => {
+    onSuccess: async (data: any, variables) => {
       hapticSuccess();
       if (data?.xp?.xpAwarded) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }
-      toast("Prediction placed!", { description: "Your world-market prediction has been recorded." });
+      // Sprint 3.1: community-market buys get the AMM-aware share
+      // toast when the response confirms the engine. Multi-option
+      // entries route by Yes/No direction; binary markets carry the
+      // side in the entry label so we keep direction as "other" for
+      // the share card. Mirrors what the community detail page does.
+      if (data?.engine === "amm") {
+        const origin =
+          typeof window !== "undefined" ? window.location.origin : "";
+        const market = openMarkets.find(
+          (m: any) => String(m.slug) === String(variables.slug),
+        );
+        const entry =
+          market?.entries?.find(
+            (e: any) => String(e.id) === String(variables.entryId),
+          ) ?? null;
+        const person = entry?.person ?? null;
+        const isBinary = market?.openMarketType === "binary";
+        const entryLabel = isBinary
+          ? variables.direction === "no"
+            ? "No"
+            : "Yes"
+          : entry?.label ?? person?.name ?? variables.direction.toUpperCase();
+        const direction: "up" | "down" | "other" = isBinary
+          ? variables.direction === "no"
+            ? "down"
+            : "up"
+          : "other";
+        fireAmmTradeToast({
+          response: data,
+          actionType: "buy",
+          username: profile?.username || "you",
+          personName: person?.name ?? null,
+          personAvatar: person?.avatar ?? null,
+          marketTitle: market?.title ?? "Community market",
+          category: market?.category ?? null,
+          entryLabel: String(entryLabel),
+          direction,
+          openShareCard,
+          fallbackShareUrl: market?.slug
+            ? `${origin}/markets/${market.slug}`
+            : origin,
+        });
+      } else {
+        toast("Prediction placed!", {
+          description: "Your world-market prediction has been recorded.",
+        });
+      }
       setStakeModalOpen(false);
       setPendingSelection(null);
       await Promise.all([

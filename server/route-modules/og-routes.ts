@@ -1,6 +1,9 @@
 import type { Express, Request, Response } from "express";
 import { and, desc, eq, gt, inArray } from "drizzle-orm";
 import sharp from "sharp";
+import fs from "fs";
+import path from "path";
+import { createRequire } from "module";
 import { db } from "../db";
 import {
   predictionMarkets,
@@ -147,6 +150,80 @@ const PRICE_CHIP_FILL: Record<AmmPriceChip["accent"], string> = {
   other: "#A855F7",
 };
 
+/**
+ * Sprint 3.1 — embed Inter (regular + bold) into every OG SVG so the
+ * `sharp`/librsvg renderer on the Railway container has glyphs to draw
+ * with. Without this, every `font-family: Inter…` declaration falls
+ * through to "no font found" and the rendered PNG shows empty rectangles
+ * (the WhatsApp / iMessage glyph-boxes bug).
+ *
+ * Strategy:
+ *   - Load both weights once at module import (synchronous, one-time
+ *     cost on cold boot — measured at ~3ms).
+ *   - Base64 each font, store as a module-level constant so we don't
+ *     re-read or re-encode per request.
+ *   - Inject a `<style>` block with two `@font-face` rules at the top
+ *     of every generated SVG (both `buildOgSvg` and `buildBetOgSvg`).
+ *   - If reading the files fails (defensive — e.g. node_modules was
+ *     pruned in an unexpected way), log a warning and fall back to the
+ *     prior behaviour. The OG image still renders, just with the
+ *     missing-font bug — no hard crash.
+ *
+ * Note on format: @fontsource/inter@5.x ships woff2 (and woff) only —
+ * no TTF in the modern release. resvg / librsvg both support woff2 via
+ * the @font-face URL data-uri pathway, so we use woff2 (~25KB per
+ * weight vs the ~300KB TTF equivalent).
+ */
+const FONT_FACE_STYLE = (() => {
+  try {
+    // `createRequire` lets us resolve packages relative to this file
+    // even though the rest of the server is ESM. Resolving the
+    // @fontsource/inter package.json gives us a stable root we can
+    // join the `files/` directory onto, so this works regardless of
+    // how the bundler / Railway laid out node_modules.
+    const requireFromHere = createRequire(import.meta.url);
+    const pkgJsonPath = requireFromHere.resolve("@fontsource/inter/package.json");
+    const filesDir = path.join(path.dirname(pkgJsonPath), "files");
+    const r400 = fs.readFileSync(path.join(filesDir, "inter-latin-400-normal.woff2"));
+    const r700 = fs.readFileSync(path.join(filesDir, "inter-latin-700-normal.woff2"));
+    const b64_400 = r400.toString("base64");
+    const b64_700 = r700.toString("base64");
+    return `<style>
+    @font-face {
+      font-family: 'Inter';
+      font-style: normal;
+      font-weight: 400;
+      src: url(data:font/woff2;base64,${b64_400}) format('woff2');
+    }
+    @font-face {
+      font-family: 'Inter';
+      font-style: normal;
+      font-weight: 500;
+      src: url(data:font/woff2;base64,${b64_400}) format('woff2');
+    }
+    @font-face {
+      font-family: 'Inter';
+      font-style: normal;
+      font-weight: 600;
+      src: url(data:font/woff2;base64,${b64_700}) format('woff2');
+    }
+    @font-face {
+      font-family: 'Inter';
+      font-style: normal;
+      font-weight: 700;
+      src: url(data:font/woff2;base64,${b64_700}) format('woff2');
+    }
+  </style>`;
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[og] Failed to load @fontsource/inter — OG images will fall back to system fonts (which may render as empty boxes on minimal Linux containers).",
+      err,
+    );
+    return "";
+  }
+})();
+
 function buildOgSvg(
   title: string,
   subtitle: string,
@@ -179,7 +256,7 @@ function buildOgSvg(
   const titleLines = limited
     .map(
       (line, i) =>
-        `<text x="80" y="${320 + i * 90}" fill="#ffffff" font-size="78" font-weight="700" font-family="Inter, system-ui, -apple-system, Segoe UI, sans-serif">${escapeHtml(line)}</text>`,
+        `<text x="80" y="${320 + i * 90}" fill="#ffffff" font-size="78" font-weight="700" font-family="'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif">${escapeHtml(line)}</text>`,
     )
     .join("\n");
 
@@ -205,7 +282,7 @@ function buildOgSvg(
       const fill = PRICE_CHIP_FILL[c.accent];
       const chip = `<g>
     <rect x="${cursorX}" y="${y}" width="${width}" height="${chipHeight}" rx="22" ry="22" fill="${fill}" fill-opacity="0.18" stroke="${fill}" stroke-opacity="0.55" stroke-width="1.5" />
-    <text x="${cursorX + padX}" y="${y + chipHeight / 2 + fontSize / 3}" fill="#ffffff" font-size="${fontSize}" font-weight="600" font-family="Inter, system-ui, -apple-system, Segoe UI, sans-serif">${escapeHtml(text)}</text>
+    <text x="${cursorX + padX}" y="${y + chipHeight / 2 + fontSize / 3}" fill="#ffffff" font-size="${fontSize}" font-weight="600" font-family="'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif">${escapeHtml(text)}</text>
   </g>`;
       cursorX += width + gap;
       return chip;
@@ -221,6 +298,7 @@ function buildOgSvg(
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${OG_WIDTH}" height="${OG_HEIGHT}" viewBox="0 0 ${OG_WIDTH} ${OG_HEIGHT}">
+  ${FONT_FACE_STYLE}
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#0f172a" />
@@ -234,16 +312,16 @@ function buildOgSvg(
   <rect width="${OG_WIDTH}" height="${OG_HEIGHT}" fill="url(#bg)" />
   <rect x="0" y="0" width="${OG_WIDTH}" height="8" fill="url(#accent)" />
 
-  <text x="80" y="170" fill="#a78bfa" font-size="32" font-weight="600" letter-spacing="6" font-family="Inter, system-ui, -apple-system, Segoe UI, sans-serif">${escapeHtml(badge.toUpperCase())}</text>
+  <text x="80" y="170" fill="#a78bfa" font-size="32" font-weight="600" letter-spacing="6" font-family="'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif">${escapeHtml(badge.toUpperCase())}</text>
 
   ${titleLines}
 
   ${priceChipsSvg}
 
-  <text x="80" y="${subtitleY}" fill="#cbd5e1" font-size="32" font-weight="500" font-family="Inter, system-ui, -apple-system, Segoe UI, sans-serif">${escapeHtml(subtitle)}</text>
+  <text x="80" y="${subtitleY}" fill="#cbd5e1" font-size="32" font-weight="500" font-family="'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif">${escapeHtml(subtitle)}</text>
 
-  <text x="${OG_WIDTH - 80}" y="170" fill="#ffffff" font-size="44" font-weight="700" text-anchor="end" font-family="Inter, system-ui, -apple-system, Segoe UI, sans-serif">VoxDex</text>
-  <text x="${OG_WIDTH - 80}" y="${subtitleY}" fill="#94a3b8" font-size="22" font-weight="500" text-anchor="end" font-family="Inter, system-ui, -apple-system, Segoe UI, sans-serif">voxdex.com</text>
+  <text x="${OG_WIDTH - 80}" y="170" fill="#ffffff" font-size="44" font-weight="700" text-anchor="end" font-family="'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif">VoxDex</text>
+  <text x="${OG_WIDTH - 80}" y="${subtitleY}" fill="#94a3b8" font-size="22" font-weight="500" text-anchor="end" font-family="'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif">voxdex.com</text>
 </svg>`;
 }
 
@@ -589,7 +667,7 @@ function buildBetOgSvg(args: {
   const titleLines = limited
     .map(
       (line, i) =>
-        `<text x="80" y="${330 + i * 90}" fill="#ffffff" font-size="78" font-weight="700" font-family="Inter, system-ui, -apple-system, Segoe UI, sans-serif">${escapeHtml(line)}</text>`,
+        `<text x="80" y="${330 + i * 90}" fill="#ffffff" font-size="78" font-weight="700" font-family="'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif">${escapeHtml(line)}</text>`,
     )
     .join("\n");
 
@@ -602,6 +680,7 @@ function buildBetOgSvg(args: {
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${OG_WIDTH}" height="${OG_HEIGHT}" viewBox="0 0 ${OG_WIDTH} ${OG_HEIGHT}">
+  ${FONT_FACE_STYLE}
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#0f172a" />
@@ -622,16 +701,16 @@ function buildBetOgSvg(args: {
        both stay legible without overflowing the 1200px canvas. -->
   <g>
     <rect x="80" y="140" rx="22" ry="22" width="${Math.max(160, Math.min(620, 60 + args.badge.length * 24))}" height="56" fill="${badgeFill}" fill-opacity="0.22" stroke="${badgeFill}" stroke-opacity="0.7" stroke-width="2" />
-    <text x="${80 + 28}" y="178" fill="#ffffff" font-size="26" font-weight="700" letter-spacing="4" font-family="Inter, system-ui, -apple-system, Segoe UI, sans-serif">${escapeHtml(args.badge.toUpperCase())}</text>
+    <text x="${80 + 28}" y="178" fill="#ffffff" font-size="26" font-weight="700" letter-spacing="4" font-family="'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif">${escapeHtml(args.badge.toUpperCase())}</text>
   </g>
 
   ${titleLines}
 
-  <text x="80" y="520" fill="#e2e8f0" font-size="28" font-weight="500" font-family="Inter, system-ui, -apple-system, Segoe UI, sans-serif">${escapeHtml(sub)}</text>
+  <text x="80" y="520" fill="#e2e8f0" font-size="28" font-weight="500" font-family="'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif">${escapeHtml(sub)}</text>
 
-  <text x="${OG_WIDTH - 80}" y="170" fill="#ffffff" font-size="44" font-weight="700" text-anchor="end" font-family="Inter, system-ui, -apple-system, Segoe UI, sans-serif">VoxDex</text>
-  <text x="${OG_WIDTH - 80}" y="210" fill="#cbd5e1" font-size="22" font-weight="500" text-anchor="end" font-family="Inter, system-ui, -apple-system, Segoe UI, sans-serif">${escapeHtml(userTag)}</text>
-  <text x="${OG_WIDTH - 80}" y="600" fill="#94a3b8" font-size="22" font-weight="500" text-anchor="end" font-family="Inter, system-ui, -apple-system, Segoe UI, sans-serif">voxdex.com</text>
+  <text x="${OG_WIDTH - 80}" y="170" fill="#ffffff" font-size="44" font-weight="700" text-anchor="end" font-family="'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif">VoxDex</text>
+  <text x="${OG_WIDTH - 80}" y="210" fill="#cbd5e1" font-size="22" font-weight="500" text-anchor="end" font-family="'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif">${escapeHtml(userTag)}</text>
+  <text x="${OG_WIDTH - 80}" y="600" fill="#94a3b8" font-size="22" font-weight="500" text-anchor="end" font-family="'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif">voxdex.com</text>
 </svg>`;
 }
 

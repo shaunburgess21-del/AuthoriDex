@@ -1,4 +1,6 @@
+import { toast } from "sonner";
 import type {
+  ShareCardData,
   ShareCardTradeData,
   ShareCardPositionData,
 } from "@/components/share/ShareCard";
@@ -137,4 +139,128 @@ export function inferDirection(
   if (l === "up" || l === "yes") return "up";
   if (l === "down" || l === "no") return "down";
   return "other";
+}
+
+/**
+ * Sprint 3.1 — single source of truth for the AMM buy / sell success
+ * toast (with embedded Share action) shared across every surface that
+ * fires an AMM trade: detail pages, predict carousel, home leaderboard,
+ * PersonDetail predict tab.
+ *
+ * Why a helper rather than 5 inline copies:
+ *   - Sprint 2 only patched the dedicated detail pages, and three other
+ *     surfaces (home leaderboard, predict carousel, PersonDetail tab)
+ *     kept the legacy parimutuel toast — surfaced during testing as
+ *     "Your weekly up/down prediction has been recorded" on AMM buys.
+ *   - The toast description ("X shares · Y cr") + Share-button payload
+ *     are identical across surfaces; copy-pasting them invites drift.
+ *
+ * The helper builds the trade share-card data, constructs the toast
+ * with a Share action, and dispatches to the global ShareCard context
+ * via the `openShareCard` callback the caller passes in. Sell flows
+ * are supported but currently only fired from UpDown / H2H detail
+ * pages — community + race AMM sells don't have UI yet.
+ */
+export interface FireAmmTradeToastArgs {
+  /** AMM trade response from the API (must have engine='amm'). */
+  response: {
+    engine?: string;
+    betId?: string;
+    sharesPurchased?: number;
+    sharesSold?: number;
+    chargeCredits?: number;
+    proceeds?: number;
+    pricePerShareAvg?: number;
+  };
+  actionType: "buy" | "sell";
+  /** Username to attribute the share to. Pass "you" if unknown. */
+  username: string;
+  personName: string | null;
+  personAvatar: string | null;
+  marketTitle: string;
+  category?: string | null;
+  /** Display label of the entry traded ("UP", "DOWN", candidate name). */
+  entryLabel: string;
+  direction: "up" | "down" | "other";
+  /** Callback from `useShareCard()`. */
+  openShareCard: (args: {
+    data: ShareCardData;
+    fallbackText?: string;
+    shareUrl?: string;
+    filenameBase?: string;
+  }) => void;
+  /**
+   * Fallback URL when `response.betId` is missing (defensive — every
+   * AMM trade has a betId, but pari rows during the legacy window may
+   * not). Typically `${origin}${pathname}` or the market URL.
+   */
+  fallbackShareUrl: string;
+}
+
+/**
+ * Fires the AMM trade success toast with an embedded Share action.
+ * Returns nothing — fire-and-forget. Parimutuel callers should branch
+ * on `response.engine === "amm"` themselves and keep their existing
+ * static toast for the non-AMM path.
+ */
+export function fireAmmTradeToast(args: FireAmmTradeToastArgs): void {
+  const isBuy = args.actionType === "buy";
+  const shares = Number(
+    isBuy ? args.response.sharesPurchased : args.response.sharesSold,
+  ) || 0;
+  const credits = Number(
+    isBuy ? args.response.chargeCredits : args.response.proceeds,
+  ) || 0;
+  const pricePerShare = (() => {
+    const fromApi = Number(args.response.pricePerShareAvg);
+    if (Number.isFinite(fromApi) && fromApi > 0) return fromApi;
+    // Defensive — community AMM buys briefly omitted pricePerShareAvg;
+    // derive from chargeCredits / shares so the share card never shows
+    // "0%" on the trade card.
+    if (shares > 0 && credits > 0) return credits / shares;
+    return 0;
+  })();
+
+  const tradeData = buildTradeShareData({
+    actionType: args.actionType,
+    username: args.username,
+    personName: args.personName,
+    personAvatar: args.personAvatar,
+    marketTitle: args.marketTitle,
+    category: args.category ?? null,
+    entryLabel: args.entryLabel,
+    direction: args.direction,
+    shares,
+    pricePerShare,
+    stakeAmount: credits,
+  });
+
+  const betId = args.response.betId;
+  const shareUrl = betId
+    ? `${typeof window !== "undefined" ? window.location.origin : ""}/share/bet/${betId}`
+    : args.fallbackShareUrl;
+
+  const description = isBuy
+    ? `${Math.round(shares).toLocaleString()} ${args.entryLabel} shares · ${credits.toLocaleString()} cr`
+    : `Sold ${Math.round(shares).toLocaleString()} ${args.entryLabel} shares · +${credits.toLocaleString()} cr`;
+
+  const fallbackText = isBuy
+    ? `I just backed ${args.entryLabel} on "${args.marketTitle}" on VoxDex!\n${shareUrl}`
+    : `Just took ${credits} credits off the table on "${args.marketTitle}" on VoxDex!\n${shareUrl}`;
+
+  const title = isBuy ? "Prediction placed!" : "Position sold";
+
+  toast(title, {
+    description,
+    action: {
+      label: "Share",
+      onClick: () =>
+        args.openShareCard({
+          data: tradeData,
+          fallbackText,
+          shareUrl,
+          filenameBase: `voxdex-trade-${(betId ?? args.actionType).toString().slice(0, 8)}`,
+        }),
+    },
+  });
 }

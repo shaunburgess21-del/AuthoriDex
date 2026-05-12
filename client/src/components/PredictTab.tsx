@@ -22,6 +22,8 @@ import { apiRequest, parseApiError } from "@/lib/queryClient";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { getMarketBaselineScore } from "@/lib/predict-market-baseline";
 import { getCanonicalNativeCycle } from "@/lib/nativeMarketLifecycle";
+import { fireAmmTradeToast } from "@/lib/share-data";
+import { useShareCard } from "@/contexts/ShareCardContext";
 import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { PredictCard } from "@/components/predict/PredictCard";
 import { WeeklyUpDownCard, type PredictionMarket } from "@/components/predict/WeeklyUpDownCard";
@@ -500,6 +502,9 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
   const hasAnyMarkets = weeklyMarket || h2hBattles.length > 0 || gainerMarkets.length > 0 || openMarketsForPerson.length > 0 || jackpotMarket;
 
   const { user, profile, refreshProfile } = useAuth();
+  // Sprint 3.1: PersonDetail predict tab buys fire AMM trade toasts
+  // with a Share action via the global ShareCard modal.
+  const { openShareCard } = useShareCard();
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
   const [pendingSelection, setPendingSelection] = useState<StakeSelection | null>(null);
@@ -576,14 +581,37 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       const res = await apiRequest("POST", `/api/native-markets/updown/${marketId}/bet`, { entryId, stakeAmount });
       return res.json();
     },
-    onSuccess: async (_data, variables) => {
-      toast("Prediction placed!", { description: "Your weekly up/down prediction has been recorded." });
-      setStakeModalOpen(false);
-      setPendingSelection(null);
-
+    onSuccess: async (data: any, variables) => {
       let entryLabel = "Up";
       if (variables.entryId === weeklyMarket?.downEntryId) entryLabel = "Down";
       else if (variables.entryId === weeklyMarket?.upEntryId) entryLabel = "Up";
+
+      // Sprint 3.1: AMM-aware share toast on PersonDetail predict tab.
+      // The dedicated detail pages already do this; the tab was still
+      // on the legacy static description.
+      if (data?.engine === "amm" && weeklyMarket) {
+        const origin =
+          typeof window !== "undefined" ? window.location.origin : "";
+        fireAmmTradeToast({
+          response: data,
+          actionType: "buy",
+          username: profile?.username || "you",
+          personName: weeklyMarket.personName ?? null,
+          personAvatar: weeklyMarket.personAvatar ?? null,
+          marketTitle: `${weeklyMarket.personName}: Up or Down?`,
+          category: weeklyMarket.category,
+          entryLabel: entryLabel.toUpperCase(),
+          direction: entryLabel.toLowerCase() === "down" ? "down" : "up",
+          openShareCard,
+          fallbackShareUrl: `${origin}/predict/updown/${weeklyMarket.id}`,
+        });
+      } else {
+        toast("Prediction placed!", {
+          description: "Your weekly up/down prediction has been recorded.",
+        });
+      }
+      setStakeModalOpen(false);
+      setPendingSelection(null);
 
       const seededStats = {
         total: 1,
@@ -676,6 +704,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       choice: choice === "up" ? "Trend Score UP" : "Trend Score DOWN",
       marketName: market.personName,
       marketId: market.id,
+      entryId,
       startScore: market.baselineScore,
       currentScore: market.currentScore,
       crowdSentiment: choice === "up" ? market.upPoolPercent : 100 - market.upPoolPercent,
@@ -686,6 +715,11 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       tieRule: market.tieRule ?? "refund",
       endAt: serverResolutionDeadline ?? undefined,
       bettingCutoff: serverBettingCutoff,
+      // Sprint 3.1: thread engine + ammState so the StakeModal renders
+      // the LMSR UI on AMM Up/Down markets opened from a person's
+      // detail page (PersonDetailPage → PredictTab).
+      engine: market.engine === "amm" ? "amm" : "parimutuel",
+      ammState: market.ammState ?? null,
     });
     setStakeModalOpen(true);
   };

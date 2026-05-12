@@ -35,7 +35,7 @@ import { pricesFor, priceToPercent, snapshotFromApi } from "@/lib/ammClient";
 import { AmmPriceHistoryChart } from "@/components/predict/AmmPriceHistoryChart";
 import { MarketActivityFeed } from "@/components/predict/MarketActivityFeed";
 import { useShareCard } from "@/contexts/ShareCardContext";
-import { buildTradeShareData } from "@/lib/share-data";
+import { buildTradeShareData, buildPositionShareData } from "@/lib/share-data";
 import {
   ArrowLeft,
   Crown,
@@ -139,6 +139,29 @@ export default function CategoryRaceDetailPage() {
       const res = await apiRequest("GET", `/api/markets/${marketId}/my-position`);
       return res.json();
     },
+    staleTime: 30_000,
+    retry: false,
+  });
+
+  // Sprint 3.1: parallel AMM position query so the persistent Share
+  // button on MyPositionCard can build an honest position payload
+  // (netShares, avgEntryPrice, currentPrice) without re-deriving them
+  // from raw bets. Only enabled on AMM markets — parimutuel Race
+  // markets fall back to the at-entry stake-based summary and don't
+  // get the share button anyway.
+  const { data: ammPositionData } = useQuery<{
+    positions: Array<{
+      entryId: string;
+      entryLabel: string;
+      netShares: number;
+      netCreditsIn: number;
+      avgEntryPrice: number;
+      currentPrice: number;
+      currentValue: number;
+    }>;
+  }>({
+    queryKey: ["/api/markets", marketId, "amm-position"],
+    enabled: !!user && !!marketId,
     staleTime: 30_000,
     retry: false,
   });
@@ -527,6 +550,49 @@ export default function CategoryRaceDetailPage() {
                 }
               : null
           }
+          // Sprint 3.1: persistent Share affordance for AMM open
+          // positions. Race users can hold multiple candidates — we
+          // share the biggest position by current value.
+          onShare={(() => {
+            if (!isAmm) return undefined;
+            const positions = (ammPositionData?.positions ?? []).filter(
+              (p) => p.netShares > 1e-6,
+            );
+            if (positions.length === 0) return undefined;
+            const pos = positions.reduce((biggest, p) =>
+              p.currentValue > biggest.currentValue ? p : biggest,
+            );
+            return () => {
+              const candidate = candidates.find(
+                (c) => c.entryId === pos.entryId,
+              );
+              const data = buildPositionShareData({
+                username: profile?.username || "you",
+                personName: candidate?.name ?? pos.entryLabel ?? null,
+                personAvatar: candidate?.avatar ?? null,
+                marketTitle: `Category Race · ${categoryLabel}`,
+                category: categoryLabel,
+                entryLabel: candidate?.name ?? pos.entryLabel,
+                direction: "other",
+                netShares: pos.netShares,
+                avgEntryPrice: pos.avgEntryPrice,
+                currentPrice: pos.currentPrice,
+                costBasis: pos.netCreditsIn,
+                currentValue: pos.currentValue,
+                endAt: (market as any)?.endAt || "",
+              });
+              const origin =
+                typeof window !== "undefined" ? window.location.origin : "";
+              const pathname =
+                typeof window !== "undefined" ? window.location.pathname : "";
+              openShareCard({
+                data,
+                fallbackText: `I'm backing ${candidate?.name ?? pos.entryLabel} in the ${categoryLabel} Category Race on VoxDex!\n${origin}${pathname}`,
+                shareUrl: `${origin}${pathname}`,
+                filenameBase: `voxdex-position-${marketId.slice(0, 8)}`,
+              });
+            };
+          })()}
         />
 
         {/* Path-to-win callout — quantifies how far behind the leader

@@ -21,7 +21,7 @@ import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
 import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
 import { ShareIconButton } from "@/components/predict/ShareIconButton";
 import { useShareCard } from "@/contexts/ShareCardContext";
-import { buildTradeShareData } from "@/lib/share-data";
+import { buildTradeShareData, buildPositionShareData } from "@/lib/share-data";
 import { RelatedMarkets } from "@/components/predict/RelatedMarkets";
 import { MuteMarketToggle } from "@/components/predict/MuteMarketToggle";
 import { Button } from "@/components/ui/button";
@@ -809,6 +809,56 @@ export default function UpDownDetailPage() {
                 }
               : null
           }
+          // Sprint 3.1: persistent Share affordance for AMM open
+          // positions, replacing the 4-second post-trade toast as the
+          // primary share moment. We pick the largest open AMM
+          // position on this market (Up/Down only ever has one side at
+          // a time anyway — hedging is blocked above) and build the
+          // share-card payload from the same data the OpenPosition
+          // panel above renders.
+          onShare={(() => {
+            if (!isAmm) return undefined;
+            const positions = (ammPositionData?.positions ?? []).filter(
+              (p) => p.netShares > 1e-6,
+            );
+            if (positions.length === 0) return undefined;
+            const pos = positions.reduce((biggest, p) =>
+              p.currentValue > biggest.currentValue ? p : biggest,
+            );
+            return () => {
+              const direction: "up" | "down" | "other" =
+                pos.entryLabel.toLowerCase() === "up"
+                  ? "up"
+                  : pos.entryLabel.toLowerCase() === "down"
+                    ? "down"
+                    : "other";
+              const data = buildPositionShareData({
+                username: profile?.username || "you",
+                personName: hydrated.personName,
+                personAvatar: hydrated.personAvatar || null,
+                marketTitle: `${hydrated.personName}: Up or Down?`,
+                category: hydrated.category,
+                entryLabel: pos.entryLabel,
+                direction,
+                netShares: pos.netShares,
+                avgEntryPrice: pos.avgEntryPrice,
+                currentPrice: pos.currentPrice,
+                costBasis: pos.netCreditsIn,
+                currentValue: pos.currentValue,
+                endAt: hydrated.endAt || "",
+              });
+              const origin =
+                typeof window !== "undefined" ? window.location.origin : "";
+              const pathname =
+                typeof window !== "undefined" ? window.location.pathname : "";
+              openShareCard({
+                data,
+                fallbackText: `I'm holding ${Math.floor(pos.netShares)} ${pos.entryLabel.toUpperCase()} shares on "${hydrated.personName}: Up or Down?" on VoxDex!\n${origin}${pathname}`,
+                shareUrl: `${origin}${pathname}`,
+                filenameBase: `voxdex-position-${marketId.slice(0, 8)}`,
+              });
+            };
+          })()}
         />
 
         {/* AMM Price History - the market consensus over time. Shown
