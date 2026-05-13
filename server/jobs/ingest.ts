@@ -1607,7 +1607,15 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     // new daily-normalised average. Day 0 maps will be empty; the system
     // self-heals to a full rolling window over ~7 days (~14 snapshots at
     // the 12h fetch cadence).
-    const trendsHistoryAvgMap = new Map<string, number>();
+    // History stored as {sum, n} (not pre-divided mean) so the per-person
+    // augmented average — (sum + currentLatest) / (n + 1) — can be computed
+    // downstream without losing precision. Bootstrap behaviour:
+    //   - n=0 (first cycle after cutover): avg = latest / 1 = latest, ratio = 1.0 → "steady"
+    //   - n=1 (second cycle): avg = (prev + latest) / 2 — true rolling mean
+    //   - n=14 (full week at 12h cadence): avg = mean of 15 points
+    // This matches the user-facing framing of avg7d as "your typical
+    // daily-peak score over the past week, including today".
+    const trendsHistoryMap = new Map<string, { sum: number; n: number }>();
     const trendsPrevDayMap = new Map<string, number>();
     try {
       const trendsHistoryWindowStart = new Date(
@@ -1624,10 +1632,10 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
               AND diagnostics::jsonb->'raw'->>'trendsInterest' != 'null'
             ORDER BY person_id, timestamp DESC`,
       );
-      // Group rows by person; collect mean(interest) and the point closest
+      // Group rows by person; accumulate {sum, n} and the point closest
       // to (now - 24h) within ±TRENDS_PREV_DAY_TOLERANCE_MS.
       const accum = new Map<string, { sum: number; n: number; bestPrev: { delta: number; value: number } | null }>();
-      for (const row of trendsHistoryRows.rows as Array<{ person_id: string; timestamp: Date; interest: string | number }>) {
+      for (const row of trendsHistoryRows.rows as Array<{ person_id: string; timestamp: Date | string; interest: string | number }>) {
         const personId = row.person_id;
         const interest = Number(row.interest);
         if (!Number.isFinite(interest)) continue;
@@ -1642,15 +1650,28 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
         accum.set(personId, cur);
       }
       for (const [personId, v] of accum) {
-        if (v.n > 0) trendsHistoryAvgMap.set(personId, v.sum / v.n);
+        if (v.n > 0) trendsHistoryMap.set(personId, { sum: v.sum, n: v.n });
         if (v.bestPrev) trendsPrevDayMap.set(personId, v.bestPrev.value);
       }
       console.log(
-        `[Ingest] Google Trends history: ${trendsHistoryAvgMap.size} people with rolling 7d avg, ${trendsPrevDayMap.size} with ~24h prior comparator (cutover ${TRENDS_DAILY_SCALE_CUTOVER.toISOString()})`,
+        `[Ingest] Google Trends history: ${trendsHistoryMap.size} people with post-cutover history, ${trendsPrevDayMap.size} with ~24h prior comparator (cutover ${TRENDS_DAILY_SCALE_CUTOVER.toISOString()})`,
       );
     } catch (e) {
       console.warn("[Ingest] Google Trends history load failed:", (e as Error).message);
     }
+
+    /**
+     * Augmented rolling 7-day mean for a person: combines their stored
+     * post-cutover history with the current cycle's `latest` reading so
+     * the average always reflects "this point + last week's points".
+     * Returns `latest` (or 0 if not yet available) when history is empty.
+     */
+    const computeTrendsAvg7d = (personId: string, latest: number | null | undefined): number => {
+      const h = trendsHistoryMap.get(personId);
+      const safeLatest = typeof latest === "number" && Number.isFinite(latest) ? latest : 0;
+      if (!h) return safeLatest;
+      return (h.sum + safeLatest) / (h.n + 1);
+    };
 
     for (const person of people) {
       try {
@@ -1983,11 +2004,12 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           wikiPageviews7dAvg: wiki?.averageDaily7d || 0, // 7-day average for stable mass baseline
           wikiAverageDaily7d: wikiAvg7dExcludingToday,
           trendsInterest: trends?.latestInterest ?? 0,
-          // History-derived rolling 7d average (see trendsHistoryAvgMap
-          // computation above). Falls back to the current reading on day 0
-          // so the dormant trends-momentum scoring slot doesn't divide by
-          // zero before the bootstrap window fills in.
-          trendsAvg7d: trendsHistoryAvgMap.get(person.id) ?? (trends?.latestInterest ?? 0),
+          // History-augmented rolling 7d average (see computeTrendsAvg7d
+          // above): mean of post-cutover history plus the current reading.
+          // Falls back to the current reading on day 0 so the dormant
+          // trends-momentum scoring slot doesn't divide by zero before
+          // the bootstrap window fills in.
+          trendsAvg7d: computeTrendsAvg7d(person.id, trends?.latestInterest ?? 0),
           wikiDelta: wiki?.delta || 0,
           newsDelta: newsDelta,
           searchDelta: searchDelta,
@@ -2102,20 +2124,17 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
         // `trendsInterest` is the latest "% of today's peak hour" reading
         // from the `now 1-d` SerpApi response. The 7-day baseline and the
         // 24h-prior comparator can't be derived from a 24h window, so they
-        // come from `trendsHistoryAvgMap` / `trendsPrevDayMap` — both
+        // come from `trendsHistoryMap` / `trendsPrevDayMap` — both
         // populated above from our own post-cutover snapshot history.
         // Fallback semantics:
-        //   - trendsAvg7d: if no history yet, fall back to the current
-        //     reading so momentum ratio ≈ 1.0 (neutral / "medium") rather
-        //     than divide-by-zero into "no signal".
+        //   - trendsAvg7d: when no history yet, computeTrendsAvg7d returns
+        //     the current latest, so momentum ratio ≈ 1.0 ("medium / steady")
+        //     rather than divide-by-zero into "no signal".
         //   - trendsPrevDayInterest: 0 when we don't have a snapshot
         //     within ±6h of (now-24h). routes.ts treats 0 as "no delta"
         //     and renders an em-dash, same as cold-start celebs today.
         const trendsInterestLatest = trends?.latestInterest ?? 0;
-        const trendsAvg7dFromHistory = trendsHistoryAvgMap.get(person.id);
-        const trendsAvg7d = trendsAvg7dFromHistory != null
-          ? trendsAvg7dFromHistory
-          : trendsInterestLatest;
+        const trendsAvg7d = computeTrendsAvg7d(person.id, trendsInterestLatest);
         const trendsPrevDayInterest = trendsPrevDayMap.get(person.id) ?? 0;
         const trendsAvg90d = 0;
         const trendsMomentumRatio = trendsAvg7d > 0 && trendsInterestLatest > 0
