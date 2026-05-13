@@ -38,6 +38,21 @@ import {
 } from "../providers/serpapi-trends";
 
 const GDELT_CANDIDATE_COUNT = 25;
+// Cutover for the Google Trends daily-normalisation rollout (May 2026).
+// Before this timestamp, snapshots stored `trendsInterest` on the legacy
+// `now 7-d` scale (% of weekly peak hour). After it, they live on the new
+// `now 1-d` scale (% of today's peak hour). Mixing the two would make the
+// rolling 7-day baseline meaningless, so the history-derived `trendsAvg7d`
+// and `trendsPrevDayInterest` both filter to `timestamp >= cutover`. Set
+// to deploy time; can be overridden via env for staging or replays.
+const TRENDS_DAILY_SCALE_CUTOVER = new Date(
+  process.env.TRENDS_DAILY_SCALE_CUTOVER ?? "2026-05-13T11:00:00.000Z",
+);
+// Tolerance for matching "snapshot from ~24h ago" when computing the
+// trendsPrevDayInterest comparator. Our trends fetch cadence is 12h, so a
+// ±6h window guarantees we hit at most one historical point and never
+// fall back to one that's actually closer to "now" than to 24h ago.
+const TRENDS_PREV_DAY_TOLERANCE_MS = 6 * 60 * 60 * 1000;
 
 async function computeNewsCandidates(
   people: Array<{ id: string; name: string }>,
@@ -1579,6 +1594,64 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
       sourceStatuses.trends = "SKIPPED";
     }
 
+    // ══════════════════════════════════════════════════════════════════════════
+    // GOOGLE TRENDS HISTORY — rolling 7-day baseline + 24h-prior comparator
+    // ══════════════════════════════════════════════════════════════════════════
+    // Reconstruct what the SerpApi response used to give us for free on the
+    // `now 7-d` window. Now that we query `now 1-d` (so the score matches
+    // the Google Trends UI "Past 24h" scale), the rolling weekly average
+    // and the 24h-prior interest must come from our own snapshot history.
+    //
+    // Filtered to `timestamp >= TRENDS_DAILY_SCALE_CUTOVER` so legacy
+    // 7-day-normalised values from before the rollout don't poison the
+    // new daily-normalised average. Day 0 maps will be empty; the system
+    // self-heals to a full rolling window over ~7 days (~14 snapshots at
+    // the 12h fetch cadence).
+    const trendsHistoryAvgMap = new Map<string, number>();
+    const trendsPrevDayMap = new Map<string, number>();
+    try {
+      const trendsHistoryWindowStart = new Date(
+        Math.max(now.getTime() - 7 * 24 * 60 * 60 * 1000, TRENDS_DAILY_SCALE_CUTOVER.getTime()),
+      );
+      const targetPrevTs = now.getTime() - 24 * 60 * 60 * 1000;
+      const trendsHistoryRows = await db.execute(
+        sql`SELECT person_id, timestamp,
+                   (diagnostics::jsonb->'raw'->>'trendsInterest')::numeric AS interest
+            FROM trend_snapshots
+            WHERE snapshot_origin = 'ingest'
+              AND timestamp >= ${trendsHistoryWindowStart}
+              AND diagnostics::jsonb->'raw'->'trendsInterest' IS NOT NULL
+              AND diagnostics::jsonb->'raw'->>'trendsInterest' != 'null'
+            ORDER BY person_id, timestamp DESC`,
+      );
+      // Group rows by person; collect mean(interest) and the point closest
+      // to (now - 24h) within ±TRENDS_PREV_DAY_TOLERANCE_MS.
+      const accum = new Map<string, { sum: number; n: number; bestPrev: { delta: number; value: number } | null }>();
+      for (const row of trendsHistoryRows.rows as Array<{ person_id: string; timestamp: Date; interest: string | number }>) {
+        const personId = row.person_id;
+        const interest = Number(row.interest);
+        if (!Number.isFinite(interest)) continue;
+        const ts = row.timestamp instanceof Date ? row.timestamp.getTime() : new Date(row.timestamp).getTime();
+        const cur = accum.get(personId) ?? { sum: 0, n: 0, bestPrev: null };
+        cur.sum += interest;
+        cur.n += 1;
+        const delta = Math.abs(ts - targetPrevTs);
+        if (delta <= TRENDS_PREV_DAY_TOLERANCE_MS && (cur.bestPrev == null || delta < cur.bestPrev.delta)) {
+          cur.bestPrev = { delta, value: interest };
+        }
+        accum.set(personId, cur);
+      }
+      for (const [personId, v] of accum) {
+        if (v.n > 0) trendsHistoryAvgMap.set(personId, v.sum / v.n);
+        if (v.bestPrev) trendsPrevDayMap.set(personId, v.bestPrev.value);
+      }
+      console.log(
+        `[Ingest] Google Trends history: ${trendsHistoryAvgMap.size} people with rolling 7d avg, ${trendsPrevDayMap.size} with ~24h prior comparator (cutover ${TRENDS_DAILY_SCALE_CUTOVER.toISOString()})`,
+      );
+    } catch (e) {
+      console.warn("[Ingest] Google Trends history load failed:", (e as Error).message);
+    }
+
     for (const person of people) {
       try {
         const PER_PERSON_TIMEOUT_MS = 30_000;
@@ -1910,7 +1983,11 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           wikiPageviews7dAvg: wiki?.averageDaily7d || 0, // 7-day average for stable mass baseline
           wikiAverageDaily7d: wikiAvg7dExcludingToday,
           trendsInterest: trends?.latestInterest ?? 0,
-          trendsAvg7d: trends?.avg7d ?? 0,
+          // History-derived rolling 7d average (see trendsHistoryAvgMap
+          // computation above). Falls back to the current reading on day 0
+          // so the dormant trends-momentum scoring slot doesn't divide by
+          // zero before the bootstrap window fills in.
+          trendsAvg7d: trendsHistoryAvgMap.get(person.id) ?? (trends?.latestInterest ?? 0),
           wikiDelta: wiki?.delta || 0,
           newsDelta: newsDelta,
           searchDelta: searchDelta,
@@ -2021,17 +2098,26 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           : 0;
         const wikiMomentumLevel = computeMomentumLevel(wikiMomentumRatio);
 
-        // Google Trends momentum diagnostics (May 2026 — display-only, dormant)
+        // Google Trends momentum diagnostics (May 2026 — daily-scale rollout)
+        // `trendsInterest` is the latest "% of today's peak hour" reading
+        // from the `now 1-d` SerpApi response. The 7-day baseline and the
+        // 24h-prior comparator can't be derived from a 24h window, so they
+        // come from `trendsHistoryAvgMap` / `trendsPrevDayMap` — both
+        // populated above from our own post-cutover snapshot history.
+        // Fallback semantics:
+        //   - trendsAvg7d: if no history yet, fall back to the current
+        //     reading so momentum ratio ≈ 1.0 (neutral / "medium") rather
+        //     than divide-by-zero into "no signal".
+        //   - trendsPrevDayInterest: 0 when we don't have a snapshot
+        //     within ±6h of (now-24h). routes.ts treats 0 as "no delta"
+        //     and renders an em-dash, same as cold-start celebs today.
         const trendsInterestLatest = trends?.latestInterest ?? 0;
-        // Day-over-day baseline for the Trends Activity 24h pill — the mean
-        // interest 24-28h before "now", drawn from the same SerpApi 7-day
-        // window as `latestInterest`. Persisting both on the same snapshot
-        // means the delta is always computable from a single row, so the
-        // pill stays accurate across the 12h trends fetch cadence (no
-        // snapshot-diff dependency, no cache-stickiness issues).
-        const trendsPrevDayInterest = trends?.prevDayInterest ?? 0;
-        const trendsAvg7d = trends?.avg7d ?? 0;
-        const trendsAvg90d = trends?.avg90d ?? 0;
+        const trendsAvg7dFromHistory = trendsHistoryAvgMap.get(person.id);
+        const trendsAvg7d = trendsAvg7dFromHistory != null
+          ? trendsAvg7dFromHistory
+          : trendsInterestLatest;
+        const trendsPrevDayInterest = trendsPrevDayMap.get(person.id) ?? 0;
+        const trendsAvg90d = 0;
         const trendsMomentumRatio = trendsAvg7d > 0 && trendsInterestLatest > 0
           ? Math.min(trendsInterestLatest / Math.max(trendsAvg7d, 1), MOMENTUM_RATIO_CAP)
           : 0;

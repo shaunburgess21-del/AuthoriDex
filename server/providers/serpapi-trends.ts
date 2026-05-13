@@ -4,9 +4,14 @@
 // Fetches Google Trends "Interest over time" timeseries via SerpApi's
 // google_trends engine. One query per call (no batching) so each person's
 // 0-100 score is normalised against THEIR OWN peak, not against the loudest
-// person in a shared batch. Uses date=now 7-d for hourly resolution over the
-// past 7 days — this is what users see on the Google Trends UI for "Past 7
-// days" and produces the meaningful "current interest" reading.
+// person in a shared batch. Uses date=now 1-d (past 24h, ~8-min resolution)
+// so the 0-100 scale is rebased against TODAY's peak hour — matching what
+// users see on the Google Trends UI "Past 24h" view. Previous versions used
+// `now 7-d`, which crushed everyone whose week contained a single viral
+// hour (e.g. a cricket match for Kohli) into the low single digits even
+// when their current interest was genuinely high. The 7-day baseline and
+// the 24h delta comparator are now reconstructed by the ingest job from
+// our own snapshot history (see server/jobs/ingest.ts).
 //
 // Why per-person and not batched? When you submit q=a,b,c,d,e to Google
 // Trends, ALL series are normalised against the single highest point across
@@ -26,9 +31,17 @@ const SERPAPI_BASE_URL = "https://serpapi.com/search.json";
 const REQUEST_TIMEOUT_MS = 25_000;
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-// Google Trends date window. "now 7-d" = past 7 days at hourly resolution
-// (~168 points). Matches the "Past 7 days" view on the Google Trends UI.
-const TRENDS_DATE_WINDOW = "now 7-d";
+// Google Trends date window. "now 1-d" = past 24 hours at ~8-minute
+// resolution (~180 points). Matches the "Past 24 hours" view on the
+// Google Trends UI: 100 = the busiest 8-minute slot in the last 24h.
+const TRENDS_DATE_WINDOW = "now 1-d";
+// Fraction of the timeseries tail averaged into `latestInterest`. We aim
+// for roughly the most-recent ~4h block; with `now 1-d` (~180 points over
+// 24h) the last 1/6th gives ~30 points = ~4h. Capped to avoid runaway in
+// case Google Trends returns an unexpected resolution.
+const LATEST_TAIL_FRACTION = 1 / 6;
+const LATEST_TAIL_MAX_POINTS = 30;
+const LATEST_TAIL_MIN_POINTS = 4;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -48,18 +61,13 @@ export interface TrendsTimeseriesPoint {
 export interface TrendsBatchResult {
   personId: string;
   timeseries: TrendsTimeseriesPoint[];
+  // Mean of the most recent ~4h slice of the timeseries. With `now 1-d`
+  // this is "% of today's peak hour" — directly comparable to the score
+  // shown on the Google Trends UI "Past 24h" view. The 7-day baseline and
+  // the 24h-prior comparator are no longer derived here; the ingest job
+  // reconstructs them from our own snapshot history because a 24h
+  // response window doesn't contain that information.
   latestInterest: number;
-  // Mean of the 4 hourly points covering 24-28 hours before "now" — the
-  // direct day-over-day comparator for `latestInterest`. Both windows are
-  // drawn from the same SerpApi response so they live on the same 0-100
-  // normalisation scale, which makes their ratio meaningful. Powers the
-  // Wiki-Pulse-style 24h delta pill on the Google Trends Activity card
-  // (see server/routes.ts → trendsDeltaPct). 0 when fewer than 28 hourly
-  // points are available (very rare; first few hours of a brand-new
-  // Topic ID).
-  prevDayInterest: number;
-  avg7d: number;
-  avg90d: number;
 }
 
 export interface TopicSuggestion {
@@ -192,18 +200,22 @@ async function setCache(cacheKey: string, data: any, personId?: string): Promise
  * Fetch Google Trends TIMESERIES data for a list of people. Each person is
  * fetched in their own SerpApi call (one query per call) so that the 0-100
  * scaling is normalised per-person rather than against the loudest peak in
- * a shared batch. Returns one result per person with the full hourly
- * timeseries (~168 points over 7 days), a "latest" reading (mean of the
- * most recent ~4h, picked for intra-day responsiveness at our 12h cadence),
- * and a 7-day baseline average (used by the future Trends Momentum card).
+ * a shared batch. Returns one result per person with the past-24h
+ * timeseries (~180 8-minute points) and a "latest" reading (mean of the
+ * most recent ~4h slice, picked for intra-day responsiveness at our 12h
+ * cadence).
+ *
+ * The 0-100 scale is rebased against TODAY's peak hour because we query
+ * `now 1-d`. This matches the Google Trends UI "Past 24h" view so a
+ * celeb who is genuinely trending right now reads in the 50-100 band
+ * regardless of whether they had a bigger spike earlier in the week.
  *
  * People with a `googleTrendsTopicId` use the Topic ID (preferred for
  * disambiguation). Others fall back to name search with a warning.
  *
- * Note: `avg90d` is always 0 — the 7-day window does not contain 90 days
- * of data. Trends mass is dormant in the score engine and not rendered in
- * the UI, so this is safe. If we ever wire up a 90-day mass signal we can
- * fetch it on a separate, slower cadence.
+ * Note: the 7-day baseline (`trendsAvg7d`) and the 24h-prior comparator
+ * (`trendsPrevDayInterest`) are reconstructed by the ingest job from
+ * our own snapshot history — they cannot be derived from a 24h response.
  */
 export async function fetchGoogleTrendsBatch(
   people: TrendsBatchInput[],
@@ -257,46 +269,32 @@ export async function fetchGoogleTrendsBatch(
       }
 
       if (series.length > 0) {
-        // Mean of the most recent 4 hourly points (~last 4h) = "current
-        // interest". Tight enough that a 12h-cadence morning fetch and
-        // evening fetch reflect different states of the day (capturing
-        // intra-day rises and falls), while still smoothing out single-
-        // point hourly noise. Falls back to whatever points exist if
-        // fewer than 4 are returned.
-        const lastWindow = series.slice(-4);
+        // Mean of the most recent ~4h slice = "current interest". Using a
+        // fraction of the series (LATEST_TAIL_FRACTION) keeps the math
+        // resolution-agnostic — at `now 1-d` (~180 8-minute points) the
+        // tail is ~30 points (~4h). Clamped to [MIN, MAX] so very short
+        // or very long responses still produce a sensible smoothed value.
+        const tailSize = Math.min(
+          LATEST_TAIL_MAX_POINTS,
+          Math.max(LATEST_TAIL_MIN_POINTS, Math.floor(series.length * LATEST_TAIL_FRACTION)),
+        );
+        const lastWindow = series.slice(-Math.min(tailSize, series.length));
         const latestInterest = lastWindow.length > 0
           ? lastWindow.reduce((s, x) => s + x.interest, 0) / lastWindow.length
           : 0;
-        // Mean of the same-sized 4h window shifted back 24h (points
-        // 24-28h before "now") — the day-over-day comparator. Lives on
-        // the same 0-100 normalised scale as `latestInterest` because
-        // it comes from the same SerpApi response, so dividing one by
-        // the other gives a meaningful percentage. Powers the 24h delta
-        // pill on the Google Trends Activity card.
-        const prevWindow = series.length >= 28 ? series.slice(-28, -24) : [];
-        const prevDayInterest = prevWindow.length > 0
-          ? prevWindow.reduce((s, x) => s + x.interest, 0) / prevWindow.length
-          : 0;
-        // Mean across the full 7-day window — the baseline that "current"
-        // is compared against in momentum ratios. Computed for free off
-        // the same call; consumed by the future Trends Momentum card.
-        const avg7d = series.reduce((s, x) => s + x.interest, 0) / series.length;
 
         results.push({
           personId: p.personId,
           timeseries: series,
           latestInterest,
-          prevDayInterest,
-          avg7d,
-          avg90d: 0, // not available in 7-day window; dormant signal
         });
       } else {
-        results.push({ personId: p.personId, timeseries: [], latestInterest: 0, prevDayInterest: 0, avg7d: 0, avg90d: 0 });
+        results.push({ personId: p.personId, timeseries: [], latestInterest: 0 });
       }
     } else if (data) {
       // SerpApi returned success but no timeline — likely below Trends'
       // entity threshold for the queried window.
-      results.push({ personId: p.personId, timeseries: [], latestInterest: 0, prevDayInterest: 0, avg7d: 0, avg90d: 0 });
+      results.push({ personId: p.personId, timeseries: [], latestInterest: 0 });
     }
 
     if (i < people.length - 1) {

@@ -147,7 +147,7 @@ const WIKI_MOMENTUM_LEVEL_COPY =
   "Level reflects how today's Wikipedia pageviews compare to this person's own 7-day daily average — Low = below typical, Medium = around or modestly above typical, High = at least 2× their typical day.";
 
 const TRENDS_LEVEL_COPY =
-  "Low (under 25) = quiet day. Medium (25–49) = a normal level of attention. High (50+) = getting unusual attention. Scaled against this person's own trend history.";
+  "Low (under 25) = quiet day. Medium (25–49) = normal attention. High (50+) = unusually busy. Scaled to today's peak hour for this person — 100 = their busiest hour in the last 24 hours, matching the Google Trends 'Past 24 hours' view.";
 
 // Each level gets a distinct dot SHAPE on top of its colour so the indicator is
 // still unambiguous for users who can't rely on red/amber/green alone:
