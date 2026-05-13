@@ -81,6 +81,7 @@ import { Input } from "@/components/ui/input";
 import { UploadImageInput } from "@/components/ui/upload-image-input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { 
   Dialog, 
   DialogContent, 
@@ -1304,6 +1305,12 @@ export default function AdminDashboard() {
   const [trendsAuditLoading, setTrendsAuditLoading] = useState(false);
   const [trendsAuditExpanded, setTrendsAuditExpanded] = useState(false);
   const [trendsAuditFilter, setTrendsAuditFilter] = useState<"all" | "no_data" | "stale" | "zero_data" | "missing_topic_id" | "ok">("all");
+  // Per-row SerpApi autocomplete results for the Trends audit "Lookup" popover.
+  // Cached in-memory for the session so re-opening a popover is instant.
+  type TrendsSuggestion = { topicId: string; title: string; type: string };
+  type TrendsSuggestionState = { loading: boolean; suggestions: TrendsSuggestion[]; error?: string };
+  const [trendsSuggestionsByPerson, setTrendsSuggestionsByPerson] = useState<Record<string, TrendsSuggestionState>>({});
+  const [trendsSavingPersonId, setTrendsSavingPersonId] = useState<string | null>(null);
   const [serperAuditFilter, setSerperAuditFilter] = useState<
     "all" | "zero_results" | "no_cache" | "stale" | "ok"
   >("all");
@@ -1856,6 +1863,82 @@ export default function AdminDashboard() {
       toast.error("Error", { description: err.message });
     },
   });
+
+  // Lazy-load SerpApi autocomplete suggestions for a person in the Trends audit
+  // Lookup popover. Results are cached in-memory for the session (and the
+  // server caches them 24h via apiCache) so re-opening is instant.
+  const loadTrendsSuggestionsFor = async (personId: string, name: string) => {
+    setTrendsSuggestionsByPerson(prev => {
+      const existing = prev[personId];
+      if (existing && (existing.suggestions.length > 0 || existing.loading)) return prev;
+      return { ...prev, [personId]: { loading: true, suggestions: [] } };
+    });
+    try {
+      const res = await fetchWithAuth("/api/admin/trends-topic-suggestions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: name }),
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        setTrendsSuggestionsByPerson(prev => ({
+          ...prev,
+          [personId]: { loading: false, suggestions: [], error: `HTTP ${res.status}${text ? `: ${text}` : ""}` },
+        }));
+        return;
+      }
+      const data = await res.json();
+      const suggestions: TrendsSuggestion[] = Array.isArray(data?.suggestions) ? data.suggestions : [];
+      setTrendsSuggestionsByPerson(prev => ({
+        ...prev,
+        [personId]: { loading: false, suggestions },
+      }));
+    } catch (err) {
+      setTrendsSuggestionsByPerson(prev => ({
+        ...prev,
+        [personId]: { loading: false, suggestions: [], error: (err as Error).message },
+      }));
+    }
+  };
+
+  // Persist a Topic ID for a person (or clear it by passing ""). Updates the
+  // current trends-audit row in place and invalidates the celebrities list so
+  // the Celebrities tab edit modal stays consistent.
+  const applyTrendsTopicId = async (personId: string, topicId: string) => {
+    setTrendsSavingPersonId(personId);
+    try {
+      const res = await fetchWithAuth(`/api/admin/celebrities/${personId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ googleTrendsTopicId: topicId }),
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        toast.error("Save failed", { description: `HTTP ${res.status}${text ? `: ${text}` : ""}` });
+        return;
+      }
+      const normalized = topicId.trim();
+      setTrendsAuditResults((prev: any) => {
+        if (!prev?.results) return prev;
+        return {
+          ...prev,
+          results: prev.results.map((r: any) =>
+            r.personId === personId
+              ? { ...r, googleTrendsTopicId: normalized || null, hasTopicId: !!normalized }
+              : r,
+          ),
+        };
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/celebrities"] });
+      toast.success(normalized ? "Topic ID saved" : "Topic ID cleared", {
+        description: normalized ? normalized : "Will fall back to name search on next 12h cycle.",
+      });
+    } catch (err) {
+      toast.error("Save error", { description: (err as Error).message });
+    } finally {
+      setTrendsSavingPersonId(null);
+    }
+  };
 
   // System tool mutations
   const refreshDataMutation = useMutation({
@@ -7419,6 +7502,7 @@ export default function AdminDashboard() {
                                 <th className="px-2 py-1.5 text-right font-medium">Last Fetch</th>
                                 <th className="px-2 py-1.5 text-left font-medium">Status</th>
                                 <th className="px-2 py-1.5 text-left font-medium">Note</th>
+                                <th className="px-2 py-1.5 text-left font-medium">Lookup</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -7465,6 +7549,105 @@ export default function AdminDashboard() {
                                       {r.note ? (
                                         <span className="text-[10px] leading-tight block" title={r.note}>{r.note}</span>
                                       ) : "—"}
+                                    </td>
+                                    <td className="px-2 py-1.5">
+                                      <Popover>
+                                        <PopoverTrigger asChild>
+                                          <Button
+                                            type="button"
+                                            size="icon"
+                                            variant="ghost"
+                                            className="h-7 w-7"
+                                            title="Lookup Topic ID on Google Trends"
+                                            data-testid={`btn-trends-audit-lookup-${r.personId}`}
+                                            onClick={() => loadTrendsSuggestionsFor(r.personId, r.name)}
+                                          >
+                                            <Search className="h-3.5 w-3.5" />
+                                          </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-96 p-0" align="end">
+                                          {(() => {
+                                            const s = trendsSuggestionsByPerson[r.personId];
+                                            const current = r.googleTrendsTopicId || "";
+                                            const isSaving = trendsSavingPersonId === r.personId;
+                                            return (
+                                              <div className="text-xs">
+                                                <div className="px-3 py-2 border-b flex items-center justify-between gap-2">
+                                                  <div className="min-w-0">
+                                                    <div className="font-medium truncate">{r.name}</div>
+                                                    <div className="text-muted-foreground font-mono text-[10px] truncate" title={current || "none"}>
+                                                      Current: {current || <span className="italic">none</span>}
+                                                    </div>
+                                                  </div>
+                                                  {current && (
+                                                    <button
+                                                      type="button"
+                                                      className="shrink-0 text-[10px] text-muted-foreground hover:text-destructive disabled:opacity-50"
+                                                      disabled={isSaving}
+                                                      onClick={() => applyTrendsTopicId(r.personId, "")}
+                                                    >
+                                                      Clear
+                                                    </button>
+                                                  )}
+                                                </div>
+                                                <div className="max-h-72 overflow-y-auto">
+                                                  {s?.loading ? (
+                                                    <div className="flex items-center justify-center gap-2 py-6 text-muted-foreground">
+                                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                                      <span>Searching Google Trends...</span>
+                                                    </div>
+                                                  ) : s?.error ? (
+                                                    <div className="px-3 py-4 text-destructive">{s.error}</div>
+                                                  ) : !s || s.suggestions.length === 0 ? (
+                                                    <div className="px-3 py-4 text-muted-foreground">
+                                                      No Google Trends matches for this name.
+                                                    </div>
+                                                  ) : (
+                                                    <ul className="divide-y">
+                                                      {s.suggestions.map((sug) => {
+                                                        const isCurrent = sug.topicId === current;
+                                                        const isPerson = /person|politician|athlete|singer|actor|musician|rapper|model|youtuber|streamer|author|comedian|chef|host/i.test(sug.type);
+                                                        return (
+                                                          <li key={sug.topicId}>
+                                                            <button
+                                                              type="button"
+                                                              disabled={isSaving || isCurrent}
+                                                              onClick={() => applyTrendsTopicId(r.personId, sug.topicId)}
+                                                              className={cn(
+                                                                "w-full text-left px-3 py-2 hover:bg-muted/50 transition-colors disabled:cursor-default",
+                                                                isCurrent && "bg-primary/10",
+                                                              )}
+                                                            >
+                                                              <div className="flex items-center gap-2 min-w-0">
+                                                                <span className="font-medium truncate flex-1">{sug.title}</span>
+                                                                {isPerson && (
+                                                                  <Badge variant="outline" className="text-[9px] border-green-500/60 text-green-500 shrink-0">
+                                                                    Person
+                                                                  </Badge>
+                                                                )}
+                                                                {isCurrent && (
+                                                                  <Badge variant="outline" className="text-[9px] shrink-0">Current</Badge>
+                                                                )}
+                                                              </div>
+                                                              <div className="flex items-center gap-2 text-[10px] text-muted-foreground mt-0.5">
+                                                                <span className="truncate">{sug.type}</span>
+                                                                <span className="font-mono shrink-0">{sug.topicId}</span>
+                                                              </div>
+                                                            </button>
+                                                          </li>
+                                                        );
+                                                      })}
+                                                    </ul>
+                                                  )}
+                                                </div>
+                                                <div className="px-3 py-2 border-t text-[10px] text-muted-foreground">
+                                                  Click a suggestion to save. Trends data refreshes on the next 12h cycle.
+                                                </div>
+                                              </div>
+                                            );
+                                          })()}
+                                        </PopoverContent>
+                                      </Popover>
                                     </td>
                                   </tr>
                                 ))}
