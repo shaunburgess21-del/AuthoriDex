@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import confetti from "canvas-confetti";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -147,6 +147,27 @@ interface StakeModalProps {
    *  the card doesn't require closing + reopening the modal. */
   onDirectionChange?: (direction: "up" | "down" | "yes" | "no") => void;
   onChangePick?: () => void;
+  /**
+   * AMM-only intent flag. When set to `"sell"` the modal opens with
+   * the Sell tab pre-selected and rewrites the title + mission copy
+   * to read as a cash-out action. Defaults to `"buy"`. The user can
+   * still flip between Buy and Sell via the tab toggle inside the
+   * modal — this prop only seeds the initial mode.
+   */
+  initialAmmMode?: "buy" | "sell";
+  /**
+   * Optional live AMM state from the parent. When provided, the
+   * modal prefers this over the static `selection.ammState` for
+   * quote computation — so as the parent's data refetches every
+   * 60 s and other traders move the market, the user sees up-to-
+   * date shares/avg/price-impact instead of a stale snapshot from
+   * modal-open time. Server is the source of truth on execute, so
+   * there's no race; this just keeps the displayed estimate honest.
+   *
+   * Callers that don't poll (e.g. one-shot home-page renders) can
+   * omit this and the modal falls back to the frozen snapshot.
+   */
+  liveAmmState?: ApiAmmStateBlock | null;
 }
 
 const MIN_STAKE = 5;
@@ -161,10 +182,21 @@ export function StakeModal({
   walletBalance,
   onDirectionChange,
   onChangePick,
+  initialAmmMode,
+  liveAmmState,
 }: StakeModalProps) {
   const [stakeAmount, setStakeAmount] = useState("");
-  const [ammMode, setAmmMode] = useState<"buy" | "sell">("buy");
+  const [ammMode, setAmmMode] = useState<"buy" | "sell">(initialAmmMode ?? "buy");
   const [sellShares, setSellShares] = useState("");
+  // Re-seed ammMode whenever the parent's intent changes (e.g. user
+  // clicks the inline Sell button on the detail page after the modal
+  // has already been opened once for a Buy). Without this the modal
+  // would stick to whatever mode was last selected interactively.
+  useEffect(() => {
+    if (open && initialAmmMode) {
+      setAmmMode(initialAmmMode);
+    }
+  }, [open, initialAmmMode]);
   const parsedAmount = parseInt(stakeAmount) || 0;
   const balanceAfter = walletBalance - parsedAmount;
   const confirmButtonRef = useRef<HTMLButtonElement>(null);
@@ -198,7 +230,12 @@ export function StakeModal({
   const isAmm = selection.engine === "amm";
   const ammNetShares = Number(selection.ammNetShares ?? 0);
   const canSellAmm = isAmm && ammNetShares > 1e-6 && !!onConfirmAmmSell;
-  const ammSnapshot = isAmm ? snapshotFromApi(selection.ammState ?? null) : null;
+  // Prefer the parent-supplied live state when available so quotes
+  // re-derive on every refetch (round-2 polish: fixes the 879→898
+  // discrepancy reported in smoke testing — the snapshot frozen at
+  // modal-open time goes stale fast when agents keep trading).
+  const effectiveAmmState = liveAmmState ?? selection.ammState ?? null;
+  const ammSnapshot = isAmm ? snapshotFromApi(effectiveAmmState) : null;
   const ammPriceMap = ammSnapshot ? pricesFor(ammSnapshot) : null;
   const ammEntryPrice =
     isAmm && ammPriceMap && selection.entryId
@@ -222,11 +259,11 @@ export function StakeModal({
       ? ammPriceMap[oppositeEntryId] ?? null
       : null;
   const ammBuyQuote = isAmm && ammMode === "buy" && parsedAmount >= MIN_STAKE && selection.entryId
-    ? deriveBuyQuote(selection.ammState ?? null, selection.entryId, parsedAmount)
+    ? deriveBuyQuote(effectiveAmmState, selection.entryId, parsedAmount)
     : null;
   const parsedSellShares = Number(sellShares);
   const ammSellQuote = isAmm && ammMode === "sell" && Number.isFinite(parsedSellShares) && parsedSellShares > 0 && selection.entryId
-    ? deriveSellQuote(selection.ammState ?? null, selection.entryId, Math.min(parsedSellShares, ammNetShares))
+    ? deriveSellQuote(effectiveAmmState, selection.entryId, Math.min(parsedSellShares, ammNetShares))
     : null;
   const isCommunityNo = isCommunity && selection.direction === "no";
   // Yes/No badge + toggle is only meaningful for community-multi
@@ -241,6 +278,25 @@ export function StakeModal({
   const isDown = selection.choice.includes("DOWN");
 
   const isTopUp = !!selection.isTopUp;
+  const isAmmSellMode = isAmm && ammMode === "sell";
+  // Sell-mode header: the user reached this modal by clicking a Sell
+  // button on the detail page (or by toggling the Sell tab inside an
+  // already-open modal), so the title + mission text need to reflect
+  // "cash out" intent — not "buy more shares". Builds the side label
+  // off `choice` so UP/DOWN reads naturally.
+  const sellHeading = (() => {
+    if (!isAmmSellMode) return null;
+    if (isUpDown) {
+      if (isUp) return "Sell UP shares";
+      if (isDown) return "Sell DOWN shares";
+      return "Sell shares";
+    }
+    if (isH2H) return `Sell ${selection.personName ?? selection.choice} shares`;
+    if (isCommunity) {
+      return `Sell ${selection.direction === "no" ? "No" : "Yes"} shares`;
+    }
+    return "Sell shares";
+  })();
   // Header copy. On a follow-up bet we surface "Add to your X stake" so users
   // know the new credits compound onto an existing position rather than
   // creating a separate one. Same-side only — opposite-side hedges are
@@ -259,12 +315,16 @@ export function StakeModal({
     }
     return "Add to your stake";
   })();
-  const dialogTitleText = topUpHeading ?? "Confirm Prediction";
-  const missionText = isTopUp
-    ? "Adding more credits compounds onto your existing position."
-    : isAmm && AMM_MISSION_HEADERS[selection.type]
-      ? AMM_MISSION_HEADERS[selection.type]
-      : MISSION_HEADERS[selection.type] || "Place your prediction on this market.";
+  // Sell mode takes precedence over top-up because a user can only be
+  // in one or the other (`isTopUp` is buy-only at the call sites).
+  const dialogTitleText = sellHeading ?? topUpHeading ?? "Confirm Prediction";
+  const missionText = isAmmSellMode
+    ? "Cash out at the live market price. Bigger orders push the price along the curve."
+    : isTopUp
+      ? "Adding more credits compounds onto your existing position."
+      : isAmm && AMM_MISSION_HEADERS[selection.type]
+        ? AMM_MISSION_HEADERS[selection.type]
+        : MISSION_HEADERS[selection.type] || "Place your prediction on this market.";
 
   const fireConfetti = (origin: { x: number; y: number }) => {
     confetti({
@@ -455,6 +515,12 @@ export function StakeModal({
             // Inlined markup (rather than an inner component) so React
             // doesn't see a fresh component type on every parent render,
             // which would otherwise force the tile DOM to remount.
+            // Round-2 polish: dropped the `opacity-70` on the cr/share
+            // line because the muted-side tile already paints text at
+            // `text-[<color>]/70`, and stacking opacities (0.7 × 0.7 =
+            // 0.49) made the red DOWN price almost unreadable. Bumped
+            // to `font-semibold` so the cr/share reads as a real datum
+            // rather than a footnote.
             const pickBody = (
               <>
                 <p className="text-[10px] font-semibold uppercase tracking-wide truncate">
@@ -463,7 +529,7 @@ export function StakeModal({
                 <p className="text-2xl font-bold leading-tight font-mono">
                   {priceToPercent(pickPrice, 0)}
                 </p>
-                <p className="text-[10px] font-mono opacity-70">
+                <p className="text-[11px] font-mono font-semibold">
                   {pickPrice.toFixed(3)} cr/share
                 </p>
               </>
@@ -476,12 +542,17 @@ export function StakeModal({
                 <p className="text-2xl font-bold leading-tight font-mono">
                   {priceToPercent(oppositePrice, 0)}
                 </p>
-                <p className="text-[10px] font-mono opacity-70">
+                <p className="text-[11px] font-mono font-semibold">
                   {oppositePrice.toFixed(3)} cr/share
                 </p>
               </>
             );
 
+            // .blur() after tap clears the :focus ring (some browsers
+            // still paint a faint focus shadow on `<button>` after touch
+            // even with `:hover` gated by hoverOnlyWhenSupported), so the
+            // tile snaps cleanly back to muted styling on the new
+            // opposite side.
             return (
               <div className="grid grid-cols-2 gap-2" data-testid="amm-hero-tiles">
                 {canFlip ? (
@@ -489,7 +560,10 @@ export function StakeModal({
                     type="button"
                     aria-pressed
                     className={pickTileClass}
-                    onClick={() => onDirectionChange(isUp ? "up" : "down")}
+                    onClick={(e) => {
+                      e.currentTarget.blur();
+                      onDirectionChange(isUp ? "up" : "down");
+                    }}
                     data-testid="amm-hero-tile-pick"
                   >
                     {pickBody}
@@ -504,7 +578,10 @@ export function StakeModal({
                     type="button"
                     aria-pressed={false}
                     className={oppositeTileClass}
-                    onClick={() => onDirectionChange(isUp ? "down" : "up")}
+                    onClick={(e) => {
+                      e.currentTarget.blur();
+                      onDirectionChange(isUp ? "down" : "up");
+                    }}
                     data-testid="amm-hero-tile-opposite"
                   >
                     {oppositeBody}
@@ -861,7 +938,7 @@ export function StakeModal({
                   className="w-full text-xs text-muted-foreground hover:text-foreground flex items-center justify-center gap-1.5 py-1"
                   data-testid="button-stake-chart-toggle"
                 >
-                  {chartOpen ? "Hide" : "Show"} 7-day chart
+                  {chartOpen ? "Hide" : "Show"} this week's chart
                   <ChevronDown className={`h-3 w-3 transition-transform ${chartOpen ? "rotate-180" : ""}`} />
                 </button>
               )}
@@ -873,6 +950,13 @@ export function StakeModal({
                   personName={selection.personName ?? selection.marketName}
                   compact
                   userPick={isUp ? "up" : isDown ? "down" : null}
+                  ammUpEntryId={
+                    isAmm && isUpDown
+                      ? isUp
+                        ? selection.entryId ?? null
+                        : oppositeEntryId
+                      : null
+                  }
                 />
               )}
             </div>
@@ -1047,9 +1131,27 @@ export function StakeModal({
               >
                 <div className="flex items-end justify-between gap-2">
                   <div className="min-w-0 flex-1">
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      {heroLabel}
-                    </p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        {heroLabel}
+                      </p>
+                      {/* Live indicator: shown only when parent passed a
+                          fresh ammState via `liveAmmState`. Pulsing dot
+                          conveys "this estimate updates as the market
+                          moves" without taking real estate. */}
+                      {liveAmmState != null && (hasBuyQuote || hasSellQuote) && (
+                        <span
+                          className="inline-flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400"
+                          data-testid="amm-receipt-live-indicator"
+                        >
+                          <span className="relative flex h-1.5 w-1.5">
+                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-60" />
+                            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                          </span>
+                          Live
+                        </span>
+                      )}
+                    </div>
                     {hasBuyQuote && ammBuyQuote ? (
                       <p className="text-2xl font-bold leading-tight font-mono text-green-700 dark:text-green-500">
                         ~{Math.floor(ammBuyQuote.shares).toLocaleString("en-US")}{" "}
@@ -1080,7 +1182,7 @@ export function StakeModal({
                   <p className="text-[11px] font-mono text-muted-foreground border-t border-violet-500/15 pt-1.5">
                     {ammBuyQuote.shares.toFixed(2)} {sideShareLabel}
                     <span className="text-muted-foreground/70">
-                      {" · avg "}
+                      {" · Avg price "}
                       {ammBuyQuote.pricePerShareAvg.toFixed(3)} cr/share
                     </span>
                   </p>
@@ -1090,8 +1192,16 @@ export function StakeModal({
                   <p className="text-[11px] font-mono text-muted-foreground border-t border-violet-500/15 pt-1.5">
                     Selling {Math.min(parsedSellShares, ammNetShares).toFixed(2)} {sideShareLabel}
                     <span className="text-muted-foreground/70">
-                      {" @ ~"}
-                      {ammEntryPrice.toFixed(3)} cr/share
+                      {" · Avg price "}
+                      {/* Use the *quote's* avg (proceeds / shares)
+                          instead of ammEntryPrice — that's the start
+                          price, not what you actually receive. For
+                          large sells the curve walks down as you go,
+                          so avg < entry by a noticeable margin and
+                          that gap IS where the "I lost 1 credit on
+                          round-trip" credits live. Matches the buy
+                          receipt's framing one row up. */}
+                      {ammSellQuote.pricePerShareAvg.toFixed(3)} cr/share
                     </span>
                   </p>
                 )}
@@ -1104,13 +1214,94 @@ export function StakeModal({
                   </p>
                 )}
 
+                {/* Price impact: shown only when the order moves the LMSR
+                    price by >=1pp. Mirrors Polymarket's "Avg price / max
+                    price" disclosure so users twig that bigger orders
+                    push the price along the curve. The avg-price line
+                    above already shows the effective per-share cost; this
+                    line surfaces the *post-trade* price so users see
+                    where the next buyer would enter. */}
                 {showSlippage && finalPrice != null && (
-                  <p className="text-[10px] font-mono text-amber-700 dark:text-amber-400 flex items-center gap-1">
-                    Final price {priceToPercent(ammEntryPrice, 0)} → {priceToPercent(finalPrice, 0)}
+                  <div className="text-[10px] font-mono text-amber-700 dark:text-amber-400 flex items-center gap-1 flex-wrap">
+                    <span>
+                      Price impact: {priceToPercent(ammEntryPrice, 0)} → {priceToPercent(finalPrice, 0)}
+                    </span>
                     <span className="text-amber-700/70 dark:text-amber-400/70">
                       ({finalPrice > ammEntryPrice ? "+" : ""}
-                      {((finalPrice - ammEntryPrice) * 100).toFixed(1)}pp)
+                      {((finalPrice - ammEntryPrice) * 100).toFixed(1)} pts)
                     </span>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          className="text-amber-700/70 dark:text-amber-400/70 hover:text-amber-700 dark:hover:text-amber-400"
+                          aria-label="What is price impact?"
+                        >
+                          <HelpCircle className="h-3 w-3" />
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent className="text-xs max-w-64 space-y-1.5" side="top">
+                        <p className="font-semibold">Price impact</p>
+                        {hasSellQuote ? (
+                          <p>
+                            Big sells push the share price down as
+                            they fill. Your{" "}
+                            <span className="font-semibold">Avg price</span>{" "}
+                            above already factors this in — it's
+                            what you'll actually receive per share.
+                          </p>
+                        ) : (
+                          <p>
+                            Big buys push the share price up as
+                            they fill. Your{" "}
+                            <span className="font-semibold">Avg price</span>{" "}
+                            above already factors this in — it's
+                            what you'll actually pay per share.
+                          </p>
+                        )}
+                        <p className="text-muted-foreground">
+                          The arrow shows where the market price
+                          settles after your trade.{" "}
+                          <span className="italic">pts</span> =
+                          percentage points (e.g. 55% → 58% is
+                          +3 pts).
+                        </p>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                )}
+
+                {/* Spread / round-trip hint. Only on sell mode —
+                    answers the common "I bought for 500, sold for
+                    499, where did 1 credit go?" question. Kept
+                    deliberately general so it also reads correctly
+                    for users sitting on a winning or losing
+                    position (where the price move dwarfs the
+                    spread). Muted so it doesn't dominate; users
+                    who don't care just see "sell proceeds: X" and
+                    move on. */}
+                {hasSellQuote && (
+                  <p className="text-[10px] text-muted-foreground/70 leading-snug border-t border-violet-500/15 pt-1.5">
+                    A small spread applies on every trade — selling
+                    nudges the price down the curve, so proceeds
+                    are a touch below the live price × shares.
+                    Already factored above.
+                  </p>
+                )}
+
+                {/* Live-quote disclaimer. Only shown when the parent
+                    is feeding us `liveAmmState` (so the receipt is
+                    actually re-deriving on each refetch) AND the
+                    user has a real quote in front of them. Without
+                    these guards we'd be lying ("Live estimate" while
+                    the modal is using a stale snapshot) or pointless
+                    ("Live estimate" next to "Enter at least 5
+                    credits..."). */}
+                {liveAmmState != null && (hasBuyQuote || hasSellQuote) && (
+                  <p className="text-[10px] text-muted-foreground/70 leading-snug">
+                    Live estimate — actual{" "}
+                    {hasSellQuote ? "proceeds" : "shares"} depend on
+                    the price at the moment your trade executes.
                   </p>
                 )}
               </div>

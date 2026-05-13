@@ -18661,7 +18661,17 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       let userEntry: {
         enteredAt: Date;
         enteredScore: number | null;
+        // AMM marginal price at trade time for the side the user took.
+        // Stored per-bet on `marketBets.pricePerShare` since Phase 4.
+        // Parimutuel bets leave this null and the chart skips the
+        // entry-odds reference line.
+        enteredAmmPrice: number | null;
         pick: string;
+        // entryId of the side the user took. Lets the client decide
+        // whether to plot the reference line at `enteredAmmPrice`
+        // (UP entries) or `1 - enteredAmmPrice` (DOWN entries) on a
+        // chart whose right Y-axis is the UP-entry price.
+        entryId: string;
         stake: number;
       } | null = null;
 
@@ -18671,6 +18681,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
             createdAt: marketBets.createdAt,
             stakeAmount: marketBets.stakeAmount,
             entryId: marketBets.entryId,
+            pricePerShare: marketBets.pricePerShare,
           })
           .from(marketBets)
           .where(
@@ -18679,7 +18690,11 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
               eq(marketBets.userId, req.userId)
             )
           )
-          .orderBy(desc(marketBets.createdAt))
+          // Stage 3 fix: anchor the marker to the user's FIRST bet on
+          // this market — that's where their cost basis was opened.
+          // Previously `desc` returned the latest top-up so the dot
+          // teleported every time a user added to their position.
+          .orderBy(asc(marketBets.createdAt))
           .limit(1);
 
         if (bet) {
@@ -18703,10 +18718,22 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
             enteredScore = closest.fameIndex;
           }
 
+          // pricePerShare is a `numeric` column — drizzle hands it
+          // back as a string. Coerce defensively; pre-AMM bets have
+          // no value here and we surface null so the client knows to
+          // hide the entry-odds reference line.
+          const ppsRaw = bet.pricePerShare;
+          const ppsNum = ppsRaw != null ? Number(ppsRaw) : NaN;
+          const enteredAmmPrice = Number.isFinite(ppsNum) && ppsNum > 0 && ppsNum < 1
+            ? ppsNum
+            : null;
+
           userEntry = {
             enteredAt: bet.createdAt,
             enteredScore,
+            enteredAmmPrice,
             pick: entry?.label ?? bet.entryId,
+            entryId: bet.entryId,
             stake: bet.stakeAmount,
           };
         }
@@ -18850,17 +18877,44 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         }
         const personMap = Object.fromEntries(persons.map(p => [p.id, p]));
 
-        const enriched = markets.map(m => ({
-          ...m,
-          ...addLifecycleFields(m),
-          person: m.personId ? personMap[m.personId] || null : null,
-          entries: entries.filter(e => e.marketId === m.id),
-          recentParticipants: engagement.recentParticipantsByMarket.get(m.id) || [],
-          activeParticipantCount: engagement.activeParticipantCountByMarket.get(m.id) || 0,
-          latestRationale: engagement.latestRationaleByMarket.get(m.id) || null,
-          ammState: ammStateFor(m.id),
-        }));
-        return res.json(enriched);
+        const enriched = markets.map((m, idx) => {
+          const ammState = ammStateFor(m.id);
+          // Polymarket-style "Vol." chip. We use the LMSR's
+          // totalUserCreditsIn (cumulative credits users have spent
+          // buying shares this week) — that's the cleanest single
+          // number that reads as "how active is this market". Sells
+          // don't subtract, which matches Polymarket / Kalshi.
+          // Parimutuel markets get 0 (they sunset Sunday, so we don't
+          // back-compute a parimutuel volume just for the last week).
+          const volume = Number(ammState?.totalUserCreditsIn ?? 0);
+          return {
+            ...m,
+            ...addLifecycleFields(m),
+            person: m.personId ? personMap[m.personId] || null : null,
+            entries: entries.filter(e => e.marketId === m.id),
+            recentParticipants: engagement.recentParticipantsByMarket.get(m.id) || [],
+            activeParticipantCount: engagement.activeParticipantCountByMarket.get(m.id) || 0,
+            latestRationale: engagement.latestRationaleByMarket.get(m.id) || null,
+            ammState,
+            volume,
+            __idx: idx,
+          };
+        });
+
+        // Default sort for the Up/Down feed: most-traded markets first.
+        // Stable tiebreaker preserves the personalised /
+        // featured / category ordering from the DB query so users with
+        // category prefs still see "their" markets first within the
+        // same volume bucket. Parimutuel markets (volume = 0) sink
+        // to the bottom for the last week of their lives.
+        if (type === 'updown') {
+          enriched.sort((a, b) => {
+            if (b.volume !== a.volume) return b.volume - a.volume;
+            return a.__idx - b.__idx;
+          });
+        }
+
+        return res.json(enriched.map(({ __idx, ...rest }) => rest));
       }
 
       if (type === 'h2h' || type === 'gainer') {
@@ -18895,6 +18949,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
             }
           }
 
+          const ammState = ammStateFor(m.id);
           return {
             ...m,
             ...addLifecycleFields(m),
@@ -18903,21 +18958,26 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
             activeParticipantCount: engagement.activeParticipantCountByMarket.get(m.id) || 0,
             latestRationale: engagement.latestRationaleByMarket.get(m.id) || null,
             ...(modelP1Percent !== undefined ? { modelP1Percent, modelConfidence } : {}),
-            ammState: ammStateFor(m.id),
+            ammState,
+            volume: Number(ammState?.totalUserCreditsIn ?? 0),
           };
         });
         return res.json(enriched);
       }
 
-      res.json(markets.map(m => ({
-        ...m,
-        ...addLifecycleFields(m),
-        entries: entries.filter(e => e.marketId === m.id),
-        recentParticipants: engagement.recentParticipantsByMarket.get(m.id) || [],
-        activeParticipantCount: engagement.activeParticipantCountByMarket.get(m.id) || 0,
-        latestRationale: engagement.latestRationaleByMarket.get(m.id) || null,
-        ammState: ammStateFor(m.id),
-      })));
+      res.json(markets.map(m => {
+        const ammState = ammStateFor(m.id);
+        return {
+          ...m,
+          ...addLifecycleFields(m),
+          entries: entries.filter(e => e.marketId === m.id),
+          recentParticipants: engagement.recentParticipantsByMarket.get(m.id) || [],
+          activeParticipantCount: engagement.activeParticipantCountByMarket.get(m.id) || 0,
+          latestRationale: engagement.latestRationaleByMarket.get(m.id) || null,
+          ammState,
+          volume: Number(ammState?.totalUserCreditsIn ?? 0),
+        };
+      }));
     } catch (error: any) {
       console.error("Error fetching native markets:", error.message);
       res.status(500).json({ error: "Failed to fetch native markets" });

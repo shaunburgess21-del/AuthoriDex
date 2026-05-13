@@ -3,7 +3,6 @@ import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { WeeklyUpDownNameBlock } from "@/components/WeeklyUpDownNameBlock";
 import { WeeklyUpDownActionButtons } from "@/components/predict/WeeklyUpDownActionButtons";
-import { AmmPriceSparkline } from "@/components/predict/AmmPriceSparkline";
 import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
 import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
 import { PredictCard } from "@/components/predict/PredictCard";
@@ -14,6 +13,7 @@ import { Link } from "wouter";
 import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
 import { computeEarlyBirdMultiplier } from "@/lib/parimutuel";
 import { type ApiAmmStateBlock, pricesFor, snapshotFromApi } from "@/lib/ammClient";
+import { formatVolumeCredits } from "@/lib/formatNumber";
 
 type CategoryFilter = "all" | "favorites" | "trending" | "tech" | "politics" | "business" | "music" | "sports" | "film-tv" | "gaming" | "creator" | "food-drink" | "lifestyle" | "misc";
 
@@ -47,6 +47,13 @@ export interface PredictionMarket {
   engine?: "parimutuel" | "amm" | string | null;
   /** Phase 4: live AMM state snapshot from `/api/native-markets/updown`. */
   ammState?: ApiAmmStateBlock | null;
+  /**
+   * Sprint 4.3: cumulative credits users have spent buying shares on this
+   * market (mirrors ammState.totalUserCreditsIn). Powers the Polymarket-
+   * style "1.2K cr vol" chip on the card and feeds the default sort on
+   * the Up/Down feed. Parimutuel markets get 0 and the chip suppresses.
+   */
+  volume?: number;
 }
 
 export function WeeklyUpDownCard({
@@ -59,6 +66,7 @@ export function WeeklyUpDownCard({
   leaderboardCategories,
   pendingPosition,
   onBrowseFullScreen,
+  unrealisedPnl = null,
 }: {
   market: PredictionMarket;
   isMarketClosed?: boolean;
@@ -69,6 +77,14 @@ export function WeeklyUpDownCard({
   leaderboardCategories?: Set<string>;
   pendingPosition?: { pick: "up" | "down" | null; stakeAmount: number } | null;
   onBrowseFullScreen?: () => void;
+  /**
+   * Sprint 4.3: AMM-only live P&L for the current user's open position
+   * on this market. Threaded through to the position banner so the
+   * card can read `[Winning] +13.41 cr   Stake 100`. Null for
+   * parimutuel positions (no per-share P&L concept) and for cards
+   * where the position summary hasn't loaded yet.
+   */
+  unrealisedPnl?: number | null;
 }) {
   const delta = market.currentScore - market.baselineScore;
   const pctDelta = market.baselineScore > 0 ? ((delta / market.baselineScore) * 100).toFixed(1) : "0";
@@ -211,12 +227,26 @@ export function WeeklyUpDownCard({
       </Link>
 
       <div className="mt-auto">
-      <div className="mb-2">
+      {/* Trader stack + Polymarket-style volume chip. The chip suppresses
+          when there's no AMM volume yet (parimutuel markets and brand-new
+          AMM markets with zero buys) so cold-start cards don't show
+          `0 cr vol`. Bullet separator keeps the row visually tight. */}
+      <div className="mb-2 flex items-center gap-2 flex-wrap">
         <ParticipantAvatarStack
           participants={market.recentParticipants}
           totalCount={market.totalBets ?? market.activeParticipantCount ?? 0}
           engine={isAmm ? "amm" : "parimutuel"}
         />
+        {isAmm && (() => {
+          const volText = formatVolumeCredits(market.volume);
+          if (!volText) return null;
+          return (
+            <span className="text-xs text-muted-foreground">
+              <span className="text-muted-foreground/40">·</span>{" "}
+              <span className="font-mono">{volText}</span> vol
+            </span>
+          );
+        })()}
       </div>
 
       <div className="mb-2">
@@ -226,21 +256,16 @@ export function WeeklyUpDownCard({
             style={{ width: `${upPoolPercent}%` }}
           />
         </div>
+        {/* Sub-bar context line. On AMM we surface Up%/Down% on either
+            side — the coloured split bar above already shows the same
+            balance graphically, and the cr/share figures live on the
+            Up/Down buttons below, so the % here is the consumer-
+            friendly read. (Round-3 polish: dropped the mid-row
+            sparkline; users found it didn't add enough signal next
+            to the bar.) Parimutuel falls back to multiplier labels. */}
         {isAmm && upPrice != null && downPrice != null ? (
-          <div className="flex items-center justify-between text-[11px] mt-1">
-            <div className="flex items-center gap-1.5">
-              <span className="text-green-500 font-semibold">Up {Math.round(upPrice * 100)}%</span>
-              {market.upEntryId && (
-                <AmmPriceSparkline
-                  marketId={market.id}
-                  entryId={market.upEntryId}
-                  fallbackPrice={upPrice}
-                  width={56}
-                  height={16}
-                  className="stroke-green-500 dark:stroke-green-400"
-                />
-              )}
-            </div>
+          <div className="flex items-center justify-between gap-2 text-[11px] mt-1">
+            <span className="text-green-500 font-semibold">Up {Math.round(upPrice * 100)}%</span>
             <span className="text-red-500 font-semibold">Down {Math.round(downPrice * 100)}%</span>
           </div>
         ) : (
@@ -263,6 +288,9 @@ export function WeeklyUpDownCard({
         marketStartAt={market.startAt}
         bettingCutoff={market.bettingCutoff}
         engine={market.engine}
+        upPrice={upPrice}
+        downPrice={downPrice}
+        unrealisedPnl={unrealisedPnl}
       />
       </div>
     </PredictCard>

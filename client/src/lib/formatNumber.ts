@@ -29,6 +29,20 @@ export function compactVotes(count: number | null | undefined): string {
   return count.toString();
 }
 
+/**
+ * Format an AMM market's user-credit volume into a compact Polymarket-style
+ * chip — e.g. `850 cr`, `1.2K cr`, `12K cr`, `1.5M cr`. Returns `null` when
+ * the value isn't finite or is non-positive, so callers can decide whether
+ * to render the chip at all (parimutuel markets, fresh AMM markets with no
+ * trades yet, etc.).
+ */
+export function formatVolumeCredits(value: number | null | undefined): string | null {
+  if (value == null || !Number.isFinite(value) || value <= 0) return null;
+  if (value < 1_000) return `${Math.round(value)} cr`;
+  if (value < 1_000_000) return `${(value / 1_000).toFixed(1).replace(/\.0$/, '')}K cr`;
+  return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, '')}M cr`;
+}
+
 const APPROVAL_SEGMENT_COLORS = ['#FF0000', '#FF9100', '#FFC400', '#76FF03', '#00C853'];
 
 /** Returns a color for approval rating (1-5) or percentage (0-100). */

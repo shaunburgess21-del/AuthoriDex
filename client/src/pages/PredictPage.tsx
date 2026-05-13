@@ -399,6 +399,23 @@ const headToHeadMarkets: HeadToHeadMarket[] = [
 ];
 
 
+/**
+ * Sprint 4.3: minimal shape of /api/me/amm-positions for the
+ * predict-page card banner. Only the fields we actually need to
+ * compute P&L. (The full canonical type lives next to the server
+ * service in `server/services/amm-positions.ts`.)
+ */
+interface PredictPageAmmOpenPosition {
+  marketId: string;
+  entryId: string;
+  entryLabel: string;
+  netShares: number;
+  netCreditsIn: number;
+  currentPrice: number;
+  currentValue: number;
+  unrealisedPnl: number;
+}
+
 interface RecentPredictionActivity {
   id: string;
   createdAt: string;
@@ -1262,7 +1279,7 @@ function CreatePredictionModal({
 }
 
 export default function PredictPage() {
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { trigger: triggerXpBurst } = useXpBurst();
   const { user, profile, refreshProfile } = useAuth();
@@ -1287,12 +1304,22 @@ export default function PredictPage() {
     setCategoryFilter(normalizeMarketCategory(category) as CategoryFilter);
   }, []);
 
+  // Sprint 4.3: back-button anchor restore. Previously this effect was
+  // mount-only — `useEffect(..., [])` — which works on a fresh page
+  // load but never fires when the user hits the browser back button
+  // from a detail page, because wouter restores the existing
+  // PredictPage instance without unmounting. By depending on `location`
+  // we re-run every time the route settles on `/predict`, which is
+  // exactly what `history.back()` triggers. The 5-minute TTL inside
+  // `consumePredictReturnAnchor` prevents stale anchors from firing on
+  // unrelated tab switches or long sessions.
   useEffect(() => {
+    if (location !== "/predict") return;
     const anchor = consumePredictReturnAnchor();
     if (anchor) {
       scrollToPredictAnchor(anchor);
     }
-  }, []);
+  }, [location]);
 
   const [globalSearchQuery, setGlobalSearchQuery] = useState("");
   const [weeklyOverlaySearchQuery, setWeeklyOverlaySearchQuery] = useState("");
@@ -1428,6 +1455,33 @@ export default function PredictPage() {
     refetchOnMount: "always",
     refetchOnWindowFocus: true,
   });
+  // Sprint 4.3: pull the current user's AMM open positions so each
+  // Up/Down card can render a live "+13.41 cr" P&L next to the
+  // existing Stake / Your position banner. Mirrors the query already
+  // in `client/src/pages/me/PredictionsPage.tsx`. Auth-gated and
+  // tab-aware (pauses when the tab is hidden) so we don't waste
+  // requests on logged-out browsing or background tabs.
+  const { data: ammPositionsData } = useQuery<{ positions: PredictPageAmmOpenPosition[] }>({
+    queryKey: ["/api/me/amm-positions"],
+    enabled: !!user,
+    refetchInterval: () => (typeof document !== "undefined" && document.hidden ? false : 60_000),
+  });
+  const ammPositionByMarket = useMemo(() => {
+    const map = new Map<string, PredictPageAmmOpenPosition>();
+    for (const p of ammPositionsData?.positions ?? []) {
+      // Up/Down markets only ever have one open side per user (the
+      // server blocks opposite-side hedges) so the first hit is the
+      // canonical one. We still pick the larger currentValue if the
+      // server ever stops enforcing that — keeps the banner P&L
+      // sensible if both sides slip through.
+      const existing = map.get(p.marketId);
+      if (!existing || p.currentValue > existing.currentValue) {
+        map.set(p.marketId, p);
+      }
+    }
+    return map;
+  }, [ammPositionsData]);
+
   const { data: nativeJackpotData, error: jackpotError, refetch: refetchJackpot } = useQuery<any[]>({
     queryKey: ['/api/native-markets/jackpot'],
     staleTime: 30_000,
@@ -1541,6 +1595,37 @@ export default function PredictPage() {
     return map;
   }, [userBetsData]);
 
+  /**
+   * Sprint 4.3 self-review fix: compose the predict-page card's
+   * `pendingPosition` from BOTH the raw bet aggregate and the AMM
+   * position summary.
+   *
+   * `userBetsByMarket.stakeAmount` is `Σ buy bet stakeAmounts` — for
+   * AMM markets after a partial sell, this is the gross credits the
+   * user has spent over the week, which is misleading because the
+   * actual cost basis (the credits currently at risk) is lower.
+   * The AMM position's `netCreditsIn` is `gross_buys - sell_proceeds`,
+   * which matches the detail-page Sell receipt and the "Position cost"
+   * shown elsewhere.
+   *
+   * When we have both, we keep the bet-derived `pick`/`pending` flag
+   * but swap in `netCreditsIn` (rounded to whole credits to match the
+   * existing "Stake 100" formatting) for the displayed stake.
+   * Parimutuel cards (no AMM position) fall through unchanged.
+   */
+  const buildCardPendingPosition = useCallback(
+    (marketId: string) => {
+      const pending = pendingWeeklyUpDownPositionFromBet(userBetsByMarket.get(marketId));
+      if (!pending) return null;
+      const ammPos = ammPositionByMarket.get(marketId);
+      if (ammPos && Number.isFinite(ammPos.netCreditsIn) && ammPos.netCreditsIn >= 0) {
+        return { ...pending, stakeAmount: Math.round(ammPos.netCreditsIn) };
+      }
+      return pending;
+    },
+    [userBetsByMarket, ammPositionByMarket],
+  );
+
   // Per-(market, entry) aggregate of the user's active stakes split by
   // direction. Keyed by direction so the no-hedging guard can detect
   // opposite-side picks correctly — the previous shape collapsed both
@@ -1634,6 +1719,7 @@ export default function PredictPage() {
           bettingCutoff: m.bettingCutoff || null,
           engine: m.engine ?? "parimutuel",
           ammState: m.ammState ?? null,
+          volume: Number(m.volume ?? m.ammState?.totalUserCreditsIn ?? 0) || 0,
         } as PredictionMarket;
       });
     }
@@ -2848,6 +2934,30 @@ export default function PredictPage() {
     return () => { document.body.style.overflow = ''; };
   }, [snapScrollOpen, viewAllCategory]);
 
+  // Live AMM state to feed the StakeModal. Recomputes whenever the
+  // underlying poll-refetched arrays update — so the modal's shares
+  // / avg price / price-impact estimate tracks reality instead of
+  // freezing on the snapshot captured at `handleSelect` time
+  // (round-2 polish; root cause of the 879→898 surprise during
+  // smoke testing). Scans across all four native-market sources so
+  // any AMM market type (updown / h2h / gainer / community) picks
+  // up the freshest state available.
+  const liveAmmStateForPending = useMemo(() => {
+    if (!pendingSelection || pendingSelection.engine !== "amm") return null;
+    const id = pendingSelection.marketId;
+    const sources: any[][] = [
+      nativeUpdownData ?? [],
+      nativeH2hData ?? [],
+      nativeGainerData ?? [],
+      openMarkets ?? [],
+    ];
+    for (const list of sources) {
+      const m = list.find((entry: any) => String(entry?.id) === String(id));
+      if (m && m.ammState) return m.ammState;
+    }
+    return null;
+  }, [pendingSelection, nativeUpdownData, nativeH2hData, nativeGainerData, openMarkets]);
+
   return (
     <div className="min-h-screen pb-20 md:pb-0 overflow-x-clip">
       <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">
@@ -3405,8 +3515,9 @@ export default function PredictPage() {
                       onFilterCategory={handleCategoryPillFilter}
                       categoryRaceMap={raceMap}
                       leaderboardCategories={leaderboardCats}
-                      pendingPosition={pendingWeeklyUpDownPositionFromBet(userBetsByMarket.get(String(market.id)))}
+                      pendingPosition={buildCardPendingPosition(String(market.id))}
                       onBrowseFullScreen={isMobile ? () => openSnapScroll("updown", String(market.id), "browse-button") : undefined}
+                      unrealisedPnl={ammPositionByMarket.get(String(market.id))?.unrealisedPnl ?? null}
                     />
                   </div>
                 ))}
@@ -3705,7 +3816,8 @@ export default function PredictPage() {
               onFilterCategory={(cat) => setWeeklyOverlayCategoryFilter(normalizeMarketCategory(cat) as CategoryFilter)}
               categoryRaceMap={raceMap}
               leaderboardCategories={leaderboardCats}
-              pendingPosition={pendingWeeklyUpDownPositionFromBet(userBetsByMarket.get(String(market.id)))}
+              pendingPosition={buildCardPendingPosition(String(market.id))}
+              unrealisedPnl={ammPositionByMarket.get(String(market.id))?.unrealisedPnl ?? null}
             />
           ))}
       </FullScreenOverlay>
@@ -3843,6 +3955,7 @@ export default function PredictPage() {
         selection={pendingSelection}
         onConfirm={handleConfirmStake}
         walletBalance={walletCredits}
+        liveAmmState={liveAmmStateForPending}
         onChangePick={pendingSelection?.type === "gainer" ? () => {
           const market = hydratedGainers.find((item) => item.id === pendingSelection.marketId);
           if (!market) return;
@@ -3856,11 +3969,21 @@ export default function PredictPage() {
           if (pendingSelection.type === "updown" && (dir === "up" || dir === "down")) {
             const market = hydratedMarkets.find(m => m.id === pendingSelection.marketId);
             if (!market) return;
+            // entryId MUST flip with `choice` or the StakeModal's hero
+            // tiles will keep reading `ammPriceMap[oldEntryId]` and the
+            // displayed % travels under the wrong label. engine + ammState
+            // are re-threaded for parity with HomePage / PredictTab so
+            // server-side price drift between open & toggle is picked up.
+            const entryId = dir === "up" ? market.upEntryId : market.downEntryId;
+            if (!entryId) return;
             setPendingSelection({
               ...pendingSelection,
               choice: dir === "up" ? "Trend Score UP" : "Trend Score DOWN",
+              entryId,
               crowdSentiment: dir === "up" ? market.upPoolPercent : 100 - market.upPoolPercent,
               estimatedPayout: dir === "up" ? market.upMultiplier : market.downMultiplier,
+              engine: market.engine === "amm" ? "amm" : "parimutuel",
+              ammState: market.ammState ?? null,
             });
             return;
           }
@@ -3977,7 +4100,8 @@ export default function PredictPage() {
                   onFilterCategory={handleCategoryPillFilter}
                   categoryRaceMap={raceMap}
                   leaderboardCategories={leaderboardCats}
-                  pendingPosition={pendingWeeklyUpDownPositionFromBet(userBetsByMarket.get(String(market.id)))}
+                  pendingPosition={buildCardPendingPosition(String(market.id))}
+                  unrealisedPnl={ammPositionByMarket.get(String(market.id))?.unrealisedPnl ?? null}
                 />
               );
             }}

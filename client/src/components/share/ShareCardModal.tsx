@@ -24,9 +24,19 @@ interface ShareCardModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   data: ShareCardData | null;
-  /** Optional fallback text for native share / "Copy text" action. */
+  /** Optional fallback text for native share / "Copy text" action.
+   *  Callers should embed the share URL into this text — we no longer
+   *  pass `url` to `navigator.share()` separately because WhatsApp (and
+   *  others) auto-append it onto the text body, producing a duplicated
+   *  link. The embedded URL still seeds the rich preview card on iOS
+   *  / Android share sheets. */
   fallbackText?: string;
-  /** Optional URL included alongside the image on native share. */
+  /**
+   * @deprecated Accepted for backward compatibility with callers that
+   * still pass it (e.g. `ShareCardContext.tsx`) but no longer consumed
+   * — the share URL is expected to live inside `fallbackText`. See the
+   * comment in `handleShare` for the WhatsApp dedupe rationale.
+   */
   shareUrl?: string;
   /** Suggested filename (without extension) for downloads. */
   filenameBase?: string;
@@ -50,7 +60,6 @@ export function ShareCardModal({
   onOpenChange,
   data,
   fallbackText,
-  shareUrl,
   filenameBase = "voxdex-share",
 }: ShareCardModalProps) {
   const [aspect, setAspect] = useState<ShareAspect>("square");
@@ -193,10 +202,16 @@ export function ShareCardModal({
       setPendingAction(null);
       return;
     }
+    // WhatsApp (and some other share targets) auto-append `url` to the
+    // text body when both are present, producing a duplicated link in
+    // the final message. Our `fallbackText` already embeds the shareUrl
+    // (see deriveBetShareCopy / buildTradeShareData / etc.), so we omit
+    // `url` here and let the embedded link carry through. Native
+    // share-sheet preview cards (iOS / Android) still parse the URL out
+    // of the text body, so the rich preview survives.
     const result = await shareImage(blob, {
       title: "VoxDex",
       text: fallbackText,
-      url: shareUrl,
       filename,
     });
     setPendingAction(null);

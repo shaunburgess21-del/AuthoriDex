@@ -29,9 +29,9 @@ export function WeeklyUpDownYourPositionPanel({
   variant = "detail",
   href,
   onLinkClick,
-  onAddTopUp,
   className,
   tieRule,
+  unrealisedPnl = null,
 }: {
   pick: "up" | "down" | null;
   personName: string;
@@ -41,15 +41,21 @@ export function WeeklyUpDownYourPositionPanel({
   variant?: "detail" | "cardLink";
   href?: string;
   onLinkClick?: () => void;
-  /**
-   * Top-up handler. When provided alongside a non-null `pick`, the
-   * cardLink variant renders as a button that opens the parent's
-   * StakeModal in same-side top-up mode instead of bouncing through
-   * the detail page. Falls back to `href` when omitted.
-   */
-  onAddTopUp?: (pick: "up" | "down") => void;
   className?: string;
   tieRule?: string | null;
+  /**
+   * Sprint 4.3: live unrealised P&L (credits) for the user's open
+   * position on this market, shown next to Stake on the card banner.
+   * Null for parimutuel positions and for cards whose AMM position
+   * summary hasn't loaded yet — in which case we fall back to the
+   * Stake-only layout. We deliberately omit a Winning/Behind pill
+   * here even though `getUpDownWinningState` is available: that
+   * pill is anchored to the trend score crossing the baseline,
+   * which can disagree with AMM-driven P&L (the score moved down
+   * but the market is pricing your side to win, etc.). P&L is the
+   * truer "where do I stand?" signal in an AMM market.
+   */
+  unrealisedPnl?: number | null;
 }) {
   const firstName = personName.split(" ")[0];
 
@@ -96,6 +102,25 @@ export function WeeklyUpDownYourPositionPanel({
     pick === "up" ? "text-[#00C853]" : pick === "down" ? "text-[#FF0000]" : "text-violet-700 dark:text-violet-400";
 
   if (variant === "cardLink") {
+    // Sprint 4.3: P&L badge on the card banner. Raw unrealisedPnl of
+    // e.g. -0.001 would render as "-0.00 cr" (negative zero), which
+    // reads as a bug, so we clamp anything that would round to 0.00
+    // down to a flat zero with no sign + neutral colour. Threshold
+    // is half a cent so the rounding boundary matches `.toFixed(2)`.
+    const hasPnl = unrealisedPnl != null && Number.isFinite(unrealisedPnl);
+    const pnlValue = hasPnl ? (unrealisedPnl as number) : 0;
+    const pnlIsZero = hasPnl && Math.abs(pnlValue) < 0.005;
+    const pnlClass = !hasPnl || pnlIsZero
+      ? "text-muted-foreground"
+      : pnlValue >= 0
+        ? "text-green-700 dark:text-green-400"
+        : "text-red-700 dark:text-red-400";
+    const pnlText = !hasPnl
+      ? null
+      : pnlIsZero
+        ? "0.00 cr"
+        : `${pnlValue >= 0 ? "+" : ""}${pnlValue.toFixed(2)} cr`;
+
     const compact = (
       <div
         className={cn(
@@ -128,6 +153,11 @@ export function WeeklyUpDownYourPositionPanel({
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          {pnlText && (
+            <span className={cn("text-xs font-semibold font-mono tabular-nums", pnlClass)}>
+              {pnlText}
+            </span>
+          )}
           <div className="flex items-baseline gap-1 tabular-nums">
             <span className="text-[10px] text-muted-foreground">Stake</span>
             <span className="text-xs font-semibold text-foreground">
@@ -139,25 +169,12 @@ export function WeeklyUpDownYourPositionPanel({
       </div>
     );
 
-    // Top-up button takes precedence over the detail-page link: tapping
-    // the panel pulls up the StakeModal in same-side top-up mode so users
-    // can add credits in-place without bouncing through the detail page.
-    // The `pick` guard is here because the detail-page (`detail` variant)
-    // and legacy callers without a current pick still want the link.
-    if (onAddTopUp && pick) {
-      return (
-        <button
-          type="button"
-          onClick={() => onAddTopUp(pick)}
-          className="block w-full rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-          aria-label={`Add to your ${pick.toUpperCase()} stake on ${personName}`}
-          data-testid={`button-topup-${pick}-${personName.replace(/\s+/g, "-").toLowerCase()}`}
-        >
-          {compact}
-        </button>
-      );
-    }
-
+    // Always link out to the detail page from the cardLink variant —
+    // we used to support an in-place top-up handler (`onAddTopUp`)
+    // here, but it opened the StakeModal in add-only mode which hid
+    // the Sell tab and the opposite-side flip (Sprint 4 smoke-test
+    // bug). The detail page is the canonical Buy/Sell/Hedge surface
+    // for an open position.
     if (href) {
       return (
         <Link

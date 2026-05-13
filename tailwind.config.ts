@@ -3,6 +3,14 @@ import type { Config } from "tailwindcss";
 export default {
   darkMode: ["class"],
   content: ["./client/index.html", "./client/src/**/*.{js,jsx,ts,tsx}"],
+  // Tailwind v3.4 opt-in (default in v4): `hover:` only matches on devices
+  // that actually support hover (`@media (hover: hover)`). Without this, a
+  // tap on a touchscreen briefly applies `:hover` and the state sticks until
+  // the user taps elsewhere — which made the StakeModal Up/Down hero tiles
+  // both look "selected" after a flip on mobile (Sprint 4 smoke-test bug).
+  future: {
+    hoverOnlyWhenSupported: true,
+  },
   theme: {
     extend: {
       borderRadius: {

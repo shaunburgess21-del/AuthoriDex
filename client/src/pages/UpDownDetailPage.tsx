@@ -33,6 +33,7 @@ import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { getMarketBaselineScore } from "@/lib/predict-market-baseline";
 import { computePayoutMultiplier, computeEarlyBirdMultiplier } from "@/lib/parimutuel";
 import { getUpDownWinningState, UP_DOWN_STATE_LABELS } from "@/lib/updownState";
+import { formatVolumeCredits } from "@/lib/formatNumber";
 import { goBack } from "@/lib/goBack";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import {
@@ -51,6 +52,8 @@ import {
   ListChecks,
   Zap,
   Activity,
+  Plus,
+  Share2,
 } from "lucide-react";
 
 interface AmmPositionRow {
@@ -92,6 +95,11 @@ export default function UpDownDetailPage() {
 
   const [stakeModalOpen, setStakeModalOpen] = useState(false);
   const [pendingSelection, setPendingSelection] = useState<StakeSelection | null>(null);
+  // Tracks whether the modal was opened via the Buy / Up / Down CTAs
+  // ("buy") or via the inline Sell button ("sell"). Threaded into
+  // StakeModal as `initialAmmMode` so the Sell tab + sell-flavoured
+  // title/mission render on first frame instead of after a tab tap.
+  const [modalIntent, setModalIntent] = useState<"buy" | "sell">("buy");
 
   const handleGoBack = useCallback(() => {
     goBack(setLocation, "/predict");
@@ -159,6 +167,7 @@ export default function UpDownDetailPage() {
     const baselineScore = getMarketBaselineScore(market, currentScore) ?? currentScore;
     const totalPool = upStake + downStake;
     const totalParticipants = Number(market.activeParticipantCount || 0) || 0;
+    const volume = Number((market as { volume?: number }).volume ?? market.ammState?.totalUserCreditsIn ?? 0) || 0;
 
     const engine: "parimutuel" | "amm" = market.engine === "amm" ? "amm" : "parimutuel";
     const ammState: ApiAmmStateBlock | null = market.ammState ?? null;
@@ -187,6 +196,7 @@ export default function UpDownDetailPage() {
       upPercent: resolvedUpPercent,
       totalPool,
       totalParticipants,
+      volume,
       tieRule: market.tieRule || "refund",
       startAt: market.startAt,
       endAt: market.endAt,
@@ -292,6 +302,7 @@ export default function UpDownDetailPage() {
         ammState: hydrated.ammState,
         ammNetShares: hydrated.engine === "amm" ? ammNetSharesFor(entryId) : 0,
       });
+      setModalIntent("buy");
       setStakeModalOpen(true);
     },
     [hydrated, isMarketClosed, userPick, marketId, userPickTotalStake, ammNetSharesFor]
@@ -502,6 +513,7 @@ export default function UpDownDetailPage() {
         ammState: hydrated.ammState,
         ammNetShares: ammNetSharesFor(entryId),
       });
+      setModalIntent("sell");
       setStakeModalOpen(true);
     },
     [hydrated, isAmm, marketId, ammNetSharesFor],
@@ -638,42 +650,66 @@ export default function UpDownDetailPage() {
               </div>
             </div>
 
-            <div className={`grid ${isAmm ? "grid-cols-3" : "grid-cols-4"} gap-3 text-center`}>
-              <div>
-                <p className="text-sm md:text-base font-bold font-mono">
-                  {hydrated.baselineScore.toLocaleString("en-US")}
-                </p>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                  Baseline
-                </p>
-              </div>
-              <div>
-                <p className="text-sm md:text-base font-bold font-mono">
-                  {hydrated.currentScore.toLocaleString("en-US")}
-                </p>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                  Current
-                </p>
-              </div>
-              {!isAmm && (
-                <div>
-                  <p className="text-sm md:text-base font-bold text-violet-600 dark:text-violet-400">
-                    {hydrated.totalPool.toLocaleString("en-US")}
-                  </p>
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                    Pool
-                  </p>
+            {(() => {
+              // Sprint 4.3: detail-page header gets the same "Vol." chip
+              // the card now shows, so users don't have to remember the
+              // number from the predict list. Cell is only added when
+              // we have a finite, positive AMM volume (parimutuel
+              // markets in their last week stay on the 3-column layout).
+              const volText = isAmm ? formatVolumeCredits(hydrated.volume) : null;
+              const columns = (() => {
+                if (!isAmm) return "grid-cols-4";
+                return volText ? "grid-cols-4" : "grid-cols-3";
+              })();
+              return (
+                <div className={`grid ${columns} gap-3 text-center`}>
+                  <div>
+                    <p className="text-sm md:text-base font-bold font-mono">
+                      {hydrated.baselineScore.toLocaleString("en-US")}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                      Baseline
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm md:text-base font-bold font-mono">
+                      {hydrated.currentScore.toLocaleString("en-US")}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                      Current
+                    </p>
+                  </div>
+                  {!isAmm && (
+                    <div>
+                      <p className="text-sm md:text-base font-bold text-violet-600 dark:text-violet-400">
+                        {hydrated.totalPool.toLocaleString("en-US")}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                        Pool
+                      </p>
+                    </div>
+                  )}
+                  {volText && (
+                    <div>
+                      <p className="text-sm md:text-base font-bold font-mono text-violet-600 dark:text-violet-400">
+                        {volText}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                        Volume
+                      </p>
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-sm md:text-base font-bold">
+                      {hydrated.totalParticipants}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                      {isAmm ? "Traders" : "Players"}
+                    </p>
+                  </div>
                 </div>
-              )}
-              <div>
-                <p className="text-sm md:text-base font-bold">
-                  {hydrated.totalParticipants}
-                </p>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                  {isAmm ? "Traders" : "Players"}
-                </p>
-              </div>
-            </div>
+              );
+            })()}
           </div>
         </Card>
 
@@ -741,6 +777,39 @@ export default function UpDownDetailPage() {
                         unrealisedPnl >= 0
                           ? "text-green-700 dark:text-green-500"
                           : "text-red-700 dark:text-red-500";
+                      // Per-row share handler. Builds the position share
+                      // card off this specific row so users who hold both
+                      // sides (rare; only via the buy-tab inside the
+                      // sell-mode modal) get a distinct share for each.
+                      const handleSharePosition = () => {
+                        const direction: "up" | "down" | "other" =
+                          side === "up" ? "up" : "down";
+                        const data = buildPositionShareData({
+                          username: profile?.username || "you",
+                          personName: hydrated.personName,
+                          personAvatar: hydrated.personAvatar || null,
+                          marketTitle: `${hydrated.personName}: Up or Down?`,
+                          category: hydrated.category,
+                          entryLabel: pos.entryLabel,
+                          direction,
+                          netShares: pos.netShares,
+                          avgEntryPrice: pos.avgEntryPrice,
+                          currentPrice: pos.currentPrice,
+                          costBasis: pos.netCreditsIn,
+                          currentValue: pos.currentValue,
+                          endAt: hydrated.endAt || "",
+                        });
+                        const origin =
+                          typeof window !== "undefined" ? window.location.origin : "";
+                        const pathname =
+                          typeof window !== "undefined" ? window.location.pathname : "";
+                        openShareCard({
+                          data,
+                          fallbackText: `I'm holding ${Math.floor(pos.netShares)} ${pos.entryLabel.toUpperCase()} shares on "${hydrated.personName}: Up or Down?" on VoxDex!\n${origin}${pathname}`,
+                          shareUrl: `${origin}${pathname}`,
+                          filenameBase: `voxdex-position-${marketId.slice(0, 8)}`,
+                        });
+                      };
                       return (
                         <div key={side} className="flex items-center justify-between gap-2 rounded-lg bg-muted/30 px-3 py-2">
                           <div className="min-w-0 flex-1">
@@ -748,34 +817,70 @@ export default function UpDownDetailPage() {
                             <p className="text-[11px] text-muted-foreground">
                               {pos.netShares.toFixed(2)} shares · avg {pos.avgEntryPrice.toFixed(3)} cr · cost {pos.netCreditsIn.toFixed(0)} cr
                             </p>
+                            {/* Round-3 rewrite: previous copy ("≈ 64.64 cr
+                                now · -35.36 cr" + "Pays 173.82 cr if win
+                                · +73.82 net") read like a spreadsheet.
+                                New framing answers two natural questions
+                                ("what if I sell?" vs "what if I hold?")
+                                in plain language while keeping every
+                                number. The {side.toUpperCase()} word in
+                                the second line ties the resolution back
+                                to the user's pick. */}
                             <p className="text-[11px] text-muted-foreground">
-                              ≈ {pos.currentValue.toFixed(2)} cr now ·{" "}
+                              Sell now: ~{pos.currentValue.toFixed(2)} cr{" "}
                               <span className={`font-mono font-medium ${pnlColor}`}>
-                                {unrealisedPnl >= 0 ? "+" : ""}
-                                {unrealisedPnl.toFixed(2)} cr
+                                ({unrealisedPnl >= 0 ? "+" : ""}
+                                {unrealisedPnl.toFixed(2)} cr)
                               </span>
                             </p>
                             <p className="text-[11px] text-muted-foreground">
-                              Pays {pos.netShares.toFixed(2)} cr if win ·{" "}
-                              <span className="text-green-700 dark:text-green-500">
-                                {maxProfitIfWin >= 0 ? "+" : ""}
-                                {maxProfitIfWin.toFixed(2)} net
+                              If {label} wins: {pos.netShares.toFixed(2)} cr{" "}
+                              <span className="font-mono font-medium text-green-700 dark:text-green-500">
+                                ({maxProfitIfWin >= 0 ? "+" : ""}
+                                {maxProfitIfWin.toFixed(2)} cr)
                               </span>
                             </p>
                           </div>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={isMarketClosed}
-                            onClick={() => openSellModal(side)}
-                          >
-                            Sell
-                          </Button>
+                          <div className="flex flex-row items-center gap-1 shrink-0">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={isMarketClosed}
+                              onClick={() => handleSelect(side)}
+                              data-testid={`button-add-${side}-position`}
+                              className="gap-1 px-2.5"
+                            >
+                              <Plus className="h-3.5 w-3.5" />
+                              <span>Add</span>
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={isMarketClosed}
+                              onClick={() => openSellModal(side)}
+                              data-testid={`button-sell-${side}-position`}
+                              className="px-2.5"
+                            >
+                              Sell
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              onClick={handleSharePosition}
+                              aria-label={`Share your ${label} position`}
+                              data-testid={`button-share-${side}-position`}
+                              className="px-2"
+                            >
+                              <Share2 className="h-3.5 w-3.5" />
+                              <span className="sr-only">Share</span>
+                            </Button>
+                          </div>
                         </div>
                       );
                     })}
                     <p className="text-[10px] text-muted-foreground text-center">
-                      Current value is approximate — actual sell proceeds vary slightly with price impact.
+                      Live prices — these numbers shift as the market moves.
                     </p>
                   </div>
                 )}
@@ -786,80 +891,39 @@ export default function UpDownDetailPage() {
 
         {/* Your Position — unified across all detail pages so the "what
             am I in for" panel feels the same on community, jackpot,
-            updown, h2h, and race. We hide the CTA on Up/Down because
-            the existing UI doesn't support adding to an open position;
-            the bespoke WeeklyUpDownYourPositionPanel previously had no
-            CTA either. */}
-        <MyPositionCard
-          marketId={marketId}
-          marketType="updown"
-          isAmm={isAmm}
-          ctaLabel={
-            userPick ? `Add to your ${userPick.toUpperCase()} stake` : undefined
-          }
-          onAddEntry={userPick ? () => handleSelect(userPick) : undefined}
-          livePoolContext={
-            userPick && Number.isFinite(hydrated.totalPool) && hydrated.totalPool > 0
-              ? {
-                  totalPool: hydrated.totalPool,
-                  userSidePercent:
-                    userPick === "up"
-                      ? hydrated.upPercent
-                      : 100 - hydrated.upPercent,
-                }
-              : null
-          }
-          // Sprint 3.1: persistent Share affordance for AMM open
-          // positions, replacing the 4-second post-trade toast as the
-          // primary share moment. We pick the largest open AMM
-          // position on this market (Up/Down only ever has one side at
-          // a time anyway — hedging is blocked above) and build the
-          // share-card payload from the same data the OpenPosition
-          // panel above renders.
-          onShare={(() => {
-            if (!isAmm) return undefined;
-            const positions = (ammPositionData?.positions ?? []).filter(
-              (p) => p.netShares > 1e-6,
-            );
-            if (positions.length === 0) return undefined;
-            const pos = positions.reduce((biggest, p) =>
-              p.currentValue > biggest.currentValue ? p : biggest,
-            );
-            return () => {
-              const direction: "up" | "down" | "other" =
-                pos.entryLabel.toLowerCase() === "up"
-                  ? "up"
-                  : pos.entryLabel.toLowerCase() === "down"
-                    ? "down"
-                    : "other";
-              const data = buildPositionShareData({
-                username: profile?.username || "you",
-                personName: hydrated.personName,
-                personAvatar: hydrated.personAvatar || null,
-                marketTitle: `${hydrated.personName}: Up or Down?`,
-                category: hydrated.category,
-                entryLabel: pos.entryLabel,
-                direction,
-                netShares: pos.netShares,
-                avgEntryPrice: pos.avgEntryPrice,
-                currentPrice: pos.currentPrice,
-                costBasis: pos.netCreditsIn,
-                currentValue: pos.currentValue,
-                endAt: hydrated.endAt || "",
-              });
-              const origin =
-                typeof window !== "undefined" ? window.location.origin : "";
-              const pathname =
-                typeof window !== "undefined" ? window.location.pathname : "";
-              openShareCard({
-                data,
-                fallbackText: `I'm holding ${Math.floor(pos.netShares)} ${pos.entryLabel.toUpperCase()} shares on "${hydrated.personName}: Up or Down?" on VoxDex!\n${origin}${pathname}`,
-                shareUrl: `${origin}${pathname}`,
-                filenameBase: `voxdex-position-${marketId.slice(0, 8)}`,
-              });
-            };
-          })()}
-        />
+            updown, h2h, and race.
+
+            Sprint 4 polish: on AMM Up/Down markets the inline "Your
+            position" block inside the Live Market card above now
+            carries the per-side shares/avg/cost/PnL plus Add, Sell
+            and Share buttons, so mounting MyPositionCard underneath
+            would just print the same data again with different
+            framing. We render it only for parimutuel markets, where
+            the Live Market card isn't shown and MyPositionCard is
+            the only position surface. (Jackpot stays parimutuel
+            forever, by design, so this branch matters past sunset.) */}
+        {!isAmm && (
+          <MyPositionCard
+            marketId={marketId}
+            marketType="updown"
+            isAmm={isAmm}
+            ctaLabel={
+              userPick ? `Add to your ${userPick.toUpperCase()} stake` : undefined
+            }
+            onAddEntry={userPick ? () => handleSelect(userPick) : undefined}
+            livePoolContext={
+              userPick && Number.isFinite(hydrated.totalPool) && hydrated.totalPool > 0
+                ? {
+                    totalPool: hydrated.totalPool,
+                    userSidePercent:
+                      userPick === "up"
+                        ? hydrated.upPercent
+                        : 100 - hydrated.upPercent,
+                  }
+                : null
+            }
+          />
+        )}
 
         {/* AMM Price History - the market consensus over time. Shown
             above the underlying Trend Score chart so users see the
@@ -907,6 +971,7 @@ export default function UpDownDetailPage() {
               personName={hydrated.personName}
               height={280}
               userPick={userPick}
+              ammUpEntryId={isAmm ? hydrated.upEntryId ?? null : null}
             />
           </div>
         </Card>
@@ -1127,6 +1192,12 @@ export default function UpDownDetailPage() {
         onConfirmAmmSell={isAmm ? handleConfirmAmmSell : undefined}
         walletBalance={walletCredits}
         onDirectionChange={handleDirectionChange}
+        initialAmmMode={modalIntent}
+        // Detail page polls /api/native-markets/updown every 60 s so
+        // the modal can lean on the parent's refreshed state instead
+        // of the snapshot frozen at `handleSelect` time. Parimutuel
+        // markets render `null` here so the snapshot path is used.
+        liveAmmState={isAmm ? hydrated.ammState ?? null : null}
       />
     </div>
   );
