@@ -30,7 +30,15 @@ const SERPAPI_API_KEY = process.env.SERPAPI_API_KEY;
 const SERPAPI_BASE_URL = "https://serpapi.com/search.json";
 const REQUEST_TIMEOUT_MS = 25_000;
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
-const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+// Cache TTL for the per-person `now 1-d` SerpApi response. MUST stay
+// below the ingest job's TRENDS_FETCH_INTERVAL_MS (currently 12h),
+// otherwise every other intended fetch silently returns a stale cached
+// response and persists the same `latestInterest` across consecutive
+// snapshots — which collapses the rolling avg7d and the day-over-day
+// delta to "no signal". The cache's purpose is to dedupe near-
+// simultaneous re-runs of the ingest job (manual triggers, retries,
+// dev work), not to act as a multi-cycle data store.
+const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 // Google Trends date window. "now 1-d" = past 24 hours at ~8-minute
 // resolution (~180 points). Matches the "Past 24 hours" view on the
 // Google Trends UI: 100 = the busiest 8-minute slot in the last 24h.

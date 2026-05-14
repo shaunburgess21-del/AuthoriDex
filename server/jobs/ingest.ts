@@ -49,10 +49,14 @@ const TRENDS_DAILY_SCALE_CUTOVER = new Date(
   process.env.TRENDS_DAILY_SCALE_CUTOVER ?? "2026-05-13T11:00:00.000Z",
 );
 // Tolerance for matching "snapshot from ~24h ago" when computing the
-// trendsPrevDayInterest comparator. Our trends fetch cadence is 12h, so a
-// ±6h window guarantees we hit at most one historical point and never
-// fall back to one that's actually closer to "now" than to 24h ago.
-const TRENDS_PREV_DAY_TOLERANCE_MS = 6 * 60 * 60 * 1000;
+// trendsPrevDayInterest comparator. At our 12h fetch cadence, post-cutover
+// snapshot distances from `(now - 24h)` are 0h, 12h, 24h, … A ±12h window
+// accepts the natural 24h match (always wins on min-distance once it
+// exists) AND the 12h-off neighbour during bootstrap, so the delta pill
+// comes alive on cycle 2 instead of waiting a full extra cycle. The
+// nearest-match selection in the loop prevents the 12h neighbour from
+// ever winning when a true 24h-ago snapshot is available.
+const TRENDS_PREV_DAY_TOLERANCE_MS = 12 * 60 * 60 * 1000;
 
 async function computeNewsCandidates(
   people: Array<{ id: string; name: string }>,

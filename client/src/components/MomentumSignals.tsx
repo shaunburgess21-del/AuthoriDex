@@ -488,7 +488,7 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
   const trendsTrend: TrendWord = signals.trends
     ? (signals.trends.deltaPct > 5 ? "rising" : signals.trends.deltaPct < -5 ? "falling" : "steady")
     : "steady";
-  const trendsValue = hasTrendsData ? `${trendsInterest}` : "—";
+  const trendsValue = hasTrendsData ? `${Math.round(trendsInterest * 10) / 10}` : "—";
   const trendsUnit = hasTrendsData ? "interest score" : "awaiting data";
   // Activity-card visual convention: no 7-day-avg footer (that belongs on
   // the Momentum cards). Only show the warm-up notice when we have no data

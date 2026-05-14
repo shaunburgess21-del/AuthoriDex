@@ -3280,7 +3280,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Google Trends — display-only, dormant in score (May 2026 PR1).
           // Populated once Trends data starts flowing via the 24h ingest gate.
           trends: {
-            interest: trendsInterest,
+            interest: Math.round(trendsInterest * 10) / 10,
             avg7d: Math.round(trendsAvg7dVal * 10) / 10,
             avg90d: Math.round(trendsAvg90dVal * 10) / 10,
             momentumRatio: Math.round(trendsMomentumRatio * 100) / 100,
