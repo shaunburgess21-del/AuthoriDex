@@ -22,6 +22,17 @@ import { useEffect, useState } from "react";
  *                 be off-screen below the visible area. Consumers
  *                 translate UP by `delta` (negative translateY).
  *
+ *                 GATED TO iOS WebKit ONLY. On Chrome/Android (and
+ *                 other engines) `bottom: 0` already anchors to the
+ *                 visible bottom edge, and during a fast upward
+ *                 scroll `innerHeight` and `vv.height` desync for a
+ *                 few frames as the top URL bar animates back in,
+ *                 producing a transient negative delta. Applying it
+ *                 would lift the nav off the bottom and create a
+ *                 visible gap above the system gesture bar until the
+ *                 animation settles. We therefore clamp negative
+ *                 deltas to 0 off iOS.
+ *
  *   |delta| > 150 → almost certainly the soft keyboard (typical
  *                  iOS keyboard is 250–350px). We deliberately
  *                  return 0 here so the nav stays behind the
@@ -50,11 +61,16 @@ export function useVisualViewportOffset(): number {
     const vv = window.visualViewport;
     if (!vv) return;
 
+    const isIOSWebKit =
+      /iP(ad|hone|od)/.test(navigator.platform) ||
+      (navigator.userAgent.includes("Mac") && "ontouchend" in document);
+
     let frame = 0;
     const update = () => {
       frame = 0;
       const delta = vv.offsetTop + vv.height - window.innerHeight;
-      const next = Math.abs(delta) > 150 ? 0 : Math.round(delta);
+      let next = Math.abs(delta) > 150 ? 0 : Math.round(delta);
+      if (!isIOSWebKit && next < 0) next = 0;
       setOffset((prev) => (prev === next ? prev : next));
     };
 
