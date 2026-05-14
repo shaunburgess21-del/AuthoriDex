@@ -38,7 +38,12 @@ const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 // delta to "no signal". The cache's purpose is to dedupe near-
 // simultaneous re-runs of the ingest job (manual triggers, retries,
 // dev work), not to act as a multi-cycle data store.
-const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+const TRENDS_DATA_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+// Topic ID autocomplete results are essentially static — a celeb's
+// Google Trends entity ID doesn't change once minted. Long TTL keeps
+// admin "Lookup" clicks free after the first hit, while still allowing
+// occasional refresh for new/edge-case entities.
+const AUTOCOMPLETE_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 // Google Trends date window. "now 1-d" = past 24 hours at ~8-minute
 // resolution (~180 points). Matches the "Past 24 hours" view on the
 // Google Trends UI: 100 = the busiest 8-minute slot in the last 24h.
@@ -172,10 +177,15 @@ async function getCached(cacheKey: string): Promise<any | null> {
   }
 }
 
-async function setCache(cacheKey: string, data: any, personId?: string): Promise<void> {
+async function setCache(
+  cacheKey: string,
+  data: any,
+  personId?: string,
+  ttlMs: number = TRENDS_DATA_CACHE_TTL_MS,
+): Promise<void> {
   try {
     const now = new Date();
-    const expiresAt = new Date(now.getTime() + CACHE_TTL_MS);
+    const expiresAt = new Date(now.getTime() + ttlMs);
     await db
       .insert(apiCache)
       .values({
@@ -353,7 +363,7 @@ export async function fetchTrendsTopicSuggestions(
     }));
 
   if (suggestions.length > 0) {
-    await setCache(cacheKey, suggestions);
+    await setCache(cacheKey, suggestions, undefined, AUTOCOMPLETE_CACHE_TTL_MS);
   }
 
   return suggestions;
