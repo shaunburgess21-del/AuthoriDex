@@ -744,6 +744,11 @@ function CreditEarnTable({ accent }: { accent: string }) {
         Approval-gated rows ship with anti-spam controls — you only earn
         once a moderator approves the suggestion.
       </p>
+      <p className="text-xs text-muted-foreground">
+        Share any VoxDex card or page to earn Credits when someone follows
+        your link. Refer a friend and earn 500 Credits when they make their
+        first move — they get a 2,000 Credit head start too.
+      </p>
     </Card>
   );
 }

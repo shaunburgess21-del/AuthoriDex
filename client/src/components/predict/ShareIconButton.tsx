@@ -1,6 +1,7 @@
 import { Share2 } from "lucide-react";
-import { sharePage } from "@/lib/share";
+import { sharePage, type ShareSurface } from "@/lib/share";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface ShareIconButtonProps {
   /**
@@ -17,6 +18,14 @@ interface ShareIconButtonProps {
   className?: string;
   /** Used by Playwright + analytics. */
   testId?: string;
+  /**
+   * Attribution surface for the share-funnel admin tab. Defaults to
+   * "market" since the four detail variants where this lives are
+   * all market pages, but the H2H / Up-Down / Race / community
+   * variants pass through unchanged so a future per-variant surface
+   * can be wired without an API change.
+   */
+  surface?: ShareSurface;
 }
 
 /**
@@ -29,7 +38,8 @@ interface ShareIconButtonProps {
  * surface it. Icon-only on every breakpoint keeps the header layout
  * consistent across the four detail variants.
  */
-export function ShareIconButton({ title, className, testId = "button-share" }: ShareIconButtonProps) {
+export function ShareIconButton({ title, className, testId = "button-share", surface = "market" }: ShareIconButtonProps) {
+  const { user } = useAuth();
   return (
     <Button
       type="button"
@@ -37,7 +47,7 @@ export function ShareIconButton({ title, className, testId = "button-share" }: S
       size="icon"
       className={`h-8 w-8 shrink-0 ${className ?? ""}`}
       onClick={() => {
-        void sharePage(title);
+        void sharePage(title, { sharerUserId: user?.id, surface });
       }}
       aria-label="Share this market"
       data-testid={testId}

@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CreditCard, Plus, AlertTriangle, RefreshCcw } from "lucide-react";
+import { CreditCard, Plus, AlertTriangle, RefreshCcw, Users } from "lucide-react";
 import {
   CREDIT_CATEGORIES,
   type CreditCategory,
@@ -81,6 +81,9 @@ export function AdminCreditsSection() {
           <TabsTrigger value="reconciliation" data-testid="tab-credit-reconciliation">
             <AlertTriangle className="h-4 w-4 mr-2" /> Reconciliation
           </TabsTrigger>
+          <TabsTrigger value="referrals" data-testid="tab-credit-referrals">
+            <Users className="h-4 w-4 mr-2" /> Referrals
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="actions">
@@ -88,6 +91,9 @@ export function AdminCreditsSection() {
         </TabsContent>
         <TabsContent value="reconciliation">
           <ReconciliationPanel />
+        </TabsContent>
+        <TabsContent value="referrals">
+          <ReferralsPanel />
         </TabsContent>
       </Tabs>
     </div>
@@ -647,6 +653,104 @@ function ReconciliationPanel() {
         </>
       )}
     </div>
+  );
+}
+
+interface ReferralRow {
+  refereeId: string;
+  refereeUsername: string | null;
+  refereeCreatedAt: string | null;
+  refereeFirstActionAt: string | null;
+  referrerId: string | null;
+  referrerUsername: string | null;
+  creditAmount: number | null;
+  creditAwardedAt: string | null;
+}
+
+function ReferralsPanel() {
+  const { data, isLoading } = useQuery<ReferralRow[]>({
+    queryKey: ["/api/admin/referrals"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/admin/referrals");
+      return res.json();
+    },
+    staleTime: 60 * 1000,
+  });
+
+  if (isLoading) {
+    return <Skeleton className="h-40 w-full" />;
+  }
+  if (!data || data.length === 0) {
+    return (
+      <Card className="p-6 text-center text-sm text-muted-foreground">
+        No referrals yet. Once a user signs up via a ?ref= link, they'll
+        appear here.
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="overflow-hidden">
+      <div className="px-4 py-2 border-b bg-muted/40 text-xs font-semibold uppercase tracking-wide">
+        Referral activity ({data.length} most recent)
+      </div>
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
+            <th className="px-3 py-2 font-medium">Referrer</th>
+            <th className="px-3 py-2 font-medium">Referee</th>
+            <th className="px-3 py-2 font-medium">Signed up</th>
+            <th className="px-3 py-2 font-medium">First action</th>
+            <th className="px-3 py-2 font-medium text-right">Credits</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((row) => (
+            <tr
+              key={row.refereeId}
+              className="border-t border-border/60"
+              data-testid={`referral-row-${row.refereeId}`}
+            >
+              <td className="px-3 py-2">
+                {row.referrerUsername ?? (
+                  <span className="text-xs text-muted-foreground">—</span>
+                )}
+              </td>
+              <td className="px-3 py-2">
+                {row.refereeUsername ?? (
+                  <span className="text-xs text-muted-foreground font-mono">
+                    {row.refereeId.slice(0, 8)}
+                  </span>
+                )}
+              </td>
+              <td className="px-3 py-2 text-xs text-muted-foreground">
+                {row.refereeCreatedAt
+                  ? new Date(row.refereeCreatedAt).toLocaleDateString()
+                  : "—"}
+              </td>
+              <td className="px-3 py-2 text-xs text-muted-foreground">
+                {row.refereeFirstActionAt
+                  ? new Date(row.refereeFirstActionAt).toLocaleDateString()
+                  : (
+                    <Badge variant="outline" className="text-xs">
+                      Pending
+                    </Badge>
+                  )}
+              </td>
+              <td className="px-3 py-2 text-right">
+                {row.creditAmount !== null ? (
+                  <span className="font-mono text-emerald-600 dark:text-emerald-400">
+                    +{row.creditAmount.toLocaleString("en-US")}
+                  </span>
+                ) : (
+                  <span className="text-xs text-muted-foreground">—</span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </Card>
   );
 }
 

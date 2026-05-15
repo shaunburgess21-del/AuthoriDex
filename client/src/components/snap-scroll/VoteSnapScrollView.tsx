@@ -5,6 +5,7 @@ import { ArrowLeft, ArrowUp, Inbox, MessageCircle, Plus, X } from "lucide-react"
 import { getCategoryStyle } from "@/components/CategoryPill";
 import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
 import { sharePage } from "@/lib/share";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   navigateWithVoteList,
   type VoteListHistoryState,
@@ -584,10 +585,11 @@ export function VoteSnapScrollView({
     setLocation(`${detailPrefix}${encodeURIComponent(item.slug)}`);
   }, [activeCategory, categoryItems, getVisibleItem, sectionType, setLocation]);
 
+  const { user } = useAuth();
   const handleShare = useCallback(() => {
     const item = getVisibleItem();
-    if (item) sharePage(item.title);
-  }, [getVisibleItem]);
+    if (item) sharePage(item.title, { sharerUserId: user?.id, surface: "vote_deck" });
+  }, [getVisibleItem, user?.id]);
 
   const handleDragStart = useCallback((e: React.TouchEvent) => {
     dragStartY.current = e.touches[0].clientY;

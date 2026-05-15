@@ -1319,7 +1319,7 @@ export default function MarketDetailPage() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => sharePage(`${market.title} on VoxDex`)}
+                onClick={() => sharePage(`${market.title} on VoxDex`, { sharerUserId: user?.id, surface: "market" })}
                 data-testid="button-share"
               >
                 <Share2 className="h-4 w-4 mr-1" />

@@ -35,6 +35,7 @@ import { MyVoteCard, type MyVoteCardData } from "@/components/me/MyVoteCard";
 import { useShareCard } from "@/contexts/ShareCardContext";
 import { UserRankBadge } from "@/components/UserRankBadge";
 import { buildPositionShareData, inferDirection } from "@/lib/share-data";
+import { appendShareAttribution } from "@/lib/share";
 
 interface PublicProfile {
   username: string;
@@ -104,13 +105,21 @@ interface BetsResponse {
   hasMore: boolean;
 }
 
-function ShareLinkButton({ url, label }: { url: string; label: string }) {
+function ShareLinkButton({ url, label, sharerUserId }: { url: string; label: string; sharerUserId?: string | null }) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async (e: React.MouseEvent) => {
     e.stopPropagation();
     try {
-      await navigator.clipboard.writeText(url);
+      // Append attribution params so a logged-in viewer copying a
+      // public-profile link credits themselves as the sharer when
+      // a third party opens the link. Anonymous viewers fall back
+      // to a clean URL.
+      const attributedUrl = appendShareAttribution(url, {
+        sharerUserId: sharerUserId ?? null,
+        surface: "public_profile",
+      });
+      await navigator.clipboard.writeText(attributedUrl);
       setCopied(true);
       toast(label);
       setTimeout(() => setCopied(false), 2000);
@@ -587,6 +596,7 @@ function BetHistorySection({ username, isAgent }: { username: string; isAgent?: 
 export default function PublicProfilePage() {
   const [, params] = useRoute("/u/:username");
   const [, setLocation] = useLocation();
+  const { user: viewerUser } = useAuth();
   const username = params?.username;
 
   const { data: profile, isLoading, error } = useQuery<PublicProfile>({
@@ -690,7 +700,7 @@ export default function PublicProfilePage() {
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <span className="font-semibold flex-1">@{profile.username}</span>
-          <ShareLinkButton url={`${window.location.origin}/u/${profile.username}`} label="Profile link copied!" />
+          <ShareLinkButton url={`${window.location.origin}/u/${profile.username}`} label="Profile link copied!" sharerUserId={viewerUser?.id ?? null} />
         </div>
       </header>
 

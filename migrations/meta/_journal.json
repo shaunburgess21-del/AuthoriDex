@@ -414,6 +414,13 @@
       "when": 1779398400000,
       "tag": "0058_credit_actions",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1779484800000,
+      "tag": "0059_referral_system",
+      "breakpoints": true
     }
   ]
 }

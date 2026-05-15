@@ -169,6 +169,41 @@ export const CREDIT_ACTIONS: readonly CreditActionConfig[] = [
     requiresApproval: false,
   },
 
+  // SOCIAL — share-link attribution + referral funnel. share_click
+  // is daily-capped (same anti-spam shape as engagement actions);
+  // the two referral keys are lifetime-once (idempotency keys
+  // include the referred userId, not the date).
+  {
+    key: "share_click",
+    label: "Confirmed share click",
+    proposedCredits: 5,
+    dailyCap: 3,
+    category: "SOCIAL",
+    notes: "Awarded when a tracked share link generates a confirmed external click",
+    isActive: true,
+    requiresApproval: false,
+  },
+  {
+    key: "referral_completed",
+    label: "Successful referral",
+    proposedCredits: 500,
+    dailyCap: null,
+    category: "SOCIAL",
+    notes: "Awarded to referrer when referred user completes their first meaningful action",
+    isActive: true,
+    requiresApproval: false,
+  },
+  {
+    key: "referral_signup_bonus",
+    label: "Referral signup bonus",
+    proposedCredits: 2000,
+    dailyCap: null,
+    category: "SOCIAL",
+    notes: "Bonus credits for new user who signed up via a referral link — stacks on top of standard signup grant",
+    isActive: true,
+    requiresApproval: false,
+  },
+
   // SPECIAL — non-earnable bookkeeping rows. Listed so the admin
   // table is complete and the user-facing history can map every
   // ledger txnType back to a friendly label.

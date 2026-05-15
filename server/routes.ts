@@ -23,6 +23,7 @@ import {
   awardInsightCredits,
   awardSuggestionApprovedCredits,
   awardMarketSuggestionApprovedCredits,
+  maybeFireReferralCredit,
 } from "./services/credits-earn";
 import { SIGNUP_CREDIT_GRANT } from "@shared/credit-config";
 import { createNotification, createNotificationsBulk } from "./services/notifications";
@@ -95,7 +96,7 @@ import { FDX_SID_COOKIE, readFdxSid } from "./lib/anonIdentity";
 import { consumeBudgetUnit, getBudgetStatus } from "./lib/anonBudget";
 import { anonVoteIpRateLimit } from "./middleware/anonRateLimit";
 import { resolvePublicMatchupBySlugOrId } from "./utils/matchup-resolve";
-import { registerCronRoutes, registerPublicRoutes, registerGamificationRoutes, registerFavoritesRoutes, registerNotificationsRoutes, registerAdminNotificationsRoutes, registerOgRoutes } from "./route-modules";
+import { registerCronRoutes, registerPublicRoutes, registerGamificationRoutes, registerFavoritesRoutes, registerNotificationsRoutes, registerAdminNotificationsRoutes, registerOgRoutes, registerShareRoutes } from "./route-modules";
 import { handleAuthHook } from "./emails/routes/auth-hook";
 import { sendEmail } from "./emails/send";
 import { WelcomeEmail, welcomeSubject } from "./emails/templates/lifecycle/Welcome";
@@ -1403,6 +1404,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   registerPublicRoutes(app);
   registerGamificationRoutes(app);
+  registerShareRoutes(app);
   registerFavoritesRoutes(app);
   registerNotificationsRoutes(app);
   registerAdminNotificationsRoutes(app);
@@ -3479,6 +3481,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           );
         } catch (e) { console.error("XP award failed:", e); }
         await awardVoteCredits(userId, 'curation', imageId, { personId });
+        await maybeFireReferralCredit(userId);
       }
 
       await syncWinningAvatarForPerson(personId);
@@ -3654,6 +3657,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
       } catch (e) { console.error("XP award failed:", e); }
       await awardInsightCredits(req.userId!, newInsight.id, { personId });
+      await maybeFireReferralCredit(req.userId!);
 
       const [profile] = await db
         .select(commentAuthorSelect)
@@ -3986,6 +3990,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
       } catch (e) { console.error("XP award failed:", e); }
       await awardVoteCredits(userId, 'sentiment', `${personId}_${today}`, { personId, voteType });
+      await maybeFireReferralCredit(userId);
 
       res.json({ success: true, created: true, xp: xpResult ?? null });
     } catch (error: any) {
@@ -4211,6 +4216,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           );
         } catch (e) { console.error("XP award failed:", e); }
         await awardVoteCredits(req.userId, 'value', celebrityId, { vote });
+        await maybeFireReferralCredit(req.userId);
       }
 
       // Recompute metrics for this celebrity (community totals include anon votes)
@@ -5531,6 +5537,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // shouldAwardXp already enforces "min 20 chars" + "not on
         // own insight" gates, so credits piggy-back the same check.
         await awardCommentCredits(userId, newComment.id, { insightId: resolvedParentId });
+        await maybeFireReferralCredit(userId);
       }
 
       const [profile] = await db
@@ -6931,6 +6938,7 @@ Only return the JSON object.`;
             console.error("XP award failed:", xpError);
           }
           await awardVoteCredits(req.userId, 'matchup', id, { votedOption: option });
+          await maybeFireReferralCredit(req.userId);
         }
       }
       
@@ -7107,11 +7115,53 @@ Only return the JSON object.`;
   // the same number. Bumping the grant is a single-file edit.
   // (Imported at the top of routes.ts.)
 
+  /**
+   * Generate a unique 8-char referral code ("VX" + 6 base32 chars).
+   *
+   * Base32 alphabet (A–Z minus look-alikes I/O/L, 2–9 minus 0/1)
+   * keeps the code typeable on a phone — collision rate ≈ 1 / 32^6
+   * = 1 / 1B per random pull, but we still loop with onConflictDoNothing
+   * so a repeat in the next decade doesn't crash signup.
+   *
+   * Returns null after the configured retry budget; caller decides
+   * whether to fail the signup or continue without a code (we choose
+   * the latter — a missing code only blocks the user from sharing a
+   * referral, not from using the app).
+   */
+  const REFERRAL_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+  async function generateUniqueReferralCode(maxAttempts = 5): Promise<string | null> {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      let suffix = "";
+      for (let i = 0; i < 6; i++) {
+        suffix += REFERRAL_CODE_ALPHABET[
+          Math.floor(Math.random() * REFERRAL_CODE_ALPHABET.length)
+        ];
+      }
+      const candidate = `VX${suffix}`;
+      const collision = await db
+        .select({ id: profiles.id })
+        .from(profiles)
+        .where(eq(profiles.referralCode, candidate))
+        .limit(1);
+      if (collision.length === 0) return candidate;
+    }
+    console.warn("[profile-sync] generateUniqueReferralCode exhausted attempts");
+    return null;
+  }
+
   // Sync profile after Supabase auth - creates profile if doesn't exist
   app.post("/api/profile/sync", requireAuth, async (req: AuthRequest, res) => {
     try {
       const userId = req.userId!;
       const jwtEmail = req.userEmail || null;
+      // Optional referral code captured from the landing URL by the
+      // client (see localStorage "voxdex_referral_code"). We resolve
+      // it to a referrer profile id below — if invalid / self-
+      // referral / not found, we just drop it silently and the
+      // signup proceeds without an attribution.
+      const incomingReferralCode = typeof req.body?.referralCode === "string"
+        ? req.body.referralCode.trim().toUpperCase()
+        : null;
       const initialGrantEntry = {
         userId,
         txnType: 'initial_grant' as const,
@@ -7158,7 +7208,14 @@ Only return the JSON object.`;
           lastActiveAt: new Date(),
         };
         if (avatarUrl && !existing[0].avatarUrl) updateData.avatarUrl = avatarUrl;
-        
+        // Backfill referralCode for accounts that pre-date the
+        // referral system. New accounts always get one at insert
+        // time below; this branch covers the migration window.
+        if (!existing[0].referralCode) {
+          const backfillCode = await generateUniqueReferralCode();
+          if (backfillCode) updateData.referralCode = backfillCode;
+        }
+
         await db.transaction(async (tx) => {
           await tx.update(profiles).set(updateData).where(eq(profiles.id, userId));
           await tx.insert(creditLedger).values(initialGrantEntry).onConflictDoNothing();
@@ -7178,6 +7235,27 @@ Only return the JSON object.`;
       // NewUserGate keeps un-onboarded users on /login/welcome until
       // they submit a username, so a transient null is never visible
       // to the rest of the app.
+      // Resolve the optional referral code to a referrer profile id.
+      // Self-referral (code belongs to the new user) is impossible
+      // here because the new profile doesn't exist yet, but we still
+      // guard with id != newUserId for paranoia.
+      let referredBy: string | null = null;
+      if (incomingReferralCode && /^VX[A-Z0-9]{6}$/.test(incomingReferralCode)) {
+        const [referrer] = await db
+          .select({ id: profiles.id })
+          .from(profiles)
+          .where(
+            and(
+              eq(profiles.referralCode, incomingReferralCode),
+              ne(profiles.id, userId),
+            ),
+          )
+          .limit(1);
+        if (referrer) referredBy = referrer.id;
+      }
+
+      const referralCode = await generateUniqueReferralCode();
+
       const newProfile = {
         id: userId,
         username: null,
@@ -7193,6 +7271,8 @@ Only return the JSON object.`;
         totalPredictions: 0,
         winRate: 0,
         lastActiveAt: new Date(),
+        referralCode,
+        referredBy,
       };
       
       // Phase 4 — discard anonymous voting trail at signup (D8). The
@@ -7293,6 +7373,39 @@ Only return the JSON object.`;
           creditsGranted: SIGNUP_CREDIT_GRANT,
         },
       });
+
+      // Referral signup bonus — +2,000 credits stacked on top of the
+      // standard signup grant for users who arrived via a ?ref= link.
+      // The idempotency key (referral_bonus_${newUserId}) ensures a
+      // re-sync of an already-signed-up user can't double-pay even
+      // if referredBy somehow gets re-set.
+      if (referredBy) {
+        try {
+          const bonusResult = await gamificationService.adjustCredits(
+            userId,
+            "referral_signup_bonus",
+            `referral_bonus_${userId}`,
+            { metadata: { referredBy, code: incomingReferralCode } },
+          );
+          if (bonusResult.awarded) {
+            await createNotification({
+              userId,
+              kind: "credits_granted",
+              title: "Referral bonus",
+              body: `Welcome bonus of ${bonusResult.amount.toLocaleString("en-US")} extra credits for joining via a friend's link.`,
+              href: "/me/credits",
+              idempotencyKey: `referral_bonus_notify:${userId}`,
+              metadata: {
+                source: "referral_signup_bonus",
+                creditsGranted: bonusResult.amount,
+                referredBy,
+              },
+            });
+          }
+        } catch (err) {
+          console.error("[profile-sync] referral_signup_bonus failed", err);
+        }
+      }
 
       res.json({ profile: newProfile, created: true });
     } catch (error: any) {
@@ -14674,6 +14787,7 @@ Target length: about 90-150 words.`;
             );
           } catch (e) { console.error("XP award failed:", e); }
           await awardVoteCredits(req.userId, 'trending_poll', String(poll.id), { choice });
+          await maybeFireReferralCredit(req.userId);
         }
       }
 
@@ -15748,6 +15862,7 @@ Target length: about 90-150 words.`;
             );
           } catch (e) { console.error("XP award failed:", e); }
           await awardVoteCredits(req.userId, 'opinion_poll', String(poll.id), { optionId });
+          await maybeFireReferralCredit(req.userId);
         }
       }
 
@@ -17681,6 +17796,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         { marketId, entryId, stakeAmount }
       );
     } catch (e) { console.error("XP award failed:", e); }
+    await maybeFireReferralCredit(userId);
 
     return {
       data: {
@@ -18433,6 +18549,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           { marketId, stakeAmount: JACKPOT_TICKET_COST }
         );
       } catch (e) { console.error("XP award for jackpot entry failed:", e); }
+      await maybeFireReferralCredit(authReq.userId!);
 
       return res.json({
         betId: (result as any).betId,
@@ -21415,6 +21532,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           );
         } catch (e) { console.error("XP award failed:", e); }
         await awardVoteCredits(req.userId, 'induction', id);
+        await maybeFireReferralCredit(req.userId);
       }
 
       res.json({ success: true, xp: xpResult ?? null, budget: budgetSnapshot });

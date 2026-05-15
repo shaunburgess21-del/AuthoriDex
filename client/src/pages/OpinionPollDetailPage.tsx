@@ -222,7 +222,7 @@ export default function OpinionPollDetailPage() {
   };
 
   const handleShare = () => {
-    sharePage(poll ? `${poll.title} on VoxDex` : "VoxDex");
+    sharePage(poll ? `${poll.title} on VoxDex` : "VoxDex", { sharerUserId: user?.id, surface: "poll" });
   };
 
   // Dynamic <title> + OG/Twitter meta. Crawlers without JS hit

@@ -9,6 +9,7 @@ import { navigateToLogin } from "@/lib/authReturn";
 import { useAuth } from "@/contexts/AuthContext";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { UserRankBadge } from "@/components/UserRankBadge";
+import { ReferAFriendCard } from "@/components/ReferAFriendCard";
 
 export default function MePage() {
   const { user, profile, profileLoading, isAdmin, signOut } = useAuth();
@@ -249,6 +250,8 @@ export default function MePage() {
                 Credits power your predictions. They never expire and have no cash value.
               </p>
             </Card>
+
+            <ReferAFriendCard />
 
             {isAdmin && (
               <Card className="p-6 border-red-500/40 dark:border-red-500/30 bg-red-500/8 dark:bg-red-500/5">

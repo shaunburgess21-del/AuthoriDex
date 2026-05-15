@@ -171,7 +171,7 @@ export default function PollDetailPage() {
   };
 
   const handleShare = () => {
-    sharePage(poll ? `${poll.headline} on VoxDex` : "VoxDex");
+    sharePage(poll ? `${poll.headline} on VoxDex` : "VoxDex", { sharerUserId: user?.id, surface: "poll" });
   };
 
   // Dynamic <title> + OG/Twitter meta. Slack/iMessage previews come

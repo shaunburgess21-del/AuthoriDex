@@ -1,7 +1,94 @@
 import { toast } from "sonner";
 
-export async function sharePage(title: string) {
-  const url = window.location.href;
+/**
+ * Canonical share-attribution surfaces. Mirrors the `share_surface`
+ * column on share_clicks; passed by every call site so the share-
+ * funnel admin tab can group clicks by where the link came from.
+ *
+ * `referral` is reserved for the explicit "Refer a Friend" card —
+ * it shares the user's profiles.referralCode link rather than a
+ * surface-specific page.
+ */
+export type ShareSurface =
+  | "person_profile"
+  | "vote_deck"
+  | "matchup"
+  | "poll"
+  | "market"
+  | "prediction_win"
+  | "portfolio"
+  | "comment"
+  | "public_profile"
+  | "referral"
+  | "share_card";
+
+interface SharePageOptions {
+  /** Authenticated sharer's profile id. Anonymous shares pass null. */
+  sharerUserId?: string | null;
+  /** Surface label — drives utm_campaign and the share_clicks row. */
+  surface?: ShareSurface;
+  /** Override the URL we share. Defaults to window.location.href. */
+  url?: string;
+}
+
+/**
+ * Append attribution params to a share URL.
+ *
+ * - `?sharer={userId}` — used by the click-tracking ping to credit
+ *   the referrer for confirmed external clicks. Omitted entirely
+ *   for anonymous shares (no userId == no attribution).
+ * - `&utm_source=voxdex&utm_medium=share&utm_campaign={surface}` —
+ *   standard UTM tags so external analytics (and our own admin
+ *   share-funnel tab once it exists) can group the inbound traffic.
+ *
+ * Idempotent: if the URL already has any of these params we leave
+ * them in place rather than appending duplicates. This matters for
+ * the openShareCard path, where buildTradeShareData has already
+ * baked the sharer param into shareUrl.
+ */
+export function appendShareAttribution(
+  baseUrl: string,
+  options: { sharerUserId?: string | null; surface?: ShareSurface } = {},
+): string {
+  try {
+    const url = new URL(baseUrl, window.location.origin);
+    if (options.sharerUserId && !url.searchParams.has("sharer")) {
+      url.searchParams.set("sharer", options.sharerUserId);
+    }
+    if (!url.searchParams.has("utm_source")) {
+      url.searchParams.set("utm_source", "voxdex");
+    }
+    if (!url.searchParams.has("utm_medium")) {
+      url.searchParams.set("utm_medium", "share");
+    }
+    if (options.surface && !url.searchParams.has("utm_campaign")) {
+      url.searchParams.set("utm_campaign", options.surface);
+    }
+    return url.toString();
+  } catch {
+    // Fallback for non-absolute URLs that fail the URL constructor.
+    return baseUrl;
+  }
+}
+
+/**
+ * Share a page link. Optional `options` lets call sites attach a
+ * sharer id + surface so the resulting URL carries attribution
+ * params that the click-tracking endpoint can credit.
+ *
+ * Backward-compatible: existing call sites that pass only `title`
+ * still work — they just produce un-attributed shares (which is
+ * the right call for anonymous flows).
+ */
+export async function sharePage(
+  title: string,
+  options: SharePageOptions = {},
+): Promise<void> {
+  const baseUrl = options.url ?? window.location.href;
+  const url = appendShareAttribution(baseUrl, {
+    sharerUserId: options.sharerUserId ?? null,
+    surface: options.surface,
+  });
 
   if (navigator.share) {
     try {

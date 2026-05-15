@@ -19,6 +19,10 @@
  * key conventions. New earn-loop call sites consolidate here.
  */
 
+import { and, eq, isNull } from "drizzle-orm";
+import { db } from "../db";
+import { profiles } from "@shared/schema";
+import { createNotification } from "./notifications";
 import { gamificationService } from "./gamification";
 
 interface EarnResultLog {
@@ -207,6 +211,129 @@ export async function awardMarketSuggestionApprovedCredits(
       `[credits-earn] market_suggestion_approved threw userId=${userId} marketId=${marketId}`,
       err,
     );
+  }
+}
+
+/**
+ * Fire the `referral_completed` credit award for the referrer of
+ * `userId` if and only if this is the very first meaningful action
+ * the referee has ever taken.
+ *
+ * The referral funnel has three distinct events:
+ *
+ *   1. Signup with ?ref= → server stamps profiles.referred_by and
+ *      awards referral_signup_bonus to the new user.
+ *   2. First meaningful action by the referee (vote / prediction /
+ *      comment / overall rating) → THIS function. Awards
+ *      referral_completed to the referrer. Stamps both
+ *      profiles.first_action_at on the referee and
+ *      profiles.referral_credit_fired_at on the referrer.
+ *   3. All subsequent actions → no-op (first_action_at is set, so
+ *      step 1 of the guard-chain returns early).
+ *
+ * Designed to be idempotent at three layers:
+ *
+ *   - first_action_at on the referee blocks re-entry
+ *   - referral_credit_fired_at on the referrer blocks double-fire
+ *     even if first_action_at somehow gets cleared
+ *   - credit_ledger idempotency key (`referral_${userId}`) blocks
+ *     a duplicate ledger row even if both timestamps get cleared
+ *
+ * Non-blocking: every error is caught + logged. The primary action
+ * (vote / comment / etc.) has already succeeded by the time we
+ * land here.
+ */
+export async function maybeFireReferralCredit(userId: string): Promise<void> {
+  try {
+    const [profile] = await db
+      .select({
+        id: profiles.id,
+        referredBy: profiles.referredBy,
+        firstActionAt: profiles.firstActionAt,
+      })
+      .from(profiles)
+      .where(eq(profiles.id, userId))
+      .limit(1);
+
+    if (!profile) return;
+    if (profile.firstActionAt) return; // Already fired (or no-op for organic users).
+
+    // Stamp first_action_at unconditionally — every meaningful
+    // action graduates the user out of the "new" bucket, even when
+    // there's no referrer to credit. This stops the helper from
+    // re-running its referrer lookup on every subsequent action.
+    const now = new Date();
+    await db
+      .update(profiles)
+      .set({ firstActionAt: now })
+      .where(and(eq(profiles.id, userId), isNull(profiles.firstActionAt)));
+
+    if (!profile.referredBy) return;
+
+    // Defence-in-depth: confirm the referrer hasn't already been
+    // credited for this user (shouldn't be possible given the
+    // first_action_at check above, but the credit_ledger idempotency
+    // key is the actual source of truth).
+    const [referrer] = await db
+      .select({
+        id: profiles.id,
+        referralCreditFiredAt: profiles.referralCreditFiredAt,
+      })
+      .from(profiles)
+      .where(eq(profiles.id, profile.referredBy))
+      .limit(1);
+    if (!referrer) return;
+
+    const result = await gamificationService.adjustCredits(
+      profile.referredBy,
+      "referral_completed",
+      `referral_${userId}`,
+      { metadata: { referredUserId: userId } },
+    );
+    if (!result.awarded) {
+      // Most likely 'duplicate' — ledger already has the row,
+      // probably from a previous run that crashed between the
+      // award and the timestamp update. Stamp the timestamp now
+      // so the helper can stop re-evaluating.
+      await db
+        .update(profiles)
+        .set({ referralCreditFiredAt: now })
+        .where(
+          and(
+            eq(profiles.id, profile.referredBy),
+            isNull(profiles.referralCreditFiredAt),
+          ),
+        );
+      return;
+    }
+
+    await db
+      .update(profiles)
+      .set({ referralCreditFiredAt: now })
+      .where(eq(profiles.id, profile.referredBy));
+
+    // Best-effort notification so the referrer sees the payout in
+    // their bell + balance pill (which already invalidates on
+    // credits_granted via useNotificationsRealtime).
+    try {
+      await createNotification({
+        userId: profile.referredBy,
+        kind: "credits_granted",
+        title: "Referral paid out",
+        body: `Your friend made their first move. ${result.amount.toLocaleString("en-US")} credits added to your balance.`,
+        href: "/me/credits",
+        idempotencyKey: `referral_completed_notify:${userId}`,
+        metadata: {
+          source: "referral_completed",
+          referredUserId: userId,
+          creditsGranted: result.amount,
+        },
+      });
+    } catch (notifyErr) {
+      console.warn("[credits-earn] referral_completed notify failed", notifyErr);
+    }
+  } catch (err) {
+    console.error("[credits-earn] maybeFireReferralCredit failed", { userId, err });
   }
 }
 

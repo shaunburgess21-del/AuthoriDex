@@ -845,6 +845,49 @@ export const insertCreditActionSchema = createInsertSchema(creditActions).omit({
 export type CreditAction = typeof creditActions.$inferSelect;
 export type InsertCreditAction = z.infer<typeof insertCreditActionSchema>;
 
+// Share-click attribution log. Powers the share_click credit award
+// path in POST /api/share/track-click and feeds future share-funnel
+// analytics. Designed to be append-only — we never mutate clickedAt
+// or sharerUserId; `credited` flips from false → true exactly once
+// when the matching credit_ledger row is written, paired with the
+// idempotency key for cross-table reconciliation.
+export const shareClicks = pgTable("share_clicks", {
+  id: serial("id").primaryKey(),
+  // Owner of the share link. References profiles(id); FK declared
+  // in migration 0059 to keep the schema migration loose-coupled.
+  sharerUserId: text("sharer_user_id").notNull(),
+  // Surface the link came from: person_profile, vote_deck, matchup,
+  // poll, market, prediction_win, portfolio, comment, public_profile,
+  // referral. Free-form text so we can add surfaces without a schema
+  // migration; the client side enforces the canonical set.
+  shareSurface: text("share_surface").notNull(),
+  shareUrl: text("share_url").notNull(),
+  clickedAt: timestamp("clicked_at", { withTimezone: true }).defaultNow(),
+  // HTTP Referer of the inbound click. Internal hosts (voxdex.com,
+  // localhost) are rejected before insert — anything that lands here
+  // is by definition external.
+  externalReferrer: text("external_referrer"),
+  // SHA-256 of the X-Forwarded-For first hop. We never store the raw
+  // IP. Used in the `(sharerUserId, ipHash, utc-date)` dedup so the
+  // same household refreshing the link doesn't farm clicks.
+  ipHash: text("ip_hash"),
+  credited: boolean("credited").notNull().default(false),
+  // The exact idempotencyKey we passed to adjustCredits(), so the
+  // admin reconciliation tab can join share_clicks to credit_ledger
+  // without guessing.
+  creditIdempotencyKey: text("credit_idempotency_key").unique(),
+}, (table) => ({
+  sharerHistoryIdx: index("share_clicks_sharer_idx").on(table.sharerUserId, table.clickedAt),
+}));
+
+export const insertShareClickSchema = createInsertSchema(shareClicks).omit({
+  id: true,
+  clickedAt: true,
+});
+
+export type ShareClick = typeof shareClicks.$inferSelect;
+export type InsertShareClick = z.infer<typeof insertShareClickSchema>;
+
 // User Profiles - linked to Supabase Auth, stores profile info and role
 export const profiles = pgTable("profiles", {
   id: varchar("id").primaryKey(), // Supabase Auth user ID (not auto-generated)
@@ -889,6 +932,27 @@ export const profiles = pgTable("profiles", {
   // => grace-day increment, older => reset to 1. Nullable for accounts
   // that have never checked in.
   lastLoginDate: text("last_login_date"),
+  // Referral funnel — see migrations/0059_referral_system.sql.
+  // referralCode: stable per-user share token ("VX" + 6 chars) shown
+  //   on the /me Refer a Friend card; embedded as ?ref= on shareable
+  //   links. Generated on first profile sync with retry-on-collision.
+  // referredBy: profile.id of the referrer when the new user signed
+  //   up via a ?ref= link. ON DELETE SET NULL so referrer deletion
+  //   doesn't cascade away the referred user.
+  // firstActionAt: stamped exactly once when the user completes a
+  //   "meaningful action" (vote / prediction / comment / overall
+  //   rating). Gates the referral_completed credit fire so a brand-
+  //   new account can't trigger a payout by signing up alone.
+  // referralCreditFiredAt: stamped on the *referrer's* row (not the
+  //   referee's) when their referral_completed credit lands.
+  //   Defence-in-depth alongside the credit_ledger idempotency key.
+  referralCode: text("referral_code").unique(),
+  // FK back to profiles.id is declared in migration 0059 (Drizzle
+  // can't express self-references on the same table cleanly inside
+  // the column builder).
+  referredBy: text("referred_by"),
+  firstActionAt: timestamp("first_action_at", { withTimezone: true }),
+  referralCreditFiredAt: timestamp("referral_credit_fired_at", { withTimezone: true }),
   totalVotes: integer("total_votes").notNull().default(0),
   totalPredictions: integer("total_predictions").notNull().default(0),
   winRate: real("win_rate").notNull().default(0),

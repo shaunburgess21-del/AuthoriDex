@@ -19,6 +19,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useDailyCheckin, useXpCelebration } from "@/hooks/useGamification";
 import { useNotificationsRealtime } from "@/hooks/useNotificationsRealtime";
 import { initGoogleAnalytics, trackGooglePageView } from "@/lib/analytics";
+import {
+  captureReferralFromUrl,
+  captureShareClickFromUrl,
+} from "@/lib/referral-capture";
 
 // If we got here the page loaded successfully -- clear any leftover retry
 // flag from a previous stale-chunk reload so the mechanism works on the
@@ -201,6 +205,31 @@ function AnalyticsWatcher() {
 }
 
 /**
+ * Captures `?ref=` and `?sharer=` from the inbound URL on mount.
+ *
+ * - Referral capture is fire-and-forget at the App level so a user
+ *   landing on ANY route gets the code stashed before they sign up.
+ * - Share-click capture waits for AuthContext to settle so the
+ *   self-share guard can read the current user id; it re-runs when
+ *   the user id changes (the rare anonymous → authenticated case
+ *   inside the same session).
+ */
+function ShareAttributionWatcher() {
+  const { user, loading } = useAuth();
+
+  useEffect(() => {
+    captureReferralFromUrl();
+  }, []);
+
+  useEffect(() => {
+    if (loading) return;
+    void captureShareClickFromUrl(user?.id ?? null);
+  }, [loading, user?.id]);
+
+  return null;
+}
+
+/**
  * Force first-time users (no `tosAcceptedAt`) through /login/welcome before
  * they can land anywhere else. Catches the Google-OAuth signup path, which
  * skips the email verify screen entirely and would otherwise drop the user
@@ -346,6 +375,7 @@ function App() {
               <NotificationsRealtimeWatcher />
               <RankUpModalHost />
               <AnalyticsWatcher />
+              <ShareAttributionWatcher />
               <XpBurstProvider>
                 {/* Watcher is inside XpBurstProvider so useXpCelebration can fire daily-login bursts via useXpBurst. */}
                 <XpCelebrationWatcher />

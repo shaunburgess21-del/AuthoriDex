@@ -35,6 +35,7 @@ import { cn } from "@/lib/utils";
 import { useShareCard } from "@/contexts/ShareCardContext";
 import { buildPositionShareData, inferDirection } from "@/lib/share-data";
 import { inferPredictionDirection } from "@/pages/me/predictions-utils";
+import { appendShareAttribution } from "@/lib/share";
 
 type UserPrediction = MyPredictionCardData;
 
@@ -349,9 +350,12 @@ export default function PredictionsPage() {
         category: p.marketCategory,
       },
       fallbackText,
-      shareUrl: p.marketSlug
-        ? `${window.location.origin}/markets/${p.marketSlug}`
-        : window.location.origin,
+      shareUrl: appendShareAttribution(
+        p.marketSlug
+          ? `${window.location.origin}/markets/${p.marketSlug}`
+          : window.location.origin,
+        { sharerUserId: user?.id ?? null, surface: "prediction_win" },
+      ),
       filenameBase: `voxdex-win-${p.betId.slice(0, 8)}`,
     });
   };
@@ -372,7 +376,10 @@ export default function PredictionsPage() {
             : p.marketSlug
               ? `/markets/${p.marketSlug}`
               : "/predict";
-    const shareUrl = `${origin}${sharePath}`;
+    const shareUrl = appendShareAttribution(`${origin}${sharePath}`, {
+      sharerUserId: user?.id ?? null,
+      surface: "portfolio",
+    });
     const tradeData = buildPositionShareData({
       username: profile?.username || "you",
       personName: p.personName,
@@ -415,7 +422,10 @@ export default function PredictionsPage() {
         bestCategory: stats.bestCategory,
       },
       fallbackText,
-      shareUrl: `${window.location.origin}/predict`,
+      shareUrl: appendShareAttribution(`${window.location.origin}/predict`, {
+        sharerUserId: user?.id ?? null,
+        surface: "portfolio",
+      }),
       filenameBase: `voxdex-portfolio-${profile?.username || "me"}`,
     });
   };

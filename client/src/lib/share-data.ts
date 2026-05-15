@@ -4,6 +4,7 @@ import type {
   ShareCardTradeData,
   ShareCardPositionData,
 } from "@/components/share/ShareCard";
+import { appendShareAttribution } from "@/lib/share";
 
 /**
  * Helpers that map page-local state into the `ShareCardTradeData` /
@@ -195,6 +196,13 @@ export interface FireAmmTradeToastArgs {
    * not). Typically `${origin}${pathname}` or the market URL.
    */
   fallbackShareUrl: string;
+  /**
+   * Sharer's profile id. Threaded into the /share/bet/:betId
+   * permalink as ?sharer= so the click-tracking endpoint can credit
+   * the sharer for confirmed external clicks. Anonymous flows pass
+   * undefined and the URL stays attribution-free.
+   */
+  sharerUserId?: string | null;
 }
 
 /**
@@ -236,9 +244,17 @@ export function fireAmmTradeToast(args: FireAmmTradeToastArgs): void {
   });
 
   const betId = args.response.betId;
-  const shareUrl = betId
+  const rawShareUrl = betId
     ? `${typeof window !== "undefined" ? window.location.origin : ""}/share/bet/${betId}`
     : args.fallbackShareUrl;
+  // Attribution-stamp the URL so a confirmed external click can be
+  // credited back to the sharer. We import lazily to avoid a tight
+  // coupling between share-data (used in many call sites) and the
+  // attribution helper.
+  const shareUrl = appendShareAttribution(rawShareUrl, {
+    sharerUserId: args.sharerUserId ?? null,
+    surface: args.actionType === "buy" ? "prediction_win" : "portfolio",
+  });
 
   const description = isBuy
     ? `${Math.round(shares).toLocaleString()} ${args.entryLabel} shares · ${credits.toLocaleString()} cr`

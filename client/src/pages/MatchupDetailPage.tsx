@@ -176,7 +176,7 @@ export default function MatchupDetailPage() {
   };
 
   const handleShare = () => {
-    sharePage(matchup ? `${matchup.title} on VoxDex` : "VoxDex");
+    sharePage(matchup ? `${matchup.title} on VoxDex` : "VoxDex", { sharerUserId: user?.id, surface: "matchup" });
   };
 
   // Dynamic <title> + OG/Twitter meta. The "A vs B" framing is the

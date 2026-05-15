@@ -3,6 +3,10 @@ import { User, Session } from "@supabase/supabase-js";
 import { toast } from "sonner";
 import { getSupabase } from "@/lib/supabase";
 import { queryClient } from "@/lib/queryClient";
+import {
+  getStoredReferralCode,
+  clearStoredReferralCode,
+} from "@/lib/referral-capture";
 
 export interface UserProfile {
   id: string;
@@ -81,6 +85,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       let lastError: string | null = null;
 
+      // Read the persisted referral code (if any). Only forwarded
+      // on the create-profile path server-side, but we always send
+      // it — server is the right place to no-op when the profile
+      // already exists or the code is invalid.
+      const referralCode = getStoredReferralCode();
+
       for (let attempt = 0; attempt < retries; attempt++) {
         const syncResponse = await fetch("/api/profile/sync", {
           method: "POST",
@@ -88,10 +98,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             "Authorization": `Bearer ${accessToken}`,
             "Content-Type": "application/json",
           },
+          body: referralCode ? JSON.stringify({ referralCode }) : undefined,
         });
 
         if (syncResponse.ok) {
           const data = await syncResponse.json();
+          // First-time signups consume the code. Returning users
+          // (created === false) leave the stash alone — it only
+          // ever fires once, and the server ignores it for them.
+          if (data?.created && referralCode) {
+            clearStoredReferralCode();
+          }
           // Tolerate the legacy bare-profile response shape during the deploy
           // window when an old client sees a new server, or vice versa.
           const profileData = (data && typeof data === "object" && "profile" in data
