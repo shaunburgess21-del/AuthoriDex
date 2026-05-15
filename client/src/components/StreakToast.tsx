@@ -1,50 +1,101 @@
-import { Check, Flame, Gift, X } from "lucide-react";
+import { Check, Flame, Gift, Sparkles, X } from "lucide-react";
 import {
-  STREAK_MILESTONE_DAYS,
+  STREAK_MILESTONES,
   STREAK_REWARD_TEASE,
   STREAK_TARGET_DAYS,
-  STREAK_TARGET_REWARD_COPY,
+  getNextMilestone,
 } from "@/lib/streak-config";
 
 interface StreakToastProps {
   /** Day count after the daily-login bump just applied server-side. */
   currentStreak: number;
-  /** Sum of daily_login (+ optional streak_bonus) XP awarded this call. */
+  /** All-time peak streak for this user (post-bump). */
+  longestStreak?: number;
+  /** Sum of daily_login (+ optional milestone or streak_bonus) XP awarded this call. */
   xpAwarded: number;
-  /** Server-provided reason string, e.g. "Daily login + streak bonus". */
+  /** Server-provided reason string, e.g. "Day 7 milestone". */
   reason: string;
+  /** True when today's bump landed on a milestone day (3/7/14/30/100). */
+  isMilestone?: boolean;
+  /** When isMilestone, which milestone level was hit. */
+  milestoneDay?: number;
+  /** True when the daily-checkin used the grace-period rule today. */
+  graceUsed?: boolean;
   /** Sonner-supplied dismiss handler. Wired to the close button. */
   onClose: () => void;
 }
 
-function titleFor(streak: number): string {
-  if (streak <= 1) return "Streak started";
-  if (STREAK_MILESTONE_DAYS.includes(streak)) {
-    return `${streak}-day streak — nice run`;
+/**
+ * Headline copy. Distinct treatment on milestone days so the toast
+ * reads as a celebration, not a routine "+10 XP". Falls back to a
+ * pacing line ("Day N streak") for ordinary days.
+ */
+function titleFor({
+  currentStreak,
+  isMilestone,
+  milestoneDay,
+}: Pick<StreakToastProps, "currentStreak" | "isMilestone" | "milestoneDay">): string {
+  if (isMilestone && milestoneDay) {
+    return `Day ${milestoneDay} milestone — bonus XP unlocked!`;
   }
-  return `Day ${streak} streak`;
+  if (currentStreak <= 1) return "Streak started";
+  return `Day ${currentStreak} streak`;
+}
+
+/**
+ * Visible window of dots shown on the toast timeline. The cycle no
+ * longer hard-wraps every 7 days (pre-overhaul behaviour); instead
+ * the window slides so the user always sees their current position
+ * relative to the next milestone. This keeps the timeline meaningful
+ * for streaks deep into double or triple digits.
+ *
+ * Strategy:
+ *   - Anchor the right edge to the next milestone (or the current
+ *     day if past the last milestone).
+ *   - Show STREAK_TARGET_DAYS slots leading up to it.
+ */
+function buildTimeline(currentStreak: number): {
+  start: number;
+  end: number;
+  giftDay: number;
+} {
+  const next = getNextMilestone(currentStreak);
+  const giftDay = next ?? STREAK_MILESTONES[STREAK_MILESTONES.length - 1];
+  const end = Math.max(giftDay, currentStreak);
+  const start = Math.max(1, end - (STREAK_TARGET_DAYS - 1));
+  return { start, end, giftDay };
 }
 
 export function StreakToast({
   currentStreak,
+  longestStreak,
   xpAwarded,
   reason,
+  isMilestone = false,
+  milestoneDay,
+  graceUsed = false,
   onClose,
 }: StreakToastProps) {
-  const target = STREAK_TARGET_DAYS;
-  // Position within the current cycle (1..target). After completing a cycle
-  // we wrap so the dot row stays meaningful for streak > target.
-  const cyclePosition = ((currentStreak - 1) % target) + 1;
-  const completed = Math.min(cyclePosition, target);
-  // Last node is the gift / reward; treat it as "checked" only once the user
-  // has fully closed out the cycle.
-  const giftEarned = cyclePosition >= target;
+  const { start, end, giftDay } = buildTimeline(currentStreak);
+  const slots: number[] = [];
+  for (let d = start; d <= end; d += 1) slots.push(d);
+
+  const beatsBest = longestStreak !== undefined && currentStreak >= longestStreak && currentStreak > 1;
+  const nextMilestone = getNextMilestone(currentStreak);
+  const daysToNext = nextMilestone ? nextMilestone - currentStreak : null;
+
+  // Milestone variant gets a warmer border and a sparkle accent so it
+  // stands out from the routine daily check-in toast.
+  const containerClasses = isMilestone
+    ? "w-[340px] sm:w-[360px] rounded-2xl border-2 border-amber-500/60 bg-gradient-to-br from-amber-500/10 to-orange-500/10 shadow-[0_0_24px_rgba(245,158,11,0.25)] p-4 relative"
+    : "w-[340px] sm:w-[360px] rounded-2xl border border-orange-500/30 bg-card shadow-lg p-4 relative";
 
   return (
     <div
-      className="w-[340px] sm:w-[360px] rounded-2xl border border-orange-500/30 bg-card shadow-lg p-4 relative"
+      className={containerClasses}
       role="status"
       data-testid="streak-toast"
+      data-milestone={isMilestone ? "true" : "false"}
     >
       <button
         type="button"
@@ -57,12 +108,18 @@ export function StreakToast({
       </button>
 
       <div className="flex items-start gap-2.5 pr-6">
-        <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-orange-500/15 text-orange-500 dark:bg-orange-500/20 dark:text-orange-300">
-          <Flame className="h-4 w-4" />
+        <span
+          className={
+            isMilestone
+              ? "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-500/25 text-amber-500 dark:bg-amber-500/30 dark:text-amber-300"
+              : "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-orange-500/15 text-orange-500 dark:bg-orange-500/20 dark:text-orange-300"
+          }
+        >
+          {isMilestone ? <Sparkles className="h-4 w-4" /> : <Flame className="h-4 w-4" />}
         </span>
         <div className="space-y-0.5">
           <p className="text-[15px] font-semibold leading-tight">
-            {titleFor(currentStreak)}
+            {titleFor({ currentStreak, isMilestone, milestoneDay })}
           </p>
           {xpAwarded > 0 && (
             <p className="text-xs text-muted-foreground">
@@ -72,26 +129,28 @@ export function StreakToast({
               · {reason}
             </p>
           )}
+          {graceUsed && !isMilestone && (
+            <p className="text-[11px] text-muted-foreground/80">
+              Grace day used — your streak is safe.
+            </p>
+          )}
         </div>
       </div>
 
       <div
         className="mt-3.5 mb-1 flex items-center gap-0"
-        aria-label={`Streak progress: ${completed} of ${target} days`}
+        aria-label={`Streak progress: day ${currentStreak} of ${giftDay}`}
       >
-        {Array.from({ length: target }).map((_, idx) => {
-          const dayNumber = idx + 1;
-          const isLast = dayNumber === target;
-          const isCompleted = dayNumber <= completed;
-          // Connector sits to the right of every node except the last. It's
-          // active only when BOTH bookend nodes are completed (so a half-done
-          // streak draws a half-coloured chain).
-          const nextCompleted = dayNumber + 1 <= completed;
+        {slots.map((dayNumber, idx) => {
+          const isLastSlot = idx === slots.length - 1;
+          const isGift = dayNumber === giftDay;
+          const isCompleted = dayNumber <= currentStreak;
+          const nextCompleted = dayNumber + 1 <= currentStreak;
           const connectorActive = isCompleted && nextCompleted;
 
-          const nodeClasses = isLast
-            ? giftEarned
-              ? "bg-orange-500 text-white shadow-[0_0_0_3px_rgba(249,115,22,0.18)]"
+          const nodeClasses = isGift
+            ? isCompleted
+              ? "bg-amber-500 text-white shadow-[0_0_0_3px_rgba(245,158,11,0.25)]"
               : "bg-muted text-muted-foreground"
             : isCompleted
               ? "bg-orange-500 text-white shadow-[0_0_0_3px_rgba(249,115,22,0.18)]"
@@ -100,19 +159,19 @@ export function StreakToast({
           return (
             <div
               key={dayNumber}
-              className={`flex items-center ${isLast ? "" : "flex-1"}`}
+              className={`flex items-center ${isLastSlot ? "" : "flex-1"}`}
             >
               <div
                 className={`relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-colors ${nodeClasses}`}
-                data-testid={`streak-dot-${dayNumber}${isLast ? "-gift" : ""}`}
+                data-testid={`streak-dot-${dayNumber}${isGift ? "-gift" : ""}`}
               >
-                {isLast ? (
+                {isGift ? (
                   <Gift className="h-3.5 w-3.5" />
                 ) : isCompleted ? (
                   <Check className="h-3.5 w-3.5" strokeWidth={3} />
                 ) : null}
               </div>
-              {!isLast && (
+              {!isLastSlot && (
                 <div
                   className={`h-[2px] flex-1 ${
                     connectorActive
@@ -128,9 +187,16 @@ export function StreakToast({
 
       <div className="mt-3 space-y-1">
         <p className="text-[13px] text-foreground/90">{STREAK_REWARD_TEASE}</p>
-        {currentStreak < target && (
+        {daysToNext !== null && daysToNext > 0 && !isMilestone && (
           <p className="text-[12px] text-muted-foreground">
-            {STREAK_TARGET_REWARD_COPY}
+            {daysToNext === 1
+              ? `1 day to your Day ${nextMilestone} milestone.`
+              : `${daysToNext} days to your Day ${nextMilestone} milestone.`}
+          </p>
+        )}
+        {beatsBest && (
+          <p className="text-[12px] text-amber-600 dark:text-amber-400 font-medium">
+            New personal best.
           </p>
         )}
       </div>

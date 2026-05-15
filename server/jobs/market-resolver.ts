@@ -331,10 +331,18 @@ export async function settleMarketBets(marketId: string, winnerEntryId: string, 
       .set({ resolutionStatus: "loser" })
       .where(and(eq(marketEntries.marketId, marketId), sql`${marketEntries.id} != ${winnerEntryId}`));
 
+    // Recompute the cached win rate per user touched by this settlement.
+    // NOTE (streak overhaul): we deliberately no longer write
+    // profiles.currentStreak from here. That column is now reserved for
+    // the daily-login streak (see /api/gamification/daily-checkin and
+    // shared/streak-config.ts). A dedicated prediction win-streak is
+    // deferred to a future Predict overhaul; until then prediction XP
+    // (+100 prediction_win) is unaffected and continues to flow through
+    // the awardXp action handler.
     const uniqueUserIds = Array.from(new Set(allBets.map(b => b.userId)));
     for (const userId of uniqueUserIds) {
       const resolvedBets = await tx
-        .select({ status: marketBets.status, settledAt: marketBets.settledAt })
+        .select({ status: marketBets.status })
         .from(marketBets)
         .where(and(
           eq(marketBets.userId, userId),
@@ -347,18 +355,8 @@ export async function settleMarketBets(marketId: string, winnerEntryId: string, 
         ? Math.round((wonCount / totalResolved) * 1000) / 10
         : 0;
 
-      const sortedDesc = resolvedBets
-        .filter(b => b.settledAt != null)
-        .sort((a, b) => new Date(b.settledAt!).getTime() - new Date(a.settledAt!).getTime());
-
-      let currentStreak = 0;
-      for (const bet of sortedDesc) {
-        if (bet.status === 'won') currentStreak++;
-        else break;
-      }
-
       await tx.update(profiles)
-        .set({ winRate, currentStreak })
+        .set({ winRate })
         .where(eq(profiles.id, userId));
     }
 

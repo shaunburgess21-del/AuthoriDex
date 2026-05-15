@@ -13,6 +13,7 @@ import {
 import { and, desc, eq, gte, inArray, isNull, lte, lt, sql } from "drizzle-orm";
 import { log } from "../log";
 import { createNotification } from "../services/notifications";
+import { STREAK_MILESTONES } from "@shared/streak-config";
 
 /**
  * Derivation jobs for in-app notifications.
@@ -39,8 +40,6 @@ const DERIVATION_LOCK_KEY = 5_207;
 // noise. We only run hourly so the actual lead time varies 5–6h.
 const MARKET_CLOSING_SOON_WINDOW_MS = 6 * 60 * 60 * 1000;
 const MARKET_CLOSING_SOON_GRACE_MS = 30 * 60 * 1000;
-
-const STREAK_MILESTONES = [3, 7, 14, 30, 100] as const;
 
 // Hot mover threshold mirrors the trending-people "hot mover" pill in
 // the favorites dashboard — exceptional 24h move, not garden-variety.

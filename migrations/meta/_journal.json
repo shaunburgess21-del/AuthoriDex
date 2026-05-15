@@ -393,6 +393,13 @@
       "when": 1778880000000,
       "tag": "0055_profiles_positions_public",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1779225600000,
+      "tag": "0056_streak_overhaul",
+      "breakpoints": true
     }
   ]
 }

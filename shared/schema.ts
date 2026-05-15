@@ -831,6 +831,16 @@ export const profiles = pgTable("profiles", {
   xpPoints: integer("xp_points").notNull().default(0),
   predictCredits: integer("predict_credits").notNull().default(1000),
   currentStreak: integer("current_streak").notNull().default(0),
+  // Highest streak the user has ever reached. Lazily promoted whenever
+  // currentStreak crosses its previous peak (see daily-checkin endpoint).
+  // Survives streak resets so the UI can show "your best was N days".
+  longestStreak: integer("longest_streak").notNull().default(0),
+  // ISO date string (YYYY-MM-DD, UTC) for the last day this user
+  // completed daily check-in. Authoritative input to the streak state
+  // machine: today => idempotent, yesterday => increment, two days ago
+  // => grace-day increment, older => reset to 1. Nullable for accounts
+  // that have never checked in.
+  lastLoginDate: text("last_login_date"),
   totalVotes: integer("total_votes").notNull().default(0),
   totalPredictions: integer("total_predictions").notNull().default(0),
   winRate: real("win_rate").notNull().default(0),

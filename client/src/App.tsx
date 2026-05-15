@@ -15,7 +15,7 @@ import { ScrollToTop } from "@/components/ScrollToTop";
 import { XpBurstProvider } from "@/components/XpBurstProvider";
 import { ShareCardProvider } from "@/contexts/ShareCardContext";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useXpCelebration } from "@/hooks/useGamification";
+import { useDailyCheckin, useXpCelebration } from "@/hooks/useGamification";
 import { useNotificationsRealtime } from "@/hooks/useNotificationsRealtime";
 import { initGoogleAnalytics, trackGooglePageView } from "@/lib/analytics";
 
@@ -168,6 +168,9 @@ function Router() {
 function XpCelebrationWatcher() {
   const { isLoggedIn } = useAuth();
   useXpCelebration(isLoggedIn);
+  // Daily streak check-in lives alongside the celebration watcher so
+  // its toast/burst output flows through the same XpBurstProvider tree.
+  useDailyCheckin(isLoggedIn);
   return null;
 }
 

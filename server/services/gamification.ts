@@ -38,6 +38,8 @@ interface UserStats {
   predictCredits: number;
   rank: Rank | null;
   currentStreak: number;
+  longestStreak: number;
+  lastLoginDate: string | null;
   capabilities: Record<Capability, boolean>;
 }
 
@@ -428,6 +430,8 @@ class GamificationService {
       predictCredits: profile.predictCredits,
       rank: userRank || null,
       currentStreak: profile.currentStreak,
+      longestStreak: profile.longestStreak,
+      lastLoginDate: profile.lastLoginDate,
       capabilities
     };
   }

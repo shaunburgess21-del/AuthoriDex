@@ -7,6 +7,11 @@
 import { db } from "../db";
 import { xpActions, xpLedger, profiles, ranks } from "@shared/schema";
 import { eq, sql } from "drizzle-orm";
+import {
+  STREAK_MILESTONES,
+  STREAK_MILESTONE_XP,
+  streakMilestoneActionKey,
+} from "@shared/streak-config";
 
 async function seedXpActions() {
   console.log("[Gamification] Seeding XP actions...");
@@ -33,10 +38,22 @@ async function seedXpActions() {
     { actionKey: 'place_prediction', displayName: 'Place Prediction', xpValue: 20, dailyCap: 10, description: 'Place a prediction on a market' },
     { actionKey: 'prediction_win', displayName: 'Prediction Win', xpValue: 100, dailyCap: null, description: 'Win a prediction (bonus XP)' },
     
-    // Streak & Bonus Actions
+    // Streak & Bonus Actions. The per-milestone rows below are
+    // generated from shared/streak-config.ts so the seed, the
+    // daily-checkin handler, and the HowItWorks page can never disagree
+    // on amounts. dailyCap is null on milestones (the lifetime
+    // idempotency key `streak_milestone_<n>_<userId>` is what enforces
+    // "once per user per milestone" — no calendar cap needed).
     { actionKey: 'daily_login', displayName: 'Daily Login', xpValue: 10, dailyCap: 1, description: 'Log in daily to earn streak bonus' },
-    { actionKey: 'streak_bonus', displayName: 'Streak Bonus', xpValue: 25, dailyCap: 1, description: 'Bonus XP for maintaining streak' },
-    
+    { actionKey: 'streak_bonus', displayName: 'Streak Bonus', xpValue: 25, dailyCap: 1, description: 'Bonus XP for maintaining a multi-day streak' },
+    ...STREAK_MILESTONES.map((day) => ({
+      actionKey: streakMilestoneActionKey(day),
+      displayName: `Streak Milestone — Day ${day}`,
+      xpValue: STREAK_MILESTONE_XP[day],
+      dailyCap: null as number | null,
+      description: `One-time bonus for reaching a ${day}-day login streak`,
+    })),
+
     // Special Actions (no cap for admin use)
     { actionKey: 'legacy_migration', displayName: 'Legacy Migration', xpValue: 0, dailyCap: null, description: 'XP from legacy system migration' },
     { actionKey: 'admin_adjustment', displayName: 'Admin Adjustment', xpValue: 0, dailyCap: null, description: 'Manual XP adjustment by admin' },

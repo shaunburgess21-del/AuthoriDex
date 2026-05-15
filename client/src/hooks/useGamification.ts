@@ -37,9 +37,24 @@ interface UserStats {
   predictCredits: number;
   rank: Rank | null;
   currentStreak: number;
+  longestStreak: number;
+  lastLoginDate: string | null;
   capabilities: Record<Capability, boolean>;
-  /** Present when a daily_login (+ optional streak_bonus) award fired this call. Null otherwise. */
-  xp?: { xpAwarded: number; reason: string } | null;
+}
+
+/**
+ * Response shape for POST /api/gamification/daily-checkin. Mirrors
+ * the server contract in server/route-modules/gamification-routes.ts.
+ */
+interface DailyCheckinResponse {
+  streak: number;
+  longestStreak: number;
+  xpAwarded: number;
+  isMilestone: boolean;
+  milestoneDay?: number;
+  graceUsed?: boolean;
+  bonusActionKey?: string | null;
+  alreadyCheckedIn: boolean;
 }
 
 interface AwardXpResult {
@@ -173,18 +188,17 @@ export function usePermissions() {
   };
 }
 
+/**
+ * Watches user stats for rank-up transitions and fires a celebratory
+ * toast when the same user crosses a tier mid-session. The daily-login
+ * + streak burst that used to live here moved into useDailyCheckin
+ * after the streak overhaul — that change made GET stats a pure read
+ * and put the toast on the authoritative POST response.
+ */
 export function useXpCelebration(enabled: boolean = true) {
   const { data: stats } = useUserStats(enabled);
   const { data: ranks } = useRanks();
-  const { trigger: triggerXpBurst } = useXpBurst();
   const prevRef = useRef<{ xp: number; rank: string; userId: string } | null>(null);
-  const firedLoginBurstRef = useRef<string | null>(null);
-  // Per-UTC-day dedupe key for the streak toast. Reset on user change so an
-  // account switch in the same browser session doesn't suppress the toast
-  // for the new user. The XP-payload dedupe (firedLoginBurstRef) covers
-  // multi-render cases; this ref additionally guards against a same-user,
-  // same-day refetch surfacing the same payload again.
-  const firedStreakToastRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!stats) return;
@@ -193,55 +207,8 @@ export function useXpCelebration(enabled: boolean = true) {
     const currentRank = stats.rank?.name ?? 'Citizen';
     const currentUserId = stats.userId;
 
-    // Detect user-identity change BEFORE running the burst-dedupe block so
-    // we can reset the per-user dedupe key — otherwise user B might miss
-    // their daily burst if user A's key happened to match (e.g. both
-    // received "+30:daily_login" in the same browser session).
     const userChanged =
       prevRef.current !== null && prevRef.current.userId !== currentUserId;
-    if (userChanged) {
-      firedLoginBurstRef.current = null;
-      firedStreakToastRef.current = null;
-    }
-
-    // Daily-login + streak-bonus: fire a burst the first time we see an xp
-    // payload for this page-session. The server only returns xp once per UTC
-    // day (idempotent); we additionally de-dupe against re-renders by keying
-    // on xpAwarded + reason so two identical payloads won't fire twice.
-    if (stats.xp && stats.xp.xpAwarded > 0) {
-      const key = `${stats.xp.xpAwarded}:${stats.xp.reason}`;
-      if (firedLoginBurstRef.current !== key) {
-        firedLoginBurstRef.current = key;
-        triggerXpBurst(stats.xp.xpAwarded, undefined, stats.xp.reason);
-      }
-
-      // Streak check-in toast — fires alongside the burst (delayed slightly
-      // so the two don't compete visually). Dedupe key combines UTC date +
-      // user so a same-day refetch doesn't re-surface, but a fresh UTC day
-      // (or account switch) gets a fresh toast.
-      const utcToday = new Date().toISOString().split("T")[0];
-      const streakKey = `${currentUserId}:${utcToday}`;
-      if (firedStreakToastRef.current !== streakKey) {
-        firedStreakToastRef.current = streakKey;
-        const xpAwarded = stats.xp.xpAwarded;
-        const reason = stats.xp.reason;
-        const currentStreak = stats.currentStreak;
-        // setTimeout intentionally not cleaned up: a sub-400ms unmount is
-        // unlikely, and the dedupe ref above keeps a re-fire harmless.
-        setTimeout(() => {
-          toast.custom(
-            (id) =>
-              createElement(StreakToast, {
-                currentStreak,
-                xpAwarded,
-                reason,
-                onClose: () => toast.dismiss(id),
-              }),
-            { duration: STREAK_TOAST_DURATION_MS },
-          );
-        }, STREAK_TOAST_DELAY_MS);
-      }
-    }
 
     // Initial baseline OR user identity changed (sign-in, sign-out, account
     // switch). Either case must rebaseline silently — rank-up toasts should
@@ -264,7 +231,92 @@ export function useXpCelebration(enabled: boolean = true) {
     }
 
     prevRef.current = { xp: currentXp, rank: currentRank, userId: currentUserId };
-  }, [stats, ranks, triggerXpBurst]);
+  }, [stats, ranks]);
+}
+
+/**
+ * Module-level guard so the daily check-in fires at most once per
+ * page lifetime per user. We intentionally use a module-level Set
+ * (rather than sessionStorage) so a refresh DOES re-fire — refreshing
+ * is a strong signal of user activity that we want to credit. A second
+ * call from the same tab is the case we're guarding against (e.g. a
+ * StrictMode double-mount or two components both invoking the hook).
+ */
+const checkedInUserIds = new Set<string>();
+
+/**
+ * Fires POST /api/gamification/daily-checkin exactly once per
+ * authenticated user per page lifetime. On a successful response with
+ * xpAwarded > 0, triggers the XP burst and the streak toast.
+ *
+ * Mounted from <App /> alongside <XpCelebrationWatcher />. The hook
+ * is a no-op when `enabled` is false (e.g. logged out).
+ */
+export function useDailyCheckin(enabled: boolean = true) {
+  const { data: stats } = useUserStats(enabled);
+  const { trigger: triggerXpBurst } = useXpBurst();
+
+  useEffect(() => {
+    if (!enabled || !stats) return;
+    const userId = stats.userId;
+    if (!userId || checkedInUserIds.has(userId)) return;
+    checkedInUserIds.add(userId);
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await apiRequest("POST", "/api/gamification/daily-checkin");
+        if (!res.ok) return;
+        const data = (await res.json()) as DailyCheckinResponse;
+        if (cancelled) return;
+
+        // Refresh /stats so any UI bound to currentStreak / longestStreak /
+        // xpPoints / lastLoginDate reflects the new values. We don't await
+        // — the celebration animations don't need it to land first.
+        queryClient.invalidateQueries({ queryKey: ['/api/gamification/stats'] });
+
+        if (data.xpAwarded > 0) {
+          const reason = data.isMilestone
+            ? `Day ${data.milestoneDay} milestone`
+            : data.streak > 1
+              ? "Daily login + streak bonus"
+              : "Daily login";
+
+          triggerXpBurst(data.xpAwarded, undefined, reason);
+
+          // Slight delay so the burst lands first, then the toast.
+          setTimeout(() => {
+            toast.custom(
+              (id) =>
+                createElement(StreakToast, {
+                  currentStreak: data.streak,
+                  longestStreak: data.longestStreak,
+                  xpAwarded: data.xpAwarded,
+                  reason,
+                  isMilestone: data.isMilestone,
+                  milestoneDay: data.milestoneDay,
+                  graceUsed: data.graceUsed ?? false,
+                  onClose: () => toast.dismiss(id),
+                }),
+              { duration: STREAK_TOAST_DURATION_MS },
+            );
+          }, STREAK_TOAST_DELAY_MS);
+        }
+      } catch (err) {
+        // Daily check-in is non-critical — swallow so a transient
+        // failure doesn't pollute the console with red error spam.
+        if (process.env.NODE_ENV !== "production") {
+          console.warn("[daily-checkin] failed", err);
+        }
+        // Allow a retry on the next mount for transient failures.
+        checkedInUserIds.delete(userId);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [enabled, stats, triggerXpBurst]);
 }
 
 export function generateIdempotencyKey(action: string, targetId?: string): string {

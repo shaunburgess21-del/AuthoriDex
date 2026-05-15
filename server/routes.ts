@@ -6986,73 +6986,20 @@ Only return the JSON object.`;
   // GAMIFICATION ROUTES
   // ============================================================================
 
-  // Get user gamification stats (XP, rank, capabilities, credits)
+  // Get user gamification stats (XP, rank, capabilities, credits,
+  // streak snapshot). Pure read endpoint as of the streak overhaul —
+  // all daily-login / streak side effects now live behind
+  // POST /api/gamification/daily-checkin so this can be safely
+  // refetched on focus, prefetched, or hit by multiple tabs without
+  // racing on the streak counter.
   app.get("/api/gamification/stats", requireAuth, async (req: AuthRequest, res) => {
     try {
       const userId = req.userId!;
-
-      // Award daily login XP (idempotent per day)
-      const today = new Date().toISOString().split('T')[0];
-      let loginXp: Awaited<ReturnType<typeof gamificationService.awardXp>> | undefined;
-      let streakXp: Awaited<ReturnType<typeof gamificationService.awardXp>> | undefined;
-      try {
-        loginXp = await gamificationService.awardXp(
-          userId, 'daily_login',
-          `daily_login_${today}_${userId}`,
-          { date: today }
-        );
-
-        if (loginXp?.success) {
-          // Check yesterday's login to maintain/increment streak
-          const yesterday = new Date(Date.now() - 86_400_000).toISOString().split('T')[0];
-          const [yesterdayLogin] = await db.select({ id: xpLedger.id })
-            .from(xpLedger)
-            .where(and(
-              eq(xpLedger.userId, userId),
-              eq(xpLedger.idempotencyKey, `daily_login_${yesterday}_${userId}`)
-            ))
-            .limit(1);
-
-          if (yesterdayLogin) {
-            await db.update(profiles)
-              .set({ currentStreak: sql`${profiles.currentStreak} + 1` })
-              .where(eq(profiles.id, userId));
-
-            try {
-              streakXp = await gamificationService.awardXp(
-                userId, 'streak_bonus',
-                `streak_bonus_${today}_${userId}`,
-                { date: today }
-              );
-            } catch (e) { /* streak bonus already awarded or failed */ }
-          } else {
-            // Reset streak to 1 (today is day 1)
-            await db.update(profiles)
-              .set({ currentStreak: 1 })
-              .where(eq(profiles.id, userId));
-          }
-        }
-      } catch (e) { /* daily login XP already awarded or failed */ }
-
       const stats = await gamificationService.getUserStats(userId);
       if (!stats) {
         return res.status(404).json({ error: "User not found" });
       }
-
-      // Combine login + streak into a single xp payload for the client burst.
-      // Only include when at least one award fired this call — on polls where
-      // XP was already granted today both success flags are false, so the
-      // client won't re-trigger a burst.
-      const loginAwarded = loginXp?.success ? loginXp.xpAwarded : 0;
-      const streakAwarded = streakXp?.success ? streakXp.xpAwarded : 0;
-      const combinedXpAwarded = loginAwarded + streakAwarded;
-      const xp = combinedXpAwarded > 0
-        ? {
-            xpAwarded: combinedXpAwarded,
-            reason: streakAwarded > 0 ? "Daily login + streak bonus" : "Daily login",
-          }
-        : null;
-      res.json({ ...stats, xp });
+      res.json(stats);
     } catch (error: any) {
       console.error("Error fetching user stats:", error.message);
       res.status(500).json({ error: "Failed to fetch user stats" });

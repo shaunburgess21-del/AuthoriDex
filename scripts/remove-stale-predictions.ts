@@ -157,24 +157,22 @@ async function recomputeProfileStats(
   const lostCount = resolvedBets.filter((bet) => bet.status === "lost").length;
   const winRate = roundWinRate(wonCount, lostCount);
 
-  let currentStreak = 0;
-  for (const bet of resolvedBets) {
-    if (bet.status === "won") currentStreak += 1;
-    else break;
-  }
-
+  // Streak overhaul: profiles.current_streak now belongs exclusively
+  // to the daily-login streak (see shared/streak-config.ts and the
+  // /api/gamification/daily-checkin endpoint). Don't dual-write a
+  // prediction-win streak from here. Win streak as a product feature
+  // is deferred to a future Predict overhaul.
   await client.query(
     `
       update profiles
       set total_predictions = $2,
-          win_rate = $3,
-          current_streak = $4
+          win_rate = $3
       where id = $1
     `,
-    [userId, totalPredictions, winRate, currentStreak],
+    [userId, totalPredictions, winRate],
   );
 
-  return { totalPredictions, winRate, currentStreak };
+  return { totalPredictions, winRate };
 }
 
 async function recalcEntryTotals(
@@ -308,8 +306,7 @@ async function run() {
           p.username,
           p.predict_credits,
           p.total_predictions,
-          p.win_rate,
-          p.current_streak
+          p.win_rate
         from profiles p
         where p.id = any($1::text[])
         order by p.username

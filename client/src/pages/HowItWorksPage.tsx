@@ -1,6 +1,10 @@
 import { useMemo, useState } from "react";
 import { useLocation } from "wouter";
-import { ArrowLeft, BookOpen, Info } from "lucide-react";
+import { ArrowLeft, BookOpen, Flame, Info, Sparkles } from "lucide-react";
+import {
+  STREAK_MILESTONES,
+  STREAK_MILESTONE_XP,
+} from "@shared/streak-config";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -274,6 +278,7 @@ function XpSection() {
             {category}
           </h3>
           <XpActionTable rows={rows} />
+          {category === "Streak" && <StreakExplainer />}
         </div>
       ))}
 
@@ -286,6 +291,68 @@ function XpSection() {
         </p>
       </Card>
     </section>
+  );
+}
+
+/**
+ * Plain-language explainer for the streak system. Reads the milestone
+ * ladder from shared/streak-config.ts so amounts shown here are
+ * guaranteed to match what the daily-checkin handler actually awards.
+ */
+function StreakExplainer() {
+  return (
+    <Card className="space-y-4 p-4 border-orange-500/30 bg-gradient-to-br from-orange-500/5 to-transparent">
+      <div className="flex items-start gap-3">
+        <Flame className="mt-0.5 h-5 w-5 shrink-0 text-orange-500" />
+        <div className="space-y-1">
+          <h4 className="font-semibold text-base">How streaks work</h4>
+          <ul className="space-y-1.5 text-sm text-muted-foreground list-disc pl-5">
+            <li>Log in every day to build your streak.</li>
+            <li>
+              Your streak is the number of consecutive days you've been active
+              on VoxDex.
+            </li>
+            <li>
+              Miss a day? You get one grace day — your streak survives a
+              single missed day.
+            </li>
+            <li>Miss two days in a row and your streak resets to 1.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div className="border-t border-border/60 pt-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Sparkles className="h-4 w-4 text-amber-500" />
+          <h4 className="font-semibold text-base">Milestone rewards</h4>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {STREAK_MILESTONES.map((day) => (
+            <div
+              key={day}
+              className="flex items-center justify-between rounded-md bg-muted/40 px-3 py-2"
+              data-testid={`streak-milestone-${day}`}
+            >
+              <span className="text-sm font-medium">Day {day}</span>
+              <span className="font-mono text-sm font-semibold text-amber-600 dark:text-amber-400">
+                +{STREAK_MILESTONE_XP[day]} XP
+              </span>
+            </div>
+          ))}
+        </div>
+        <p className="mt-3 text-xs text-muted-foreground">
+          Each milestone bonus is awarded once per account — they sit on top
+          of your daily login XP and the standard streak bonus.
+        </p>
+      </div>
+
+      <div className="border-t border-border/60 pt-3">
+        <p className="text-xs text-muted-foreground">
+          Prediction wins also earn bonus XP — and a dedicated win streak
+          system is coming to the Predict section.
+        </p>
+      </div>
+    </Card>
   );
 }
 
