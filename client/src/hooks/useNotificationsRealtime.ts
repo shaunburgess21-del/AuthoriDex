@@ -5,6 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { getSupabase } from "@/lib/supabase";
 import { shouldAutoToast } from "@/lib/notifications/registry";
 import { useInvalidateNotifications } from "@/hooks/useNotifications";
+import { dispatchRankUp } from "@/components/RankUpModal";
 
 /**
  * Realtime payload uses raw DB column names (snake_case) — this is
@@ -19,6 +20,15 @@ interface RealtimeNotificationPayload {
   title: string;
   body: string | null;
   href: string | null;
+  /**
+   * Server-attached metadata. For rank_up notifications, contains
+   * `{ newRank, previousRank, xp, newPersonalBest }` — the inputs
+   * <RankUpModal /> needs to render the celebration without a
+   * second round-trip. May be a JSON string or an object depending
+   * on whether the row was hydrated through Drizzle or arrived raw
+   * from Postgres LISTEN; we handle both shapes below.
+   */
+  metadata?: Record<string, unknown> | string | null;
 }
 
 /**
@@ -81,6 +91,26 @@ export function useNotificationsRealtime(): void {
 
               if (!row) return;
 
+              // rank_up — bypass the auto-toast path and open the
+              // RankUpModal instead. The modal needs the metadata
+              // attached by gamificationService.awardXp() so it can
+              // render the new tier name, total XP, and the "New
+              // personal best" badge without a second fetch.
+              if (row.kind === "rank_up") {
+                const meta = parseMetadata(row.metadata);
+                if (meta) {
+                  dispatchRankUp({
+                    newRank: String(meta.newRank ?? row.title),
+                    previousRank: meta.previousRank
+                      ? String(meta.previousRank)
+                      : null,
+                    xp: Number(meta.xp ?? 0),
+                    newPersonalBest: Boolean(meta.newPersonalBest),
+                  });
+                }
+                return;
+              }
+
               // Best-effort toast for high-priority kinds. We use the
               // existing Sonner instance mounted in App.tsx so the
               // styling matches every other toast in the app.
@@ -131,4 +161,24 @@ export function useNotificationsRealtime(): void {
       channelRef?.unsubscribe();
     };
   }, [isLoggedIn, user?.id, invalidate]);
+}
+
+/**
+ * The realtime payload's `metadata` field can arrive as a JSON-encoded
+ * string (when the row is read by the Postgres LISTEN payload format)
+ * or as an already-parsed object (when Supabase Realtime hands us a
+ * deserialised JSONB column). Tolerate both, fail closed on malformed
+ * input rather than crashing the realtime subscriber.
+ */
+function parseMetadata(
+  raw: Record<string, unknown> | string | null | undefined,
+): Record<string, unknown> | null {
+  if (!raw) return null;
+  if (typeof raw === "object") return raw;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
 }

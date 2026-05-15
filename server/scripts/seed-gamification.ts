@@ -12,6 +12,7 @@ import {
   STREAK_MILESTONE_XP,
   streakMilestoneActionKey,
 } from "@shared/streak-config";
+import { RANKS } from "@shared/rank-config";
 
 /**
  * Action keys that have been retired from the live catalogue. They're
@@ -108,17 +109,12 @@ async function seedXpActions() {
 
 async function seedRanks() {
   console.log("[Gamification] Seeding ranks...");
-  
-  const rankData = [
-    { name: 'Citizen', tier: 1, minXp: 0, maxXp: 499, voteMultiplier: 1.0, color: '#6B7280', icon: 'user', description: 'Welcome to VoxDex. Every VoxMaxxer starts here.' },
-    { name: 'Aspirant', tier: 2, minXp: 500, maxXp: 1999, voteMultiplier: 1.0, color: '#10B981', icon: 'trending-up', description: "You're finding your voice. Keep VoxMaxxing." },
-    { name: 'Insider', tier: 3, minXp: 2000, maxXp: 4999, voteMultiplier: 1.25, color: '#3B82F6', icon: 'eye', description: 'You know how VoxDex works. Your perspective matters.' },
-    { name: 'Analyst', tier: 4, minXp: 5000, maxXp: 9999, voteMultiplier: 1.5, color: '#8B5CF6', icon: 'bar-chart', description: 'A sharp read on the room. Your votes carry weight.' },
-    { name: 'Expert', tier: 5, minXp: 10000, maxXp: 24999, voteMultiplier: 1.75, color: '#F59E0B', icon: 'award', description: 'Deep knowledge, consistent takes. Others follow your lead.' },
-    { name: 'Maven', tier: 6, minXp: 25000, maxXp: 49999, voteMultiplier: 2.0, color: '#EF4444', icon: 'star', description: 'Elite tier. Your predictions and calls set the pace.' },
-    { name: 'Hall of Famer', tier: 7, minXp: 50000, maxXp: 149999, voteMultiplier: 2.5, color: '#FFD700', icon: 'crown', description: 'Legendary status. A veteran of the VoxDex arena.' },
-    { name: 'VoxMax Legend', tier: 8, minXp: 150000, maxXp: null, voteMultiplier: 3.0, color: '#E5E4E2', icon: 'sparkles', description: 'The rarest status on VoxDex — reserved for those who reach the summit.' },
-  ];
+
+  // Source of truth lives in shared/rank-config.ts so the seed,
+  // the client RankLadderStrip, the Ranks tab, and the RankUpModal
+  // all read the same table. Threshold rebalances are a single-file
+  // edit with no client/server drift surface.
+  const rankData = RANKS;
 
   for (const rank of rankData) {
     const existing = await db.select().from(ranks).where(eq(ranks.tier, rank.tier)).limit(1);

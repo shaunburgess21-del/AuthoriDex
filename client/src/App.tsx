@@ -14,6 +14,7 @@ import { PWAUpdatePrompt } from "@/components/PWAUpdatePrompt";
 import { ScrollToTop } from "@/components/ScrollToTop";
 import { XpBurstProvider } from "@/components/XpBurstProvider";
 import { ShareCardProvider } from "@/contexts/ShareCardContext";
+import { RankUpModalHost } from "@/components/RankUpModal";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDailyCheckin, useXpCelebration } from "@/hooks/useGamification";
 import { useNotificationsRealtime } from "@/hooks/useNotificationsRealtime";
@@ -341,6 +342,7 @@ function App() {
               <NewUserGate />
               <InterestsGate />
               <NotificationsRealtimeWatcher />
+              <RankUpModalHost />
               <AnalyticsWatcher />
               <XpBurstProvider>
                 {/* Watcher is inside XpBurstProvider so useXpCelebration can fire daily-login bursts via useXpBurst. */}

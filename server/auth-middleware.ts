@@ -5,6 +5,11 @@ import { db } from "./db";
 import { profiles } from "@shared/schema";
 import { isAdminRole, resolveProfileRole } from "./utils/authz";
 import { readFdxSid } from "./lib/anonIdentity";
+import { gamificationService } from "./services/gamification";
+import {
+  minTierForCapability,
+  type Capability,
+} from "./services/gamification-utils";
 
 function requireEnv(name: "SUPABASE_URL" | "SUPABASE_ANON_KEY"): string {
   const value = process.env[name]?.trim();
@@ -108,6 +113,73 @@ export async function requireAdmin(req: AuthRequest, res: Response, next: NextFu
   }
 
   next();
+}
+
+/**
+ * Tier-gated authorisation middleware. Use AFTER requireAuth.
+ *
+ * Resolves the requested capability against the canonical
+ * `CAPABILITY_GATES` matrix in shared/rank-config.ts and returns
+ * 403 with a structured payload if the user's tier is below the
+ * threshold. Returning the threshold (and capability key) in the
+ * response lets the client surface a "ranks up to unlock" prompt
+ * without making a second round-trip.
+ *
+ * Usage:
+ *   router.post(
+ *     "/api/community-insights",
+ *     requireAuth,
+ *     requireMinTier("can_post_insight"),
+ *     handler,
+ *   );
+ *
+ * Failure modes:
+ *   - Pass-through if the request is anonymous (no req.userId).
+ *     Mixed-auth routes (e.g. induction voting, which accepts anon
+ *     votes against a budget) layer requireMinTier after optionalAuth
+ *     so authed users get tier-gated and anons fall through to the
+ *     budget logic. Routes that should reject anons entirely must
+ *     pair requireMinTier with requireAuth.
+ *   - 403 if the user's rank tier is below the gate. Includes the
+ *     required tier and capability key in the body.
+ *   - 500 on an unexpected DB / cache failure. We choose 500 over
+ *     fail-open so a transient gamification outage can't accidentally
+ *     unlock gated actions for everyone.
+ */
+export function requireMinTier(capability: Capability) {
+  const minTier = minTierForCapability(capability);
+
+  return async function requireMinTierMiddleware(
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction,
+  ) {
+    if (!req.userId) {
+      // Anonymous request — defer to whatever follows. See docblock
+      // for the mixed-auth pattern (optionalAuth + requireMinTier).
+      return next();
+    }
+
+    try {
+      const allowed = await gamificationService.checkPermission(
+        req.userId,
+        capability,
+      );
+      if (!allowed) {
+        return res.status(403).json({
+          error: "Insufficient rank",
+          required: minTier,
+          capability,
+        });
+      }
+      next();
+    } catch (err) {
+      console.error("[requireMinTier] permission check failed", err);
+      return res
+        .status(500)
+        .json({ error: "Internal server error" });
+    }
+  };
 }
 
 // Same token-reuse logic as requireAuth. If global middleware already

@@ -1,5 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useRef, useEffect, createElement } from "react";
+import { useEffect, createElement } from "react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { toast } from "sonner";
 import { useXpBurst } from "@/components/XpBurstProvider";
@@ -36,6 +36,8 @@ interface UserStats {
   xpPoints: number;
   predictCredits: number;
   rank: Rank | null;
+  /** Peak rank ever reached. Null on legacy rows pre-backfill. */
+  highestRank: Rank | null;
   currentStreak: number;
   longestStreak: number;
   lastLoginDate: string | null;
@@ -189,49 +191,21 @@ export function usePermissions() {
 }
 
 /**
- * Watches user stats for rank-up transitions and fires a celebratory
- * toast when the same user crosses a tier mid-session. The daily-login
- * + streak burst that used to live here moved into useDailyCheckin
- * after the streak overhaul — that change made GET stats a pure read
- * and put the toast on the authoritative POST response.
+ * Previously diffed `useUserStats` polling output to fire a rank-up
+ * toast when the same user crossed a tier mid-session. That created
+ * a race with the realtime `rank_up` notification path, which now
+ * drives the RankUpModal — both fired on the same promotion and
+ * users saw a duplicated celebration.
+ *
+ * After the ranks overhaul, all rank-up celebrations route through
+ * the realtime notification (Path A) → RankUpModal. We keep the
+ * exported hook (no-op) so existing call sites don't need to be
+ * reworked, and so future client-side celebration triggers have an
+ * obvious mounting point.
  */
-export function useXpCelebration(enabled: boolean = true) {
-  const { data: stats } = useUserStats(enabled);
-  const { data: ranks } = useRanks();
-  const prevRef = useRef<{ xp: number; rank: string; userId: string } | null>(null);
-
-  useEffect(() => {
-    if (!stats) return;
-
-    const currentXp = stats.xpPoints;
-    const currentRank = stats.rank?.name ?? 'Citizen';
-    const currentUserId = stats.userId;
-
-    const userChanged =
-      prevRef.current !== null && prevRef.current.userId !== currentUserId;
-
-    // Initial baseline OR user identity changed (sign-in, sign-out, account
-    // switch). Either case must rebaseline silently — rank-up toasts should
-    // only ever fire when the *same* user crosses a tier mid-session.
-    if (prevRef.current === null || userChanged) {
-      prevRef.current = { xp: currentXp, rank: currentRank, userId: currentUserId };
-      return;
-    }
-
-    const prev = prevRef.current;
-
-    if (currentRank !== prev.rank && ranks && ranks.length > 0) {
-      const prevTier = ranks.find(r => r.name === prev.rank)?.tier ?? 0;
-      const currentTier = ranks.find(r => r.name === currentRank)?.tier ?? 0;
-      if (currentTier > prevTier) {
-        toast.success(`Rank Up: ${currentRank}!`, {
-          description: `You've reached the ${currentRank} rank. Keep going!`,
-        });
-      }
-    }
-
-    prevRef.current = { xp: currentXp, rank: currentRank, userId: currentUserId };
-  }, [stats, ranks]);
+export function useXpCelebration(_enabled: boolean = true) {
+  // Intentionally empty — see docblock. Prefer touching
+  // RankUpModal / useNotificationsRealtime for new rank celebrations.
 }
 
 /**

@@ -3,33 +3,12 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
-import { ArrowLeft, User, Star, TrendingUp, Settings, LogOut, Vote, Wallet, Shield, Trophy, Sparkles, Eye, Lock, Flame, CreditCard } from "lucide-react";
+import { ArrowLeft, User, Star, TrendingUp, Settings, LogOut, Vote, Wallet, Shield, Trophy, Eye, Lock, Flame, CreditCard } from "lucide-react";
 import { useLocation } from "wouter";
 import { navigateToLogin } from "@/lib/authReturn";
 import { useAuth } from "@/contexts/AuthContext";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
-
-function RankBadge({ rank }: { rank: string }) {
-  const badgeConfig: Record<string, { color: string; icon: typeof Shield }> = {
-    "Citizen": { color: "bg-blue-500/25 dark:bg-blue-500/20 text-blue-500 dark:text-blue-300 border-blue-500/40 dark:border-blue-500/30", icon: Shield },
-    "Engaged": { color: "bg-green-500/25 dark:bg-green-500/20 text-green-500 dark:text-green-300 border-green-500/40 dark:border-green-500/30", icon: Shield },
-    "Contributor": { color: "bg-teal-500/25 dark:bg-teal-500/20 text-teal-500 dark:text-teal-300 border-teal-500/40 dark:border-teal-500/30", icon: Sparkles },
-    "Influencer": { color: "bg-purple-500/25 dark:bg-purple-500/20 text-purple-500 dark:text-purple-300 border-purple-500/40 dark:border-purple-500/30", icon: Sparkles },
-    "Trendsetter": { color: "bg-pink-500/25 dark:bg-pink-500/20 text-pink-500 dark:text-pink-300 border-pink-500/40 dark:border-pink-500/30", icon: Sparkles },
-    "Fame Maker": { color: "bg-orange-500/25 dark:bg-orange-500/20 text-orange-500 dark:text-orange-300 border-orange-500/40 dark:border-orange-500/30", icon: Trophy },
-    "Hall of Famer": { color: "bg-amber-500/25 dark:bg-amber-500/20 text-amber-500 dark:text-amber-300 border-amber-500/40 dark:border-amber-500/30", icon: Trophy },
-  };
-
-  const config = badgeConfig[rank] || badgeConfig["Citizen"];
-  const Icon = config.icon;
-
-  return (
-    <Badge variant="outline" className={`${config.color} px-3 py-1 gap-1.5`}>
-      <Icon className="h-3 w-3" />
-      {rank}
-    </Badge>
-  );
-}
+import { UserRankBadge } from "@/components/UserRankBadge";
 
 export default function MePage() {
   const { user, profile, profileLoading, isAdmin, signOut } = useAuth();
@@ -117,7 +96,7 @@ export default function MePage() {
                   </div>
                   <p className="text-sm text-muted-foreground">@{profile?.username || "user"}</p>
                   <div className="flex items-center gap-2 mt-2 flex-wrap">
-                    <RankBadge rank={profile?.rank || "Citizen"} />
+                    <UserRankBadge rank={profile?.rank || "Citizen"} />
                     <Badge variant="outline" className="text-amber-600 dark:text-amber-400 px-3 py-1">
                       {(profile?.xpPoints || 0).toLocaleString('en-US')} XP
                     </Badge>

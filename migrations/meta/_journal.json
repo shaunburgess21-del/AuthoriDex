@@ -400,6 +400,13 @@
       "when": 1779225600000,
       "tag": "0056_streak_overhaul",
       "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1779312000000,
+      "tag": "0057_ranks_overhaul",
+      "breakpoints": true
     }
   ]
 }

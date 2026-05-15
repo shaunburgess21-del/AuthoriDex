@@ -3,6 +3,7 @@ import { useLocation, Link } from "wouter";
 import { useAuth, UserProfile } from "@/contexts/AuthContext";
 import { useThemeToggle } from "@/hooks/useThemeToggle";
 import { useRanks } from "@/hooks/useGamification";
+import { UserRankBadge } from "@/components/UserRankBadge";
 import { navigateToLogin } from "@/lib/authReturn";
 import {
   DropdownMenu,
@@ -29,8 +30,6 @@ import {
   LogOut, 
   Sun, 
   Moon, 
-  Shield, 
-  Sparkles,
   ChevronRight,
   TrendingUp,
   Zap,
@@ -55,27 +54,10 @@ function useMediaQuery(query: string) {
   return matches;
 }
 
-function RankBadgeDisplay({ rank }: { rank: string }) {
-  const badgeConfig: Record<string, { color: string; icon: typeof User }> = {
-    "Citizen": { color: "bg-gray-500/25 dark:bg-gray-500/20 text-gray-500 dark:text-gray-300 border-gray-500/40 dark:border-gray-500/30", icon: Shield },
-    "Aspirant": { color: "bg-green-500/25 dark:bg-green-500/20 text-green-500 dark:text-green-300 border-green-500/40 dark:border-green-500/30", icon: Shield },
-    "Insider": { color: "bg-blue-500/25 dark:bg-blue-500/20 text-blue-500 dark:text-blue-300 border-blue-500/40 dark:border-blue-500/30", icon: Sparkles },
-    "Analyst": { color: "bg-purple-500/25 dark:bg-purple-500/20 text-purple-500 dark:text-purple-300 border-purple-500/40 dark:border-purple-500/30", icon: Sparkles },
-    "Expert": { color: "bg-amber-500/25 dark:bg-amber-500/20 text-amber-500 dark:text-amber-300 border-amber-500/40 dark:border-amber-500/30", icon: Trophy },
-    "Maven": { color: "bg-red-500/25 dark:bg-red-500/20 text-red-500 dark:text-red-300 border-red-500/40 dark:border-red-500/30", icon: Trophy },
-    "Hall of Famer": { color: "bg-yellow-500/25 dark:bg-yellow-500/20 text-yellow-500 dark:text-yellow-300 border-yellow-500/40 dark:border-yellow-500/30", icon: Trophy },
-  };
-
-  const config = badgeConfig[rank] || badgeConfig["Citizen"];
-  const Icon = config.icon;
-
-  return (
-    <Badge variant="outline" className={`${config.color} text-xs`}>
-      <Icon className="h-3 w-3 mr-1" />
-      {rank}
-    </Badge>
-  );
-}
+// Rank rendering moved to <UserRankBadge /> — see
+// client/src/components/UserRankBadge.tsx for the canonical
+// implementation. Local map removed as part of the ranks overhaul
+// to fix VoxMax Legend silently falling through to Citizen.
 
 function XPProgressBar({ xp }: { xp: number }) {
   const { data: ranks } = useRanks();
@@ -269,7 +251,7 @@ function UserMenuContent({
               <p className="text-xs text-muted-foreground truncate">@{profile?.username}</p>
             )}
             <div className="mt-1.5">
-              <RankBadgeDisplay rank={profile?.rank || "Citizen"} />
+              <UserRankBadge rank={profile?.rank || "Citizen"} size="sm" />
             </div>
           </div>
         </div>

@@ -827,7 +827,14 @@ export const profiles = pgTable("profiles", {
   // history stays public regardless. Migration: 0055.
   positionsPublic: boolean("positions_public").notNull().default(true),
   role: text("role").notNull().default("user"), // 'user', 'admin', 'moderator'
-  rank: text("rank").notNull().default("Citizen"), // From ranks table: Citizen, Verified, etc.
+  rank: text("rank").notNull().default("Citizen"), // From ranks table: Citizen, Aspirant, Insider, etc.
+  // Highest rank the user has ever reached. Lazily promoted whenever
+  // `rank` crosses a higher tier (see awardXp() in
+  // server/services/gamification.ts). Survives any future rebalance
+  // that demotes users at the bottom of a tier so the UI can show
+  // "your peak was N". Nullable for legacy rows that pre-date the
+  // ranks-overhaul migration; backfilled to current rank on apply.
+  highestRank: text("highest_rank"),
   xpPoints: integer("xp_points").notNull().default(0),
   predictCredits: integer("predict_credits").notNull().default(1000),
   currentStreak: integer("current_streak").notNull().default(0),

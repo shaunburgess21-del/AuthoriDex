@@ -1,26 +1,31 @@
-export type Capability =
-  | 'can_vote_sentiment'
-  | 'can_vote_matchup'
-  | 'can_vote_induction'
-  | 'can_vote_curation'
-  | 'can_post_insight'
-  | 'can_comment'
-  | 'can_predict';
+import { CAPABILITY_MIN_TIER, type Capability } from "@shared/rank-config";
 
+export type { Capability };
+
+/**
+ * Tier-gated capability check. Reads the canonical
+ * (capability → minTier) map from shared/rank-config.ts so the
+ * server, the client UI, and the Ranks tab cannot drift apart.
+ *
+ * Capabilities not listed in CAPABILITY_MIN_TIER are treated as
+ * Tier 1 (open to every authenticated user) — that's the
+ * ungated-baseline tier where can_vote_sentiment / can_vote_matchup
+ * / can_predict live.
+ */
 export function canAccessCapability(tier: number, capability: Capability): boolean {
-  switch (capability) {
-    case 'can_vote_sentiment':
-    case 'can_vote_matchup':
-    case 'can_predict':
-      return true;
-    case 'can_vote_induction':
-    case 'can_vote_curation':
-    case 'can_post_insight':
-    case 'can_comment':
-      return tier >= 2;
-    default:
-      return false;
-  }
+  const required = CAPABILITY_MIN_TIER[capability];
+  if (required === undefined) return true;
+  return tier >= required;
+}
+
+/**
+ * Returns the minimum tier required for a capability. Used by the
+ * requireMinTier middleware to surface the threshold in 403 error
+ * payloads. Defaults to 1 (open) for unknown capabilities so a
+ * forgotten gate doesn't accidentally lock everyone out.
+ */
+export function minTierForCapability(capability: Capability): number {
+  return CAPABILITY_MIN_TIER[capability] ?? 1;
 }
 
 export function computeCreditBalance(currentBalance: number, amount: number): number | null {

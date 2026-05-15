@@ -13,6 +13,7 @@ import { eq, and, sql, gte, desc } from "drizzle-orm";
 import { canAccessCapability, computeCreditBalance, type Capability } from "./gamification-utils";
 import { resolveRankForXp } from "./gamification-ranks";
 import { createNotification } from "./notifications";
+import { ALL_CAPABILITIES } from "@shared/rank-config";
 
 interface AwardXpResult {
   success: boolean;
@@ -37,6 +38,8 @@ interface UserStats {
   xpPoints: number;
   predictCredits: number;
   rank: Rank | null;
+  /** Peak rank ever reached (full row from the ranks cache). */
+  highestRank: Rank | null;
   currentStreak: number;
   longestStreak: number;
   lastLoginDate: string | null;
@@ -109,7 +112,13 @@ class GamificationService {
     // rank name actually changed AND the new tier is higher than the
     // old one — this avoids spurious pings if a future code path ever
     // recomputes rank with the same XP.
-    type RankUpFanout = { previousRank: string | null; newRank: string; newTotalXp: number };
+    type RankUpFanout = {
+      previousRank: string | null;
+      newRank: string;
+      newTotalXp: number;
+      /** True when the new rank also raised highest_rank (new peak). */
+      newPersonalBest: boolean;
+    };
     // The closure-narrowing dance: TypeScript can't see assignments
     // inside the transaction callback, so we hold the value in a
     // single-element ref array instead of a `let`. This keeps the
@@ -210,27 +219,40 @@ class GamificationService {
       const newTotalXp = profile.xpPoints + action.xpValue;
       const nextRank = resolveRankForXp(this.ranksCache, newTotalXp);
 
+      // Promotion + highest_rank lazy promotion both decided in one
+      // pass so the SET clause stays atomic. We only raise highest
+      // when the new tier strictly exceeds the existing peak — never
+      // lower it (that would defeat the "your peak was N" promise).
+      const newRankFull = nextRank
+        ? this.ranksCache.find((r) => r.name === nextRank.name)
+        : undefined;
+      const newTier = newRankFull?.tier ?? -Infinity;
+      const oldTier = this.ranksCache.find((r) => r.name === profile.rank)?.tier ?? -Infinity;
+      const peakTier =
+        this.ranksCache.find((r) => r.name === profile.highestRank)?.tier ?? -Infinity;
+      const raisingPeak = newRankFull !== undefined && newTier > peakTier;
+
       await tx.update(profiles)
         .set({
           xpPoints: newTotalXp,
           rank: nextRank?.name ?? profile.rank,
+          highestRank: raisingPeak ? nextRank!.name : profile.highestRank,
         })
         .where(eq(profiles.id, userId));
 
       if (nextRank && nextRank.name !== profile.rank) {
         // resolveRankForXp() returns the public RankThreshold shape so
-        // we look up the full Rank row in the cache to get the tier
+        // we use the full Rank row resolved above to inspect tier
         // ordering. A change is only a "promotion" (and worth a ping)
         // if the new tier is strictly higher than the old one — guards
         // against any future code path that recomputes rank with the
         // same XP and accidentally regresses.
-        const newRankFull = this.ranksCache.find((r) => r.name === nextRank.name);
-        const oldTier = this.ranksCache.find((r) => r.name === profile.rank)?.tier ?? -Infinity;
-        if (newRankFull && newRankFull.tier > oldTier) {
+        if (newRankFull && newTier > oldTier) {
           rankUpRef.value = {
             previousRank: profile.rank ?? null,
             newRank: nextRank.name,
             newTotalXp,
+            newPersonalBest: raisingPeak,
           };
         }
       }
@@ -264,6 +286,7 @@ class GamificationService {
             previousRank: rankUpFanout.previousRank,
             newRank: rankUpFanout.newRank,
             xp: rankUpFanout.newTotalXp,
+            newPersonalBest: rankUpFanout.newPersonalBest,
           },
           // Idempotent on (user, rank) — even if rank flips back and
           // forth (which shouldn't happen for monotonic XP) we never
@@ -412,16 +435,20 @@ class GamificationService {
     if (!profile) return null;
 
     const userRank = this.ranksCache.find(r => r.name === profile.rank);
+    const peakRank = profile.highestRank
+      ? this.ranksCache.find(r => r.name === profile.highestRank) ?? null
+      : null;
     const tier = userRank?.tier || 1;
-    const capabilities: Record<Capability, boolean> = {
-      can_vote_sentiment: canAccessCapability(tier, 'can_vote_sentiment'),
-      can_vote_matchup: canAccessCapability(tier, 'can_vote_matchup'),
-      can_vote_induction: canAccessCapability(tier, 'can_vote_induction'),
-      can_vote_curation: canAccessCapability(tier, 'can_vote_curation'),
-      can_post_insight: canAccessCapability(tier, 'can_post_insight'),
-      can_comment: canAccessCapability(tier, 'can_comment'),
-      can_predict: canAccessCapability(tier, 'can_predict'),
-    };
+    // Derive the full capability map from ALL_CAPABILITIES so the
+    // API response stays in sync with shared/rank-config.ts. Adding a
+    // new capability there is a one-file change.
+    const capabilities = ALL_CAPABILITIES.reduce(
+      (acc, capability) => {
+        acc[capability] = canAccessCapability(tier, capability);
+        return acc;
+      },
+      {} as Record<Capability, boolean>,
+    );
 
     return {
       userId: profile.id,
@@ -429,6 +456,7 @@ class GamificationService {
       xpPoints: profile.xpPoints,
       predictCredits: profile.predictCredits,
       rank: userRank || null,
+      highestRank: peakRank,
       currentStreak: profile.currentStreak,
       longestStreak: profile.longestStreak,
       lastLoginDate: profile.lastLoginDate,

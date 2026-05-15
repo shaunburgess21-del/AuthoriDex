@@ -11,7 +11,7 @@ import { normaliseSocialHandles, SOCIAL_HANDLE_KEYS } from "@shared/handleNormal
 import { eq, desc, and, gt, sql, count, gte, lte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull, isNull } from "drizzle-orm";
 import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
-import { requireAuth, requireAdmin, optionalAuth, type AuthRequest } from "./auth-middleware";
+import { requireAuth, requireAdmin, optionalAuth, requireMinTier, type AuthRequest } from "./auth-middleware";
 import OpenAI from "openai";
 import { createHash, randomUUID } from "crypto";
 import multer, { MulterError } from "multer";
@@ -3373,7 +3373,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Vote on a celebrity image (for Curate Profile feature)
-  app.post("/api/people/:personId/images/:imageId/vote", requireAuth, async (req: AuthRequest, res) => {
+  app.post("/api/people/:personId/images/:imageId/vote", requireAuth, requireMinTier("can_vote_curation"), async (req: AuthRequest, res) => {
     try {
       const { personId, imageId } = req.params;
       const { direction } = req.body;
@@ -3600,7 +3600,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Create a new community insight (protected route)
-  app.post("/api/community-insights", requireAuth, async (req: AuthRequest, res) => {
+  app.post("/api/community-insights", requireAuth, requireMinTier("can_post_insight"), async (req: AuthRequest, res) => {
     try {
       // Defense in depth: client must not supply author identity. We resolve it
       // server-side from the authenticated profile and attach it to the response.
@@ -5439,7 +5439,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/comments", requireAuth, async (req: AuthRequest, res) => {
+  app.post("/api/comments", requireAuth, requireMinTier("can_comment"), async (req: AuthRequest, res) => {
     try {
       if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "username")) {
         return sendBadRequest(res, "Username is resolved from the authenticated profile");
@@ -21166,7 +21166,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
   });
 
   // POST /api/vote/induction/:id/vote - Auth-or-anon: vote for an induction candidate (one vote per identity per candidate)
-  app.post("/api/vote/induction/:id/vote", optionalAuth, anonVoteIpRateLimit, async (req: AuthRequest, res) => {
+  app.post("/api/vote/induction/:id/vote", optionalAuth, requireMinTier("can_vote_induction"), anonVoteIpRateLimit, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
       const writerId = req.userId || req.sessionId;

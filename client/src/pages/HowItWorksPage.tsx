@@ -481,7 +481,7 @@ function RanksSection() {
       <SectionHeading
         id="ranks"
         title="Ranks — Your VoxDex Reputation"
-        subtitle="Eight tiers that unlock trust-gated capabilities and signal seniority across the leaderboard."
+        subtitle="Eight tiers that signal your standing, unlock platform capabilities, and mark your journey from newcomer to legend."
       />
 
       <div className="grid gap-3 md:grid-cols-2">
@@ -522,49 +522,49 @@ function RanksSection() {
       <Card className="space-y-3 p-4">
         <h3 className="font-semibold">Capabilities unlocked by tier</h3>
         <p className="text-sm text-muted-foreground">
-          Higher-trust actions are gated behind Aspirant (tier 2 / 500 XP) to
-          keep the signal-to-noise ratio high during onboarding.
+          Each rank unlocks a specific set of platform actions. Hit the
+          threshold and the capabilities below open up automatically — no
+          claim flow, no waiting.
         </p>
         <div className="overflow-hidden rounded-lg border">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
                 <th className="px-3 py-2 font-medium">Capability</th>
-                <th className="px-3 py-2 font-medium">Min Tier</th>
+                <th className="px-3 py-2 font-medium">Unlocks at</th>
               </tr>
             </thead>
             <tbody>
-              {CAPABILITY_GATES.map((gate) => (
-                <tr key={gate.capability} className="border-t border-border/60">
-                  <td className="px-3 py-2">
-                    <div className="font-medium">{gate.capability}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {gate.description}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2 align-top">
-                    <Badge
-                      variant="outline"
-                      className="text-[10px]"
-                      style={{ borderColor: `${accent}66`, color: accent }}
-                    >
-                      Tier {gate.minTier}+
-                    </Badge>
-                  </td>
-                </tr>
-              ))}
+              {CAPABILITY_GATES.map((gate) => {
+                const tierRank = RANKS.find((r) => r.tier === gate.minTier);
+                return (
+                  <tr key={gate.capability} className="border-t border-border/60">
+                    <td className="px-3 py-2">
+                      <div className="font-medium">{gate.label}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {gate.description}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2 align-top">
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] whitespace-nowrap"
+                        style={{
+                          borderColor: tierRank
+                            ? `${tierRank.color}66`
+                            : `${accent}66`,
+                          color: tierRank ? tierRank.color : accent,
+                        }}
+                      >
+                        Tier {gate.minTier} · {tierRank?.name ?? ""}
+                      </Badge>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
-      </Card>
-
-      <Card className="flex items-start gap-3 p-4">
-        <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-        <p className="text-sm text-muted-foreground">
-          Each rank carries a stored <code className="text-foreground">voteMultiplier</code>{" "}
-          (1.0 → 3.0). It is not currently applied to vote weighting in code —
-          treat the multipliers above as a roadmap rather than a live mechanic.
-        </p>
       </Card>
     </section>
   );

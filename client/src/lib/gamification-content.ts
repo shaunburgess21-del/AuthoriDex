@@ -96,47 +96,73 @@ export const XP_ACTIONS: XpActionRow[] = [
   { actionKey: "admin_adjustment", displayName: "Admin Adjustment", xpValue: 0, dailyCap: null, description: "Manual XP adjustment by an admin", category: "Special" },
 ];
 
-export interface RankRow {
-  name: string;
-  tier: number;
-  minXp: number;
-  /** null = open-ended top tier. */
-  maxXp: number | null;
-  /** Stored on the rank row but currently unused by vote weighting. */
-  voteMultiplier: number;
-  color: string;
-  description: string;
-}
+/**
+ * Rank ladder + capability gate matrix. Both are owned by
+ * `shared/rank-config.ts` so the server seed, the client UI, and the
+ * notifications cron cannot drift apart. We re-export the shared
+ * shapes under the legacy names (`RankRow`, `CapabilityRow`) so
+ * existing call sites keep compiling.
+ */
+export {
+  RANKS,
+  CAPABILITY_GATES,
+  type RankConfig as RankRow,
+  type CapabilityGate as CapabilityRow,
+} from "@shared/rank-config";
 
-/** Mirror of server/scripts/seed-gamification.ts → seedRanks. */
-export const RANKS: RankRow[] = [
-  { name: "Citizen", tier: 1, minXp: 0, maxXp: 499, voteMultiplier: 1.0, color: "#6B7280", description: "Welcome to VoxDex. Every VoxMaxxer starts here." },
-  { name: "Aspirant", tier: 2, minXp: 500, maxXp: 1999, voteMultiplier: 1.0, color: "#10B981", description: "You're finding your voice. Keep VoxMaxxing." },
-  { name: "Insider", tier: 3, minXp: 2000, maxXp: 4999, voteMultiplier: 1.25, color: "#3B82F6", description: "You know how VoxDex works. Your perspective matters." },
-  { name: "Analyst", tier: 4, minXp: 5000, maxXp: 9999, voteMultiplier: 1.5, color: "#8B5CF6", description: "A sharp read on the room. Your votes carry weight." },
-  { name: "Expert", tier: 5, minXp: 10000, maxXp: 24999, voteMultiplier: 1.75, color: "#F59E0B", description: "Deep knowledge, consistent takes. Others follow your lead." },
-  { name: "Maven", tier: 6, minXp: 25000, maxXp: 49999, voteMultiplier: 2.0, color: "#EF4444", description: "Elite tier. Your predictions and calls set the pace." },
-  { name: "Hall of Famer", tier: 7, minXp: 50000, maxXp: 149999, voteMultiplier: 2.5, color: "#FFD700", description: "Legendary status. A veteran of the VoxDex arena." },
-  { name: "VoxMax Legend", tier: 8, minXp: 150000, maxXp: null, voteMultiplier: 3.0, color: "#E5E4E2", description: "The rarest status on VoxDex — reserved for those who reach the summit." },
-];
+import { RANKS as RANKS_INTERNAL } from "@shared/rank-config";
+import {
+  Award,
+  BarChart,
+  Crown as CrownIcon,
+  Eye,
+  Shield,
+  Sparkles,
+  Star,
+  TrendingUp as TrendingUpIcon,
+  type LucideIcon,
+} from "lucide-react";
 
 /**
- * Capability gates resolved by server/services/gamification-utils.ts →
- * canAccessCapability. Tier 2 (Aspirant, 500 XP) is the universal unlock
- * point for higher-trust actions today.
+ * Map the string `icon` field on shared/rank-config to a real Lucide
+ * component. Lives on the client because the shared module is
+ * runtime-agnostic and shouldn't pull in `lucide-react`. Extend this
+ * map when adding a new tier with a new icon.
  */
-export interface CapabilityRow {
-  capability: string;
-  minTier: number;
-  description: string;
-}
+const RANK_ICON_MAP: Record<string, LucideIcon> = {
+  user: Shield,
+  "trending-up": TrendingUpIcon,
+  eye: Eye,
+  "bar-chart": BarChart,
+  award: Award,
+  star: Star,
+  crown: CrownIcon,
+  sparkles: Sparkles,
+};
 
-export const CAPABILITY_GATES: CapabilityRow[] = [
-  { capability: "Vote on inductions", minTier: 2, description: "Decide who joins the main leaderboard." },
-  { capability: "Vote on profile images (curation)", minTier: 2, description: "Hot-or-not voting on candidate images." },
-  { capability: "Post insights", minTier: 2, description: "Create top-level community insights on cards." },
-  { capability: "Comment on insights", minTier: 2, description: "Reply to insights and other comments." },
-];
+/**
+ * UI-flavoured wrapper around getRankByName. Returns the canonical
+ * rank row plus a resolved Lucide icon component, with a Citizen
+ * fallback so legacy `profiles.rank` values that pre-date a rebalance
+ * still render something instead of nothing.
+ */
+export function getRankConfig(name: string | null | undefined): {
+  name: string;
+  tier: number;
+  color: string;
+  icon: LucideIcon;
+  description: string;
+} {
+  const found =
+    RANKS_INTERNAL.find((r) => r.name === name) ?? RANKS_INTERNAL[0];
+  return {
+    name: found.name,
+    tier: found.tier,
+    color: found.color,
+    icon: RANK_ICON_MAP[found.icon] ?? Shield,
+    description: found.description,
+  };
+}
 
 /**
  * Vote surfaces that exist on the site today, with the XP action key they
