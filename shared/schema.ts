@@ -809,6 +809,42 @@ export const insertCreditLedgerSchema = createInsertSchema(creditLedger).omit({
 export type CreditLedger = typeof creditLedger.$inferSelect;
 export type InsertCreditLedger = z.infer<typeof insertCreditLedgerSchema>;
 
+// Credit earn-loop config — admin-tunable rates for engagement
+// rewards. Mirrors xpActions in shape so the admin Credits tab
+// and the runtime adjustCredits() lookup can reuse the same
+// patterns. Seed data lives in shared/credit-config.ts and is
+// upserted by server/scripts/seed-gamification.ts.
+export const creditActions = pgTable("credit_actions", {
+  id: serial("id").primaryKey(),
+  key: text("key").notNull().unique(), // Stable snake_case identifier
+  label: text("label").notNull(),
+  proposedCredits: integer("proposed_credits").notNull().default(0),
+  // null = no per-day limit. Daily cap is enforced in adjustCredits()
+  // by counting credit_ledger rows for this user + key in the UTC day.
+  dailyCap: integer("daily_cap"),
+  // Free-form for now (ENGAGEMENT | QUALITY | STREAK | SOCIAL | SPECIAL).
+  // Kept as text instead of an enum so admins can add categories
+  // without a schema migration.
+  category: text("category").notNull(),
+  notes: text("notes"),
+  isActive: boolean("is_active").notNull().default(true),
+  // True for actions that only fire after admin approval (e.g.
+  // suggestion_approved). The runtime adjustCredits() helper does
+  // not check this — callers gate themselves via the approval flow.
+  requiresApproval: boolean("requires_approval").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertCreditActionSchema = createInsertSchema(creditActions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type CreditAction = typeof creditActions.$inferSelect;
+export type InsertCreditAction = z.infer<typeof insertCreditActionSchema>;
+
 // User Profiles - linked to Supabase Auth, stores profile info and role
 export const profiles = pgTable("profiles", {
   id: varchar("id").primaryKey(), // Supabase Auth user ID (not auto-generated)
@@ -836,7 +872,12 @@ export const profiles = pgTable("profiles", {
   // ranks-overhaul migration; backfilled to current rank on apply.
   highestRank: text("highest_rank"),
   xpPoints: integer("xp_points").notNull().default(0),
-  predictCredits: integer("predict_credits").notNull().default(1000),
+  // Default 0 — runtime signup grant in POST /api/profile/sync awards
+  // SIGNUP_CREDIT_GRANT (10,000) and writes the matching credit_ledger
+  // row. Pre-credits-overhaul this defaulted to 1000, which conflicted
+  // with the runtime grant and produced silent grant/default skew for
+  // any user created via direct INSERT.
+  predictCredits: integer("predict_credits").notNull().default(0),
   currentStreak: integer("current_streak").notNull().default(0),
   // Highest streak the user has ever reached. Lazily promoted whenever
   // currentStreak crosses its previous peak (see daily-checkin endpoint).

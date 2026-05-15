@@ -5,7 +5,7 @@ import { storage } from "./storage";
 import { getBaselineDiagnostics } from "./utils/baseline";
 import { db } from "./db";
 import { syncWinningAvatarForPerson } from "./lib/curateAvatar";
-import { anonVoteBudget, trendSnapshots, trackedPeople, communityInsights, insightVotes, comments as unifiedComments, commentVotes, matchups, votes, voteActions, xpActions, xpLedger, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, marketAmmState, ammPriceSnapshots, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, contentCategories, userCategoryEngagement, emailUnsubscribeState, insertCommunityInsightSchema, insertInsightVoteSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
+import { anonVoteBudget, trendSnapshots, trackedPeople, communityInsights, insightVotes, comments as unifiedComments, commentVotes, matchups, votes, voteActions, xpActions, xpLedger, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, creditActions, adminAuditLog, predictionMarkets, marketEntries, marketBets, marketAmmState, ammPriceSnapshots, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, contentCategories, userCategoryEngagement, emailUnsubscribeState, insertCommunityInsightSchema, insertInsightVoteSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
 import { validateSuggestionPayload, SUGGESTION_TYPES } from "@shared/suggestionSchemas";
 import { normaliseSocialHandles, SOCIAL_HANDLE_KEYS } from "@shared/handleNormalise";
 import { eq, desc, and, gt, sql, count, gte, lte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull, isNull } from "drizzle-orm";
@@ -17,6 +17,14 @@ import { createHash, randomUUID } from "crypto";
 import multer, { MulterError } from "multer";
 import path from "path";
 import { gamificationService } from "./services/gamification";
+import {
+  awardVoteCredits,
+  awardCommentCredits,
+  awardInsightCredits,
+  awardSuggestionApprovedCredits,
+  awardMarketSuggestionApprovedCredits,
+} from "./services/credits-earn";
+import { SIGNUP_CREDIT_GRANT } from "@shared/credit-config";
 import { createNotification, createNotificationsBulk } from "./services/notifications";
 import { dispatchApproval, markSuggestionApproved, markSuggestionRejected } from "./services/suggestionApproval";
 import { JACKPOT_TICKET_COST, JACKPOT_MAX_PREDICTED_SCORE } from "./config/constants";
@@ -3470,6 +3478,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             { imageId, personId, direction: 'up' }
           );
         } catch (e) { console.error("XP award failed:", e); }
+        await awardVoteCredits(userId, 'curation', imageId, { personId });
       }
 
       await syncWinningAvatarForPerson(personId);
@@ -3644,6 +3653,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           { insightId: newInsight.id, personId }
         );
       } catch (e) { console.error("XP award failed:", e); }
+      await awardInsightCredits(req.userId!, newInsight.id, { personId });
 
       const [profile] = await db
         .select(commentAuthorSelect)
@@ -3975,7 +3985,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           { personId, voteType }
         );
       } catch (e) { console.error("XP award failed:", e); }
-      
+      await awardVoteCredits(userId, 'sentiment', `${personId}_${today}`, { personId, voteType });
+
       res.json({ success: true, created: true, xp: xpResult ?? null });
     } catch (error: any) {
       console.error("Error submitting sentiment vote:", error);
@@ -4199,6 +4210,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             { celebrityId, vote }
           );
         } catch (e) { console.error("XP award failed:", e); }
+        await awardVoteCredits(req.userId, 'value', celebrityId, { vote });
       }
 
       // Recompute metrics for this celebrity (community totals include anon votes)
@@ -5516,6 +5528,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             { commentId: newComment.id, insightId: resolvedParentId }
           );
         } catch (e) { console.error("XP award failed:", e); }
+        // shouldAwardXp already enforces "min 20 chars" + "not on
+        // own insight" gates, so credits piggy-back the same check.
+        await awardCommentCredits(userId, newComment.id, { insightId: resolvedParentId });
       }
 
       const [profile] = await db
@@ -6915,6 +6930,7 @@ Only return the JSON object.`;
           } catch (xpError) {
             console.error("XP award failed:", xpError);
           }
+          await awardVoteCredits(req.userId, 'matchup', id, { votedOption: option });
         }
       }
       
@@ -7086,7 +7102,10 @@ Only return the JSON object.`;
   // bumping this constant only affects NEW accounts. Existing users
   // who already received a previous-amount grant won't be silently
   // topped up — that's intentional and the safe default.
-  const SIGNUP_CREDIT_GRANT = 10000;
+  // Sourced from shared/credit-config.ts so the server, the seed,
+  // the welcome email, and the How It Works Credits tab all read
+  // the same number. Bumping the grant is a single-file edit.
+  // (Imported at the top of routes.ts.)
 
   // Sync profile after Supabase auth - creates profile if doesn't exist
   app.post("/api/profile/sync", requireAuth, async (req: AuthRequest, res) => {
@@ -14654,6 +14673,7 @@ Target length: about 90-150 words.`;
               { pollId: poll.id, choice }
             );
           } catch (e) { console.error("XP award failed:", e); }
+          await awardVoteCredits(req.userId, 'trending_poll', String(poll.id), { choice });
         }
       }
 
@@ -15727,6 +15747,7 @@ Target length: about 90-150 words.`;
               { pollId: poll.id, optionId }
             );
           } catch (e) { console.error("XP award failed:", e); }
+          await awardVoteCredits(req.userId, 'opinion_poll', String(poll.id), { optionId });
         }
       }
 
@@ -19776,6 +19797,142 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
     }
   });
 
+  // GET /api/admin/credit-actions — list every row in credit_actions
+  // for the admin Credit Actions panel. Returns inactive rows too so
+  // admins can re-enable a previously disabled action without
+  // recreating it.
+  app.get(
+    "/api/admin/credit-actions",
+    requireAuth,
+    requireAdmin,
+    async (_req: AuthRequest, res) => {
+      try {
+        const rows = await db
+          .select()
+          .from(creditActions)
+          .orderBy(creditActions.category, creditActions.key);
+        res.json(rows);
+      } catch (error: any) {
+        console.error("Error listing credit actions:", error?.message);
+        res.status(500).json({ error: "Failed to list credit actions" });
+      }
+    },
+  );
+
+  // PATCH /api/admin/credit-actions/:key — update proposed_credits,
+  // daily_cap, is_active, notes for a configured action. Invalidates
+  // the gamificationService cache so the runtime adjustCredits()
+  // path picks up the new values immediately, not after the 5-minute
+  // TTL.
+  app.patch(
+    "/api/admin/credit-actions/:key",
+    requireAuth,
+    requireAdmin,
+    async (req: AuthRequest, res) => {
+      try {
+        const { key } = req.params;
+        const { proposedCredits, dailyCap, isActive, notes, label } = req.body ?? {};
+
+        const updates: Record<string, unknown> = { updatedAt: new Date() };
+        if (typeof proposedCredits === "number") {
+          if (!Number.isFinite(proposedCredits)) {
+            return res.status(400).json({ error: "proposedCredits must be finite" });
+          }
+          updates.proposedCredits = Math.trunc(proposedCredits);
+        }
+        if (dailyCap === null) {
+          updates.dailyCap = null;
+        } else if (typeof dailyCap === "number") {
+          if (!Number.isFinite(dailyCap) || dailyCap < 0) {
+            return res.status(400).json({ error: "dailyCap must be >= 0 or null" });
+          }
+          updates.dailyCap = Math.trunc(dailyCap);
+        }
+        if (typeof isActive === "boolean") updates.isActive = isActive;
+        if (typeof notes === "string") updates.notes = notes;
+        if (typeof label === "string" && label.trim()) updates.label = label.trim();
+
+        const [updated] = await db
+          .update(creditActions)
+          .set(updates)
+          .where(eq(creditActions.key, key))
+          .returning();
+
+        if (!updated) {
+          return res.status(404).json({ error: "Action not found" });
+        }
+
+        gamificationService.invalidateCache();
+        res.json(updated);
+      } catch (error: any) {
+        console.error("Error updating credit action:", error?.message);
+        res.status(500).json({ error: "Failed to update credit action" });
+      }
+    },
+  );
+
+  // POST /api/admin/credit-actions — create a new configured action.
+  // Distinct from the seed flow: shared/credit-config.ts is the
+  // canonical seed source, but admins can prototype new earn surfaces
+  // by adding rows here before the next deploy ships the seed entry.
+  app.post(
+    "/api/admin/credit-actions",
+    requireAuth,
+    requireAdmin,
+    async (req: AuthRequest, res) => {
+      try {
+        const {
+          key,
+          label,
+          proposedCredits,
+          dailyCap,
+          category,
+          notes,
+          isActive,
+          requiresApproval,
+        } = req.body ?? {};
+
+        if (typeof key !== "string" || !key.trim()) {
+          return res.status(400).json({ error: "key is required" });
+        }
+        if (typeof label !== "string" || !label.trim()) {
+          return res.status(400).json({ error: "label is required" });
+        }
+        if (typeof category !== "string" || !category.trim()) {
+          return res.status(400).json({ error: "category is required" });
+        }
+
+        const [created] = await db
+          .insert(creditActions)
+          .values({
+            key: key.trim(),
+            label: label.trim(),
+            proposedCredits:
+              typeof proposedCredits === "number" ? Math.trunc(proposedCredits) : 0,
+            dailyCap:
+              typeof dailyCap === "number" ? Math.trunc(dailyCap) : null,
+            category: category.trim(),
+            notes: typeof notes === "string" ? notes : null,
+            isActive: typeof isActive === "boolean" ? isActive : true,
+            requiresApproval:
+              typeof requiresApproval === "boolean" ? requiresApproval : false,
+          })
+          .returning();
+
+        gamificationService.invalidateCache();
+        res.status(201).json(created);
+      } catch (error: any) {
+        // Most likely a unique violation on `key`; surface a 409 so
+        // the admin UI can show "already exists".
+        if (String(error?.message ?? "").includes("duplicate key")) {
+          return res.status(409).json({ error: "Action key already exists" });
+        }
+        console.error("Error creating credit action:", error?.message);
+        res.status(500).json({ error: "Failed to create credit action" });
+      }
+    },
+  );
+
   app.get("/api/admin/credit-reconciliation", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const allProfiles = await db.select({ id: profiles.id, predictCredits: profiles.predictCredits }).from(profiles).where(eq(profiles.isAgent, false));
@@ -21257,6 +21414,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
             { candidateId: id }
           );
         } catch (e) { console.error("XP award failed:", e); }
+        await awardVoteCredits(req.userId, 'induction', id);
       }
 
       res.json({ success: true, xp: xpResult ?? null, budget: budgetSnapshot });
@@ -23812,6 +23970,25 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           );
         } catch (xpErr) {
           console.error("XP award failed for suggestion approval:", xpErr);
+        }
+        // Market suggestions (world-event predictions, type
+        // `open_market` per server/services/suggestionApproval.ts)
+        // earn the larger `market_suggestion_approved` reward;
+        // everything else falls into the generic content suggestion
+        // bucket (matchup, sentiment_poll, opinion_poll, induction,
+        // profile_image).
+        if (suggestion.type === "open_market") {
+          await awardMarketSuggestionApprovedCredits(
+            suggestion.submittedBy,
+            String(approvedAsId ?? suggestion.id),
+            { suggestionId: suggestion.id, approvedAsType },
+          );
+        } else {
+          await awardSuggestionApprovedCredits(
+            suggestion.submittedBy,
+            suggestion.id,
+            { suggestionType: suggestion.type, approvedAsId },
+          );
         }
       }
 

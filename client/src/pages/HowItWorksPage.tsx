@@ -18,12 +18,18 @@ import {
   CAPABILITY_GATES,
   VOTE_SURFACES,
   PREDICT_SURFACES,
-  PROPOSED_CREDIT_EARNS,
   PROPOSED_BADGES,
   type KnowledgeTab,
   type KnowledgeTabId,
   type XpActionRow,
 } from "@/lib/gamification-content";
+import {
+  CREDIT_ACTIONS,
+  CREDIT_CATEGORIES,
+  SIGNUP_CREDIT_GRANT,
+  type CreditActionConfig,
+  type CreditCategory,
+} from "@shared/credit-config";
 
 /**
  * Local tab bar mirroring ProfileTabs visually (muted track, raised active
@@ -581,23 +587,38 @@ function CreditsSection() {
       />
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <StatPill label="Signup grant" value="1,000" accent={accent} />
+        <StatPill
+          label="Signup grant"
+          value={SIGNUP_CREDIT_GRANT.toLocaleString("en-US")}
+          accent={accent}
+        />
         <StatPill label="Spend on" value="Predictions" accent={accent} />
-        <StatPill label="Earn back via" value="Wins + Purchase" accent={accent} />
+        <StatPill label="Earn back via" value="Wins + Engagement" accent={accent} />
       </div>
 
       <Card className="space-y-3 p-4">
-        <h3 className="font-semibold">Where Credits come from today</h3>
+        <h3 className="font-semibold">Where Credits come from</h3>
         <ul className="space-y-2 text-sm text-muted-foreground">
           <li>
-            <strong className="text-foreground">Signup grant.</strong> New
-            accounts start with a balance so you can place predictions
-            immediately.
+            <strong className="text-foreground">Signup grant.</strong> Every
+            new account starts with{" "}
+            {SIGNUP_CREDIT_GRANT.toLocaleString("en-US")} Credits so you can
+            place predictions immediately.
           </li>
           <li>
             <strong className="text-foreground">Prediction payouts.</strong>{" "}
             Winning predictions return Credits to your balance when the
-            market settles.
+            market settles, plus your share of the pool.
+          </li>
+          <li>
+            <strong className="text-foreground">Engagement earn loop.</strong>{" "}
+            Cast votes, post insights, comment, and hit streak milestones to
+            earn small top-ups (see the table below).
+          </li>
+          <li>
+            <strong className="text-foreground">Approved suggestions.</strong>{" "}
+            Suggest a candidate or a market — if it goes live, you earn a
+            larger one-off bounty.
           </li>
           <li>
             <strong className="text-foreground">Purchase.</strong> Buy more
@@ -613,74 +634,117 @@ function CreditsSection() {
       <Card className="space-y-3 p-4">
         <h3 className="font-semibold">Where Credits go</h3>
         <p className="text-sm text-muted-foreground">
-          Every prediction debits Credits from your balance and writes to the
-          immutable <code className="text-foreground">credit_ledger</code>. Stake
-          size is your call; the live market price determines your payout if
-          you win.
+          Every prediction deducts Credits from your balance the moment you
+          place it. Your stake size is your call — if you win, Credits return
+          to your balance plus your share of the pool.
         </p>
       </Card>
 
-      <Card
-        className="space-y-3 p-4"
-        style={{
-          borderColor: `${accent}66`,
-          backgroundColor: `${accent}0F`,
-        }}
-      >
-        <div className="flex items-center gap-2">
-          <Badge
-            variant="outline"
-            style={{ borderColor: `${accent}66`, color: accent }}
-            className="text-[10px] uppercase tracking-wide"
-          >
-            Coming Soon
-          </Badge>
-          <h3 className="font-semibold">Earn Credits by participating</h3>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          We're building out an engagement-based earn loop so active VoxMaxxers
-          can sustain their balance without always reaching for the wallet.
-          Credits will stay <em>much harder to earn than XP</em> — values below
-          are placeholders pending tuning.
-        </p>
-        <div className="overflow-hidden rounded-lg border" style={{ borderColor: `${accent}40` }}>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                <th className="px-3 py-2 font-medium">Action</th>
-                <th className="px-3 py-2 font-medium text-right">Proposed Credits</th>
-                <th className="hidden px-3 py-2 font-medium md:table-cell">Notes</th>
-              </tr>
-            </thead>
-            <tbody>
-              {PROPOSED_CREDIT_EARNS.map((row) => (
-                <tr
-                  key={row.action}
-                  className="border-t border-border/60 align-top"
-                >
-                  <td className="px-3 py-2 font-medium">{row.action}</td>
-                  <td className="px-3 py-2 text-right">
-                    <span
-                      className="font-mono text-xs font-semibold"
-                      style={{ color: accent }}
-                    >
-                      {row.proposedCredits}
-                    </span>
-                  </td>
-                  <td className="hidden px-3 py-2 text-muted-foreground md:table-cell">
-                    {row.notes}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Approval-gated rows ship with anti-spam controls — you only earn once
-          a moderator approves the suggestion.
-        </p>
-      </Card>
+      <CreditEarnTable accent={accent} />
     </section>
+  );
+}
+
+const CREDIT_CATEGORY_LABELS: Record<CreditCategory, string> = {
+  ENGAGEMENT: "Engagement",
+  QUALITY: "Quality",
+  STREAK: "Streak milestones",
+  SOCIAL: "Social",
+  SPECIAL: "Special",
+};
+
+/**
+ * Live earn-loop table sourced from shared/credit-config.ts. The
+ * SPECIAL category (signup grant, admin adjustment) is intentionally
+ * omitted from the user-facing table — those rows are bookkeeping
+ * for the admin Credit Actions screen, not actions a user can earn.
+ */
+function CreditEarnTable({ accent }: { accent: string }) {
+  const grouped = (() => {
+    const map = new Map<CreditCategory, CreditActionConfig[]>();
+    for (const action of CREDIT_ACTIONS) {
+      if (!action.isActive) continue;
+      if (action.category === CREDIT_CATEGORIES.SPECIAL) continue;
+      const list = map.get(action.category) ?? [];
+      list.push(action);
+      map.set(action.category, list);
+    }
+    return Array.from(map.entries());
+  })();
+
+  return (
+    <Card
+      className="space-y-3 p-4"
+      style={{
+        borderColor: `${accent}66`,
+        backgroundColor: `${accent}0F`,
+      }}
+    >
+      <h3 className="font-semibold">Earn Credits by participating</h3>
+      <p className="text-sm text-muted-foreground">
+        Engagement actions earn small daily-capped top-ups. Approved
+        suggestions and streak milestones pay out larger one-offs. Values
+        below are live — admins can tune them at any time.
+      </p>
+
+      {grouped.map(([category, actions]) => (
+        <div key={category} className="space-y-2">
+          <p
+            className="text-[11px] font-semibold uppercase tracking-wider"
+            style={{ color: accent }}
+          >
+            {CREDIT_CATEGORY_LABELS[category]}
+          </p>
+          <div
+            className="overflow-hidden rounded-lg border"
+            style={{ borderColor: `${accent}40` }}
+          >
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                  <th className="px-3 py-2 font-medium">Action</th>
+                  <th className="px-3 py-2 font-medium text-right">Credits</th>
+                  <th className="px-3 py-2 font-medium text-right">Daily cap</th>
+                  <th className="hidden px-3 py-2 font-medium md:table-cell">
+                    Notes
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {actions.map((action) => (
+                  <tr
+                    key={action.key}
+                    className="border-t border-border/60 align-top"
+                    data-testid={`credit-earn-row-${action.key}`}
+                  >
+                    <td className="px-3 py-2 font-medium">{action.label}</td>
+                    <td className="px-3 py-2 text-right">
+                      <span
+                        className="font-mono text-xs font-semibold"
+                        style={{ color: accent }}
+                      >
+                        +{action.proposedCredits}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-right text-xs text-muted-foreground">
+                      {action.dailyCap === null ? "No cap" : `${action.dailyCap}/day`}
+                    </td>
+                    <td className="hidden px-3 py-2 text-muted-foreground md:table-cell">
+                      {action.notes ?? ""}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ))}
+
+      <p className="text-xs text-muted-foreground">
+        Approval-gated rows ship with anti-spam controls — you only earn
+        once a moderator approves the suggestion.
+      </p>
+    </Card>
   );
 }
 

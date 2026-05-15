@@ -63,6 +63,7 @@ import {
   ExternalLink,
   Bot,
   Bell,
+  CreditCard,
 } from "lucide-react";
 import { AdminUnderratedOverrated } from "@/components/admin/AdminUnderratedOverrated";
 import { AdminCurateProfile } from "@/components/admin/AdminCurateProfile";
@@ -70,6 +71,7 @@ import { AdminInductionQueue } from "@/components/admin/AdminInductionQueue";
 import { AdminSettlementCenter } from "@/components/admin/AdminSettlementCenter";
 import { AdminAmmSection } from "@/components/admin/AdminAmmSection";
 import { AdminUserCreditHistory } from "@/components/admin/AdminUserCreditHistory";
+import { AdminCreditsSection } from "@/components/admin/AdminCreditsSection";
 import { AdminLeaderboardDiff } from "@/components/admin/AdminLeaderboardDiff";
 import { AdminCategoriesSection } from "@/components/admin/AdminCategoriesSection";
 import { AdminScoreInspector } from "@/components/admin/AdminScoreInspector";
@@ -2893,6 +2895,7 @@ export default function AdminDashboard() {
     { id: "settlement" as const, label: "Settlement", icon: Gavel },
     { id: "amm" as const, label: "AMM", icon: Activity },
     { id: "users" as const, label: "Users", icon: Users },
+    { id: "credits" as const, label: "Credits", icon: CreditCard },
     { id: "agents" as const, label: "Agents", icon: Bot },
     { id: "categories" as const, label: "Categories", icon: Layers },
     { id: "tools" as const, label: "System Tools", icon: Settings },
@@ -6106,6 +6109,11 @@ export default function AdminDashboard() {
         {/* AMM Section */}
         {activeSection === "amm" && (
           <AdminAmmSection />
+        )}
+
+        {/* Credits Section */}
+        {activeSection === "credits" && (
+          <AdminCreditsSection />
         )}
 
         {/* Users Section */}

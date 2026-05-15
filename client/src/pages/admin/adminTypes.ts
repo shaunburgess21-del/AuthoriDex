@@ -21,6 +21,7 @@ export type AdminSection =
   | "settlement"
   | "amm"
   | "users"
+  | "credits"
   | "agents"
   | "categories"
   | "tools";

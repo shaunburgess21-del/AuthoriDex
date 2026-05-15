@@ -92,6 +92,7 @@ const CategoryRaceDetailPage = lazyWithRetry(() => import("@/pages/CategoryRaceD
 const UpDownDetailPage = lazyWithRetry(() => import("@/pages/UpDownDetailPage"));
 const H2HDetailPage = lazyWithRetry(() => import("@/pages/H2HDetailPage"));
 const HowItWorksPage = lazyWithRetry(() => import("@/pages/HowItWorksPage"));
+const CreditHistoryPage = lazyWithRetry(() => import("@/pages/CreditHistoryPage"));
 const ShareBetRedirect = lazyWithRetry(
   () => import("@/pages/ShareBetRedirect"),
 );
@@ -133,6 +134,7 @@ function Router() {
         <Route path="/me" component={MePage} />
         <Route path="/me/votes" component={VotesPage} />
         <Route path="/me/predictions" component={PredictionsPage} />
+        <Route path="/me/credits" component={CreditHistoryPage} />
         <Route path="/me/favorites" component={FavoritesPage} />
         <Route path="/me/settings" component={SettingsPage} />
         <Route path="/me/notifications" component={NotificationsArchivePage} />

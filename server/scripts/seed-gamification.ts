@@ -5,7 +5,7 @@
 //   capped at maxXp=149999; all ranks gained a description column.
 
 import { db } from "../db";
-import { xpActions, xpLedger, profiles, ranks } from "@shared/schema";
+import { xpActions, xpLedger, profiles, ranks, creditActions } from "@shared/schema";
 import { eq, sql } from "drizzle-orm";
 import {
   STREAK_MILESTONES,
@@ -13,6 +13,7 @@ import {
   streakMilestoneActionKey,
 } from "@shared/streak-config";
 import { RANKS } from "@shared/rank-config";
+import { CREDIT_ACTIONS } from "@shared/credit-config";
 
 /**
  * Action keys that have been retired from the live catalogue. They're
@@ -139,6 +140,59 @@ async function seedRanks() {
   console.log(`[Gamification] Seeded ${rankData.length} ranks`);
 }
 
+async function seedCreditActions() {
+  console.log("[Gamification] Seeding credit actions...");
+
+  // Upsert by `key` so reseed refreshes proposed_credits, daily_cap,
+  // and is_active without recreating rows. Admin edits made via the
+  // CRUD endpoints survive a reseed only when the row's key matches
+  // a config entry — which is the usual case, since adding a new
+  // earn surface goes through shared/credit-config.ts first.
+  for (const action of CREDIT_ACTIONS) {
+    const existing = await db
+      .select()
+      .from(creditActions)
+      .where(eq(creditActions.key, action.key))
+      .limit(1);
+
+    if (existing.length > 0) {
+      await db
+        .update(creditActions)
+        .set({
+          label: action.label,
+          proposedCredits: action.proposedCredits,
+          dailyCap: action.dailyCap,
+          category: action.category,
+          notes: action.notes ?? null,
+          isActive: action.isActive,
+          requiresApproval: action.requiresApproval,
+          updatedAt: new Date(),
+        })
+        .where(eq(creditActions.key, action.key));
+    } else {
+      await db.insert(creditActions).values({
+        key: action.key,
+        label: action.label,
+        proposedCredits: action.proposedCredits,
+        dailyCap: action.dailyCap,
+        category: action.category,
+        notes: action.notes ?? null,
+        isActive: action.isActive,
+        requiresApproval: action.requiresApproval,
+      });
+    }
+  }
+
+  const counts = CREDIT_ACTIONS.reduce<Record<string, number>>((acc, a) => {
+    acc[a.category] = (acc[a.category] ?? 0) + 1;
+    return acc;
+  }, {});
+  console.log(
+    `[Gamification] Seeded ${CREDIT_ACTIONS.length} credit actions ` +
+      `(${Object.entries(counts).map(([c, n]) => `${c}:${n}`).join(", ")})`,
+  );
+}
+
 async function migrateLegacyXp() {
   console.log("[Gamification] Migrating legacy XP balances to ledger...");
   
@@ -175,6 +229,7 @@ export async function seedGamification() {
   try {
     await seedXpActions();
     await seedRanks();
+    await seedCreditActions();
     await migrateLegacyXp();
     console.log("[Gamification] Seeding complete!");
     return { success: true };

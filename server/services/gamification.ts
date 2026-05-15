@@ -4,9 +4,11 @@ import {
   xpLedger, 
   creditLedger, 
   xpActions, 
+  creditActions,
   ranks,
   type Profile,
   type XpAction,
+  type CreditAction,
   type Rank
 } from "@shared/schema";
 import { eq, and, sql, gte, desc } from "drizzle-orm";
@@ -14,6 +16,7 @@ import { canAccessCapability, computeCreditBalance, type Capability } from "./ga
 import { resolveRankForXp } from "./gamification-ranks";
 import { createNotification } from "./notifications";
 import { ALL_CAPABILITIES } from "@shared/rank-config";
+import { CREDIT_ACTIONS, type CreditActionConfig } from "@shared/credit-config";
 
 interface AwardXpResult {
   success: boolean;
@@ -26,10 +29,34 @@ interface AwardXpResult {
 }
 
 interface AdjustCreditsResult {
-  success: boolean;
+  /** True when a ledger row was inserted and the balance moved. */
+  awarded: boolean;
+  /** Signed amount applied (0 if not awarded). */
   amount: number;
+  /** Balance after the operation (or the unchanged balance if not awarded). */
   newBalance: number;
+  /**
+   * Reason code for non-awarded results. Stable enough that callers
+   * can branch on it ('duplicate' | 'daily_cap' | 'inactive' |
+   * 'unknown_action' | 'insufficient_credits' | 'user_not_found').
+   */
+  reason?: string;
   message: string;
+}
+
+interface AdjustCreditsOptions {
+  /**
+   * Signed override for the reward amount. When omitted, the helper
+   * reads `proposed_credits` from the credit_actions cache (DB row,
+   * so admin edits take effect without redeploy) and falls back to
+   * the shared seed config if the DB row is missing.
+   *
+   * Stake / payout / refund call sites that compute their own amount
+   * (e.g. parimutuel payouts) pass the signed value here. Engagement
+   * earn-loop call sites omit this and let the table win.
+   */
+  amount?: number;
+  metadata?: Record<string, unknown>;
 }
 
 interface UserStats {
@@ -48,6 +75,10 @@ interface UserStats {
 
 class GamificationService {
   private xpActionsCache: Map<string, XpAction> = new Map();
+  // Mirrors xpActionsCache. Populated from the credit_actions table
+  // so admin edits to proposed_credits / daily_cap / is_active are
+  // picked up after the next ensureCache() refresh (5-minute TTL).
+  private creditActionsCache: Map<string, CreditAction> = new Map();
   private ranksCache: Rank[] = [];
   private cacheExpiry: number = 0;
   private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes
@@ -60,15 +91,49 @@ class GamificationService {
   private async ensureCache(): Promise<void> {
     if (Date.now() < this.cacheExpiry) return;
 
-    const [actions, ranksList] = await Promise.all([
+    const [actions, creditActionRows, ranksList] = await Promise.all([
       db.select().from(xpActions).where(eq(xpActions.isActive, true)),
+      // Cache ALL credit action rows (active + inactive) so the admin
+      // CRUD endpoints can return the inactive ones without a second
+      // DB read; the runtime award path checks isActive separately.
+      db.select().from(creditActions),
       db.select().from(ranks).orderBy(ranks.tier)
     ]);
 
     this.xpActionsCache.clear();
     actions.forEach(action => this.xpActionsCache.set(action.actionKey, action));
+    this.creditActionsCache.clear();
+    creditActionRows.forEach(action => this.creditActionsCache.set(action.key, action));
     this.ranksCache = ranksList;
     this.cacheExpiry = Date.now() + this.CACHE_TTL;
+  }
+
+  /**
+   * Force a cache refresh on the next access. Called by the admin
+   * credit-actions CRUD endpoints so a rate edit propagates to the
+   * runtime award path immediately, not after the 5-minute TTL.
+   */
+  invalidateCache(): void {
+    this.cacheExpiry = 0;
+  }
+
+  /**
+   * Resolve a credit action by key, preferring the live DB row and
+   * falling back to the shared seed config. The fallback matters in
+   * two cases: (a) cold start before the seed has run, and (b) a
+   * production hotfix that ships a new action key in code before the
+   * accompanying seed is applied. In both cases we'd rather award
+   * the seed default than silently no-op.
+   */
+  private resolveCreditAction(actionKey: string):
+    | { source: "db"; row: CreditAction }
+    | { source: "seed"; row: CreditActionConfig }
+    | null {
+    const dbRow = this.creditActionsCache.get(actionKey);
+    if (dbRow) return { source: "db", row: dbRow };
+    const seed = CREDIT_ACTIONS.find((a) => a.key === actionKey);
+    if (seed) return { source: "seed", row: seed };
+    return null;
   }
 
   async awardXp(
@@ -301,93 +366,214 @@ class GamificationService {
     return txResult;
   }
 
+  /**
+   * Award (or deduct) credits against a configured action key.
+   *
+   * The earn loop (votes, comments, insights, suggestion approvals,
+   * streak milestones) calls this with no `amount` override — the
+   * helper looks up `proposed_credits` from the credit_actions DB
+   * cache so admin edits take effect without a redeploy.
+   *
+   * Existing production paths (prediction stake/payout/refund,
+   * jackpot payouts, AMM trades, signup grant, admin adjustments)
+   * still inline their own ledger writes. The intent is to keep
+   * those untouched; new earn-loop call sites consolidate here.
+   *
+   * Daily cap enforcement: when the resolved action has a non-null
+   * dailyCap, we count credit_ledger rows with the matching txnType
+   * for this user since the start of the UTC day. At-or-above the
+   * cap returns `awarded: false` with reason 'daily_cap' — silent,
+   * not an error, mirroring the awardXp() pattern.
+   *
+   * Idempotency: `(userId, idempotencyKey)` uniqueness on the
+   * credit_ledger row prevents double-payment when a caller retries.
+   * Engagement actions should encode (action, target, user) into the
+   * key; lifetime-once actions (streak milestones) encode just
+   * (action, user) so reset+reclimb cannot double-pay.
+   */
   async adjustCredits(
     userId: string,
-    amount: number,
-    txnType: string,
+    actionKey: string,
     idempotencyKey: string,
-    metadata?: Record<string, unknown>
+    options?: AdjustCreditsOptions
   ): Promise<AdjustCreditsResult> {
+    await this.ensureCache();
+
+    const resolved = this.resolveCreditAction(actionKey);
+
+    if (!resolved) {
+      return {
+        awarded: false,
+        amount: 0,
+        newBalance: 0,
+        reason: "unknown_action",
+        message: `Unknown credit action: ${actionKey}`,
+      };
+    }
+
+    // Inactive guard. Admin-initiated kills (e.g. abuse mitigation)
+    // should immediately stop awarding even if a deploy is mid-flight.
+    if (resolved.source === "db" && resolved.row.isActive === false) {
+      return {
+        awarded: false,
+        amount: 0,
+        newBalance: 0,
+        reason: "inactive",
+        message: `Credit action ${actionKey} is inactive`,
+      };
+    }
+    if (resolved.source === "seed" && resolved.row.isActive === false) {
+      return {
+        awarded: false,
+        amount: 0,
+        newBalance: 0,
+        reason: "inactive",
+        message: `Credit action ${actionKey} is inactive`,
+      };
+    }
+
+    const proposedCredits =
+      resolved.source === "db"
+        ? resolved.row.proposedCredits
+        : resolved.row.proposedCredits;
+    const dailyCap =
+      resolved.source === "db" ? resolved.row.dailyCap : resolved.row.dailyCap;
+    const amount = options?.amount ?? proposedCredits;
+
+    // Zero-amount actions (e.g. admin_adjustment with no override)
+    // are a no-op — silently skip rather than write an empty row.
+    if (amount === 0) {
+      return {
+        awarded: false,
+        amount: 0,
+        newBalance: 0,
+        reason: "zero_amount",
+        message: `No credit amount configured for ${actionKey}`,
+      };
+    }
+
     return db.transaction(async (tx) => {
-      const [existingEntry] = await tx.select({
-        balanceAfter: creditLedger.balanceAfter,
-      })
-      .from(creditLedger)
-      .where(and(
-        eq(creditLedger.userId, userId),
-        eq(creditLedger.idempotencyKey, idempotencyKey)
-      ))
-      .limit(1);
+      const [existingEntry] = await tx
+        .select({ balanceAfter: creditLedger.balanceAfter })
+        .from(creditLedger)
+        .where(
+          and(
+            eq(creditLedger.userId, userId),
+            eq(creditLedger.idempotencyKey, idempotencyKey),
+          ),
+        )
+        .limit(1);
 
       if (existingEntry) {
         return {
-          success: false,
+          awarded: false,
           amount: 0,
           newBalance: existingEntry.balanceAfter,
-          message: 'Duplicate transaction'
+          reason: "duplicate",
+          message: "Duplicate transaction",
         };
       }
 
-      const [profile] = await tx.select({
-        predictCredits: profiles.predictCredits,
-      })
-      .from(profiles)
-      .where(eq(profiles.id, userId))
-      .limit(1);
+      const [profile] = await tx
+        .select({ predictCredits: profiles.predictCredits })
+        .from(profiles)
+        .where(eq(profiles.id, userId))
+        .limit(1);
 
       if (!profile) {
         return {
-          success: false,
+          awarded: false,
           amount: 0,
           newBalance: 0,
-          message: 'User not found'
+          reason: "user_not_found",
+          message: "User not found",
         };
+      }
+
+      // Daily cap check. Count UTC-today's ledger rows with the
+      // matching txnType. At or above the cap, return awarded:false
+      // silently — caller swallows the result and continues.
+      if (dailyCap !== null && dailyCap !== undefined && amount > 0) {
+        const utcToday = new Date();
+        utcToday.setUTCHours(0, 0, 0, 0);
+
+        const [{ count }] = await tx
+          .select({ count: sql<number>`count(*)::int` })
+          .from(creditLedger)
+          .where(
+            and(
+              eq(creditLedger.userId, userId),
+              eq(creditLedger.txnType, actionKey),
+              gte(creditLedger.createdAt, utcToday),
+            ),
+          );
+
+        if (Number(count) >= dailyCap) {
+          return {
+            awarded: false,
+            amount: 0,
+            newBalance: profile.predictCredits,
+            reason: "daily_cap",
+            message: `Daily cap reached for ${actionKey} (${count}/${dailyCap})`,
+          };
+        }
       }
 
       const newBalance = computeCreditBalance(profile.predictCredits, amount);
 
       if (newBalance === null) {
         return {
-          success: false,
+          awarded: false,
           amount: 0,
           newBalance: profile.predictCredits,
-          message: 'Insufficient credits'
+          reason: "insufficient_credits",
+          message: "Insufficient credits",
         };
       }
 
-      const insertedLedger = await tx.insert(creditLedger).values({
-        userId,
-        txnType,
-        amount,
-        walletType: 'VIRTUAL',
-        balanceAfter: newBalance,
-        source: 'user_action',
-        idempotencyKey,
-        metadata: metadata || null
-      }).onConflictDoNothing().returning({
-        id: creditLedger.id,
-      });
+      const insertedLedger = await tx
+        .insert(creditLedger)
+        .values({
+          userId,
+          // txnType mirrors the action key so the credit history UI
+          // and labelForTxnType() in shared/credit-config can resolve
+          // the friendly label from a single source.
+          txnType: actionKey,
+          amount,
+          walletType: "VIRTUAL",
+          balanceAfter: newBalance,
+          source: "user_action",
+          idempotencyKey,
+          metadata: options?.metadata ?? null,
+        })
+        .onConflictDoNothing()
+        .returning({ id: creditLedger.id });
 
       if (insertedLedger.length === 0) {
+        // Unique violation race — another concurrent caller landed
+        // first. Treat as duplicate, same as the explicit precheck.
         return {
-          success: false,
+          awarded: false,
           amount: 0,
           newBalance: profile.predictCredits,
-          message: 'Duplicate transaction'
+          reason: "duplicate",
+          message: "Duplicate transaction",
         };
       }
 
-      await tx.update(profiles)
+      await tx
+        .update(profiles)
         .set({ predictCredits: newBalance })
         .where(eq(profiles.id, userId));
 
       return {
-        success: true,
+        awarded: true,
         amount,
         newBalance,
-        message: amount > 0
-          ? `Added ${amount} credits`
-          : `Deducted ${Math.abs(amount)} credits`
+        message:
+          amount > 0
+            ? `Awarded ${amount} credits for ${actionKey}`
+            : `Deducted ${Math.abs(amount)} credits for ${actionKey}`,
       };
     });
   }

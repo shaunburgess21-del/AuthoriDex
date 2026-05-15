@@ -1,11 +1,25 @@
 import { useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { getSupabase } from "@/lib/supabase";
 import { shouldAutoToast } from "@/lib/notifications/registry";
 import { useInvalidateNotifications } from "@/hooks/useNotifications";
 import { dispatchRankUp } from "@/components/RankUpModal";
+
+/**
+ * Notification kinds that imply the user's credit balance just
+ * changed on the server. When one of these arrives, we refresh the
+ * AuthContext profile (the source for every balance pill) AND
+ * invalidate /api/gamification/stats so the secondary callers
+ * (HowItWorks ladder, predictions hero) catch up too.
+ */
+const BALANCE_CHANGING_KINDS = new Set<string>([
+  "market_resolved",
+  "credits_granted",
+  "market_void_refund",
+]);
 
 /**
  * Realtime payload uses raw DB column names (snake_case) — this is
@@ -49,14 +63,19 @@ interface RealtimeNotificationPayload {
  * it more than once would create duplicate channels and double-toast.
  */
 export function useNotificationsRealtime(): void {
-  const { user, isLoggedIn } = useAuth();
+  const { user, isLoggedIn, refreshProfile } = useAuth();
   const invalidate = useInvalidateNotifications();
+  const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
   const lastUserIdRef = useRef<string | null>(null);
   // Keep a stable ref to setLocation so the effect doesn't tear down the
   // realtime channel just because wouter handed us a new function ref.
   const setLocationRef = useRef(setLocation);
   setLocationRef.current = setLocation;
+  // Same trick for refreshProfile so a re-render in AuthContext
+  // doesn't tear the channel down.
+  const refreshProfileRef = useRef(refreshProfile);
+  refreshProfileRef.current = refreshProfile;
 
   useEffect(() => {
     if (!isLoggedIn || !user?.id) {
@@ -90,6 +109,24 @@ export function useNotificationsRealtime(): void {
               invalidate();
 
               if (!row) return;
+
+              // Balance-changing kinds: refresh the AuthContext
+              // profile (source of every balance pill) and the
+              // gamification stats query so the predict surfaces
+              // catch up without forcing the user to navigate.
+              // Pre-credits-overhaul, async parimutuel payouts left
+              // the balance stale until a refocus or route change.
+              if (BALANCE_CHANGING_KINDS.has(row.kind)) {
+                refreshProfileRef.current().catch((err) => {
+                  console.warn("[notifications] refreshProfile failed", err);
+                });
+                queryClient.invalidateQueries({
+                  queryKey: ["/api/gamification/stats"],
+                });
+                queryClient.invalidateQueries({
+                  queryKey: ["/api/gamification/credit-history"],
+                });
+              }
 
               // rank_up — bypass the auto-toast path and open the
               // RankUpModal instead. The modal needs the metadata
@@ -160,7 +197,7 @@ export function useNotificationsRealtime(): void {
       cancelled = true;
       channelRef?.unsubscribe();
     };
-  }, [isLoggedIn, user?.id, invalidate]);
+  }, [isLoggedIn, user?.id, invalidate, queryClient]);
 }
 
 /**

@@ -166,6 +166,15 @@ export default function MePage() {
                   <TrendingUp className="h-4 w-4" />
                   My Predictions
                 </Button>
+                <Button
+                  variant="outline"
+                  className="w-full justify-start gap-3"
+                  onClick={() => setLocation("/me/credits")}
+                  data-testid="button-my-credits"
+                >
+                  <CreditCard className="h-4 w-4" />
+                  My Credits
+                </Button>
                 <Button 
                   variant="outline" 
                   className="w-full justify-start gap-3"

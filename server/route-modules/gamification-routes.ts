@@ -148,6 +148,7 @@ export function registerGamificationRoutes(app: Express): void {
           streak: profile.currentStreak,
           longestStreak: profile.longestStreak,
           xpAwarded: 0,
+          creditsAwarded: 0,
           isMilestone: false,
           alreadyCheckedIn: true,
         });
@@ -206,6 +207,7 @@ export function registerGamificationRoutes(app: Express): void {
 
       let bonusXpAwarded = 0;
       let bonusActionKey: string | null = null;
+      let creditsAwarded = 0;
       if (milestoneHit) {
         const actionKey = streakMilestoneActionKey(milestoneHit);
         const result = await gamificationService.awardXp(
@@ -217,6 +219,29 @@ export function registerGamificationRoutes(app: Express): void {
         if (result.success) {
           bonusXpAwarded = result.xpAwarded;
           bonusActionKey = actionKey;
+        }
+        // Pair the XP milestone with a credit milestone. Idempotency
+        // key (milestoneDay, userId) prevents reset+reclimb from
+        // double-paying credits across resets, mirroring the XP
+        // milestone idempotency pattern above. Call adjustCredits()
+        // directly here (rather than via the helper) so we can
+        // surface the awarded amount in the API response — the
+        // helper swallows it.
+        try {
+          const creditResult = await gamificationService.adjustCredits(
+            userId,
+            `streak_milestone_${milestoneHit}_credits`,
+            `credit_streak_${milestoneHit}_${userId}`,
+            { metadata: { milestoneDay: milestoneHit, date: today } },
+          );
+          if (creditResult.awarded) {
+            creditsAwarded = creditResult.amount;
+          }
+        } catch (err) {
+          console.error(
+            `[daily-checkin] streak_milestone_${milestoneHit}_credits failed`,
+            err,
+          );
         }
       } else if (nextStreak > 1) {
         const result = await gamificationService.awardXp(
@@ -238,6 +263,7 @@ export function registerGamificationRoutes(app: Express): void {
         streak: nextStreak,
         longestStreak: nextLongest,
         xpAwarded,
+        creditsAwarded,
         isMilestone: milestoneHit !== null,
         milestoneDay: milestoneHit ?? undefined,
         graceUsed,
