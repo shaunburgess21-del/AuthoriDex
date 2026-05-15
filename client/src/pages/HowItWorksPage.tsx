@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useLocation } from "wouter";
-import { ArrowLeft, BookOpen, Flame, Info, Sparkles } from "lucide-react";
+import { ArrowLeft, BookOpen, ChevronRight, Flame, Info, Sparkles } from "lucide-react";
 import {
   STREAK_MILESTONES,
   STREAK_MILESTONE_XP,
@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { useUserStats } from "@/hooks/useGamification";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   KNOWLEDGE_TABS,
   XP_ACTIONS,
@@ -123,23 +125,28 @@ function SectionHeading({
 
 function StatPill(
   props:
-    | { label: string; value: string; variant: "xp-chrome" }
-    | { label: string; value: string; accent: string; variant?: "default" },
+    | { label: string; value: string; sublabel?: string; variant: "xp-chrome" }
+    | { label: string; value: string; sublabel?: string; accent: string; variant?: "default" },
 ) {
   if (props.variant === "xp-chrome") {
-    const { label, value } = props;
+    const { label, value, sublabel } = props;
     return (
       <div className="flex items-center justify-between rounded-lg border border-slate-300 bg-slate-100 px-3 py-2 dark:border-white/35 dark:bg-white/[0.06]">
         <span className="text-xs uppercase tracking-wide text-muted-foreground">
           {label}
         </span>
-        <span className="font-mono text-sm font-semibold text-slate-800 dark:text-white">
-          {value}
+        <span className="flex flex-col items-end leading-tight">
+          <span className="font-mono text-sm font-semibold text-slate-800 dark:text-white">
+            {value}
+          </span>
+          {sublabel && (
+            <span className="text-[10px] text-muted-foreground">{sublabel}</span>
+          )}
         </span>
       </div>
     );
   }
-  const { label, value, accent } = props;
+  const { label, value, sublabel, accent } = props;
   return (
     <div
       className="flex items-center justify-between rounded-lg border px-3 py-2"
@@ -151,8 +158,13 @@ function StatPill(
       <span className="text-xs uppercase tracking-wide text-muted-foreground">
         {label}
       </span>
-      <span className="font-mono text-sm font-semibold" style={{ color: accent }}>
-        {value}
+      <span className="flex flex-col items-end leading-tight">
+        <span className="font-mono text-sm font-semibold" style={{ color: accent }}>
+          {value}
+        </span>
+        {sublabel && (
+          <span className="text-[10px] text-muted-foreground">{sublabel}</span>
+        )}
       </span>
     </div>
   );
@@ -182,9 +194,6 @@ function XpActionTable({ rows }: { rows: XpActionRow[] }) {
             >
               <td className="px-3 py-2">
                 <div className="font-medium">{row.displayName}</div>
-                <code className="text-[11px] text-muted-foreground">
-                  {row.actionKey}
-                </code>
               </td>
               <td className="px-3 py-2 text-right">
                 <span className="font-mono font-semibold text-slate-700 dark:text-white">
@@ -205,29 +214,63 @@ function XpActionTable({ rows }: { rows: XpActionRow[] }) {
   );
 }
 
-function XpSection() {
+/**
+ * Categories shown to end users. The `Special` category exists in
+ * XP_ACTIONS for the admin portal / XP audit views but is intentionally
+ * hidden here — Legacy Migration and Admin Adjustment are not user-
+ * earnable actions and surfacing them on /how-it-works just confused
+ * the prose ("daily max includes admin-only zero-XP entries").
+ */
+const USER_FACING_XP_CATEGORIES: XpActionRow["category"][] = [
+  "Voting",
+  "Content",
+  "Engagement",
+  "Prediction",
+  "Streak",
+];
+
+interface XpSectionProps {
+  onJumpToTab?: (tab: KnowledgeTabId) => void;
+}
+
+function XpSection({ onJumpToTab }: XpSectionProps) {
   const grouped = useMemo(() => {
-    const order: XpActionRow["category"][] = [
-      "Voting",
-      "Content",
-      "Engagement",
-      "Prediction",
-      "Streak",
-      "Special",
-    ];
-    return order.map((category) => ({
+    return USER_FACING_XP_CATEGORIES.map((category) => ({
       category,
       rows: XP_ACTIONS.filter((row) => row.category === category),
     }));
   }, []);
 
-  const totalActions = XP_ACTIONS.length;
+  // "Ways to earn" reflects what the user can actually see on this
+  // page — admin-only actions are hidden, so they don't count.
+  const userFacingActions = useMemo(
+    () =>
+      XP_ACTIONS.filter((row) =>
+        USER_FACING_XP_CATEGORIES.includes(row.category),
+      ),
+    [],
+  );
+
+  // Theoretical daily maximum: sum of (xpValue × dailyCap) for every
+  // capped, user-earnable action, plus a single occurrence of each
+  // uncapped bonus (suggestion_approved, prediction_win) representing
+  // the realistic "one big payoff" case. Streak milestones are
+  // lifetime-once and therefore excluded — including them in the
+  // daily figure would inflate the headline number for an event that
+  // can't recur.
   const maxDaily = useMemo(() => {
-    return XP_ACTIONS.reduce((sum, row) => {
-      if (row.dailyCap === null || row.xpValue === 0) return sum;
+    return userFacingActions.reduce((sum, row) => {
+      if (row.xpValue === 0) return sum;
+      // Skip lifetime-once streak milestones (action keys begin with
+      // streak_milestone_) so they don't dominate the daily total.
+      if (row.actionKey.startsWith("streak_milestone_")) return sum;
+      if (row.dailyCap === null) {
+        // Uncapped one-shot bonuses: count one expected occurrence.
+        return sum + row.xpValue;
+      }
       return sum + row.xpValue * row.dailyCap;
     }, 0);
-  }, []);
+  }, [userFacingActions]);
 
   return (
     <section className="space-y-6">
@@ -238,38 +281,46 @@ function XpSection() {
       />
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <StatPill label="Tracked actions" value={String(totalActions)} variant="xp-chrome" />
         <StatPill
-          label="Theoretical daily max"
+          label="Ways to earn"
+          value={String(userFacingActions.length)}
+          variant="xp-chrome"
+        />
+        <StatPill
+          label="Daily maximum"
           value={`${maxDaily.toLocaleString()} XP`}
           variant="xp-chrome"
         />
-        <StatPill label="Highest single award" value="+100 XP (Win)" variant="xp-chrome" />
+        <StatPill
+          label="Milestone bonus"
+          value="+500 XP"
+          sublabel="Day 100 streak"
+          variant="xp-chrome"
+        />
       </div>
+
+      <RankLadderStrip onJumpToRanks={() => onJumpToTab?.("ranks")} />
 
       <Card className="space-y-3 p-4">
         <h3 className="font-semibold">How XP is awarded</h3>
-        <ul className="space-y-2 text-sm text-muted-foreground">
-          <li>
-            Every awardable event flows through one server-side function
-            (<code className="text-foreground">awardXp</code>) which writes
-            to an immutable <code className="text-foreground">xp_ledger</code>.
-          </li>
-          <li>
-            Each award carries an idempotency key — the same vote, comment,
-            or prediction can never grant XP twice, even on retry.
-          </li>
-          <li>
-            Daily caps reset at the start of each calendar day (server time)
-            per <em>(user, action)</em> pair. Once you hit the cap, further
-            actions still count for product purposes — you just stop earning XP
-            for them that day.
-          </li>
-          <li>
-            Crossing a rank threshold automatically promotes your rank and
-            sends a <code className="text-foreground">rank_up</code> notification.
-          </li>
-        </ul>
+        <p className="text-sm text-muted-foreground">
+          Every action you take on VoxDex that contributes to the community
+          earns you XP. Votes, predictions, comments, streaks — it all counts.
+        </p>
+        <p className="text-sm text-muted-foreground">
+          Each action can only award XP once per event — you'll never get
+          double credit for the same thing, even if something goes wrong on
+          our end.
+        </p>
+        <p className="text-sm text-muted-foreground">
+          Most actions have a daily limit to keep things fair. Hitting a limit
+          just means you stop earning XP for that action today — everything
+          else still counts, and limits reset at midnight UTC.
+        </p>
+        <p className="text-sm text-muted-foreground">
+          When you earn enough XP to cross a rank threshold, your rank updates
+          automatically and you'll get a notification.
+        </p>
       </Card>
 
       {grouped.map(({ category, rows }) => (
@@ -291,6 +342,73 @@ function XpSection() {
         </p>
       </Card>
     </section>
+  );
+}
+
+/**
+ * Compact horizontal rank ladder — eight tiered chips on a scrollable
+ * strip, anchored above the "How XP is awarded" prose. Highlights the
+ * authenticated user's current tier so the section reads as "here's
+ * where you are, here's what's ahead". Falls back to no-highlight for
+ * logged-out users (we still show the full ladder so the rank
+ * progression is discoverable to first-time visitors).
+ *
+ * Tier data comes straight from RANKS (the same source the dedicated
+ * Ranks tab uses), so threshold tweaks land in one place.
+ */
+function RankLadderStrip({ onJumpToRanks }: { onJumpToRanks: () => void }) {
+  const { isLoggedIn } = useAuth();
+  const { data: stats } = useUserStats(isLoggedIn);
+  const currentTier = stats?.rank?.tier ?? null;
+
+  return (
+    <div className="space-y-2">
+      <div
+        className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide md:grid md:grid-cols-8 md:gap-2 md:overflow-visible"
+        data-testid="rank-ladder-strip"
+      >
+        {RANKS.map((rank) => {
+          const isCurrent = currentTier === rank.tier;
+          return (
+            <div
+              key={rank.tier}
+              data-testid={`rank-ladder-tier-${rank.tier}`}
+              className={`shrink-0 md:shrink min-w-[110px] md:min-w-0 rounded-lg border px-2 py-2 transition-colors ${
+                isCurrent
+                  ? "border-amber-500/60 bg-amber-500/10 shadow-[0_0_0_2px_rgba(245,158,11,0.2)]"
+                  : "border-border/60 bg-muted/30"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <span
+                  className="inline-flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold text-white"
+                  style={{ backgroundColor: rank.color }}
+                >
+                  {rank.tier}
+                </span>
+                <div className="min-w-0 leading-tight">
+                  <p className="truncate text-[12px] font-semibold">
+                    {rank.name}
+                  </p>
+                  <p className="font-mono text-[10px] text-muted-foreground">
+                    {rank.minXp.toLocaleString()} XP
+                  </p>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <button
+        type="button"
+        onClick={onJumpToRanks}
+        className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:underline dark:text-blue-400"
+        data-testid="link-jump-to-ranks"
+      >
+        See what each rank unlocks
+        <ChevronRight className="h-3.5 w-3.5" />
+      </button>
+    </div>
   );
 }
 
@@ -823,13 +941,17 @@ function PredictSection() {
   );
 }
 
-const SECTION_BY_TAB: Record<KnowledgeTabId, () => JSX.Element> = {
-  xp: XpSection,
-  ranks: RanksSection,
-  credits: CreditsSection,
-  badges: BadgesSection,
-  vote: VoteSection,
-  predict: PredictSection,
+type SectionRenderer = (props: {
+  onJumpToTab: (tab: KnowledgeTabId) => void;
+}) => JSX.Element;
+
+const SECTION_BY_TAB: Record<KnowledgeTabId, SectionRenderer> = {
+  xp: ({ onJumpToTab }) => <XpSection onJumpToTab={onJumpToTab} />,
+  ranks: () => <RanksSection />,
+  credits: () => <CreditsSection />,
+  badges: () => <BadgesSection />,
+  vote: () => <VoteSection />,
+  predict: () => <PredictSection />,
 };
 
 export default function HowItWorksPage() {
@@ -889,7 +1011,7 @@ export default function HowItWorksPage() {
           </p>
         </Card>
 
-        <ActiveSection />
+        <ActiveSection onJumpToTab={setActiveTab} />
 
         <Separator />
 

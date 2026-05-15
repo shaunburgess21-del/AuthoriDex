@@ -13,27 +13,45 @@ import {
   streakMilestoneActionKey,
 } from "@shared/streak-config";
 
+/**
+ * Action keys that have been retired from the live catalogue. They're
+ * not deleted (we keep them so historical xp_ledger rows stay
+ * referentially intact and admin XP audit views can still resolve the
+ * displayName) — instead the seed flips `isActive=false` on every run
+ * so any orphaned awardXp() callers fail closed with "Action not
+ * found or inactive".
+ */
+const DEPRECATED_ACTION_KEYS = ['downvote_insight'] as const;
+
 async function seedXpActions() {
   console.log("[Gamification] Seeding XP actions...");
-  
+
   const actions = [
-    // Voting Actions
-    { actionKey: 'vote_sentiment', displayName: 'Sentiment Vote', xpValue: 25, dailyCap: 20, description: 'Vote on celebrity sentiment (1-10 scale)' },
-    { actionKey: 'vote_face_off', displayName: 'Matchup Vote', xpValue: 15, dailyCap: 25, description: 'Vote in a Matchup' },
-    { actionKey: 'vote_induction', displayName: 'Induction Vote', xpValue: 30, dailyCap: 10, description: 'Vote on candidate for main leaderboard' },
-    { actionKey: 'vote_curation', displayName: 'Image Curation Vote', xpValue: 20, dailyCap: 30, description: 'Vote on profile images (hot-or-not)' },
-    { actionKey: 'vote_opinion', displayName: 'Opinion Poll Vote', xpValue: 15, dailyCap: 20, description: 'Vote on an opinion poll' },
-    
+    // Voting Actions — equalised to 20 XP / cap 20/day across all
+    // five surfaces. Pre-overhaul values varied 15–30 XP and 10–30
+    // cap, which made vote choice feel like an XP optimisation
+    // problem ("induction is worth more, skip sentiment"). Flat
+    // values let users vote where the content interests them.
+    { actionKey: 'vote_sentiment', displayName: 'Sentiment Vote', xpValue: 20, dailyCap: 20, description: 'Vote on celebrity sentiment (1-10 scale)' },
+    { actionKey: 'vote_face_off', displayName: 'Matchup Vote', xpValue: 20, dailyCap: 20, description: 'Vote in a Matchup' },
+    { actionKey: 'vote_induction', displayName: 'Induction Vote', xpValue: 20, dailyCap: 10, description: 'Vote on candidate for main leaderboard' },
+    { actionKey: 'vote_curation', displayName: 'Image Curation Vote', xpValue: 20, dailyCap: 20, description: 'Vote on whether a profile image should be featured' },
+    { actionKey: 'vote_opinion', displayName: 'Opinion Poll Vote', xpValue: 20, dailyCap: 20, description: 'Vote on an opinion poll' },
+
     // Content Creation Actions
     { actionKey: 'post_insight', displayName: 'Post Insight', xpValue: 50, dailyCap: 5, description: 'Post a community insight' },
     { actionKey: 'post_comment', displayName: 'Post Comment', xpValue: 15, dailyCap: 10, description: 'Comment on an insight (min 20 chars, not on own insight, cap 10/day)' },
     { actionKey: 'submit_suggestion', displayName: 'Submit Suggestion', xpValue: 5, dailyCap: 3, description: 'Earn XP for submitting content suggestions for admin review' },
     { actionKey: 'suggestion_approved', displayName: 'Suggestion Approved', xpValue: 50, dailyCap: null, description: 'Bonus XP when your suggested content is approved and goes live' },
-    
-    // Engagement Actions
-    { actionKey: 'upvote_insight', displayName: 'Upvote Insight', xpValue: 5, dailyCap: 50, description: 'Upvote a community insight' },
-    { actionKey: 'downvote_insight', displayName: 'Downvote Insight', xpValue: 5, dailyCap: 50, description: 'Downvote a community insight' },
-    
+
+    // Engagement Actions. downvote_insight was retired in this
+    // pass — see DEPRECATED_ACTION_KEYS below for the deactivation
+    // path. insight_upvoted is the new author-side reward: when
+    // your insight or comment receives an upvote, you (the
+    // author) earn a small bounty, capped per author per day.
+    { actionKey: 'upvote_insight', displayName: 'Upvote Insight', xpValue: 5, dailyCap: 10, description: 'Upvote a community insight or comment' },
+    { actionKey: 'insight_upvoted', displayName: 'Insight Upvoted', xpValue: 20, dailyCap: 10, description: 'Earned when your insight or comment receives an upvote from another VoxMaxer' },
+
     // Prediction Actions
     { actionKey: 'place_prediction', displayName: 'Place Prediction', xpValue: 20, dailyCap: 10, description: 'Place a prediction on a market' },
     { actionKey: 'prediction_win', displayName: 'Prediction Win', xpValue: 100, dailyCap: null, description: 'Win a prediction (bonus XP)' },
@@ -61,7 +79,7 @@ async function seedXpActions() {
 
   for (const action of actions) {
     await db.insert(xpActions)
-      .values(action)
+      .values({ ...action, isActive: true })
       .onConflictDoUpdate({
         target: xpActions.actionKey,
         set: {
@@ -69,11 +87,23 @@ async function seedXpActions() {
           xpValue: action.xpValue,
           dailyCap: action.dailyCap,
           description: action.description,
+          isActive: true,
         }
       });
   }
 
-  console.log(`[Gamification] Seeded ${actions.length} XP actions`);
+  // Flip retired keys to isActive=false. Idempotent — runs every seed
+  // and converges any environment that pre-dated the deprecation.
+  for (const key of DEPRECATED_ACTION_KEYS) {
+    await db.update(xpActions)
+      .set({ isActive: false })
+      .where(eq(xpActions.actionKey, key));
+  }
+
+  console.log(
+    `[Gamification] Seeded ${actions.length} XP actions ` +
+    `(${DEPRECATED_ACTION_KEYS.length} deprecated → isActive=false)`,
+  );
 }
 
 async function seedRanks() {

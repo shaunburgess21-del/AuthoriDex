@@ -68,19 +68,19 @@ export interface XpActionRow {
 
 /** Mirror of server/scripts/seed-gamification.ts → seedXpActions. */
 export const XP_ACTIONS: XpActionRow[] = [
-  { actionKey: "vote_sentiment", displayName: "Sentiment Vote", xpValue: 25, dailyCap: 20, description: "Vote on celebrity sentiment (1-10 scale)", category: "Voting" },
-  { actionKey: "vote_face_off", displayName: "Matchup Vote", xpValue: 15, dailyCap: 25, description: "Vote in a Matchup", category: "Voting" },
-  { actionKey: "vote_induction", displayName: "Induction Vote", xpValue: 30, dailyCap: 10, description: "Vote on candidate for main leaderboard", category: "Voting" },
-  { actionKey: "vote_curation", displayName: "Image Curation Vote", xpValue: 20, dailyCap: 30, description: "Vote on profile images (hot-or-not)", category: "Voting" },
-  { actionKey: "vote_opinion", displayName: "Opinion Poll Vote", xpValue: 15, dailyCap: 20, description: "Vote on an opinion poll", category: "Voting" },
+  { actionKey: "vote_sentiment", displayName: "Sentiment Vote", xpValue: 20, dailyCap: 20, description: "Vote on celebrity sentiment (1-10 scale)", category: "Voting" },
+  { actionKey: "vote_face_off", displayName: "Matchup Vote", xpValue: 20, dailyCap: 20, description: "Vote in a Matchup", category: "Voting" },
+  { actionKey: "vote_induction", displayName: "Induction Vote", xpValue: 20, dailyCap: 10, description: "Vote on candidate for main leaderboard", category: "Voting" },
+  { actionKey: "vote_curation", displayName: "Image Curation Vote", xpValue: 20, dailyCap: 20, description: "Vote on whether a profile image should be featured", category: "Voting" },
+  { actionKey: "vote_opinion", displayName: "Opinion Poll Vote", xpValue: 20, dailyCap: 20, description: "Vote on an opinion poll", category: "Voting" },
 
   { actionKey: "post_insight", displayName: "Post Insight", xpValue: 50, dailyCap: 5, description: "Post a community insight", category: "Content" },
   { actionKey: "post_comment", displayName: "Post Comment", xpValue: 15, dailyCap: 10, description: "Comment on an insight (min 20 chars, not on own insight)", category: "Content" },
   { actionKey: "submit_suggestion", displayName: "Submit Suggestion", xpValue: 5, dailyCap: 3, description: "Submit content suggestions for admin review", category: "Content" },
   { actionKey: "suggestion_approved", displayName: "Suggestion Approved", xpValue: 50, dailyCap: null, description: "Bonus when a suggestion is approved and goes live", category: "Content" },
 
-  { actionKey: "upvote_insight", displayName: "Upvote Insight", xpValue: 5, dailyCap: 50, description: "Upvote a community insight or comment", category: "Engagement" },
-  { actionKey: "downvote_insight", displayName: "Downvote Insight", xpValue: 5, dailyCap: 50, description: "Downvote a community insight or comment", category: "Engagement" },
+  { actionKey: "upvote_insight", displayName: "Upvote Insight", xpValue: 5, dailyCap: 10, description: "Upvote a community insight or comment", category: "Engagement" },
+  { actionKey: "insight_upvoted", displayName: "Insight Upvoted", xpValue: 20, dailyCap: 10, description: "Earned when your insight or comment receives an upvote from another VoxMaxer", category: "Engagement" },
 
   { actionKey: "place_prediction", displayName: "Place Prediction", xpValue: 20, dailyCap: 10, description: "Place a prediction on a market", category: "Prediction" },
   { actionKey: "prediction_win", displayName: "Prediction Win", xpValue: 100, dailyCap: null, description: "Bonus XP when a prediction settles in your favour", category: "Prediction" },
@@ -88,6 +88,10 @@ export const XP_ACTIONS: XpActionRow[] = [
   { actionKey: "daily_login", displayName: "Daily Login", xpValue: 10, dailyCap: 1, description: "Log in to keep your streak alive", category: "Streak" },
   { actionKey: "streak_bonus", displayName: "Streak Bonus", xpValue: 25, dailyCap: 1, description: "Bonus XP for maintaining a multi-day streak", category: "Streak" },
 
+  // Special category is admin-only and intentionally hidden from
+  // HowItWorksPage (see HowItWorksPage.tsx XpSection's category list).
+  // Kept here for the admin portal / XP audit views which reuse this
+  // catalogue.
   { actionKey: "legacy_migration", displayName: "Legacy Migration", xpValue: 0, dailyCap: null, description: "One-time XP carried over from the legacy system", category: "Special" },
   { actionKey: "admin_adjustment", displayName: "Admin Adjustment", xpValue: 0, dailyCap: null, description: "Manual XP adjustment by an admin", category: "Special" },
 ];

@@ -3727,6 +3727,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .select({
           id: communityInsights.id,
           deletedAt: communityInsights.deletedAt,
+          authorId: communityInsights.userId,
         })
         .from(communityInsights)
         .where(eq(communityInsights.id, id))
@@ -3792,6 +3793,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
             { insightId: id, voteType }
           );
         } catch (e) { console.error("XP award failed:", e); }
+
+        // Author bounty: pay the insight author for receiving a fresh
+        // upvote, capped per author per day. Self-upvotes are
+        // disallowed by design (cannot earn from upvoting your own
+        // content) and we also no-op when the author row is missing
+        // (e.g. legacy orphaned insights with no profile).
+        if (insight.authorId && insight.authorId !== userId) {
+          try {
+            await gamificationService.awardXp(
+              insight.authorId, "insight_upvoted",
+              `insight_upvoted_${id}_${insight.authorId}_${userId}`,
+              { insightId: id, voterId: userId, source: "community_insight" },
+            );
+          } catch (e) { console.error("Author upvote XP award failed:", e); }
+        }
       }
 
       res.json({ success: true, xp: xpResult ?? null });
@@ -5767,6 +5783,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
             { commentId: id, voteType }
           );
         } catch (e) { console.error("XP award failed:", e); }
+
+        // Author bounty for upvoted comments. Mirrors the insight-vote
+        // handler above: only fires on `up`, never on self-votes, and
+        // is capped per author per day via the insight_upvoted action.
+        // The idempotency key shape matches the pattern documented in
+        // the XP catalogue:
+        //   insight_upvoted_<entityId>_<authorId>_<voterId>
+        if (
+          voteType === "up" &&
+          comment.userId &&
+          comment.userId !== userId
+        ) {
+          try {
+            await gamificationService.awardXp(
+              comment.userId, "insight_upvoted",
+              `insight_upvoted_${id}_${comment.userId}_${userId}`,
+              { commentId: id, voterId: userId, source: "comment" },
+            );
+          } catch (e) { console.error("Author upvote XP award failed:", e); }
+        }
       }
 
       // comment_upvote_milestone fanout. We deliberately do NOT ping per
