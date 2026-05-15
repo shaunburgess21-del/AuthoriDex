@@ -202,11 +202,33 @@ export function registerShareRoutes(app: Express): void {
   app.get("/api/me/referral-stats", requireAuth, async (req: AuthRequest, res) => {
     try {
       const userId = req.userId!;
-      const [profile] = await db
-        .select({ referralCode: profiles.referralCode })
-        .from(profiles)
-        .where(eq(profiles.id, userId))
-        .limit(1);
+
+      // Read via raw SQL on the snake_case column directly. Earlier
+      // attempts went through Drizzle's typed select on
+      // `profiles.referralCode`; under some build / process-restart
+      // sequences (notably when the dev server is running an older
+      // compiled bundle than the schema file on disk) that mapping
+      // resolved to undefined even when the column was populated,
+      // which produced a stable referralCode=null in the response
+      // and trapped the client card in its retry state. Going
+      // through `sql<string>...` skips the codegen layer and reads
+      // the column verbatim, so the only failure mode is "the row
+      // doesn't exist" — which we handle below.
+      const profileRows = await db.execute<{
+        referral_code: string | null;
+        exists: boolean;
+      }>(sql`
+        SELECT referral_code, true AS exists
+        FROM profiles
+        WHERE id = ${userId}
+        LIMIT 1
+      `);
+
+      const profileRow =
+        ((profileRows as any).rows ?? profileRows ?? [])[0] ?? null;
+
+      let referralCode: string | null =
+        (profileRow?.referral_code as string | null) ?? null;
 
       // Self-heal for accounts that pre-date the referral column
       // and never went through a fresh /api/profile/sync after the
@@ -215,8 +237,7 @@ export function registerShareRoutes(app: Express): void {
       // generation exhausts (extremely unlikely) we still return
       // the row with a null code rather than 500-ing — the client
       // is hardened to render a "generating" state in that case.
-      let referralCode = profile?.referralCode ?? null;
-      if (profile && !referralCode) {
+      if (profileRow && !referralCode) {
         try {
           const minted = await generateUniqueReferralCode();
           if (minted) {
