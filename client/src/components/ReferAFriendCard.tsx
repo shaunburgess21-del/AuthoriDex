@@ -1,10 +1,10 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Copy, Check, Share2, Users } from "lucide-react";
+import { Copy, Check, Share2, Users, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { apiRequest } from "@/lib/queryClient";
 import { sharePage } from "@/lib/share";
@@ -21,36 +21,103 @@ interface ReferralStats {
  * link, a copy + share affordance, and counters fed by
  * GET /api/me/referral-stats.
  *
- * Hides itself when the server hasn't generated a code yet (very
- * fresh signup pre-sync, or a backfill window for legacy accounts).
- * The next /api/profile/sync call populates the column, so this is
- * a transient state that resolves on its own.
+ * Failure modes — the card stays mounted in all of them so the user
+ * never sees it disappear mid-page:
+ *
+ *   - loading             → skeleton
+ *   - error               → "Generating your referral link..." with a
+ *                           single auto-retry after 2s, then a manual
+ *                           Retry button
+ *   - data.referralCode null (server failed to mint on demand) →
+ *                           same generating state, with retry. We
+ *                           refetch instead of hiding because the
+ *                           backfill / on-demand mint should resolve
+ *                           it within one extra round-trip.
+ *   - happy path          → full card with link, copy, share, counters
  */
 export function ReferAFriendCard() {
   const { isLoggedIn, user } = useAuth();
+  const queryClient = useQueryClient();
   const [copied, setCopied] = useState(false);
+  const [autoRetryDone, setAutoRetryDone] = useState(false);
 
-  const { data, isLoading } = useQuery<ReferralStats>({
-    queryKey: ["/api/me/referral-stats"],
-    queryFn: async () => {
-      const res = await apiRequest("GET", "/api/me/referral-stats");
-      return res.json();
-    },
-    enabled: isLoggedIn,
-    staleTime: 60 * 1000,
-  });
+  const { data, isLoading, isError, refetch, isFetching } =
+    useQuery<ReferralStats>({
+      queryKey: ["/api/me/referral-stats"],
+      queryFn: async () => {
+        const res = await apiRequest("GET", "/api/me/referral-stats");
+        return res.json();
+      },
+      enabled: isLoggedIn,
+      staleTime: 60 * 1000,
+      // Don't let React Query give up silently — if it fails once,
+      // we want a stable error state we can render rather than a
+      // disappearing card.
+      retry: 1,
+    });
+
+  // Single auto-retry 2s after a missing-code or error response.
+  // Most often this is a fresh post-overhaul login that triggered
+  // the server's on-demand mint; the second call hits the populated
+  // column and renders the happy path.
+  useEffect(() => {
+    if (autoRetryDone) return;
+    if (isLoading || isFetching) return;
+    const needsRetry = isError || (data && !data.referralCode);
+    if (!needsRetry) return;
+
+    const t = setTimeout(() => {
+      setAutoRetryDone(true);
+      queryClient.invalidateQueries({ queryKey: ["/api/me/referral-stats"] });
+    }, 2000);
+    return () => clearTimeout(t);
+  }, [autoRetryDone, isLoading, isFetching, isError, data, queryClient]);
 
   if (!isLoggedIn) return null;
+
   if (isLoading) {
     return (
-      <Card className="p-6 space-y-3">
+      <Card className="p-6 space-y-3" data-testid="refer-a-friend-loading">
         <Skeleton className="h-5 w-40" />
         <Skeleton className="h-10 w-full" />
         <Skeleton className="h-4 w-2/3" />
       </Card>
     );
   }
-  if (!data?.referralCode) return null;
+
+  // Error / missing-code path. We keep the card mounted with a
+  // friendly message so the /me layout doesn't reflow when the
+  // referral system has a transient hiccup.
+  if (isError || !data?.referralCode) {
+    return (
+      <Card
+        className="p-6 space-y-3"
+        data-testid="refer-a-friend-generating"
+      >
+        <div className="flex items-center gap-2">
+          <Loader2 className="h-4 w-4 text-muted-foreground animate-spin" />
+          <h3 className="font-semibold">Refer a Friend</h3>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          {isError
+            ? "Couldn't load your referral link. We'll try again automatically."
+            : "Generating your referral link..."}
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setAutoRetryDone(false);
+            void refetch();
+          }}
+          disabled={isFetching}
+          data-testid="button-retry-referral"
+        >
+          {isFetching ? "Trying again..." : "Retry"}
+        </Button>
+      </Card>
+    );
+  }
 
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const referralUrl = `${origin}?ref=${data.referralCode}`;

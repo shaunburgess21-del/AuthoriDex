@@ -26,6 +26,7 @@ import {
   maybeFireReferralCredit,
 } from "./services/credits-earn";
 import { SIGNUP_CREDIT_GRANT } from "@shared/credit-config";
+import { generateUniqueReferralCode } from "./utils/referral-code";
 import { createNotification, createNotificationsBulk } from "./services/notifications";
 import { dispatchApproval, markSuggestionApproved, markSuggestionRejected } from "./services/suggestionApproval";
 import { JACKPOT_TICKET_COST, JACKPOT_MAX_PREDICTED_SCORE } from "./config/constants";
@@ -7115,39 +7116,9 @@ Only return the JSON object.`;
   // the same number. Bumping the grant is a single-file edit.
   // (Imported at the top of routes.ts.)
 
-  /**
-   * Generate a unique 8-char referral code ("VX" + 6 base32 chars).
-   *
-   * Base32 alphabet (A–Z minus look-alikes I/O/L, 2–9 minus 0/1)
-   * keeps the code typeable on a phone — collision rate ≈ 1 / 32^6
-   * = 1 / 1B per random pull, but we still loop with onConflictDoNothing
-   * so a repeat in the next decade doesn't crash signup.
-   *
-   * Returns null after the configured retry budget; caller decides
-   * whether to fail the signup or continue without a code (we choose
-   * the latter — a missing code only blocks the user from sharing a
-   * referral, not from using the app).
-   */
-  const REFERRAL_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
-  async function generateUniqueReferralCode(maxAttempts = 5): Promise<string | null> {
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      let suffix = "";
-      for (let i = 0; i < 6; i++) {
-        suffix += REFERRAL_CODE_ALPHABET[
-          Math.floor(Math.random() * REFERRAL_CODE_ALPHABET.length)
-        ];
-      }
-      const candidate = `VX${suffix}`;
-      const collision = await db
-        .select({ id: profiles.id })
-        .from(profiles)
-        .where(eq(profiles.referralCode, candidate))
-        .limit(1);
-      if (collision.length === 0) return candidate;
-    }
-    console.warn("[profile-sync] generateUniqueReferralCode exhausted attempts");
-    return null;
-  }
+  // generateUniqueReferralCode lives in server/utils/referral-code.ts
+  // so the one-shot backfill script and any future admin tooling
+  // can reuse the same retry-on-collision logic.
 
   // Sync profile after Supabase auth - creates profile if doesn't exist
   app.post("/api/profile/sync", requireAuth, async (req: AuthRequest, res) => {

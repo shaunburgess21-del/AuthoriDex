@@ -5,6 +5,7 @@ import { db } from "../db";
 import { profiles, shareClicks, creditLedger } from "@shared/schema";
 import { gamificationService } from "../services/gamification";
 import { requireAuth, requireAdmin, type AuthRequest } from "../auth-middleware";
+import { generateUniqueReferralCode } from "../utils/referral-code";
 
 /**
  * Hosts that count as "internal" for share-click attribution.
@@ -207,6 +208,29 @@ export function registerShareRoutes(app: Express): void {
         .where(eq(profiles.id, userId))
         .limit(1);
 
+      // Self-heal for accounts that pre-date the referral column
+      // and never went through a fresh /api/profile/sync after the
+      // overhaul. We mint a code on demand and persist it so the
+      // next call short-circuits to the fast path. Best-effort: if
+      // generation exhausts (extremely unlikely) we still return
+      // the row with a null code rather than 500-ing — the client
+      // is hardened to render a "generating" state in that case.
+      let referralCode = profile?.referralCode ?? null;
+      if (profile && !referralCode) {
+        try {
+          const minted = await generateUniqueReferralCode();
+          if (minted) {
+            await db
+              .update(profiles)
+              .set({ referralCode: minted })
+              .where(eq(profiles.id, userId));
+            referralCode = minted;
+          }
+        } catch (err) {
+          console.warn("[me-referral-stats] on-demand mint failed", err);
+        }
+      }
+
       const [{ count: successfulReferrals }] = await db
         .select({ count: sql<number>`count(*)::int` })
         .from(profiles)
@@ -231,7 +255,7 @@ export function registerShareRoutes(app: Express): void {
         );
 
       res.json({
-        referralCode: profile?.referralCode ?? null,
+        referralCode,
         successfulReferrals: Number(successfulReferrals) || 0,
         pendingReferrals: Number(pendingReferrals) || 0,
       });
