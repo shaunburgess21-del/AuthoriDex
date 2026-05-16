@@ -473,8 +473,15 @@ async function main(): Promise<void> {
   console.log(green(bold(`✓ Loadgen passed: ${oks.length}/${allResults.length} buys ok, p95=${p95}ms, all invariants hold.`)));
 }
 
-main().catch((err) => {
-  console.error(red(`\n[amm-loadgen] FAILED: ${err?.message ?? err}`));
-  if (err?.stack) console.error(dim(err.stack));
-  process.exit(1);
-});
+// Explicitly exit after main resolves. server/db's pg.Pool holds the
+// event loop open for `idleTimeoutMillis` (30s) after the last query,
+// so the loadgen run would otherwise hang for ~30s after printing the
+// final verdict. Preserves any `process.exitCode` set during the run
+// (invariant failures + unexpected HTTP errors).
+main()
+  .then(() => process.exit(process.exitCode ?? 0))
+  .catch((err) => {
+    console.error(red(`\n[amm-loadgen] FAILED: ${err?.message ?? err}`));
+    if (err?.stack) console.error(dim(err.stack));
+    process.exit(1);
+  });

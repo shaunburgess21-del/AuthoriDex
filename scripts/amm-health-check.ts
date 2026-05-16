@@ -389,8 +389,15 @@ async function main(): Promise<void> {
   console.log(green(bold("\n✓ Health check passed cleanly. AMM stack is healthy.")));
 }
 
-main().catch((err) => {
-  console.error(red(`\n[amm-health-check] FAILED: ${err?.message ?? err}`));
-  if (err?.stack) console.error(dim(err.stack));
-  process.exit(1);
-});
+// Explicitly exit after main resolves. server/db's pg.Pool holds the
+// event loop open for `idleTimeoutMillis` (30s) after the last query,
+// so a cron-able script would otherwise hang for ~30s on every run.
+// We preserve any exitCode that was set during the run (e.g. via the
+// warning path returning early without an exit code).
+main()
+  .then(() => process.exit(process.exitCode ?? 0))
+  .catch((err) => {
+    console.error(red(`\n[amm-health-check] FAILED: ${err?.message ?? err}`));
+    if (err?.stack) console.error(dim(err.stack));
+    process.exit(1);
+  });
