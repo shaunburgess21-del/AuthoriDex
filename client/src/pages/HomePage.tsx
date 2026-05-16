@@ -1155,6 +1155,14 @@ export default function HomePage() {
   const welcomeOnboardingRef = useRef<OnboardingDrawerHandle>(null);
   const [stakeModalOpen, setStakeModalOpen] = useState(false);
   const [pendingSelection, setPendingSelection] = useState<StakeSelection | null>(null);
+  /**
+   * Sprint 5 / Phase 1.3: parity with PredictPage. The home leaderboard
+   * doesn't yet surface a "Sell" affordance directly, but the StakeModal
+   * itself toggles between Buy/Sell and we want the same `initialAmmMode`
+   * default so behaviour is identical regardless of which page launched
+   * the modal.
+   */
+  const [modalIntent, setModalIntent] = useState<"buy" | "sell">("buy");
   // Real wallet balance from the auth profile — was previously a
   // hardcoded `useState(10000)`, which let users on the home
   // leaderboard appear to stake credits they didn't have. The
@@ -1331,6 +1339,7 @@ export default function HomePage() {
       ammState: (market.ammState ?? null) as StakeSelection["ammState"],
     });
     refreshProfile?.().catch(() => {});
+    setModalIntent("buy");
     setStakeModalOpen(true);
   }, [updownMarkets, isUpdownCutoffPassed, refreshProfile, userUpdownPickByPerson]);
 
@@ -1418,6 +1427,78 @@ export default function HomePage() {
     }
     nativeUpdownBetMutation.mutate({ marketId: market.id, entryId, stakeAmount: amount });
   }, [pendingSelection, updownMarkets, nativeUpdownBetMutation]);
+
+  /**
+   * Sprint 5 / Phase 1.3: AMM sell support for the home leaderboard
+   * StakeModal. Without this `StakeModal.canSellAmm` is false and the
+   * Sell tab silently disappears even when the user is in an AMM
+   * position. Home leaderboard only opens Up/Down markets today, so
+   * we keep the wiring narrow rather than reaching for the multi-type
+   * dispatch that PredictPage uses.
+   */
+  const homeAmmSellMutation = useMutation({
+    mutationFn: async ({ marketId, entryId, shares }: { marketId: string; entryId: string; shares: number }) => {
+      const res = await apiRequest("POST", `/api/native-markets/${marketId}/bet`, {
+        entryId,
+        actionType: "sell",
+        shares,
+      });
+      return res.json();
+    },
+    onSuccess: async (data: any) => {
+      hapticSuccess();
+      if (data?.xp?.xpAwarded) {
+        triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
+      }
+      const proceeds = Math.round(Number(data?.proceeds ?? 0));
+      toast("Position sold", {
+        description:
+          proceeds > 0
+            ? `Proceeds credited: +${proceeds.toLocaleString("en-US")} cr`
+            : "Proceeds have been credited to your wallet.",
+      });
+      setStakeModalOpen(false);
+      setPendingSelection(null);
+      await Promise.all([
+        refreshProfile(),
+        queryClient.invalidateQueries({ queryKey: ["/api/native-markets/updown"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/me/predictions"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/me/amm-positions"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
+      ]);
+    },
+    onError: (err: Error) => {
+      hapticError();
+      const { title, description } = parseApiError(err, "Failed to sell position");
+      toast.error(title, { description });
+    },
+  });
+
+  const handleConfirmAmmSell = useCallback(async (shares: number) => {
+    if (!pendingSelection?.marketId || !pendingSelection.entryId) {
+      setStakeModalOpen(false);
+      setPendingSelection(null);
+      return;
+    }
+    await homeAmmSellMutation.mutateAsync({
+      marketId: String(pendingSelection.marketId),
+      entryId: String(pendingSelection.entryId),
+      shares,
+    });
+  }, [pendingSelection, homeAmmSellMutation]);
+
+  /**
+   * Live AMM state for the currently-open selection. Without this the
+   * StakeModal renders stale prices (cached on the original pick) for
+   * the lifetime of the modal, so a fast-moving market visibly drifts
+   * away from the % shown in the buy panel. Mirrors PredictPage.
+   */
+  const liveAmmStateForPending = useMemo(() => {
+    if (!pendingSelection || pendingSelection.engine !== "amm") return null;
+    const id = pendingSelection.marketId;
+    const m = updownMarkets.find((entry) => String(entry?.id) === String(id));
+    return (m?.ammState ?? null) as StakeSelection["ammState"] | null;
+  }, [pendingSelection, updownMarkets]);
   const [trendingNowCollapsed, setTrendingNowCollapsed] = useState(() => {
     try {
       const saved = localStorage.getItem('trending_now_collapsed');
@@ -2523,6 +2604,9 @@ export default function HomePage() {
         }}
         selection={pendingSelection}
         onConfirm={handleConfirmStake}
+        onConfirmAmmSell={handleConfirmAmmSell}
+        initialAmmMode={modalIntent}
+        liveAmmState={liveAmmStateForPending}
         walletBalance={walletCredits}
         onDirectionChange={(dir) => {
           if (!pendingSelection || pendingSelection.type !== "updown") return;

@@ -29,6 +29,7 @@ import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constan
 import { apiRequest, parseApiError } from "@/lib/queryClient";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { goBack } from "@/lib/goBack";
+import { formatVolumeCredits } from "@/lib/formatNumber";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { computePayoutMultiplier, computeEarlyBirdMultiplier } from "@/lib/parimutuel";
 import { pricesFor, priceToPercent, snapshotFromApi } from "@/lib/ammClient";
@@ -80,6 +81,13 @@ export default function CategoryRaceDetailPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [stakeModalOpen, setStakeModalOpen] = useState(false);
   const [pendingSelection, setPendingSelection] = useState<StakeSelection | null>(null);
+  /**
+   * Sprint 5 / Phase 3.4: seeds which StakeModal tab opens. Buy-side
+   * flows from the leaderboard or "Back another candidate" CTA set
+   * this to "buy"; the per-candidate Sell button below the Live
+   * Market card sets it to "sell". Mirrors the Up/Down + H2H pattern.
+   */
+  const [modalIntent, setModalIntent] = useState<"buy" | "sell">("buy");
   // Race trades target one of N candidates — `pendingSelection.choice`
   // is the candidate name, but we also need the avatar for the share
   // card hero. Captured at click-time alongside the pending selection;
@@ -328,6 +336,7 @@ export default function CategoryRaceDetailPage() {
         engine: isAmm ? "amm" : "parimutuel",
         ammState: isAmm ? ((market as any)?.ammState ?? null) : null,
       } as StakeSelection);
+      setModalIntent("buy");
       setStakeModalOpen(true);
     },
     [isMarketClosed, marketId, categoryLabel, totalPool, market, serverResolutionDeadline, existingStakeFor, isAmm, ammPriceMap]
@@ -429,6 +438,104 @@ export default function CategoryRaceDetailPage() {
     [pendingSelection, betMutation]
   );
 
+  /**
+   * Sprint 5 / Phase 3.4: Race AMM sell flow. Same shape as the
+   * Up/Down + H2H pages — POST to `/api/native-markets/:marketId/bet`
+   * with `actionType: "sell"`. The cache invalidations mirror the
+   * other native pages so the rendered position rows refresh
+   * immediately after a sell. We keep the share toast lean (just
+   * proceeds) — Race shares are best opened from the position card.
+   */
+  const sellMutation = useMutation({
+    mutationFn: async ({ entryId, shares }: { entryId: string; shares: number }) => {
+      const res = await apiRequest("POST", `/api/native-markets/${marketId}/bet`, {
+        entryId,
+        actionType: "sell",
+        shares,
+      });
+      return res.json();
+    },
+    onSuccess: async (data: any) => {
+      hapticSuccess();
+      if (data?.xp?.xpAwarded) {
+        triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
+      }
+      const proceeds = Math.round(Number(data?.proceeds ?? 0));
+      toast("Position sold", {
+        description:
+          proceeds > 0
+            ? `Proceeds credited: +${proceeds.toLocaleString("en-US")} cr`
+            : "Proceeds have been credited to your wallet.",
+      });
+      setStakeModalOpen(false);
+      setPendingSelection(null);
+      await Promise.all([
+        refreshProfile?.(),
+        queryClient.invalidateQueries({ queryKey: ["/api/native-markets/gainer"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/me/predictions"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/me/amm-positions"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/markets", marketId, "my-position"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/markets", marketId, "amm-position"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/markets", marketId, "price-history"] }),
+      ]);
+    },
+    onError: (err: Error) => {
+      hapticError();
+      const { title, description } = parseApiError(err, "Failed to sell position");
+      toast.error(title, { description });
+    },
+  });
+
+  const handleConfirmAmmSell = useCallback(
+    async (shares: number) => {
+      if (!pendingSelection?.entryId) return;
+      await sellMutation.mutateAsync({
+        entryId: pendingSelection.entryId,
+        shares,
+      });
+    },
+    [pendingSelection, sellMutation]
+  );
+
+  const openSellModal = useCallback(
+    (candidate: GainerCandidate, netShares: number) => {
+      if (!isAmm || !candidate.entryId) return;
+      const livePrice = ammPriceMap && candidate.entryId ? Number(ammPriceMap[candidate.entryId] ?? 0) : 0;
+      const crowdSentiment = Math.round(Math.max(0, Math.min(1, livePrice)) * 100);
+      // Note: pendingShareCandidateRef is only read by the BUY mutation
+      // success handler to build the share toast — sells use a leaner
+      // proceeds-only toast so we deliberately don't stash a candidate
+      // here. Leaving the ref alone also avoids leaking a stale buy
+      // share candidate if the user sells then immediately re-buys a
+      // different entry (handleCandidateSelect will overwrite it).
+      setPendingSelection({
+        type: "gainer",
+        marketId,
+        entryId: candidate.entryId,
+        choice: candidate.name,
+        marketName: `Category Race: ${categoryLabel}`,
+        candidateRank: candidate.rank,
+        candidatePercentGain: candidate.percentGain,
+        candidatePointsAdded: candidate.currentGain,
+        crowdSentiment,
+        endAt: serverResolutionDeadline ?? undefined,
+        bettingCutoff: market?.bettingCutoff || null,
+        engine: "amm",
+        ammState: (market as any)?.ammState ?? null,
+        // Sprint 5 / Phase 3.4 fix: thread the user's netShares for
+        // this entry so `canSellAmm` in StakeModal (which gates on
+        // `ammNetShares > 1e-6`) actually reveals the Sell tab. Without
+        // this the modal opens with `initialAmmMode="sell"` but the
+        // Sell tab is hidden, leaving the user staring at a Buy form.
+        ammNetShares: netShares,
+      } as StakeSelection);
+      setModalIntent("sell");
+      setStakeModalOpen(true);
+    },
+    [isAmm, ammPriceMap, marketId, categoryLabel, serverResolutionDeadline, market],
+  );
+
   const { timeRemaining } = marketState;
   const pad = (n: number) => String(n).padStart(2, "0");
 
@@ -526,11 +633,12 @@ export default function CategoryRaceDetailPage() {
           </div>
         </Card>
 
-        {/* Your Position — unified across all detail pages. For Race
-            we wire the CTA to the candidate-search input so adding
-            another bet is a one-tap flow (Race natively supports
-            staking on multiple candidates, unlike UpDown / H2H). */}
-        <MyPositionCard
+        {/* Your Position — for parimutuel races we keep MyPositionCard
+            (familiar legacy UI). For AMM races we hide it and let the
+            new Live Market card below render per-candidate position
+            rows inline (Sprint 5 / Phase 3.3) so the user's net
+            shares + Sell button live next to the live market price. */}
+        {!isAmm && <MyPositionCard
           marketId={marketId}
           marketType="race"
           isAmm={isAmm}
@@ -597,7 +705,7 @@ export default function CategoryRaceDetailPage() {
               });
             };
           })()}
-        />
+        />}
 
         {/* Path-to-win callout — quantifies how far behind the leader
             the user's pick is (in % gain points). Race resolves on the
@@ -611,55 +719,221 @@ export default function CategoryRaceDetailPage() {
           />
         )}
 
-        {/* AMM Live Market — surfaces the top-5 LMSR prices so users
-            see market consensus at a glance before scrolling the full
-            leaderboard. */}
-        {isAmm && ammPriceMap && candidates.length > 0 && (
-          <Card className="border-emerald-500/30 dark:border-emerald-500/20">
-            <div className="p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-sm font-semibold flex items-center gap-1.5">
-                  <Activity className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                  Live Market
-                </h2>
-                <Badge variant="outline" className="text-emerald-600 dark:text-emerald-400 border-emerald-500/40 dark:border-emerald-500/30 text-[10px]">
-                  LIVE
-                </Badge>
-              </div>
-              <div className="space-y-1.5">
-                {[...candidates]
-                  .filter(c => c.entryId)
-                  .map(c => ({
-                    ...c,
-                    livePrice: Number(ammPriceMap[c.entryId!] ?? 0),
-                  }))
-                  .sort((a, b) => b.livePrice - a.livePrice)
-                  .slice(0, 6)
-                  .map(c => {
-                    const pct = Math.max(0, Math.min(100, Math.round(c.livePrice * 100)));
-                    return (
-                      <div key={c.entryId} className="flex items-center gap-3 text-sm">
-                        <span className="w-[35%] sm:w-[30%] truncate font-medium">{c.name}</span>
-                        <div className="flex-1 h-5 rounded-md overflow-hidden border border-emerald-500/25 bg-slate-900/80">
+        {/* AMM Live Market — consolidated card (Sprint 5 / Phase 3.3).
+            Renders three layers in priority order:
+              1. Volume + Traders chips (parity with H2H / Up/Down)
+              2. Per-candidate position rows for candidates the user
+                 holds — net shares, avg, cost, conversational sell-now
+                 / if-wins copy, plus inline Add / Sell / Share buttons
+              3. Top-6 candidates by live LMSR price (existing market
+                 consensus surface)
+            This replaces MyPositionCard for AMM races so the position
+            rows live next to the live prices that drive them. */}
+        {isAmm && ammPriceMap && candidates.length > 0 && (() => {
+          const liveVolume = Number(
+            ((market as any)?.ammState?.totalUserCreditsIn ?? (market as any)?.volume ?? 0),
+          );
+          const liveVolumeLabel = liveVolume > 0 ? formatVolumeCredits(liveVolume) : null;
+          const openPositions = (ammPositionData?.positions ?? []).filter(
+            (p) => p.netShares > 1e-6,
+          );
+          return (
+            <Card className="border-emerald-500/30 dark:border-emerald-500/20">
+              <div className="p-4">
+                <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                  <h2 className="text-sm font-semibold flex items-center gap-1.5">
+                    <Activity className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                    Live Market
+                  </h2>
+                  <div className="flex items-center gap-1.5">
+                    {liveVolumeLabel && (
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] tabular-nums text-muted-foreground border-border/50"
+                        data-testid="race-live-market-volume"
+                      >
+                        {liveVolumeLabel} vol
+                      </Badge>
+                    )}
+                    {totalParticipants > 0 && (
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] tabular-nums text-muted-foreground border-border/50 flex items-center gap-1"
+                      >
+                        <Users className="h-2.5 w-2.5" />
+                        {totalParticipants}
+                      </Badge>
+                    )}
+                    <Badge variant="outline" className="text-emerald-600 dark:text-emerald-400 border-emerald-500/40 dark:border-emerald-500/30 text-[10px]">
+                      LIVE
+                    </Badge>
+                  </div>
+                </div>
+
+                {/* Per-candidate position rows. Race users can hold
+                    multiple candidates at once — we render one row per
+                    open position with conversational copy + per-row
+                    Sell button. The Add CTA below the list focuses the
+                    search input so they can back yet another. */}
+                {openPositions.length > 0 && (
+                  <div className="space-y-2 pb-3 mb-3 border-b border-border/40">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                      Your positions
+                    </p>
+                    {openPositions
+                      .slice()
+                      .sort((a, b) => b.currentValue - a.currentValue)
+                      .map((pos) => {
+                        const candidate = candidates.find(
+                          (c) => c.entryId === pos.entryId,
+                        );
+                        const candidateName = candidate?.name ?? pos.entryLabel;
+                        const unrealisedPnl = pos.currentValue - pos.netCreditsIn;
+                        const maxProfitIfWin = pos.netShares - pos.netCreditsIn;
+                        // Sub-cent clamp: render -0.00 cr as 0.00 cr so
+                        // the user sees a clean break-even instead of a
+                        // misleading negative sign. Mirrors the
+                        // WeeklyUpDownYourPositionPanel clamp.
+                        const pnlIsZero = Math.abs(unrealisedPnl) < 0.005;
+                        const pnlClass = pnlIsZero
+                          ? "text-muted-foreground"
+                          : unrealisedPnl >= 0
+                            ? "text-green-700 dark:text-green-500"
+                            : "text-red-700 dark:text-red-500";
+                        return (
                           <div
-                            className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400"
-                            style={{ width: `${Math.max(pct, 1)}%` }}
-                          />
+                            key={pos.entryId}
+                            className="rounded-lg bg-muted/30 p-3"
+                            data-testid={`race-position-row-${pos.entryId}`}
+                          >
+                            <div className="flex items-start gap-3">
+                              {candidate?.avatar ? (
+                                <PersonAvatar
+                                  name={candidateName}
+                                  avatar={candidate.avatar}
+                                  className="h-10 w-10 shrink-0"
+                                />
+                              ) : null}
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-semibold truncate">{candidateName}</p>
+                                <p className="text-[11px] text-muted-foreground">
+                                  {pos.netShares.toFixed(2)} shares · avg {pos.avgEntryPrice.toFixed(3)} cr · cost {pos.netCreditsIn.toFixed(0)} cr
+                                </p>
+                                <p className="text-[11px] text-muted-foreground">
+                                  Sell now: ~{pos.currentValue.toFixed(2)} cr{" "}
+                                  <span className={`font-mono font-medium ${pnlClass}`}>
+                                    ({pnlIsZero ? "0.00" : (unrealisedPnl >= 0 ? "+" : "") + unrealisedPnl.toFixed(2)} cr)
+                                  </span>
+                                </p>
+                                <p className="text-[11px] text-muted-foreground">
+                                  If {candidateName} wins: {pos.netShares.toFixed(2)} cr{" "}
+                                  <span className="font-mono font-medium text-green-700 dark:text-green-500">
+                                    ({maxProfitIfWin >= 0 ? "+" : ""}{maxProfitIfWin.toFixed(2)} cr)
+                                  </span>
+                                </p>
+                              </div>
+                            </div>
+                            <div className="mt-2 flex items-center justify-end gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={isMarketClosed || !candidate}
+                                onClick={() => candidate && handleCandidateSelect(candidate)}
+                                data-testid={`race-position-add-${pos.entryId}`}
+                              >
+                                Add
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={isMarketClosed || !candidate}
+                                onClick={() => candidate && openSellModal(candidate, pos.netShares)}
+                                data-testid={`race-position-sell-${pos.entryId}`}
+                              >
+                                Sell
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                  const data = buildPositionShareData({
+                                    username: profile?.username || "you",
+                                    personName: candidateName,
+                                    personAvatar: candidate?.avatar ?? null,
+                                    marketTitle: `Category Race: ${categoryLabel}`,
+                                    category: categoryLabel,
+                                    entryLabel: candidateName,
+                                    direction: "other",
+                                    netShares: pos.netShares,
+                                    avgEntryPrice: pos.avgEntryPrice,
+                                    currentPrice: pos.currentPrice,
+                                    costBasis: pos.netCreditsIn,
+                                    currentValue: pos.currentValue,
+                                    endAt: (market as any)?.endAt || "",
+                                  });
+                                  const origin =
+                                    typeof window !== "undefined" ? window.location.origin : "";
+                                  const pathname =
+                                    typeof window !== "undefined" ? window.location.pathname : "";
+                                  openShareCard({
+                                    data,
+                                    fallbackText: `I'm backing ${candidateName} in the ${categoryLabel} Category Race on VoxDex!\n${origin}${pathname}`,
+                                    shareUrl: `${origin}${pathname}`,
+                                    filenameBase: `voxdex-position-${marketId.slice(0, 8)}`,
+                                  });
+                                }}
+                                data-testid={`race-position-share-${pos.entryId}`}
+                              >
+                                Share
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    <p className="text-[10px] text-muted-foreground text-center pt-1">
+                      Live prices — these numbers shift as the market moves.
+                    </p>
+                  </div>
+                )}
+
+                {/* Top-6 candidates by live LMSR price — the "market
+                    consensus" surface that existed in this card before
+                    we added per-position rows. */}
+                <div className="space-y-1.5">
+                  {[...candidates]
+                    .filter(c => c.entryId)
+                    .map(c => ({
+                      ...c,
+                      livePrice: Number(ammPriceMap[c.entryId!] ?? 0),
+                    }))
+                    .sort((a, b) => b.livePrice - a.livePrice)
+                    .slice(0, 6)
+                    .map(c => {
+                      const pct = Math.max(0, Math.min(100, Math.round(c.livePrice * 100)));
+                      return (
+                        <div key={c.entryId} className="flex items-center gap-3 text-sm">
+                          <span className="w-[35%] sm:w-[30%] truncate font-medium">{c.name}</span>
+                          <div className="flex-1 h-5 rounded-md overflow-hidden border border-emerald-500/25 bg-slate-900/80">
+                            <div
+                              className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400"
+                              style={{ width: `${Math.max(pct, 1)}%` }}
+                            />
+                          </div>
+                          <span className="font-mono font-bold w-10 text-right tabular-nums">{pct}%</span>
+                          <span className="font-mono text-[10px] text-muted-foreground w-14 text-right tabular-nums hidden sm:block">
+                            {c.livePrice.toFixed(3)} cr
+                          </span>
                         </div>
-                        <span className="font-mono font-bold w-10 text-right tabular-nums">{pct}%</span>
-                        <span className="font-mono text-[10px] text-muted-foreground w-14 text-right tabular-nums hidden sm:block">
-                          {c.livePrice.toFixed(3)} cr
-                        </span>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                </div>
+                <p className="text-[10px] text-muted-foreground/70 mt-3 text-center">
+                  Live LMSR pricing — each share pays 1 credit if the candidate wins.
+                </p>
               </div>
-              <p className="text-[10px] text-muted-foreground/70 mt-3 text-center">
-                Live LMSR pricing — each share pays 1 credit if the candidate wins.
-              </p>
-            </div>
-          </Card>
-        )}
+            </Card>
+          );
+        })()}
 
         {/* AMM Price History — week-long market consensus drift. We
             only render the top 6 candidates BY CURRENT LMSR PRICE so
@@ -1018,6 +1292,13 @@ export default function CategoryRaceDetailPage() {
           setPendingSelection(null);
         }}
         onConfirm={handleConfirmStake}
+        // Sprint 5 / Phase 3.4: AMM sell wiring + live AMM state +
+        // initialAmmMode parity with Up/Down and H2H. Together they
+        // unlock the Sell tab inside the modal and keep cr/share
+        // pricing in sync with the LMSR snapshot as the user trades.
+        onConfirmAmmSell={isAmm ? handleConfirmAmmSell : undefined}
+        liveAmmState={isAmm ? ((market as any)?.ammState ?? null) : null}
+        initialAmmMode={modalIntent}
         walletBalance={walletCredits}
         onChangePick={() => {
           setStakeModalOpen(false);

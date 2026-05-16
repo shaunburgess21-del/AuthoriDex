@@ -4,8 +4,11 @@ import { useParams, useLocation, Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { sharePage } from "@/lib/share";
+import { hapticSuccess, hapticError } from "@/lib/haptic";
 import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { useXpBurst } from "@/components/XpBurstProvider";
+import { StakeModal, type StakeSelection } from "@/components/StakeModal";
+import { formatVolumeCredits } from "@/lib/formatNumber";
 import { CategoryPill } from "@/components/CategoryPill";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -639,6 +642,19 @@ export default function MarketDetailPage() {
   const [headerImgError, setHeaderImgError] = useState(false);
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
   const [commentsSheetOpen, setCommentsSheetOpen] = useState(false);
+  /**
+   * Sprint 5 / Phase 4.1+4.2: StakeModal state for community AMM
+   * markets. Previously the buy flow was an inline form ("Place Your
+   * Prediction") which had no Sell tab, no live LMSR quote, and
+   * didn't match the polished modal used on Up/Down + H2H + Race.
+   * For AMM markets we replace the inline form with a Predict CTA +
+   * per-entry Buy / Sell buttons that open this modal. Parimutuel
+   * community markets keep the inline form (they sunset alongside
+   * native parimutuel).
+   */
+  const [stakeModalOpen, setStakeModalOpen] = useState(false);
+  const [pendingSelection, setPendingSelection] = useState<StakeSelection | null>(null);
+  const [modalIntent, setModalIntent] = useState<"buy" | "sell">("buy");
 
   // Refs for the "Add another entry / Increase stake" CTA on
   // MyPositionCard. Jackpot has a single always-rendered input we can
@@ -947,6 +963,25 @@ export default function MarketDetailPage() {
   });
 
 
+  /**
+   * Sprint 5 / Phase 4.7 fix: track whether the AMM auto-open has
+   * fired so the second effect (which depends on openBuyModal) is
+   * idempotent. Without this ref a state update inside openBuyModal
+   * could re-run the effect and pop the modal a second time after the
+   * user closes it.
+   */
+  const ammAutoOpenFiredRef = useRef(false);
+  /**
+   * Entry id queued for AMM auto-open. The first effect parses the
+   * pick param and stores the resolved entry id here; the second
+   * effect (which has openBuyModal in scope) reads it and calls
+   * `openBuyModal`. Split this way because `openBuyModal` is defined
+   * further down the component body — keeping it out of this effect's
+   * closure means we don't need to put a render-fresh function in the
+   * deps array.
+   */
+  const [ammAutoOpenEntryId, setAmmAutoOpenEntryId] = useState<string | null>(null);
+
   useEffect(() => {
     if (pickApplied || !market?.entries) return;
 
@@ -965,6 +1000,15 @@ export default function MarketDetailPage() {
       const matched = matchedById || matchedByLabel;
       if (matched) {
         setSelectedEntry(matched.id);
+        // Sprint 5 / Phase 4.7 fix: on AMM (non-jackpot) markets the
+        // inline form is hidden — selectedEntry alone won't take the
+        // user anywhere. Queue an auto-open so the StakeModal pops
+        // for the picked entry, matching the one-tap UX native cards
+        // already provide via `onPickEntry`. Jackpot keeps its own
+        // inline UI and is excluded here.
+        if (isAmm && !isJackpotMarket) {
+          setAmmAutoOpenEntryId(matched.id);
+        }
       }
       if (directionParam === "yes" || directionParam === "no") {
         setSelectedDirection(directionParam);
@@ -981,7 +1025,7 @@ export default function MarketDetailPage() {
       setSelectedDirection(dir);
       setPickApplied(true);
     }
-  }, [pickParam, directionParam, market?.entries, pickApplied, userPickedEntryId, userBetsByEntry]);
+  }, [pickParam, directionParam, market?.entries, pickApplied, userPickedEntryId, userBetsByEntry, isAmm, isJackpotMarket]);
 
   const timeLeft = useCountdown(market?.closeAt || market?.endAt || null);
 
@@ -1093,6 +1137,206 @@ export default function MarketDetailPage() {
 
     betMutation.mutate({ entryId: selectedEntry, stakeAmount: amount, direction: selectedDirection });
   };
+
+  /**
+   * Sprint 5 / Phase 4.2: Community AMM sell mutation. Hits the
+   * dedicated /api/markets/:id/sell endpoint (LMSR sell of YES shares
+   * of one entry). Mirrors the receipt + cache invalidation pattern
+   * used by the buy flow above so the per-entry position rows refresh
+   * immediately after a sell.
+   */
+  const ammSellMutation = useMutation({
+    mutationFn: async ({ entryId, shares }: { entryId: string; shares: number }) => {
+      if (!market) throw new Error("Market not loaded");
+      const res = await apiRequest("POST", `/api/markets/${market.id}/sell`, {
+        entryId,
+        shares,
+      });
+      return res.json();
+    },
+    onSuccess: async (data: any) => {
+      hapticSuccess();
+      const proceeds = Math.round(Number(data?.proceeds ?? 0));
+      toast("Position sold", {
+        description:
+          proceeds > 0
+            ? `Proceeds credited: +${proceeds.toLocaleString("en-US")} cr`
+            : "Proceeds have been credited to your wallet.",
+      });
+      if (data?.xp?.xpAwarded) {
+        triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
+      }
+      setStakeModalOpen(false);
+      setPendingSelection(null);
+      await Promise.all([
+        refreshProfile(),
+        queryClient.invalidateQueries({ queryKey: ["/api/open-markets"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/open-markets", params.slug] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/me/predictions"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/me/amm-positions"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
+        market?.id ? queryClient.invalidateQueries({ queryKey: myPositionQueryKey(market.id) }) : Promise.resolve(),
+        market?.id ? queryClient.invalidateQueries({ queryKey: ["/api/markets", market.id, "amm-position"] }) : Promise.resolve(),
+        market?.id ? queryClient.invalidateQueries({ queryKey: ["/api/markets", market.id, "price-history"] }) : Promise.resolve(),
+      ]);
+    },
+    onError: (err: Error) => {
+      hapticError();
+      const { title, description } = parseApiError(err, "Failed to sell position");
+      toast.error(title, { description });
+    },
+  });
+
+  /**
+   * Sprint 5 / Phase 4.1: build a StakeSelection for the community
+   * AMM market and open the modal in buy mode. `direction` is only
+   * meaningful for multi community markets (Yes/No per entry) —
+   * binary markets bake the side into the entry label.
+   *
+   * We re-derive `crowdSentiment` from the live LMSR price (rounded
+   * to whole %) so the modal hero pill matches the Live Market card
+   * immediately above it, and pass `engine: 'amm' + ammState` so the
+   * modal flips into LMSR mode (live cr/share quote, Sell tab gated
+   * on `ammNetShares`).
+   */
+  const openBuyModal = (entry: MarketEntry, direction: "yes" | "no" = "yes") => {
+    if (!isLoggedIn) {
+      navigateToLogin(setLocation);
+      return;
+    }
+    if (!market) return;
+    const livePrice = isAmm && ammPriceMap ? Number(ammPriceMap[entry.id] ?? 0) : 0;
+    const crowdSentiment = isAmm
+      ? Math.round(Math.max(0, Math.min(1, livePrice)) * 100)
+      : entry.totalStake && totalPool > 0
+        ? Math.round((Number(entry.totalStake) / totalPool) * 100)
+        : 0;
+    const entryStakes = userBetsByEntry.get(entry.id);
+    const sameSideStake =
+      effectiveOpenMarketType === "binary"
+        ? (entryStakes?.yesStake ?? 0) + (entryStakes?.noStake ?? 0)
+        : direction === "yes"
+          ? entryStakes?.yesStake ?? 0
+          : entryStakes?.noStake ?? 0;
+    const isTopUpSelection = sameSideStake > 0;
+    const netSharesForEntry =
+      ammPositionData?.positions?.find((p) => p.entryId === entry.id)?.netShares ?? 0;
+    setPendingSelection({
+      type: "community",
+      marketId: market.id,
+      entryId: entry.id,
+      choice:
+        effectiveOpenMarketType === "binary"
+          ? entry.label
+          : `${direction === "no" ? "No" : "Yes"} \u00b7 ${entry.label}`,
+      marketName: market.title,
+      personName: market.linkedPersonName ?? undefined,
+      crowdSentiment,
+      poolTotal: totalPool,
+      bettingCutoff: market.closeAt || market.endAt || null,
+      endAt: market.endAt || undefined,
+      direction:
+        effectiveOpenMarketType === "binary"
+          ? undefined
+          : direction,
+      openMarketType: effectiveOpenMarketType,
+      isTopUp: isTopUpSelection,
+      existingStake: isTopUpSelection ? sameSideStake : undefined,
+      engine: isAmm ? "amm" : "parimutuel",
+      ammState: isAmm ? (market.ammState ?? null) : null,
+      ammNetShares: isAmm ? netSharesForEntry : undefined,
+    } as StakeSelection);
+    setModalIntent("buy");
+    setStakeModalOpen(true);
+  };
+
+  /**
+   * Sprint 5 / Phase 4.2: Open the StakeModal in sell mode for a
+   * specific AMM entry. Only meaningful when the user holds netShares
+   * on the entry — the per-entry Sell buttons are hidden otherwise.
+   */
+  const openSellModal = (entry: MarketEntry) => {
+    if (!isLoggedIn) {
+      navigateToLogin(setLocation);
+      return;
+    }
+    if (!market || !isAmm) return;
+    const livePrice = ammPriceMap ? Number(ammPriceMap[entry.id] ?? 0) : 0;
+    const crowdSentiment = Math.round(Math.max(0, Math.min(1, livePrice)) * 100);
+    const netSharesForEntry =
+      ammPositionData?.positions?.find((p) => p.entryId === entry.id)?.netShares ?? 0;
+    setPendingSelection({
+      type: "community",
+      marketId: market.id,
+      entryId: entry.id,
+      choice: entry.label,
+      marketName: market.title,
+      personName: market.linkedPersonName ?? undefined,
+      crowdSentiment,
+      poolTotal: totalPool,
+      bettingCutoff: market.closeAt || market.endAt || null,
+      endAt: market.endAt || undefined,
+      openMarketType: effectiveOpenMarketType,
+      engine: "amm",
+      ammState: market.ammState ?? null,
+      ammNetShares: netSharesForEntry,
+    } as StakeSelection);
+    setModalIntent("sell");
+    setStakeModalOpen(true);
+  };
+
+  /**
+   * Sprint 5 / Phase 4.1: StakeModal buy confirm. Routes through the
+   * existing `betMutation` (which already handles both community and
+   * native paths) so the receipt + share toast + cache invalidations
+   * stay consistent with the legacy inline form. We dispatch on the
+   * `pendingSelection.entryId / direction` because the modal can flip
+   * sides via `onDirectionChange` without reopening.
+   */
+  const handleConfirmStakeFromModal = async (amount: number) => {
+    if (!pendingSelection?.entryId) return;
+    const direction =
+      pendingSelection.direction === "no" ? "no" : "yes";
+    await betMutation.mutateAsync({
+      entryId: pendingSelection.entryId,
+      stakeAmount: amount,
+      direction,
+    });
+    setStakeModalOpen(false);
+    setPendingSelection(null);
+  };
+
+  /**
+   * Sprint 5 / Phase 4.2: StakeModal sell confirm. Sends `shares` to
+   * the community sell endpoint via `ammSellMutation`.
+   */
+  const handleConfirmAmmSellFromModal = async (shares: number) => {
+    if (!pendingSelection?.entryId) return;
+    await ammSellMutation.mutateAsync({
+      entryId: pendingSelection.entryId,
+      shares,
+    });
+  };
+
+  /**
+   * Sprint 5 / Phase 4.7 fix: AMM auto-open. Fires `openBuyModal` once
+   * after the pickApplied effect resolved a URL pick to a real entry,
+   * matching the one-tap modal UX of native (Up/Down / H2H / Race)
+   * cards. Guards on the `ammAutoOpenFiredRef` so a re-render driven
+   * by the modal state itself doesn't spawn a second modal.
+   */
+  useEffect(() => {
+    if (ammAutoOpenFiredRef.current) return;
+    if (!ammAutoOpenEntryId || !isAmm || isJackpotMarket) return;
+    if (!market || market.status !== "OPEN") return;
+    const entry = market.entries?.find((e) => e.id === ammAutoOpenEntryId);
+    if (!entry) return;
+    const direction: "yes" | "no" =
+      directionParam === "no" ? "no" : "yes";
+    ammAutoOpenFiredRef.current = true;
+    openBuyModal(entry, direction);
+    setAmmAutoOpenEntryId(null);
+  }, [ammAutoOpenEntryId, isAmm, isJackpotMarket, market, directionParam]);
 
   // Same-side top-up affordance — surfaces an inline "Currently staked"
   // line above the stake input and swaps the submit label to "Add to
@@ -1429,57 +1673,219 @@ export default function MarketDetailPage() {
             list of bars; for binary we show two equal tiles. This
             replaces the parimutuel "Pool sentiment" patterns on
             community AMM markets. */}
-        {isAmm && ammPriceMap && market.entries && market.entries.length > 0 && (
-          <Card className="p-4 mb-6 border-emerald-500/30 dark:border-emerald-500/20" data-testid="section-amm-live-market">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-semibold flex items-center gap-1.5">
-                <Activity className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                Live Market
-              </h2>
-              <Badge variant="outline" className="text-emerald-600 dark:text-emerald-400 border-emerald-500/40 dark:border-emerald-500/30 text-[10px]">
-                LIVE
-              </Badge>
-            </div>
-            {effectiveOpenMarketType === "multi" ? (
-              <div className="space-y-2">
-                {[...entriesWithPercentages].sort((a, b) => b.percentage - a.percentage).map((entry) => {
-                  const livePrice = Number(ammPriceMap[entry.id] ?? 0);
-                  return (
-                    <div key={entry.id} className="flex items-center gap-3 text-sm" data-testid={`amm-live-row-${entry.id}`}>
-                      <span className="w-[35%] sm:w-[30%] truncate font-medium">{entry.label}</span>
-                      <div className="flex-1 h-5 rounded-md overflow-hidden border border-blue-500/25 bg-slate-900/80">
+        {/* Sprint 5 / Phase 4.3: Consolidated Live Market card on
+            community AMM detail. Mirrors the Up/Down + Race patterns:
+              1. Header chips (cr VOL + Traders + LIVE)
+              2. Per-position rows when the user holds netShares on
+                 any entry — conversational copy + inline Sell button
+              3. Per-entry Buy CTAs:
+                   - Binary (2 entries): two-tile grid with a Buy
+                     button per side, mirroring the Up/Down layout
+                   - Multi (N entries): per-row layout with a Buy
+                     button (label + price + Buy on each row),
+                     mirroring the Race candidate list
+            Parimutuel community markets still use the inline form
+            below — they sunset alongside native parimutuel. */}
+        {isAmm && ammPriceMap && market.entries && market.entries.length > 0 && (() => {
+          const liveVolume = Number(market.ammState?.totalUserCreditsIn ?? 0);
+          const liveVolumeLabel = liveVolume > 0 ? formatVolumeCredits(liveVolume) : null;
+          // Sprint 5 / Phase 4.3: trader count chip uses the same
+          // `totalParticipants` memo as the existing hero stats below
+          // so the two surfaces stay numerically aligned.
+          const traderCount = totalParticipants;
+          const openPositions = (ammPositionData?.positions ?? []).filter(
+            (p) => p.netShares > 1e-6,
+          );
+          return (
+            <Card className="p-4 mb-6 border-emerald-500/30 dark:border-emerald-500/20" data-testid="section-amm-live-market">
+              <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                <h2 className="text-sm font-semibold flex items-center gap-1.5">
+                  <Activity className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  Live Market
+                </h2>
+                <div className="flex items-center gap-1.5">
+                  {liveVolumeLabel && (
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] tabular-nums text-muted-foreground border-border/50"
+                      data-testid="community-live-market-volume"
+                    >
+                      {liveVolumeLabel} vol
+                    </Badge>
+                  )}
+                  {traderCount > 0 && (
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] tabular-nums text-muted-foreground border-border/50 flex items-center gap-1"
+                    >
+                      <Users className="h-2.5 w-2.5" />
+                      {traderCount}
+                    </Badge>
+                  )}
+                  <Badge variant="outline" className="text-emerald-600 dark:text-emerald-400 border-emerald-500/40 dark:border-emerald-500/30 text-[10px]">
+                    LIVE
+                  </Badge>
+                </div>
+              </div>
+
+              {/* Per-position rows. One row per entry the user holds
+                  netShares on. Re-using the same conversational copy
+                  pattern as H2H + Race so the "Your position" block
+                  reads identically across detail pages. */}
+              {openPositions.length > 0 && (
+                <div className="space-y-2 pb-3 mb-3 border-b border-border/40">
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                    Your positions
+                  </p>
+                  {openPositions
+                    .slice()
+                    .sort((a, b) => b.currentValue - a.currentValue)
+                    .map((pos) => {
+                      const entry = market.entries?.find((e) => e.id === pos.entryId);
+                      if (!entry) return null;
+                      const unrealisedPnl = pos.currentValue - pos.netCreditsIn;
+                      const maxProfitIfWin = pos.netShares - pos.netCreditsIn;
+                      const pnlIsZero = Math.abs(unrealisedPnl) < 0.005;
+                      const pnlClass = pnlIsZero
+                        ? "text-muted-foreground"
+                        : unrealisedPnl >= 0
+                          ? "text-green-700 dark:text-green-500"
+                          : "text-red-700 dark:text-red-500";
+                      return (
                         <div
-                          className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400"
-                          style={{ width: `${Math.max(entry.percentage, 1)}%` }}
-                        />
+                          key={pos.entryId}
+                          className="rounded-lg bg-muted/30 p-3"
+                          data-testid={`community-position-row-${pos.entryId}`}
+                        >
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold truncate">{entry.label}</p>
+                            <p className="text-[11px] text-muted-foreground">
+                              {pos.netShares.toFixed(2)} shares · avg {pos.avgEntryPrice.toFixed(3)} cr · cost {pos.netCreditsIn.toFixed(0)} cr
+                            </p>
+                            <p className="text-[11px] text-muted-foreground">
+                              Sell now: ~{pos.currentValue.toFixed(2)} cr{" "}
+                              <span className={`font-mono font-medium ${pnlClass}`}>
+                                ({pnlIsZero ? "0.00" : (unrealisedPnl >= 0 ? "+" : "") + unrealisedPnl.toFixed(2)} cr)
+                              </span>
+                            </p>
+                            <p className="text-[11px] text-muted-foreground">
+                              If {entry.label} wins: {pos.netShares.toFixed(2)} cr{" "}
+                              <span className="font-mono font-medium text-green-700 dark:text-green-500">
+                                ({maxProfitIfWin >= 0 ? "+" : ""}{maxProfitIfWin.toFixed(2)} cr)
+                              </span>
+                            </p>
+                          </div>
+                          <div className="mt-2 flex items-center justify-end gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={!isOpen}
+                              onClick={() => openBuyModal(entry, "yes")}
+                              data-testid={`community-position-add-${pos.entryId}`}
+                            >
+                              Add
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={!isOpen}
+                              onClick={() => openSellModal(entry)}
+                              data-testid={`community-position-sell-${pos.entryId}`}
+                            >
+                              Sell
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  <p className="text-[10px] text-muted-foreground text-center pt-1">
+                    Live prices — these numbers shift as the market moves.
+                  </p>
+                </div>
+              )}
+
+              {effectiveOpenMarketType === "multi" ? (
+                <div className="space-y-2">
+                  {[...entriesWithPercentages].sort((a, b) => b.percentage - a.percentage).map((entry) => {
+                    const livePrice = Number(ammPriceMap[entry.id] ?? 0);
+                    return (
+                      <div
+                        key={entry.id}
+                        className="flex items-center gap-3 text-sm rounded-lg border border-border/40 bg-background/40 p-2"
+                        data-testid={`amm-live-row-${entry.id}`}
+                      >
+                        <span className="w-[28%] sm:w-[26%] truncate font-medium">{entry.label}</span>
+                        <div className="flex-1 h-5 rounded-md overflow-hidden border border-blue-500/25 bg-slate-900/80">
+                          <div
+                            className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400"
+                            style={{ width: `${Math.max(entry.percentage, 1)}%` }}
+                          />
+                        </div>
+                        <span className="font-mono font-bold text-sm w-12 text-right tabular-nums">{entry.percentage}%</span>
+                        <span className="font-mono text-[10px] text-muted-foreground w-14 text-right tabular-nums hidden sm:block">
+                          {livePrice.toFixed(3)} cr
+                        </span>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={!isOpen}
+                          onClick={() => openBuyModal(entry, "yes")}
+                          className="shrink-0 h-8 px-3"
+                          data-testid={`community-buy-${entry.id}`}
+                        >
+                          Buy
+                        </Button>
                       </div>
-                      <span className="font-mono font-bold text-sm w-12 text-right">{entry.percentage}%</span>
-                      <span className="font-mono text-[10px] text-muted-foreground w-14 text-right tabular-nums hidden sm:block">
-                        {livePrice.toFixed(3)} cr
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-3">
-                {[...entriesWithPercentages].sort((a, b) => a.displayOrder - b.displayOrder).map((entry) => {
-                  const livePrice = Number(ammPriceMap[entry.id] ?? 0);
-                  return (
-                    <div key={entry.id} className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 text-center" data-testid={`amm-live-tile-${entry.id}`}>
-                      <p className="text-[10px] text-muted-foreground uppercase tracking-wider truncate">{entry.label}</p>
-                      <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 font-mono">{entry.percentage}%</p>
-                      <p className="text-[10px] text-muted-foreground tabular-nums">{livePrice.toFixed(3)} cr / share</p>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-            <p className="text-[10px] text-muted-foreground/70 mt-3 text-center">
-              Live LMSR pricing — each share pays 1 credit if the outcome wins.
-            </p>
-          </Card>
-        )}
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  {[...entriesWithPercentages].sort((a, b) => a.displayOrder - b.displayOrder).map((entry) => {
+                    const livePrice = Number(ammPriceMap[entry.id] ?? 0);
+                    const isYesLike =
+                      entry.label.toLowerCase() === "yes" ||
+                      entry.label.toLowerCase() === "above" ||
+                      entry.displayOrder === 0;
+                    const tileColor = isYesLike
+                      ? "border-emerald-500/30 bg-emerald-500/5"
+                      : "border-rose-500/30 bg-rose-500/5";
+                    const priceColor = isYesLike
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : "text-rose-600 dark:text-rose-400";
+                    const btnColor = isYesLike
+                      ? "border-emerald-500/40 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/10"
+                      : "border-rose-500/40 text-rose-700 dark:text-rose-400 hover:bg-rose-500/10";
+                    return (
+                      <div
+                        key={entry.id}
+                        className={`rounded-lg border p-3 text-center ${tileColor}`}
+                        data-testid={`amm-live-tile-${entry.id}`}
+                      >
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider truncate">{entry.label}</p>
+                        <p className={`text-2xl font-bold font-mono ${priceColor}`}>{entry.percentage}%</p>
+                        <p className="text-[10px] text-muted-foreground tabular-nums">{livePrice.toFixed(3)} cr / share</p>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={!isOpen}
+                          onClick={() => openBuyModal(entry, "yes")}
+                          className={`mt-2 w-full h-8 ${btnColor}`}
+                          data-testid={`community-buy-${entry.id}`}
+                        >
+                          Buy {entry.label}
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <p className="text-[10px] text-muted-foreground/70 mt-3 text-center">
+                Live LMSR pricing — each share pays 1 credit if the outcome wins.
+              </p>
+            </Card>
+          );
+        })()}
 
         {/* AMM price history chart — shows market consensus drift.
             Sits above the place-prediction form so users see the
@@ -1515,7 +1921,14 @@ export default function MarketDetailPage() {
           </div>
         )}
 
-        {isOpen && !isInactive && (
+        {/* Sprint 5 / Phase 4.1: hide the inline form on AMM
+            markets — the buy flow now lives inside the Live Market
+            card above (per-entry Buy buttons → StakeModal). The
+            parimutuel form stays unchanged; it sunsets with the
+            parimutuel community markets. Jackpot also keeps its
+            inline form (it has its own UI shape and uses a different
+            endpoint). */}
+        {isOpen && !isInactive && !(isAmm && !isJackpotMarket) && (
           <Card
             ref={placePredictionSectionRef}
             className="p-5 mb-6 border-border/40 bg-muted/5"
@@ -2368,6 +2781,43 @@ export default function MarketDetailPage() {
           />
         </div>
       )}
+
+      {/* Sprint 5 / Phase 4.1+4.2: StakeModal for community AMM
+          markets. The buy flow is opened from per-entry buttons
+          inside the Live Market card above; the sell flow is opened
+          from per-position rows. Parimutuel markets still use the
+          inline form and never reach this modal. */}
+      <StakeModal
+        open={stakeModalOpen}
+        onClose={() => {
+          setStakeModalOpen(false);
+          setPendingSelection(null);
+        }}
+        selection={pendingSelection}
+        onConfirm={handleConfirmStakeFromModal}
+        onConfirmAmmSell={isAmm ? handleConfirmAmmSellFromModal : undefined}
+        initialAmmMode={modalIntent}
+        walletBalance={walletBalance}
+        liveAmmState={isAmm ? (market?.ammState ?? null) : null}
+        onDirectionChange={(dir) => {
+          if (!pendingSelection) return;
+          if (pendingSelection.type !== "community") return;
+          if (effectiveOpenMarketType === "binary") return;
+          if (dir !== "yes" && dir !== "no") return;
+          const entry = market?.entries?.find((e) => e.id === pendingSelection.entryId);
+          if (!entry) return;
+          const livePrice = isAmm && ammPriceMap ? Number(ammPriceMap[entry.id] ?? 0) : 0;
+          const crowdSentiment = isAmm
+            ? Math.round(Math.max(0, Math.min(1, livePrice)) * 100)
+            : pendingSelection.crowdSentiment ?? 0;
+          setPendingSelection({
+            ...pendingSelection,
+            choice: `${dir === "no" ? "No" : "Yes"} \u00b7 ${entry.label}`,
+            direction: dir,
+            crowdSentiment,
+          });
+        }}
+      />
     </div>
   );
 }

@@ -15,6 +15,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Activity, Check, ChevronRight, Zap } from "lucide-react";
 import { Link } from "wouter";
 import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
+import { formatVolumeCredits } from "@/lib/formatNumber";
 
 type CategoryFilter = "all" | "favorites" | "trending" | "tech" | "politics" | "business" | "music" | "sports" | "film-tv" | "gaming" | "creator" | "food-drink" | "lifestyle" | "misc";
 
@@ -51,6 +52,12 @@ export interface HeadToHeadMarket {
   /** Phase 4: live AMM state snapshot from the list endpoint. Used to
    *  compute the live probability bar for AMM markets. */
   ammState?: ApiAmmStateBlock | null;
+  /**
+   * Sprint 5 / Phase 1.4: total AMM credits in for the market. Drives
+   * a Polymarket-style "1.2K cr vol" chip on the card. Parimutuel
+   * markets get 0 and the chip suppresses (no AMM volume to show).
+   */
+  volume?: number;
 }
 
 export function smartName(fullName: string): string {
@@ -94,6 +101,7 @@ export function HeadToHeadCard({
   onSelect,
   userPick,
   userStake,
+  unrealisedPnl = null,
   onFilterCategory,
   categoryRaceMap,
   leaderboardCategories,
@@ -105,17 +113,51 @@ export function HeadToHeadCard({
   userPick?: 1 | 2 | null;
   /** Aggregated stake for this market when the user has a pick (optional). */
   userStake?: number;
+  /**
+   * Sprint 5 / Phase 2: live unrealised P&L (credits) for the user's
+   * open AMM position on this market. Replaces the legacy "Winning /
+   * Behind" pill which was anchored to the trend score crossing the
+   * baseline — that signal can disagree with the AMM odds (the score
+   * dipped but the market is pricing your side to win), so P&L is the
+   * truer "where do I stand?" readout for AMM markets. Null for
+   * parimutuel positions and for cards whose AMM position summary
+   * hasn't loaded yet, in which case we fall back to a stake-only row
+   * with no status pill at all (rather than a misleading score-based
+   * one). Mirrors the Up/Down banner we shipped in Sprint 4.3.
+   */
+  unrealisedPnl?: number | null;
   onFilterCategory?: (category: string) => void;
   categoryRaceMap?: Map<string, string>;
   leaderboardCategories?: Set<string>;
 }) {
   const hasPicked = userPick === 1 || userPick === 2;
   const pickedName = userPick === 1 ? market.person1.name : userPick === 2 ? market.person2.name : "";
-  const scoreDiff = (market.person1.currentScore || 0) - (market.person2.currentScore || 0);
-  const pickWinning = hasPicked && (
-    (userPick === 1 && scoreDiff > 0) || (userPick === 2 && scoreDiff < 0)
-  );
-  const pickTied = hasPicked && scoreDiff === 0;
+  // Sprint 5 / Phase 2: trend-score based Winning/Behind pill removed.
+  // We now surface P&L instead (computed below) because P&L is the
+  // truer "where do I stand?" readout for AMM markets — see the
+  // WeeklyUpDownYourPositionPanel comments for the same rationale.
+  const volumeLabel = formatVolumeCredits(market.volume ?? 0);
+
+  /**
+   * Sprint 5 / Phase 2: AMM P&L delta + sub-cent zero clamp.
+   * `-0.0001 cr` rounds to "-0.00 cr" via `.toFixed(2)`, which reads as
+   * a bug; we clamp anything inside half a cent of zero to a neutral
+   * "0.00 cr" with no sign prefix. Identical treatment to
+   * `WeeklyUpDownYourPositionPanel` so the two card types feel the same.
+   */
+  const hasPnl = unrealisedPnl != null && Number.isFinite(unrealisedPnl);
+  const pnlValue = hasPnl ? (unrealisedPnl as number) : 0;
+  const pnlIsZero = hasPnl && Math.abs(pnlValue) < 0.005;
+  const pnlClass = !hasPnl || pnlIsZero
+    ? "text-muted-foreground"
+    : pnlValue >= 0
+      ? "text-green-700 dark:text-green-400"
+      : "text-red-700 dark:text-red-400";
+  const pnlText = !hasPnl
+    ? null
+    : pnlIsZero
+      ? "0.00 cr"
+      : `${pnlValue >= 0 ? "+" : ""}${pnlValue.toFixed(2)} cr`;
 
   const pickAccentShell =
     userPick === 1
@@ -183,13 +225,30 @@ export function HeadToHeadCard({
               );
             })()}
           </div>
-          <InteractiveCategoryPill
-            category={market.category}
-            onFilter={() => onFilterCategory?.(market.category)}
-            leaderboardCategories={leaderboardCategories}
-            detailHref={`/predict/h2h/${market.id}`}
-            detailLabel="View Battle Details"
-          />
+          <div className="flex items-center gap-1.5">
+            {/*
+             * Sprint 5 / Phase 2: Polymarket-style volume chip. We show
+             * it inline with the category pill so the card chrome stays
+             * the same height. Suppressed for parimutuel markets (volume
+             * is 0 there — no AMM trades to summarise).
+             */}
+            {volumeLabel && (
+              <Badge
+                variant="outline"
+                className="text-[10px] tabular-nums text-muted-foreground border-border/50"
+                data-testid={`h2h-card-volume-${market.id}`}
+              >
+                {volumeLabel} vol
+              </Badge>
+            )}
+            <InteractiveCategoryPill
+              category={market.category}
+              onFilter={() => onFilterCategory?.(market.category)}
+              leaderboardCategories={leaderboardCategories}
+              detailHref={`/predict/h2h/${market.id}`}
+              detailLabel="View Battle Details"
+            />
+          </div>
         </div>
         <MarketCycleStrip
           bettingCutoff={market.bettingCutoff ?? null}
@@ -418,6 +477,11 @@ export function HeadToHeadCard({
                       <p className="text-[11px] leading-none text-muted-foreground">Your pick</p>
                       <p className="truncate text-sm font-semibold leading-tight text-foreground">{smartName(pickedName)}</p>
                     </div>
+                    {pnlText && (
+                      <span className={cn("text-xs font-semibold font-mono tabular-nums shrink-0", pnlClass)}>
+                        {pnlText}
+                      </span>
+                    )}
                     {userStake != null && (
                       <div className="flex shrink-0 flex-col items-end tabular-nums">
                         <span className="text-[10px] leading-none text-muted-foreground">Stake</span>
@@ -426,17 +490,6 @@ export function HeadToHeadCard({
                         </span>
                       </div>
                     )}
-                    <Badge
-                      className={
-                        pickWinning
-                          ? "shrink-0 bg-green-600/20 text-green-500 border-green-500/40 dark:border-green-500/30"
-                          : pickTied
-                            ? "shrink-0 bg-amber-600/20 text-amber-500 border-amber-500/40 dark:border-amber-500/30"
-                            : "shrink-0 bg-[#FF0000]/10 text-[#FF0000] border-[#FF0000]/50 dark:border-[#FF0000]/50"
-                      }
-                    >
-                      {pickWinning ? "Winning" : pickTied ? "Tied" : "Behind"}
-                    </Badge>
                   </div>
                 </button>
               ) : (
@@ -458,6 +511,11 @@ export function HeadToHeadCard({
                       <p className="text-[11px] leading-none text-muted-foreground">Your pick</p>
                       <p className="truncate text-sm font-semibold leading-tight text-foreground">{smartName(pickedName)}</p>
                     </div>
+                    {pnlText && (
+                      <span className={cn("text-xs font-semibold font-mono tabular-nums shrink-0", pnlClass)}>
+                        {pnlText}
+                      </span>
+                    )}
                     {userStake != null && (
                       <div className="flex shrink-0 flex-col items-end tabular-nums">
                         <span className="text-[10px] leading-none text-muted-foreground">Stake</span>
@@ -467,17 +525,6 @@ export function HeadToHeadCard({
                       </div>
                     )}
                     <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-                    <Badge
-                      className={
-                        pickWinning
-                          ? "shrink-0 bg-green-600/20 text-green-500 border-green-500/40 dark:border-green-500/30"
-                          : pickTied
-                            ? "shrink-0 bg-amber-600/20 text-amber-500 border-amber-500/40 dark:border-amber-500/30"
-                            : "shrink-0 bg-[#FF0000]/10 text-[#FF0000] border-[#FF0000]/50 dark:border-[#FF0000]/50"
-                      }
-                    >
-                      {pickWinning ? "Winning" : pickTied ? "Tied" : "Behind"}
-                    </Badge>
                   </div>
                 </Link>
               )}

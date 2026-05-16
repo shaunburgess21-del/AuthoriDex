@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { hapticSuccess, hapticError } from "@/lib/haptic";
 import { consumePredictReturnAnchor, scrollToPredictAnchor } from "@/lib/predictReturnAnchor";
+import type { CardSectionHandle } from "@/components/CardSection";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { CardGridSkeleton } from "@/components/ui/card-skeletons";
@@ -1304,21 +1305,90 @@ export default function PredictPage() {
     setCategoryFilter(normalizeMarketCategory(category) as CategoryFilter);
   }, []);
 
-  // Sprint 4.3: back-button anchor restore. Previously this effect was
-  // mount-only — `useEffect(..., [])` — which works on a fresh page
-  // load but never fires when the user hits the browser back button
-  // from a detail page, because wouter restores the existing
-  // PredictPage instance without unmounting. By depending on `location`
-  // we re-run every time the route settles on `/predict`, which is
-  // exactly what `history.back()` triggers. The 5-minute TTL inside
-  // `consumePredictReturnAnchor` prevents stale anchors from firing on
-  // unrelated tab switches or long sessions.
+  /**
+   * Sprint 5 / Phase 0: back-button anchor restore.
+   *
+   * Earlier sprints stored a single `data-testid` in sessionStorage and
+   * scrolled the window to it on Back-navigation. That works on the
+   * desktop grid (all cards rendered) but fails on the mobile carousel,
+   * which runs Swiper in `virtual` mode — only the active slide is in
+   * the DOM, so the testId we want to scroll to literally doesn't exist
+   * yet. Symptom the user reported: "I swiped to card 4, tapped, hit
+   * Back, and the page snapped to the top of /predict."
+   *
+   * The fix is a two-step restore:
+   *   1. Parse the testId prefix to figure out which CardSection the
+   *      target card lives in.
+   *   2. Imperatively `slideToKey` on that section (CardSection now
+   *      exposes a `forwardRef` handle for exactly this), THEN scroll
+   *      the window so the section sits below the sticky header stack.
+   *
+   * Polls with rAF for up to 2.5 s because the section's children may
+   * not have hydrated yet on first mount (react-query refetch race).
+   */
+  const updownSectionRef = useRef<CardSectionHandle | null>(null);
+  const h2hSectionRef = useRef<CardSectionHandle | null>(null);
+  const gainerSectionRef = useRef<CardSectionHandle | null>(null);
+  const communitySectionRef = useRef<CardSectionHandle | null>(null);
+
   useEffect(() => {
     if (location !== "/predict") return;
     const anchor = consumePredictReturnAnchor();
-    if (anchor) {
+    if (!anchor) return;
+
+    const match = anchor.match(/^card-(weekly|h2h|gainer|community)-(.+)$/);
+    if (!match) {
       scrollToPredictAnchor(anchor);
+      return;
     }
+    const [, section, marketId] = match;
+    const sectionRef =
+      section === "weekly"
+        ? updownSectionRef
+        : section === "h2h"
+          ? h2hSectionRef
+          : section === "gainer"
+            ? gainerSectionRef
+            : communitySectionRef;
+
+    let cancelled = false;
+    let scrollFired = false;
+    const start = performance.now();
+    // Fires `scrollToPredictAnchor` exactly once across the lifetime
+    // of this effect. Without this guard we'd spawn a fresh internal
+    // poll loop on every outer rAF tick (each of which snaps window
+    // scrollY to 0 before re-polling), producing a visible top-snap
+    // flicker until either the slide lands or the 2.5s timeout fires.
+    const fireScrollOnce = () => {
+      if (scrollFired) return;
+      scrollFired = true;
+      scrollToPredictAnchor(anchor);
+    };
+    const tick = () => {
+      if (cancelled) return;
+      const succeeded = sectionRef.current?.slideToKey(marketId) ?? false;
+      if (succeeded) {
+        // Slide landed; let CardSection's drain effect render the
+        // target slide on the next paint and THEN run the DOM scroll
+        // restore. scrollToPredictAnchor itself polls for the testid
+        // so a slightly late paint is tolerated.
+        fireScrollOnce();
+        return;
+      }
+      if (performance.now() - start < 2500) {
+        requestAnimationFrame(tick);
+        return;
+      }
+      // Polling window elapsed without a successful slide (e.g. the
+      // section never hydrated or the user navigated away). Fall back
+      // to a single DOM-testid scroll so users at least land on the
+      // section header rather than the top of /predict.
+      fireScrollOnce();
+    };
+    requestAnimationFrame(tick);
+    return () => {
+      cancelled = true;
+    };
   }, [location]);
 
   const [globalSearchQuery, setGlobalSearchQuery] = useState("");
@@ -1413,6 +1483,15 @@ export default function PredictPage() {
 
   const [pendingSelection, setPendingSelection] = useState<StakeSelection | null>(null);
   const [stakeModalOpen, setStakeModalOpen] = useState(false);
+  /**
+   * Sprint 5 / Phase 1.1: seed which StakeModal tab (buy / sell) opens
+   * when the user triggers the overlay from the predict page. The
+   * carousel doesn't currently have its own "Sell" affordance, but the
+   * modal's internal toggle does flip this, so we still honour an
+   * external override (e.g. future "Sell from card banner") instead of
+   * hard-coding "buy" at the call site.
+   */
+  const [modalIntent, setModalIntent] = useState<"buy" | "sell">("buy");
   const [townSquareCollapsed, setTownSquareCollapsed] = useState(true);
   const [gainerPickerState, setGainerPickerState] = useState<{ market: TopGainerMarket; initialCandidate?: GainerCandidate | null } | null>(null);
   
@@ -1481,6 +1560,19 @@ export default function PredictPage() {
     }
     return map;
   }, [ammPositionsData]);
+
+  /**
+   * Sprint 5 / Phase 3.6: race-specific top-position lookup.
+   *
+   * Race markets natively support multi-candidate positions (a user
+   * can back two or three candidates in the same race), so the card
+   * banner needs an opinion about WHICH position to surface. We pick
+   * the one with the largest `currentValue` — the same algorithm
+   * `ammPositionByMarket` uses, but called out separately so the
+   * semantics are obvious at the call site. Mechanically a wrapper
+   * around the same memo; kept as its own export for readability.
+   */
+  const raceTopPositionByMarket = useMemo(() => ammPositionByMarket, [ammPositionByMarket]);
 
   const { data: nativeJackpotData, error: jackpotError, refetch: refetchJackpot } = useQuery<any[]>({
     queryKey: ['/api/native-markets/jackpot'],
@@ -1765,6 +1857,12 @@ export default function PredictPage() {
           modelConfidence: m.modelConfidence ?? undefined,
           engine: m.engine ?? "parimutuel",
           ammState: m.ammState ?? null,
+          // Sprint 5 / Phase 1.4: server-side volume (sum of net AMM
+          // credits in) for the H2H volume chip + feed sort. Falls back
+          // to the legacy `ammState.totalUserCreditsIn` if the server
+          // hasn't been redeployed yet — same shape PredictPage already
+          // uses for Up/Down hydration.
+          volume: Number(m.volume ?? m.ammState?.totalUserCreditsIn ?? 0) || 0,
         } as HeadToHeadMarket;
       });
     }
@@ -1826,6 +1924,9 @@ export default function PredictPage() {
           teaser: typeof m.teaser === "string" && m.teaser.trim() ? m.teaser.trim() : null,
           engine: m.engine || "parimutuel",
           ammState: m.ammState ?? null,
+          // Sprint 5 / Phase 1.4: see HeadToHeadMarket comment above —
+          // identical fallback chain for the Race feed.
+          volume: Number(m.volume ?? m.ammState?.totalUserCreditsIn ?? 0) || 0,
         } as TopGainerMarket;
       });
     }
@@ -2171,8 +2272,9 @@ export default function PredictPage() {
     },
   });
 
-  const openStakeModal = () => {
+  const openStakeModal = (intent: "buy" | "sell" = "buy") => {
     refreshProfile?.();
+    setModalIntent(intent);
     setStakeModalOpen(true);
   };
 
@@ -2255,6 +2357,125 @@ export default function PredictPage() {
     },
   });
 
+  /**
+   * Sprint 5 / Phase 1.1: AMM sell mutation shared by every type of
+   * native market (Up/Down, H2H, Race). Server-side the same
+   * `/api/native-markets/:marketId/bet` endpoint with `actionType:"sell"`
+   * handles all three — it dispatches by the market's engine flag —
+   * so we can collapse them into one mutation here. Cache invalidation
+   * is type-aware though because the detail/list queryKeys differ.
+   */
+  const nativeAmmSellMutation = useMutation({
+    mutationFn: async ({ marketId, entryId, shares }: { marketId: string; entryId: string; shares: number; marketType: "updown" | "h2h" | "gainer" }) => {
+      const res = await apiRequest("POST", `/api/native-markets/${marketId}/bet`, {
+        entryId,
+        actionType: "sell",
+        shares,
+      });
+      return res.json();
+    },
+    onSuccess: async (data: any, variables) => {
+      hapticSuccess();
+      if (data?.xp?.xpAwarded) {
+        triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
+      }
+      // Best-effort proceeds readout in the toast. We avoid hammering
+      // the user with a full share-card flow here — the modal closes
+      // on success and the cards re-hydrate with the new netCreditsIn
+      // / unrealisedPnl, which is the value most users want to see.
+      const proceeds = Math.round(Number(data?.proceeds ?? 0));
+      toast("Position sold", {
+        description:
+          proceeds > 0
+            ? `Proceeds credited: +${proceeds.toLocaleString("en-US")} cr`
+            : "Proceeds have been credited to your wallet.",
+      });
+      setStakeModalOpen(false);
+      setPendingSelection(null);
+      await Promise.all([
+        refreshProfile(),
+        queryClient.invalidateQueries({ queryKey: [`/api/native-markets/${variables.marketType}`] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/me/predictions"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/me/amm-positions"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
+      ]);
+    },
+    onError: (err: Error) => {
+      hapticError();
+      const { title, description } = parseApiError(err, "Failed to sell position");
+      toast.error(title, { description });
+    },
+  });
+
+  const communityAmmSellMutation = useMutation({
+    mutationFn: async ({ marketId, entryId, shares }: { marketId: string; entryId: string; shares: number }) => {
+      const res = await apiRequest("POST", `/api/markets/${marketId}/sell`, { entryId, shares });
+      return res.json();
+    },
+    onSuccess: async (data: any) => {
+      hapticSuccess();
+      if (data?.xp?.xpAwarded) {
+        triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
+      }
+      const proceeds = Math.round(Number(data?.proceeds ?? 0));
+      toast("Position sold", {
+        description:
+          proceeds > 0
+            ? `Proceeds credited: +${proceeds.toLocaleString("en-US")} cr`
+            : "Proceeds have been credited to your wallet.",
+      });
+      setStakeModalOpen(false);
+      setPendingSelection(null);
+      await Promise.all([
+        refreshProfile(),
+        queryClient.invalidateQueries({ queryKey: ["/api/open-markets"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/me/predictions"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/me/amm-positions"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
+      ]);
+    },
+    onError: (err: Error) => {
+      hapticError();
+      const { title, description } = parseApiError(err, "Failed to sell position");
+      toast.error(title, { description });
+    },
+  });
+
+  /**
+   * Unified sell-confirm handler. StakeModal only enables its Sell tab
+   * when `onConfirmAmmSell` is wired, so this is the gate that decides
+   * whether the predict-page overlay can complete a sell at all. We
+   * dispatch by `pendingSelection.type` and bail safely for any future
+   * market type that isn't yet wired (no-op + close).
+   */
+  const handleConfirmAmmSell = useCallback(
+    async (shares: number) => {
+      if (!pendingSelection?.marketId || !pendingSelection.entryId) {
+        setStakeModalOpen(false);
+        setPendingSelection(null);
+        return;
+      }
+      if (pendingSelection.type === "updown" || pendingSelection.type === "h2h" || pendingSelection.type === "gainer") {
+        await nativeAmmSellMutation.mutateAsync({
+          marketId: String(pendingSelection.marketId),
+          entryId: String(pendingSelection.entryId),
+          shares,
+          marketType: pendingSelection.type,
+        });
+        return;
+      }
+      if (pendingSelection.type === "community") {
+        await communityAmmSellMutation.mutateAsync({
+          marketId: String(pendingSelection.marketId),
+          entryId: String(pendingSelection.entryId),
+          shares,
+        });
+        return;
+      }
+    },
+    [pendingSelection, nativeAmmSellMutation, communityAmmSellMutation],
+  );
+
   const handleCommunityPickEntry = (market: any, entry: any, direction: "yes" | "no") => {
     if (market.status !== "OPEN" || market.visibility !== "live") {
       return;
@@ -2332,6 +2553,16 @@ export default function PredictPage() {
       openMarketType: market.openMarketType ?? null,
       isTopUp,
       existingStake: isTopUp ? sameDirStake : undefined,
+      // Sprint 5 / Phase 1.2: community markets historically built the
+      // selection without `engine` / `ammState`, so `selection.engine ===
+      // "amm"` was never true downstream and the StakeModal silently
+      // fell back to parimutuel-flavoured copy + no live cr/share. The
+      // server now stamps `engine` + `ammState` on every market in
+      // `/api/open-markets`, so we just thread it through here. Parimutuel
+      // community markets land as `engine: "parimutuel"` (or undefined)
+      // and continue to render the old multiplier UI.
+      engine: market.engine === "amm" ? "amm" : "parimutuel",
+      ammState: market.ammState ?? null,
     });
     openStakeModal();
   };
@@ -3224,11 +3455,24 @@ export default function PredictPage() {
                 ))}
               </div>
             ) : filteredCommunity.length > 0 ? (
-              <CardSection desktopLimit={9} gap="gap-4" testIdPrefix="section-community" dotActiveColor="bg-violet-500" mobileSlideMinHeight="min-h-[420px]">
+              <CardSection ref={communitySectionRef} desktopLimit={9} gap="gap-4" testIdPrefix="section-community" dotActiveColor="bg-violet-500" mobileSlideMinHeight="min-h-[420px]">
                 {filteredCommunity.map((market: any) => (
-                  <div key={market.id} onClick={(e) => handleCardEmptyTap(e, "world-markets", String(market.id))}>
-                    <OpenMarketCard 
-                      market={market} 
+                  // Sprint 5 / Phase 0 fix: `OpenMarketCard` itself
+                  // testIds by slug (`card-market-${slug}`), but the
+                  // predict-return anchor is keyed by marketId
+                  // (`card-community-${marketId}`) so the regex parser
+                  // in the back-restore effect can identify the section.
+                  // We tag the wrapper div with the marketId testId so
+                  // `scrollToPredictAnchor` can resolve it on Back —
+                  // mirrors how native (weekly/h2h/gainer) cards
+                  // already do this at the PredictCard level.
+                  <div
+                    key={market.id}
+                    data-testid={`card-community-${market.id}`}
+                    onClick={(e) => handleCardEmptyTap(e, "world-markets", String(market.id))}
+                  >
+                    <OpenMarketCard
+                      market={market}
                       onNavigate={(slug, pick, direction) => setLocation(`/markets/${slug}${pick ? `?pick=${pick}${direction ? `&direction=${direction}` : ''}` : ''}`)}
                       onPickEntry={handleCommunityPickEntry}
                       isMarketClosed={market.status !== 'OPEN'}
@@ -3238,6 +3482,7 @@ export default function PredictPage() {
                       categoryRaceMap={raceMap}
                       leaderboardCategories={leaderboardCats}
                       onBrowseFullScreen={isMobile ? () => openSnapScroll("world-markets", String(market.id), "browse-button") : undefined}
+                      unrealisedPnl={ammPositionByMarket.get(String(market.id))?.unrealisedPnl ?? null}
                     />
                   </div>
                 ))}
@@ -3504,7 +3749,7 @@ export default function PredictPage() {
             ) : updownLoading ? (
               <CardGridSkeleton count={3} />
             ) : filteredUpDown.length > 0 ? (
-              <CardSection desktopLimit={9} gap="gap-4" testIdPrefix="section-updown" dotActiveColor="bg-violet-500">
+              <CardSection ref={updownSectionRef} desktopLimit={9} gap="gap-4" testIdPrefix="section-updown" dotActiveColor="bg-violet-500">
                 {filteredUpDown.map((market) => (
                   <div key={market.id} onClick={(e) => handleCardEmptyTap(e, "updown", String(market.id))}>
                     <WeeklyUpDownCard 
@@ -3606,7 +3851,7 @@ export default function PredictPage() {
             ) : h2hLoading ? (
               <CardGridSkeleton count={3} />
             ) : filteredH2H.length > 0 ? (
-              <CardSection desktopLimit={9} gap="gap-4" testIdPrefix="section-h2h" dotActiveColor="bg-violet-500" mobileSlideMinHeight="min-h-[420px]">
+              <CardSection ref={h2hSectionRef} desktopLimit={9} gap="gap-4" testIdPrefix="section-h2h" dotActiveColor="bg-violet-500" mobileSlideMinHeight="min-h-[420px]">
                 {filteredH2H.map((market) => {
                   const bet = userBetsByMarket.get(String(market.id));
                   const h2hUserPick = h2hUserPickFromBet(
@@ -3622,6 +3867,7 @@ export default function PredictPage() {
                       onSelect={(person) => handleH2HSelect(market, person)}
                       userPick={h2hUserPick}
                       userStake={bet?.stakeAmount}
+                      unrealisedPnl={ammPositionByMarket.get(String(market.id))?.unrealisedPnl ?? null}
                       onFilterCategory={handleCategoryPillFilter}
                       categoryRaceMap={raceMap}
                       leaderboardCategories={leaderboardCats}
@@ -3729,7 +3975,7 @@ export default function PredictPage() {
             ) : gainerLoading ? (
               <CardGridSkeleton count={3} />
             ) : filteredGainers.length > 0 ? (
-              <CardSection desktopLimit={9} gap="gap-4" testIdPrefix="section-gainer" dotActiveColor="bg-violet-500" mobileSlideMinHeight="min-h-[420px]">
+              <CardSection ref={gainerSectionRef} desktopLimit={9} gap="gap-4" testIdPrefix="section-gainer" dotActiveColor="bg-violet-500" mobileSlideMinHeight="min-h-[420px]">
                 {filteredGainers.map((market) => (
                   <TopGainerCard 
                     key={market.id}
@@ -3743,6 +3989,7 @@ export default function PredictPage() {
                     onFilterCategory={handleCategoryPillFilter}
                     categoryRaceMap={raceMap}
                     leaderboardCategories={leaderboardCats}
+                    unrealisedPnl={raceTopPositionByMarket.get(String(market.id))?.unrealisedPnl ?? null}
                   />
                 ))}
               </CardSection>
@@ -3860,6 +4107,7 @@ export default function PredictPage() {
                 onSelect={(person) => handleH2HSelect(market, person)}
                 userPick={h2hUserPick}
                 userStake={bet?.stakeAmount}
+                unrealisedPnl={ammPositionByMarket.get(String(market.id))?.unrealisedPnl ?? null}
                 onFilterCategory={(cat) => setH2hOverlayCategoryFilter(normalizeMarketCategory(cat) as CategoryFilter)}
                 categoryRaceMap={raceMap}
                 leaderboardCategories={leaderboardCats}
@@ -3894,6 +4142,7 @@ export default function PredictPage() {
               onFilterCategory={(cat) => setGainersOverlayCategoryFilter(normalizeMarketCategory(cat) as CategoryFilter)}
               categoryRaceMap={raceMap}
               leaderboardCategories={leaderboardCats}
+              unrealisedPnl={raceTopPositionByMarket.get(String(market.id))?.unrealisedPnl ?? null}
             />
           ))
         ) : (
@@ -3943,6 +4192,7 @@ export default function PredictPage() {
               onFilterCategory={(cat) => setCommunityOverlayCategoryFilter(normalizeMarketCategory(cat) as any)}
               categoryRaceMap={raceMap}
               leaderboardCategories={leaderboardCats}
+              unrealisedPnl={ammPositionByMarket.get(String(market.id))?.unrealisedPnl ?? null}
             />
           ))}
       </FullScreenOverlay>
@@ -3954,6 +4204,8 @@ export default function PredictPage() {
         }}
         selection={pendingSelection}
         onConfirm={handleConfirmStake}
+        onConfirmAmmSell={handleConfirmAmmSell}
+        initialAmmMode={modalIntent}
         walletBalance={walletCredits}
         liveAmmState={liveAmmStateForPending}
         onChangePick={pendingSelection?.type === "gainer" ? () => {
@@ -4076,6 +4328,7 @@ export default function PredictPage() {
                   onFilterCategory={handleCategoryPillFilter}
                   categoryRaceMap={raceMap}
                   leaderboardCategories={leaderboardCats}
+                  unrealisedPnl={ammPositionByMarket.get(String(market.id))?.unrealisedPnl ?? null}
                 />
               );
             }}

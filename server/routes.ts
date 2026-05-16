@@ -16505,20 +16505,39 @@ Target length: about 90-150 words.`;
         }
       }
 
-      const result = markets.map((m) => ({
-        ...m,
-        entries: entriesByMarket.get(m.id) || [],
-        linkedPersonAvatar: m.personId ? personAvatars.get(m.personId) || null : null,
-        linkedPersonName: m.personId ? personNames.get(m.personId) || null : null,
-        recentParticipants: engagement.recentParticipantsByMarket.get(m.id) || [],
-        activeParticipantCount: engagement.activeParticipantCountByMarket.get(m.id) || 0,
-        latestRationale: engagement.latestRationaleByMarket.get(m.id) || null,
-        relatedPersonIds: (relatedMap[m.id] || []).map(rp => rp.id),
-        relatedPeople: relatedMap[m.id] || [],
-        ammState: m.engine === "amm" ? ammStateByMarket.get(m.id) ?? null : null,
-      }));
+      const result = markets.map((m, idx) => {
+        const ammState = m.engine === "amm" ? ammStateByMarket.get(m.id) ?? null : null;
+        // Sprint 5 / Phase 1.6: community markets now project a volume
+        // field so OpenMarketCard can render a Polymarket-style chip and
+        // the AMM markets can be sorted by activity. Parimutuel markets
+        // get 0 — they sink to the bottom of the AMM-volume bucket,
+        // which matches the Up/Down / H2H / Race feeds.
+        const volume = Number(ammState?.totalUserCreditsIn ?? 0);
+        return {
+          ...m,
+          entries: entriesByMarket.get(m.id) || [],
+          linkedPersonAvatar: m.personId ? personAvatars.get(m.personId) || null : null,
+          linkedPersonName: m.personId ? personNames.get(m.personId) || null : null,
+          recentParticipants: engagement.recentParticipantsByMarket.get(m.id) || [],
+          activeParticipantCount: engagement.activeParticipantCountByMarket.get(m.id) || 0,
+          latestRationale: engagement.latestRationaleByMarket.get(m.id) || null,
+          relatedPersonIds: (relatedMap[m.id] || []).map(rp => rp.id),
+          relatedPeople: relatedMap[m.id] || [],
+          ammState,
+          volume,
+          __idx: idx,
+        };
+      });
 
-      res.json(result);
+      // Sort AMM markets to the top by volume desc, parimutuel markets
+      // sink. Stable __idx tiebreaker preserves the original
+      // featured/recency/category ordering inside each volume bucket.
+      result.sort((a, b) => {
+        if (b.volume !== a.volume) return b.volume - a.volume;
+        return a.__idx - b.__idx;
+      });
+
+      res.json(result.map(({ __idx, ...rest }) => rest));
     } catch (error: any) {
       console.error("[Open Markets] List error:", error);
       res.status(500).json({ error: "Failed to fetch open markets" });
@@ -19017,7 +19036,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         }
         const personMap = Object.fromEntries(persons.map(p => [p.id, p]));
 
-        const enriched = markets.map(m => {
+        const enriched = markets.map((m, idx) => {
           const mEntries = entries.filter(e => e.marketId === m.id).map(e => ({
             ...e,
             person: e.personId ? personMap[e.personId] || null : null,
@@ -19052,9 +19071,21 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
             ...(modelP1Percent !== undefined ? { modelP1Percent, modelConfidence } : {}),
             ammState,
             volume: Number(ammState?.totalUserCreditsIn ?? 0),
+            __idx: idx,
           };
         });
-        return res.json(enriched);
+
+        // Sprint 5 / Phase 1.5: H2H and Race feeds now sort by volume
+        // DESC by default (same as Up/Down — Sprint 4.3). Parimutuel
+        // markets (volume = 0) sink to the bottom for sunset week, and
+        // the stable __idx tiebreaker preserves the DB's category /
+        // featured ordering inside each volume bucket.
+        enriched.sort((a, b) => {
+          if (b.volume !== a.volume) return b.volume - a.volume;
+          return a.__idx - b.__idx;
+        });
+
+        return res.json(enriched.map(({ __idx, ...rest }) => rest));
       }
 
       res.json(markets.map(m => {

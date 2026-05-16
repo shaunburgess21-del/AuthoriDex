@@ -13,6 +13,8 @@ import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constan
 import { Crown, ChevronRight, Check, Zap } from "lucide-react";
 import { Link } from "wouter";
 import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
+import { cn } from "@/lib/utils";
+import { formatVolumeCredits } from "@/lib/formatNumber";
 
 type CategoryFilter = "all" | "favorites" | "trending" | "tech" | "politics" | "business" | "music" | "sports" | "film-tv" | "gaming" | "creator" | "food-drink" | "lifestyle" | "misc";
 
@@ -49,6 +51,12 @@ export interface TopGainerMarket {
   engine?: "amm" | "parimutuel" | string;
   /** LMSR state block — present only for engine='amm'. */
   ammState?: unknown;
+  /**
+   * Sprint 5 / Phase 3.1: total AMM credits in for the market. Drives
+   * a Polymarket-style "1.2K cr vol" chip on the card. Parimutuel
+   * markets get 0 and the chip suppresses.
+   */
+  volume?: number;
 }
 
 export type CategoryRacePredictionSummary = { pickLabel: string; stakeAmount: number };
@@ -110,6 +118,7 @@ export function TopGainerCard({
   onShowAllCandidates,
   isPredicted = false,
   predictionSummary = null,
+  unrealisedPnl = null,
   isShimmering = false,
   onFilterCategory,
   categoryRaceMap,
@@ -121,6 +130,16 @@ export function TopGainerCard({
   onShowAllCandidates?: (market: TopGainerMarket, initialCandidate?: GainerCandidate) => void;
   isPredicted?: boolean;
   predictionSummary?: CategoryRacePredictionSummary | null;
+  /**
+   * Sprint 5 / Phase 3.2: live unrealised P&L for the user's largest
+   * AMM position on this race. Race users can hold positions on
+   * multiple candidates at once — we surface the top-position P&L
+   * here for the banner readout. Null for parimutuel positions, for
+   * "Multiple picks" pending state where one P&L number would be
+   * misleading, and for cards whose AMM position summary hasn't
+   * loaded yet. Mirrors the Up/Down / H2H pattern.
+   */
+  unrealisedPnl?: number | null;
   isShimmering?: boolean;
   onFilterCategory?: (category: string) => void;
   categoryRaceMap?: Map<string, string>;
@@ -133,6 +152,28 @@ export function TopGainerCard({
   // "Hot" + early-bird are parimutuel-only signals. On AMM races
   // there is no pool to heat up and no boost multiplier.
   const isHot = !isAmm && (market.totalPool > 5000 || (market.totalBets ?? market.activeParticipantCount ?? 0) > 50);
+  const volumeLabel = formatVolumeCredits(market.volume ?? 0);
+
+  /**
+   * Sprint 5 / Phase 3.2: AMM P&L delta with sub-cent zero clamp.
+   * Suppressed entirely for "Multiple picks" pending state where a
+   * single P&L number would be misleading (it represents only the
+   * top position, not the aggregate).
+   */
+  const isMultiplePicks = predictionSummary?.pickLabel === "Multiple picks";
+  const hasPnl = !isMultiplePicks && unrealisedPnl != null && Number.isFinite(unrealisedPnl);
+  const pnlValue = hasPnl ? (unrealisedPnl as number) : 0;
+  const pnlIsZero = hasPnl && Math.abs(pnlValue) < 0.005;
+  const pnlClass = !hasPnl || pnlIsZero
+    ? "text-muted-foreground"
+    : pnlValue >= 0
+      ? "text-green-700 dark:text-green-400"
+      : "text-red-700 dark:text-red-400";
+  const pnlText = !hasPnl
+    ? null
+    : pnlIsZero
+      ? "0.00 cr"
+      : `${pnlValue >= 0 ? "+" : ""}${pnlValue.toFixed(2)} cr`;
 
   const handlePlacePrediction = () => {
     onShowAllCandidates?.(market);
@@ -161,12 +202,26 @@ export function TopGainerCard({
             );
           })()}
         </div>
-        <InteractiveCategoryPill
-          category={market.category}
-          onFilter={() => onFilterCategory?.(market.category)}
-          raceMarketId={categoryRaceMap?.get(normalizeMarketCategory(market.category))}
-          leaderboardCategories={leaderboardCategories}
-        />
+        <div className="flex items-center gap-1.5">
+          {/* Sprint 5 / Phase 3.1: volume chip beside the category pill,
+              same treatment as Up/Down + H2H so the predict feed reads
+              consistently across all native market types. */}
+          {volumeLabel && (
+            <Badge
+              variant="outline"
+              className="text-[10px] tabular-nums text-muted-foreground border-border/50"
+              data-testid={`gainer-card-volume-${market.id}`}
+            >
+              {volumeLabel} vol
+            </Badge>
+          )}
+          <InteractiveCategoryPill
+            category={market.category}
+            onFilter={() => onFilterCategory?.(market.category)}
+            raceMarketId={categoryRaceMap?.get(normalizeMarketCategory(market.category))}
+            leaderboardCategories={leaderboardCategories}
+          />
+        </div>
       </div>
       <MarketCycleStrip
         bettingCutoff={market.bettingCutoff ?? null}
@@ -274,6 +329,17 @@ export function TopGainerCard({
                     {predictionSummary.pickLabel}
                   </p>
                 </div>
+                {/* Sprint 5 / Phase 3.2: P&L delta replaces the
+                    trend-score-based Winning/Place pill. For AMM
+                    races we show the unrealised P&L of the user's
+                    largest position — the truer "where do I stand?"
+                    signal. We keep the parimutuel place pill as a
+                    fallback for non-AMM races (no P&L to show). */}
+                {pnlText ? (
+                  <span className={cn("text-xs font-semibold font-mono tabular-nums shrink-0", pnlClass)}>
+                    {pnlText}
+                  </span>
+                ) : null}
                 <div className="flex shrink-0 flex-col items-end tabular-nums">
                   <span className="text-[10px] leading-none text-muted-foreground">Stake</span>
                   <span className="text-xs font-semibold leading-tight text-foreground">
@@ -281,7 +347,9 @@ export function TopGainerCard({
                   </span>
                 </div>
                 <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-                {racePlace != null && (
+                {/* Parimutuel-only place pill — AMM races already
+                    have a P&L readout above which is more informative. */}
+                {!isAmm && racePlace != null && (
                   <Badge className={categoryRaceStandingBadgeClass(racePlace)}>
                     {categoryRaceStandingLabel(racePlace)}
                   </Badge>

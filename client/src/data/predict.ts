@@ -105,6 +105,12 @@ export interface HeadToHeadMarket {
   endTime: string;
   totalPool: number;
   person1Percent: number;
+  /**
+   * Sprint 5 / Phase 1.4: total AMM credits in for the market. Drives
+   * the volume chip on `HeadToHeadCard` and the default sort on the
+   * H2H feed. Parimutuel markets get 0 and the chip suppresses.
+   */
+  volume?: number;
 }
 
 export const HEAD_TO_HEAD_MARKETS: HeadToHeadMarket[] = [
@@ -156,6 +162,12 @@ export interface TopGainerMarket {
   leaders: { name: string; avatar: string; currentGain: number; percentGain: number }[];
   totalPool: number;
   endTime: string;
+  /**
+   * Sprint 5 / Phase 1.4: total AMM credits in for the market. Drives
+   * the volume chip on `TopGainerCard` and the default sort on the
+   * Race feed. Parimutuel markets get 0 and the chip suppresses.
+   */
+  volume?: number;
 }
 
 export const TOP_GAINER_MARKETS: TopGainerMarket[] = [

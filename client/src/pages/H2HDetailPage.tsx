@@ -102,6 +102,13 @@ export default function H2HDetailPage() {
 
   const [stakeModalOpen, setStakeModalOpen] = useState(false);
   const [pendingSelection, setPendingSelection] = useState<StakeSelection | null>(null);
+  /**
+   * Sprint 5 / Phase 2.3: seed which StakeModal tab opens (buy / sell).
+   * Buy-side flows (Add, score-row tiles) set this to "buy"; the
+   * per-pick Sell button below sets it to "sell" so the modal lands on
+   * the right tab without flicker. Mirrors the Up/Down detail page.
+   */
+  const [modalIntent, setModalIntent] = useState<"buy" | "sell">("buy");
 
   const { data: allH2hMarkets, isLoading } = useQuery<any[]>({
     queryKey: ["/api/native-markets/h2h"],
@@ -328,6 +335,7 @@ export default function H2HDetailPage() {
         ammState: hydrated.ammState,
         ammNetShares: hydrated.engine === "amm" ? ammNetSharesFor(entryId) : 0,
       });
+      setModalIntent("buy");
       setStakeModalOpen(true);
     },
     [hydrated, isMarketClosed, userPickSide, marketId, userPickTotalStake, ammNetSharesFor]
@@ -538,6 +546,7 @@ export default function H2HDetailPage() {
         ammState: hydrated.ammState,
         ammNetShares: ammNetSharesFor(entryId),
       });
+      setModalIntent("sell");
       setStakeModalOpen(true);
     },
     [hydrated, isAmm, marketId, ammNetSharesFor],
@@ -895,18 +904,21 @@ export default function H2HDetailPage() {
                             <p className="text-[11px] text-muted-foreground">
                               {pos.netShares.toFixed(2)} shares · avg {pos.avgEntryPrice.toFixed(3)} cr · cost {pos.netCreditsIn.toFixed(0)} cr
                             </p>
+                            {/* Sprint 5 / Phase 2.4: conversational position copy.
+                                Replaces the dense "≈ X cr now · -Y cr" style
+                                with two plain-English lines that read like the
+                                Up/Down detail page: what you'd get if you sold
+                                now, and what the position pays if it wins. */}
                             <p className="text-[11px] text-muted-foreground">
-                              ≈ {pos.currentValue.toFixed(2)} cr now ·{" "}
+                              Sell now: ~{pos.currentValue.toFixed(2)} cr{" "}
                               <span className={`font-mono font-medium ${pnlColor}`}>
-                                {unrealisedPnl >= 0 ? "+" : ""}
-                                {unrealisedPnl.toFixed(2)} cr
+                                ({unrealisedPnl >= 0 ? "+" : ""}{unrealisedPnl.toFixed(2)} cr)
                               </span>
                             </p>
                             <p className="text-[11px] text-muted-foreground">
-                              Pays {pos.netShares.toFixed(2)} cr if win ·{" "}
-                              <span className="text-green-700 dark:text-green-500">
-                                {maxProfitIfWin >= 0 ? "+" : ""}
-                                {maxProfitIfWin.toFixed(2)} net
+                              If {smartName(person.name)} wins: {pos.netShares.toFixed(2)} cr{" "}
+                              <span className="font-mono font-medium text-green-700 dark:text-green-500">
+                                ({maxProfitIfWin >= 0 ? "+" : ""}{maxProfitIfWin.toFixed(2)} cr)
                               </span>
                             </p>
                           </div>
@@ -922,7 +934,7 @@ export default function H2HDetailPage() {
                       );
                     })}
                     <p className="text-[10px] text-muted-foreground text-center">
-                      Current value is approximate — actual sell proceeds vary slightly with price impact.
+                      Live prices — these numbers shift as the market moves.
                     </p>
                   </div>
                 )}
@@ -1234,6 +1246,8 @@ export default function H2HDetailPage() {
         }}
         onConfirm={handleConfirmStake}
         onConfirmAmmSell={isAmm ? handleConfirmAmmSell : undefined}
+        liveAmmState={isAmm ? hydrated?.ammState ?? null : null}
+        initialAmmMode={modalIntent}
         walletBalance={walletCredits}
       />
     </div>
