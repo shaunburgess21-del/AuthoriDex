@@ -4,6 +4,7 @@ import { db } from "../db";
 import { profiles, xpActions } from "@shared/schema";
 import { requireAuth, type AuthRequest } from "../auth-middleware";
 import { gamificationService } from "../services/gamification";
+import { awardStreakMilestoneBadge } from "../services/badges";
 import {
   STREAK_GRACE_PERIOD_DAYS,
   STREAK_MILESTONES,
@@ -240,6 +241,17 @@ export function registerGamificationRoutes(app: Express): void {
         } catch (err) {
           console.error(
             `[daily-checkin] streak_milestone_${milestoneHit}_credits failed`,
+            err,
+          );
+        }
+        // Streak-tier badge (streak_keeper / fortnight / monthly_regular
+        // / century_streak). Only fires for milestones with a configured
+        // badge key — earlier streak days (e.g. 3-day) are credit/XP only.
+        try {
+          await awardStreakMilestoneBadge(userId, milestoneHit);
+        } catch (err) {
+          console.error(
+            `[daily-checkin] streak badge ${milestoneHit} failed`,
             err,
           );
         }

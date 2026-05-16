@@ -19,6 +19,7 @@ export type NotificationKind =
   | "streak_milestone"
   | "credits_low"
   | "credits_granted"
+  | "badge_awarded"
   | "announcement";
 
 export type NotificationCategory =

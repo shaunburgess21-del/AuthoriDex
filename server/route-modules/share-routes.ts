@@ -4,6 +4,7 @@ import { and, eq, gte, isNotNull, isNull, sql } from "drizzle-orm";
 import { db } from "../db";
 import { profiles, shareClicks, creditLedger } from "@shared/schema";
 import { gamificationService } from "../services/gamification";
+import { checkAndAwardShareMasterBadge } from "../services/badges";
 import { requireAuth, requireAdmin, type AuthRequest } from "../auth-middleware";
 import { generateUniqueReferralCode } from "../utils/referral-code";
 
@@ -182,6 +183,18 @@ export function registerShareRoutes(app: Express): void {
             .update(shareClicks)
             .set({ credited: true })
             .where(eq(shareClicks.id, inserted!.id));
+
+          // Share Master badge — fires on the first credited click
+          // for this user. The badge service guards idempotency so
+          // subsequent credited clicks are no-ops.
+          try {
+            await checkAndAwardShareMasterBadge(sharerUserId);
+          } catch (badgeErr) {
+            console.warn(
+              "[share-track-click] share_master badge check failed",
+              badgeErr,
+            );
+          }
         }
       } catch (err) {
         console.error("[share-track-click] credit award failed", err);

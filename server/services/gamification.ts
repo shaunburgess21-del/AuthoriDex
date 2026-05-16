@@ -17,6 +17,7 @@ import { resolveRankForXp } from "./gamification-ranks";
 import { createNotification } from "./notifications";
 import { ALL_CAPABILITIES } from "@shared/rank-config";
 import { CREDIT_ACTIONS, type CreditActionConfig } from "@shared/credit-config";
+import { awardRankTierBadges } from "./badges";
 
 interface AwardXpResult {
   success: boolean;
@@ -336,6 +337,21 @@ class GamificationService {
     // Post-commit fanout. Best-effort; never throws back to the caller.
     const rankUpFanout = rankUpRef.value;
     if (rankUpFanout) {
+      // Tier badge awards (Hall Inductee tier 7, VoxMax Legend tier 8).
+      // Idempotent — no-op if the user already holds the badge. Fired
+      // BEFORE the rank_up notification so the badge_awarded toast
+      // can land alongside the rank-up modal without race ambiguity.
+      try {
+        const newTier = this.ranksCache.find(
+          (r) => r.name === rankUpFanout.newRank,
+        )?.tier;
+        if (newTier) {
+          await awardRankTierBadges(userId, newTier);
+        }
+      } catch (err) {
+        console.error("[badges] rank tier badge award failed:", err);
+      }
+
       try {
         await createNotification({
           userId,

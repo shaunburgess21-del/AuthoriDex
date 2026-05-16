@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  Award,
   Bell,
   CreditCard,
   Flame,
@@ -129,6 +130,13 @@ export const NOTIFICATION_REGISTRY: Record<NotificationKind, KindMeta> = {
   },
   credits_granted: {
     icon: Wallet,
+    accent: ACCOUNT_ACCENT,
+    bgAccent: ACCOUNT_BG,
+    category: "account",
+    priority: 1,
+  },
+  badge_awarded: {
+    icon: Award,
     accent: ACCOUNT_ACCENT,
     bgAccent: ACCOUNT_BG,
     category: "account",

@@ -5,7 +5,7 @@
 //   capped at maxXp=149999; all ranks gained a description column.
 
 import { db } from "../db";
-import { xpActions, xpLedger, profiles, ranks, creditActions } from "@shared/schema";
+import { xpActions, xpLedger, profiles, ranks, creditActions, badges } from "@shared/schema";
 import { eq, sql } from "drizzle-orm";
 import {
   STREAK_MILESTONES,
@@ -14,6 +14,7 @@ import {
 } from "@shared/streak-config";
 import { RANKS } from "@shared/rank-config";
 import { CREDIT_ACTIONS } from "@shared/credit-config";
+import { BADGES } from "@shared/badge-config";
 
 /**
  * Action keys that have been retired from the live catalogue. They're
@@ -57,6 +58,14 @@ async function seedXpActions() {
     // Prediction Actions
     { actionKey: 'place_prediction', displayName: 'Place Prediction', xpValue: 20, dailyCap: 10, description: 'Place a prediction on a market' },
     { actionKey: 'prediction_win', displayName: 'Prediction Win', xpValue: 100, dailyCap: null, description: 'Win a prediction (bonus XP)' },
+
+    // Profile Completion Actions — lifetime-once via idempotency key
+    // (`xp_profile_<key>_<userId>`). dailyCap stays null for the same
+    // reason as streak milestones: the per-user idempotency key is
+    // the cap.
+    { actionKey: 'profile_avatar', displayName: 'Profile Photo Added', xpValue: 25, dailyCap: null, description: 'One-time XP for uploading a profile photo' },
+    { actionKey: 'profile_bio', displayName: 'Profile Name & Bio', xpValue: 25, dailyCap: null, description: 'One-time XP for completing your display name and bio' },
+    { actionKey: 'profile_demographics', displayName: 'Profile Demographics', xpValue: 100, dailyCap: null, description: 'One-time XP for completing all demographic fields' },
     
     // Streak & Bonus Actions. The per-milestone rows below are
     // generated from shared/streak-config.ts so the seed, the
@@ -193,6 +202,63 @@ async function seedCreditActions() {
   );
 }
 
+async function seedBadges() {
+  console.log("[Gamification] Seeding badges...");
+
+  // Upsert by `key` so reseed refreshes name / description / icon /
+  // sortOrder / criteriaJson without recreating rows. Admin toggles
+  // for isActive / visibleOnFrontend made via the CRUD endpoints
+  // are also re-asserted from the config — the source of truth for
+  // those flags is the config file, not the DB. If you want a
+  // production-only override, change the config and reseed.
+  for (const badge of BADGES) {
+    const existing = await db
+      .select()
+      .from(badges)
+      .where(eq(badges.key, badge.key))
+      .limit(1);
+
+    if (existing.length > 0) {
+      await db
+        .update(badges)
+        .set({
+          name: badge.name,
+          description: badge.description,
+          category: badge.category,
+          rarity: badge.rarity,
+          icon: badge.icon,
+          criteriaJson: badge.criteriaJson,
+          isActive: badge.isActive,
+          visibleOnFrontend: badge.visibleOnFrontend,
+          sortOrder: badge.sortOrder,
+        })
+        .where(eq(badges.key, badge.key));
+    } else {
+      await db.insert(badges).values({
+        key: badge.key,
+        name: badge.name,
+        description: badge.description,
+        category: badge.category,
+        rarity: badge.rarity,
+        icon: badge.icon,
+        criteriaJson: badge.criteriaJson,
+        isActive: badge.isActive,
+        visibleOnFrontend: badge.visibleOnFrontend,
+        sortOrder: badge.sortOrder,
+      });
+    }
+  }
+
+  const counts = BADGES.reduce<Record<string, number>>((acc, b) => {
+    acc[b.category] = (acc[b.category] ?? 0) + 1;
+    return acc;
+  }, {});
+  console.log(
+    `[Gamification] Seeded ${BADGES.length} badges ` +
+      `(${Object.entries(counts).map(([c, n]) => `${c}:${n}`).join(", ")})`,
+  );
+}
+
 async function migrateLegacyXp() {
   console.log("[Gamification] Migrating legacy XP balances to ledger...");
   
@@ -230,6 +296,7 @@ export async function seedGamification() {
     await seedXpActions();
     await seedRanks();
     await seedCreditActions();
+    await seedBadges();
     await migrateLegacyXp();
     console.log("[Gamification] Seeding complete!");
     return { success: true };

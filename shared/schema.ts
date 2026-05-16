@@ -953,6 +953,24 @@ export const profiles = pgTable("profiles", {
   referredBy: text("referred_by"),
   firstActionAt: timestamp("first_action_at", { withTimezone: true }),
   referralCreditFiredAt: timestamp("referral_credit_fired_at", { withTimezone: true }),
+  // Free-form profile bio. Surfaced on /me + public profile and
+  // gates the `getting_personal` PROFILE badge alongside the
+  // user's display name.
+  bio: text("bio"),
+  // Demographic fields — see migration 0060_badge_system.sql.
+  // Power the PROFILE-category badges (community_member,
+  // full_voxmaxer) and the PROFILE XP/credit actions
+  // (profile_demographics). Treated as opt-in PII: nullable by
+  // default, made visible to other users only when
+  // profileFieldsPublic is set. The badge-completion check inspects
+  // the columns directly; admin tooling reads through
+  // profileFieldsPublic before exposing them on public surfaces.
+  dateOfBirth: text("date_of_birth"),
+  gender: text("gender"),
+  countryOfOrigin: text("country_of_origin"),
+  countryOfResidence: text("country_of_residence"),
+  ethnicity: text("ethnicity"),
+  profileFieldsPublic: boolean("profile_fields_public").notNull().default(false),
   totalVotes: integer("total_votes").notNull().default(0),
   totalPredictions: integer("total_predictions").notNull().default(0),
   winRate: real("win_rate").notNull().default(0),
@@ -983,6 +1001,80 @@ export const insertProfileSchema = createInsertSchema(profiles).omit({
 
 export type Profile = typeof profiles.$inferSelect;
 export type InsertProfile = z.infer<typeof insertProfileSchema>;
+
+// Badge definitions. Canonical list lives in shared/badge-config.ts;
+// seedBadges() in server/scripts/seed-gamification.ts upserts that
+// list into this table on every run. Keeping the runtime row in the
+// DB (instead of reading the config file) means admin toggles for
+// isActive / visibleOnFrontend take effect without a redeploy.
+export const badges = pgTable("badges", {
+  id: serial("id").primaryKey(),
+  // Stable snake_case identifier — referenced by user_badges and
+  // every awardBadge() call site. NEVER rename without a migration.
+  key: text("key").notNull().unique(),
+  name: text("name").notNull(),
+  description: text("description").notNull(),
+  // VOTING | PREDICTION | CONTENT | STREAK | SOCIAL | PROFILE | SPECIAL.
+  // Free-form text so admins can add categories without a schema
+  // migration; canonical values mirror BADGE_CATEGORIES in
+  // shared/badge-config.ts.
+  category: text("category").notNull(),
+  // COMMON | RARE | EPIC | LEGENDARY. Same shape contract as category.
+  rarity: text("rarity").notNull(),
+  // Lucide icon name (kebab-case), resolved client-side.
+  icon: text("icon").notNull(),
+  // Free-form criteria descriptor. Used only by admin tooling and
+  // the How It Works page — runtime award logic relies on the
+  // hand-written check helpers in server/services/badges.ts, NOT on
+  // this column. Keeping it as JSON makes the admin UI self-
+  // documenting without forcing the runtime to interpret it.
+  criteriaJson: jsonb("criteria_json"),
+  isActive: boolean("is_active").notNull().default(true),
+  // True for badges shown on the public Badges grid + How It Works
+  // page. Hidden badges (e.g. `founder`) still award normally and
+  // appear on the holder's profile, but aren't advertised.
+  visibleOnFrontend: boolean("visible_on_frontend").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertBadgeSchema = createInsertSchema(badges).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type Badge = typeof badges.$inferSelect;
+export type InsertBadge = z.infer<typeof insertBadgeSchema>;
+
+// Award log. One row per (user, badge) pair — the unique constraint
+// prevents double-awards even if a caller forgets to pass the
+// idempotency key. The idempotencyKey UNIQUE is the second guard
+// rail: deterministic for automatic awards
+// (`badge_${userId}_${badgeKey}`) and prefixed for admin manual
+// awards (`badge_manual_${userId}_${badgeKey}`).
+export const userBadges = pgTable("user_badges", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  badgeKey: text("badge_key").notNull(),
+  earnedAt: timestamp("earned_at", { withTimezone: true }).defaultNow(),
+  idempotencyKey: text("idempotency_key").notNull().unique(),
+  metadata: jsonb("metadata"),
+}, (table) => ({
+  userBadgeUnique: unique("user_badges_user_badge_key_unique").on(
+    table.userId,
+    table.badgeKey,
+  ),
+  userIdx: index("user_badges_user_id_idx").on(table.userId),
+  badgeKeyIdx: index("user_badges_badge_key_idx").on(table.badgeKey),
+}));
+
+export const insertUserBadgeSchema = createInsertSchema(userBadges).omit({
+  id: true,
+  earnedAt: true,
+});
+
+export type UserBadge = typeof userBadges.$inferSelect;
+export type InsertUserBadge = z.infer<typeof insertUserBadgeSchema>;
 
 // Phase 3 Interest Picker — behavioural blending aggregate.
 // One row per (user_id, category_id). No event log; we keep aggregate

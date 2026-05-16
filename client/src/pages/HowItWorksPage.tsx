@@ -650,6 +650,7 @@ const CREDIT_CATEGORY_LABELS: Record<CreditCategory, string> = {
   QUALITY: "Quality",
   STREAK: "Streak milestones",
   SOCIAL: "Social",
+  PROFILE: "Profile completion",
   SPECIAL: "Special",
 };
 

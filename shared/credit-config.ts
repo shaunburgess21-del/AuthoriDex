@@ -28,6 +28,7 @@ export const CREDIT_CATEGORIES = {
   QUALITY: "QUALITY",
   STREAK: "STREAK",
   SOCIAL: "SOCIAL",
+  PROFILE: "PROFILE",
   SPECIAL: "SPECIAL",
 } as const;
 
@@ -200,6 +201,41 @@ export const CREDIT_ACTIONS: readonly CreditActionConfig[] = [
     dailyCap: null,
     category: "SOCIAL",
     notes: "Bonus credits for new user who signed up via a referral link — stacks on top of standard signup grant",
+    isActive: true,
+    requiresApproval: false,
+  },
+
+  // PROFILE — lifetime-once profile completion rewards. Idempotency
+  // keys (`credit_profile_<key>_<userId>`) are date-less so they
+  // pay exactly once per user even if the field is later cleared
+  // and re-saved.
+  {
+    key: "profile_avatar",
+    label: "Add profile photo",
+    proposedCredits: 10,
+    dailyCap: null,
+    category: "PROFILE",
+    notes: "One-time grant when avatar is first uploaded",
+    isActive: true,
+    requiresApproval: false,
+  },
+  {
+    key: "profile_bio",
+    label: "Complete name and bio",
+    proposedCredits: 10,
+    dailyCap: null,
+    category: "PROFILE",
+    notes: "One-time grant for completing display name + bio",
+    isActive: true,
+    requiresApproval: false,
+  },
+  {
+    key: "profile_demographics",
+    label: "Complete demographic profile",
+    proposedCredits: 50,
+    dailyCap: null,
+    category: "PROFILE",
+    notes: "One-time grant for completing all demographic fields",
     isActive: true,
     requiresApproval: false,
   },

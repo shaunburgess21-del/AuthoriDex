@@ -22,6 +22,7 @@ export type AdminSection =
   | "amm"
   | "users"
   | "credits"
+  | "badges"
   | "agents"
   | "categories"
   | "tools";

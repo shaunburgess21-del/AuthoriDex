@@ -5,7 +5,7 @@ import { storage } from "./storage";
 import { getBaselineDiagnostics } from "./utils/baseline";
 import { db } from "./db";
 import { syncWinningAvatarForPerson } from "./lib/curateAvatar";
-import { anonVoteBudget, trendSnapshots, trackedPeople, communityInsights, insightVotes, comments as unifiedComments, commentVotes, matchups, votes, voteActions, xpActions, xpLedger, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, creditActions, adminAuditLog, predictionMarkets, marketEntries, marketBets, marketAmmState, ammPriceSnapshots, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, contentCategories, userCategoryEngagement, emailUnsubscribeState, insertCommunityInsightSchema, insertInsightVoteSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
+import { anonVoteBudget, trendSnapshots, trackedPeople, communityInsights, insightVotes, comments as unifiedComments, commentVotes, matchups, votes, voteActions, xpActions, xpLedger, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, creditActions, badges as badgesTable, userBadges, adminAuditLog, predictionMarkets, marketEntries, marketBets, marketAmmState, ammPriceSnapshots, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, contentCategories, userCategoryEngagement, emailUnsubscribeState, insertCommunityInsightSchema, insertInsightVoteSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
 import { validateSuggestionPayload, SUGGESTION_TYPES } from "@shared/suggestionSchemas";
 import { normaliseSocialHandles, SOCIAL_HANDLE_KEYS } from "@shared/handleNormalise";
 import { eq, desc, and, gt, sql, count, gte, lte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull, isNull } from "drizzle-orm";
@@ -25,6 +25,15 @@ import {
   awardMarketSuggestionApprovedCredits,
   maybeFireReferralCredit,
 } from "./services/credits-earn";
+import {
+  badgeService,
+  checkAndAwardVoteBadges,
+  checkAndAwardInsightBadges,
+  checkAndAwardSuggestionBadges,
+  checkAndAwardPredictionBadges,
+  checkAndAwardProfileBadges,
+  checkAndAwardUpvoteReceivedBadges,
+} from "./services/badges";
 import { SIGNUP_CREDIT_GRANT } from "@shared/credit-config";
 import { generateUniqueReferralCode } from "./utils/referral-code";
 import { createNotification, createNotificationsBulk } from "./services/notifications";
@@ -3483,6 +3492,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } catch (e) { console.error("XP award failed:", e); }
         await awardVoteCredits(userId, 'curation', imageId, { personId });
         await maybeFireReferralCredit(userId);
+        await checkAndAwardVoteBadges(userId);
       }
 
       await syncWinningAvatarForPerson(personId);
@@ -3659,6 +3669,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (e) { console.error("XP award failed:", e); }
       await awardInsightCredits(req.userId!, newInsight.id, { personId });
       await maybeFireReferralCredit(req.userId!);
+      await checkAndAwardInsightBadges(req.userId!);
 
       const [profile] = await db
         .select(commentAuthorSelect)
@@ -3822,6 +3833,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               { insightId: id, voterId: userId, source: "community_insight" },
             );
           } catch (e) { console.error("Author upvote XP award failed:", e); }
+          await checkAndAwardUpvoteReceivedBadges(insight.authorId);
         }
       }
 
@@ -3992,6 +4004,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (e) { console.error("XP award failed:", e); }
       await awardVoteCredits(userId, 'sentiment', `${personId}_${today}`, { personId, voteType });
       await maybeFireReferralCredit(userId);
+      await checkAndAwardVoteBadges(userId);
 
       res.json({ success: true, created: true, xp: xpResult ?? null });
     } catch (error: any) {
@@ -4218,6 +4231,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } catch (e) { console.error("XP award failed:", e); }
         await awardVoteCredits(req.userId, 'value', celebrityId, { vote });
         await maybeFireReferralCredit(req.userId);
+        await checkAndAwardVoteBadges(req.userId);
       }
 
       // Recompute metrics for this celebrity (community totals include anon votes)
@@ -5825,6 +5839,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               { commentId: id, voterId: userId, source: "comment" },
             );
           } catch (e) { console.error("Author upvote XP award failed:", e); }
+          await checkAndAwardUpvoteReceivedBadges(comment.userId);
         }
       }
 
@@ -6940,6 +6955,7 @@ Only return the JSON object.`;
           }
           await awardVoteCredits(req.userId, 'matchup', id, { votedOption: option });
           await maybeFireReferralCredit(req.userId);
+          await checkAndAwardVoteBadges(req.userId);
         }
       }
       
@@ -7412,8 +7428,20 @@ Only return the JSON object.`;
   app.patch("/api/profile/me", requireAuth, async (req: AuthRequest, res) => {
     try {
       const userId = req.userId!;
-      const { username, avatarUrl, isPublic, positionsPublic } = req.body;
-      
+      const {
+        username,
+        avatarUrl,
+        isPublic,
+        positionsPublic,
+        bio,
+        dateOfBirth,
+        gender,
+        countryOfOrigin,
+        countryOfResidence,
+        ethnicity,
+        profileFieldsPublic,
+      } = req.body;
+
       // Build update object with only provided fields
       const updateData: Partial<Profile> = {};
       if (username !== undefined) {
@@ -7434,14 +7462,39 @@ Only return the JSON object.`;
       if (typeof positionsPublic === "boolean") {
         updateData.positionsPublic = positionsPublic;
       }
-      
+      // Profile completion fields (badge surface + PROFILE XP/credit
+      // actions). All optional and treated as plain text — sanitisation
+      // is the form's responsibility. `null` from the client clears
+      // the field; `undefined` leaves it untouched.
+      if (bio !== undefined) updateData.bio = bio === null ? null : String(bio);
+      if (dateOfBirth !== undefined) {
+        updateData.dateOfBirth = dateOfBirth === null ? null : String(dateOfBirth);
+      }
+      if (gender !== undefined) updateData.gender = gender === null ? null : String(gender);
+      if (countryOfOrigin !== undefined) {
+        updateData.countryOfOrigin = countryOfOrigin === null ? null : String(countryOfOrigin);
+      }
+      if (countryOfResidence !== undefined) {
+        updateData.countryOfResidence = countryOfResidence === null ? null : String(countryOfResidence);
+      }
+      if (ethnicity !== undefined) {
+        updateData.ethnicity = ethnicity === null ? null : String(ethnicity);
+      }
+      if (typeof profileFieldsPublic === "boolean") {
+        updateData.profileFieldsPublic = profileFieldsPublic;
+      }
+
       if (Object.keys(updateData).length === 0) {
         return res.status(400).json({ error: "No fields to update" });
       }
       
       await db.update(profiles).set(updateData).where(eq(profiles.id, userId));
       const updated = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
-      
+
+      // Profile-completion fan-out: badges + lifetime-once XP/credits.
+      // Non-blocking; a single failure never aborts the PATCH response.
+      void checkAndAwardProfileBadges(userId);
+
       res.json(updated[0]);
     } catch (error: any) {
       console.error("Error updating profile:", error.message);
@@ -7689,6 +7742,10 @@ Only return the JSON object.`;
       if (updated.length === 0) {
         return res.status(404).json({ error: "Profile not found" });
       }
+
+      // Profile-completion fan-out for the avatar surface (badge +
+      // profile_avatar XP/credit). Idempotent + non-blocking.
+      void checkAndAwardProfileBadges(userId);
 
       res.json({ profile: updated[0] });
     } catch (error: any) {
@@ -14774,6 +14831,7 @@ Target length: about 90-150 words.`;
           } catch (e) { console.error("XP award failed:", e); }
           await awardVoteCredits(req.userId, 'trending_poll', String(poll.id), { choice });
           await maybeFireReferralCredit(req.userId);
+          await checkAndAwardVoteBadges(req.userId);
         }
       }
 
@@ -15849,6 +15907,7 @@ Target length: about 90-150 words.`;
           } catch (e) { console.error("XP award failed:", e); }
           await awardVoteCredits(req.userId, 'opinion_poll', String(poll.id), { optionId });
           await maybeFireReferralCredit(req.userId);
+          await checkAndAwardVoteBadges(req.userId);
         }
       }
 
@@ -17802,6 +17861,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       );
     } catch (e) { console.error("XP award failed:", e); }
     await maybeFireReferralCredit(userId);
+    await checkAndAwardPredictionBadges(userId);
 
     return {
       data: {
@@ -18555,6 +18615,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         );
       } catch (e) { console.error("XP award for jackpot entry failed:", e); }
       await maybeFireReferralCredit(authReq.userId!);
+      await checkAndAwardPredictionBadges(authReq.userId!);
 
       return res.json({
         betId: (result as any).betId,
@@ -20067,6 +20128,174 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
     },
   );
 
+  // ----- Admin Badges -----
+  // Three concerns served from one CRUD-shaped surface:
+  //   GET  /api/admin/badges                — list badge definitions +
+  //                                            per-key award counts.
+  //   PATCH /api/admin/badges/:key          — toggle isActive /
+  //                                            visibleOnFrontend / sortOrder
+  //                                            and copy fields. Definitions
+  //                                            themselves still live in
+  //                                            shared/badge-config.ts;
+  //                                            create-from-admin is
+  //                                            intentionally not supported
+  //                                            (config + reseed is the path).
+  //   GET  /api/admin/badges/award-log      — recent user_badges rows for
+  //                                            the audit tab.
+  //   POST /api/admin/badges/award          — manual award; idempotency
+  //                                            key prefixed with
+  //                                            `badge_manual_` so the
+  //                                            automatic shape can never
+  //                                            collide.
+  //   DELETE /api/admin/badges/award/:userId/:key — revoke (delete the
+  //                                            user_badges row). The
+  //                                            manual award path can
+  //                                            re-award the same badge
+  //                                            because the key prefix
+  //                                            differs from the auto one.
+  app.get("/api/admin/badges", requireAuth, requireAdmin, async (_req: AuthRequest, res) => {
+    try {
+      const rows = await db
+        .select()
+        .from(badgesTable)
+        .orderBy(badgesTable.category, badgesTable.sortOrder, badgesTable.key);
+      const counts = await db
+        .select({
+          badgeKey: userBadges.badgeKey,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(userBadges)
+        .groupBy(userBadges.badgeKey);
+      const countByKey = new Map(counts.map((c) => [c.badgeKey, Number(c.count) || 0]));
+      const enriched = rows.map((r) => ({
+        ...r,
+        awardCount: countByKey.get(r.key) ?? 0,
+      }));
+      res.json(enriched);
+    } catch (error: any) {
+      console.error("Error listing badges:", error?.message);
+      res.status(500).json({ error: "Failed to list badges" });
+    }
+  });
+
+  app.patch("/api/admin/badges/:key", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { key } = req.params;
+      const { name, description, isActive, visibleOnFrontend, sortOrder } = req.body ?? {};
+
+      const updates: Record<string, unknown> = {};
+      if (typeof name === "string" && name.trim()) updates.name = name.trim();
+      if (typeof description === "string" && description.trim())
+        updates.description = description.trim();
+      if (typeof isActive === "boolean") updates.isActive = isActive;
+      if (typeof visibleOnFrontend === "boolean")
+        updates.visibleOnFrontend = visibleOnFrontend;
+      if (typeof sortOrder === "number" && Number.isFinite(sortOrder))
+        updates.sortOrder = Math.trunc(sortOrder);
+
+      if (Object.keys(updates).length === 0) {
+        return res.status(400).json({ error: "No fields to update" });
+      }
+
+      const [updated] = await db
+        .update(badgesTable)
+        .set(updates)
+        .where(eq(badgesTable.key, key))
+        .returning();
+
+      if (!updated) {
+        return res.status(404).json({ error: "Badge not found" });
+      }
+
+      badgeService.invalidateCache();
+      res.json(updated);
+    } catch (error: any) {
+      console.error("Error updating badge:", error?.message);
+      res.status(500).json({ error: "Failed to update badge" });
+    }
+  });
+
+  app.get("/api/admin/badges/award-log", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const limit = Math.min(parseInt(String(req.query.limit ?? "100"), 10) || 100, 500);
+      const badgeKey = typeof req.query.badgeKey === "string" ? req.query.badgeKey : null;
+
+      const whereClause = badgeKey
+        ? eq(userBadges.badgeKey, badgeKey)
+        : undefined;
+
+      const rows = await db
+        .select({
+          id: userBadges.id,
+          userId: userBadges.userId,
+          badgeKey: userBadges.badgeKey,
+          earnedAt: userBadges.earnedAt,
+          metadata: userBadges.metadata,
+          username: profiles.username,
+          badgeName: badgesTable.name,
+          rarity: badgesTable.rarity,
+        })
+        .from(userBadges)
+        .leftJoin(profiles, eq(profiles.id, userBadges.userId))
+        .leftJoin(badgesTable, eq(badgesTable.key, userBadges.badgeKey))
+        .where(whereClause as any)
+        .orderBy(desc(userBadges.earnedAt))
+        .limit(limit);
+
+      res.json(rows);
+    } catch (error: any) {
+      console.error("Error listing award log:", error?.message);
+      res.status(500).json({ error: "Failed to list award log" });
+    }
+  });
+
+  app.post("/api/admin/badges/award", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { userId, badgeKey, note } = req.body ?? {};
+      if (typeof userId !== "string" || !userId.trim()) {
+        return res.status(400).json({ error: "userId is required" });
+      }
+      if (typeof badgeKey !== "string" || !badgeKey.trim()) {
+        return res.status(400).json({ error: "badgeKey is required" });
+      }
+      const result = await badgeService.awardBadge(
+        userId,
+        badgeKey,
+        `badge_manual_${userId}_${badgeKey}`,
+        {
+          source: "admin_manual",
+          adminId: req.userId ?? null,
+          note: typeof note === "string" ? note : null,
+          at: new Date().toISOString(),
+        },
+      );
+      if (!result.awarded) {
+        return res.status(409).json({ awarded: false, reason: result.reason });
+      }
+      res.status(201).json({ awarded: true, badge: result.badge });
+    } catch (error: any) {
+      console.error("Error manual-awarding badge:", error?.message);
+      res.status(500).json({ error: "Failed to award badge" });
+    }
+  });
+
+  app.delete("/api/admin/badges/award/:userId/:key", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { userId, key } = req.params;
+      const deleted = await db
+        .delete(userBadges)
+        .where(and(eq(userBadges.userId, userId), eq(userBadges.badgeKey, key)))
+        .returning({ id: userBadges.id });
+      if (deleted.length === 0) {
+        return res.status(404).json({ error: "Award not found" });
+      }
+      res.json({ revoked: true });
+    } catch (error: any) {
+      console.error("Error revoking badge:", error?.message);
+      res.status(500).json({ error: "Failed to revoke badge" });
+    }
+  });
+
   app.get("/api/admin/credit-reconciliation", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const allProfiles = await db.select({ id: profiles.id, predictCredits: profiles.predictCredits }).from(profiles).where(eq(profiles.isAgent, false));
@@ -21550,6 +21779,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         } catch (e) { console.error("XP award failed:", e); }
         await awardVoteCredits(req.userId, 'induction', id);
         await maybeFireReferralCredit(req.userId);
+        await checkAndAwardVoteBadges(req.userId);
       }
 
       res.json({ success: true, xp: xpResult ?? null, budget: budgetSnapshot });
@@ -24125,6 +24355,9 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
             { suggestionType: suggestion.type, approvedAsId },
           );
         }
+        // Badge check for first_approved_suggestion / content_creator.
+        // Idempotent — re-running for already-earned badges is a no-op.
+        await checkAndAwardSuggestionBadges(suggestion.submittedBy);
       }
 
       res.json({ success: true, approvedAsId, approvedAsType });

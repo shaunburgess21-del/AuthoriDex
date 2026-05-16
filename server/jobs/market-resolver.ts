@@ -7,6 +7,7 @@ import { scoreResolvedMarket } from "../agents/performanceUpdater";
 import { resolveAmmMarket } from "../services/amm-resolver";
 import { getAiModel, getChatCompletionTokenLimit } from "../config/ai-models";
 import { gamificationService } from "../services/gamification";
+import { checkAndAwardPredictionWinBadges } from "../services/badges";
 import { createNotification } from "../services/notifications";
 import OpenAI from "openai";
 import { fetchTrendingNewsContext } from "../providers/serper";
@@ -389,6 +390,11 @@ export async function settleMarketBets(marketId: string, winnerEntryId: string, 
           { marketId, betId: bet.id }
         );
       } catch (e) { console.error("XP award for prediction win failed:", e); }
+      // First Win / Sharp Mind / Oracle / Jackpot Hunter checks. Idempotent
+      // and non-blocking — failures here never abort settlement.
+      try {
+        await checkAndAwardPredictionWinBadges(bet.userId);
+      } catch (e) { console.error("Prediction win badge check failed:", e); }
     }
   }
 
@@ -1165,6 +1171,9 @@ async function resolveJackpot(market: any): Promise<"resolved" | "blocked"> {
         { marketId: market.id, betId: w.id }
       );
     } catch (e) { console.error("XP award for jackpot win failed:", e); }
+    try {
+      await checkAndAwardPredictionWinBadges(w.userId);
+    } catch (e) { console.error("Jackpot win badge check failed:", e); }
   }
 
   // Notification fanout for jackpot. Same model as settleMarketBets but

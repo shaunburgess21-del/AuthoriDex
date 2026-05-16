@@ -24,6 +24,7 @@ import { db } from "../db";
 import { profiles } from "@shared/schema";
 import { createNotification } from "./notifications";
 import { gamificationService } from "./gamification";
+import { checkAndAwardReferralBadges } from "./badges";
 
 interface EarnResultLog {
   userId: string;
@@ -331,6 +332,14 @@ export async function maybeFireReferralCredit(userId: string): Promise<void> {
       });
     } catch (notifyErr) {
       console.warn("[credits-earn] referral_completed notify failed", notifyErr);
+    }
+
+    // Referral milestone badges (pioneer / connector / community_builder)
+    // for the referrer. Idempotent + non-blocking.
+    try {
+      await checkAndAwardReferralBadges(profile.referredBy);
+    } catch (badgeErr) {
+      console.warn("[credits-earn] referral badge check failed", badgeErr);
     }
   } catch (err) {
     console.error("[credits-earn] maybeFireReferralCredit failed", { userId, err });

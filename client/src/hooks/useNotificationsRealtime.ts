@@ -7,6 +7,7 @@ import { getSupabase } from "@/lib/supabase";
 import { shouldAutoToast } from "@/lib/notifications/registry";
 import { useInvalidateNotifications } from "@/hooks/useNotifications";
 import { dispatchRankUp } from "@/components/RankUpModal";
+import { STREAK_BADGE_KEYS } from "@shared/badge-config";
 
 /**
  * Notification kinds that imply the user's credit balance just
@@ -145,6 +146,39 @@ export function useNotificationsRealtime(): void {
                     newPersonalBest: Boolean(meta.newPersonalBest),
                   });
                 }
+                return;
+              }
+
+              // badge_awarded — high-priority kind. Streak-tier
+              // badges are delayed 4s so they don't visually fight
+              // with the existing streak_milestone toast that the
+              // daily-checkin handler fires moments earlier.
+              if (row.kind === "badge_awarded") {
+                const meta = parseMetadata(row.metadata);
+                const badgeKey = meta?.badgeKey
+                  ? String(meta.badgeKey)
+                  : null;
+                const delay =
+                  badgeKey && STREAK_BADGE_KEYS.has(badgeKey) ? 4000 : 0;
+                const fire = () => {
+                  toast(row.title, {
+                    description: row.body || undefined,
+                    action: row.href
+                      ? {
+                          label: "View",
+                          onClick: () => {
+                            if (/^https?:\/\//i.test(row.href!)) {
+                              window.location.assign(row.href!);
+                            } else {
+                              setLocationRef.current(row.href!);
+                            }
+                          },
+                        }
+                      : undefined,
+                  });
+                };
+                if (delay > 0) setTimeout(fire, delay);
+                else fire();
                 return;
               }
 
