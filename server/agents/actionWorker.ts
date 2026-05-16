@@ -27,7 +27,7 @@ import { JACKPOT_TICKET_COST } from "../config/constants";
 import { WORLD_MARKETS_LLM_ENABLED } from "./constants";
 import type { PredictionDecision } from "./types";
 import { buildAgentActionStakeIdempotencyKey, buildAgentBetMetadata } from "./actionWorker-utils";
-import { getMarketBettingCutoff, type MarketEngine } from "../native-markets/lifecycle";
+import { getMarketBettingCutoff } from "../native-markets/lifecycle";
 import { isAgentsPaused } from "./runtime-state";
 import { executeBuy, type TradeError } from "../services/amm-trades";
 import { sizeAmmBudget } from "./sizing";
@@ -191,24 +191,18 @@ async function executeAction(action: {
       return;
     }
 
-    // Engine-aware cutoff. Parimutuel keeps the legacy Friday-23:59 UTC
-    // wall; AMM markets use the configurable pre-resolve cooldown
-    // (see `server/native-markets/amm-settings.ts`). `getMarketBettingCutoff`
-    // dispatches on `engine` so we never enforce the wrong rule.
+    // Parimutuel sunset: every non-jackpot weekly market is AMM, so the
+    // cutoff is always the configurable AMM pre-resolve cooldown (see
+    // `server/native-markets/amm-settings.ts`). The legacy Friday-23:59
+    // UTC parimutuel wall is gone.
     const isWeeklyNative = ["updown", "h2h", "gainer"].includes(market.marketType ?? "");
     if (isWeeklyNative && market.endAt) {
-      const cutoff = getMarketBettingCutoff(
-        market.endAt,
-        (market.engine ?? "parimutuel") as MarketEngine,
-      );
+      const cutoff = getMarketBettingCutoff(market.endAt, "amm");
       if (new Date() > cutoff) {
         await db.update(scheduledAgentActions)
           .set({
             status: "skipped",
-            errorMessage:
-              market.engine === "amm"
-                ? "Betting cutoff passed (AMM cooldown reached)"
-                : "Betting cutoff passed (Fri 23:59 UTC)",
+            errorMessage: "Betting cutoff passed (AMM cooldown reached)",
             executedAt: new Date(),
           })
           .where(eq(scheduledAgentActions.id, action.id));
@@ -256,182 +250,26 @@ async function executeAction(action: {
       return;
     }
 
-    // Check agent has enough credits.
-    //
-    // For PARIMUTUEL the worker debits `action.stakeAmount` exactly, so the
-    // strict comparison below is the right gate. For AMM the worker only
-    // ever charges `<= sizeAmmBudget(...).creditBudget` which itself is
-    // `<= action.stakeAmount`; the strict check would reject bets that
-    // could actually have succeeded after sizing trimmed the budget. We
-    // defer the real check to `executeBuy`, which returns a clean
-    // `insufficient_credits` if the SQL guard rejects the debit.
-    const [profile] = await db
-      .select({ predictCredits: profiles.predictCredits })
-      .from(profiles)
-      .where(eq(profiles.id, agent.userId))
-      .limit(1);
-
-    if (!profile) {
-      await markFailed(action.id, "Agent profile not found");
-      return;
-    }
-
-    if (market.engine !== "amm" && profile.predictCredits < action.stakeAmount) {
-      await markFailed(action.id, "Insufficient agent credits");
-      return;
-    }
-
-    // ---------------------------------------------------------------------
-    // AMM dispatch (Phase 10). For LMSR markets we hand off to the same
-    // `executeBuy` helper that powers the human buy endpoint. The pool
-    // math, share-quantity update, credit ledger, and price recompute all
-    // live there — the worker only owns sizing (`sizeAmmBudget`) and the
-    // scheduledAgentActions bookkeeping (markExecuted / markFailed /
-    // markSkipped). Parimutuel markets continue down the legacy path
-    // below this block, untouched.
-    // ---------------------------------------------------------------------
-    if (market.engine === "amm") {
-      await executeAmmBuy(action, decision, agent, market, entry);
-      return;
-    }
-
-    // Honour the decision's direction. "no" means the agent is shorting the
-    // outcome (betting it will NOT happen) and the stake goes into the entry's
-    // noStake pool. Defaults to "yes" so older queued actions without a
-    // direction stay backwards-compatible. AMM markets never reach here —
-    // direction translation happens upstream in `agentRunner` (binary AMM
-    // markets only have YES on each entry; "no on A" is just "yes on B").
-    const direction: "yes" | "no" = decision.direction === "no" ? "no" : "yes";
-
-    // Calculate potential payout (parimutuel). Mirror the human bet endpoint
-    // in server/routes.ts so the displayed expected payout is consistent
-    // between human and agent bets on the same market+direction. Note: this
-    // is only the *displayed* expected payout — the actual payout at resolve
-    // time comes from calculateSettlementPayouts, which is already
-    // direction-aware.
-    const allEntries = await db
-      .select({
-        id: marketEntries.id,
-        totalStake: marketEntries.totalStake,
-        noStake: marketEntries.noStake,
-      })
-      .from(marketEntries)
-      .where(eq(marketEntries.marketId, action.marketId));
-
-    const totalPoolBefore = allEntries.reduce(
-      (sum, e) => sum + e.totalStake + e.noStake,
-      0,
-    );
-    const totalNoPoolBefore = allEntries.reduce((sum, e) => sum + e.noStake, 0);
-    const otherEntries = allEntries.filter((e) => e.id !== action.entryId);
-
-    let potentialPayout: number;
-    if (direction === "no") {
-      // Forecast: assume the most likely winner is the OTHER entry with the
-      // highest Yes pool, and the agent's No bet wins along with all No bets
-      // on every other entry.
-      const likelyWinningEntry = otherEntries.reduce<typeof allEntries[number] | null>(
-        (best, e) => (!best || e.totalStake > best.totalStake ? e : best),
-        null,
-      );
-      const winnerPoolBefore =
-        (likelyWinningEntry?.totalStake ?? 0) +
-        (totalNoPoolBefore - (likelyWinningEntry?.noStake ?? 0));
-      const winnerPoolAfter = winnerPoolBefore + action.stakeAmount;
-      const totalPoolAfter = totalPoolBefore + action.stakeAmount;
-      potentialPayout = Math.round(
-        (action.stakeAmount / Math.max(winnerPoolAfter, 1)) * totalPoolAfter,
-      );
-    } else {
-      // Yes bet: winner pool is this entry's Yes pool + all other entries'
-      // No pools (because if this entry wins, those No bets lose too).
-      const winnerPoolBefore =
-        entry.totalStake +
-        otherEntries.reduce((sum, e) => sum + e.noStake, 0);
-      const winnerPoolAfter = winnerPoolBefore + action.stakeAmount;
-      const totalPoolAfter = totalPoolBefore + action.stakeAmount;
-      potentialPayout = Math.round(
-        (action.stakeAmount / Math.max(winnerPoolAfter, 1)) * totalPoolAfter,
-      );
-    }
-
-    // Place the bet (same transactional logic as placeMarketBet)
-    await db.transaction(async (tx) => {
-      const [updatedProfile] = await tx
-        .update(profiles)
+    // Parimutuel sunset: every non-jackpot agent action now flows through
+    // `executeAmmBuy` (sizing + `executeBuy` from `amm-trades.ts`). The
+    // parimutuel pool math + ledger writes that used to live here are
+    // gone. Strict pre-tx balance gate was parimutuel-only too (AMM
+    // sizes the budget down inside `sizeAmmBudget` and defers the real
+    // check to `executeBuy`).
+    if (market.engine !== "amm") {
+      await db
+        .update(scheduledAgentActions)
         .set({
-          predictCredits: sql`${profiles.predictCredits} - ${action.stakeAmount}`,
-          totalPredictions: sql`${profiles.totalPredictions} + 1`,
+          status: "skipped",
+          errorMessage: "Legacy parimutuel market (sunset)",
+          executedAt: new Date(),
         })
-        .where(
-          and(
-            eq(profiles.id, agent.userId),
-            sql`${profiles.predictCredits} >= ${action.stakeAmount}`
-          )
-        )
-        .returning({ predictCredits: profiles.predictCredits });
+        .where(eq(scheduledAgentActions.id, action.id));
+      return;
+    }
 
-      if (!updatedProfile) {
-        throw new Error("Insufficient credits during transaction");
-      }
-
-      const [insertedBet] = await tx
-        .insert(marketBets)
-        .values({
-          marketId: action.marketId,
-          entryId: action.entryId,
-          userId: agent.userId,
-          stakeAmount: action.stakeAmount,
-          potentialPayout,
-          status: "active",
-          agentId: agent.id,
-          confidence: decision.confidence?.toFixed(2) ?? null,
-          direction,
-          betMetadata: buildAgentBetMetadata(action.id),
-        })
-        .returning();
-
-      await tx.insert(creditLedger).values({
-        userId: agent.userId,
-        txnType: "prediction_stake",
-        amount: -action.stakeAmount,
-        walletType: "VIRTUAL",
-        balanceAfter: updatedProfile.predictCredits,
-        source: "agent_action",
-        idempotencyKey: buildAgentActionStakeIdempotencyKey(action.id),
-        metadata: {
-          marketId: action.marketId,
-          entryId: action.entryId,
-          betId: insertedBet.id,
-          agentId: agent.id,
-          direction,
-          ...buildAgentBetMetadata(action.id),
-        },
-      });
-
-      if (direction === "no") {
-        await tx
-          .update(marketEntries)
-          .set({
-            noStake: sql`${marketEntries.noStake} + ${action.stakeAmount}`,
-          })
-          .where(eq(marketEntries.id, action.entryId));
-      } else {
-        await tx
-          .update(marketEntries)
-          .set({
-            totalStake: sql`${marketEntries.totalStake} + ${action.stakeAmount}`,
-          })
-          .where(eq(marketEntries.id, action.entryId));
-      }
-    });
-
-    // Mark action as executed
-    await markExecuted(action.id);
-
-    log(
-      `[ActionWorker] Executed: agent=${agent.displayName} market=${action.marketId} entry=${entry.label} direction=${direction} confidence=${decision.confidence} stake=${action.stakeAmount}`
-    );
+    await executeAmmBuy(action, decision, agent, market, entry);
+    return;
   } catch (err: any) {
     const [alreadyPlacedBet] = await db
       .select({ id: marketBets.id })

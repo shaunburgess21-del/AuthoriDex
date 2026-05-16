@@ -1,16 +1,16 @@
-export interface SettlementPreviewBet {
-  id: string;
-  entryId: string;
-  stakeAmount: number;
-  direction?: "yes" | "no";
-  createdAt?: Date | string | null;
-}
-
 /**
- * Early-bird bonus: Monday bettors get up to BONUS_RATE extra weight in the
- * winning pool. The boost decays linearly to ~0 at cutoff. This is purely
- * redistributive — the total pool is unchanged, so correct bettors always
- * profit; early ones just profit more.
+ * Early-bird bonus: bettors who get in early on a parimutuel market get
+ * up to BONUS_RATE extra weight in the winning pool. The boost decays
+ * linearly to ~0 at cutoff. It's purely redistributive — the total pool
+ * is unchanged, so correct bettors always profit; early ones just
+ * profit more.
+ *
+ * Parimutuel sunset: the only remaining consumer is `resolveJackpot`
+ * (jackpot is the last market type still on the parimutuel engine).
+ * The old `calculateSettlementPayouts` helper used by the
+ * `settleMarketBets` parimutuel resolver was removed alongside that
+ * function — AMM markets settle via `resolveAmmMarket` and don't share
+ * any of this math.
  */
 export const EARLY_BIRD_BONUS_RATE = 0.5;
 
@@ -28,65 +28,4 @@ export function computeEarlyBirdMultiplier(
   if (totalWindow <= 0) return 1;
   const remaining = Math.min(totalWindow, Math.max(0, close - created));
   return 1 + EARLY_BIRD_BONUS_RATE * (remaining / totalWindow);
-}
-
-export interface SettlementTimingContext {
-  marketStartAt?: Date | string | null;
-  marketCloseAt?: Date | string | null;
-}
-
-export function calculateSettlementPayouts(
-  bets: SettlementPreviewBet[],
-  winnerEntryId: string,
-  timing?: SettlementTimingContext,
-) {
-  const totalPool = bets.reduce((sum, bet) => sum + bet.stakeAmount, 0);
-
-  const winnerBets = bets.filter((bet) => {
-    const dir = bet.direction || "yes";
-    if (dir === "yes") return bet.entryId === winnerEntryId;
-    return bet.entryId !== winnerEntryId;
-  });
-
-  const totalWinnerStake = winnerBets.reduce((sum, b) => sum + b.stakeAmount, 0);
-  // Loser pool = the "winnings" available to redistribute. This is the
-  // ONLY portion the early-bird boost reweights. Winners always get their
-  // base stake back first, then share the loser pool by weight. This
-  // guarantees no correct bettor ever loses money — the boost is purely
-  // a redistribution of profit between earlier and later winners.
-  const winningsPool = Math.max(0, totalPool - totalWinnerStake);
-
-  const useTimeWeight = !!(timing?.marketStartAt && timing?.marketCloseAt);
-
-  const winnersWithWeight = winnerBets.map((bet) => ({
-    ...bet,
-    weight: useTimeWeight
-      ? bet.stakeAmount * computeEarlyBirdMultiplier(bet.createdAt, timing!.marketStartAt, timing!.marketCloseAt)
-      : bet.stakeAmount,
-  }));
-
-  const totalWeight = winnersWithWeight.reduce((sum, b) => sum + b.weight, 0);
-
-  const payouts = winnersWithWeight.map((bet) => ({
-    betId: bet.id,
-    payout: totalWeight > 0
-      ? bet.stakeAmount + Math.floor((bet.weight / totalWeight) * winningsPool)
-      : bet.stakeAmount,
-  }));
-
-  let payoutsDistributed = payouts.reduce((sum, bet) => sum + bet.payout, 0);
-  const dust = totalPool - payoutsDistributed;
-  if (dust > 0 && payouts.length > 0) {
-    const largestIdx = payouts.reduce((maxIdx, p, i, arr) => p.payout > arr[maxIdx].payout ? i : maxIdx, 0);
-    payouts[largestIdx].payout += dust;
-    payoutsDistributed += dust;
-  }
-
-  return {
-    totalPool,
-    winnerBets,
-    payouts,
-    payoutsDistributed,
-    remainder: totalPool - payoutsDistributed,
-  };
 }

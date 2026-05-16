@@ -18,36 +18,20 @@ const MARKET_GENERATOR_RETRY_DELAY_MS = 15 * 60 * 1000;
 const MARKET_GENERATOR_MAX_RETRIES = 4;
 
 /**
- * Phase 4: H2H + Up/Down weekly markets are created with engine='amm'
- * starting from this week onwards. Existing parimutuel markets in
- * flight finish parimutuel via the legacy resolver path; new markets
- * use LMSR pricing + the Phase 3 buy/sell endpoints.
+ * Parimutuel sunset (Phase 1.5): every non-jackpot weekly market is
+ * created as AMM. The previous `AMM_NATIVE_FLIP_ENABLED` and
+ * `AMM_GAINER_FLIP_ENABLED` env-var rollback handles were deleted
+ * along with the parimutuel resolver paths — there's no parimutuel
+ * arm left for them to point at.
  *
- * Toggle by env var if we ever need to roll back: set
- * AMM_NATIVE_FLIP_ENABLED=false to revert to parimutuel for all
- * native types. Default = true.
+ * Jackpot is the only market type still on parimutuel. Its creation
+ * path sets `engine: 'parimutuel'` explicitly (see
+ * `generateWeeklyJackpot`) so the AMM-by-default schema default
+ * doesn't accidentally turn it into an AMM market.
  */
-const AMM_NATIVE_FLIP_ENABLED =
-  (process.env.AMM_NATIVE_FLIP_ENABLED ?? "true").toLowerCase() !== "false";
-
-// Phase 14 (Category Races to AMM): gated so we can flip gainer alone
-// without touching updown/h2h. Defaults OFF so the first cutover is
-// explicit — once the operator sets `AMM_GAINER_FLIP_ENABLED=true`,
-// the next `generateWeeklyGainer` cycle creates AMM races with
-// LMSR seed liquidity.
-const AMM_GAINER_FLIP_ENABLED =
-  (process.env.AMM_GAINER_FLIP_ENABLED ?? "false").toLowerCase() === "true";
-
 function nativeEngineFor(marketType: "updown" | "h2h" | "gainer" | "jackpot"): MarketEngine {
-  // Phase 4: updown + h2h ship as AMM by default.
-  // Phase 14: gainer ships as AMM when AMM_GAINER_FLIP_ENABLED=true
-  //           (off by default so the cutover is an explicit ops step).
-  // Jackpot stays parimutuel — the share-vs-ticket mental models don't
-  // overlap and there's no LMSR analogue for exact-score prediction.
-  if (!AMM_NATIVE_FLIP_ENABLED) return "parimutuel";
-  if (marketType === "updown" || marketType === "h2h") return "amm";
-  if (marketType === "gainer") return AMM_GAINER_FLIP_ENABLED ? "amm" : "parimutuel";
-  return "parimutuel";
+  if (marketType === "jackpot") return "parimutuel";
+  return "amm";
 }
 
 export function getWeeklyBettingCutoff(endAt: Date): Date {
@@ -423,6 +407,9 @@ export async function generateWeeklyJackpot(): Promise<number> {
     const slug = `jackpot-${person.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-week-${weekNumber}`;
     const values = {
       marketType: "jackpot" as const,
+      // Explicit — the schema default is now 'amm' since the parimutuel
+      // sunset, but jackpot stays on the pool-split engine.
+      engine: "parimutuel" as const,
       title: `${person.name}: Predict Exact Score`,
       slug,
       personId: person.id,

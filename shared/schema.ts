@@ -1233,11 +1233,13 @@ export type InsertProfileItemPrivacy = typeof profileItemPrivacy.$inferInsert;
 export const predictionMarkets = pgTable("prediction_markets", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   marketType: text("market_type").notNull(), // 'jackpot', 'updown', 'h2h', 'race', 'gainer', 'community'
-  // Pricing engine: 'parimutuel' (legacy pool-split) or 'amm' (LMSR shares).
-  // Defaults to parimutuel so existing markets and any code paths that
-  // forget to set this stay on the old engine. Phase 4+ flips specific
-  // market types to 'amm' as the rebuild rolls out.
-  engine: text("engine").notNull().default("parimutuel"),
+  // Pricing engine: 'amm' (LMSR shares, default) or 'parimutuel' (jackpot
+  // exact-score only). Defaults to AMM after the parimutuel sunset — every
+  // non-jackpot creation path is expected to land as AMM, so a forgotten
+  // explicit value falls into the safe bucket. Jackpot creation paths
+  // MUST set `engine: 'parimutuel'` explicitly (see
+  // server/jobs/market-generator.ts `generateWeeklyJackpot`).
+  engine: text("engine").notNull().default("amm"),
   status: text("status").notNull().default("OPEN"), // 'OPEN', 'CLOSED_PENDING', 'RESOLVED', 'VOID'
   title: text("title").notNull(),
   slug: text("slug").notNull().unique(),

@@ -435,6 +435,13 @@
       "when": 1779657600000,
       "tag": "0061_profile_extended",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1779744000000,
+      "tag": "0062_parimutuel_sunset_creation_gates",
+      "breakpoints": true
     }
   ]
 }

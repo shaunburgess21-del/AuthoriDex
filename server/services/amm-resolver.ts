@@ -34,7 +34,12 @@ import {
   profiles,
 } from "@shared/schema";
 import { db } from "../db";
+import { log } from "../log";
 import { returnAmmSeedAtSettlement } from "./amm-house";
+import { createNotification } from "./notifications";
+import { gamificationService } from "./gamification";
+import { checkAndAwardPredictionWinBadges } from "./badges";
+import { scoreResolvedMarket } from "../agents/performanceUpdater";
 
 type DbOrTx = Pick<typeof db, "select" | "insert" | "update">;
 
@@ -77,7 +82,7 @@ export async function resolveAmmMarket(
 ): Promise<ResolveAmmMarketResult | ResolveAmmMarketError> {
   const { marketId, winnerEntryId = null, voidMarket = false, settledBy = null } = input;
 
-  return db.transaction(async (txRaw) => {
+  const txResult: ResolveAmmMarketResult | ResolveAmmMarketError = await db.transaction(async (txRaw) => {
     const tx = txRaw as unknown as DbOrTx;
 
     const [market] = await tx
@@ -139,9 +144,10 @@ export async function resolveAmmMarket(
         )
         .limit(1);
 
+      const outcome: "resolved" | "voided" = market.status === "RESOLVED" ? "resolved" : "voided";
       return {
         marketId,
-        outcome: market.status === "RESOLVED" ? "resolved" : "voided",
+        outcome,
         winnerEntryId: winner?.id ?? null,
         payoutLiability: settleRow ? seed + totalIn - settleRow.amount : 0,
         creditedToHouse: settleRow?.amount ?? 0,
@@ -208,6 +214,167 @@ export async function resolveAmmMarket(
 
     return runWinnerPath(tx, marketId, winnerEntryId!, settledBy, settledAt);
   });
+
+  // Errors short-circuit the post-tx fanout. `ResolveAmmMarketResult`
+  // never has an `error` field, so the structural narrow is sound and
+  // returns the typed error union for the caller.
+  if ("error" in txResult) return txResult;
+  if (!txResult.idempotentSkip) {
+    await emitResolutionSideEffects(txResult);
+  }
+  return txResult;
+}
+
+// ---------------------------------------------------------------------------
+// Post-transaction side effects: market_resolved notifications, win XP,
+// agent performance scoring. Mirrors the parimutuel `settleMarketBets`
+// fanout 1:1 so AMM resolutions look the same from the user's side as
+// the old engine did. Failures are logged and swallowed — settlement
+// already committed.
+// ---------------------------------------------------------------------------
+async function emitResolutionSideEffects(result: ResolveAmmMarketResult): Promise<void> {
+  const { marketId, outcome, winnerEntryId } = result;
+
+  try {
+    const [marketMeta] = await db
+      .select({ title: predictionMarkets.title, slug: predictionMarkets.slug })
+      .from(predictionMarkets)
+      .where(eq(predictionMarkets.id, marketId))
+      .limit(1);
+    const marketTitle = marketMeta?.title ?? "your prediction";
+    const href = marketMeta?.slug ? `/markets/${marketMeta.slug}` : `/me/predictions`;
+
+    if (outcome === "voided") {
+      // Pull refund ledger rows (settledUserCount > 0 path) and fan
+      // out a single "market voided — your credits were refunded"
+      // notification per user.
+      const refundRows = await db
+        .select({
+          userId: creditLedger.userId,
+          amount: creditLedger.amount,
+        })
+        .from(creditLedger)
+        .where(
+          and(
+            eq(creditLedger.txnType, "amm_void_refund"),
+            sql`${creditLedger.metadata}->>'marketId' = ${marketId}`,
+          ),
+        );
+
+      for (const row of refundRows) {
+        const refund = row.amount ?? 0;
+        await createNotification({
+          userId: row.userId,
+          kind: "market_resolved",
+          title: "Market voided — credits refunded",
+          body: `${marketTitle} was voided. ${refund.toLocaleString("en-US")} credits returned.`,
+          href,
+          entityType: "market",
+          entityId: marketId,
+          marketId,
+          metadata: { outcome: "voided", refund },
+          idempotencyKey: `market_resolved:${marketId}:void:${row.userId}`,
+        });
+      }
+      return;
+    }
+
+    // Winner path. Fan out per active buy row (won/lost) so each open
+    // position closes with its own ping — same pattern as parimutuel.
+    const settledBuys = await db
+      .select({
+        id: marketBets.id,
+        userId: marketBets.userId,
+        status: marketBets.status,
+        stakeAmount: marketBets.stakeAmount,
+        payoutAmount: marketBets.payoutAmount,
+      })
+      .from(marketBets)
+      .where(
+        and(
+          eq(marketBets.marketId, marketId),
+          eq(marketBets.actionType, "buy"),
+          inArray(marketBets.status, ["won", "lost"]),
+        ),
+      );
+
+    for (const bet of settledBuys) {
+      const won = bet.status === "won";
+      const stake = bet.stakeAmount ?? 0;
+      const payout = bet.payoutAmount ?? 0;
+      const profit = won ? payout - stake : -stake;
+      const signedProfit = `${profit >= 0 ? "+" : ""}${profit.toLocaleString("en-US")}`;
+      let title: string;
+      let body: string;
+      if (won && profit > 0) {
+        title = `Your prediction won — ${signedProfit} credits`;
+        body = `${marketTitle} resolved. Payout ${payout.toLocaleString("en-US")} credits (net ${signedProfit}).`;
+      } else if (won) {
+        title = `Stake returned — ${payout.toLocaleString("en-US")} credits`;
+        body = `${marketTitle} resolved. Payout matched your stake (net ${signedProfit}).`;
+      } else {
+        title = `Your prediction didn't land`;
+        body = `${marketTitle} resolved. Lost ${stake.toLocaleString("en-US")} credits — better luck next round.`;
+      }
+      await createNotification({
+        userId: bet.userId,
+        kind: "market_resolved",
+        title,
+        body,
+        href,
+        entityType: "market",
+        entityId: marketId,
+        marketId,
+        metadata: { betId: bet.id, status: bet.status, payout, stake, profit },
+        idempotencyKey: `market_resolved:${marketId}:${bet.id}`,
+      });
+    }
+
+    // Award `prediction_win` XP per winning buy row (idempotent via
+    // gamificationService key). Badge checks run once per unique winner
+    // to avoid redundant work when one user holds multiple winning bets.
+    const winningBuys = settledBuys.filter((b) => b.status === "won");
+    const winningUserIds = new Set<string>();
+    for (const bet of winningBuys) {
+      winningUserIds.add(bet.userId);
+      try {
+        await gamificationService.awardXp(
+          bet.userId,
+          "prediction_win",
+          `prediction_win_${marketId}_${bet.id}`,
+          { marketId, betId: bet.id },
+        );
+      } catch (err) {
+        log(`[AmmResolver] XP award failed for ${marketId}/${bet.id}: ${(err as Error)?.message ?? err}`);
+      }
+    }
+    for (const userId of winningUserIds) {
+      try {
+        await checkAndAwardPredictionWinBadges(userId);
+      } catch (err) {
+        log(`[AmmResolver] Win-badge check failed for ${marketId}/${userId}: ${(err as Error)?.message ?? err}`);
+      }
+    }
+
+    // Agent performance scoring (fire-and-forget).
+    if (winnerEntryId) {
+      scoreResolvedMarket(marketId, winnerEntryId).catch((err) =>
+        log(`[AmmResolver] Agent scoring failed for ${marketId}: ${err?.message ?? err}`),
+      );
+    }
+
+    // AI resolution summary (fire-and-forget). Lives in market-resolver
+    // to avoid duplicating the prompt; dynamic-imported here to break
+    // the otherwise-circular dependency (market-resolver imports this
+    // file).
+    import("../jobs/market-resolver")
+      .then((mod) => mod.generateResolutionSummary(marketId))
+      .catch((err) =>
+        log(`[AmmResolver] Resolution summary failed for ${marketId}: ${err?.message ?? err}`),
+      );
+  } catch (err) {
+    log(`[AmmResolver] Post-settlement fanout failed for ${marketId}: ${(err as Error)?.message ?? err}`);
+  }
 }
 
 // ---------------------------------------------------------------------------

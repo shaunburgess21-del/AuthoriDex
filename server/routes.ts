@@ -5097,35 +5097,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
         periodFilter = sql`${marketBets.settledAt} >= ${settledAfter}`;
       }
 
-      // Realised P&L and volume on parimutuel bets only — the AMM
-      // contribution (P&L + turnover) flows through the helper below
-      // so partial-exit avg-cost accounting stays correct.
+      // Parimutuel sunset: every non-jackpot market is AMM, so the
+      // only rows in `market_bets` that carry `actionType='parimutuel'`
+      // are jackpot tickets (they keep the schema default). The
+      // CASE-WHEN below therefore measures *jackpot* P&L specifically;
+      // AMM buy/sell P&L flows through `loadAmmAggregatePnlPerUser`
+      // a few lines down.
       //
-      //   parimutuelPnl    SUM(payout − stake) over won/lost rows.
-      //   parimutuelVolume SUM(stake) over won/lost rows.
-      //   winCount         COUNT(*) on status='won' (parimutuel or
-      //                    AMM buy resolved YES). AMM sells aren't
-      //                    wins.
-      //   totalResolved    COUNT(*) on status IN (won, lost) — the
-      //                    win-rate denominator. Excludes 'settled'
-      //                    (AMM partial exits): the underlying buy
-      //                    will resolve later and count then.
+      //   jackpotPnl    SUM(payout − stake) over won/lost jackpot rows.
+      //   jackpotVolume SUM(stake) over won/lost jackpot rows.
+      //   winCount      COUNT(*) on status='won' across BOTH engines
+      //                 (jackpot wins + AMM buy resolved YES).
+      //   totalResolved COUNT(*) on status IN (won, lost) — win-rate
+      //                 denominator. Excludes 'settled' (AMM partial
+      //                 exits): the underlying buy will resolve later
+      //                 and count then.
       const statsRows = await db
         .select({
           userId: marketBets.userId,
-          parimutuelPnl: sql<number>`
+          jackpotPnl: sql<number>`
             SUM(CASE
                   WHEN ${marketBets.actionType} = 'parimutuel' AND ${marketBets.status} = 'won'
                     THEN COALESCE(${marketBets.payoutAmount}, ${marketBets.potentialPayout}, 0) - ${marketBets.stakeAmount}
                   WHEN ${marketBets.actionType} = 'parimutuel' AND ${marketBets.status} = 'lost'
                     THEN -${marketBets.stakeAmount}
                   ELSE 0
-                END)`.as('parimutuel_pnl'),
-          parimutuelVolume: sql<number>`SUM(CASE
+                END)`.as('jackpot_pnl'),
+          jackpotVolume: sql<number>`SUM(CASE
             WHEN ${marketBets.actionType} = 'parimutuel' AND ${marketBets.status} IN ('won','lost')
               THEN ${marketBets.stakeAmount}
             ELSE 0
-          END)`.as('parimutuel_volume'),
+          END)`.as('jackpot_volume'),
           winCount: sql<number>`COUNT(*) FILTER (WHERE ${marketBets.status} = 'won')`.as('win_count'),
           totalResolved: sql<number>`COUNT(*) FILTER (WHERE ${marketBets.status} IN ('won', 'lost'))`.as('total_resolved'),
         })
@@ -5138,8 +5140,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .having(sql`COUNT(*) FILTER (WHERE ${marketBets.status} IN ('won', 'lost', 'settled')) > 0`);
 
       // AMM realised + unrealised P&L for everyone with AMM activity.
-      // No userIds filter: we want AMM-only traders (no resolved
-      // parimutuel bets) to appear on the board too. The helper does
+      // No userIds filter: we want AMM-only traders (no jackpot
+      // history) to appear on the board too. The helper does
       // weighted-avg-cost accounting and honours `settledAfter` for
       // realised contributions; unrealised MTM is always current state.
       const { loadAmmAggregatePnlPerUser } = await import(
@@ -5148,8 +5150,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const ammByUser = await loadAmmAggregatePnlPerUser({ settledAfter });
 
       // Fold AMM-only traders into statsRows so they appear on the
-      // board with zero parimutuel P&L. Without this, fresh AMM-only
-      // traders would be invisible until their first parimutuel bet
+      // board with zero jackpot P&L. Without this, fresh AMM-only
+      // traders would be invisible until their first jackpot ticket
       // resolved. For time-filtered boards we require some in-window
       // turnover — otherwise stale, never-touched-this-period accounts
       // would clutter the rankings at zero P&L.
@@ -5159,8 +5161,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (settledAfter && ammPnl.turnover < 1) continue;
         const synthetic = {
           userId,
-          parimutuelPnl: 0,
-          parimutuelVolume: 0,
+          jackpotPnl: 0,
+          jackpotVolume: 0,
           winCount: 0,
           totalResolved: 0,
         };
@@ -5195,7 +5197,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const sr = statsByUser.get(uid);
         const amm = ammByUser.get(uid);
         return (
-          (Number(sr?.parimutuelPnl) || 0) +
+          (Number(sr?.jackpotPnl) || 0) +
           (amm?.realisedFromSells ?? 0) +
           (amm?.realisedFromResolution ?? 0)
         );
@@ -5205,7 +5207,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // "all-time"). Folding it into the time-filtered boards would
       // let stale open positions dominate "today", so unrealised
       // only contributes to the all-time ranking. Time-filtered
-      // periods are pure realised P&L (parimutuel resolutions + AMM
+      // periods are pure realised P&L (jackpot resolutions + AMM
       // sells + AMM resolutions in window).
       const includeUnrealised = period === 'all';
       const unrealisedFor = (uid: string): number =>
@@ -5213,7 +5215,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const volumeFor = (uid: string): number => {
         const sr = statsByUser.get(uid);
         const amm = ammByUser.get(uid);
-        return (Number(sr?.parimutuelVolume) || 0) + (amm?.turnover ?? 0);
+        return (Number(sr?.jackpotVolume) || 0) + (amm?.turnover ?? 0);
       };
 
       // Sort by total P&L (realised + unrealised) desc, then volume,
@@ -7907,24 +7909,26 @@ Only return the JSON object.`;
         });
       }
 
-      // Parimutuel-side stats (P&L + volume). AMM contribution lands
+      // Parimutuel sunset: the only `actionType='parimutuel'` rows
+      // remaining are jackpot tickets (every non-jackpot market is now
+      // AMM, where rows are `'buy'`/`'sell'`). AMM contribution lands
       // via `loadAmmAggregatePnlForUser` below — keeping the two
       // engines split here avoids the double-count trap with AMM
-      // partial exits (where naive `SUM(CASE)` would credit sell
+      // partial exits (where a naive `SUM(CASE)` would credit sell
       // proceeds twice).
       //
-      //   parimutuelPnl    Resolved parimutuel P&L (payout − stake on
-      //                    won, −stake on lost).
-      //   parimutuelVolume Settled parimutuel turnover (stake on
-      //                    won/lost rows).
-      //   totalBets        Count of settled+resolved rows across all
-      //                    engines (display-only stat).
-      //   biggestWin       MAX(payout − stake) on won rows, parimutuel
-      //                    or AMM. AMM sells aren't wins — they're
-      //                    partial exits, not eligible.
+      //   jackpotPnl    Resolved jackpot P&L (payout − stake on won,
+      //                 −stake on lost).
+      //   jackpotVolume Settled jackpot turnover (stake on won/lost
+      //                 rows).
+      //   totalBets     Count of settled+resolved rows across all
+      //                 engines (display-only stat).
+      //   biggestWin    MAX(payout − stake) on won rows, jackpot or
+      //                 AMM. AMM sells aren't wins — they're partial
+      //                 exits, not eligible.
       const [betStats] = await db
         .select({
-          parimutuelPnl: sql<number>`COALESCE(SUM(
+          jackpotPnl: sql<number>`COALESCE(SUM(
             CASE
               WHEN ${marketBets.actionType} = 'parimutuel' AND ${marketBets.status} = 'won'
                 THEN COALESCE(${marketBets.payoutAmount}, ${marketBets.potentialPayout}, 0) - ${marketBets.stakeAmount}
@@ -7932,14 +7936,14 @@ Only return the JSON object.`;
                 THEN -${marketBets.stakeAmount}
               ELSE 0
             END
-          ), 0)`.as("parimutuel_pnl"),
-          parimutuelVolume: sql<number>`COALESCE(SUM(
+          ), 0)`.as("jackpot_pnl"),
+          jackpotVolume: sql<number>`COALESCE(SUM(
             CASE
               WHEN ${marketBets.actionType} = 'parimutuel' AND ${marketBets.status} IN ('won','lost')
                 THEN ${marketBets.stakeAmount}
               ELSE 0
             END
-          ), 0)`.as("parimutuel_volume"),
+          ), 0)`.as("jackpot_volume"),
           totalBets: sql<number>`COUNT(*) FILTER (
             WHERE ${marketBets.status} IN ('won','lost','settled')
           )::int`.as("total_bets"),
@@ -7965,7 +7969,7 @@ Only return the JSON object.`;
       );
       const ammPnl = await loadAmmAggregatePnlForUser(baseProfile.id);
       const profitLoss =
-        Number(betStats?.parimutuelPnl ?? 0) +
+        Number(betStats?.jackpotPnl ?? 0) +
         ammPnl.realisedFromSells +
         ammPnl.realisedFromResolution;
 
@@ -7995,7 +7999,7 @@ Only return the JSON object.`;
       );
 
       const totalVolume =
-        Number(betStats?.parimutuelVolume ?? 0) + ammPnl.turnover;
+        Number(betStats?.jackpotVolume ?? 0) + ammPnl.turnover;
 
       res.json({
         userId: baseProfile.id,
@@ -9182,7 +9186,10 @@ Only return the JSON object.`;
           marketTitle: b.marketTitle,
           marketStatus: b.marketStatus,
           marketType: b.marketType,
-          engine: b.marketEngine ?? 'parimutuel',
+          // Parimutuel sunset: every market has an explicit engine
+          // (column is NOT NULL with default 'amm'). Fallback to 'amm'
+          // is the new safe default if a join ever returns NULL.
+          engine: b.marketEngine ?? 'amm',
           marketCadence: isNative ? (b.marketCadence ?? 'weekly') : b.marketCadence,
           marketCategory: b.marketCategory,
           entryId: b.entryId,
@@ -9257,57 +9264,18 @@ Only return the JSON object.`;
     }
   });
   
-  app.get("/api/markets/:id/my-payout", requireAuth, async (req: AuthRequest, res) => {
-    try {
-      const userId = req.userId!;
-      const { id } = req.params;
-
-      const [market] = await db.select({
-        id: predictionMarkets.id,
-        status: predictionMarkets.status,
-      }).from(predictionMarkets).where(eq(predictionMarkets.id, id)).limit(1);
-
-      if (!market) return res.status(404).json({ error: "Market not found" });
-
-      const [winningEntry] = await db.select({ id: marketEntries.id })
-        .from(marketEntries)
-        .where(and(eq(marketEntries.marketId, id), eq(marketEntries.resolutionStatus, 'winner')))
-        .limit(1);
-
-      const allBets = await db.select({
-        stakeAmount: marketBets.stakeAmount,
-        entryId: marketBets.entryId,
-      }).from(marketBets).where(eq(marketBets.marketId, id));
-
-      const myBets = await db.select({
-        stakeAmount: marketBets.stakeAmount,
-        entryId: marketBets.entryId,
-        payoutAmount: marketBets.payoutAmount,
-        status: marketBets.status,
-      }).from(marketBets).where(and(eq(marketBets.marketId, id), eq(marketBets.userId, userId)));
-
-      if (myBets.length === 0) return res.status(404).json({ error: "No bets found for this market" });
-
-      const totalPool = allBets.reduce((s, b) => s + b.stakeAmount, 0);
-      const userStake = myBets.reduce((s, b) => s + b.stakeAmount, 0);
-      const userPayout = myBets.reduce((s, b) => s + (b.payoutAmount ?? 0), 0);
-
-      let winnerPoolTotal = 0;
-      if (winningEntry) {
-        winnerPoolTotal = allBets.filter(b => b.entryId === winningEntry.id).reduce((s, b) => s + b.stakeAmount, 0);
-      }
-
-      res.json({
-        totalPool,
-        userStake,
-        winnerPoolTotal,
-        userPayout,
-        remainderPolicy: 'burned',
-      });
-    } catch (error: any) {
-      console.error("Error fetching user payout:", error.message);
-      res.status(500).json({ error: "Failed to fetch payout details" });
-    }
+  // Removed in the parimutuel sunset: this endpoint computed
+  // pool-split payout fields (`totalPool`, `winnerPoolTotal`, etc.)
+  // that have no AMM analogue. Jackpot markets still surface their
+  // payout via `/api/markets/:id/my-position`. Returns 410 so any
+  // forgotten caller surfaces a loud error instead of nonsense data.
+  app.get("/api/markets/:id/my-payout", requireAuth, async (_req: AuthRequest, res) => {
+    res.status(410).json({
+      error: "endpoint_removed",
+      message:
+        "GET /api/markets/:id/my-payout was retired with the parimutuel sunset. " +
+        "Use GET /api/markets/:id/my-position instead.",
+    });
   });
 
   // GET /api/markets/:id/my-position
@@ -16937,19 +16905,15 @@ Target length: about 90-150 words.`;
         .where(eq(predictionMarkets.marketType, "community"));
       const nextCmsOrder = (cmsMax?.max || 0) + 1;
 
-      // Phase 13: community markets are created as AMM by default.
-      // The flag mirrors AMM_NATIVE_FLIP_ENABLED so we can flip back
-      // to parimutuel quickly if the rollout uncovers issues.
-      const ammCommunityEnabled =
-        (process.env.AMM_COMMUNITY_FLIP_ENABLED ?? "true").toLowerCase() !== "false";
-      const useAmm = ammCommunityEnabled && (openMarketType === "binary" || openMarketType === "multi");
-
+      // Parimutuel sunset: every admin-created community market is AMM.
+      // The previous `AMM_COMMUNITY_FLIP_ENABLED` env-var rollback is
+      // gone — the parimutuel arm has been removed.
       const { createdMarket, createdEntries } = await db.transaction(async (tx) => {
         const [createdMarket] = await tx
           .insert(predictionMarkets)
           .values({
             marketType: "community",
-            engine: useAmm ? "amm" : "parimutuel",
+            engine: "amm",
             title,
             slug,
             openMarketType,
@@ -16998,17 +16962,15 @@ Target length: about 90-150 words.`;
           )
           .returning();
 
-        if (useAmm) {
-          const { seedAmmMarket } = await import("./services/amm-house");
-          const entryIdsInOrder = createdEntries
-            .slice()
-            .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
-            .map((e) => e.id);
-          await seedAmmMarket(
-            { marketId: createdMarket.id, marketType: "community", entryIdsInOrder },
-            tx,
-          );
-        }
+        const { seedAmmMarket } = await import("./services/amm-house");
+        const entryIdsInOrder = createdEntries
+          .slice()
+          .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
+          .map((e) => e.id);
+        await seedAmmMarket(
+          { marketId: createdMarket.id, marketType: "community", entryIdsInOrder },
+          tx,
+        );
 
         return { createdMarket, createdEntries };
       });
@@ -17200,12 +17162,33 @@ Target length: about 90-150 words.`;
         return res.status(400).json({ error: "Winner entry not found in this market" });
       }
 
-      const { settleMarketBets } = await import("./jobs/market-resolver");
-      const settlementResult = await settleMarketBets(id, winnerEntryId, {
-        resolveMethod: "admin_manual",
-        resolutionNotes: resolutionNotes || null,
-        settledBy: authReq.userId,
+      // Parimutuel sunset: every community market is AMM. Delegate to
+      // `resolveAmmMarket` which handles AMM-correct payout (1 credit per
+      // winning share) and seed return. The legacy `settleMarketBets`
+      // pool-split helper is gone.
+      const { resolveAmmMarket } = await import("./services/amm-resolver");
+      const ammResult = await resolveAmmMarket({
+        marketId: id,
+        winnerEntryId,
+        voidMarket: false,
+        settledBy: authReq.userId ?? null,
       });
+      if ("error" in ammResult) {
+        const status = ammResult.error === "market_not_found" ? 404 : 400;
+        return res.status(status).json({ error: ammResult.error, message: ammResult.message });
+      }
+
+      if (resolutionNotes) {
+        // The AMM resolver fills `resolution_notes` with its own evidence
+        // JSON; layering admin notes is a follow-up nicety, kept out of
+        // the core resolver to avoid coupling its idempotency to free-form
+        // text. Just stamp `resolveMethod`/`settledBy` markers here.
+        await db.update(predictionMarkets).set({
+          resolveMethod: "admin_manual",
+          settledBy: authReq.userId ?? null,
+          updatedAt: new Date(),
+        }).where(eq(predictionMarkets.id, id));
+      }
 
       const [updatedMarket] = await db
         .select()
@@ -17213,7 +17196,7 @@ Target length: about 90-150 words.`;
         .where(eq(predictionMarkets.id, id))
         .limit(1);
 
-      res.json({ ...updatedMarket, settlement: settlementResult });
+      res.json({ ...updatedMarket, settlement: ammResult });
     } catch (error) {
       console.error("[Open Markets] Settle error:", error);
       res.status(500).json({ error: "Failed to settle market" });
@@ -17248,13 +17231,24 @@ Target length: about 90-150 words.`;
         return res.status(400).json({ error: "Market is already resolved or voided" });
       }
 
-      const { voidMarketBets } = await import("./jobs/market-resolver");
-      await voidMarketBets(id);
+      // Parimutuel sunset: community markets are AMM. Void = AMM refund
+      // (net credits in per user). `voidMarketBets` (parimutuel stake-as-
+      // refund) is gone.
+      const { resolveAmmMarket } = await import("./services/amm-resolver");
+      const ammResult = await resolveAmmMarket({
+        marketId: id,
+        winnerEntryId: null,
+        voidMarket: true,
+        settledBy: (req as AuthRequest).userId ?? null,
+      });
+      if ("error" in ammResult) {
+        const status = ammResult.error === "market_not_found" ? 404 : 400;
+        return res.status(status).json({ error: ammResult.error, message: ammResult.message });
+      }
 
       const [updatedMarket] = await db
         .update(predictionMarkets)
         .set({
-          status: "VOID",
           voidReason,
           settledBy: (req as AuthRequest).userId ?? null,
           resolveMethod: "admin_manual",
@@ -17494,43 +17488,63 @@ Target length: about 90-150 words.`;
           if (row.timeHorizon) metadata.timeHorizon = row.timeHorizon;
           if (row.launchWave) metadata.launchWave = row.launchWave;
 
-          const [created] = await db.insert(predictionMarkets).values({
-            marketType: "community",
-            title,
-            slug,
-            openMarketType,
-            teaser,
-            category,
-            personId: resolvedPersonId,
-            endAt,
-            closeAt,
-            startAt: new Date(),
-            resolutionCriteria: resolutionCriteria ? [resolutionCriteria] : null,
-            resolveMethod: "admin_manual",
-            status: "OPEN",
-            visibility: "draft",
-            isLive: false,
-            featured: false,
-            timezone: "UTC",
-            underlying,
-            metric,
-            strike,
-            unit: openMarketType === "updown" ? unit : null,
-            metadata: Object.keys(metadata).length > 0 ? metadata : null,
-            createdBy: authReq.userId,
-            cmsDisplayOrder: nextImportCmsOrder,
-          }).returning();
-          nextImportCmsOrder += 1;
+          // Wrap market + entries + AMM seed in one transaction so a
+          // partial failure (AMM seed crashes) doesn't leave the row
+          // present but un-seeded. Pre-sunset the importer skipped AMM
+          // seeding entirely; post-sunset every community market is
+          // AMM so the seed is non-optional.
+          const created = await db.transaction(async (tx) => {
+            const [createdRow] = await tx.insert(predictionMarkets).values({
+              marketType: "community",
+              engine: "amm",
+              title,
+              slug,
+              openMarketType,
+              teaser,
+              category,
+              personId: resolvedPersonId,
+              endAt,
+              closeAt,
+              startAt: new Date(),
+              resolutionCriteria: resolutionCriteria ? [resolutionCriteria] : null,
+              resolveMethod: "admin_manual",
+              status: "OPEN",
+              visibility: "draft",
+              isLive: false,
+              featured: false,
+              timezone: "UTC",
+              underlying,
+              metric,
+              strike,
+              unit: openMarketType === "updown" ? unit : null,
+              metadata: Object.keys(metadata).length > 0 ? metadata : null,
+              createdBy: authReq.userId,
+              cmsDisplayOrder: nextImportCmsOrder,
+            }).returning();
 
-          await db.insert(marketEntries).values(
-            entries.map((e, idx) => ({
-              marketId: created.id,
-              entryType: "custom" as const,
-              label: e.label,
-              description: e.description || null,
-              displayOrder: idx,
-            }))
-          );
+            const insertedEntries = await tx.insert(marketEntries).values(
+              entries.map((e, idx) => ({
+                marketId: createdRow.id,
+                entryType: "custom" as const,
+                label: e.label,
+                description: e.description || null,
+                displayOrder: idx,
+              }))
+            ).returning({ id: marketEntries.id, displayOrder: marketEntries.displayOrder });
+
+            const { seedAmmMarket } = await import("./services/amm-house");
+            const entryIdsInOrder = insertedEntries
+              .slice()
+              .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
+              .map((e) => e.id);
+            await seedAmmMarket(
+              { marketId: createdRow.id, marketType: "community", entryIdsInOrder },
+              tx,
+            );
+
+            return createdRow;
+          });
+          nextImportCmsOrder += 1;
 
           existingSlugs.add(slug);
           results.push({ index: i, slug, title, status: "created", messages: msgs, marketId: created.id });
@@ -17775,195 +17789,20 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
     }
   });
 
-  const MIN_BET_STAKE = 5;
-
-  async function placeMarketBet(params: {
-    userId: string;
-    marketId: string;
-    entryId: string;
-    stakeAmount: number;
-    direction?: "yes" | "no";
-  }) {
-    const { userId, marketId, entryId, stakeAmount, direction = "yes" } = params;
-
-    if (!Number.isInteger(stakeAmount) || stakeAmount < MIN_BET_STAKE) {
-      return { error: `Stake must be a whole number of at least ${MIN_BET_STAKE} credits`, status: 400 as const };
-    }
-
-    const [entry] = await db
-      .select()
-      .from(marketEntries)
-      .where(
-        and(
-          eq(marketEntries.id, entryId),
-          eq(marketEntries.marketId, marketId)
-        )
-      )
-      .limit(1);
-
-    if (!entry) {
-      return { error: "Entry not found in this market", status: 400 as const };
-    }
-
-    const result = await db.transaction(async (tx) => {
-      const [updatedProfile] = await tx
-        .update(profiles)
-        .set({
-          predictCredits: sql`${profiles.predictCredits} - ${stakeAmount}`,
-          totalPredictions: sql`${profiles.totalPredictions} + 1`,
-        })
-        .where(and(
-          eq(profiles.id, userId),
-          sql`${profiles.predictCredits} >= ${stakeAmount}`
-        ))
-        .returning({ predictCredits: profiles.predictCredits });
-
-      if (!updatedProfile) {
-        throw new Error("Insufficient credits");
-      }
-
-      const allEntries = await tx
-        .select({ totalStake: marketEntries.totalStake, noStake: marketEntries.noStake, id: marketEntries.id })
-        .from(marketEntries)
-        .where(eq(marketEntries.marketId, marketId));
-
-      const currentEntry = allEntries.find(e => e.id === entryId);
-      const otherEntries = allEntries.filter(e => e.id !== entryId);
-      const totalPoolBefore = allEntries.reduce((sum, e) => sum + e.totalStake + e.noStake, 0);
-      const totalNoPoolBefore = allEntries.reduce((sum, e) => sum + e.noStake, 0);
-
-      let potentialPayout: number;
-      if (direction === "no") {
-        const likelyWinningEntry = otherEntries.reduce<typeof allEntries[number] | null>(
-          (best, entry) => {
-            if (!best) return entry;
-            return entry.totalStake > best.totalStake ? entry : best;
-          },
-          null,
-        );
-        const winnerPoolBefore =
-          (likelyWinningEntry?.totalStake ?? 0) +
-          (totalNoPoolBefore - (likelyWinningEntry?.noStake ?? 0));
-        const winnerPoolAfter = winnerPoolBefore + stakeAmount;
-        const totalPoolAfter = totalPoolBefore + stakeAmount;
-        potentialPayout = Math.round(
-          (stakeAmount / Math.max(winnerPoolAfter, 1)) * totalPoolAfter
-        );
-      } else {
-        const winnerPoolBefore =
-          (currentEntry?.totalStake ?? 0) +
-          otherEntries.reduce((sum, entry) => sum + entry.noStake, 0);
-        const winnerPoolAfter = winnerPoolBefore + stakeAmount;
-        const totalPoolAfter = totalPoolBefore + stakeAmount;
-        potentialPayout = Math.round(
-          (stakeAmount / Math.max(winnerPoolAfter, 1)) * totalPoolAfter
-        );
-      }
-
-      const [insertedBet] = await tx
-        .insert(marketBets)
-        .values({
-          marketId,
-          entryId,
-          userId,
-          stakeAmount,
-          potentialPayout,
-          status: "active",
-          direction,
-        })
-        .returning();
-
-      await tx.insert(creditLedger).values({
-        userId,
-        txnType: 'prediction_stake',
-        amount: -stakeAmount,
-        walletType: 'VIRTUAL',
-        balanceAfter: updatedProfile.predictCredits,
-        source: 'user_action',
-        idempotencyKey: `stake_${marketId}_${insertedBet.id}`,
-        metadata: { marketId, entryId, betId: insertedBet.id, direction },
-      });
-
-      if (direction === "no") {
-        await tx
-          .update(marketEntries)
-          .set({ noStake: sql`${marketEntries.noStake} + ${stakeAmount}` })
-          .where(eq(marketEntries.id, entryId));
-      } else {
-        await tx
-          .update(marketEntries)
-          .set({ totalStake: sql`${marketEntries.totalStake} + ${stakeAmount}` })
-          .where(eq(marketEntries.id, entryId));
-      }
-
-      return { bet: { ...insertedBet, remainingCredits: updatedProfile.predictCredits }, potentialPayout };
-    });
-
-    // Phase 3: stake-weighted prediction engagement signal + early-bird
-    // boost. Single query fetches category, startAt, closeAt.
-    let earlyBirdMultiplier = 1;
-    try {
-      const [marketRow] = await db
-        .select({
-          category: predictionMarkets.category,
-          startAt: predictionMarkets.startAt,
-          closeAt: predictionMarkets.closeAt,
-        })
-        .from(predictionMarkets)
-        .where(eq(predictionMarkets.id, marketId))
-        .limit(1);
-      earlyBirdMultiplier = computeEarlyBirdMultiplier(
-        new Date(), marketRow?.startAt, marketRow?.closeAt,
-      );
-      await upsertEngagement({
-        userId,
-        categoryId: marketRow?.category,
-        stakeCredits: stakeAmount,
-        source: "market-bet",
-      });
-    } catch (e) {
-      console.warn("[market-bet] engagement lookup failed:", e);
-      captureBackgroundError(e, {
-        surface: "market-bet.engagement",
-        userId,
-        marketId,
-      });
-    }
-
-    let xpResult;
-    try {
-      xpResult = await gamificationService.awardXp(
-        userId, 'place_prediction',
-        `prediction_${marketId}_${result.bet.id}_${userId}`,
-        { marketId, entryId, stakeAmount }
-      );
-    } catch (e) { console.error("XP award failed:", e); }
-    await maybeFireReferralCredit(userId);
-    await checkAndAwardPredictionBadges(userId);
-
-    return {
-      data: {
-        ...result.bet,
-        potentialPayout: result.potentialPayout,
-        remainingCredits: result.bet.remainingCredits,
-        xp: xpResult ?? null,
-        earlyBirdMultiplier: +earlyBirdMultiplier.toFixed(2),
-      },
-      status: 200 as const,
-    };
-  }
+  // `MIN_BET_STAKE` and `placeMarketBet` were the parimutuel bet helper.
+  // Deleted in the parimutuel sunset — every non-jackpot bet now goes
+  // through `executeBuy` / `executeSell` in `server/services/amm-trades.ts`
+  // and jackpot bets go through `/api/native-markets/:marketId/jackpot-bet`.
 
   app.post("/api/open-markets/:slug/bet", requireAuth, async (req, res) => {
     try {
       const authReq = req as AuthRequest;
       const { slug } = req.params;
-      const { entryId, stakeAmount, direction } = req.body;
+      const { entryId, stakeAmount } = req.body;
 
       if (!entryId || !stakeAmount || typeof stakeAmount !== "number" || stakeAmount <= 0) {
         return res.status(400).json({ error: "Valid entryId and positive stakeAmount are required" });
       }
-
-      const validDirection = direction === "no" ? "no" as const : "yes" as const;
 
       if (!checkBetRateLimit(authReq.userId!)) {
         return res.status(429).json({ error: "You're moving fast! Try again in a moment" });
@@ -17975,7 +17814,6 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           engine: predictionMarkets.engine,
           closeAt: predictionMarkets.closeAt,
           endAt: predictionMarkets.endAt,
-          openMarketType: predictionMarkets.openMarketType,
         })
         .from(predictionMarkets)
         .where(
@@ -18005,103 +17843,47 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         return res.status(400).json({ error: "Betting is closed for this market" });
       }
 
-      // Phase 13: AMM community markets reuse the LMSR buy path. We
-      // ignore `direction` (AMM markets pick a side by choosing the
-      // entry directly — there is no separate Yes/No on a single
-      // entry) and treat `stakeAmount` as the integer credit budget,
-      // matching `/api/markets/:id/buy`.
-      if (market.engine === "amm") {
-        const { executeBuy } = await import("./services/amm-trades");
-        const budget = Math.floor(Number(stakeAmount));
-        if (!Number.isInteger(budget) || budget <= 0) {
-          return res.status(400).json({ error: "stakeAmount must be a positive integer" });
-        }
-        const result = await executeBuy({
-          marketId: market.id,
-          userId: authReq.userId!,
-          entryId,
-          creditBudget: budget,
-        });
-        if ("error" in result) {
-          return res
-            .status(result.status)
-            .json({ error: result.error, message: result.message });
-        }
-        return res.json({
-          ok: true,
-          engine: "amm",
-          betId: result.betId,
-          sharesPurchased: result.sharesPurchased,
-          chargeCredits: result.chargeCredits,
-          // Sprint 2: returned for share-card parity with the native-
-          // markets bet route so the client can render "X shares @ Y%"
-          // on the trade share preview without recomputing from
-          // chargeCredits/shares.
-          pricePerShareAvg: result.pricePerShareAvg,
-          newPrices: result.newPrices,
-          userBalanceAfter: result.userBalanceAfter,
-        });
+      // Parimutuel sunset: every community market is AMM. The legacy
+      // parimutuel fallback (no-hedge guard + `placeMarketBet`) and the
+      // `direction` Yes/No semantics that went with it are gone — AMM
+      // positions are hedge-aware via netShares (a position can have
+      // negative netShares on one outcome and the engine prices the
+      // round-trip honestly).
+      if (market.engine !== "amm") {
+        return res.status(400).json({ error: "Legacy parimutuel market — no longer accepting bets." });
       }
 
-      // No-hedging rule for community markets:
-      //   - multi:  per entry, only one direction. Same direction = top-up,
-      //             opposite direction on the same entry = blocked. Other
-      //             entries are independent.
-      //   - binary: per market, only one entry. Same entry = top-up,
-      //             other entry = blocked.
-      // Same-side top-ups are allowed and just compound on the existing
-      // pari-mutuel pool. Settlement (server/jobs/market-resolver.ts) is
-      // unchanged — legacy hedge bets placed before this rule continue to
-      // settle normally; we only block NEW hedge bets here.
-      const isMulti = market.openMarketType === "multi";
-      const isBinary = market.openMarketType === "binary";
-
-      if (isMulti || isBinary) {
-        const existing = await db
-          .select({
-            entryId: marketBets.entryId,
-            direction: marketBets.direction,
-          })
-          .from(marketBets)
-          .where(
-            and(
-              eq(marketBets.userId, authReq.userId!),
-              eq(marketBets.marketId, market.id),
-              eq(marketBets.status, "active"),
-            )
-          );
-
-        const wouldHedge =
-          (isMulti && existing.some(b => b.entryId === entryId && b.direction !== validDirection)) ||
-          (isBinary && existing.some(b => b.entryId !== entryId));
-
-        if (wouldHedge) {
-          return res.status(409).json({
-            error: "Stick with your pick",
-            detail: isBinary
-              ? "You've already backed the other side. Top up your existing pick instead."
-              : "You've already taken the other direction on this option. Top up your existing pick instead.",
-          });
-        }
+      const { executeBuy } = await import("./services/amm-trades");
+      const budget = Math.floor(Number(stakeAmount));
+      if (!Number.isInteger(budget) || budget <= 0) {
+        return res.status(400).json({ error: "stakeAmount must be a positive integer" });
       }
-
-      const result = await placeMarketBet({
-        userId: authReq.userId!,
+      const result = await executeBuy({
         marketId: market.id,
+        userId: authReq.userId!,
         entryId,
-        stakeAmount,
-        direction: validDirection,
+        creditBudget: budget,
       });
-
       if ("error" in result) {
-        return res.status(result.status).json({ error: result.error });
+        return res
+          .status(result.status)
+          .json({ error: result.error, message: result.message });
       }
-
-      return res.json(result.data);
+      return res.json({
+        ok: true,
+        engine: "amm",
+        betId: result.betId,
+        sharesPurchased: result.sharesPurchased,
+        chargeCredits: result.chargeCredits,
+        // Sprint 2: returned for share-card parity with the native-
+        // markets bet route so the client can render "X shares @ Y%"
+        // on the trade share preview without recomputing from
+        // chargeCredits/shares.
+        pricePerShareAvg: result.pricePerShareAvg,
+        newPrices: result.newPrices,
+        userBalanceAfter: result.userBalanceAfter,
+      });
     } catch (error: any) {
-      if (error?.message === "Insufficient credits") {
-        return res.status(400).json({ error: "Insufficient credits" });
-      }
       console.error("[Open Markets] Bet error:", error);
       res.status(500).json({ error: "Failed to place bet" });
     }
@@ -18143,15 +17925,21 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         return res.status(404).json({ error: "Market not found or not open" });
       }
 
-      const isAmm = market.engine === "amm";
+      // Parimutuel sunset: every Up/Down market is AMM. The engine-aware
+      // cutoff branch is gone — `getMarketBettingCutoff(endAt, "amm")` is
+      // the only cutoff we use. The no-hedge guard from the parimutuel
+      // arm is gone too: AMM tracks netShares per entry so opposite-side
+      // trades naturally hedge through the pool.
+      if (market.engine !== "amm") {
+        return res.status(400).json({ error: "Legacy parimutuel market — no longer accepting bets." });
+      }
+
       const now = new Date();
       if (market.endAt) {
-        const bettingCutoff = getMarketBettingCutoff(market.endAt, isAmm ? "amm" : "parimutuel");
+        const bettingCutoff = getMarketBettingCutoff(market.endAt, "amm");
         if (now > bettingCutoff) {
           return res.status(400).json({
-            error: isAmm
-              ? "Trading is closed (5-minute pre-resolve cooldown). This market is now locked."
-              : "Betting closes Friday at 23:59 UTC. This market is now locked.",
+            error: "Trading is closed (5-minute pre-resolve cooldown). This market is now locked.",
             bettingCutoff: bettingCutoff.toISOString(),
           });
         }
@@ -18163,113 +17951,63 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         return res.status(400).json({ error: "Betting is closed for this market" });
       }
 
-      // AMM dispatch: buy/sell into the LMSR pool. Sell allowed any
-      // time before cutoff, even on the opposite side from your buy
-      // (each entry's position tracks independently). No hedge guard
-      // — AMM positions ARE hedge-aware via netShares.
-      if (isAmm) {
-        if (actionType === "sell") {
-          const sharesNum = Number(shares);
-          if (!Number.isFinite(sharesNum) || sharesNum <= 0) {
-            return res.status(400).json({ error: "shares must be a positive number for sell" });
-          }
-          const sellResult = await executeSell({
-            marketId: market.id,
-            userId: authReq.userId!,
-            entryId,
-            shares: sharesNum,
-          });
-          if ("error" in sellResult) {
-            return res.status(sellResult.status).json({ error: sellResult.message });
-          }
-          return res.json({
-            engine: "amm",
-            actionType: "sell",
-            stakeAmount: -sellResult.proceeds,
-            potentialPayout: 0,
-            sharesSold: sellResult.sharesSold,
-            proceeds: sellResult.proceeds,
-            pricePerShareAvg: sellResult.pricePerShareAvg,
-            newPrices: sellResult.newPrices,
-            newQ: sellResult.newQ,
-            remainingShares: sellResult.remainingShares,
-            remainingCredits: sellResult.userBalanceAfter,
-          });
+      if (actionType === "sell") {
+        const sharesNum = Number(shares);
+        if (!Number.isFinite(sharesNum) || sharesNum <= 0) {
+          return res.status(400).json({ error: "shares must be a positive number for sell" });
         }
-
-        const budget = Number(stakeAmount);
-        if (!Number.isInteger(budget) || budget <= 0) {
-          return res.status(400).json({ error: "Valid entryId and positive integer stakeAmount are required" });
-        }
-        const buyResult = await executeBuy({
+        const sellResult = await executeSell({
           marketId: market.id,
           userId: authReq.userId!,
           entryId,
-          creditBudget: budget,
+          shares: sharesNum,
         });
-        if ("error" in buyResult) {
-          return res.status(buyResult.status).json({ error: buyResult.message });
+        if ("error" in sellResult) {
+          return res.status(sellResult.status).json({ error: sellResult.message });
         }
         return res.json({
           engine: "amm",
-          actionType: "buy",
-          stakeAmount: buyResult.chargeCredits,
-          // 1 share pays 1 credit at settlement, so payout-if-win equals
-          // shares purchased. Keeps the existing client toast text valid.
-          potentialPayout: Math.floor(buyResult.sharesPurchased),
-          sharesPurchased: buyResult.sharesPurchased,
-          chargeCredits: buyResult.chargeCredits,
-          pricePerShareAvg: buyResult.pricePerShareAvg,
-          newPrices: buyResult.newPrices,
-          newQ: buyResult.newQ,
-          remainingCredits: buyResult.userBalanceAfter,
+          actionType: "sell",
+          stakeAmount: -sellResult.proceeds,
+          potentialPayout: 0,
+          sharesSold: sellResult.sharesSold,
+          proceeds: sellResult.proceeds,
+          pricePerShareAvg: sellResult.pricePerShareAvg,
+          newPrices: sellResult.newPrices,
+          newQ: sellResult.newQ,
+          remainingShares: sellResult.remainingShares,
+          remainingCredits: sellResult.userBalanceAfter,
         });
       }
 
-      // Parimutuel path (legacy in-flight markets):
-      if (!stakeAmount || typeof stakeAmount !== "number" || stakeAmount <= 0) {
-        return res.status(400).json({ error: "Valid entryId and positive stakeAmount are required" });
+      const budget = Number(stakeAmount);
+      if (!Number.isInteger(budget) || budget <= 0) {
+        return res.status(400).json({ error: "Valid entryId and positive integer stakeAmount are required" });
       }
-
-      // No-hedging rule for native updown: only one entry per user
-      // per market. Same entry = top-up (compounded by placeMarketBet);
-      // other entry = blocked. Mirrors the community-binary guard.
-      // Client surfaces a toast on the predict-card and detail-page
-      // CTAs already; this is the server-side defence so a misbehaving
-      // client (or DevTools call) can't sneak a hedge through.
-      const existingNativeBets = await db
-        .select({ entryId: marketBets.entryId })
-        .from(marketBets)
-        .where(
-          and(
-            eq(marketBets.userId, authReq.userId!),
-            eq(marketBets.marketId, market.id),
-            eq(marketBets.status, "active"),
-          )
-        );
-      if (existingNativeBets.some((b) => b.entryId !== entryId)) {
-        return res.status(409).json({
-          error: "Stick with your pick",
-          detail: "You've already backed the other side. Top up your existing pick instead.",
-        });
-      }
-
-      const result = await placeMarketBet({
-        userId: authReq.userId!,
+      const buyResult = await executeBuy({
         marketId: market.id,
+        userId: authReq.userId!,
         entryId,
-        stakeAmount,
+        creditBudget: budget,
       });
-
-      if ("error" in result) {
-        return res.status(result.status).json({ error: result.error });
+      if ("error" in buyResult) {
+        return res.status(buyResult.status).json({ error: buyResult.message });
       }
-
-      return res.json(result.data);
+      return res.json({
+        engine: "amm",
+        actionType: "buy",
+        stakeAmount: buyResult.chargeCredits,
+        // 1 share pays 1 credit at settlement, so payout-if-win equals
+        // shares purchased. Keeps the existing client toast text valid.
+        potentialPayout: Math.floor(buyResult.sharesPurchased),
+        sharesPurchased: buyResult.sharesPurchased,
+        chargeCredits: buyResult.chargeCredits,
+        pricePerShareAvg: buyResult.pricePerShareAvg,
+        newPrices: buyResult.newPrices,
+        newQ: buyResult.newQ,
+        remainingCredits: buyResult.userBalanceAfter,
+      });
     } catch (error: any) {
-      if (error?.message === "Insufficient credits") {
-        return res.status(400).json({ error: "Insufficient credits" });
-      }
       console.error("[Native Markets] Updown bet error:", error);
       res.status(500).json({ error: "Failed to place bet" });
     }
@@ -18313,7 +18051,6 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           id: predictionMarkets.id,
           closeAt: predictionMarkets.closeAt,
           endAt: predictionMarkets.endAt,
-          marketType: predictionMarkets.marketType,
           engine: predictionMarkets.engine,
         })
         .from(predictionMarkets)
@@ -18331,15 +18068,20 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         return res.status(404).json({ error: "Market not found or not open" });
       }
 
-      const isAmm = market.engine === "amm";
+      // Parimutuel sunset: every updown/h2h/gainer market is AMM. Engine
+      // branching, parimutuel hedge guards, and the `placeMarketBet`
+      // fallback are gone — opposite-side trades hedge through the AMM
+      // pool via netShares.
+      if (market.engine !== "amm") {
+        return res.status(400).json({ error: "Legacy parimutuel market — no longer accepting bets." });
+      }
+
       const now = new Date();
       if (market.endAt) {
-        const bettingCutoff = getMarketBettingCutoff(market.endAt, isAmm ? "amm" : "parimutuel");
+        const bettingCutoff = getMarketBettingCutoff(market.endAt, "amm");
         if (now > bettingCutoff) {
           return res.status(400).json({
-            error: isAmm
-              ? "Trading is closed (5-minute pre-resolve cooldown). This market is now locked."
-              : "Betting closes Friday at 23:59 UTC. This market is now locked.",
+            error: "Trading is closed (5-minute pre-resolve cooldown). This market is now locked.",
             bettingCutoff: bettingCutoff.toISOString(),
           });
         }
@@ -18351,110 +18093,59 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         return res.status(400).json({ error: "Betting is closed for this market" });
       }
 
-      if (isAmm) {
-        if (actionType === "sell") {
-          if (!shares || shares <= 0) {
-            return res.status(400).json({ error: "shares must be a positive number for sell" });
-          }
-          const sellResult = await executeSell({
-            marketId: market.id,
-            userId: authReq.userId!,
-            entryId,
-            shares,
-          });
-          if ("error" in sellResult) {
-            return res.status(sellResult.status).json({ error: sellResult.message });
-          }
-          return res.json({
-            engine: "amm",
-            actionType: "sell",
-            stakeAmount: -sellResult.proceeds,
-            potentialPayout: 0,
-            sharesSold: sellResult.sharesSold,
-            proceeds: sellResult.proceeds,
-            pricePerShareAvg: sellResult.pricePerShareAvg,
-            newPrices: sellResult.newPrices,
-            newQ: sellResult.newQ,
-            remainingShares: sellResult.remainingShares,
-            remainingCredits: sellResult.userBalanceAfter,
-          });
+      if (actionType === "sell") {
+        if (!shares || shares <= 0) {
+          return res.status(400).json({ error: "shares must be a positive number for sell" });
         }
-
-        if (!stakeAmount || stakeAmount <= 0) {
-          return res.status(400).json({ error: "stakeAmount is required for buy" });
-        }
-        const buyResult = await executeBuy({
+        const sellResult = await executeSell({
           marketId: market.id,
           userId: authReq.userId!,
           entryId,
-          creditBudget: stakeAmount,
+          shares,
         });
-        if ("error" in buyResult) {
-          return res.status(buyResult.status).json({ error: buyResult.message });
+        if ("error" in sellResult) {
+          return res.status(sellResult.status).json({ error: sellResult.message });
         }
         return res.json({
           engine: "amm",
-          actionType: "buy",
-          stakeAmount: buyResult.chargeCredits,
-          potentialPayout: Math.floor(buyResult.sharesPurchased),
-          sharesPurchased: buyResult.sharesPurchased,
-          chargeCredits: buyResult.chargeCredits,
-          pricePerShareAvg: buyResult.pricePerShareAvg,
-          newPrices: buyResult.newPrices,
-          newQ: buyResult.newQ,
-          remainingCredits: buyResult.userBalanceAfter,
+          actionType: "sell",
+          stakeAmount: -sellResult.proceeds,
+          potentialPayout: 0,
+          sharesSold: sellResult.sharesSold,
+          proceeds: sellResult.proceeds,
+          pricePerShareAvg: sellResult.pricePerShareAvg,
+          newPrices: sellResult.newPrices,
+          newQ: sellResult.newQ,
+          remainingShares: sellResult.remainingShares,
+          remainingCredits: sellResult.userBalanceAfter,
         });
       }
 
-      // Parimutuel path:
       if (!stakeAmount || stakeAmount <= 0) {
-        return sendBadRequest(res, "Invalid bet body");
+        return res.status(400).json({ error: "stakeAmount is required for buy" });
       }
-
-      // No-hedging rule for native markets:
-      //   - h2h:    only one entry per user (picking person A vs B).
-      //             Same entry = top-up, other = blocked.
-      //   - gainer: cross-entry is the whole point ("back another
-      //             candidate"), so we don't block. Re-picking the same
-      //             candidate is just compounded by placeMarketBet.
-      // updown is handled by the dedicated /updown/:marketId/bet route
-      // above — this route's marketType filter only sees h2h/gainer in
-      // practice but we key off market.marketType for safety.
-      if (market.marketType === "h2h") {
-        const existingH2HBets = await db
-          .select({ entryId: marketBets.entryId })
-          .from(marketBets)
-          .where(
-            and(
-              eq(marketBets.userId, authReq.userId!),
-              eq(marketBets.marketId, market.id),
-              eq(marketBets.status, "active"),
-            )
-          );
-        if (existingH2HBets.some((b) => b.entryId !== entryId)) {
-          return res.status(409).json({
-            error: "Stick with your pick",
-            detail: "You've already backed the other side. Top up your existing pick instead.",
-          });
-        }
-      }
-
-      const result = await placeMarketBet({
-        userId: authReq.userId!,
+      const buyResult = await executeBuy({
         marketId: market.id,
+        userId: authReq.userId!,
         entryId,
-        stakeAmount,
+        creditBudget: stakeAmount,
       });
-
-      if ("error" in result) {
-        return res.status(result.status).json({ error: result.error });
+      if ("error" in buyResult) {
+        return res.status(buyResult.status).json({ error: buyResult.message });
       }
-
-      return res.json(result.data);
+      return res.json({
+        engine: "amm",
+        actionType: "buy",
+        stakeAmount: buyResult.chargeCredits,
+        potentialPayout: Math.floor(buyResult.sharesPurchased),
+        sharesPurchased: buyResult.sharesPurchased,
+        chargeCredits: buyResult.chargeCredits,
+        pricePerShareAvg: buyResult.pricePerShareAvg,
+        newPrices: buyResult.newPrices,
+        newQ: buyResult.newQ,
+        remainingCredits: buyResult.userBalanceAfter,
+      });
     } catch (error: any) {
-      if (error?.message === "Insufficient credits") {
-        return res.status(400).json({ error: "Insufficient credits" });
-      }
       console.error("[Native Markets] Bet error:", error);
       res.status(500).json({ error: "Failed to place bet" });
     }
@@ -19495,60 +19186,75 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       }
       const h2hMetadata = h2hOpeningScores.length > 0 ? { openingScores: h2hOpeningScores } : undefined;
 
+      // Parimutuel sunset: ad-hoc admin-created H2H markets land as AMM,
+      // matching the weekly generator. Wrap the market + entries + AMM
+      // seed in a single transaction so a partial failure (seed crashes,
+      // entry insert collides, etc.) doesn't leave a half-built market.
+      const buildH2HValues = (slugVal: string) => ({
+        marketType: "h2h" as const,
+        engine: "amm" as const,
+        title,
+        slug: slugVal,
+        category: category || personA.category?.toLowerCase() || "misc",
+        visibility,
+        featured,
+        status: "OPEN" as const,
+        startAt: monday,
+        endAt: sunday,
+        closeAt: getMarketBettingCutoff(sunday, "amm"),
+        weekNumber,
+        metadata: h2hMetadata,
+      });
+
       let market: any;
-      try {
-        [market] = await db.insert(predictionMarkets).values({
-          marketType: "h2h",
-          title,
-          slug,
-          category: category || personA.category?.toLowerCase() || "misc",
-          visibility,
-          featured,
-          status: "OPEN",
-          startAt: monday,
-          endAt: sunday,
-          weekNumber,
-          metadata: h2hMetadata,
-        }).returning();
-      } catch (slugErr: any) {
-        if (slugErr.code === '23505') {
-          slug = `${slug}-${randomUUID().slice(0, 6)}`;
-          [market] = await db.insert(predictionMarkets).values({
-            marketType: "h2h",
-            title,
-            slug,
-            category: category || personA.category?.toLowerCase() || "misc",
-            visibility,
-            featured,
-            status: "OPEN",
-            startAt: monday,
-            endAt: sunday,
-            weekNumber,
-            metadata: h2hMetadata,
-          }).returning();
-        } else {
+      let attempt = 0;
+      while (attempt < 2) {
+        const slugVal = attempt === 0 ? slug : `${slug}-${randomUUID().slice(0, 6)}`;
+        try {
+          market = await db.transaction(async (tx) => {
+            const [m] = await tx
+              .insert(predictionMarkets)
+              .values(buildH2HValues(slugVal))
+              .returning();
+            const entries = await tx
+              .insert(marketEntries)
+              .values([
+                {
+                  marketId: m.id,
+                  entryType: "person",
+                  personId: personA.id,
+                  label: personA.name,
+                  displayOrder: 0,
+                  imageUrl: personA.avatar,
+                },
+                {
+                  marketId: m.id,
+                  entryType: "person",
+                  personId: personB.id,
+                  label: personB.name,
+                  displayOrder: 1,
+                  imageUrl: personB.avatar,
+                },
+              ])
+              .returning({ id: marketEntries.id, displayOrder: marketEntries.displayOrder });
+            const { seedAmmMarket } = await import("./services/amm-house");
+            const entryIdsInOrder = entries
+              .slice()
+              .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
+              .map((e) => e.id);
+            await seedAmmMarket({ marketId: m.id, marketType: "h2h", entryIdsInOrder }, tx);
+            return m;
+          });
+          slug = slugVal;
+          break;
+        } catch (slugErr: any) {
+          if (slugErr?.code === "23505" && attempt === 0) {
+            attempt++;
+            continue;
+          }
           throw slugErr;
         }
       }
-
-      await db.insert(marketEntries).values([
-        {
-          marketId: market.id,
-          entryType: "person",
-          personId: personA.id,
-          label: personA.name,
-          displayOrder: 0,
-          imageUrl: personA.avatar,
-        },
-        {
-          marketId: market.id,
-          entryType: "person",
-          personId: personB.id,
-          label: personB.name,
-          displayOrder: 1,
-          imageUrl: personB.avatar,
-        },
-      ]);
 
       await db.insert(adminAuditLog).values({
         adminId: req.userId!,
@@ -19568,23 +19274,13 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
 
   app.post("/api/admin/native-markets/gainer", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const { category, personIds, visibility = "live", featured = false, engine: requestedEngine } = req.body;
+      const { category, personIds, visibility = "live", featured = false } = req.body;
       const normalizedCategory = normalizeMarketCategory(category);
 
-      // Phase 14: same flip semantics as `nativeEngineFor("gainer")` in the
-      // weekly generator. Operator can override per-call via `engine` body
-      // param to spin up a single AMM smoke market while the flag is off.
-      const ammNativeEnabled =
-        (process.env.AMM_NATIVE_FLIP_ENABLED ?? "true").toLowerCase() !== "false";
-      const ammGainerFlip =
-        (process.env.AMM_GAINER_FLIP_ENABLED ?? "false").toLowerCase() === "true";
-      const defaultGainerEngine: "amm" | "parimutuel" =
-        ammNativeEnabled && ammGainerFlip ? "amm" : "parimutuel";
-      const resolvedEngine: "amm" | "parimutuel" =
-        requestedEngine === "amm" || requestedEngine === "parimutuel"
-          ? requestedEngine
-          : defaultGainerEngine;
-
+      // Parimutuel sunset: every Category Race is AMM. The old
+      // `AMM_NATIVE_FLIP_ENABLED` / `AMM_GAINER_FLIP_ENABLED` env-var
+      // handles and the `engine` body-param override are gone — the
+      // parimutuel gainer resolver no longer exists.
       if (!CANONICAL_MARKET_CATEGORIES.includes(normalizedCategory as typeof CANONICAL_MARKET_CATEGORIES[number])) {
         return res.status(400).json({ error: "Invalid category" });
       }
@@ -19595,10 +19291,10 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       // 1-outcome AMM is degenerate — every share would be worth 1
       // credit at open). Fail fast with a clear message instead of
       // letting seedAmmMarket throw mid-transaction.
-      if (resolvedEngine === "amm" && personIds.length < 2) {
+      if (personIds.length < 2) {
         return res.status(400).json({
           error: "amm_requires_min_2_outcomes",
-          message: "AMM Category Race markets need at least 2 candidates.",
+          message: "Category Race markets need at least 2 candidates.",
         });
       }
       const now = new Date();
@@ -19614,11 +19310,8 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       const jan1 = new Date(now.getUTCFullYear(), 0, 1);
       const weekNumber = Math.ceil(((now.getTime() - jan1.getTime()) / 86400000 + jan1.getUTCDay() + 1) / 7);
 
-      // Allow one parimutuel + one AMM race per (category, week) so
-      // Phase 14.4 can run a dry-run AMM race alongside the existing
-      // parimutuel ones. The dedup key is (category, engine) — same
-      // category with the same engine still 409s, since that's a true
-      // double-create.
+      // Parimutuel sunset: one race per (category, week). The legacy
+      // parimutuel + AMM dual-create path that Phase 14.4 used is gone.
       const existingGainers = await db.select().from(predictionMarkets).where(and(
         eq(predictionMarkets.marketType, "gainer"),
         eq(predictionMarkets.weekNumber, weekNumber)
@@ -19626,21 +19319,11 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       const sameCategory = existingGainers.filter(
         (market) => normalizeMarketCategory(market.category) === normalizedCategory,
       );
-      const sameCategorySameEngine = sameCategory.find(
-        (market) => (market.engine ?? "parimutuel") === resolvedEngine,
-      );
-      if (sameCategorySameEngine) {
-        return res.status(409).json({
-          error: `A ${resolvedEngine === "amm" ? "AMM" : "parimutuel"} Category Race for ${getMarketCategoryLabel(normalizedCategory)} already exists this week`,
-          existingId: sameCategorySameEngine.id,
-        });
-      }
       if (sameCategory.length > 0) {
-        const other = sameCategory[0];
-        const otherEngine = (other.engine ?? "parimutuel") === "amm" ? "AMM" : "parimutuel";
-        console.log(
-          `[admin/native-markets/gainer] Creating ${resolvedEngine} race for ${normalizedCategory} alongside existing ${otherEngine} race ${other.id} (Phase 14.4 dry-run path).`,
-        );
+        return res.status(409).json({
+          error: `A Category Race for ${getMarketCategoryLabel(normalizedCategory)} already exists this week`,
+          existingId: sameCategory[0].id,
+        });
       }
 
       const persons = await db.select().from(trackedPeople).where(inArray(trackedPeople.id, personIds));
@@ -19657,17 +19340,14 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       // Pre-check the slug BEFORE entering the transaction. In Postgres,
       // a failed insert inside a transaction aborts the whole tx and any
       // subsequent statements are rejected with "current transaction is
-      // aborted" — the inner retry-with-suffix path can't recover. With
-      // the (category, engine) dedup now allowing a parimutuel + AMM
-      // race to coexist, the slug WILL collide for the second engine and
-      // we have to disambiguate up front.
+      // aborted" — the inner retry-with-suffix path can't recover.
       const existingSlug = await db
         .select({ id: predictionMarkets.id })
         .from(predictionMarkets)
         .where(eq(predictionMarkets.slug, slug))
         .limit(1);
       if (existingSlug.length > 0) {
-        slug = `${slug}-${resolvedEngine === "amm" ? "amm" : "pari"}-${randomUUID().slice(0, 6)}`;
+        slug = `${slug}-${randomUUID().slice(0, 6)}`;
       }
 
       const gainerSnapRows = personIds.length > 0
@@ -19690,7 +19370,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       const market = await db.transaction(async (tx) => {
         const [created] = await tx.insert(predictionMarkets).values({
           marketType: "gainer",
-          engine: resolvedEngine,
+          engine: "amm",
           title,
           slug,
           category: normalizedCategory,
@@ -19699,7 +19379,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           status: "OPEN",
           startAt: monday,
           endAt: sunday,
-          closeAt: getMarketBettingCutoff(sunday, resolvedEngine),
+          closeAt: getMarketBettingCutoff(sunday, "amm"),
           weekNumber,
           metadata: gainerMetadata,
         }).returning();
@@ -19719,7 +19399,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           .values(entryValues)
           .returning({ id: marketEntries.id, displayOrder: marketEntries.displayOrder });
 
-        if (resolvedEngine === "amm") {
+        {
           const { seedAmmMarket } = await import("./services/amm-house");
           const entryIdsInOrder = createdEntries
             .slice()
@@ -19740,7 +19420,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         actionType: "create",
         targetTable: "prediction_markets",
         targetId: market.id,
-        metadata: { type: "gainer", category, personCount: personIds.length, engine: resolvedEngine },
+        metadata: { type: "gainer", category, personCount: personIds.length, engine: "amm" },
       });
 
       res.json(market);
@@ -20032,17 +19712,15 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         return res.status(400).json({ error: "Jackpot markets cannot be settled by entry. Use void or let the auto-resolver handle it." });
       }
 
-      const { settleMarketBets, voidMarketBets } = await import("./jobs/market-resolver");
-      let settlementResult = null;
+      // Parimutuel sunset: dispatch by engine. Non-jackpot markets all
+      // resolve via `resolveAmmMarket`. Jackpot stays parimutuel: void
+      // path uses `voidMarketBets`; a successful jackpot is auto-resolved
+      // by the cron resolver from the close-time score snapshot, never
+      // by hand here.
+      let settlementResult: unknown = null;
 
-      if (winnerEntryId) {
-        settlementResult = await settleMarketBets(id, winnerEntryId, {
-          resolveMethod: "admin_manual",
-          resolutionNotes: notes,
-          settledBy: req.userId!,
-          voidReason: null,
-        });
-      } else {
+      if (market.marketType === "jackpot") {
+        const { voidMarketBets } = await import("./jobs/market-resolver");
         const refunded = await voidMarketBets(id);
         settlementResult = { voided: true, refunded };
         await db.update(predictionMarkets).set({
@@ -20052,6 +19730,31 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           voidReason: notes || "Admin voided",
           updatedAt: new Date(),
         }).where(eq(predictionMarkets.id, id));
+      } else {
+        const { resolveAmmMarket } = await import("./services/amm-resolver");
+        const ammResult = await resolveAmmMarket({
+          marketId: id,
+          winnerEntryId: winnerEntryId ?? null,
+          voidMarket: !winnerEntryId,
+          settledBy: req.userId ?? null,
+        });
+        if ("error" in ammResult) {
+          const status = ammResult.error === "market_not_found" ? 404 : 400;
+          return res.status(status).json({ error: ammResult.error, message: ammResult.message });
+        }
+        settlementResult = ammResult;
+        // Stamp admin metadata. The AMM resolver writes its own
+        // resolution_notes JSON; we layer admin notes separately so we
+        // don't poison the resolver's idempotency check.
+        if (notes || !winnerEntryId) {
+          await db.update(predictionMarkets).set({
+            settledBy: req.userId!,
+            resolveMethod: "admin_manual",
+            ...(notes ? { resolutionNotes: notes } : {}),
+            ...(!winnerEntryId ? { voidReason: notes || "Admin voided" } : {}),
+            updatedAt: new Date(),
+          }).where(eq(predictionMarkets.id, id));
+        }
       }
 
       await db.insert(adminAuditLog).values({
@@ -20946,186 +20649,18 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
     }
   });
 
-  app.post("/api/admin/test-payout-pipeline", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
-    if (process.env.ENABLE_TEST_ENDPOINTS !== 'true') {
-      return res.status(403).json({ error: "Test endpoints disabled. Set ENABLE_TEST_ENDPOINTS=true to enable." });
-    }
-    try {
-      const { settleMarketBets } = await import("./jobs/market-resolver");
-
-      const testPersonRows = await db.select({ id: trackedPeople.id, name: trackedPeople.name }).from(trackedPeople).limit(1);
-      if (testPersonRows.length === 0) return res.status(500).json({ error: "No tracked people found" });
-      const testPerson = testPersonRows[0];
-
-      const testProfileRows = await db.select({ id: profiles.id, predictCredits: profiles.predictCredits }).from(profiles).limit(2);
-      if (testProfileRows.length < 2) return res.status(500).json({ error: "Need at least 2 profiles for test" });
-
-      const userA = testProfileRows[0];
-      const userB = testProfileRows[1];
-      const creditsBefore = { userA: userA.predictCredits, userB: userB.predictCredits };
-      const stakeA = 100;
-      const stakeB = 100;
-      const totalPool = stakeA + stakeB;
-
-      const testSlug = `test-payout-${Date.now()}`;
-      const [testMarket] = await db.insert(predictionMarkets).values({
-        marketType: "updown",
-        title: "[TEST] Payout Pipeline Test",
-        slug: testSlug,
-        personId: testPerson.id,
-        category: "test",
-        visibility: "hidden",
-        status: "OPEN",
-        startAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
-        endAt: new Date(Date.now() - 60 * 1000),
-        weekNumber: 0,
-      }).returning();
-
-      const [upEntry] = await db.insert(marketEntries).values({
-        marketId: testMarket.id,
-        entryType: "custom",
-        label: "Up",
-        displayOrder: 0,
-      }).returning();
-
-      const [downEntry] = await db.insert(marketEntries).values({
-        marketId: testMarket.id,
-        entryType: "custom",
-        label: "Down",
-        displayOrder: 1,
-      }).returning();
-
-      await db.update(profiles).set({ predictCredits: creditsBefore.userA - stakeA }).where(eq(profiles.id, userA.id));
-      await db.update(profiles).set({ predictCredits: creditsBefore.userB - stakeB }).where(eq(profiles.id, userB.id));
-
-      const [betA] = await db.insert(marketBets).values({
-        marketId: testMarket.id, entryId: upEntry.id, userId: userA.id, stakeAmount: stakeA, status: "active",
-      }).returning();
-      const [betB] = await db.insert(marketBets).values({
-        marketId: testMarket.id, entryId: downEntry.id, userId: userB.id, stakeAmount: stakeB, status: "active",
-      }).returning();
-
-      await db.insert(creditLedger).values([
-        {
-          userId: userA.id, txnType: 'prediction_stake', amount: -stakeA, walletType: 'VIRTUAL',
-          balanceAfter: creditsBefore.userA - stakeA, source: 'user_action',
-          idempotencyKey: `stake_${testMarket.id}_${betA.id}`, metadata: { marketId: testMarket.id, entryId: upEntry.id, betId: betA.id },
-        },
-        {
-          userId: userB.id, txnType: 'prediction_stake', amount: -stakeB, walletType: 'VIRTUAL',
-          balanceAfter: creditsBefore.userB - stakeB, source: 'user_action',
-          idempotencyKey: `stake_${testMarket.id}_${betB.id}`, metadata: { marketId: testMarket.id, entryId: downEntry.id, betId: betB.id },
-        },
-      ]);
-
-      const settlement = await settleMarketBets(testMarket.id, upEntry.id);
-
-      const invariants: Record<string, { passed: boolean; detail: string }> = {};
-
-      invariants.poolConservation = {
-        passed: Math.abs(settlement.remainder) <= 1,
-        detail: `pool=${settlement.totalPool}, payouts=${settlement.payoutsDistributed}, remainder=${settlement.remainder}`,
-      };
-
-      invariants.winnersCount = {
-        passed: settlement.winnersCount === 1,
-        detail: `expected=1, actual=${settlement.winnersCount}`,
-      };
-
-      invariants.losersCount = {
-        passed: settlement.losersCount === 1,
-        detail: `expected=1, actual=${settlement.losersCount}`,
-      };
-
-      const betsAfter = await db.select().from(marketBets).where(eq(marketBets.marketId, testMarket.id));
-      const winnerBet = betsAfter.find(b => b.entryId === upEntry.id);
-      const loserBet = betsAfter.find(b => b.entryId === downEntry.id);
-
-      invariants.losersGetNothing = {
-        passed: loserBet?.payoutAmount === 0,
-        detail: `loserPayout=${loserBet?.payoutAmount}`,
-      };
-
-      invariants.winnerGetsTotalPool = {
-        passed: winnerBet?.payoutAmount === totalPool,
-        detail: `winnerPayout=${winnerBet?.payoutAmount}, totalPool=${totalPool}`,
-      };
-
-      const updatedA = await db.select({ predictCredits: profiles.predictCredits }).from(profiles).where(eq(profiles.id, userA.id));
-      const updatedB = await db.select({ predictCredits: profiles.predictCredits }).from(profiles).where(eq(profiles.id, userB.id));
-
-      const expectedABalance = creditsBefore.userA - stakeA + totalPool;
-      const expectedBBalance = creditsBefore.userB - stakeB;
-      invariants.winnerBalanceIntegrity = {
-        passed: updatedA[0]?.predictCredits === expectedABalance,
-        detail: `expected=${expectedABalance}, actual=${updatedA[0]?.predictCredits}`,
-      };
-      invariants.loserBalanceIntegrity = {
-        passed: updatedB[0]?.predictCredits === expectedBBalance,
-        detail: `expected=${expectedBBalance}, actual=${updatedB[0]?.predictCredits}`,
-      };
-
-      const ledgerEntries = await db.select().from(creditLedger)
-        .where(sql`${creditLedger.idempotencyKey} LIKE ${'%' + testMarket.id + '%'}`);
-      const stakeEntries = ledgerEntries.filter(e => e.txnType === 'prediction_stake');
-      const payoutEntries = ledgerEntries.filter(e => e.txnType === 'prediction_payout');
-
-      invariants.stakeLedgerEntries = {
-        passed: stakeEntries.length === 2,
-        detail: `expected=2 stake entries, actual=${stakeEntries.length}`,
-      };
-      invariants.payoutLedgerEntries = {
-        passed: payoutEntries.length === 1,
-        detail: `expected=1 payout entry, actual=${payoutEntries.length}`,
-      };
-
-      await db.update(predictionMarkets).set({ status: "OPEN" as any }).where(eq(predictionMarkets.id, testMarket.id));
-      await db.update(marketBets).set({ status: "active", settledAt: null, payoutAmount: 0 }).where(eq(marketBets.marketId, testMarket.id));
-      await db.update(profiles).set({ predictCredits: updatedA[0]?.predictCredits }).where(eq(profiles.id, userA.id));
-
-      const settlement2 = await settleMarketBets(testMarket.id, upEntry.id);
-
-      invariants.idempotency = {
-        passed: settlement2.alreadySettled !== true && settlement2.totalPool === totalPool,
-        detail: `secondSettle: alreadySettled=${settlement2.alreadySettled}, pool=${settlement2.totalPool}`,
-      };
-
-      await db.update(predictionMarkets).set({ status: "RESOLVED" as any }).where(eq(predictionMarkets.id, testMarket.id));
-      const settlement3 = await settleMarketBets(testMarket.id, upEntry.id);
-      invariants.resolvedIdempotency = {
-        passed: settlement3.alreadySettled === true,
-        detail: `thirdSettle on RESOLVED: alreadySettled=${settlement3.alreadySettled}`,
-      };
-
-      const allPassed = Object.values(invariants).every(i => i.passed);
-
-      const results = {
-        passed: allPassed,
-        testMarketId: testMarket.id,
-        invariants,
-        settlement,
-        bets: betsAfter.map(b => ({ id: b.id, entryId: b.entryId, userId: b.userId, status: b.status, payoutAmount: b.payoutAmount, stakeAmount: b.stakeAmount })),
-        ledgerSummary: { stakeEntries: stakeEntries.length, payoutEntries: payoutEntries.length, totalLedger: ledgerEntries.length },
-        credits: {
-          userA: { before: creditsBefore.userA, staked: stakeA, afterStake: creditsBefore.userA - stakeA, afterPayout: updatedA[0]?.predictCredits },
-          userB: { before: creditsBefore.userB, staked: stakeB, afterStake: creditsBefore.userB - stakeB, afterPayout: updatedB[0]?.predictCredits },
-        },
-      };
-
-      await db.delete(creditLedger).where(sql`${creditLedger.idempotencyKey} LIKE ${'%' + testMarket.id + '%'}`);
-      await db.delete(marketBets).where(eq(marketBets.marketId, testMarket.id));
-      await db.delete(marketEntries).where(eq(marketEntries.marketId, testMarket.id));
-      await db.delete(predictionMarkets).where(eq(predictionMarkets.id, testMarket.id));
-
-      await db.update(profiles).set({ predictCredits: creditsBefore.userA }).where(eq(profiles.id, userA.id));
-      await db.update(profiles).set({ predictCredits: creditsBefore.userB }).where(eq(profiles.id, userB.id));
-
-      res.json(results);
-    } catch (error: any) {
-      console.error("Error in payout pipeline test:", error.message);
-      res.status(500).json({ error: "Payout pipeline test failed", details: error.message });
-    }
+  // `POST /api/admin/test-payout-pipeline` (parimutuel pool-split smoke
+  // test) was deleted in the parimutuel sunset along with
+  // `settleMarketBets`. Returns 410 so any saved curl scripts surface a
+  // clean failure instead of routing to the wrong handler. The AMM
+  // smoke suite (`npm run amm:smoke`) covers the round-trip equivalent.
+  app.post("/api/admin/test-payout-pipeline", requireAuth, requireAdmin, async (_req: AuthRequest, res) => {
+    return res.status(410).json({
+      error: "parimutuel_sunset",
+      message: "Parimutuel payout pipeline test was retired with the parimutuel sunset. Use `npm run amm:smoke` for the AMM equivalent.",
+    });
   });
+
 
   app.patch("/api/admin/native-markets/h2h/:id/entries", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {

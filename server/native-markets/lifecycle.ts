@@ -23,8 +23,9 @@ export interface NativeMarketLifecycle {
 export const AMM_PRE_RESOLVE_COOLDOWN_MS = DEFAULT_PRE_RESOLVE_COOLDOWN_MS;
 
 /**
- * Weekly betting closes on Friday 23:59:59.999 UTC for a Sunday-end
- * market. Used by parimutuel (legacy) markets.
+ * Weekly betting cutoff: Friday 23:59:59.999 UTC for a Sunday-end
+ * market. Parimutuel sunset: jackpot is the only remaining consumer —
+ * non-jackpot markets are AMM and use `getAmmTradingCutoff` instead.
  */
 export function getWeeklyBettingCutoff(endAt: Date): Date {
   const cutoff = new Date(endAt);
@@ -47,12 +48,16 @@ export function getAmmTradingCutoff(endAt: Date): Date {
 
 /**
  * Engine-aware cutoff used by the market generator + bet endpoints +
- * notification scheduler. Single source of truth so creation, gating
+ * notification scheduler. Single source of truth so creation, gating,
  * and notifications agree on when a given market closes.
+ *
+ * Parimutuel sunset: the default is now `"amm"`. Only jackpot markets
+ * should pass `"parimutuel"` explicitly. Every other call site can
+ * either omit the engine arg or pass it for documentation.
  */
 export function getMarketBettingCutoff(
   endAt: Date,
-  engine: MarketEngine = "parimutuel",
+  engine: MarketEngine = "amm",
 ): Date {
   return engine === "amm" ? getAmmTradingCutoff(endAt) : getWeeklyBettingCutoff(endAt);
 }
@@ -60,7 +65,7 @@ export function getMarketBettingCutoff(
 export function deriveNativeMarketLifecycle(
   endAt: Date | null | undefined,
   now: Date = new Date(),
-  engine: MarketEngine = "parimutuel",
+  engine: MarketEngine = "amm",
 ): NativeMarketLifecycle {
   if (!endAt) {
     return {
