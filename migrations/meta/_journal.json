@@ -428,6 +428,13 @@
       "when": 1779571200000,
       "tag": "0060_badge_system",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1779657600000,
+      "tag": "0061_profile_extended",
+      "breakpoints": true
     }
   ]
 }

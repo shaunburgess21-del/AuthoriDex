@@ -6,3 +6,4 @@ export { registerNotificationsRoutes } from "./notifications-routes";
 export { registerAdminNotificationsRoutes } from "./admin-notifications-routes";
 export { registerOgRoutes } from "./og-routes";
 export { registerShareRoutes } from "./share-routes";
+export { registerBadgesRoutes } from "./badges-routes";

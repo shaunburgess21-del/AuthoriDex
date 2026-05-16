@@ -971,6 +971,24 @@ export const profiles = pgTable("profiles", {
   countryOfResidence: text("country_of_residence"),
   ethnicity: text("ethnicity"),
   profileFieldsPublic: boolean("profile_fields_public").notNull().default(false),
+  // Account-tab extras — see migration 0061_profile_extended.sql.
+  // recoveryEmail is treated as opt-in PII and is never exposed via
+  // public profile endpoints. The verified flag is always reset to
+  // false in the PATCH handler whenever recoveryEmail changes; the
+  // verification flow itself is a follow-up prompt.
+  recoveryEmail: text("recovery_email"),
+  recoveryEmailVerified: boolean("recovery_email_verified").notNull().default(false),
+  phoneNumber: text("phone_number"),
+  // About-Me discoverability fields. Stored without the leading '@'
+  // (the PATCH handler strips it) so we can reconstruct social URLs
+  // unambiguously. Visibility is gated by socialHandlesPublic /
+  // occupationPublic — each privacy-sensitive bucket has its own
+  // opt-in so a user can share occupation without sharing socials.
+  socialXHandle: text("social_x_handle"),
+  socialInstagramHandle: text("social_instagram_handle"),
+  occupationIndustry: text("occupation_industry"),
+  socialHandlesPublic: boolean("social_handles_public").notNull().default(false),
+  occupationPublic: boolean("occupation_public").notNull().default(false),
   totalVotes: integer("total_votes").notNull().default(0),
   totalPredictions: integer("total_predictions").notNull().default(0),
   winRate: real("win_rate").notNull().default(0),

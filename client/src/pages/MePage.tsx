@@ -3,13 +3,14 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
-import { ArrowLeft, User, Star, TrendingUp, Settings, LogOut, Vote, Wallet, Shield, Trophy, Eye, Lock, Flame, CreditCard } from "lucide-react";
+import { ArrowLeft, User, Star, TrendingUp, Settings, LogOut, Vote, Wallet, Shield, Trophy, Eye, Lock, Flame, CreditCard, Award } from "lucide-react";
 import { useLocation } from "wouter";
 import { navigateToLogin } from "@/lib/authReturn";
 import { useAuth } from "@/contexts/AuthContext";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { UserRankBadge } from "@/components/UserRankBadge";
 import { ReferAFriendCard } from "@/components/ReferAFriendCard";
+import { ProfileCompletionCard } from "@/components/ProfileCompletionCard";
 
 export default function MePage() {
   const { user, profile, profileLoading, isAdmin, signOut } = useAuth();
@@ -134,6 +135,8 @@ export default function MePage() {
                 </div>
               </div>
               
+              <ProfileCompletionCard />
+
               <div className="space-y-3">
                 {profile?.username && (
                   <Button 
@@ -175,6 +178,15 @@ export default function MePage() {
                 >
                   <CreditCard className="h-4 w-4" />
                   My Credits
+                </Button>
+                <Button 
+                  variant="outline" 
+                  className="w-full justify-start gap-3"
+                  onClick={() => setLocation("/me/badges")}
+                  data-testid="button-my-badges"
+                >
+                  <Award className="h-4 w-4" />
+                  My Badges
                 </Button>
                 <Button 
                   variant="outline" 

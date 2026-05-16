@@ -8,6 +8,8 @@ import { shouldAutoToast } from "@/lib/notifications/registry";
 import { useInvalidateNotifications } from "@/hooks/useNotifications";
 import { dispatchRankUp } from "@/components/RankUpModal";
 import { STREAK_BADGE_KEYS } from "@shared/badge-config";
+import { BadgeToast } from "@/components/BadgeToast";
+import { createElement } from "react";
 
 /**
  * Notification kinds that imply the user's credit balance just
@@ -158,24 +160,37 @@ export function useNotificationsRealtime(): void {
                 const badgeKey = meta?.badgeKey
                   ? String(meta.badgeKey)
                   : null;
+                const badgeName = meta?.badgeName
+                  ? String(meta.badgeName)
+                  : row.title.replace(/^New badge:\s*/i, "");
+                const rarity = meta?.rarity ? String(meta.rarity) : "COMMON";
+                const icon = meta?.icon ? String(meta.icon) : "award";
+                const description =
+                  (meta?.description ? String(meta.description) : null) ||
+                  row.body ||
+                  null;
                 const delay =
                   badgeKey && STREAK_BADGE_KEYS.has(badgeKey) ? 4000 : 0;
                 const fire = () => {
-                  toast(row.title, {
-                    description: row.body || undefined,
-                    action: row.href
-                      ? {
-                          label: "View",
-                          onClick: () => {
-                            if (/^https?:\/\//i.test(row.href!)) {
-                              window.location.assign(row.href!);
-                            } else {
-                              setLocationRef.current(row.href!);
-                            }
-                          },
-                        }
-                      : undefined,
-                  });
+                  // Custom Sonner render so the toast picks up the
+                  // rarity-coloured BadgeToast styling instead of the
+                  // default text/description layout. Click anywhere on
+                  // the toast surface still routes to /me/badges via
+                  // the row.href fallback baked into the action below.
+                  toast.custom(
+                    (id) =>
+                      createElement(BadgeToast, {
+                        badgeKey: badgeKey ?? "",
+                        badgeName,
+                        description,
+                        rarity,
+                        icon,
+                        onClose: () => toast.dismiss(id),
+                      }),
+                    {
+                      duration: 6000,
+                    },
+                  );
                 };
                 if (delay > 0) setTimeout(fire, delay);
                 else fire();

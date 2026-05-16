@@ -34,6 +34,7 @@ import { Badge } from "@/components/ui/badge";
 import { getAuthHeaders } from "@/lib/queryClient";
 import { ProfileTabs, type ProfileTab } from "@/components/ProfileTabs";
 import { MyVoteCard, type MyVoteCardData } from "@/components/me/MyVoteCard";
+import { BadgeCard, type BadgeCardData } from "@/components/BadgeCard";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { DoughnutChart, type DoughnutSegment } from "@/components/charts/DoughnutChart";
 import { useItemVisibility, voteTypeToPrivacyType } from "@/hooks/useItemVisibility";
@@ -1195,21 +1196,6 @@ interface ShapedSubject {
   valueFair: number;
 }
 
-function computeSubjectShaperEarned(votes: UnifiedVote[]): boolean {
-  const counts = new Map<string, number>();
-  for (const v of votes) {
-    if (!PERSON_VOTE_TYPES.has(v.voteType)) continue;
-    const name = v.targetName?.trim();
-    if (!name || name === "Unknown") continue;
-    const key = v.subjectId || name;
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-  }
-  for (const n of counts.values()) {
-    if (n >= 5) return true;
-  }
-  return false;
-}
-
 function aggregateShapedSubjects(
   votes: UnifiedVote[],
   sectionFilter: MeVotesFilterParam | null,
@@ -1451,8 +1437,6 @@ function ImpactTab({
     return Array.from(seen).sort((a, b) => getVoteTypeLabel(a).localeCompare(getVoteTypeLabel(b)));
   }, [allVotes]);
 
-  const subjectShaperEarned = useMemo(() => computeSubjectShaperEarned(allVotes), [allVotes]);
-
   const shapedSubjects = useMemo(
     () => aggregateShapedSubjects(allVotes, impactSectionFilter),
     [allVotes, impactSectionFilter],
@@ -1473,46 +1457,29 @@ function ImpactTab({
     };
   }, [allVotes]);
 
-  const badges = useMemo(() => {
-    const arr: { id: string; label: string; description: string; icon: React.ReactNode; earned: boolean }[] = [];
-    arr.push({
-      id: "first_vote",
-      label: "First Vote",
-      description: "Cast your first vote",
-      icon: <Vote className="h-5 w-5 text-cyan-500" />,
-      earned: allVotes.length >= 1,
-    });
-    arr.push({
-      id: "vote_25",
-      label: "Quarter Century",
-      description: "Cast 25 votes",
-      icon: <Target className="h-5 w-5 text-sky-500" />,
-      earned: allVotes.length >= 25,
-    });
-    arr.push({
-      id: "vote_100",
-      label: "Century Citizen",
-      description: "Cast 100 votes",
-      icon: <Trophy className="h-5 w-5 text-amber-500" />,
-      earned: allVotes.length >= 100,
-    });
-    const distinctTypes = new Set(allVotes.map((v) => v.voteType)).size;
-    arr.push({
-      id: "well_rounded",
-      label: "Well-Rounded",
-      description: "Vote in 4+ different sections",
-      icon: <Sparkles className="h-5 w-5 text-violet-500" />,
-      earned: distinctTypes >= 4,
-    });
-    arr.push({
-      id: "subject_shaper",
-      label: "Subject Shaper",
-      description: "Cast 5+ votes on the same person",
-      icon: <Flame className="h-5 w-5 text-orange-500" />,
-      earned: subjectShaperEarned,
-    });
-    return arr;
-  }, [allVotes, subjectShaperEarned]);
+  // Voting-category badges now come from the canonical /api/me/badges
+  // endpoint instead of being re-derived client-side from allVotes.
+  // The API joins shared/badge-config.ts with user_badges so earned
+  // state is the single source of truth (and stays consistent with
+  // notifications + the trophy cabinet at /me/badges).
+  const { data: apiBadges } = useQuery<BadgeCardData[]>({
+    queryKey: ["/api/me/badges"],
+    queryFn: async () => {
+      const res = await fetch("/api/me/badges", { headers: await getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to load badges");
+      return res.json();
+    },
+  });
+  const votingBadges = useMemo(
+    () =>
+      (apiBadges ?? [])
+        .filter((b) => b.category === "VOTING")
+        .sort((a, b) => {
+          if (a.earned !== b.earned) return a.earned ? -1 : 1;
+          return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+        }),
+    [apiBadges],
+  );
 
   if (isLoading) {
     return (
@@ -1631,35 +1598,9 @@ function ImpactTab({
             <p className="text-xs text-muted-foreground">Earn milestones as you vote</p>
           </div>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-          {badges.map((b) => (
-            <div
-              key={b.id}
-              className={cn(
-                "relative rounded-lg border p-3 text-center transition",
-                b.earned
-                  ? "border-cyan-500/30 bg-cyan-500/5 ring-1 ring-cyan-500/30"
-                  : "border-border/60 bg-muted/10 opacity-30 grayscale",
-              )}
-            >
-              {!b.earned && (
-                <Lock
-                  className="absolute right-1.5 top-1.5 h-3 w-3 text-muted-foreground"
-                  aria-hidden
-                />
-              )}
-              <div className="flex justify-center mb-1.5">{b.icon}</div>
-              <p className="text-xs font-semibold">{b.label}</p>
-              <p className="text-[10px] text-muted-foreground">{b.description}</p>
-              {b.earned && (
-                <Badge
-                  variant="outline"
-                  className="mt-1.5 h-4 gap-1 border-emerald-500/40 bg-emerald-500/10 text-[9px] text-emerald-600 dark:text-emerald-300"
-                >
-                  <Check className="h-2.5 w-2.5" /> Earned
-                </Badge>
-              )}
-            </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          {votingBadges.map((b) => (
+            <BadgeCard key={b.key} badge={b} size="md" />
           ))}
         </div>
       </Card>

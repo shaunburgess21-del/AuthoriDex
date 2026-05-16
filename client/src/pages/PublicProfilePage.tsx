@@ -32,12 +32,14 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MyVoteCard, type MyVoteCardData } from "@/components/me/MyVoteCard";
+import { BadgeCard, type BadgeCardData } from "@/components/BadgeCard";
 import { useShareCard } from "@/contexts/ShareCardContext";
 import { UserRankBadge } from "@/components/UserRankBadge";
 import { buildPositionShareData, inferDirection } from "@/lib/share-data";
 import { appendShareAttribution } from "@/lib/share";
 
 interface PublicProfile {
+  userId?: string;
   username: string;
   avatarUrl?: string | null;
   rank?: string;
@@ -804,6 +806,10 @@ export default function PublicProfilePage() {
           )}
         </Card>
 
+        {profile.userId && (
+          <PublicBadgesSection userId={profile.userId} />
+        )}
+
         {/* XP Progress */}
         <Card className="p-6">
           <h2 className="font-semibold mb-4">XP Progress</h2>
@@ -850,5 +856,50 @@ export default function PublicProfilePage() {
         {username && <BetHistorySection username={username} isAgent={profile.isAgent} />}
       </div>
     </div>
+  );
+}
+
+function PublicBadgesSection({ userId }: { userId: string }) {
+  const { data, isLoading } = useQuery<BadgeCardData[]>({
+    queryKey: [`/api/users/${userId}/badges`],
+    queryFn: async () => {
+      const res = await fetch(`/api/users/${userId}/badges`, {
+        headers: await getAuthHeaders(),
+      });
+      if (!res.ok) throw new Error("Failed to load badges");
+      return res.json();
+    },
+  });
+
+  if (isLoading) return null;
+  const badges = data ?? [];
+  if (badges.length === 0) return null;
+
+  const visible = badges.slice(0, 8);
+  const more = badges.length - visible.length;
+
+  return (
+    <Card className="p-6">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="font-semibold flex items-center gap-2">
+            <Trophy className="h-4 w-4 text-amber-500" /> Badges
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            {badges.length} earned
+          </p>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {visible.map((b) => (
+          <BadgeCard key={b.key} badge={b} size="sm" showCategory />
+        ))}
+      </div>
+      {more > 0 && (
+        <p className="mt-3 text-xs text-muted-foreground">
+          +{more} more {more === 1 ? "badge" : "badges"}
+        </p>
+      )}
+    </Card>
   );
 }

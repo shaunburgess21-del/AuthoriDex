@@ -24,6 +24,23 @@ export interface UserProfile {
   winRate: number;
   /** AMM open-position visibility (Sprint 1 phase 15.C). Defaults to true. */
   positionsPublic?: boolean;
+  // About Me — see migration 0060_badge_system.sql + 0061_profile_extended.sql.
+  bio?: string | null;
+  dateOfBirth?: string | null;
+  gender?: string | null;
+  countryOfOrigin?: string | null;
+  countryOfResidence?: string | null;
+  ethnicity?: string | null;
+  profileFieldsPublic?: boolean;
+  socialXHandle?: string | null;
+  socialInstagramHandle?: string | null;
+  occupationIndustry?: string | null;
+  socialHandlesPublic?: boolean;
+  occupationPublic?: boolean;
+  // Account tab.
+  recoveryEmail?: string | null;
+  recoveryEmailVerified?: boolean;
+  phoneNumber?: string | null;
   lastActiveAt: string | null;
   tosAcceptedAt: string | null;
   // Phase 1 Interest Picker fields. statedInterests is the user's selected

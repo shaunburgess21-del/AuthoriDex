@@ -106,7 +106,7 @@ import { FDX_SID_COOKIE, readFdxSid } from "./lib/anonIdentity";
 import { consumeBudgetUnit, getBudgetStatus } from "./lib/anonBudget";
 import { anonVoteIpRateLimit } from "./middleware/anonRateLimit";
 import { resolvePublicMatchupBySlugOrId } from "./utils/matchup-resolve";
-import { registerCronRoutes, registerPublicRoutes, registerGamificationRoutes, registerFavoritesRoutes, registerNotificationsRoutes, registerAdminNotificationsRoutes, registerOgRoutes, registerShareRoutes } from "./route-modules";
+import { registerCronRoutes, registerPublicRoutes, registerGamificationRoutes, registerFavoritesRoutes, registerNotificationsRoutes, registerAdminNotificationsRoutes, registerOgRoutes, registerShareRoutes, registerBadgesRoutes } from "./route-modules";
 import { handleAuthHook } from "./emails/routes/auth-hook";
 import { sendEmail } from "./emails/send";
 import { WelcomeEmail, welcomeSubject } from "./emails/templates/lifecycle/Welcome";
@@ -1415,6 +1415,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerPublicRoutes(app);
   registerGamificationRoutes(app);
   registerShareRoutes(app);
+  registerBadgesRoutes(app);
   registerFavoritesRoutes(app);
   registerNotificationsRoutes(app);
   registerAdminNotificationsRoutes(app);
@@ -7440,6 +7441,13 @@ Only return the JSON object.`;
         countryOfResidence,
         ethnicity,
         profileFieldsPublic,
+        recoveryEmail,
+        phoneNumber,
+        socialXHandle,
+        socialInstagramHandle,
+        occupationIndustry,
+        socialHandlesPublic,
+        occupationPublic,
       } = req.body;
 
       // Build update object with only provided fields
@@ -7482,6 +7490,43 @@ Only return the JSON object.`;
       }
       if (typeof profileFieldsPublic === "boolean") {
         updateData.profileFieldsPublic = profileFieldsPublic;
+      }
+      // Recovery email — verified is always reset to false on edit
+      // so a stale verified flag can never survive a value change.
+      // TODO: send verification email when recoveryEmail changes
+      if (recoveryEmail !== undefined) {
+        const next = recoveryEmail === null ? null : String(recoveryEmail).trim() || null;
+        updateData.recoveryEmail = next;
+        updateData.recoveryEmailVerified = false;
+      }
+      if (phoneNumber !== undefined) {
+        updateData.phoneNumber =
+          phoneNumber === null ? null : String(phoneNumber).trim() || null;
+      }
+      // Social handles — strip a single leading '@' if present so
+      // we always store the bare handle. Avoids ambiguity when we
+      // build profile links downstream.
+      const stripAt = (raw: unknown): string | null => {
+        if (raw === null) return null;
+        if (typeof raw !== "string") return null;
+        const trimmed = raw.trim().replace(/^@+/, "");
+        return trimmed.length > 0 ? trimmed : null;
+      };
+      if (socialXHandle !== undefined) {
+        updateData.socialXHandle = stripAt(socialXHandle);
+      }
+      if (socialInstagramHandle !== undefined) {
+        updateData.socialInstagramHandle = stripAt(socialInstagramHandle);
+      }
+      if (occupationIndustry !== undefined) {
+        updateData.occupationIndustry =
+          occupationIndustry === null ? null : String(occupationIndustry).trim() || null;
+      }
+      if (typeof socialHandlesPublic === "boolean") {
+        updateData.socialHandlesPublic = socialHandlesPublic;
+      }
+      if (typeof occupationPublic === "boolean") {
+        updateData.occupationPublic = occupationPublic;
       }
 
       if (Object.keys(updateData).length === 0) {
@@ -7820,6 +7865,7 @@ Only return the JSON object.`;
       // If profile is private, return limited info
       if (!baseProfile.isPublic) {
         return res.json({
+          userId: baseProfile.id,
           username: baseProfile.username,
           avatarUrl: baseProfile.avatarUrl,
           rank: baseProfile.rank,
@@ -7921,6 +7967,7 @@ Only return the JSON object.`;
         Number(betStats?.parimutuelVolume ?? 0) + ammPnl.turnover;
 
       res.json({
+        userId: baseProfile.id,
         username: baseProfile.username,
         avatarUrl: baseProfile.avatarUrl,
         rank: baseProfile.rank,

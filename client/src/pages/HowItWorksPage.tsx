@@ -18,7 +18,6 @@ import {
   CAPABILITY_GATES,
   VOTE_SURFACES,
   PREDICT_SURFACES,
-  PROPOSED_BADGES,
   type KnowledgeTab,
   type KnowledgeTabId,
   type XpActionRow,
@@ -30,6 +29,8 @@ import {
   type CreditActionConfig,
   type CreditCategory,
 } from "@shared/credit-config";
+import { BADGES, type BadgeCategory } from "@shared/badge-config";
+import { cn } from "@/lib/utils";
 
 /**
  * Local tab bar mirroring ProfileTabs visually (muted track, raised active
@@ -754,25 +755,57 @@ function CreditEarnTable({ accent }: { accent: string }) {
   );
 }
 
+type RarityFilter = "ALL" | "COMMON" | "RARE" | "EPIC" | "LEGENDARY";
+
 function BadgesSection() {
-  const accent = accentFor("badges");
+  const [rarityFilter, setRarityFilter] = useState<RarityFilter>("ALL");
+
+  const visibleBadges = useMemo(
+    () =>
+      BADGES.filter((b) => b.visibleOnFrontend && b.isActive).sort(
+        (a, b) => a.sortOrder - b.sortOrder,
+      ),
+    [],
+  );
+
+  const filtered = useMemo(
+    () =>
+      rarityFilter === "ALL"
+        ? visibleBadges
+        : visibleBadges.filter((b) => b.rarity === rarityFilter),
+    [visibleBadges, rarityFilter],
+  );
+
   const grouped = useMemo(() => {
-    const order: ("Action" | "Milestone" | "Special / Event")[] = [
-      "Action",
-      "Milestone",
-      "Special / Event",
+    const order: BadgeCategory[] = [
+      "VOTING",
+      "PREDICTION",
+      "CONTENT",
+      "STREAK",
+      "SOCIAL",
+      "PROFILE",
+      "SPECIAL",
     ];
-    return order.map((category) => ({
-      category,
-      rows: PROPOSED_BADGES.filter((row) => row.category === category),
-    }));
-  }, []);
+    return order
+      .map((category) => ({
+        category,
+        rows: filtered.filter((row) => row.category === category),
+      }))
+      .filter((g) => g.rows.length > 0);
+  }, [filtered]);
 
   const rarityAccent: Record<string, string> = {
-    Common: "#94A3B8",
-    Rare: "#3C83F6",
-    Epic: "#8B5CF6",
-    Legendary: "#F59E0B",
+    COMMON: "#94A3B8",
+    RARE: "#3C83F6",
+    EPIC: "#8B5CF6",
+    LEGENDARY: "#F59E0B",
+  };
+
+  const rarityLabel: Record<string, string> = {
+    COMMON: "Common",
+    RARE: "Rare",
+    EPIC: "Epic",
+    LEGENDARY: "Legendary",
   };
 
   return (
@@ -780,67 +813,69 @@ function BadgesSection() {
       <SectionHeading
         id="badges"
         title="Badges — Achievements & Milestones"
-        subtitle="A separate collection layer that recognises specific accomplishments — distinct from your tier-based Rank."
+        subtitle="A collectible record of what you've done — earned automatically as you vote, predict, comment, and engage. Distinct from your rank, which tracks overall standing."
       />
 
-      <Card
-        className="flex items-start gap-3 p-4"
-        style={{
-          borderColor: `${accent}66`,
-          backgroundColor: `${accent}0F`,
-        }}
-      >
-        <Info className="mt-0.5 h-4 w-4 shrink-0" style={{ color: accent }} />
-        <div className="space-y-1 text-sm">
-          <p className="font-medium" style={{ color: accent }}>
-            Proposal — not yet implemented
-          </p>
-          <p className="text-muted-foreground">
-            The taxonomy below is a working draft for the upcoming badges
-            system. Ranks stay the headline reputation tier; badges sit
-            alongside as a collectible record of <em>what</em> you've done.
-          </p>
-        </div>
-      </Card>
-
       <div className="flex flex-wrap gap-2">
-        {(["Common", "Rare", "Epic", "Legendary"] as const).map((rarity) => (
-          <Badge
-            key={rarity}
-            variant="outline"
-            className="text-[11px]"
-            style={{
-              borderColor: `${rarityAccent[rarity]}66`,
-              color: rarityAccent[rarity],
-            }}
-          >
-            {rarity}
-          </Badge>
-        ))}
+        <Badge
+          variant="outline"
+          onClick={() => setRarityFilter("ALL")}
+          className={cn(
+            "cursor-pointer text-[11px]",
+            rarityFilter === "ALL" && "ring-2 ring-primary",
+          )}
+        >
+          All ({visibleBadges.length})
+        </Badge>
+        {(["COMMON", "RARE", "EPIC", "LEGENDARY"] as const).map((rarity) => {
+          const count = visibleBadges.filter((b) => b.rarity === rarity).length;
+          return (
+            <Badge
+              key={rarity}
+              variant="outline"
+              onClick={() => setRarityFilter(rarity)}
+              className={cn(
+                "cursor-pointer text-[11px]",
+                rarityFilter === rarity && "ring-2 ring-primary",
+              )}
+              style={{
+                borderColor: `${rarityAccent[rarity]}66`,
+                color: rarityAccent[rarity],
+              }}
+            >
+              {rarityLabel[rarity]} ({count})
+            </Badge>
+          );
+        })}
       </div>
 
       {grouped.map(({ category, rows }) => (
         <div key={category} className="space-y-2">
           <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-            {category}
+            {BADGE_CATEGORY_LABELS[category]}
           </h3>
           <div className="grid gap-2 md:grid-cols-2">
             {rows.map((row) => (
-              <Card key={row.name} className="space-y-1.5 p-3">
-                <div className="flex items-center justify-between">
+              <Card key={row.key} className="space-y-1.5 p-3">
+                <div className="flex items-center justify-between gap-2">
                   <div className="font-medium">{row.name}</div>
                   <Badge
                     variant="outline"
-                    className="text-[10px]"
+                    className="text-[10px] shrink-0"
                     style={{
                       borderColor: `${rarityAccent[row.rarity]}66`,
                       color: rarityAccent[row.rarity],
                     }}
                   >
-                    {row.rarity}
+                    {rarityLabel[row.rarity]}
                   </Badge>
                 </div>
-                <p className="text-xs text-muted-foreground">{row.trigger}</p>
+                <p className="text-xs text-muted-foreground">
+                  {row.description}
+                </p>
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground/70">
+                  {BADGE_CATEGORY_LABELS[category]}
+                </p>
               </Card>
             ))}
           </div>
@@ -849,6 +884,16 @@ function BadgesSection() {
     </section>
   );
 }
+
+const BADGE_CATEGORY_LABELS: Record<BadgeCategory, string> = {
+  VOTING: "Voting",
+  PREDICTION: "Prediction",
+  CONTENT: "Content",
+  STREAK: "Streak",
+  SOCIAL: "Social",
+  PROFILE: "Profile",
+  SPECIAL: "Special",
+};
 
 function VoteSection() {
   const accent = accentFor("vote");

@@ -145,19 +145,23 @@ class BadgeService {
         const rarity =
           (cached?.rarity ?? seed?.rarity ?? "COMMON") as string;
         const name = cached?.name ?? seed?.name ?? badgeKey;
+        const description =
+          cached?.description ?? seed?.description ?? "You earned a badge.";
+        const icon = cached?.icon ?? seed?.icon ?? "award";
         await createNotification({
           userId,
           kind: "badge_awarded",
           title: `New badge: ${name}`,
-          body:
-            cached?.description ?? seed?.description ?? "You earned a badge.",
-          href: "/me?tab=badges",
+          body: description,
+          href: "/me/badges",
           entityType: "badge",
           entityId: badgeKey,
           metadata: {
             badgeKey,
             badgeName: name,
             rarity,
+            icon,
+            description,
           },
           idempotencyKey: `badge_awarded:${userId}:${badgeKey}`,
         });

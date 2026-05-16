@@ -78,6 +78,7 @@ const VotesPage = lazyWithRetry(() => import("@/pages/me/VotesPage"));
 const PredictionsPage = lazyWithRetry(() => import("@/pages/me/PredictionsPage"));
 const FavoritesPage = lazyWithRetry(() => import("@/pages/me/FavoritesPage"));
 const SettingsPage = lazyWithRetry(() => import("@/pages/me/SettingsPage"));
+const BadgesPage = lazyWithRetry(() => import("@/pages/me/BadgesPage"));
 const NotificationsArchivePage = lazyWithRetry(() => import("@/pages/me/NotificationsPage"));
 const PublicProfilePage = lazyWithRetry(() => import("@/pages/PublicProfilePage"));
 const AdminDashboard = lazyWithRetry(() => import("@/pages/AdminDashboard"));
@@ -140,6 +141,7 @@ function Router() {
         <Route path="/me/predictions" component={PredictionsPage} />
         <Route path="/me/credits" component={CreditHistoryPage} />
         <Route path="/me/favorites" component={FavoritesPage} />
+        <Route path="/me/badges" component={BadgesPage} />
         <Route path="/me/settings" component={SettingsPage} />
         <Route path="/me/notifications" component={NotificationsArchivePage} />
         <Route path="/u/:username" component={PublicProfilePage} />
