@@ -51,6 +51,32 @@ export function computePrediction(
 
   const sharp = isSharpAgent(agent);
 
+  // Cohort-wide gates derived from the weekly-open delta. Hoisted up here
+  // so every downstream step (prestige bias, contrarian fade, weighted-
+  // random selection) consults the SAME computation instead of each
+  // re-deriving it inline. `pctChangeVsOpen` is only set on binary
+  // up/down per-person markets (see agentRunner getTrendSignals), so on
+  // jackpot / community / pre-Sprint-6 markets both flags stay false and
+  // legacy behaviour is preserved.
+  //
+  //   decisivelyDown    — used to disarm the UP prestige boost the moment
+  //                       a famous person is more than 5% below open.
+  //                       Tighter threshold because "famous person in
+  //                       any noticeable drawdown" is enough to flip the
+  //                       heuristic from helpful to actively wrong.
+  //   decisiveWeeklyMove — used in both directions to skip the cohort
+  //                       splitting / contrarianism mechanics that exist
+  //                       to inject variance on borderline reads. ±15%
+  //                       is well inside the 20% saturation of the new
+  //                       computeSignalBoost so the deterministic top
+  //                       pick is already obviously right by then.
+  const pctVsOpen =
+    signals.pctChangeVsOpen != null && Number.isFinite(signals.pctChangeVsOpen)
+      ? signals.pctChangeVsOpen
+      : null;
+  const decisivelyDown = pctVsOpen != null && pctVsOpen < -0.05;
+  const decisiveWeeklyMove = pctVsOpen != null && Math.abs(pctVsOpen) >= 0.15;
+
   // Step 1: Domain filter
   const marketCategory = market.category?.toLowerCase() ?? "";
   const domainMatch =
@@ -176,11 +202,9 @@ export function computePrediction(
   // pattern (famous people's markets tend to resolve toward the
   // "person continues to exist as the kind of person they are"
   // direction), it just shouldn't dominate when the reality has
-  // already moved decisively the other way.
-  const decisivelyDown =
-    signals.pctChangeVsOpen != null &&
-    Number.isFinite(signals.pctChangeVsOpen) &&
-    signals.pctChangeVsOpen < -0.05;
+  // already moved decisively the other way. `decisivelyDown` is
+  // hoisted to the top of the function so every guard reads the same
+  // value.
   if (
     signals.scoreBaseline > 6500 &&
     agent.prestigeBias > 0.6 &&
@@ -203,7 +227,22 @@ export function computePrediction(
   });
 
   // Step 3d: Contrarianism adjustment
-  if (agent.contrarianism > 0.5 && Object.keys(crowd).length > 0) {
+  //
+  // Contrarianism exists to keep the cohort from groupthink on
+  // BORDERLINE reads — a "many humans bet Down on Theo Von, agents
+  // should add some Up to balance the book" mechanic. On a decisively-
+  // trending weekly market it stops being a balance and starts being
+  // noise that fights the model: if humans rightly pile DOWN on a
+  // person who is -30% from open, contrarian agents fading DOWN are
+  // just pushing the price back to 50/50 against reality. Skip when
+  // `decisiveWeeklyMove` (same threshold as the weighted-random skip
+  // below — they're two sides of the same "honour the obvious read"
+  // rule).
+  if (
+    agent.contrarianism > 0.5 &&
+    !decisiveWeeklyMove &&
+    Object.keys(crowd).length > 0
+  ) {
     const crowdEntries = Object.entries(crowd).sort((a, b) => b[1] - a[1]);
     if (crowdEntries.length > 0) {
       const [dominantId, dominantShare] = crowdEntries[0];
@@ -262,20 +301,13 @@ export function computePrediction(
 
   const isBinaryUpDown = !isH2H && !isMultiCommunity && n === 2;
   // Skip the weighted-random side split when the weekly-open delta is
-  // decisive (|move| >= 15%). The split exists to prevent the standard
-  // cohort from piling onto the same low-conviction side on borderline
-  // reads (Theo Von 2026-05-01) — but on a market where the person has
-  // already moved ±15%+ from open the deterministic top pick IS the
-  // correct read, and randomizing fights reality. Sharps were already
-  // exempt from the split; this just extends the exemption to standard
-  // agents when the market itself is no longer borderline. 15% is well
-  // inside the 20% saturation of the new pctChangeVsOpen boost (so the
-  // score gap should already be wide enough for the deterministic pick
-  // to be obviously right), and well above ordinary mid-week noise.
-  const decisiveWeeklyMove =
-    signals.pctChangeVsOpen != null &&
-    Number.isFinite(signals.pctChangeVsOpen) &&
-    Math.abs(signals.pctChangeVsOpen) >= 0.15;
+  // decisive (|move| >= 15%, see `decisiveWeeklyMove` at top). The split
+  // exists to prevent the standard cohort from piling onto the same
+  // low-conviction side on borderline reads (Theo Von 2026-05-01) — but
+  // on a market where the person has already moved ±15%+ from open the
+  // deterministic top pick IS the correct read, and randomizing fights
+  // reality. Sharps were already exempt; this just extends the exemption
+  // to standard agents when the market itself is no longer borderline.
   const useWeightedUpDown =
     isBinaryUpDown && !sharp && sorted[0][1] < 0.65 && !decisiveWeeklyMove;
 
