@@ -24373,23 +24373,27 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         );
       } else {
         // Bonus XP — non-blocking; failure does not fail the approval.
+        // Market suggestions (`open_market`) earn the larger
+        // `market_suggestion_approved` action so the XP side mirrors
+        // the credits side (which already branches below). Everything
+        // else uses the generic `suggestion_approved` row.
+        const isMarketSuggestion = suggestion.type === "open_market";
         try {
           await gamificationService.awardXp(
             suggestion.submittedBy,
-            "suggestion_approved",
-            `suggestion_approved_${suggestion.id}`,
+            isMarketSuggestion ? "market_suggestion_approved" : "suggestion_approved",
+            isMarketSuggestion
+              ? `xp_market_suggestion_approved_${suggestion.id}`
+              : `suggestion_approved_${suggestion.id}`,
             { suggestionType: suggestion.type, approvedAsId }
           );
         } catch (xpErr) {
           console.error("XP award failed for suggestion approval:", xpErr);
         }
-        // Market suggestions (world-event predictions, type
-        // `open_market` per server/services/suggestionApproval.ts)
-        // earn the larger `market_suggestion_approved` reward;
-        // everything else falls into the generic content suggestion
-        // bucket (matchup, sentiment_poll, opinion_poll, induction,
-        // profile_image).
-        if (suggestion.type === "open_market") {
+        // Credit side already branches on type — keep the existing
+        // behaviour. `awardMarketSuggestionApprovedCredits` writes
+        // +100 cr; `awardSuggestionApprovedCredits` writes +50 cr.
+        if (isMarketSuggestion) {
           await awardMarketSuggestionApprovedCredits(
             suggestion.submittedBy,
             String(approvedAsId ?? suggestion.id),

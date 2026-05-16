@@ -895,8 +895,24 @@ const BADGE_CATEGORY_LABELS: Record<BadgeCategory, string> = {
   SPECIAL: "Special",
 };
 
-function VoteSection() {
+function VoteSection({
+  onJumpToTab,
+}: {
+  onJumpToTab: (tab: KnowledgeTabId) => void;
+}) {
   const accent = accentFor("vote");
+  // Live values from the canonical configs so a future seed change
+  // (XP rebalance, vote_any credit bump) flows through automatically.
+  const voteCreditAction = CREDIT_ACTIONS.find((a) => a.key === "vote_any");
+  const submitSuggestionXp = XP_ACTIONS.find(
+    (a) => a.actionKey === "submit_suggestion",
+  );
+  const suggestionApprovedXp = XP_ACTIONS.find(
+    (a) => a.actionKey === "suggestion_approved",
+  );
+  const suggestionApprovedCredits = CREDIT_ACTIONS.find(
+    (a) => a.key === "suggestion_approved",
+  );
   return (
     <section className="space-y-6">
       <SectionHeading
@@ -904,6 +920,26 @@ function VoteSection() {
         title="Vote — Shape the Conversation"
         subtitle="Voting is the most XP-rewarded surface on VoxDex. Every vote is recorded and contributes to leaderboard signal."
       />
+
+      <p className="text-xs text-muted-foreground -mt-3">
+        Every vote earns XP and Credits — see the{" "}
+        <button
+          type="button"
+          onClick={() => onJumpToTab("xp")}
+          className="underline-offset-2 hover:underline text-foreground/80"
+        >
+          XP tab
+        </button>{" "}
+        and{" "}
+        <button
+          type="button"
+          onClick={() => onJumpToTab("credits")}
+          className="underline-offset-2 hover:underline text-foreground/80"
+        >
+          Credits tab
+        </button>{" "}
+        for full earn rates and daily limits.
+      </p>
 
       <Card className="space-y-3 p-4">
         <h3 className="font-semibold">Vote surfaces</h3>
@@ -915,6 +951,7 @@ function VoteSection() {
                 <th className="px-3 py-2 font-medium">Where</th>
                 <th className="px-3 py-2 font-medium text-right">XP</th>
                 <th className="px-3 py-2 font-medium text-right">Cap</th>
+                <th className="px-3 py-2 font-medium text-right">Credits</th>
               </tr>
             </thead>
             <tbody>
@@ -937,12 +974,36 @@ function VoteSection() {
                     <td className="px-3 py-2 text-right text-muted-foreground">
                       {formatCap(xp?.dailyCap ?? null)}
                     </td>
+                    <td className="px-3 py-2 text-right">
+                      <span className="font-mono font-semibold text-violet-500 dark:text-violet-300">
+                        +{voteCreditAction?.proposedCredits ?? 2} cr
+                      </span>
+                    </td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
         </div>
+        <p className="text-xs text-muted-foreground">
+          Credit cap is shared across all vote types — max{" "}
+          {voteCreditAction?.dailyCap ?? 10} votes earn Credits per day.
+        </p>
+      </Card>
+
+      <Card className="flex items-start gap-3 p-4">
+        <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+        <p className="text-sm text-muted-foreground">
+          Induction and Image Curation votes require{" "}
+          <button
+            type="button"
+            onClick={() => onJumpToTab("ranks")}
+            className="underline-offset-2 hover:underline text-foreground/80"
+          >
+            Aspirant rank
+          </button>{" "}
+          (Tier 2 — 500 XP) or above. Reach Aspirant to unlock these surfaces.
+        </p>
       </Card>
 
       <Card className="space-y-3 p-4">
@@ -951,26 +1012,90 @@ function VoteSection() {
           Submit matchups, sentiment polls, opinion polls, induction
           candidates, or profile images for admin review. You earn{" "}
           <span className="font-mono" style={{ color: accent }}>
-            +5 XP
+            +{submitSuggestionXp?.xpValue ?? 5} XP
           </span>{" "}
-          for the submission (capped at 3 / day) and a{" "}
+          for the submission (capped at {submitSuggestionXp?.dailyCap ?? 3} /
+          day) and a{" "}
           <span className="font-mono" style={{ color: accent }}>
-            +50 XP
+            +{suggestionApprovedXp?.xpValue ?? 50} XP
           </span>{" "}
-          bonus when it's approved and goes live.
+          bonus when it&apos;s approved and goes live.
         </p>
         <p className="text-xs text-muted-foreground">
-          Approval-gating is what protects against suggestion spam — only
-          quality submissions earn the bonus, and Credits will follow the same
-          rule once that earn path ships.
+          Approval-gating protects against suggestion spam — only quality
+          submissions earn the bonus. Approved vote suggestions also earn{" "}
+          <span className="font-mono text-violet-500 dark:text-violet-300">
+            +{suggestionApprovedCredits?.proposedCredits ?? 50} Credits
+          </span>{" "}
+          with no daily cap.
         </p>
+      </Card>
+
+      <Card className="space-y-2 p-4">
+        <h3 className="font-semibold">Voting Badges</h3>
+        <p className="text-sm text-muted-foreground">
+          Cast votes to unlock 10 voting badges — from First Vote to Legend
+          of the Ballot (10,000 votes). Rarer badges track your consistency
+          across different vote types.
+        </p>
+        <button
+          type="button"
+          onClick={() => onJumpToTab("badges")}
+          className="text-xs font-medium underline-offset-2 hover:underline"
+          style={{ color: accent }}
+          data-testid="link-vote-badges"
+        >
+          See all voting badges →
+        </button>
       </Card>
     </section>
   );
 }
 
-function PredictSection() {
+function PredictSection({
+  onJumpToTab,
+}: {
+  onJumpToTab: (tab: KnowledgeTabId) => void;
+}) {
   const accent = accentFor("predict");
+  // Live values from the catalogue. predictionWinXp drives the "+100 XP"
+  // bullet copy below so a future rebalance flows through automatically.
+  const predictionWinXp = XP_ACTIONS.find(
+    (a) => a.actionKey === "prediction_win",
+  );
+  // Credit reads for the surface-level Credits column. We hardcode
+  // the row→action mapping (not data-driven from PREDICT_SURFACES)
+  // because place_prediction has no credit row by design — it costs
+  // credits, doesn't earn them.
+  const marketSuggestionCredits = CREDIT_ACTIONS.find(
+    (a) => a.key === "market_suggestion_approved",
+  );
+
+  /** Per-row credit cell. Returns either an earn pill, a "—" with
+   *  helper text, or a payout label depending on the row. */
+  const creditCellFor = (xpActionKey: string): JSX.Element => {
+    if (xpActionKey === "place_prediction") {
+      return (
+        <span className="text-xs text-muted-foreground">Costs Credits to stake</span>
+      );
+    }
+    if (xpActionKey === "prediction_win") {
+      return (
+        <span className="text-xs font-medium text-violet-500 dark:text-violet-300">
+          Payout returned
+        </span>
+      );
+    }
+    if (xpActionKey === "market_suggestion_approved") {
+      return (
+        <span className="font-mono font-semibold text-violet-500 dark:text-violet-300">
+          +{marketSuggestionCredits?.proposedCredits ?? 100} cr
+        </span>
+      );
+    }
+    return <span className="text-muted-foreground">—</span>;
+  };
+
   return (
     <section className="space-y-6">
       <SectionHeading
@@ -979,12 +1104,27 @@ function PredictSection() {
         subtitle="Spend Credits to predict outcomes. Win Credits + bonus XP when you're right."
       />
 
+      <p className="text-xs text-muted-foreground -mt-3">
+        Credits power every prediction — see the{" "}
+        <button
+          type="button"
+          onClick={() => onJumpToTab("credits")}
+          className="underline-offset-2 hover:underline text-foreground/80"
+        >
+          Credits tab
+        </button>{" "}
+        for earn rates, signup grants, and purchase options.
+      </p>
+
       <Card className="space-y-3 p-4">
         <h3 className="font-semibold">How prediction markets work</h3>
         <ul className="space-y-2 text-sm text-muted-foreground">
           <li>
-            Every market has a live price for each outcome. The price moves
-            as people back either side — buying pushes that side up.
+            Markets come in two forms: pool markets where payouts are shared
+            among winners at settlement, and live-price markets where odds
+            shift in real time as predictions are placed. Both work the same
+            way — pick your outcome, stake your Credits, and wait for the
+            result.
           </li>
           <li>
             Your stake is debited from your Credits balance the moment you
@@ -994,7 +1134,7 @@ function PredictSection() {
             When the market resolves, the resolver settles winning positions —
             payout returns Credits to your balance and awards{" "}
             <span className="font-mono" style={{ color: accent }}>
-              +100 XP
+              +{predictionWinXp?.xpValue ?? 100} XP
             </span>{" "}
             for the win.
           </li>
@@ -1010,6 +1150,8 @@ function PredictSection() {
                 <th className="px-3 py-2 font-medium">Surface</th>
                 <th className="px-3 py-2 font-medium">Where</th>
                 <th className="px-3 py-2 font-medium text-right">XP</th>
+                <th className="px-3 py-2 font-medium text-right">Cap</th>
+                <th className="px-3 py-2 font-medium text-right">Credits</th>
               </tr>
             </thead>
             <tbody>
@@ -1036,6 +1178,12 @@ function PredictSection() {
                         +{xp?.xpValue ?? 0}
                       </span>
                     </td>
+                    <td className="px-3 py-2 text-right text-muted-foreground">
+                      {formatCap(xp?.dailyCap ?? null)}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      {creditCellFor(row.xpActionKey)}
+                    </td>
                   </tr>
                 );
               })}
@@ -1047,10 +1195,62 @@ function PredictSection() {
       <Card className="flex items-start gap-3 p-4">
         <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
         <p className="text-sm text-muted-foreground">
-          World / open markets carry the most editorial weight on VoxDex. When
-          your suggested world market is approved and published, you'll earn
-          XP today and (once shipped) Credits as well.
+          When your suggested world market is approved and published,
+          you&apos;ll earn{" "}
+          <span className="font-mono" style={{ color: accent }}>
+            +100 XP
+          </span>{" "}
+          and{" "}
+          <span className="font-mono text-violet-500 dark:text-violet-300">
+            +{marketSuggestionCredits?.proposedCredits ?? 100} Credits
+          </span>{" "}
+          when your market goes live. World markets carry the most editorial
+          weight on VoxDex — only the best suggestions make it through.
         </p>
+      </Card>
+
+      <Card className="flex items-start gap-3 p-4">
+        <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <p className="text-sm text-muted-foreground">
+              Advanced prediction markets unlock at{" "}
+              <button
+                type="button"
+                onClick={() => onJumpToTab("ranks")}
+                className="underline-offset-2 hover:underline text-foreground/80"
+              >
+                Analyst rank
+              </button>{" "}
+              (Tier 4 — 15,000 XP). Higher-stakes markets are reserved for
+              credentialed predictors.
+            </p>
+          </div>
+          <Badge
+            variant="outline"
+            className="text-[10px] border-amber-500/40 text-amber-600 dark:text-amber-300"
+          >
+            Coming soon
+          </Badge>
+        </div>
+      </Card>
+
+      <Card className="space-y-2 p-4">
+        <h3 className="font-semibold">Prediction Badges</h3>
+        <p className="text-sm text-muted-foreground">
+          Win predictions to unlock 7 prediction badges — from First Win to
+          Oracle (70%+ win rate across 50+ predictions). Consistent
+          forecasters unlock the rarest tiers.
+        </p>
+        <button
+          type="button"
+          onClick={() => onJumpToTab("badges")}
+          className="text-xs font-medium underline-offset-2 hover:underline"
+          style={{ color: accent }}
+          data-testid="link-predict-badges"
+        >
+          See all prediction badges →
+        </button>
       </Card>
     </section>
   );
@@ -1065,8 +1265,8 @@ const SECTION_BY_TAB: Record<KnowledgeTabId, SectionRenderer> = {
   ranks: () => <RanksSection />,
   credits: () => <CreditsSection />,
   badges: () => <BadgesSection />,
-  vote: () => <VoteSection />,
-  predict: () => <PredictSection />,
+  vote: ({ onJumpToTab }) => <VoteSection onJumpToTab={onJumpToTab} />,
+  predict: ({ onJumpToTab }) => <PredictSection onJumpToTab={onJumpToTab} />,
 };
 
 export default function HowItWorksPage() {

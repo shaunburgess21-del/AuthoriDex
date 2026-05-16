@@ -46,6 +46,10 @@ async function seedXpActions() {
     { actionKey: 'post_comment', displayName: 'Post Comment', xpValue: 15, dailyCap: 10, description: 'Comment on an insight (min 20 chars, not on own insight, cap 10/day)' },
     { actionKey: 'submit_suggestion', displayName: 'Submit Suggestion', xpValue: 5, dailyCap: 3, description: 'Earn XP for submitting content suggestions for admin review' },
     { actionKey: 'suggestion_approved', displayName: 'Suggestion Approved', xpValue: 50, dailyCap: null, description: 'Bonus XP when your suggested content is approved and goes live' },
+    // Market suggestions (type === "open_market") carry more
+    // editorial weight — distinct row so the bonus tracks the +100
+    // credit award and the catalogue can show the difference.
+    { actionKey: 'market_suggestion_approved', displayName: 'Market Suggestion Approved', xpValue: 100, dailyCap: null, description: 'Bonus when a suggested world/open market is approved and published' },
 
     // Engagement Actions. downvote_insight was retired in this
     // pass — see DEPRECATED_ACTION_KEYS below for the deactivation

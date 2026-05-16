@@ -78,6 +78,7 @@ export const XP_ACTIONS: XpActionRow[] = [
   { actionKey: "post_comment", displayName: "Post Comment", xpValue: 15, dailyCap: 10, description: "Comment on an insight (min 20 chars, not on own insight)", category: "Content" },
   { actionKey: "submit_suggestion", displayName: "Submit Suggestion", xpValue: 5, dailyCap: 3, description: "Submit content suggestions for admin review", category: "Content" },
   { actionKey: "suggestion_approved", displayName: "Suggestion Approved", xpValue: 50, dailyCap: null, description: "Bonus when a suggestion is approved and goes live", category: "Content" },
+  { actionKey: "market_suggestion_approved", displayName: "Market Suggestion Approved", xpValue: 100, dailyCap: null, description: "Bonus when a suggested world/open market is approved and published", category: "Content" },
 
   { actionKey: "upvote_insight", displayName: "Upvote Insight", xpValue: 5, dailyCap: 10, description: "Upvote a community insight or comment", category: "Engagement" },
   { actionKey: "insight_upvoted", displayName: "Insight Upvoted", xpValue: 20, dailyCap: 10, description: "Earned when your insight or comment receives an upvote from another VoxMaxer", category: "Engagement" },
@@ -191,10 +192,10 @@ export interface PredictSurfaceRow {
 }
 
 export const PREDICT_SURFACES: PredictSurfaceRow[] = [
-  { surface: "Place a prediction (any market)", where: "/predict and per-market detail pages", xpActionKey: "place_prediction", notes: "Costs Credits (the stake)." },
-  { surface: "Prediction settles in your favour", where: "Awarded automatically by the market resolver", xpActionKey: "prediction_win", notes: "Winning shares pay 1 credit each back to your balance." },
-  { surface: "Suggest a world / open market", where: "/predict → suggest, then admin review", xpActionKey: "submit_suggestion" },
-  { surface: "Your market suggestion is approved", where: "Bonus when admins publish your suggested market", xpActionKey: "suggestion_approved" },
+  { surface: "Place a prediction (any market)", where: "/predict and per-market detail pages", xpActionKey: "place_prediction", notes: "Costs Credits to stake" },
+  { surface: "Prediction settles in your favour", where: "Awarded automatically by the market resolver", xpActionKey: "prediction_win", notes: "Winning stake + share of pool returned to balance" },
+  { surface: "Suggest a world / open market", where: "/predict → suggest, then admin review", xpActionKey: "submit_suggestion", notes: "Admin-reviewed before publish" },
+  { surface: "Your market suggestion is approved", where: "Bonus when admins publish your suggested market", xpActionKey: "market_suggestion_approved", notes: "+100 Credits paid alongside" },
 ];
 
 /**
