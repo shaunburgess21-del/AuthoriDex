@@ -1,6 +1,7 @@
 import type { Express, Request } from "express";
 import crypto from "crypto";
 import { and, eq, gte, isNotNull, isNull, sql } from "drizzle-orm";
+import rateLimit from "express-rate-limit";
 import { db } from "../db";
 import { profiles, shareClicks, creditLedger } from "@shared/schema";
 import { gamificationService } from "../services/gamification";
@@ -29,19 +30,37 @@ const INTERNAL_HOSTS = [
   "127.0.0.1",
 ];
 
-function isInternalReferrer(referer: string | null): boolean {
-  if (!referer) return false;
+/**
+ * Strict external-referer check. Returns true ONLY when the header
+ * is present, parseable as a URL, and the host is not one of our
+ * own properties (or a subdomain thereof).
+ *
+ * Inverted vs. the prior `isInternalReferrer` helper: missing or
+ * malformed Referer headers used to fall through to the credit
+ * path because the policy was "reject if internal" and `null`
+ * doesn't match any internal host. That let unauthenticated
+ * scripts farm credits by simply omitting the header (or sending
+ * `referrerPolicy: "no-referrer"`). The credit-side daily cap of
+ * 3/day was the only line of defence — trivial to clear from a
+ * botnet rotating IPs.
+ *
+ * Now: the credit path requires a *positive* attribution to an
+ * external origin. Every other shape (no header, "" header, junk
+ * URL, our own host) drops to credited=false.
+ */
+function isExternalReferrer(referer: string | null | undefined): boolean {
+  if (typeof referer !== "string" || referer.length === 0) return false;
+  let host: string;
   try {
-    const host = new URL(referer).hostname.toLowerCase();
-    return INTERNAL_HOSTS.some(
-      (internal) => host === internal || host.endsWith(`.${internal}`),
-    );
+    host = new URL(referer).hostname.toLowerCase();
   } catch {
-    // Malformed Referer header — treat as external; the credit
-    // award is daily-capped + dedup-keyed, so a bad actor can't
-    // farm credits by injecting garbage values.
     return false;
   }
+  if (!host) return false;
+  const isInternal = INTERNAL_HOSTS.some(
+    (internal) => host === internal || host.endsWith(`.${internal}`),
+  );
+  return !isInternal;
 }
 
 function hashIp(rawIp: string): string {
@@ -60,24 +79,60 @@ function utcDateString(d: Date = new Date()): string {
   return d.toISOString().split("T")[0];
 }
 
+// Per-IP rate limit on the public track-click endpoint. The
+// share_click credit row is daily-capped at 3/day per sharer, but
+// that cap protects the *credit ledger*, not the share_clicks
+// analytics table — without an IP cap a botnet can write millions
+// of credited=false rows and bloat analytics. 60/hr/IP is plenty
+// for any legitimate sharer-driven traffic spike.
+const trackClickLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 60,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  // Match the same client-IP extraction used inside the handler so
+  // a single forwarded peer is rate-limited consistently regardless
+  // of where the limiter sits in the middleware stack.
+  keyGenerator: (req) => {
+    const xff = req.headers["x-forwarded-for"];
+    if (typeof xff === "string" && xff.length > 0) {
+      return xff.split(",")[0]!.trim();
+    }
+    return req.ip ?? "unknown";
+  },
+});
+
+// Length caps. The DB columns are unbounded text; without these
+// caps an attacker can stuff arbitrary payloads into
+// share_clicks.share_url / share_surface (which then fan out to
+// the credit_ledger metadata blob). The numbers below match what
+// the legitimate client surfaces actually emit:
+//   surface — short keys like "leaderboard_card", "predict_market"
+//   shareUrl — full app URLs incl. ?ref query strings
+const MAX_SURFACE_LEN = 50;
+const MAX_SHARE_URL_LEN = 2048;
+
 export function registerShareRoutes(app: Express): void {
   // POST /api/share/track-click — records an external click on a
   // tracked share link and (when valid + uncapped) awards
   // share_click credits to the sharer.
   //
   // Validation order:
-  //   1. sharerUserId exists in profiles (silently 200 with
+  //   1. Per-IP rate limit (60/hr) via trackClickLimiter middleware
+  //   2. Body shape + length caps on surface / shareUrl
+  //   3. sharerUserId exists in profiles (silently 200 with
   //      credited=false if not — the link could legitimately
   //      outlive the account)
-  //   2. Referer is external (else 200 credited=false; this is the
-  //      noisy case — a user clicking their own link inside the app)
-  //   3. Dedup against (sharerUserId, ipHash, utcDate) — same
+  //   4. Referer is external (parseable, present, not one of our
+  //      hosts). Missing / malformed / internal still inserts the
+  //      analytics row but skips the credit award.
+  //   5. Dedup against (sharerUserId, ipHash, utcDate) — same
   //      household refreshing doesn't farm credits
   //
   // The credit award itself respects the daily cap configured on
   // the credit_actions row (default 3/day), so even a successful
   // dedup-pass can no-op once the user hits the cap.
-  app.post("/api/share/track-click", async (req, res) => {
+  app.post("/api/share/track-click", trackClickLimiter, async (req, res) => {
     try {
       const { sharerUserId, surface, shareUrl } = req.body ?? {};
 
@@ -92,6 +147,13 @@ export function registerShareRoutes(app: Express): void {
         return res.status(400).json({ error: "Missing required fields" });
       }
 
+      if (surface.length > MAX_SURFACE_LEN) {
+        return res.status(400).json({ error: "surface_too_long" });
+      }
+      if (shareUrl.length > MAX_SHARE_URL_LEN) {
+        return res.status(400).json({ error: "share_url_too_long" });
+      }
+
       // 1) Profile existence guard. We never reveal whether a
       // userId exists via the response shape — silent no-op keeps
       // the endpoint useless for user-enumeration probes.
@@ -104,19 +166,21 @@ export function registerShareRoutes(app: Express): void {
         return res.json({ credited: false, creditsAwarded: 0 });
       }
 
-      // 2) Referer guard. The whole point of share_click is to
-      // reward *external* arrivals; an in-app click is just
-      // navigation noise.
+      // 2) Referer guard. The credit path requires a positive
+      // attribution to an external origin — missing, malformed, or
+      // internal Referer headers all drop to credit-ineligible.
+      // The analytics row is still written below so funnel reporting
+      // sees the click; only the credit award is suppressed.
       const refererHeader =
         (req.headers["referer"] as string | undefined) ??
         (req.headers["referrer"] as string | undefined) ??
         null;
-      if (isInternalReferrer(refererHeader ?? null)) {
-        return res.json({ credited: false, creditsAwarded: 0 });
-      }
+      const creditEligible = isExternalReferrer(refererHeader);
 
       // 3) Dedup by (sharer, ipHash, utcDate). Same household
-      // refreshing the link doesn't farm credits.
+      // refreshing the link doesn't farm credits. Dedup-hit still
+      // exits early because we already have an analytics row for
+      // this (sharer, ip, day) — no value in inserting another.
       const ipHash = hashIp(clientIp(req));
       const utcToday = utcDateString();
       const utcStart = new Date(`${utcToday}T00:00:00.000Z`);
@@ -180,40 +244,44 @@ export function registerShareRoutes(app: Express): void {
         throw insertErr;
       }
 
-      // Credit award is best-effort. If it fails (cap, duplicate,
-      // inactive action) we keep the share_clicks row — the admin
-      // tab uses these for funnel analytics regardless of credit.
+      // Credit award is gated on `creditEligible` (positive external
+      // Referer) and is otherwise best-effort. If adjustCredits fails
+      // (cap, duplicate, inactive action) we keep the share_clicks
+      // row — the admin tab uses these for funnel analytics
+      // regardless of credit.
       let creditsAwarded = 0;
       let credited = false;
-      try {
-        const result = await gamificationService.adjustCredits(
-          sharerUserId,
-          "share_click",
-          idempotencyKey,
-          { metadata: { surface, shareUrl, shareClickId: inserted?.id } },
-        );
-        if (result.awarded) {
-          creditsAwarded = result.amount;
-          credited = true;
-          await db
-            .update(shareClicks)
-            .set({ credited: true })
-            .where(eq(shareClicks.id, inserted!.id));
+      if (creditEligible) {
+        try {
+          const result = await gamificationService.adjustCredits(
+            sharerUserId,
+            "share_click",
+            idempotencyKey,
+            { metadata: { surface, shareUrl, shareClickId: inserted?.id } },
+          );
+          if (result.awarded) {
+            creditsAwarded = result.amount;
+            credited = true;
+            await db
+              .update(shareClicks)
+              .set({ credited: true })
+              .where(eq(shareClicks.id, inserted!.id));
 
-          // Share Master badge — fires on the first credited click
-          // for this user. The badge service guards idempotency so
-          // subsequent credited clicks are no-ops.
-          try {
-            await checkAndAwardShareMasterBadge(sharerUserId);
-          } catch (badgeErr) {
-            console.warn(
-              "[share-track-click] share_master badge check failed",
-              badgeErr,
-            );
+            // Share Master badge — fires on the first credited click
+            // for this user. The badge service guards idempotency so
+            // subsequent credited clicks are no-ops.
+            try {
+              await checkAndAwardShareMasterBadge(sharerUserId);
+            } catch (badgeErr) {
+              console.warn(
+                "[share-track-click] share_master badge check failed",
+                badgeErr,
+              );
+            }
           }
+        } catch (err) {
+          console.error("[share-track-click] credit award failed", err);
         }
-      } catch (err) {
-        console.error("[share-track-click] credit award failed", err);
       }
 
       return res.json({ credited, creditsAwarded });
