@@ -608,7 +608,21 @@ async function runAgentBatchOnce(): Promise<{
         decision = await computeWorldMarketPrediction(agentData, marketData, entries);
       } else {
         const sharpFetch = getSimulationProfile(agent.simulationProfile).personaBand === "sharp";
-        const signals = await getTrendSignals(market.personId, { includeMultiWindow: sharpFetch });
+        // Pull the per-market opening score out of metadata so the deterministic
+        // engine can read `signals.pctChangeVsOpen`. Only meaningful on binary
+        // up/down per-person markets — metadata.openingScore lives at the
+        // market level, not per entry. H2H / gainer per-entry signals below
+        // intentionally do NOT receive openingScore (no per-entry baseline
+        // exists in the current schema; revisit in a later sprint).
+        const meta = market.metadata as Record<string, any> | null;
+        const openingScore =
+          typeof meta?.openingScore?.score === "number"
+            ? (meta.openingScore.score as number)
+            : null;
+        const signals = await getTrendSignals(market.personId, {
+          includeMultiWindow: sharpFetch,
+          openingScore,
+        });
         const crowd = computeCrowdSplit(entries);
 
         let entrySignals: Map<string, TrendSignals> | undefined;
@@ -1177,7 +1191,7 @@ function toAgentData(row: typeof agentConfigs.$inferSelect): AgentConfigData {
 
 async function getTrendSignals(
   personId: string | null,
-  options: { includeMultiWindow?: boolean } = {},
+  options: { includeMultiWindow?: boolean; openingScore?: number | null } = {},
 ): Promise<TrendSignals> {
   if (!personId) {
     return {
@@ -1237,6 +1251,19 @@ async function getTrendSignals(
     wikiPulse,
     newsLevel,
   };
+
+  // Weekly-open delta — only meaningful when the caller has a market
+  // context (Up/Down per-person markets carry `metadata.openingScore`).
+  // Guard against a zero/missing baseline so we never emit NaN/Infinity:
+  // an opening score of 0 would mean the person was unranked at open,
+  // in which case "% change vs open" isn't a coherent quantity.
+  if (
+    options.openingScore != null &&
+    Number.isFinite(options.openingScore) &&
+    options.openingScore > 0
+  ) {
+    result.pctChangeVsOpen = (fameIndex - options.openingScore) / options.openingScore;
+  }
 
   // Multi-window momentum for sharps. Two extra ranged queries — kept off
   // the hot path for non-sharp evaluations because it would otherwise add

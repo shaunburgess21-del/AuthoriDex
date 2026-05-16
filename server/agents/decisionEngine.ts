@@ -159,8 +159,33 @@ export function computePrediction(
     }
   }
 
-  // Step 3b: Prestige bias — favour positive outcomes for high-baseline figures
-  if (signals.scoreBaseline > 6500 && agent.prestigeBias > 0.6) {
+  // Step 3b: Prestige bias — favour positive outcomes for high-baseline figures.
+  //
+  // Guard: skip when the person is in clear weekly drawdown vs THIS
+  // market's opening score (`pctChangeVsOpen < -0.05`). The old version
+  // gated only on raw fame (`scoreBaseline > 6500`), which is a live
+  // measure — a celebrity who has tanked 37% from their weekly open
+  // still trivially clears it, and the UP-direction prestige boost then
+  // actively fights the reality of the market resolving DOWN. This was
+  // the second-biggest contributor to the "Putin/Vinicius/Magyar
+  // 50/50 on −30% markets" mispricing (after the saturated 7d momentum
+  // signal, now superseded by `pctChangeVsOpen` in computeSignalBoost).
+  //
+  // We only KILL prestige in the down direction. A celeb who is flat
+  // or up vs open still benefits — the heuristic captures a real
+  // pattern (famous people's markets tend to resolve toward the
+  // "person continues to exist as the kind of person they are"
+  // direction), it just shouldn't dominate when the reality has
+  // already moved decisively the other way.
+  const decisivelyDown =
+    signals.pctChangeVsOpen != null &&
+    Number.isFinite(signals.pctChangeVsOpen) &&
+    signals.pctChangeVsOpen < -0.05;
+  if (
+    signals.scoreBaseline > 6500 &&
+    agent.prestigeBias > 0.6 &&
+    !decisivelyDown
+  ) {
     const prestigeBoost = (agent.prestigeBias - 0.5) * 0.12;
     entries.forEach((entry) => {
       const label = (entry.label ?? "").toLowerCase();
@@ -236,7 +261,23 @@ export function computePrediction(
     n >= 3;
 
   const isBinaryUpDown = !isH2H && !isMultiCommunity && n === 2;
-  const useWeightedUpDown = isBinaryUpDown && !sharp && sorted[0][1] < 0.65;
+  // Skip the weighted-random side split when the weekly-open delta is
+  // decisive (|move| >= 15%). The split exists to prevent the standard
+  // cohort from piling onto the same low-conviction side on borderline
+  // reads (Theo Von 2026-05-01) — but on a market where the person has
+  // already moved ±15%+ from open the deterministic top pick IS the
+  // correct read, and randomizing fights reality. Sharps were already
+  // exempt from the split; this just extends the exemption to standard
+  // agents when the market itself is no longer borderline. 15% is well
+  // inside the 20% saturation of the new pctChangeVsOpen boost (so the
+  // score gap should already be wide enough for the deterministic pick
+  // to be obviously right), and well above ordinary mid-week noise.
+  const decisiveWeeklyMove =
+    signals.pctChangeVsOpen != null &&
+    Number.isFinite(signals.pctChangeVsOpen) &&
+    Math.abs(signals.pctChangeVsOpen) >= 0.15;
+  const useWeightedUpDown =
+    isBinaryUpDown && !sharp && sorted[0][1] < 0.65 && !decisiveWeeklyMove;
 
   if (isMultiCommunity) {
     const candidates = sorted.slice(0, Math.min(3, n));
@@ -338,12 +379,28 @@ function computeSignalBoost(
   if (signals.newsLevel === "red") boost += 0.07 * agent.recencyWeight;
   if (signals.newsLevel === "green") boost -= 0.04 * agent.recencyWeight;
 
-  // 7-day score delta as momentum signal
-  const normalizedDelta = Math.max(
-    -1,
-    Math.min(1, signals.scoreDelta7d / 15)
-  );
-  boost += normalizedDelta * 0.1 * agent.recencyWeight;
+  // Primary directional read for binary up/down markets: move since
+  // THIS market opened (Monday → Friday for weekly cards). Saturates at
+  // ±20% with a strong 0.18 coefficient — a person who is −20% below
+  // their weekly open will push DOWN entries up by ~0.18 (and UP entries
+  // down by the same amount), which on a 0.50 base gives ~0.68/0.32 —
+  // enough to clear the existing edge gate without going extreme.
+  //
+  // When `pctChangeVsOpen` is missing (jackpot evaluation, H2H per-entry
+  // signals, community markets, or pre-Sprint-6 markets that never had
+  // metadata.openingScore stamped) we fall back to the original 7d
+  // rolling momentum read so legacy behaviour is preserved.
+  if (signals.pctChangeVsOpen != null && Number.isFinite(signals.pctChangeVsOpen)) {
+    const normalizedOpen = Math.max(-1, Math.min(1, signals.pctChangeVsOpen / 0.20));
+    boost += normalizedOpen * 0.18 * agent.recencyWeight;
+  } else {
+    // 7-day score delta as momentum signal — legacy fallback path
+    const normalizedDelta = Math.max(
+      -1,
+      Math.min(1, signals.scoreDelta7d / 15)
+    );
+    boost += normalizedDelta * 0.1 * agent.recencyWeight;
+  }
 
   return boost;
 }

@@ -57,6 +57,23 @@ export interface TrendSignals {
    */
   scoreDelta14d?: number;
   scoreDelta30d?: number;
+  /**
+   * Signed fractional change vs. THIS market's opening score:
+   *   pctChangeVsOpen = (fameIndex − openingScore) / openingScore
+   *
+   * Available only when the agent runner passes `openingScore` into
+   * `getTrendSignals` — i.e. for binary up/down per-person markets that
+   * carry `metadata.openingScore.score`. Jackpots, H2H per-entry signals,
+   * and community markets leave this undefined.
+   *
+   * Why this exists separately from `scoreDelta7d`: the 7-day rolling
+   * delta is a momentum signal, not a "vs. baseline" signal. A market
+   * that opened on Monday and closes on Friday cares about the move
+   * since Monday, which may differ materially from the trailing 7d.
+   * This field is the primary input to `computeSignalBoost` when present
+   * (saturates at ±0.20 with a stronger coefficient than the 7d fallback).
+   */
+  pctChangeVsOpen?: number;
   wikiPulse: "rising" | "falling" | "stable";
   newsLevel: "red" | "amber" | "green";
 }
