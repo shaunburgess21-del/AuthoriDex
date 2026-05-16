@@ -20,7 +20,7 @@
 -- removed from this migration; the corresponding objects already
 -- exist in every environment that ran 0051-0053.
 
-CREATE TABLE "amm_price_snapshots" (
+CREATE TABLE IF NOT EXISTS "amm_price_snapshots" (
 	"id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"market_id" varchar NOT NULL,
 	"entry_id" varchar NOT NULL,
@@ -29,5 +29,20 @@ CREATE TABLE "amm_price_snapshots" (
 	"recorded_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-ALTER TABLE "amm_price_snapshots" ADD CONSTRAINT "amm_price_snapshots_market_id_prediction_markets_id_fk" FOREIGN KEY ("market_id") REFERENCES "public"."prediction_markets"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "amm_price_snapshots_market_time_idx" ON "amm_price_snapshots" USING btree ("market_id","recorded_at");
+-- FK is wrapped in a pg_constraint guard so this migration is safe
+-- to re-apply on partially-applied environments. The unconditional
+-- ALTER TABLE in the original commit fails with `constraint already
+-- exists` on retry; this guard is the same shape used in 0059.
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'amm_price_snapshots_market_id_prediction_markets_id_fk'
+  ) THEN
+    ALTER TABLE "amm_price_snapshots"
+      ADD CONSTRAINT "amm_price_snapshots_market_id_prediction_markets_id_fk"
+      FOREIGN KEY ("market_id") REFERENCES "public"."prediction_markets"("id")
+      ON DELETE cascade ON UPDATE no action;
+  END IF;
+END $$;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "amm_price_snapshots_market_time_idx" ON "amm_price_snapshots" USING btree ("market_id","recorded_at");

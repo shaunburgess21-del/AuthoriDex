@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, pgEnum, text, varchar, integer, real, timestamp, unique, uniqueIndex, jsonb, serial, boolean, index, numeric, check, primaryKey, type AnyPgColumn } from "drizzle-orm/pg-core";
+import { pgTable, pgEnum, text, varchar, integer, real, timestamp, unique, uniqueIndex, jsonb, serial, boolean, index, numeric, check, primaryKey, date, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { relations } from "drizzle-orm";
@@ -965,7 +965,11 @@ export const profiles = pgTable("profiles", {
   // profileFieldsPublic is set. The badge-completion check inspects
   // the columns directly; admin tooling reads through
   // profileFieldsPublic before exposing them on public surfaces.
-  dateOfBirth: text("date_of_birth"),
+  // Stored as Postgres `date` per migration 0060. `mode: "string"` keeps
+  // the runtime value as an ISO `YYYY-MM-DD` string so the PATCH handler
+  // and the Settings form can pass values straight through without
+  // needing to construct Date objects (which would tz-shift on write).
+  dateOfBirth: date("date_of_birth", { mode: "string" }),
   gender: text("gender"),
   countryOfOrigin: text("country_of_origin"),
   countryOfResidence: text("country_of_residence"),
