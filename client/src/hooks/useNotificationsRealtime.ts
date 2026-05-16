@@ -191,6 +191,15 @@ export function useNotificationsRealtime(): void {
                       duration: 6000,
                     },
                   );
+                  // Invalidate the badges query so the trophy cabinet
+                  // (/me/badges), Impact-tab voting badges, and the
+                  // ProfileCompletionCard refresh in lock-step with
+                  // the toast. Without this, the user sees "Badge
+                  // unlocked" but `/me/badges` keeps the tile in the
+                  // locked state until the page is reloaded.
+                  queryClient.invalidateQueries({
+                    queryKey: ["/api/me/badges"],
+                  });
                 };
                 if (delay > 0) setTimeout(fire, delay);
                 else fire();

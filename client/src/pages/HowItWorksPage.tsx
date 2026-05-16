@@ -370,8 +370,17 @@ function RankLadderStrip({ onJumpToRanks }: { onJumpToRanks: () => void }) {
 
   return (
     <div className="space-y-2">
+      {/* Mobile: horizontal scroll keeps the strip approachable on
+          narrow viewports. Desktop: 4-column grid (two rows of four)
+          so each chip has roughly twice the width of the old 8-col
+          layout — full names like "Hall of Famer" and "VoxMaximus"
+          fit on one line, with a 2-line fallback for any future
+          longer names via `line-clamp-2`. The chip itself flips to
+          a vertical stack on desktop (tier circle on top, name +
+          XP centred below) so the title can use the chip's full
+          horizontal real estate. */}
       <div
-        className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide md:grid md:grid-cols-8 md:gap-2 md:overflow-visible"
+        className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide md:grid md:grid-cols-4 md:gap-3 md:overflow-visible"
         data-testid="rank-ladder-strip"
       >
         {RANKS.map((rank) => {
@@ -380,21 +389,21 @@ function RankLadderStrip({ onJumpToRanks }: { onJumpToRanks: () => void }) {
             <div
               key={rank.tier}
               data-testid={`rank-ladder-tier-${rank.tier}`}
-              className={`shrink-0 md:shrink min-w-[110px] md:min-w-0 rounded-lg border px-2 py-2 transition-colors ${
+              className={`shrink-0 md:shrink min-w-[110px] md:min-w-0 rounded-lg border px-2 py-2 md:px-3 md:py-2.5 transition-colors ${
                 isCurrent
                   ? "border-amber-500/60 bg-amber-500/10 shadow-[0_0_0_2px_rgba(245,158,11,0.2)]"
                   : "border-border/60 bg-muted/30"
               }`}
             >
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 md:flex-col md:items-center md:gap-1.5 md:text-center">
                 <span
-                  className="inline-flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold text-white"
+                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white"
                   style={{ backgroundColor: rank.color }}
                 >
                   {rank.tier}
                 </span>
-                <div className="min-w-0 leading-tight">
-                  <p className="truncate text-[12px] font-semibold">
+                <div className="min-w-0 leading-tight md:w-full">
+                  <p className="truncate md:whitespace-normal md:line-clamp-2 md:text-balance text-[12px] font-semibold">
                     {rank.name}
                   </p>
                   <p className="font-mono text-[10px] text-muted-foreground">
@@ -1002,7 +1011,7 @@ function VoteSection({
           >
             Aspirant rank
           </button>{" "}
-          (Tier 2 — 500 XP) or above. Reach Aspirant to unlock these surfaces.
+          (Tier 2 — 1,000 XP) or above. Reach Aspirant to unlock these surfaces.
         </p>
       </Card>
 

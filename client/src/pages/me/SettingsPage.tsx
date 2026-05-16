@@ -171,6 +171,7 @@ export default function SettingsPage() {
               if (window.history.length > 1) window.history.back();
               else setLocation("/me");
             }}
+            aria-label="Go back"
             data-testid="button-back"
           >
             <ArrowLeft className="h-5 w-5" />
