@@ -7905,6 +7905,7 @@ Only return the JSON object.`;
           rank: baseProfile.rank,
           isAgent: baseProfile.isAgent,
           isPublic: false,
+          positionsPublic: baseProfile.positionsPublic ?? true,
           agentProfile,
           message: "This profile is private"
         });
@@ -8013,6 +8014,7 @@ Only return the JSON object.`;
         winRate: baseProfile.winRate,
         isAgent: baseProfile.isAgent,
         isPublic: true,
+        positionsPublic: baseProfile.positionsPublic ?? true,
         createdAt: baseProfile.createdAt,
         agentProfile,
         profitLoss,

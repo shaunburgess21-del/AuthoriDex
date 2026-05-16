@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,23 @@ import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 import { apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { toast } from "sonner";
 import { useRanks } from "@/hooks/useGamification";
+import {
+  ArrowLeft, User, Trophy, Vote, TrendingUp, Calendar, Lock,
+  BarChart3, Coins, Target, ChevronRight, Loader2, Share2, Check,
+  ArrowUpDown, EyeOff, Eye, Settings, Globe, Swords, Star,
+  MessageCircle, ImageIcon, UserPlus, ThumbsUp, RefreshCw, Info,
+} from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { Skeleton } from "@/components/ui/skeleton";
+import { MyVoteCard, type MyVoteCardData } from "@/components/me/MyVoteCard";
+import { MyPredictionCard, type MyPredictionCardData } from "@/components/me/MyPredictionCard";
+import { ProfileTabs, type ProfileTab } from "@/components/ProfileTabs";
+import { BadgeCard, type BadgeCardData } from "@/components/BadgeCard";
+import { useShareCard } from "@/contexts/ShareCardContext";
+import { UserRankBadge } from "@/components/UserRankBadge";
+import { buildPositionShareData, inferDirection } from "@/lib/share-data";
+import { appendShareAttribution } from "@/lib/share";
+import { cn } from "@/lib/utils";
 
 type RankRow = { tier: number; name: string; minXp: number; maxXp: number | null };
 
@@ -24,19 +41,6 @@ function getRankProgress(xp: number, ranks: RankRow[] | undefined) {
     xpToNext: next ? next.minXp - xp : null,
   };
 }
-import {
-  ArrowLeft, User, Trophy, Vote, TrendingUp, Calendar, Lock,
-  BarChart3, Coins, Target, ChevronRight, Loader2, Share2, Check,
-  ArrowUpDown, EyeOff,
-} from "lucide-react";
-import { useAuth } from "@/contexts/AuthContext";
-import { Skeleton } from "@/components/ui/skeleton";
-import { MyVoteCard, type MyVoteCardData } from "@/components/me/MyVoteCard";
-import { BadgeCard, type BadgeCardData } from "@/components/BadgeCard";
-import { useShareCard } from "@/contexts/ShareCardContext";
-import { UserRankBadge } from "@/components/UserRankBadge";
-import { buildPositionShareData, inferDirection } from "@/lib/share-data";
-import { appendShareAttribution } from "@/lib/share";
 
 interface PublicProfile {
   userId?: string;
@@ -49,27 +53,18 @@ interface PublicProfile {
   winRate?: number;
   isAgent?: boolean;
   isPublic: boolean;
+  /** Sprint 1 phase 15.C — when false, the public bets `active` tab and the
+   * AMM open positions list are hidden. Settled history stays visible. */
+  positionsPublic?: boolean;
   createdAt?: string;
   message?: string;
   profitLoss?: number;
-  /** Same as profitLoss (= jackpot realised + AMM realised-from-
-   *  sells + AMM realised-from-resolution). Surfaced as its own
-   *  field so future UX can split realised vs. unrealised without
-   *  another contract change. */
   realisedPnl?: number;
-  /** Sum of (currentPrice − avgEntryPrice) × netShares across every
-   *  open AMM position. Positive when the user's open book is up
-   *  relative to its weighted-avg cost basis. */
   unrealisedPnl?: number;
   volume?: number;
   totalBets?: number;
   biggestWin?: number;
-  /** Realizable sell-quote value of every open AMM position summed up
-   *  (LMSR-convexity + credit-floor aware — matches the per-market
-   *  detail page so the headline tile and the detail page never
-   *  disagree on what a position is worth). */
   openPositionsValue?: number;
-  /** Count of distinct (market, entry) rows with non-zero net shares. */
   openPositionsCount?: number;
   agentProfile?: {
     displayName: string;
@@ -81,7 +76,7 @@ interface PublicProfile {
   } | null;
 }
 
-interface BetRecord {
+interface PublicBet {
   betId: string;
   marketSlug: string;
   marketTitle: string;
@@ -92,7 +87,6 @@ interface BetRecord {
   payout: number;
   pnl: number;
   status: string;
-  /** "parimutuel" exclusively for jackpot tickets, "buy"/"sell" for AMM trades. */
   actionType?: "parimutuel" | "buy" | "sell";
   shareCount?: number | null;
   pricePerShare?: number | null;
@@ -104,11 +98,152 @@ interface BetRecord {
 }
 
 interface BetsResponse {
-  bets: BetRecord[];
+  bets: PublicBet[];
   offset: number;
   limit: number;
   hasMore: boolean;
 }
+
+// ---------- Tab plumbing ----------
+
+const VALID_TABS = ["overview", "votes", "predictions"] as const;
+type TabId = (typeof VALID_TABS)[number];
+const SESSION_KEY = "public_profile_tab";
+
+const TAB_DEFS: ProfileTab[] = [
+  { id: "overview", label: "Overview", icon: Eye, accent: "#3C83F6" },
+  { id: "votes", label: "Votes", icon: Vote, accent: "#22D3EE" },
+  { id: "predictions", label: "Predictions", icon: TrendingUp, accent: "#8B5CF6" },
+];
+
+function getInitialTab(): TabId {
+  if (typeof window === "undefined") return "overview";
+  const urlParam = new URLSearchParams(window.location.search).get("tab");
+  if (urlParam && (VALID_TABS as readonly string[]).includes(urlParam)) {
+    return urlParam as TabId;
+  }
+  try {
+    const stored = sessionStorage.getItem(SESSION_KEY);
+    if (stored && (VALID_TABS as readonly string[]).includes(stored)) {
+      return stored as TabId;
+    }
+  } catch {
+    /* ignore */
+  }
+  return "overview";
+}
+
+// ---------- Bet → MyPredictionCard adapter ----------
+
+// The public bets endpoint returns a slimmer shape than `MyPredictionCardData`
+// (no marketId, no baseline/current scores, no person, etc). The shared card
+// degrades gracefully when those fields are zero/empty, so we fill in just
+// enough to keep the layout sensible.
+function adaptPublicBet(b: PublicBet): MyPredictionCardData {
+  const result: MyPredictionCardData["result"] =
+    b.status === "active"
+      ? "pending"
+      : b.status === "won"
+        ? "won"
+        : b.status === "lost"
+          ? "lost"
+          : "refunded";
+  return {
+    betId: b.betId,
+    marketId: "",
+    marketSlug: b.marketSlug,
+    marketTitle: b.marketTitle,
+    marketStatus: b.status,
+    marketType: b.marketType,
+    marketCadence: "",
+    marketCategory: b.marketCategory,
+    entryLabel: b.entryLabel,
+    stakeAmount: b.stakeAmount,
+    potentialPayout: b.payout,
+    payout: b.payout,
+    result,
+    baselineScore: 0,
+    currentScore: 0,
+    betCreatedAt: b.placedAt,
+    personName: null,
+    personAvatar: null,
+    startAt: "",
+    endAt: b.settledAt ?? "",
+    engine: b.actionType === "parimutuel" ? "parimutuel" : "amm",
+  };
+}
+
+// ---------- Filter pill primitives (mirrors My Votes / My Predictions) ----------
+
+const ACCENT_CLASS: Record<string, string> = {
+  cyan: "border-cyan-500/50 bg-cyan-500/15 text-cyan-600 dark:text-cyan-300",
+  violet: "border-violet-500/50 bg-violet-500/15 text-violet-600 dark:text-violet-300",
+  amber: "border-amber-500/50 bg-amber-500/15 text-amber-700 dark:text-amber-300",
+  blue: "border-blue-500/50 bg-blue-500/15 text-blue-600 dark:text-blue-300",
+};
+
+type PillAccent = keyof typeof ACCENT_CLASS;
+
+function FilterPill({
+  active,
+  onClick,
+  children,
+  accent = "cyan",
+  count,
+  dataTestId,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+  accent?: PillAccent;
+  count?: number;
+  dataTestId?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      data-testid={dataTestId}
+      aria-pressed={active}
+      className={cn(
+        "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-medium transition-colors",
+        active
+          ? ACCENT_CLASS[accent]
+          : "border-border/60 text-muted-foreground hover:border-border hover:text-foreground",
+      )}
+    >
+      {children}
+      {count !== undefined && count > 0 && (
+        <span
+          className={cn(
+            "rounded-full px-1.5 text-[10px] tabular-nums",
+            active ? "bg-background/40" : "bg-muted/60",
+          )}
+        >
+          {count}
+        </span>
+      )}
+    </button>
+  );
+}
+
+function ScrollableFilterRow({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-2 overflow-x-auto md:flex-wrap",
+        "scrollbar-none",
+        "[mask-image:linear-gradient(to_right,black_calc(100%-24px),transparent)]",
+        "md:[mask-image:none]",
+        className,
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+// ---------- Share link helper (unchanged behaviour) ----------
 
 function ShareLinkButton({ url, label, sharerUserId }: { url: string; label: string; sharerUserId?: string | null }) {
   const [copied, setCopied] = useState(false);
@@ -116,10 +251,6 @@ function ShareLinkButton({ url, label, sharerUserId }: { url: string; label: str
   const handleCopy = async (e: React.MouseEvent) => {
     e.stopPropagation();
     try {
-      // Append attribution params so a logged-in viewer copying a
-      // public-profile link credits themselves as the sharer when
-      // a third party opens the link. Anonymous viewers fall back
-      // to a clean URL.
       const attributedUrl = appendShareAttribution(url, {
         sharerUserId: sharerUserId ?? null,
         surface: "public_profile",
@@ -140,64 +271,62 @@ function ShareLinkButton({ url, label, sharerUserId }: { url: string; label: str
   );
 }
 
-// Rank rendering moved to <UserRankBadge /> — see
-// client/src/components/UserRankBadge.tsx for the canonical
-// implementation. Local map removed as part of the ranks overhaul
-// to fix VoxMax Legend silently falling through to Citizen.
+// ---------- Owner visibility banner ----------
 
-function PublicVotesSection({ username }: { username: string }) {
-  const { data, isLoading, error } = useQuery<MyVoteCardData[]>({
-    queryKey: ["/api/profile/u", username, "votes"],
-    queryFn: async () => {
-      const authHeaders = await getAuthHeaders();
-      const res = await fetch(`/api/profile/u/${username}/votes`, {
-        headers: authHeaders,
-        credentials: "include",
-      });
-      if (res.status === 403 || res.status === 404) {
-        // Profile private or gone — render nothing at the section level.
-        return [];
-      }
-      if (!res.ok) throw new Error("Failed to fetch votes");
-      return res.json();
-    },
-    enabled: !!username,
-  });
-
-  // Hide the entire section on error or when there's nothing to show.
-  if (error) return null;
-  if (!isLoading && (!data || data.length === 0)) return null;
-
+function OwnerBanner({ isPublic }: { isPublic: boolean }) {
+  const [, setLocation] = useLocation();
   return (
-    <Card className="p-6">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h2 className="font-semibold">Recent Public Votes</h2>
-          <p className="text-xs text-muted-foreground">
-            What this user has weighed in on lately
-          </p>
-        </div>
-        <Badge variant="outline" className="gap-1 text-[10px]">
-          <Vote className="h-3 w-3" /> {(data ?? []).length} visible
-        </Badge>
-      </div>
-
-      {isLoading ? (
-        <div className="space-y-3">
-          {[1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-20 w-full rounded-xl" />
-          ))}
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {(data ?? []).slice(0, 8).map((vote) => (
-            <MyVoteCard key={`${vote.voteType}-${vote.id}`} vote={vote} />
-          ))}
-        </div>
+    <Card
+      className={cn(
+        "p-3 flex flex-wrap items-center gap-3",
+        isPublic
+          ? "border-emerald-500/30 bg-emerald-500/5"
+          : "border-amber-500/30 bg-amber-500/5",
       )}
+      data-testid="owner-banner"
+    >
+      <Badge
+        variant="outline"
+        className={cn(
+          "gap-1 text-[11px]",
+          isPublic
+            ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+            : "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+        )}
+      >
+        {isPublic ? <Globe className="h-3 w-3" /> : <Lock className="h-3 w-3" />}
+        Your profile is {isPublic ? "Public" : "Private"}
+      </Badge>
+      <p className="text-xs text-muted-foreground flex-1 min-w-[180px]">
+        {isPublic
+          ? "Visitors can see your public votes and predictions."
+          : "Only you can see this page. Visitors see a private notice."}
+      </p>
+      <div className="flex items-center gap-1.5 ml-auto">
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 gap-1.5 text-xs"
+          onClick={() => setLocation("/me/settings#privacy")}
+          data-testid="owner-banner-privacy"
+        >
+          {isPublic ? "Privacy settings" : "Make public"} →
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 gap-1.5 text-xs"
+          onClick={() => setLocation("/me/settings")}
+          data-testid="owner-banner-edit"
+        >
+          <Settings className="h-3 w-3" /> Edit profile
+        </Button>
+      </div>
     </Card>
   );
 }
+
+// ---------- Open positions section (kept) ----------
 
 interface PublicAmmPosition {
   marketId: string;
@@ -208,21 +337,13 @@ interface PublicAmmPosition {
   marketCategory?: string | null;
   entryId: string;
   entryLabel: string;
-  // Sprint 2: returned by `loadAmmPositionsFor` so the per-row Share
-  // button can build a `position` share card with the right hero. May
-  // be null for community markets without a linked person.
   personName?: string | null;
   personAvatar?: string | null;
   netShares: number;
   netCreditsIn: number;
-  /** Weighted-average buy cost per share (NOT netCreditsIn/netShares,
-   *  which understates avg cost for partial-sell users). */
   avgEntryPrice: number;
   currentPrice: number;
-  /** netShares × currentPrice. */
   currentValue: number;
-  /** (currentPrice − avgEntryPrice) × netShares, computed server-side
-   *  so the panel doesn't have to redo the math. */
   unrealisedPnl: number;
   marketEndAt: string | null;
 }
@@ -241,10 +362,6 @@ function OpenPositionsSection({ username }: { username: string }) {
   const isOwnProfile = viewer?.username === username;
   const { openShareCard } = useShareCard();
 
-  // Build a `position` share card for one of this user's open
-  // positions. Mirrors the same helper used on /me/predictions so the
-  // share card output is identical whether the user opened it from
-  // their own dashboard or from their public profile.
   const handleShare = (p: PublicAmmPosition) => {
     const direction = inferDirection(p.entryLabel);
     const origin = typeof window !== "undefined" ? window.location.origin : "";
@@ -272,9 +389,6 @@ function OpenPositionsSection({ username }: { username: string }) {
       currentPrice: p.currentPrice,
       costBasis: p.netCreditsIn,
       currentValue: p.currentValue,
-      // Community markets can be open-ended; the share card renders
-      // "Open market" on a blank endAt rather than a misleading
-      // "0m left" countdown.
       endAt: p.marketEndAt ?? "",
     });
     const fallbackText = `Holding ${Math.round(p.netShares)} ${p.entryLabel} shares on "${p.marketTitle}" on VoxDex.\n${shareUrl}`;
@@ -298,19 +412,12 @@ function OpenPositionsSection({ username }: { username: string }) {
       return res.json();
     },
     enabled: !!username,
-    // Live price moves every trade — same refresh cadence as the
-    // dashboard's open positions tab to stay in sync without polling
-    // hard. Server adds a short Cache-Control as defense in depth.
     refetchInterval: 30_000,
   });
 
   const positionsPublic = data?.positionsPublic ?? true;
   const positions = data?.positions ?? [];
 
-  // Don't render the section at all for an unknown viewer of a
-  // pari-mutuel-only profile (no positions, public) — the page is
-  // already busy. Keep it visible on own profile so the user can
-  // confirm visibility state.
   const shouldHide =
     !isLoading &&
     !error &&
@@ -455,11 +562,27 @@ function OpenPositionsSection({ username }: { username: string }) {
   );
 }
 
-function BetHistorySection({ username, isAgent }: { username: string; isAgent?: boolean }) {
-  const [tab, setTab] = useState<"settled" | "active">("settled");
-  const [, setLocation] = useLocation();
+// ---------- Shared fetch hooks for public votes/bets ----------
 
-  const { data, isLoading, error } = useQuery<BetsResponse>({
+function usePublicVotes(username: string | undefined) {
+  return useQuery<MyVoteCardData[] | { __private: true }>({
+    queryKey: ["/api/profile/u", username, "votes"],
+    queryFn: async () => {
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch(`/api/profile/u/${username}/votes`, {
+        headers: authHeaders,
+        credentials: "include",
+      });
+      if (res.status === 403) return { __private: true };
+      if (!res.ok) throw new Error("Failed to fetch votes");
+      return res.json();
+    },
+    enabled: !!username,
+  });
+}
+
+function usePublicBets(username: string | undefined, tab: "settled" | "active", enabled: boolean) {
+  return useQuery<BetsResponse | { __private: true }>({
     queryKey: ["/api/profile/u", username, "bets", tab],
     queryFn: async () => {
       const authHeaders = await getAuthHeaders();
@@ -467,136 +590,607 @@ function BetHistorySection({ username, isAgent }: { username: string; isAgent?: 
         headers: authHeaders,
         credentials: "include",
       });
+      if (res.status === 403) return { __private: true };
       if (!res.ok) throw new Error("Failed to fetch bets");
       return res.json();
     },
-    enabled: !!username,
+    enabled: !!username && enabled,
   });
+}
 
-  const bets = data?.bets ?? [];
+// ---------- Owner hidden-count notes ----------
 
+function OwnerHiddenVotesNote() {
+  const { user } = useAuth();
+  const { data } = useQuery<{ hiddenCount?: number }>({
+    queryKey: ["/api/me/vote-stats"],
+    queryFn: async () => {
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch("/api/me/vote-stats", {
+        credentials: "include",
+        headers: authHeaders,
+      });
+      if (!res.ok) throw new Error("vote-stats failed");
+      return res.json();
+    },
+    enabled: !!user,
+  });
+  const hidden = data?.hiddenCount ?? 0;
+  if (hidden <= 0) return null;
+  return (
+    <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+      <EyeOff className="h-3 w-3" />
+      {hidden} {hidden === 1 ? "vote is" : "votes are"} hidden from public view —{" "}
+      <a href="/me/votes" className="text-primary hover:underline">
+        Manage visibility →
+      </a>
+    </p>
+  );
+}
+
+function OwnerHiddenPredictionsNote() {
+  const { user } = useAuth();
+  const { data } = useQuery<{ stats?: { hiddenCount?: number } } | unknown>({
+    queryKey: ["/api/me/predictions"],
+    enabled: !!user,
+  });
+  const hidden = (() => {
+    if (!data || typeof data !== "object") return 0;
+    const stats = (data as { stats?: { hiddenCount?: number } }).stats;
+    return stats?.hiddenCount ?? 0;
+  })();
+  if (hidden <= 0) return null;
+  return (
+    <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+      <EyeOff className="h-3 w-3" />
+      {hidden} {hidden === 1 ? "prediction is" : "predictions are"} hidden from public view —{" "}
+      <a href="/me/predictions" className="text-primary hover:underline">
+        Manage visibility →
+      </a>
+    </p>
+  );
+}
+
+// ---------- Vote type filters (mirrors My Votes minus legacy sentiment) ----------
+
+const VOTE_TYPE_FILTERS = [
+  { value: "overall_rating", label: "Overall Rating", icon: ThumbsUp },
+  { value: "face_off", label: "Matchups", icon: Swords },
+  { value: "value_vote", label: "Underrated/Overrated", icon: Star },
+  { value: "trending_poll", label: "Trending Polls", icon: BarChart3 },
+  { value: "opinion_poll", label: "Opinion Polls", icon: MessageCircle },
+  { value: "image_curate", label: "Image Votes", icon: ImageIcon },
+  { value: "induction", label: "Induction", icon: UserPlus },
+] as const;
+type VoteFilterValue = (typeof VOTE_TYPE_FILTERS)[number]["value"];
+
+// ---------- Recent teasers (Overview) ----------
+
+function RecentVotesTeaser({
+  username,
+  onSeeAll,
+}: {
+  username: string;
+  onSeeAll: () => void;
+}) {
+  const { data, isLoading } = usePublicVotes(username);
+  if (isLoading) return null;
+  if (!data || (data as { __private?: true }).__private) return null;
+  const votes = data as MyVoteCardData[];
+  if (votes.length === 0) return null;
   return (
     <Card className="p-6">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="font-semibold">Prediction History</h2>
-        <div className="flex gap-1 p-0.5 bg-muted rounded-lg">
-          <button
-            onClick={() => setTab("settled")}
-            className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-              tab === "settled" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-            }`}
+        <div>
+          <h2 className="font-semibold">Recent Votes</h2>
+          <p className="text-xs text-muted-foreground">Latest public picks</p>
+        </div>
+        <Button variant="ghost" size="sm" className="text-xs" onClick={onSeeAll}>
+          See all votes →
+        </Button>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {votes.slice(0, 3).map((v) => (
+          <MyVoteCard key={`${v.voteType}-${v.id}`} vote={v} />
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function RecentPredictionsTeaser({
+  username,
+  onSeeAll,
+}: {
+  username: string;
+  onSeeAll: () => void;
+}) {
+  const { data, isLoading } = usePublicBets(username, "settled", true);
+  if (isLoading) return null;
+  if (!data || (data as { __private?: true }).__private) return null;
+  const bets = (data as BetsResponse).bets;
+  if (bets.length === 0) return null;
+  return (
+    <Card className="p-6">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="font-semibold">Recent Predictions</h2>
+          <p className="text-xs text-muted-foreground">Latest settled outcomes</p>
+        </div>
+        <Button variant="ghost" size="sm" className="text-xs" onClick={onSeeAll}>
+          See all predictions →
+        </Button>
+      </div>
+      <div className="space-y-3">
+        {bets.slice(0, 3).map((b) => (
+          <MyPredictionCard key={b.betId} prediction={adaptPublicBet(b)} />
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+// ---------- Votes tab panel ----------
+
+function VotesTabPanel({
+  username,
+  displayName,
+  isOwner,
+}: {
+  username: string;
+  displayName: string;
+  isOwner: boolean;
+}) {
+  const [filter, setFilter] = useState<VoteFilterValue | null>(null);
+  const { data, isLoading, error, refetch, isFetching } = usePublicVotes(username);
+
+  if (data && (data as { __private?: true }).__private) {
+    return <PrivateNotice />;
+  }
+  const votes = (data as MyVoteCardData[] | undefined) ?? [];
+  const filtered = filter ? votes.filter((v) => v.voteType === filter) : votes;
+
+  return (
+    <div className="space-y-4">
+      <ScrollableFilterRow>
+        <FilterPill active={!filter} onClick={() => setFilter(null)} dataTestId="public-votes-filter-all">
+          All
+        </FilterPill>
+        {VOTE_TYPE_FILTERS.map((t) => {
+          const Icon = t.icon;
+          const present = votes.some((v) => v.voteType === t.value);
+          if (!present && filter !== t.value) return null;
+          return (
+            <FilterPill
+              key={t.value}
+              active={filter === t.value}
+              onClick={() => setFilter(t.value)}
+              dataTestId={`public-votes-filter-${t.value}`}
+            >
+              <Icon className="h-3 w-3" />
+              {t.label}
+            </FilterPill>
+          );
+        })}
+      </ScrollableFilterRow>
+
+      {isOwner && <OwnerHiddenVotesNote />}
+
+      {isLoading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {[1, 2, 3, 4].map((i) => (
+            <Skeleton key={i} className="h-24 w-full rounded-xl" />
+          ))}
+        </div>
+      ) : error ? (
+        <Card className="p-8 text-center">
+          <Vote className="h-12 w-12 mx-auto mb-4 text-destructive" />
+          <h3 className="text-lg font-semibold mb-2">Couldn't load votes</h3>
+          <Button onClick={() => refetch()} disabled={isFetching} data-testid="public-votes-retry">
+            <RefreshCw className="h-4 w-4 mr-1.5" /> Retry
+          </Button>
+        </Card>
+      ) : filtered.length === 0 ? (
+        <Card className="p-8 text-center text-sm text-muted-foreground">
+          {votes.length === 0
+            ? `${displayName} hasn't made any public votes yet.`
+            : "No votes match this filter."}
+        </Card>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {filtered.map((v) => (
+              <MyVoteCard key={`${v.voteType}-${v.id}`} vote={v} />
+            ))}
+          </div>
+          {votes.length >= 50 && (
+            <p className="text-center text-[11px] text-muted-foreground">
+              Showing first 50 public votes
+            </p>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ---------- Predictions tab panel ----------
+
+function PredictionsTabPanel({
+  username,
+  displayName,
+  isOwner,
+  positionsPublic,
+}: {
+  username: string;
+  displayName: string;
+  isOwner: boolean;
+  positionsPublic: boolean;
+}) {
+  const [subTab, setSubTab] = useState<"settled" | "active">("settled");
+  const [category, setCategory] = useState<string>("all");
+
+  const settledQuery = usePublicBets(username, "settled", true);
+  // Skip the active fetch entirely when positions are private (server would
+  // return an empty list anyway). Avoids a needless round-trip.
+  const activeEnabled = positionsPublic;
+  const activeQuery = usePublicBets(username, "active", activeEnabled);
+
+  const activeData =
+    subTab === "settled"
+      ? settledQuery
+      : activeQuery;
+
+  if (settledQuery.data && (settledQuery.data as { __private?: true }).__private) {
+    return <PrivateNotice />;
+  }
+
+  const settledBets = settledQuery.data && !(settledQuery.data as { __private?: true }).__private
+    ? (settledQuery.data as BetsResponse).bets
+    : [];
+  const activeBets = activeQuery.data && !(activeQuery.data as { __private?: true }).__private
+    ? (activeQuery.data as BetsResponse).bets
+    : [];
+  const bets = subTab === "settled" ? settledBets : activeBets;
+
+  // Categories derived from both tabs so the pill set is stable as the user
+  // flips between Settled and Active.
+  const categories = useMemo(() => {
+    const set = new Set<string>();
+    for (const b of [...settledBets, ...activeBets]) {
+      if (b.marketCategory) set.add(b.marketCategory);
+    }
+    return Array.from(set).sort();
+  }, [settledBets, activeBets]);
+
+  const filtered = category === "all"
+    ? bets
+    : bets.filter((b) => b.marketCategory === category);
+
+  const positionsHidden = subTab === "active" && !positionsPublic;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-1 p-0.5 bg-muted rounded-lg w-fit">
+        <button
+          onClick={() => setSubTab("settled")}
+          className={cn(
+            "px-3 py-1.5 text-xs font-medium rounded-md transition-colors",
+            subTab === "settled"
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+          data-testid="public-predictions-subtab-settled"
+        >
+          Settled
+        </button>
+        <button
+          onClick={() => setSubTab("active")}
+          className={cn(
+            "px-3 py-1.5 text-xs font-medium rounded-md transition-colors",
+            subTab === "active"
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+          data-testid="public-predictions-subtab-active"
+        >
+          Active
+        </button>
+      </div>
+
+      {categories.length > 1 && !positionsHidden && (
+        <ScrollableFilterRow>
+          <FilterPill
+            active={category === "all"}
+            accent="violet"
+            onClick={() => setCategory("all")}
+            dataTestId="public-predictions-category-all"
           >
-            Closed
-          </button>
-          <button
-            onClick={() => setTab("active")}
-            className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-              tab === "active" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            Active
-          </button>
+            All
+          </FilterPill>
+          {categories.map((cat) => (
+            <FilterPill
+              key={cat}
+              active={category === cat}
+              accent="violet"
+              onClick={() => setCategory(cat)}
+              dataTestId={`public-predictions-category-${cat}`}
+            >
+              {cat.charAt(0).toUpperCase() + cat.slice(1)}
+            </FilterPill>
+          ))}
+        </ScrollableFilterRow>
+      )}
+
+      {isOwner && <OwnerHiddenPredictionsNote />}
+
+      {positionsHidden ? (
+        <Card className="p-8 text-center">
+          <Lock className="h-10 w-10 mx-auto mb-3 text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">
+            {displayName} has chosen to keep open positions private.
+          </p>
+        </Card>
+      ) : activeData.isLoading ? (
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-28 w-full rounded-xl" />
+          ))}
+        </div>
+      ) : activeData.error ? (
+        <Card className="p-8 text-center">
+          <TrendingUp className="h-12 w-12 mx-auto mb-4 text-destructive" />
+          <h3 className="text-lg font-semibold mb-2">Couldn't load predictions</h3>
+          <Button onClick={() => activeData.refetch()} data-testid="public-predictions-retry">
+            <RefreshCw className="h-4 w-4 mr-1.5" /> Retry
+          </Button>
+        </Card>
+      ) : filtered.length === 0 ? (
+        <Card className="p-8 text-center text-sm text-muted-foreground">
+          {bets.length === 0
+            ? subTab === "settled"
+              ? `${displayName} has no public settled predictions yet.`
+              : `${displayName} has no open positions currently.`
+            : "No predictions match this category."}
+        </Card>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {filtered.map((b) => (
+              <MyPredictionCard
+                key={b.betId}
+                prediction={adaptPublicBet(b)}
+                openMode={subTab === "active"}
+              />
+            ))}
+          </div>
+          {bets.length >= 50 && (
+            <p className="text-center text-[11px] text-muted-foreground">
+              Showing first 50 — refine with the category filter
+            </p>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function PrivateNotice() {
+  return (
+    <Card className="p-8 text-center">
+      <Lock className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+      <h3 className="text-lg font-semibold mb-1">Private Profile</h3>
+      <p className="text-sm text-muted-foreground">
+        This user has chosen to keep their profile private.
+      </p>
+    </Card>
+  );
+}
+
+// ---------- Identity card (header section in Overview) ----------
+
+function ProfileIdentityCard({
+  profile,
+  displayName,
+  memberSince,
+  accuracyPct,
+  pnl,
+  predictions,
+}: {
+  profile: PublicProfile;
+  displayName: string;
+  memberSince: string;
+  accuracyPct: number | null;
+  pnl: number;
+  predictions: number;
+}) {
+  return (
+    <Card className="p-6">
+      <div className="flex items-start gap-4 mb-6">
+        <UserProfileAvatar
+          displayName={displayName}
+          avatarUrl={profile.avatarUrl}
+          className="h-20 w-20"
+          fallbackClassName="text-2xl"
+        />
+        <div className="flex-1 min-w-0">
+          <h1 className="text-2xl font-bold truncate">{displayName}</h1>
+          <p className="text-muted-foreground">@{profile.username}</p>
+          <div className="flex items-center gap-2 mt-3 flex-wrap">
+            <UserRankBadge rank={profile.rank || "Citizen"} />
+          </div>
         </div>
       </div>
 
-      {isLoading ? (
-        <div className="flex items-center justify-center py-8">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      <div className="flex items-center gap-2 text-sm text-muted-foreground mb-6">
+        <Calendar className="h-4 w-4" />
+        <span>Member since {memberSince}</span>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        <div className="p-3 rounded-lg bg-muted/50 text-center">
+          <TrendingUp className="h-4 w-4 mx-auto mb-1.5 text-violet-600 dark:text-violet-400" />
+          <p className="text-xl font-bold">{predictions}</p>
+          <p className="text-[10px] text-muted-foreground">Predictions</p>
         </div>
-      ) : error ? (
-        <div className="text-center py-8 text-destructive text-sm">
-          Failed to load prediction history
+        <div className="p-3 rounded-lg bg-muted/50 text-center">
+          <Coins className="h-4 w-4 mx-auto mb-1.5 text-amber-600 dark:text-amber-400" />
+          <p className={`text-xl font-bold ${pnl > 0 ? "text-emerald-600 dark:text-emerald-400" : pnl < 0 ? "text-red-600 dark:text-red-400" : ""}`}>
+            {pnl > 0 ? "+" : ""}{pnl.toLocaleString()}
+          </p>
+          <p className="text-[10px] text-muted-foreground">P&L</p>
         </div>
-      ) : bets.length === 0 ? (
-        <div className="text-center py-8 text-muted-foreground text-sm">
-          {tab === "active" ? "No active predictions" : "No settled predictions yet"}
+        <div className="p-3 rounded-lg bg-muted/50 text-center">
+          <BarChart3 className="h-4 w-4 mx-auto mb-1.5 text-cyan-600 dark:text-cyan-400" />
+          <p className="text-xl font-bold">{(profile.volume ?? 0).toLocaleString()}</p>
+          <p className="text-[10px] text-muted-foreground">Volume</p>
         </div>
-      ) : (
-        <div className="space-y-2">
-          {bets.map((bet) => {
-            const actionType = bet.actionType ?? "parimutuel";
-            const isAmmSell = actionType === "sell";
-            const isAmmBuy = actionType === "buy";
-            const pricePct = bet.pricePerShare != null
-              ? `${Math.round(bet.pricePerShare * 100)}%`
-              : null;
-            const shareCountLabel = bet.shareCount != null
-              ? Math.round(bet.shareCount).toLocaleString()
-              : null;
-            return (
-              <div
-                key={bet.betId}
-                className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors cursor-pointer group"
-                onClick={() => setLocation(`/markets/${bet.marketSlug}`)}
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    {bet.status === "won" && (
-                      <Badge variant="outline" className="bg-emerald-500/15 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/40 dark:border-emerald-500/30 text-[10px] px-1.5 py-0">Won</Badge>
-                    )}
-                    {bet.status === "lost" && (
-                      <Badge variant="outline" className="bg-red-500/15 dark:bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/40 dark:border-red-500/30 text-[10px] px-1.5 py-0">Lost</Badge>
-                    )}
-                    {bet.status === "active" && (
-                      <Badge variant="outline" className="bg-blue-500/15 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/40 dark:border-blue-500/30 text-[10px] px-1.5 py-0">Active</Badge>
-                    )}
-                    {bet.status === "settled" && isAmmSell && (
-                      <Badge variant="outline" className="bg-amber-500/15 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/40 dark:border-amber-500/30 text-[10px] px-1.5 py-0">Sold</Badge>
-                    )}
-                    {(bet.status === "void" || bet.status === "refunded") && (
-                      <Badge variant="outline" className="bg-gray-500/15 dark:bg-gray-500/10 text-gray-600 dark:text-gray-400 border-gray-500/40 dark:border-gray-500/30 text-[10px] px-1.5 py-0">Void</Badge>
-                    )}
-                    <span className="text-sm font-medium truncate">{bet.marketTitle}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <span className="text-violet-600 dark:text-violet-400 font-medium">
-                      {bet.predictedScore != null
-                        ? bet.entryLabel
-                        : isAmmBuy && shareCountLabel
-                          ? `Bought ${shareCountLabel} shares of ${bet.entryLabel}${pricePct ? ` @ ${pricePct}` : ""}`
-                          : isAmmSell && shareCountLabel
-                            ? `Sold ${shareCountLabel} shares of ${bet.entryLabel}${pricePct ? ` @ ${pricePct}` : ""}`
-                            : bet.marketType === 'updown'
-                              ? `Picked: ${bet.entryLabel}`
-                              : `Backed: ${bet.entryLabel}`}
-                    </span>
-                    {bet.predictedScore != null && (
-                      <span className="text-amber-600 dark:text-amber-400">Score: {Number(bet.predictedScore).toLocaleString()}</span>
-                    )}
-                    {!isAgent && bet.confidence != null && (
-                      <span className="text-cyan-600 dark:text-cyan-400">{Math.round(bet.confidence * 100)}% conf</span>
-                    )}
-                    {!isAmmSell && (
-                      <span>{bet.stakeAmount.toLocaleString()} credits</span>
-                    )}
-                  </div>
-                </div>
-                <div className="text-right shrink-0">
-                  {bet.status === "won" && (
-                    <span className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">+{bet.pnl.toLocaleString()}</span>
-                  )}
-                  {bet.status === "lost" && (
-                    <span className="text-sm font-semibold text-red-600 dark:text-red-400">{bet.pnl.toLocaleString()}</span>
-                  )}
-                  {bet.status === "settled" && isAmmSell && (
-                    <span className="text-sm font-semibold text-amber-600 dark:text-amber-400">+{Math.round(bet.pnl).toLocaleString()}</span>
-                  )}
-                  {bet.status === "active" && (
-                    <span className="text-sm text-muted-foreground">{bet.stakeAmount.toLocaleString()}</span>
-                  )}
-                  <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </div>
-              </div>
-            );
-          })}
-          {data?.hasMore && (
-            <p className="text-center text-xs text-muted-foreground pt-2">Showing first {bets.length} results</p>
+        <div className="p-3 rounded-lg bg-muted/50 text-center">
+          <Trophy className="h-4 w-4 mx-auto mb-1.5 text-emerald-600 dark:text-emerald-400" />
+          <p className="text-xl font-bold">{accuracyPct ?? profile.winRate ?? 0}%</p>
+          <p className="text-[10px] text-muted-foreground">Win Rate</p>
+        </div>
+        <div className="p-3 rounded-lg bg-muted/50 text-center col-span-2 sm:col-span-1">
+          <Vote className="h-4 w-4 mx-auto mb-1.5 text-cyan-600 dark:text-cyan-400" />
+          <p className="text-xl font-bold">{(profile.totalVotes ?? 0).toLocaleString()}</p>
+          <p className="text-[10px] text-muted-foreground">Public Votes</p>
+        </div>
+      </div>
+
+      {(profile.biggestWin ?? 0) > 0 && (
+        <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/8 dark:bg-emerald-500/5 border border-emerald-500/15">
+          <Target className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+          <span className="text-sm text-emerald-600 dark:text-emerald-400 font-medium">
+            Biggest Win: +{(profile.biggestWin ?? 0).toLocaleString()} credits
+          </span>
+        </div>
+      )}
+
+      {(profile.openPositionsCount ?? 0) > 0 && (
+        <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-500/8 dark:bg-blue-500/5 border border-blue-500/15">
+          <BarChart3 className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
+          <span className="text-sm text-blue-600 dark:text-blue-400 font-medium">
+            Open positions: {profile.openPositionsCount} ({Math.round(profile.openPositionsValue ?? 0).toLocaleString()} cr live value)
+          </span>
+          {profile.unrealisedPnl != null && Math.abs(profile.unrealisedPnl) >= 1 && (
+            <span
+              className={`ml-auto text-sm font-semibold ${
+                profile.unrealisedPnl > 0
+                  ? "text-emerald-600 dark:text-emerald-400"
+                  : "text-red-600 dark:text-red-400"
+              }`}
+            >
+              {profile.unrealisedPnl > 0 ? "+" : ""}
+              {Math.round(profile.unrealisedPnl).toLocaleString()} cr
+            </span>
           )}
         </div>
       )}
     </Card>
   );
 }
+
+function PublicBadgesSection({ userId }: { userId: string }) {
+  const { data, isLoading } = useQuery<BadgeCardData[]>({
+    queryKey: [`/api/users/${userId}/badges`],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/users/${userId}/badges`);
+      return res.json();
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <Card className="p-6">
+        <div className="h-5 w-32 mb-4 rounded bg-muted/40 animate-pulse" />
+        <div className="flex flex-wrap gap-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div
+              key={i}
+              className="h-20 w-20 rounded-lg bg-muted/30 animate-pulse"
+            />
+          ))}
+        </div>
+      </Card>
+    );
+  }
+  const badges = data ?? [];
+  if (badges.length === 0) return null;
+
+  const visible = badges.slice(0, 8);
+  const more = badges.length - visible.length;
+
+  return (
+    <Card className="p-6">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="font-semibold flex items-center gap-2">
+            <Trophy className="h-4 w-4 text-amber-500" /> Badges
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            {badges.length} earned
+          </p>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {visible.map((b) => (
+          <BadgeCard key={b.key} badge={b} size="sm" showCategory />
+        ))}
+      </div>
+      {more > 0 && (
+        <p className="mt-3 text-xs text-muted-foreground">
+          +{more} more {more === 1 ? "badge" : "badges"}
+        </p>
+      )}
+    </Card>
+  );
+}
+
+function XpProgressCard({
+  xp,
+  ranks,
+}: {
+  xp: number;
+  ranks: RankRow[] | undefined;
+}) {
+  return (
+    <Card className="p-6">
+      <h2 className="font-semibold mb-4">XP Progress</h2>
+      <div className="flex items-center gap-4">
+        <div className="flex-1">
+          <div className="flex justify-end text-sm mb-2">
+            <span className="font-mono text-amber-600 dark:text-amber-400">
+              {xp.toLocaleString("en-US")} XP
+            </span>
+          </div>
+          {(() => {
+            const progress = getRankProgress(xp, ranks);
+            if (!progress) {
+              return <div className="h-2 bg-muted rounded-full overflow-hidden" />;
+            }
+            return (
+              <>
+                <div className="h-2 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-amber-500 to-orange-500 rounded-full"
+                    style={{ width: `${progress.pct}%` }}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {progress.nextName && progress.xpToNext !== null
+                    ? `${progress.xpToNext.toLocaleString()} XP to ${progress.nextName}`
+                    : "Max rank reached"}
+                </p>
+              </>
+            );
+          })()}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+// ---------- Page ----------
 
 export default function PublicProfilePage() {
   const [, params] = useRoute("/u/:username");
@@ -610,6 +1204,37 @@ export default function PublicProfilePage() {
   });
   const { data: ranks } = useRanks();
 
+  const [activeTab, setActiveTab] = useState<TabId>(getInitialTab);
+
+  // Persist tab selection in sessionStorage and reflect in URL so deep links
+  // round-trip cleanly. We use replaceState (not setLocation) to avoid
+  // pushing a new history entry per tab click.
+  const handleTabChange = (next: string) => {
+    const tab = (VALID_TABS as readonly string[]).includes(next) ? (next as TabId) : "overview";
+    setActiveTab(tab);
+    try {
+      sessionStorage.setItem(SESSION_KEY, tab);
+    } catch {
+      /* ignore */
+    }
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (tab === "overview") url.searchParams.delete("tab");
+    else url.searchParams.set("tab", tab);
+    window.history.replaceState({}, "", url.toString());
+  };
+
+  // If the user lands with ?tab=... we initialised correctly via
+  // getInitialTab. If they navigate within the SPA to a fresh /u/:username,
+  // re-read the URL so deep links from elsewhere still work.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const fromUrl = new URLSearchParams(window.location.search).get("tab");
+    if (fromUrl && (VALID_TABS as readonly string[]).includes(fromUrl) && fromUrl !== activeTab) {
+      setActiveTab(fromUrl as TabId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [username]);
 
   if (isLoading) {
     return (
@@ -663,7 +1288,12 @@ export default function PublicProfilePage() {
     );
   }
 
-  if (!profile.isPublic) {
+  const isOwner = !!viewerUser?.id && !!profile.userId && viewerUser.id === profile.userId;
+
+  // Private profile: visitors get the lock screen; the owner gets the full
+  // page (with the amber banner) so they can preview exactly what will
+  // appear once they flip the toggle.
+  if (!profile.isPublic && !isOwner) {
     return (
       <div className="min-h-screen pb-20 md:pb-0">
         <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">
@@ -687,15 +1317,15 @@ export default function PublicProfilePage() {
   }
 
   const displayName = profile.username || "User";
-  const memberSince = profile.createdAt ? new Date(profile.createdAt).toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "long"
-  }) : "Unknown";
+  const memberSince = profile.createdAt
+    ? new Date(profile.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "long" })
+    : "Unknown";
   const accuracyPct = profile.agentProfile?.accuracy != null
     ? Math.round(profile.agentProfile.accuracy * 100)
     : null;
   const pnl = profile.profitLoss ?? 0;
   const predictions = profile.agentProfile?.totalEntered || profile.totalPredictions || 0;
+  const positionsPublic = profile.positionsPublic ?? true;
 
   return (
     <div className="min-h-screen pb-20 md:pb-0">
@@ -709,212 +1339,85 @@ export default function PublicProfilePage() {
         </div>
       </header>
 
-      <div className="container mx-auto px-2 sm:px-4 py-8 max-w-2xl space-y-6">
-        {/* Identity Card */}
-        <Card className="p-6">
-          <div className="flex items-start gap-4 mb-6">
-            <UserProfileAvatar
+      <div className="container mx-auto px-2 sm:px-4 py-6 max-w-3xl space-y-4">
+        {isOwner && <OwnerBanner isPublic={profile.isPublic} />}
+
+        {/* Tab row — horizontal on mobile via ProfileTabs' built-in layout. */}
+        <ProfileTabs
+          activeTab={activeTab}
+          onTabChange={handleTabChange}
+          tabs={TAB_DEFS}
+          noBottomMargin
+        />
+
+        {activeTab === "overview" && (
+          <div className="space-y-6 pt-2">
+            <ProfileIdentityCard
+              profile={profile}
               displayName={displayName}
-              avatarUrl={profile.avatarUrl}
-              className="h-20 w-20"
-              fallbackClassName="text-2xl"
+              memberSince={memberSince}
+              accuracyPct={accuracyPct}
+              pnl={pnl}
+              predictions={predictions}
             />
-            <div className="flex-1 min-w-0">
-              <h1 className="text-2xl font-bold truncate">{displayName}</h1>
-              <p className="text-muted-foreground">@{profile.username}</p>
-              <div className="flex items-center gap-2 mt-3 flex-wrap">
-                <UserRankBadge rank={profile.rank || "Citizen"} />
-              </div>
-            </div>
-          </div>
 
-          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-6">
-            <Calendar className="h-4 w-4" />
-            <span>Member since {memberSince}</span>
-          </div>
+            {profile.userId && <PublicBadgesSection userId={profile.userId} />}
 
-          {/* Stats Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="p-3 rounded-lg bg-muted/50 text-center">
-              <TrendingUp className="h-4 w-4 mx-auto mb-1.5 text-violet-600 dark:text-violet-400" />
-              <p className="text-xl font-bold">{predictions}</p>
-              <p className="text-[10px] text-muted-foreground">Predictions</p>
-            </div>
-            <div className="p-3 rounded-lg bg-muted/50 text-center">
-              <Coins className="h-4 w-4 mx-auto mb-1.5 text-amber-600 dark:text-amber-400" />
-              <p className={`text-xl font-bold ${pnl > 0 ? "text-emerald-600 dark:text-emerald-400" : pnl < 0 ? "text-red-600 dark:text-red-400" : ""}`}>
-                {pnl > 0 ? "+" : ""}{pnl.toLocaleString()}
-              </p>
-              <p className="text-[10px] text-muted-foreground">P&L</p>
-            </div>
-            <div className="p-3 rounded-lg bg-muted/50 text-center">
-              <BarChart3 className="h-4 w-4 mx-auto mb-1.5 text-cyan-600 dark:text-cyan-400" />
-              <p className="text-xl font-bold">{(profile.volume ?? 0).toLocaleString()}</p>
-              <p className="text-[10px] text-muted-foreground">Volume</p>
-            </div>
-            <div className="p-3 rounded-lg bg-muted/50 text-center">
-              <Trophy className="h-4 w-4 mx-auto mb-1.5 text-emerald-600 dark:text-emerald-400" />
-              <p className="text-xl font-bold">{accuracyPct ?? profile.winRate ?? 0}%</p>
-              <p className="text-[10px] text-muted-foreground">Win Rate</p>
-            </div>
-          </div>
+            <XpProgressCard xp={profile.xpPoints || 0} ranks={ranks} />
 
-          {/* Biggest Win highlight */}
-          {(profile.biggestWin ?? 0) > 0 && (
-            <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/8 dark:bg-emerald-500/5 border border-emerald-500/15">
-              <Target className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-              <span className="text-sm text-emerald-600 dark:text-emerald-400 font-medium">
-                Biggest Win: +{(profile.biggestWin ?? 0).toLocaleString()} credits
-              </span>
-            </div>
-          )}
+            {/* Open positions card respects positionsPublic internally. */}
+            {username && positionsPublic && <OpenPositionsSection username={username} />}
 
-          {/* Open AMM positions highlight (mark-to-market + unrealised
-              P&L). Skipped when the user has no open AMM book so
-              jackpot-only profiles don't get an empty/zero tile.
-              The unrealised P&L delta is the most useful number on
-              this tile — it's what changes when prices move. */}
-          {(profile.openPositionsCount ?? 0) > 0 && (
-            <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-500/8 dark:bg-blue-500/5 border border-blue-500/15">
-              <BarChart3 className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
-              <span className="text-sm text-blue-600 dark:text-blue-400 font-medium">
-                Open positions: {profile.openPositionsCount} ({Math.round(profile.openPositionsValue ?? 0).toLocaleString()} cr live value)
-              </span>
-              {profile.unrealisedPnl != null && Math.abs(profile.unrealisedPnl) >= 1 && (
-                <span
-                  className={`ml-auto text-sm font-semibold ${
-                    profile.unrealisedPnl > 0
-                      ? "text-emerald-600 dark:text-emerald-400"
-                      : "text-red-600 dark:text-red-400"
-                  }`}
-                >
-                  {profile.unrealisedPnl > 0 ? "+" : ""}
-                  {Math.round(profile.unrealisedPnl).toLocaleString()} cr
+            {username && (
+              <RecentVotesTeaser
+                username={username}
+                onSeeAll={() => handleTabChange("votes")}
+              />
+            )}
+
+            {username && (
+              <RecentPredictionsTeaser
+                username={username}
+                onSeeAll={() => handleTabChange("predictions")}
+              />
+            )}
+
+            {isOwner && (
+              <Card className="p-3 flex items-center gap-2 text-[11px] text-muted-foreground border-dashed">
+                <Info className="h-3.5 w-3.5 shrink-0" />
+                <span>
+                  You're viewing your own public profile. Anything hidden via your{" "}
+                  <a href="/me/votes" className="text-primary hover:underline">My Votes</a>
+                  {" "}or{" "}
+                  <a href="/me/predictions" className="text-primary hover:underline">My Predictions</a>
+                  {" "}pages won't appear here.
                 </span>
-              )}
-            </div>
-          )}
-
-          {/* Votes Cast */}
-          {(profile.totalVotes ?? 0) > 0 && (
-            <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/30">
-              <Vote className="h-4 w-4 text-cyan-600 dark:text-cyan-400 shrink-0" />
-              <span className="text-sm text-muted-foreground">
-                {profile.totalVotes} votes cast
-              </span>
-            </div>
-          )}
-        </Card>
-
-        {profile.userId && (
-          <PublicBadgesSection userId={profile.userId} />
+              </Card>
+            )}
+          </div>
         )}
 
-        {/* XP Progress */}
-        <Card className="p-6">
-          <h2 className="font-semibold mb-4">XP Progress</h2>
-            <div className="flex items-center gap-4">
-              <div className="flex-1">
-                <div className="flex justify-end text-sm mb-2">
-                  <span className="font-mono text-amber-600 dark:text-amber-400">{profile.xpPoints?.toLocaleString('en-US') || 0} XP</span>
-                </div>
-                {(() => {
-                  const progress = getRankProgress(profile.xpPoints || 0, ranks);
-                  if (!progress) {
-                    return <div className="h-2 bg-muted rounded-full overflow-hidden" />;
-                  }
-                  return (
-                    <>
-                      <div className="h-2 bg-muted rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-gradient-to-r from-amber-500 to-orange-500 rounded-full"
-                          style={{ width: `${progress.pct}%` }}
-                        />
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {progress.nextName && progress.xpToNext !== null
-                          ? `${progress.xpToNext.toLocaleString()} XP to ${progress.nextName}`
-                          : "Max rank reached"}
-                      </p>
-                    </>
-                  );
-                })()}
-              </div>
-            </div>
-          </Card>
+        {activeTab === "votes" && username && (
+          <div className="pt-2">
+            <VotesTabPanel
+              username={username}
+              displayName={displayName}
+              isOwner={isOwner}
+            />
+          </div>
+        )}
 
-        {/* Open AMM Positions — live MTM book. Sits between headline
-            stats and the longer-form Prediction History so the
-            "what are they sitting on right now" question is the first
-            thing a visitor sees. */}
-        {username && <OpenPositionsSection username={username} />}
-
-        {/* Public Votes */}
-        {username && <PublicVotesSection username={username} />}
-
-        {/* Bet History */}
-        {username && <BetHistorySection username={username} isAgent={profile.isAgent} />}
+        {activeTab === "predictions" && username && (
+          <div className="pt-2">
+            <PredictionsTabPanel
+              username={username}
+              displayName={displayName}
+              isOwner={isOwner}
+              positionsPublic={positionsPublic}
+            />
+          </div>
+        )}
       </div>
     </div>
-  );
-}
-
-function PublicBadgesSection({ userId }: { userId: string }) {
-  const { data, isLoading } = useQuery<BadgeCardData[]>({
-    queryKey: [`/api/users/${userId}/badges`],
-    queryFn: async () => {
-      const res = await apiRequest("GET", `/api/users/${userId}/badges`);
-      return res.json();
-    },
-  });
-
-  // L8: render a small skeleton placeholder during fetch so the
-  // section doesn't pop into view after first paint and shift the
-  // layout below it. Earned-empty arrays still hit the null branch
-  // below the loading guard.
-  if (isLoading) {
-    return (
-      <Card className="p-6">
-        <div className="h-5 w-32 mb-4 rounded bg-muted/40 animate-pulse" />
-        <div className="flex flex-wrap gap-3">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div
-              key={i}
-              className="h-20 w-20 rounded-lg bg-muted/30 animate-pulse"
-            />
-          ))}
-        </div>
-      </Card>
-    );
-  }
-  const badges = data ?? [];
-  if (badges.length === 0) return null;
-
-  const visible = badges.slice(0, 8);
-  const more = badges.length - visible.length;
-
-  return (
-    <Card className="p-6">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h2 className="font-semibold flex items-center gap-2">
-            <Trophy className="h-4 w-4 text-amber-500" /> Badges
-          </h2>
-          <p className="text-xs text-muted-foreground">
-            {badges.length} earned
-          </p>
-        </div>
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        {visible.map((b) => (
-          <BadgeCard key={b.key} badge={b} size="sm" showCategory />
-        ))}
-      </div>
-      {more > 0 && (
-        <p className="mt-3 text-xs text-muted-foreground">
-          +{more} more {more === 1 ? "badge" : "badges"}
-        </p>
-      )}
-    </Card>
   );
 }
