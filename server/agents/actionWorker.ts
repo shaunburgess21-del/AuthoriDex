@@ -409,13 +409,12 @@ async function executeAmmBuy(
     return;
   }
 
-  // Mirror the parimutuel path's totalPredictions bump. executeBuy
-  // doesn't touch the counter (humans get it elsewhere), but agents
-  // rely on it for analytics + persona pacing.
-  await db
-    .update(profiles)
-    .set({ totalPredictions: sql`${profiles.totalPredictions} + 1` })
-    .where(eq(profiles.id, agent.userId));
+  // `executeBuy` now bumps `profiles.totalPredictions` itself inside the
+  // trade transaction (see server/services/amm-trades.ts), so the agent
+  // worker no longer needs a follow-up UPDATE. Centralising the counter
+  // there keeps it in lock-step with `market_bets` for both human and
+  // agent callers and removes the double-counting risk that existed
+  // briefly during the parimutuel sunset.
 
   await markExecuted(action.id);
 

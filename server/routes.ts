@@ -77,6 +77,7 @@ import { generateWeeklyUpDown, generateWeeklyJackpot, generateWeeklyH2H, generat
 import { voidMarketBets } from "./jobs/market-resolver";
 import { deriveNativeMarketLifecycle, getWeeklyBettingCutoff, getMarketBettingCutoff } from "./native-markets/lifecycle";
 import { executeBuy, executeSell } from "./services/amm-trades";
+import { fireAmmPlacementHooks } from "./services/amm-bet-hooks";
 import { computeEarlyBirdMultiplier } from "./jobs/settlement-utils";
 import { recomputeCelebrityMetrics } from "./services/celebrity-metrics-recompute";
 import { z, ZodError } from "zod";
@@ -9971,7 +9972,26 @@ Only return the JSON object.`;
       if ("error" in result) {
         return res.status(result.status).json({ error: result.error, message: result.message });
       }
-      res.json({ ok: true, ...result });
+
+      // Post-trade hooks (XP / referral / placement badges / engagement
+      // signal). Run after the trade transaction commits so a hook
+      // failure can never roll back the buy. The market's category is
+      // fetched separately here because this route doesn't pre-load the
+      // market row — one cheap select per successful buy.
+      const [marketRow] = await db
+        .select({ category: predictionMarkets.category })
+        .from(predictionMarkets)
+        .where(eq(predictionMarkets.id, id))
+        .limit(1);
+      const hooks = await fireAmmPlacementHooks({
+        userId: req.userId!,
+        marketId: id,
+        betId: result.betId,
+        stakeAmount: result.chargeCredits,
+        categoryId: marketRow?.category ?? null,
+      });
+
+      res.json({ ok: true, ...result, xp: hooks.xp });
     } catch (err: any) {
       console.error("[POST /api/markets/:id/buy] failed:", err);
       res.status(500).json({ error: "Failed to execute buy" });
@@ -17814,6 +17834,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           engine: predictionMarkets.engine,
           closeAt: predictionMarkets.closeAt,
           endAt: predictionMarkets.endAt,
+          category: predictionMarkets.category,
         })
         .from(predictionMarkets)
         .where(
@@ -17869,6 +17890,13 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           .status(result.status)
           .json({ error: result.error, message: result.message });
       }
+      const communityHooks = await fireAmmPlacementHooks({
+        userId: authReq.userId!,
+        marketId: market.id,
+        betId: result.betId,
+        stakeAmount: result.chargeCredits,
+        categoryId: market.category ?? null,
+      });
       return res.json({
         ok: true,
         engine: "amm",
@@ -17882,6 +17910,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         pricePerShareAvg: result.pricePerShareAvg,
         newPrices: result.newPrices,
         userBalanceAfter: result.userBalanceAfter,
+        xp: communityHooks.xp,
       });
     } catch (error: any) {
       console.error("[Open Markets] Bet error:", error);
@@ -17909,6 +17938,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           closeAt: predictionMarkets.closeAt,
           endAt: predictionMarkets.endAt,
           engine: predictionMarkets.engine,
+          category: predictionMarkets.category,
         })
         .from(predictionMarkets)
         .where(
@@ -17993,6 +18023,13 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       if ("error" in buyResult) {
         return res.status(buyResult.status).json({ error: buyResult.message });
       }
+      const updownHooks = await fireAmmPlacementHooks({
+        userId: authReq.userId!,
+        marketId: market.id,
+        betId: buyResult.betId,
+        stakeAmount: buyResult.chargeCredits,
+        categoryId: market.category ?? null,
+      });
       return res.json({
         engine: "amm",
         actionType: "buy",
@@ -18006,6 +18043,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         newPrices: buyResult.newPrices,
         newQ: buyResult.newQ,
         remainingCredits: buyResult.userBalanceAfter,
+        xp: updownHooks.xp,
       });
     } catch (error: any) {
       console.error("[Native Markets] Updown bet error:", error);
@@ -18052,6 +18090,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           closeAt: predictionMarkets.closeAt,
           endAt: predictionMarkets.endAt,
           engine: predictionMarkets.engine,
+          category: predictionMarkets.category,
         })
         .from(predictionMarkets)
         .where(
@@ -18133,6 +18172,13 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       if ("error" in buyResult) {
         return res.status(buyResult.status).json({ error: buyResult.message });
       }
+      const nativeHooks = await fireAmmPlacementHooks({
+        userId: authReq.userId!,
+        marketId: market.id,
+        betId: buyResult.betId,
+        stakeAmount: buyResult.chargeCredits,
+        categoryId: market.category ?? null,
+      });
       return res.json({
         engine: "amm",
         actionType: "buy",
@@ -18144,6 +18190,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         newPrices: buyResult.newPrices,
         newQ: buyResult.newQ,
         remainingCredits: buyResult.userBalanceAfter,
+        xp: nativeHooks.xp,
       });
     } catch (error: any) {
       console.error("[Native Markets] Bet error:", error);
@@ -23388,6 +23435,210 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
     }
   });
+
+  // ============================================================================
+  // AMM SMOKE — pick an OPEN live AMM market by type
+  // ----------------------------------------------------------------------------
+  // Read-only helper for `scripts/amm-smoke.ts`'s Phase B sweep. Returns the
+  // most recently opened OPEN+live AMM market of the requested `marketType`,
+  // plus its entries — so the smoke runner can buy/sell against real
+  // production markets (one per type) instead of only the synthetic Phase-A
+  // draft market.
+  //
+  // Restricted to admins. Always returns the *most recent* OPEN market so the
+  // smoke runner exercises whatever's actively trading rather than an old
+  // stale one.
+  //
+  // Query: ?marketType=h2h|updown|gainer
+  // ============================================================================
+  app.get("/api/admin/amm/smoke-pick-market", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const marketType = String(req.query.marketType ?? "").toLowerCase();
+      if (!["h2h", "updown", "gainer"].includes(marketType)) {
+        return res.status(400).json({
+          error: "marketType must be one of: h2h, updown, gainer",
+        });
+      }
+
+      const [market] = await db
+        .select({
+          id: predictionMarkets.id,
+          slug: predictionMarkets.slug,
+          title: predictionMarkets.title,
+          marketType: predictionMarkets.marketType,
+          engine: predictionMarkets.engine,
+          status: predictionMarkets.status,
+          visibility: predictionMarkets.visibility,
+          closeAt: predictionMarkets.closeAt,
+          endAt: predictionMarkets.endAt,
+          category: predictionMarkets.category,
+        })
+        .from(predictionMarkets)
+        .where(
+          and(
+            eq(predictionMarkets.marketType, marketType),
+            eq(predictionMarkets.engine, "amm"),
+            eq(predictionMarkets.status, "OPEN"),
+            eq(predictionMarkets.visibility, "live"),
+          ),
+        )
+        .orderBy(desc(predictionMarkets.createdAt))
+        .limit(1);
+
+      if (!market) {
+        return res.status(404).json({
+          error: `No OPEN live AMM ${marketType} market available for smoke testing.`,
+        });
+      }
+
+      // Filter out markets that have already passed their cooldown / endAt so
+      // the smoke runner doesn't pick a market that'll reject its bet.
+      const now = new Date();
+      if (market.endAt) {
+        const cutoff = getMarketBettingCutoff(market.endAt, "amm");
+        if (now > cutoff) {
+          return res.status(404).json({
+            error: `Most recent ${marketType} market is past its cooldown — re-run later.`,
+            marketId: market.id,
+          });
+        }
+      }
+      if (
+        (market.closeAt && new Date(market.closeAt) < now) ||
+        (market.endAt && new Date(market.endAt) < now)
+      ) {
+        return res.status(404).json({
+          error: `Most recent ${marketType} market has already closed — re-run later.`,
+          marketId: market.id,
+        });
+      }
+
+      const entries = await db
+        .select({
+          id: marketEntries.id,
+          label: marketEntries.label,
+          displayOrder: marketEntries.displayOrder,
+        })
+        .from(marketEntries)
+        .where(eq(marketEntries.marketId, market.id))
+        .orderBy(marketEntries.displayOrder);
+
+      if (entries.length === 0) {
+        return res.status(404).json({
+          error: `Picked market ${market.id} has no entries — skipping.`,
+        });
+      }
+
+      res.json({
+        ok: true,
+        market: {
+          id: market.id,
+          slug: market.slug,
+          title: market.title,
+          marketType: market.marketType,
+          category: market.category,
+          closeAt: market.closeAt,
+          endAt: market.endAt,
+        },
+        entries,
+      });
+    } catch (err: any) {
+      console.error("[AmmAdmin] smoke-pick-market failed:", err);
+      res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
+    }
+  });
+
+  // ============================================================================
+  // JACKPOT SMOKE — env-gated force-resolve for end-to-end smoke testing
+  // ----------------------------------------------------------------------------
+  // Drives `resolveJackpot` directly with a synthetic actualScore, bypassing
+  // the snapshot capture path so a smoke run doesn't have to wait for the
+  // close-snapshot cron. Backdates the market's `endAt` to `now - 1m` so a
+  // concurrent cron pass would also pick it up — but the override score is
+  // what determines the winner here.
+  //
+  // SAFETY: triple-gated to prevent accidental production resolution:
+  //   1. requireAdmin
+  //   2. SMOKE_FORCE_RESOLVE=true must be set in env (so prod deploys
+  //      without the flag can't be exploited even by a leaked admin token)
+  //   3. Market must be marketType=jackpot AND status=OPEN
+  //
+  // Body: { actualScore: number }
+  // ============================================================================
+  app.post(
+    "/api/admin/native-markets/:marketId/force-resolve-jackpot",
+    requireAuth,
+    requireAdmin,
+    async (req: AuthRequest, res) => {
+      try {
+        const enabled = String(process.env.SMOKE_FORCE_RESOLVE ?? "").toLowerCase() === "true";
+        if (!enabled) {
+          return res.status(403).json({
+            error: "force-resolve-jackpot is disabled. Set SMOKE_FORCE_RESOLVE=true on the deployment to enable.",
+          });
+        }
+
+        const { marketId } = req.params;
+        const rawScore = Number(req.body?.actualScore);
+        if (!Number.isFinite(rawScore) || rawScore <= 0) {
+          return res.status(400).json({ error: "actualScore must be a positive number" });
+        }
+        const actualScore = Math.round(rawScore);
+
+        const [market] = await db
+          .select()
+          .from(predictionMarkets)
+          .where(eq(predictionMarkets.id, marketId))
+          .limit(1);
+        if (!market) {
+          return res.status(404).json({ error: "Market not found" });
+        }
+        if (market.marketType !== "jackpot") {
+          return res.status(400).json({ error: "Market is not a jackpot market" });
+        }
+        if (market.status !== "OPEN") {
+          return res.status(400).json({
+            error: `Market status is ${market.status}, expected OPEN`,
+          });
+        }
+
+        const now = new Date();
+        const backdatedEndAt = new Date(now.getTime() - 60 * 1000);
+        await db
+          .update(predictionMarkets)
+          .set({ endAt: backdatedEndAt, updatedAt: now })
+          .where(eq(predictionMarkets.id, marketId));
+
+        const { resolveJackpot } = await import("./jobs/market-resolver");
+        const marketForResolver = { ...market, endAt: backdatedEndAt };
+        const outcome = await resolveJackpot(marketForResolver, actualScore);
+
+        console.log(
+          `[SmokeForceResolve] jackpot market=${marketId} actualScore=${actualScore} outcome=${outcome} by admin=${req.userId}`,
+        );
+
+        const [refreshed] = await db
+          .select({
+            id: predictionMarkets.id,
+            status: predictionMarkets.status,
+            resolvedAt: predictionMarkets.resolvedAt,
+            resolutionNotes: predictionMarkets.resolutionNotes,
+          })
+          .from(predictionMarkets)
+          .where(eq(predictionMarkets.id, marketId))
+          .limit(1);
+
+        res.json({
+          ok: true,
+          outcome,
+          market: refreshed,
+        });
+      } catch (err: any) {
+        console.error("[SmokeForceResolve] failed:", err);
+        res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
+      }
+    },
+  );
 
   // POST /api/admin/markets/:id/amm-resolve - Manually resolve an AMM
   // market to a winner (or void it). Pays out winning shares at 1

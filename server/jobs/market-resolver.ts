@@ -628,20 +628,40 @@ async function resolveGainer(market: any): Promise<"resolved" | "voided" | "bloc
   return "resolved";
 }
 
-async function resolveJackpot(market: any): Promise<"resolved" | "blocked"> {
+/**
+ * Resolve a jackpot market against the closing snapshot's authority score.
+ *
+ * Exported so the `/api/admin/native-markets/:marketId/force-resolve-jackpot`
+ * smoke endpoint can drive the same resolution path without waiting for
+ * the cron loop to pick it up.
+ *
+ * Pass `actualScoreOverride` to bypass `getCloseSnapshot` entirely — only
+ * the env-gated force-resolve endpoint uses this so the cron path is
+ * untouched.
+ */
+export async function resolveJackpot(
+  market: any,
+  actualScoreOverride?: number,
+): Promise<"resolved" | "blocked"> {
   const personId = market.personId;
-  if (!personId) {
-    log(`[MarketResolver] jackpot ${market.id}: no personId, skipping`);
-    return "blocked";
-  }
+  let closeSnap: Awaited<ReturnType<typeof getCloseSnapshot>> | null = null;
+  let actualScore: number;
 
-  const closeSnap = await getCloseSnapshot(personId, market.endAt);
-  if (!closeSnap) {
-    log(`[MarketResolver] jackpot ${market.id}: no snapshot available yet, will retry`);
-    return "blocked";
+  if (typeof actualScoreOverride === "number" && Number.isFinite(actualScoreOverride)) {
+    actualScore = Math.round(actualScoreOverride);
+    log(`[MarketResolver] jackpot ${market.id}: using overridden actualScore=${actualScore} (force-resolve path)`);
+  } else {
+    if (!personId) {
+      log(`[MarketResolver] jackpot ${market.id}: no personId, skipping`);
+      return "blocked";
+    }
+    closeSnap = await getCloseSnapshot(personId, market.endAt);
+    if (!closeSnap) {
+      log(`[MarketResolver] jackpot ${market.id}: no snapshot available yet, will retry`);
+      return "blocked";
+    }
+    actualScore = Math.round(closeSnap.score);
   }
-
-  const actualScore = Math.round(closeSnap.score);
 
   const allBets = await db
     .select({
@@ -782,7 +802,7 @@ async function resolveJackpot(market: any): Promise<"resolved" | "blocked"> {
         payout: totalPool,
         totalEntries: allBets.length,
         tiedWinners: winners.length,
-        closeSnapshotAt: closeSnap.capturedAt?.toISOString?.() ?? null,
+        closeSnapshotAt: closeSnap?.capturedAt?.toISOString?.() ?? null,
       }),
     }).where(eq(predictionMarkets.id, market.id));
   });
