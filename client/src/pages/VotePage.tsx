@@ -911,7 +911,8 @@ function DiscourseCard({
           </button>
         </div>
       ) : (
-        <div className="flex flex-col gap-3 mt-auto">
+        <>
+        <div className="flex flex-col gap-5 md:gap-3 my-auto md:mt-auto">
           <div className="flex items-center gap-3">
             <ThumbsUp className="h-4 w-4 shrink-0" style={{ color: getSentimentPollChoiceColor("support") }} />
             <span
@@ -962,8 +963,9 @@ function DiscourseCard({
             </div>
             <span className="text-sm text-muted-foreground w-10 text-right">{topic.disapprovePercent}%</span>
           </div>
-          
-          <div className="mt-2 flex items-center gap-2 pt-3 border-t border-white/10">
+        </div>
+
+        <div className="mt-auto md:mt-2 flex items-center gap-2 pt-3 border-t border-white/10">
             <div className="flex-1 min-w-0">
               <button
                 type="button"
@@ -1005,7 +1007,7 @@ function DiscourseCard({
               </div>
             </div>
           </div>
-        </div>
+        </>
       )}
     </Card>
     {expandedImage && (
