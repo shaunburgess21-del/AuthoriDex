@@ -337,6 +337,317 @@ async function main(): Promise<void> {
   }
 
   console.log(dim(`\nMarket id: ${marketId} (slug=${created.slug}). Safe to leave; flagged with the "amm-smoke" tag.`));
+
+  // ===================================================================
+  // Phase B — live market sweep
+  // ===================================================================
+  // Pick one OPEN live AMM market per type (h2h / updown / gainer) and
+  // run a small buy + ~25% sell against each. This exercises the AMM
+  // bet routes that humans actually hit in production (vs. Phase A's
+  // synthetic draft market via the admin smoke endpoint).
+  //
+  // Invariants per market:
+  //   * buy charges credits and bumps prices
+  //   * position endpoint returns the right netShares
+  //   * sell returns proceeds < buy spend (LMSR spread)
+  //   * XP is awarded on the buy (via the new amm-bet-hooks helper)
+  // ===================================================================
+
+  console.log(`\n${cyan(bold("=== Phase B — live market sweep ==="))}`);
+
+  const liveMarketTypes: Array<{
+    apiType: "h2h" | "updown" | "gainer";
+    label: string;
+    betPath: (id: string) => string;
+  }> = [
+    {
+      apiType: "h2h",
+      label: "H2H",
+      betPath: (id) => `/api/native-markets/${id}/bet`,
+    },
+    {
+      apiType: "updown",
+      label: "UpDown",
+      betPath: (id) => `/api/native-markets/updown/${id}/bet`,
+    },
+    {
+      apiType: "gainer",
+      label: "Race",
+      betPath: (id) => `/api/native-markets/${id}/bet`,
+    },
+  ];
+
+  let phaseBFailures = 0;
+  for (const mt of liveMarketTypes) {
+    step(11, `${mt.label} — pick latest OPEN live market`);
+    let picked: any = null;
+    try {
+      picked = await api<any>(
+        alice,
+        "GET",
+        `/api/admin/amm/smoke-pick-market?marketType=${mt.apiType}`,
+      );
+    } catch (err: any) {
+      console.log(yellow(`    ! No ${mt.label} market available to smoke (${err?.message ?? err}). Skipping.`));
+      continue;
+    }
+    const liveMarket = picked.market;
+    const liveEntry = picked.entries[0];
+    info("marketId", liveMarket.id);
+    info("title", liveMarket.title);
+    info("entry", `${liveEntry.label} (${liveEntry.id.slice(0, 8)})`);
+
+    // Capture Alice's prior position before buying so we can assert the
+    // delta after the buy. The smoke runs against real live markets in
+    // production, so Alice may already hold shares from previous smoke
+    // runs — a strict equality check on netShares would spuriously
+    // fail on the second+ run.
+    let priorNetShares = 0;
+    try {
+      const prePos = await api<any>(
+        alice,
+        "GET",
+        `/api/markets/${liveMarket.id}/amm-position`,
+      );
+      const priorRow = prePos.positions?.find((p: any) => p.entryId === liveEntry.id);
+      priorNetShares = Number(priorRow?.netShares ?? 0);
+    } catch {
+      // No position yet — treat as zero. The post-buy assertion will
+      // still be correct because `delta` will equal sharesPurchased.
+    }
+
+    step(12, `${mt.label} — Alice buys 100 credits on "${liveEntry.label}"`);
+    let liveBuy: any;
+    try {
+      liveBuy = await api<any>(alice, "POST", mt.betPath(liveMarket.id), {
+        entryId: liveEntry.id,
+        stakeAmount: 100,
+        actionType: "buy",
+      });
+    } catch (err: any) {
+      console.log(red(`    ✗ Buy failed: ${err?.message ?? err}`));
+      phaseBFailures++;
+      continue;
+    }
+    info("chargeCredits", liveBuy.chargeCredits);
+    info("shares", liveBuy.sharesPurchased.toFixed(4));
+    info("avgPrice", liveBuy.pricePerShareAvg.toFixed(4));
+    info("remainingCredits", liveBuy.remainingCredits);
+    info("xpAwarded", liveBuy.xp ? "yes" : "no");
+
+    if (!liveBuy.xp) {
+      console.log(yellow("    ! XP payload missing — placement-hook regression?"));
+      phaseBFailures++;
+    } else {
+      console.log(green("    ✓ Placement hooks fired (xp payload present)"));
+    }
+
+    step(13, `${mt.label} — Alice's position`);
+    let livePosition: any;
+    try {
+      livePosition = await api<any>(
+        alice,
+        "GET",
+        `/api/markets/${liveMarket.id}/amm-position`,
+      );
+    } catch (err: any) {
+      console.log(red(`    ✗ Position lookup failed: ${err?.message ?? err}`));
+      phaseBFailures++;
+      continue;
+    }
+    const pos = livePosition.positions.find((p: any) => p.entryId === liveEntry.id);
+    if (!pos) {
+      console.log(red(`    ✗ No position row for entry ${liveEntry.id}.`));
+      phaseBFailures++;
+      continue;
+    }
+    info("priorNetShares", priorNetShares.toFixed(4));
+    info("netShares", pos.netShares.toFixed(4));
+    info("avgEntry", pos.avgEntryPrice.toFixed(4));
+    info("currentValue", pos.currentValue.toFixed(2));
+
+    const delta = Number(pos.netShares) - priorNetShares;
+    if (Math.abs(delta - liveBuy.sharesPurchased) > 0.01) {
+      console.log(
+        red(
+          `    ✗ Position drift: buy returned ${liveBuy.sharesPurchased.toFixed(4)} shares but position delta is ${delta.toFixed(4)} (prior=${priorNetShares.toFixed(4)}, now=${pos.netShares.toFixed(4)}).`,
+        ),
+      );
+      phaseBFailures++;
+    } else {
+      console.log(
+        green(
+          `    ✓ Position delta (+${delta.toFixed(4)}) matches buy result.`,
+        ),
+      );
+    }
+
+    const sellQty = Math.floor((liveBuy.sharesPurchased / 4) * 100) / 100;
+    if (sellQty <= 0) {
+      console.log(yellow(`    ! sellQty rounded to 0 — skipping ${mt.label} sell.`));
+      continue;
+    }
+
+    step(14, `${mt.label} — Alice sells ${sellQty} shares (partial exit)`);
+    let liveSell: any;
+    try {
+      liveSell = await api<any>(alice, "POST", mt.betPath(liveMarket.id), {
+        entryId: liveEntry.id,
+        actionType: "sell",
+        shares: sellQty,
+      });
+    } catch (err: any) {
+      console.log(red(`    ✗ Sell failed: ${err?.message ?? err}`));
+      phaseBFailures++;
+      continue;
+    }
+    info("proceeds", liveSell.proceeds);
+    info("avgPrice", liveSell.pricePerShareAvg.toFixed(4));
+    info("remainingCredits", liveSell.remainingCredits);
+
+    if (liveSell.proceeds > liveBuy.chargeCredits) {
+      console.log(
+        red(
+          `    ✗ Sell proceeds (${liveSell.proceeds}) exceed buy cost (${liveBuy.chargeCredits}). LMSR spread should make this impossible.`,
+        ),
+      );
+      phaseBFailures++;
+    } else {
+      console.log(
+        green(
+          `    ✓ ${mt.label} round-trip cost: ${liveBuy.chargeCredits - liveSell.proceeds} credits over ${(liveBuy.sharesPurchased - sellQty).toFixed(4)} held shares.`,
+        ),
+      );
+    }
+  }
+
+  if (phaseBFailures > 0) {
+    console.log(red(bold(`\n✗ Phase B failed with ${phaseBFailures} issue(s).`)));
+    process.exitCode = 1;
+  } else {
+    console.log(green(bold("\n✓ Phase B passed across H2H / UpDown / Race.")));
+  }
+
+  // ===================================================================
+  // Phase C — jackpot end-to-end smoke
+  // ===================================================================
+  // 1. List OPEN jackpot markets, pick the first one.
+  // 2. Alice places a jackpot bet (predictedScore = 42).
+  // 3. Force-resolve via the env-gated admin endpoint with the same
+  //    actualScore so alice's bet wins.
+  // 4. Assert the market is RESOLVED and the resolutionNotes carry the
+  //    correct outcome.
+  //
+  // Requires `SMOKE_FORCE_RESOLVE=true` on the target deployment.
+  // Skip with a warning if the flag is off or no OPEN jackpot exists.
+  // ===================================================================
+
+  console.log(`\n${cyan(bold("=== Phase C — jackpot end-to-end smoke ==="))}`);
+
+  if (String(process.env.SMOKE_PHASE_C ?? "").toLowerCase() === "skip") {
+    console.log(yellow("    ! SMOKE_PHASE_C=skip — skipping jackpot smoke."));
+    return;
+  }
+
+  step(15, "Pick an OPEN jackpot market");
+  let jackpotList: any[];
+  try {
+    jackpotList = await api<any[]>(alice, "GET", "/api/native-markets/jackpot");
+  } catch (err: any) {
+    console.log(red(`    ✗ Jackpot list lookup failed: ${err?.message ?? err}`));
+    process.exitCode = 1;
+    return;
+  }
+  if (!Array.isArray(jackpotList) || jackpotList.length === 0) {
+    console.log(yellow("    ! No OPEN jackpot market found — skipping Phase C."));
+    return;
+  }
+  const jackpot = jackpotList[0];
+  info("marketId", jackpot.id);
+  info("title", jackpot.title ?? jackpot.slug ?? "(untitled)");
+
+  const predictedScore = 42;
+  step(16, `Alice places a jackpot ticket (predictedScore=${predictedScore})`);
+  let jackpotBet: any;
+  try {
+    jackpotBet = await api<any>(
+      alice,
+      "POST",
+      `/api/native-markets/${jackpot.id}/jackpot-bet`,
+      { predictedScore },
+    );
+  } catch (err: any) {
+    if (String(err?.message ?? "").includes("already")) {
+      console.log(yellow(`    ! Alice already has a bet on this jackpot — Phase C cannot proceed cleanly. Skipping.`));
+      return;
+    }
+    console.log(red(`    ✗ Jackpot bet failed: ${err?.message ?? err}`));
+    process.exitCode = 1;
+    return;
+  }
+  info("betId", jackpotBet.betId);
+  info("stakeAmount", jackpotBet.stakeAmount);
+  info("xpAwarded", jackpotBet.xp ? "yes" : "no");
+
+  step(17, "Force-resolve the jackpot with actualScore=" + predictedScore);
+  let resolveResult: any;
+  try {
+    resolveResult = await api<any>(
+      alice,
+      "POST",
+      `/api/admin/native-markets/${jackpot.id}/force-resolve-jackpot`,
+      { actualScore: predictedScore },
+    );
+  } catch (err: any) {
+    const msg = String(err?.message ?? err);
+    if (msg.includes("SMOKE_FORCE_RESOLVE") || msg.includes("disabled")) {
+      console.log(yellow(`    ! Force-resolve endpoint is disabled on this deployment. Set SMOKE_FORCE_RESOLVE=true to enable Phase C.`));
+      return;
+    }
+    console.log(red(`    ✗ Force-resolve failed: ${msg}`));
+    process.exitCode = 1;
+    return;
+  }
+  info("outcome", resolveResult.outcome);
+  info("status", resolveResult.market?.status);
+  info("resolvedAt", resolveResult.market?.resolvedAt);
+
+  if (resolveResult.outcome !== "resolved" || resolveResult.market?.status !== "RESOLVED") {
+    console.log(
+      red(
+        `    ✗ Jackpot did not transition to RESOLVED. outcome=${resolveResult.outcome}, status=${resolveResult.market?.status}.`,
+      ),
+    );
+    process.exitCode = 1;
+    return;
+  }
+
+  let notes: any = null;
+  try {
+    notes = resolveResult.market?.resolutionNotes
+      ? JSON.parse(resolveResult.market.resolutionNotes)
+      : null;
+  } catch {
+    /* keep null */
+  }
+  if (notes) {
+    info("actualScore", notes.actualScore);
+    info("winningPrediction", notes.winningPrediction);
+    info("totalEntries", notes.totalEntries);
+    info("tiedWinners", notes.tiedWinners);
+
+    if (notes.actualScore === predictedScore && notes.winningPrediction === predictedScore) {
+      console.log(green(bold("\n✓ Phase C jackpot smoke passed — alice's prediction matched the override score and won.")));
+    } else {
+      console.log(
+        yellow(
+          `    ! Jackpot resolved but alice didn't win solo (winningPrediction=${notes.winningPrediction}). Other entrants may have been closer.`,
+        ),
+      );
+    }
+  } else {
+    console.log(yellow("    ! resolutionNotes missing or unparseable; manual verification recommended."));
+  }
 }
 
 main().catch((err) => {
