@@ -32,6 +32,10 @@ export interface UserProfile {
   countryOfResidence?: string | null;
   ethnicity?: string | null;
   profileFieldsPublic?: boolean;
+  dobPublic?: boolean;
+  genderPublic?: boolean;
+  countryPublic?: boolean;
+  ethnicityPublic?: boolean;
   socialXHandle?: string | null;
   socialInstagramHandle?: string | null;
   occupationIndustry?: string | null;

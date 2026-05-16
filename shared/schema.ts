@@ -974,7 +974,19 @@ export const profiles = pgTable("profiles", {
   countryOfOrigin: text("country_of_origin"),
   countryOfResidence: text("country_of_residence"),
   ethnicity: text("ethnicity"),
+  // Legacy aggregate visibility toggle. Superseded by the four
+  // per-field flags below (migration 0062) but kept on the row for
+  // backward compat — older clients that still PATCH this field will
+  // continue to land. New code reads the per-field flags.
   profileFieldsPublic: boolean("profile_fields_public").notNull().default(false),
+  // Per-field demographic visibility (migration 0062). Defaults
+  // mirror the column defaults: gender + country visible by default,
+  // DOB + ethnicity hidden by default. The PublicProfile API gates
+  // each field on its matching flag.
+  dobPublic: boolean("dob_public").notNull().default(false),
+  genderPublic: boolean("gender_public").notNull().default(true),
+  countryPublic: boolean("country_public").notNull().default(true),
+  ethnicityPublic: boolean("ethnicity_public").notNull().default(false),
   // Account-tab extras — see migration 0061_profile_extended.sql.
   // recoveryEmail is treated as opt-in PII and is never exposed via
   // public profile endpoints. The verified flag is always reset to

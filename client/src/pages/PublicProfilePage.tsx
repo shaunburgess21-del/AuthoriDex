@@ -25,6 +25,9 @@ import { UserRankBadge } from "@/components/UserRankBadge";
 import { buildPositionShareData, inferDirection } from "@/lib/share-data";
 import { appendShareAttribution } from "@/lib/share";
 import { cn } from "@/lib/utils";
+import { CountryFlag } from "@/components/ui/CountryFlag";
+import { getCountryName } from "@shared/countries";
+import { getEthnicityLabel } from "@shared/ethnicity";
 
 type RankRow = { tier: number; name: string; minXp: number; maxXp: number | null };
 
@@ -74,6 +77,17 @@ interface PublicProfile {
     totalEntered?: number;
     accuracy?: number | null;
   } | null;
+  // Demographic surface — each field is gated server-side by the
+  // matching per-field visibility toggle on the profile.
+  bio?: string | null;
+  countryOfOrigin?: string | null;
+  countryOfResidence?: string | null;
+  gender?: string | null;
+  ethnicity?: string | null;
+  age?: number | null;
+  socialXHandle?: string | null;
+  socialInstagramHandle?: string | null;
+  occupationIndustry?: string | null;
 }
 
 interface PublicBet {
@@ -1022,10 +1036,12 @@ function ProfileIdentityCard({
         </div>
       </div>
 
-      <div className="flex items-center gap-2 text-sm text-muted-foreground mb-6">
+      <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
         <Calendar className="h-4 w-4" />
         <span>Member since {memberSince}</span>
       </div>
+
+      <ProfileAboutStrip profile={profile} className="mb-6" />
 
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         <div className="p-3 rounded-lg bg-muted/50 text-center">
@@ -1087,6 +1103,156 @@ function ProfileIdentityCard({
         </div>
       )}
     </Card>
+  );
+}
+
+// Renders the user's gated demographic surface — bio, country (with
+// flags), age, gender, ethnicity, occupation, social handles. Each
+// field only appears when the matching per-field visibility toggle is
+// on; the server already redacts hidden fields, so we just render
+// what's present.
+function ProfileAboutStrip({
+  profile,
+  className,
+}: {
+  profile: PublicProfile;
+  className?: string;
+}) {
+  const GENDER_LABELS: Record<string, string> = {
+    male: "Male",
+    female: "Female",
+    non_binary: "Non-binary",
+    prefer_not_to_say: "Prefer not to say",
+    other: "Other",
+  };
+
+  const originName =
+    getCountryName(profile.countryOfOrigin ?? null) ??
+    profile.countryOfOrigin ??
+    null;
+  const residenceName =
+    getCountryName(profile.countryOfResidence ?? null) ??
+    profile.countryOfResidence ??
+    null;
+  const sameCountry =
+    originName && residenceName && originName === residenceName;
+
+  const items: React.ReactNode[] = [];
+
+  if (originName) {
+    items.push(
+      <span
+        key="origin"
+        className="inline-flex items-center gap-1.5"
+        title="Country of origin"
+      >
+        <CountryFlag code={profile.countryOfOrigin} title={originName} />
+        <span>{originName}</span>
+        {!sameCountry && residenceName && (
+          <span className="text-muted-foreground">(origin)</span>
+        )}
+      </span>,
+    );
+  }
+
+  if (residenceName && !sameCountry) {
+    items.push(
+      <span
+        key="residence"
+        className="inline-flex items-center gap-1.5"
+        title="Country of residence"
+      >
+        <CountryFlag code={profile.countryOfResidence} title={residenceName} />
+        <span>{residenceName}</span>
+        <span className="text-muted-foreground">(resides)</span>
+      </span>,
+    );
+  }
+
+  if (typeof profile.age === "number") {
+    items.push(
+      <span key="age" className="inline-flex items-center gap-1">
+        <span>{profile.age}</span>
+        <span className="text-muted-foreground">yrs</span>
+      </span>,
+    );
+  }
+
+  if (profile.gender) {
+    items.push(
+      <span key="gender" className="capitalize">
+        {GENDER_LABELS[profile.gender] ?? profile.gender}
+      </span>,
+    );
+  }
+
+  if (profile.ethnicity) {
+    items.push(
+      <span key="ethnicity">
+        {getEthnicityLabel(profile.ethnicity)}
+      </span>,
+    );
+  }
+
+  if (profile.occupationIndustry) {
+    items.push(
+      <span key="occupation">{profile.occupationIndustry}</span>,
+    );
+  }
+
+  const hasBio = Boolean(profile.bio?.trim());
+  const hasSocials = Boolean(
+    profile.socialXHandle || profile.socialInstagramHandle,
+  );
+
+  if (items.length === 0 && !hasBio && !hasSocials) {
+    return null;
+  }
+
+  return (
+    <div className={cn("space-y-2", className)}>
+      {hasBio && (
+        <p className="text-sm text-foreground/90 whitespace-pre-line">
+          {profile.bio}
+        </p>
+      )}
+      {items.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm text-foreground/80">
+          {items.map((node, i) => (
+            <div key={i} className="flex items-center">
+              {i > 0 && (
+                <span className="mr-3 h-1 w-1 rounded-full bg-muted-foreground/40" />
+              )}
+              {node}
+            </div>
+          ))}
+        </div>
+      )}
+      {hasSocials && (
+        <div className="flex flex-wrap items-center gap-3 text-sm">
+          {profile.socialXHandle && (
+            <a
+              href={`https://x.com/${profile.socialXHandle}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-muted-foreground hover:text-foreground transition-colors"
+            >
+              @{profile.socialXHandle} on X
+            </a>
+          )}
+          {profile.socialInstagramHandle && (
+            <a
+              href={`https://instagram.com/${profile.socialInstagramHandle}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-muted-foreground hover:text-foreground transition-colors"
+            >
+              @{profile.socialInstagramHandle} on Instagram
+            </a>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

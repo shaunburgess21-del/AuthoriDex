@@ -7444,6 +7444,10 @@ Only return the JSON object.`;
         countryOfResidence,
         ethnicity,
         profileFieldsPublic,
+        dobPublic,
+        genderPublic,
+        countryPublic,
+        ethnicityPublic,
         recoveryEmail,
         phoneNumber,
         socialXHandle,
@@ -7510,17 +7514,50 @@ Only return the JSON object.`;
         }
       }
       if (gender !== undefined) updateData.gender = cap(gender, 32);
+      // Country fields now store ISO 3166-1 alpha-2 codes from the
+      // CountryCombobox. Free-text legacy values still load on GET
+      // (we just render them as-is); the next save coerces to a code.
+      // `null` clears the field. Anything else must look like an
+      // alpha-2 code.
+      const isIsoCountry = (raw: string): boolean =>
+        /^[A-Za-z]{2}$/.test(raw);
       if (countryOfOrigin !== undefined) {
-        updateData.countryOfOrigin = cap(countryOfOrigin, 60);
+        if (countryOfOrigin === null) {
+          updateData.countryOfOrigin = null;
+        } else if (typeof countryOfOrigin === "string" && isIsoCountry(countryOfOrigin.trim())) {
+          updateData.countryOfOrigin = countryOfOrigin.trim().toUpperCase();
+        } else {
+          return res.status(400).json({ error: "invalid_country_code" });
+        }
       }
       if (countryOfResidence !== undefined) {
-        updateData.countryOfResidence = cap(countryOfResidence, 60);
+        if (countryOfResidence === null) {
+          updateData.countryOfResidence = null;
+        } else if (typeof countryOfResidence === "string" && isIsoCountry(countryOfResidence.trim())) {
+          updateData.countryOfResidence = countryOfResidence.trim().toUpperCase();
+        } else {
+          return res.status(400).json({ error: "invalid_country_code" });
+        }
       }
       if (ethnicity !== undefined) {
         updateData.ethnicity = cap(ethnicity, 60);
       }
+      // Legacy single-toggle. Kept for backward compat with older
+      // clients; new code reads the four per-field flags below.
       if (typeof profileFieldsPublic === "boolean") {
         updateData.profileFieldsPublic = profileFieldsPublic;
+      }
+      if (typeof dobPublic === "boolean") {
+        updateData.dobPublic = dobPublic;
+      }
+      if (typeof genderPublic === "boolean") {
+        updateData.genderPublic = genderPublic;
+      }
+      if (typeof countryPublic === "boolean") {
+        updateData.countryPublic = countryPublic;
+      }
+      if (typeof ethnicityPublic === "boolean") {
+        updateData.ethnicityPublic = ethnicityPublic;
       }
       // Recovery email — verified is always reset to false on edit
       // so a stale verified flag can never survive a value change.
@@ -8003,6 +8040,32 @@ Only return the JSON object.`;
       const totalVolume =
         Number(betStats?.jackpotVolume ?? 0) + ammPnl.turnover;
 
+      // Gated demographic surface. Each field is exposed only when
+      // the corresponding per-field visibility toggle is on. DOB is
+      // never returned raw — we derive `age` and surface that instead.
+      // Eligibility for country/gender/age-locked vote cards is
+      // unaffected; the server still has the underlying values.
+      const showCountry = baseProfile.countryPublic ?? true;
+      const showGender = baseProfile.genderPublic ?? true;
+      const showEthnicity = baseProfile.ethnicityPublic ?? false;
+      const showDob = baseProfile.dobPublic ?? false;
+      const showSocials = baseProfile.socialHandlesPublic ?? false;
+      const showOccupation = baseProfile.occupationPublic ?? false;
+
+      let publicAge: number | null = null;
+      if (showDob && baseProfile.dateOfBirth) {
+        const dob = new Date(baseProfile.dateOfBirth);
+        if (!Number.isNaN(dob.getTime())) {
+          const now = new Date();
+          let age = now.getUTCFullYear() - dob.getUTCFullYear();
+          const m = now.getUTCMonth() - dob.getUTCMonth();
+          if (m < 0 || (m === 0 && now.getUTCDate() < dob.getUTCDate())) {
+            age -= 1;
+          }
+          if (age >= 0 && age < 150) publicAge = age;
+        }
+      }
+
       res.json({
         userId: baseProfile.id,
         username: baseProfile.username,
@@ -8027,6 +8090,19 @@ Only return the JSON object.`;
         biggestWin: Number(betStats?.biggestWin ?? 0),
         openPositionsValue: ammPnl.openPositionsValue,
         openPositionsCount: ammPnl.openPositionsCount,
+        bio: baseProfile.bio ?? null,
+        countryOfOrigin: showCountry ? baseProfile.countryOfOrigin ?? null : null,
+        countryOfResidence: showCountry ? baseProfile.countryOfResidence ?? null : null,
+        gender: showGender ? baseProfile.gender ?? null : null,
+        ethnicity: showEthnicity ? baseProfile.ethnicity ?? null : null,
+        age: publicAge,
+        socialXHandle: showSocials ? baseProfile.socialXHandle ?? null : null,
+        socialInstagramHandle: showSocials
+          ? baseProfile.socialInstagramHandle ?? null
+          : null,
+        occupationIndustry: showOccupation
+          ? baseProfile.occupationIndustry ?? null
+          : null,
       });
     } catch (error: any) {
       console.error("Error fetching public profile:", error.message);

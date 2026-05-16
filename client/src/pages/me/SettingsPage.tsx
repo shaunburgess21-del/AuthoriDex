@@ -50,6 +50,8 @@ import { uploadAvatarFile, uploadGeneratedAvatar } from "@/lib/avatar/upload";
 import { PasswordCard } from "./PasswordCard";
 import { InterestsPicker } from "@/components/interests/InterestsPicker";
 import { cn } from "@/lib/utils";
+import { CountryCombobox } from "@/components/ui/CountryCombobox";
+import { ETHNICITY_OPTIONS } from "@shared/ethnicity";
 
 const USERNAME_PATTERN = /^[A-Za-z0-9_]{3,30}$/;
 const BIO_MAX = 280;
@@ -556,8 +558,15 @@ function AboutMeTab() {
   const [occupationIndustry, setOccupationIndustry] = useState(
     profile?.occupationIndustry ?? "",
   );
-  const [profileFieldsPublic, setProfileFieldsPublic] = useState(
-    profile?.profileFieldsPublic ?? false,
+  const [dobPublic, setDobPublic] = useState(profile?.dobPublic ?? false);
+  const [genderPublic, setGenderPublic] = useState(
+    profile?.genderPublic ?? true,
+  );
+  const [countryPublic, setCountryPublic] = useState(
+    profile?.countryPublic ?? true,
+  );
+  const [ethnicityPublic, setEthnicityPublic] = useState(
+    profile?.ethnicityPublic ?? false,
   );
   const [socialHandlesPublic, setSocialHandlesPublic] = useState(
     profile?.socialHandlesPublic ?? false,
@@ -578,7 +587,10 @@ function AboutMeTab() {
     setSocialXHandle(profile.socialXHandle ?? "");
     setSocialInstagramHandle(profile.socialInstagramHandle ?? "");
     setOccupationIndustry(profile.occupationIndustry ?? "");
-    setProfileFieldsPublic(profile.profileFieldsPublic ?? false);
+    setDobPublic(profile.dobPublic ?? false);
+    setGenderPublic(profile.genderPublic ?? true);
+    setCountryPublic(profile.countryPublic ?? true);
+    setEthnicityPublic(profile.ethnicityPublic ?? false);
     setSocialHandlesPublic(profile.socialHandlesPublic ?? false);
     setOccupationPublic(profile.occupationPublic ?? false);
   }, [profile, dirty]);
@@ -611,7 +623,10 @@ function AboutMeTab() {
       socialXHandle: socialXHandle.trim() || null,
       socialInstagramHandle: socialInstagramHandle.trim() || null,
       occupationIndustry: occupationIndustry || null,
-      profileFieldsPublic,
+      dobPublic,
+      genderPublic,
+      countryPublic,
+      ethnicityPublic,
       socialHandlesPublic,
       occupationPublic,
     });
@@ -692,43 +707,52 @@ function AboutMeTab() {
 
           <div className="space-y-2">
             <Label htmlFor="origin">Country of origin</Label>
-            <Input
+            <CountryCombobox
               id="origin"
-              value={countryOfOrigin ?? ""}
-              onChange={(e) => {
+              value={countryOfOrigin || null}
+              onChange={(code) => {
                 markDirty();
-                setCountryOfOrigin(e.target.value);
+                setCountryOfOrigin(code ?? "");
               }}
-              placeholder="e.g. United Kingdom"
-              data-testid="input-country-origin"
+              placeholder="Search countries…"
+              testId="input-country-origin"
             />
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="residence">Country of residence</Label>
-            <Input
+            <CountryCombobox
               id="residence"
-              value={countryOfResidence ?? ""}
-              onChange={(e) => {
+              value={countryOfResidence || null}
+              onChange={(code) => {
                 markDirty();
-                setCountryOfResidence(e.target.value);
+                setCountryOfResidence(code ?? "");
               }}
-              placeholder="e.g. United States"
-              data-testid="input-country-residence"
+              placeholder="Search countries…"
+              testId="input-country-residence"
             />
           </div>
 
           <div className="space-y-2 md:col-span-2">
             <Label htmlFor="ethnicity">Ethnicity</Label>
-            <Input
-              id="ethnicity"
-              value={ethnicity ?? ""}
-              onChange={(e) => {
+            <Select
+              value={ethnicity || undefined}
+              onValueChange={(v) => {
                 markDirty();
-                setEthnicity(e.target.value);
+                setEthnicity(v);
               }}
-              placeholder="e.g. Latino, Black, Asian, Mixed…"
-            />
+            >
+              <SelectTrigger id="ethnicity" data-testid="select-ethnicity">
+                <SelectValue placeholder="Select…" />
+              </SelectTrigger>
+              <SelectContent>
+                {ETHNICITY_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-2">
@@ -787,16 +811,51 @@ function AboutMeTab() {
         <h3 className="font-semibold flex items-center gap-2">
           <Eye className="h-4 w-4 text-muted-foreground" /> Privacy
         </h3>
+        <p className="text-xs text-muted-foreground -mt-3">
+          Each toggle is independent. Hidden fields stay usable for
+          eligibility on country, gender, or age-locked vote cards —
+          they just won&apos;t appear on your public profile.
+        </p>
 
         <PrivacyRow
-          label="Make demographics public"
-          helper="Date of birth (age only), gender, countries, ethnicity. When off, only you can see this information."
-          checked={profileFieldsPublic}
+          label="Show date of birth (age only) on my public profile"
+          helper="We only ever display your age, never the raw date."
+          checked={dobPublic}
           onChange={(v) => {
             markDirty();
-            setProfileFieldsPublic(v);
+            setDobPublic(v);
           }}
-          testId="switch-fields-public"
+          testId="switch-dob-public"
+        />
+        <PrivacyRow
+          label="Show gender on my public profile"
+          helper="Visible by default."
+          checked={genderPublic}
+          onChange={(v) => {
+            markDirty();
+            setGenderPublic(v);
+          }}
+          testId="switch-gender-public"
+        />
+        <PrivacyRow
+          label="Show country on my public profile"
+          helper="Country of origin and country of residence (with flags). Visible by default."
+          checked={countryPublic}
+          onChange={(v) => {
+            markDirty();
+            setCountryPublic(v);
+          }}
+          testId="switch-country-public"
+        />
+        <PrivacyRow
+          label="Show ethnicity on my public profile"
+          helper="Hidden by default."
+          checked={ethnicityPublic}
+          onChange={(v) => {
+            markDirty();
+            setEthnicityPublic(v);
+          }}
+          testId="switch-ethnicity-public"
         />
         <PrivacyRow
           label="Show social handles on my public profile"
@@ -1061,12 +1120,37 @@ function PrivacyTab() {
   const [positionsPublic, setPositionsPublic] = useState(
     profile?.positionsPublic ?? true,
   );
+  // Mirror of the per-field demographic toggles from About Me. Both
+  // tabs read/write the same `profile.*Public` columns, so saving on
+  // either tab updates the other after `refreshProfile()` lands.
+  const [dobPublic, setDobPublic] = useState(profile?.dobPublic ?? false);
+  const [genderPublic, setGenderPublic] = useState(
+    profile?.genderPublic ?? true,
+  );
+  const [countryPublic, setCountryPublic] = useState(
+    profile?.countryPublic ?? true,
+  );
+  const [ethnicityPublic, setEthnicityPublic] = useState(
+    profile?.ethnicityPublic ?? false,
+  );
+  const [socialHandlesPublic, setSocialHandlesPublic] = useState(
+    profile?.socialHandlesPublic ?? false,
+  );
+  const [occupationPublic, setOccupationPublic] = useState(
+    profile?.occupationPublic ?? false,
+  );
   const [dirty, setDirty] = useState(false);
 
   useEffect(() => {
     if (!profile || dirty) return;
     setIsPublic(profile.isPublic);
     setPositionsPublic(profile.positionsPublic ?? true);
+    setDobPublic(profile.dobPublic ?? false);
+    setGenderPublic(profile.genderPublic ?? true);
+    setCountryPublic(profile.countryPublic ?? true);
+    setEthnicityPublic(profile.ethnicityPublic ?? false);
+    setSocialHandlesPublic(profile.socialHandlesPublic ?? false);
+    setOccupationPublic(profile.occupationPublic ?? false);
   }, [profile, dirty]);
 
   const mutation = useMutation({
@@ -1074,6 +1158,12 @@ function PrivacyTab() {
       const res = await apiRequest("PATCH", "/api/profile/me", {
         isPublic,
         positionsPublic,
+        dobPublic,
+        genderPublic,
+        countryPublic,
+        ethnicityPublic,
+        socialHandlesPublic,
+        occupationPublic,
       });
       return res.json();
     },
@@ -1139,6 +1229,79 @@ function PrivacyTab() {
               data-testid="switch-positions-public"
             />
           </div>
+        </div>
+
+        <div className="pt-4 border-t border-border/60 space-y-4">
+          <div className="space-y-1">
+            <Label>Profile visibility</Label>
+            <p className="text-xs text-muted-foreground">
+              Mirrors the toggles on About Me. Hidden fields stay
+              usable for eligibility on country, gender, or age-locked
+              vote cards — they just won&apos;t appear on your public
+              profile.
+            </p>
+          </div>
+
+          <PrivacyRow
+            label="Show date of birth (age only)"
+            helper="We only ever display your age, never the raw date."
+            checked={dobPublic}
+            onChange={(v) => {
+              setDirty(true);
+              setDobPublic(v);
+            }}
+            testId="switch-dob-public-mirror"
+          />
+          <PrivacyRow
+            label="Show gender"
+            helper="Visible by default."
+            checked={genderPublic}
+            onChange={(v) => {
+              setDirty(true);
+              setGenderPublic(v);
+            }}
+            testId="switch-gender-public-mirror"
+          />
+          <PrivacyRow
+            label="Show country"
+            helper="Country of origin and country of residence (with flags). Visible by default."
+            checked={countryPublic}
+            onChange={(v) => {
+              setDirty(true);
+              setCountryPublic(v);
+            }}
+            testId="switch-country-public-mirror"
+          />
+          <PrivacyRow
+            label="Show ethnicity"
+            helper="Hidden by default."
+            checked={ethnicityPublic}
+            onChange={(v) => {
+              setDirty(true);
+              setEthnicityPublic(v);
+            }}
+            testId="switch-ethnicity-public-mirror"
+          />
+          <PrivacyRow
+            label="Show social handles"
+            helper="Adds your X and Instagram handles to your public profile."
+            checked={socialHandlesPublic}
+            onChange={(v) => {
+              setDirty(true);
+              setSocialHandlesPublic(v);
+            }}
+            testId="switch-socials-public-mirror"
+          />
+          <PrivacyRow
+            label="Show occupation"
+            helper="Lets viewers see your selected industry."
+            checked={occupationPublic}
+            onChange={(v) => {
+              setDirty(true);
+              setOccupationPublic(v);
+            }}
+            testId="switch-occupation-public-mirror"
+          />
         </div>
 
         <div className="pt-2 border-t border-border/60">
