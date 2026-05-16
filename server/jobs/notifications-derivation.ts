@@ -35,11 +35,64 @@ import { STREAK_MILESTONES } from "@shared/streak-config";
 
 const DERIVATION_LOCK_KEY = 5_207;
 
-// 6h pre-close warning. Picked from the plan; long enough that "I'll
-// log in tonight" still counts, short enough that it isn't ambient
-// noise. We only run hourly so the actual lead time varies 5–6h.
-const MARKET_CLOSING_SOON_WINDOW_MS = 6 * 60 * 60 * 1000;
+// Lookahead window for the closing-soon scanner. Markets whose close
+// lies inside this window are considered for milestone gating below;
+// markets further out are ignored until they drift into range. Was 6h
+// (single uniform reminder); 24h gives the 24h milestone room to fire.
+const MARKET_CLOSING_SOON_WINDOW_MS = 24 * 60 * 60 * 1000;
 const MARKET_CLOSING_SOON_GRACE_MS = 30 * 60 * 1000;
+
+// Closing-soon milestones, ordered largest threshold → smallest.
+// Each milestone fires at most once per (user, variant, close-cycle)
+// via the idempotency key downstream; inside a milestone bucket the
+// row content (time-remaining label, market count) refreshes silently
+// via `refreshOnConflict` on every cron tick.
+//
+// Why these four? They map to the lead times people actually act on:
+//   24h — "I'll get to it tonight"
+//    4h — "I'll grab a coffee and decide"
+//    1h — "ok, this is real, last review"
+//    5m — "now or never"
+// Anything denser than this was the original symptom report — the
+// UTC-hour key was creating 1m/1h/2h/3h/… stacks per market per user.
+const CLOSING_MILESTONES = [
+  { id: "24h", thresholdMs: 24 * 60 * 60 * 1000 },
+  { id: "4h", thresholdMs: 4 * 60 * 60 * 1000 },
+  { id: "1h", thresholdMs: 1 * 60 * 60 * 1000 },
+  { id: "5m", thresholdMs: 5 * 60 * 1000 },
+] as const;
+
+type ClosingMilestoneId = (typeof CLOSING_MILESTONES)[number]["id"];
+
+/**
+ * Smallest milestone whose `thresholdMs` is ≥ the remaining time. Returns
+ * `null` when the market is further out than the largest milestone (e.g.
+ * a 48h-out market on a 24h schedule) or has already closed (negative
+ * value — let the auto-dismiss cleanup pass handle stale rows).
+ *
+ * Worked examples on the default 24h/4h/1h/5m schedule:
+ *   ~30h until close → null (too far out)
+ *   ~12h until close → "24h"   (still inside the 24h bucket)
+ *    ~3h until close → "4h"
+ *   ~30m until close → "1h"
+ *    ~3m until close → "5m"
+ *      already closed → null (no fresh fire; cleanup handles)
+ */
+function currentMilestone(timeUntilCloseMs: number): ClosingMilestoneId | null {
+  if (timeUntilCloseMs <= 0) return null;
+  // CLOSING_MILESTONES is ordered largest→smallest. The smallest
+  // milestone whose threshold still covers `timeUntilCloseMs` is the
+  // last one we see before crossing below; once a threshold dips under
+  // we can stop walking. (Tiny list so the optimization is cosmetic —
+  // the break exists to make "we land in the deepest qualifying
+  // bucket" obvious to readers.)
+  let chosen: ClosingMilestoneId | null = null;
+  for (const m of CLOSING_MILESTONES) {
+    if (m.thresholdMs < timeUntilCloseMs) break;
+    chosen = m.id;
+  }
+  return chosen;
+}
 
 // Hot mover threshold mirrors the trending-people "hot mover" pill in
 // the favorites dashboard — exceptional 24h move, not garden-variety.
@@ -153,6 +206,16 @@ async function deriveFavoriteRankCrossings(): Promise<number> {
       entityType: "person",
       entityId: fav.personId,
       metadata: { crossing, previousRank: prior, currentRank: current },
+      // Audit: idempotencyKey already includes the UTC hour bucket so
+      // we cannot exceed one row per (user, person, crossing) per hour.
+      // groupKey here collapses any yo-yo crossings client-side — e.g.
+      // a person who breaks top10 then re-crosses 14h later shows as
+      // one row with "+1 earlier" instead of two separate rows. Scoped
+      // to (user, person) — not (user, person, crossing) — so that a
+      // single person's mixed crossings (top10 → top50 → top10) also
+      // fold together, which is what users actually mean by "show me
+      // what changed about this person."
+      groupKey: `favorite_rank_cross:${fav.userId}:${fav.personId}`,
       idempotencyKey: `favrank:${fav.userId}:${fav.personId}:${crossing}:${bucket}`,
     });
     if (id) inserted += 1;
@@ -264,6 +327,13 @@ async function deriveFavoriteHotMovers(): Promise<number> {
       entityType: "person",
       entityId: fav.personId,
       metadata: { direction, pctChange, currentScore: current, priorScore: prior },
+      // Audit: throttled to once per (user, person) per ~24h via the
+      // explicit cooldown query above (the day-bucket idempotency key
+      // is a second-line defense if the cooldown ever races). groupKey
+      // gives the client-side panel a collapse target so a person who
+      // alternates between climbing fast and slipping fast over several
+      // days surfaces as one row with the latest direction.
+      groupKey: `favorite_hot_mover:${fav.userId}:${fav.personId}`,
       idempotencyKey: `favhot:${fav.userId}:${fav.personId}:${bucket}`,
     });
     if (id) inserted += 1;
@@ -311,25 +381,34 @@ function closingSoonHref(market: ClosingSoonMarket): string {
 }
 
 /**
- * Find markets whose `closeAt` is within the next ~6h and ping users
+ * Find markets whose `closeAt` is within the next 24h and ping users
  * who have an open bet on the market. We deliberately do NOT also fan
  * out to "users with a favorite linked to the market" — that's much
  * noisier and harder to reason about. Open-bet-only keeps signal high.
  *
- * Digests: one notification per user per UTC hour per message family
- * (standard betting vs jackpot entries vs AMM) so dozens of parallel
- * weekly cards don't spam identical titles. Muted markets are excluded
- * before grouping — there is no single `marketId` on digest rows, so
- * we filter upfront. Idempotency: `closing_digest:${userId}:${hour}:${variant}`.
+ * Digests: one notification per user per close-cycle milestone per
+ * variant (standard betting vs jackpot entries vs AMM). Milestones are
+ * 24h / 4h / 1h / 5m — see `CLOSING_MILESTONES`. Within each milestone
+ * bucket the row's title/body/metadata refresh silently (via
+ * `refreshOnConflict` on the dispatcher) as the time-remaining label
+ * drifts; `created_at` and `read_at` are untouched so a user who has
+ * already read the row doesn't see it pop unread.
+ *
+ * Muted markets are excluded before grouping — there is no single
+ * `marketId` on digest rows so we filter upfront. Idempotency key is
+ * `closing_digest:${userId}:${variant}:${milestoneId}` (no UTC bucket
+ * — that was the source of the per-hour repetition).
  */
 async function deriveMarketClosingSoon(): Promise<number> {
   const now = new Date();
   const horizon = new Date(now.getTime() + MARKET_CLOSING_SOON_WINDOW_MS);
   const grace = new Date(now.getTime() - MARKET_CLOSING_SOON_GRACE_MS);
 
-  // Markets that close inside the [now, now+6h] window AND haven't
-  // already closed (or are still safely settle-able). The grace upper
-  // bound covers tick drift if the job is late by a few minutes.
+  // Markets that close inside the [now, now+24h] window AND haven't
+  // already closed (or are still safely settle-able). The grace lower
+  // bound covers tick drift if the job is late by a few minutes; the
+  // 24h horizon is the largest milestone — markets further out are
+  // filtered later via `currentMilestone` returning null.
   const closingMarkets = await db
     .select({
       id: predictionMarkets.id,
@@ -406,7 +485,6 @@ async function deriveMarketClosingSoon(): Promise<number> {
     g.markets.push(market);
   }
 
-  const bucket = hourBucket(now);
   let inserted = 0;
 
   for (const { userId, variant, markets } of groupMap.values()) {
@@ -417,6 +495,18 @@ async function deriveMarketClosingSoon(): Promise<number> {
       if (!earliest || ca.getTime() < earliest.getTime()) earliest = ca;
     }
     if (!earliest) continue;
+
+    // Gate firing on the milestone schedule. If the group's earliest
+    // close is further out than the largest milestone (24h) or has
+    // already slipped past close (grace-window markets), skip — the
+    // auto-dismiss pass in `runNotificationsDerivation` handles the
+    // already-closed case. Without this guard a market closing in 23h
+    // would still match the lookahead window but we'd insert a row
+    // every cron tick keyed by hour, which is exactly the noise we're
+    // trying to remove.
+    const timeUntilClose = earliest.getTime() - now.getTime();
+    const milestone = currentMilestone(timeUntilClose);
+    if (!milestone) continue;
 
     const timing = closingSoonTimingLabel(now, earliest);
     const title =
@@ -467,6 +557,7 @@ async function deriveMarketClosingSoon(): Promise<number> {
         marketIds: marketIdsInGroup,
         count,
         variant,
+        milestone,
         closeAt: earliest.toISOString(),
         ...(single
           ? {
@@ -475,12 +566,60 @@ async function deriveMarketClosingSoon(): Promise<number> {
             }
           : {}),
       },
-      idempotencyKey: `closing_digest:${userId}:${bucket}:${variant}`,
+      // Shared groupKey across every milestone row for this user+variant
+      // (one user may still get one row per variant, but inside a variant
+      // the four milestone rows fold together client-side via
+      // `flattenNotifications`'s groupKey collapse → user sees one
+      // "Closes in 5m · +3 earlier" pill instead of four stacked rows).
+      groupKey: `market_closing_soon:${userId}:${variant}`,
+      idempotencyKey: `closing_digest:${userId}:${variant}:${milestone}`,
+      // Inside a milestone bucket the time-remaining label drifts
+      // (24h → 12h → 5h → …); refresh so the row stays current without
+      // bumping `created_at` or re-marking unread.
+      refreshOnConflict: true,
     });
     if (id) inserted += 1;
   }
 
   return inserted;
+}
+
+/**
+ * Auto-dismiss closing-soon rows whose referenced markets are no
+ * longer OPEN. Runs on the same 10-minute cadence as the deriver so
+ * post-close cleanup happens within one tick (typically faster than
+ * the user notices). We deliberately stay reactive instead of wiring
+ * into [server/native-markets/lifecycle.ts](server/native-markets/lifecycle.ts)
+ * / [server/jobs/market-resolver.ts](server/jobs/market-resolver.ts):
+ * the cost is one extra UPDATE per tick and we avoid coupling unrelated
+ * subsystems.
+ *
+ * Scope: every notification we emit from `deriveMarketClosingSoon`
+ * carries `metadata.marketIds` (single-market rows include one id;
+ * digest rows include all of them). The row is safe to dismiss the
+ * moment NONE of those markets is still OPEN. Defensive `jsonb_typeof`
+ * and `jsonb_array_length` guards prevent us from touching legacy or
+ * malformed rows we don't fully understand.
+ */
+async function dismissClosedMarketClosingSoon(): Promise<number> {
+  const result = await db.execute(sql`
+    UPDATE ${notifications} AS n
+    SET dismissed_at = NOW()
+    WHERE n.kind = 'market_closing_soon'
+      AND n.dismissed_at IS NULL
+      AND jsonb_typeof(n.metadata->'marketIds') = 'array'
+      AND jsonb_array_length(n.metadata->'marketIds') > 0
+      AND NOT EXISTS (
+        SELECT 1
+        FROM ${predictionMarkets} pm
+        WHERE pm.status = 'OPEN'
+          AND pm.id = ANY(
+            SELECT jsonb_array_elements_text(n.metadata->'marketIds')
+          )
+      )
+    RETURNING id
+  `);
+  return (result.rows || []).length;
 }
 
 /**
@@ -492,6 +631,13 @@ async function deriveMarketClosingSoon(): Promise<number> {
  * to be useful — VoxDex doesn't store user timezone yet, so we hold off
  * on the warning variant until that exists. This module covers the
  * positive milestones today.
+ *
+ * Audit (notifications consolidation): the idempotency key already
+ * bakes in the discrete streak value (`streak:${userId}:${value}`), so
+ * a user can only hit the "3-day streak" / "7-day streak" / etc.
+ * notification ONCE — even if the deriver fires daily for the lifetime
+ * of the streak. No groupKey needed: each milestone is a distinct
+ * achievement worth its own inbox row.
  */
 async function deriveStreakMilestones(): Promise<number> {
   const targets = STREAK_MILESTONES as readonly number[];
@@ -524,6 +670,12 @@ async function deriveStreakMilestones(): Promise<number> {
  * Low-credit reminder. Throttled to once per 7 days via a weekly
  * idempotency bucket ("YYYY-WW"). Threshold is intentionally
  * conservative (100 credits) — we want this to be useful, not annoying.
+ *
+ * Audit (notifications consolidation): the weekly bucket bounds firing
+ * to at most one row per user per ISO week. groupKey deliberately not
+ * set — users who hit low credits in week N AND week N+2 want both
+ * rows distinct (they were two separate moments of being low). The
+ * inbox cap eventually evicts the older one.
  */
 async function deriveCreditsLow(): Promise<number> {
   const LOW_THRESHOLD = 100;
@@ -572,10 +724,16 @@ export async function runNotificationsDerivation(): Promise<NotificationsDerivat
   const lock = await withDbAdvisoryLock(DERIVATION_LOCK_KEY, "NotificationsDerivation", async () => {
     const start = Date.now();
     const results: Record<string, number> = {};
+    // Closing-soon dismiss runs immediately after the deriver as the
+    // logical "cleanup half" of the same pipeline stage. Order is not
+    // load-bearing — the deriver only emits for OPEN markets so a
+    // market that closed between ticks won't re-fire either way — but
+    // grouping them keeps the orchestration readable.
     const steps: Array<[string, () => Promise<number>]> = [
       ["favorite_rank_cross", deriveFavoriteRankCrossings],
       ["favorite_hot_mover", deriveFavoriteHotMovers],
       ["market_closing_soon", deriveMarketClosingSoon],
+      ["market_closing_soon_dismiss", dismissClosedMarketClosingSoon],
       ["streak_milestone", deriveStreakMilestones],
       ["credits_low", deriveCreditsLow],
     ];

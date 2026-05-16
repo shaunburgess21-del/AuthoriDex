@@ -11,7 +11,9 @@ import {
 import { requireAuth, type AuthRequest } from "../auth-middleware";
 import {
   dismissNotification,
+  dismissNotificationGroup,
   markAllNotificationsRead,
+  markNotificationGroupRead,
   markNotificationRead,
   markNotificationsSeen,
   type NotificationCategory,
@@ -28,6 +30,8 @@ import {
  *   POST   /api/me/notifications/seen
  *   POST   /api/me/notifications/read-all
  *   POST   /api/me/notifications/:id/read
+ *   POST   /api/me/notifications/group/read           { groupKey }
+ *   POST   /api/me/notifications/group/dismiss        { groupKey }
  *   DELETE /api/me/notifications/:id
  *   GET    /api/me/notification-preferences
  *   PATCH  /api/me/notification-preferences
@@ -177,6 +181,44 @@ export function registerNotificationsRoutes(app: Express): void {
     } catch (error: any) {
       req.log?.error({ err: error }, "[notifications] mark seen failed");
       res.status(500).json({ error: "Failed to mark notifications seen" });
+    }
+  });
+
+  // ── Mark every unread row in a groupKey as read ──────────────────────
+  // Registered BEFORE the `:id/read` route below so Express's first-match
+  // path resolver doesn't capture "group" as the `:id` parameter. Used
+  // when the client collapses a groupKey via `flattenNotifications` and
+  // the user clicks the head — drops the badge by the full hidden count
+  // rather than just the visible one.
+  app.post("/api/me/notifications/group/read", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const groupKey = typeof req.body?.groupKey === "string" ? req.body.groupKey : "";
+      if (!groupKey) {
+        return res.status(400).json({ error: "groupKey required" });
+      }
+      const updated = await markNotificationGroupRead(req.userId!, groupKey);
+      res.json({ updated });
+    } catch (error: any) {
+      req.log?.error({ err: error }, "[notifications] mark group read failed");
+      res.status(500).json({ error: "Failed to mark notification group read" });
+    }
+  });
+
+  // ── Soft-dismiss every undismissed row in a groupKey ─────────────────
+  // Companion to the group-read endpoint. Dismissing a collapsed head
+  // without this would "roll back" the inbox to a stale older milestone
+  // when `flattenNotifications` re-collapses on the next render.
+  app.post("/api/me/notifications/group/dismiss", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const groupKey = typeof req.body?.groupKey === "string" ? req.body.groupKey : "";
+      if (!groupKey) {
+        return res.status(400).json({ error: "groupKey required" });
+      }
+      const updated = await dismissNotificationGroup(req.userId!, groupKey);
+      res.json({ updated });
+    } catch (error: any) {
+      req.log?.error({ err: error }, "[notifications] dismiss group failed");
+      res.status(500).json({ error: "Failed to dismiss notification group" });
     }
   });
 

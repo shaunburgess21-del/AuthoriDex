@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "../db";
 import { notificationPreferences, notifications, notificationMarketMutes, profiles } from "@shared/schema";
 import { logger } from "../log";
@@ -95,6 +95,23 @@ export interface CreateNotificationInput {
    * slug, so jackpot/H2H/Race etc. all use the same lookup column.
    */
   marketId?: string;
+  /**
+   * Opt-in: when the idempotency key already exists, UPDATE
+   * `title / body / metadata` in place instead of `DO NOTHING`.
+   *
+   * Used by the closing-soon milestone derivation so a row keyed on
+   * (user, variant, milestone) can stay current as the time-remaining
+   * label drifts ("Entries close in 4h" → "Entries close in 2h")
+   * without re-marking the row unread or bumping `created_at`. We
+   * deliberately do NOT include `priority / read_at / seen_at /
+   * dismissed_at / created_at` in the update set, and the update is
+   * suppressed entirely if the row was already dismissed — actively
+   * swiping a row away should not be undone by the next cron tick.
+   *
+   * Defaults to false; every existing call site keeps `DO NOTHING`
+   * semantics.
+   */
+  refreshOnConflict?: boolean;
 }
 
 const CATEGORY_TO_IN_APP_COLUMN: Record<NotificationCategory, keyof typeof notificationPreferences.$inferSelect> = {
@@ -189,7 +206,7 @@ export async function createNotification(input: CreateNotificationInput): Promis
   const priority = input.priority ?? meta.priority;
 
   try {
-    const result = await db
+    const baseInsert = db
       .insert(notifications)
       .values({
         userId: input.userId,
@@ -205,12 +222,37 @@ export async function createNotification(input: CreateNotificationInput): Promis
         priority,
         groupKey: input.groupKey,
         idempotencyKey: input.idempotencyKey,
-      })
-      .onConflictDoNothing({
-        target: [notifications.userId, notifications.idempotencyKey],
-      })
-      .returning({ id: notifications.id });
+      });
 
+    // Conflict policy: default keeps the long-standing DO NOTHING (a
+    // re-fired event silently absorbs). With `refreshOnConflict` we
+    // UPDATE only the content-bearing columns from EXCLUDED and gate
+    // the update behind `dismissed_at IS NULL` so a user-dismissed
+    // row cannot resurrect on the next tick. createdAt / readAt /
+    // seenAt are intentionally absent from `set` so they stay
+    // exactly as they were when the row was first inserted.
+    const query = input.refreshOnConflict
+      ? baseInsert.onConflictDoUpdate({
+          target: [notifications.userId, notifications.idempotencyKey],
+          set: {
+            title: sql`EXCLUDED.title`,
+            body: sql`EXCLUDED.body`,
+            metadata: sql`EXCLUDED.metadata`,
+          },
+          setWhere: sql`${notifications.dismissedAt} IS NULL`,
+        })
+      : baseInsert.onConflictDoNothing({
+          target: [notifications.userId, notifications.idempotencyKey],
+        });
+
+    const result = await query.returning({ id: notifications.id });
+
+    // Note: with refreshOnConflict, returning the id on an UPDATE path
+    // means the function returns "row exists" rather than "row was
+    // freshly inserted." Callers (e.g. the closing-soon deriver) only
+    // use the return value to count emissions, so this is harmless;
+    // documented here so future call sites don't rely on the stricter
+    // "newly inserted" semantic.
     return result[0]?.id ?? null;
   } catch (err) {
     // Most likely cause: profile row was deleted between the upstream
@@ -395,6 +437,39 @@ export async function markAllNotificationsRead(userId: string): Promise<number> 
   return result.length;
 }
 
+/**
+ * Mark every unread notification in a groupKey as read.
+ *
+ * Companion to `flattenNotifications`'s client-side collapse: when the
+ * user clicks the collapsed head row in the panel, the badge should
+ * drop by the full count of unread rows in that group — not just the
+ * visible head — otherwise the unread count diverges from the user's
+ * perception ("I just dealt with this market"). We also set `seen_at`
+ * here for parity with the per-row helper above.
+ *
+ * Read state is per-row by design, so this is a bulk UPDATE rather
+ * than a denormalised flag on the group. Callers should not pass
+ * empty / null groupKey — the route validates the input.
+ */
+export async function markNotificationGroupRead(
+  userId: string,
+  groupKey: string,
+): Promise<number> {
+  const now = new Date();
+  const result = await db
+    .update(notifications)
+    .set({ readAt: now, seenAt: now })
+    .where(
+      and(
+        eq(notifications.userId, userId),
+        eq(notifications.groupKey, groupKey),
+        isNull(notifications.readAt),
+      ),
+    )
+    .returning({ id: notifications.id });
+  return result.length;
+}
+
 export async function markNotificationsSeen(userId: string): Promise<number> {
   const result = await db
     .update(notifications)
@@ -411,4 +486,32 @@ export async function dismissNotification(userId: string, notificationId: string
     .where(and(eq(notifications.id, notificationId), eq(notifications.userId, userId)))
     .returning({ id: notifications.id });
   return result.length > 0;
+}
+
+/**
+ * Soft-dismiss every undismissed notification in a groupKey.
+ *
+ * Without this, dismissing the head row of a collapsed group would
+ * "roll back" the inbox to the next-older milestone (whose body is
+ * already stale because the deriver doesn't refresh rows outside the
+ * active milestone bucket). Group-dismiss matches the user's intent of
+ * "I'm done with this whole thing."
+ */
+export async function dismissNotificationGroup(
+  userId: string,
+  groupKey: string,
+): Promise<number> {
+  const now = new Date();
+  const result = await db
+    .update(notifications)
+    .set({ dismissedAt: now })
+    .where(
+      and(
+        eq(notifications.userId, userId),
+        eq(notifications.groupKey, groupKey),
+        isNull(notifications.dismissedAt),
+      ),
+    )
+    .returning({ id: notifications.id });
+  return result.length;
 }

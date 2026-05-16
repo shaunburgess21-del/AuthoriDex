@@ -50,8 +50,12 @@ export default function NotificationsArchivePage() {
     unreadOnly: tab === "unread",
   });
 
+  // Archive view: show every notification row individually. The
+  // panel/dropdown collapses by groupKey for terseness; the archive
+  // deliberately doesn't so the per-milestone closing-soon history
+  // (and any future groupKey-using kind) is fully browsable.
   const items = useMemo(
-    () => flattenNotifications(list.data?.pages),
+    () => flattenNotifications(list.data?.pages, { collapse: false }),
     [list.data?.pages],
   );
 

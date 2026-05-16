@@ -7,6 +7,8 @@ import { getKindMeta } from "@/lib/notifications/registry";
 import type { NotificationRow } from "@/lib/notifications/types";
 import {
   useDismissNotification,
+  useDismissNotificationGroup,
+  useMarkNotificationGroupRead,
   useMarkNotificationRead,
 } from "@/hooks/useNotifications";
 
@@ -29,7 +31,9 @@ interface NotificationItemProps {
 export function NotificationItem({ notification, onNavigate }: NotificationItemProps) {
   const [, setLocation] = useLocation();
   const markRead = useMarkNotificationRead();
+  const markGroupRead = useMarkNotificationGroupRead();
   const dismiss = useDismissNotification();
+  const dismissGroup = useDismissNotificationGroup();
   const [isExiting, setIsExiting] = useState(false);
 
   const meta = getKindMeta(notification.kind);
@@ -56,9 +60,22 @@ export function NotificationItem({ notification, onNavigate }: NotificationItemP
         : meta.accent;
   const isUnread = !notification.readAt;
   const isInternalLink = !!notification.href && notification.href.startsWith("/");
+  // True when this row stands in for additional collapsed rows behind
+  // it (`flattenNotifications` set `collapsedCount` and we have a
+  // groupKey to address the bundle). The click/dismiss handlers route
+  // to the group mutations so the user's interaction affects every
+  // row they're standing in for, not just the visible head.
+  const isCollapsedHead =
+    (notification.collapsedCount ?? 0) > 0 && !!notification.groupKey;
 
   const handleClick = () => {
-    if (isUnread) markRead.mutate(notification.id);
+    if (isUnread) {
+      if (isCollapsedHead && notification.groupKey) {
+        markGroupRead.mutate(notification.groupKey);
+      } else {
+        markRead.mutate(notification.id);
+      }
+    }
     if (notification.href) {
       if (isInternalLink) {
         setLocation(notification.href);
@@ -74,7 +91,13 @@ export function NotificationItem({ notification, onNavigate }: NotificationItemP
     setIsExiting(true);
     // Slight delay matches the fade-out feel — list filters out the
     // row the moment the dismiss mutation lands.
-    setTimeout(() => dismiss.mutate(notification.id), 120);
+    setTimeout(() => {
+      if (isCollapsedHead && notification.groupKey) {
+        dismissGroup.mutate(notification.groupKey);
+      } else {
+        dismiss.mutate(notification.id);
+      }
+    }, 120);
   };
 
   return (
@@ -127,9 +150,39 @@ export function NotificationItem({ notification, onNavigate }: NotificationItemP
           >
             {notification.title}
           </p>
-          <span className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0 mt-0.5">
-            {formatTimeAgo(notification.createdAt)}
-          </span>
+          <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
+            {/* Collapse indicator. `collapsedCount` is set by
+                `flattenNotifications` when this row represents the head
+                of a groupKey bucket (typically the latest closing-soon
+                milestone for a market). Renders inline with the
+                timestamp so the user can see the row is hiding earlier
+                rows without us pulling them into the list itself. */}
+            {(notification.collapsedCount ?? 0) > 0 && (
+              <span
+                className={cn(
+                  // Match the neighbouring timestamp's 10px font so the
+                  // chip doesn't look like a different size class — 9px
+                  // sat half a step below the timestamp and read as a
+                  // typo at standard density.
+                  "px-1.5 py-0.5 rounded-full text-[10px] font-medium",
+                  "bg-muted text-muted-foreground/80",
+                  "leading-none whitespace-nowrap",
+                )}
+                aria-label={`${notification.collapsedCount} earlier notification${
+                  (notification.collapsedCount ?? 0) === 1 ? "" : "s"
+                } in this group`}
+                title={`${notification.collapsedCount} earlier notification${
+                  (notification.collapsedCount ?? 0) === 1 ? "" : "s"
+                } in this group`}
+                data-testid={`notification-collapsed-pill-${notification.id}`}
+              >
+                +{notification.collapsedCount} earlier
+              </span>
+            )}
+            <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+              {formatTimeAgo(notification.createdAt)}
+            </span>
+          </div>
         </div>
         {notification.body && (
           <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
@@ -147,7 +200,11 @@ export function NotificationItem({ notification, onNavigate }: NotificationItemP
       <button
         type="button"
         onClick={handleDismiss}
-        aria-label="Dismiss notification"
+        aria-label={
+          isCollapsedHead
+            ? `Dismiss this group of ${(notification.collapsedCount ?? 0) + 1} notifications`
+            : "Dismiss notification"
+        }
         className={cn(
           "absolute top-2 right-2 h-6 w-6 rounded-full",
           "flex items-center justify-center",

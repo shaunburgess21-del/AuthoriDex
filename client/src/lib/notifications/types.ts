@@ -52,6 +52,15 @@ export interface NotificationRow {
   readAt: string | null;
   dismissedAt: string | null;
   createdAt: string;
+  /**
+   * Client-only — set by `flattenNotifications` when rows are collapsed
+   * by `groupKey`. When present and > 0 this row is the most recent of
+   * a group of N+1 rows; the UI renders a small "+N earlier" pill next
+   * to the timestamp so the user can see how many were folded. Never
+   * present on the wire; never present when collapsing is opted out
+   * (e.g. on the full archive page).
+   */
+  collapsedCount?: number;
 }
 
 export interface NotificationListResponse {

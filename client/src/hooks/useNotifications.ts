@@ -93,23 +93,89 @@ export function useNotificationsList(options: NotificationsListOptions = {}) {
   });
 }
 
+export interface FlattenNotificationsOptions {
+  /**
+   * When true (default), rows that share a non-null `groupKey` collapse
+   * into a single row — the most recent by `createdAt` — with the
+   * remaining count attached as `collapsedCount` so the UI can render
+   * a "+N earlier" pill. Rows without a groupKey are unaffected.
+   *
+   * Set false on the full archive page where the per-event history is
+   * the point (e.g. seeing every closing-soon milestone for a market).
+   */
+  collapse?: boolean;
+}
+
 /**
- * Convenience: flat array view of the paginated list, with id-dedupe.
+ * Convenience: flat array view of the paginated list. Always id-dedupes
+ * (Realtime can deliver an item that's already in the cached first
+ * page, otherwise it'd render twice). Optionally collapses rows by
+ * `groupKey` so noisy emitters — e.g. the closing-soon milestone
+ * digest — surface as one row plus a "+N earlier" pill.
  */
 export function flattenNotifications(
   pages: NotificationListResponse[] | undefined,
+  options: FlattenNotificationsOptions = {},
 ): NotificationRow[] {
   if (!pages) return [];
+  const { collapse = true } = options;
+
   const seen = new Set<string>();
-  const out: NotificationRow[] = [];
+  const deduped: NotificationRow[] = [];
   for (const page of pages) {
     for (const item of page.items) {
       if (seen.has(item.id)) continue;
       seen.add(item.id);
-      out.push(item);
+      deduped.push(item);
     }
   }
-  return out;
+
+  if (!collapse) return deduped;
+
+  // Bucket by groupKey; rows with no groupKey pass through unchanged
+  // so every existing kind (no groupKey set server-side) keeps the
+  // current per-row UX. Only the kinds that opt in via `groupKey`
+  // get folded — market_closing_soon, favorite_rank_cross,
+  // favorite_hot_mover (Sprint: notifications consolidation).
+  const groups = new Map<string, NotificationRow[]>();
+  const ungrouped: NotificationRow[] = [];
+  for (const row of deduped) {
+    if (!row.groupKey) {
+      ungrouped.push(row);
+      continue;
+    }
+    const arr = groups.get(row.groupKey);
+    if (arr) arr.push(row);
+    else groups.set(row.groupKey, [row]);
+  }
+
+  // ISO-8601 timestamps sort lexicographically the same way they sort
+  // chronologically — taking the string compare avoids `new Date()`
+  // allocations on every comparison (this runs through useMemo, but
+  // panel renders flow through it on every cache invalidation).
+  const byCreatedAtDesc = (a: NotificationRow, b: NotificationRow): number =>
+    a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0;
+
+  const collapsed: NotificationRow[] = [];
+  for (const rows of groups.values()) {
+    // Sort each group desc so the head row (the one we surface) is
+    // always the freshest milestone. The server already sorts the full
+    // page desc, but rows in one group can interleave with other
+    // groups' rows across pages — sort locally to be safe.
+    rows.sort(byCreatedAtDesc);
+    const [head, ...rest] = rows;
+    collapsed.push(
+      rest.length > 0 ? { ...head, collapsedCount: rest.length } : head,
+    );
+  }
+
+  // Merge collapsed group representatives back into the ungrouped
+  // stream and re-sort by createdAt desc so the chronological inbox
+  // order is preserved. When `collapse: false` is set or no groups
+  // exist, this is effectively a no-op over the already-sorted input.
+  collapsed.push(...ungrouped);
+  collapsed.sort(byCreatedAtDesc);
+  return collapsed;
 }
 
 export function useMarkNotificationRead() {
@@ -153,6 +219,85 @@ export function useMarkNotificationRead() {
       return { previousCounts, previousLists };
     },
     onError: (_err, _id, context) => {
+      if (context?.previousCounts) {
+        queryClient.setQueryData(COUNTS_QUERY_KEY, context.previousCounts);
+      }
+      if (context?.previousLists) {
+        for (const [key, data] of context.previousLists) {
+          queryClient.setQueryData(key, data);
+        }
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: COUNTS_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: LIST_QUERY_KEY });
+    },
+  });
+}
+
+/**
+ * Mark every unread row in a groupKey as read.
+ *
+ * Counterpart of the panel's groupKey collapse: when the user clicks
+ * the head row of a collapsed group, we want the badge to drop by the
+ * full hidden count, not just the visible head. Without this the
+ * unread count drifts ("I just clicked it, why does the bell still
+ * say 3?") because the older milestone rows behind the head are still
+ * unread server-side.
+ *
+ * Optimistic update sweeps every cache entry (the panel may cache
+ * "all" plus per-category lists; one row may live in multiple). We
+ * dedupe by row id so the unread delta isn't double-counted.
+ */
+export function useMarkNotificationGroupRead() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (groupKey: string) => {
+      const res = await apiRequest(
+        "POST",
+        "/api/me/notifications/group/read",
+        { groupKey },
+      );
+      return res.json();
+    },
+    onMutate: async (groupKey) => {
+      await queryClient.cancelQueries({ queryKey: COUNTS_QUERY_KEY });
+      await queryClient.cancelQueries({ queryKey: LIST_QUERY_KEY });
+
+      const now = new Date().toISOString();
+      // Dedupe by row id — a row may be cached under multiple list
+      // query keys (e.g. "all" and the predictions-category filter).
+      // Without this we'd count the same unread row twice and over-
+      // decrement the badge.
+      const unreadIds = new Set<string>();
+      const previousLists = queryClient.getQueriesData<{ pages?: NotificationListResponse[] }>({ queryKey: LIST_QUERY_KEY });
+      for (const [key, data] of previousLists) {
+        if (!data?.pages) continue;
+        queryClient.setQueryData(key, {
+          ...data,
+          pages: data.pages.map((page) => ({
+            ...page,
+            items: page.items.map((row) => {
+              if (row.groupKey !== groupKey || row.readAt) return row;
+              unreadIds.add(row.id);
+              return { ...row, readAt: now };
+            }),
+          })),
+        });
+      }
+
+      const previousCounts = queryClient.getQueryData<NotificationCountsResponse>(COUNTS_QUERY_KEY);
+      if (previousCounts && unreadIds.size > 0) {
+        queryClient.setQueryData<NotificationCountsResponse>(COUNTS_QUERY_KEY, {
+          ...previousCounts,
+          unread: Math.max(0, previousCounts.unread - unreadIds.size),
+        });
+      }
+
+      return { previousCounts, previousLists };
+    },
+    onError: (_err, _groupKey, context) => {
       if (context?.previousCounts) {
         queryClient.setQueryData(COUNTS_QUERY_KEY, context.previousCounts);
       }
@@ -307,6 +452,76 @@ export function useDismissNotification() {
       return { previousLists, previousCounts };
     },
     onError: (_err, _id, context) => {
+      if (context?.previousCounts) {
+        queryClient.setQueryData(COUNTS_QUERY_KEY, context.previousCounts);
+      }
+      if (context?.previousLists) {
+        for (const [key, data] of context.previousLists) {
+          queryClient.setQueryData(key, data);
+        }
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: COUNTS_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: LIST_QUERY_KEY });
+    },
+  });
+}
+
+/**
+ * Soft-dismiss every undismissed row in a groupKey.
+ *
+ * Without this, dismissing the head of a collapsed group would
+ * "reveal" the next-older milestone (whose body has gone stale) on
+ * the next render. Dismiss-group makes "I'm done with this whole
+ * thing" do the obvious thing — drop the entire collapsed bundle in
+ * one go.
+ */
+export function useDismissNotificationGroup() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (groupKey: string) => {
+      const res = await apiRequest(
+        "POST",
+        "/api/me/notifications/group/dismiss",
+        { groupKey },
+      );
+      return res.json();
+    },
+    onMutate: async (groupKey) => {
+      await queryClient.cancelQueries({ queryKey: COUNTS_QUERY_KEY });
+      await queryClient.cancelQueries({ queryKey: LIST_QUERY_KEY });
+
+      // Track dropped unread rows by id so we can decrement the badge
+      // accurately (one row may be cached in multiple list-key entries
+      // — "all", "predictions", etc.).
+      const droppedUnreadIds = new Set<string>();
+      const previousLists = queryClient.getQueriesData<{ pages?: NotificationListResponse[] }>({ queryKey: LIST_QUERY_KEY });
+      for (const [key, data] of previousLists) {
+        if (!data?.pages) continue;
+        const newPages = data.pages.map((page) => {
+          const filtered = page.items.filter((row) => {
+            if (row.groupKey !== groupKey) return true;
+            if (!row.readAt) droppedUnreadIds.add(row.id);
+            return false;
+          });
+          return { ...page, items: filtered };
+        });
+        queryClient.setQueryData(key, { ...data, pages: newPages });
+      }
+
+      const previousCounts = queryClient.getQueryData<NotificationCountsResponse>(COUNTS_QUERY_KEY);
+      if (previousCounts && droppedUnreadIds.size > 0) {
+        queryClient.setQueryData<NotificationCountsResponse>(COUNTS_QUERY_KEY, {
+          ...previousCounts,
+          unread: Math.max(0, previousCounts.unread - droppedUnreadIds.size),
+        });
+      }
+
+      return { previousLists, previousCounts };
+    },
+    onError: (_err, _groupKey, context) => {
       if (context?.previousCounts) {
         queryClient.setQueryData(COUNTS_QUERY_KEY, context.previousCounts);
       }
