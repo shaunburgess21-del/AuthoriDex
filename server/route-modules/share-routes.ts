@@ -151,18 +151,34 @@ export function registerShareRoutes(app: Express): void {
       const slotIndex = Number(priorCount) + 1;
       const idempotencyKey = `share_click_${sharerUserId}_${utcToday}_${slotIndex}`;
 
-      const [inserted] = await db
-        .insert(shareClicks)
-        .values({
-          sharerUserId,
-          shareSurface: surface,
-          shareUrl,
-          externalReferrer: refererHeader,
-          ipHash,
-          credited: false,
-          creditIdempotencyKey: idempotencyKey,
-        })
-        .returning({ id: shareClicks.id });
+      // Concurrent requests can both compute the same slotIndex
+      // before either insert commits. The global UNIQUE on
+      // `credit_idempotency_key` (shared/schema.ts) guarantees the
+      // second insert fails with Postgres error code 23505. Catch
+      // it and treat as already-tracked rather than 500-ing the
+      // tracker — the credits side stays safe via adjustCredits()
+      // which has its own duplicate handling.
+      let inserted: { id: number } | undefined;
+      try {
+        const rows = await db
+          .insert(shareClicks)
+          .values({
+            sharerUserId,
+            shareSurface: surface,
+            shareUrl,
+            externalReferrer: refererHeader,
+            ipHash,
+            credited: false,
+            creditIdempotencyKey: idempotencyKey,
+          })
+          .returning({ id: shareClicks.id });
+        inserted = rows[0];
+      } catch (insertErr: any) {
+        if (insertErr?.code === "23505") {
+          return res.json({ credited: false, creditsAwarded: 0 });
+        }
+        throw insertErr;
+      }
 
       // Credit award is best-effort. If it fails (cap, duplicate,
       // inactive action) we keep the share_clicks row — the admin

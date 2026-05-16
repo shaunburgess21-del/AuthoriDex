@@ -7471,22 +7471,50 @@ Only return the JSON object.`;
         updateData.positionsPublic = positionsPublic;
       }
       // Profile completion fields (badge surface + PROFILE XP/credit
-      // actions). All optional and treated as plain text — sanitisation
-      // is the form's responsibility. `null` from the client clears
-      // the field; `undefined` leaves it untouched.
-      if (bio !== undefined) updateData.bio = bio === null ? null : String(bio);
+      // actions). All optional. `null` from the client clears the
+      // field; `undefined` leaves it untouched. Server-side length
+      // caps protect against oversized writes (UI enforces shorter
+      // limits, but the server is the source of truth — bots and
+      // stale tabs can bypass the form).
+      const cap = (raw: unknown, max: number): string | null => {
+        if (raw === null) return null;
+        if (typeof raw !== "string") return null;
+        const trimmed = raw.trim();
+        if (trimmed.length === 0) return null;
+        return trimmed.slice(0, max);
+      };
+      // Date-of-birth must look like YYYY-MM-DD; the column is now
+      // typed `date` in shared/schema.ts so an invalid string would
+      // throw at the driver layer. Reject early with a 400 instead.
+      const isValidDateOfBirth = (raw: unknown): raw is string => {
+        if (typeof raw !== "string") return false;
+        return /^\d{4}-\d{2}-\d{2}$/.test(raw);
+      };
+      // Email regex is intentionally lenient — we only need to
+      // block obvious junk ("hello", "{}", oversize strings). Real
+      // verification will land with the recovery-email send flow.
+      const isValidEmail = (raw: string): boolean =>
+        /^[^\s@]{1,64}@[^\s@]{1,253}\.[^\s@]{2,}$/.test(raw);
+
+      if (bio !== undefined) updateData.bio = cap(bio, 280);
       if (dateOfBirth !== undefined) {
-        updateData.dateOfBirth = dateOfBirth === null ? null : String(dateOfBirth);
+        if (dateOfBirth === null) {
+          updateData.dateOfBirth = null;
+        } else if (isValidDateOfBirth(dateOfBirth)) {
+          updateData.dateOfBirth = dateOfBirth;
+        } else {
+          return res.status(400).json({ error: "invalid_date_of_birth" });
+        }
       }
-      if (gender !== undefined) updateData.gender = gender === null ? null : String(gender);
+      if (gender !== undefined) updateData.gender = cap(gender, 32);
       if (countryOfOrigin !== undefined) {
-        updateData.countryOfOrigin = countryOfOrigin === null ? null : String(countryOfOrigin);
+        updateData.countryOfOrigin = cap(countryOfOrigin, 60);
       }
       if (countryOfResidence !== undefined) {
-        updateData.countryOfResidence = countryOfResidence === null ? null : String(countryOfResidence);
+        updateData.countryOfResidence = cap(countryOfResidence, 60);
       }
       if (ethnicity !== undefined) {
-        updateData.ethnicity = ethnicity === null ? null : String(ethnicity);
+        updateData.ethnicity = cap(ethnicity, 60);
       }
       if (typeof profileFieldsPublic === "boolean") {
         updateData.profileFieldsPublic = profileFieldsPublic;
@@ -7495,22 +7523,26 @@ Only return the JSON object.`;
       // so a stale verified flag can never survive a value change.
       // TODO: send verification email when recoveryEmail changes
       if (recoveryEmail !== undefined) {
-        const next = recoveryEmail === null ? null : String(recoveryEmail).trim() || null;
+        const next = cap(recoveryEmail, 254);
+        if (next !== null && !isValidEmail(next)) {
+          return res.status(400).json({ error: "invalid_recovery_email" });
+        }
         updateData.recoveryEmail = next;
         updateData.recoveryEmailVerified = false;
       }
       if (phoneNumber !== undefined) {
-        updateData.phoneNumber =
-          phoneNumber === null ? null : String(phoneNumber).trim() || null;
+        updateData.phoneNumber = cap(phoneNumber, 20);
       }
       // Social handles — strip a single leading '@' if present so
       // we always store the bare handle. Avoids ambiguity when we
-      // build profile links downstream.
+      // build profile links downstream. Capped at 30 chars (X +
+      // Instagram are both <= 30).
       const stripAt = (raw: unknown): string | null => {
         if (raw === null) return null;
         if (typeof raw !== "string") return null;
         const trimmed = raw.trim().replace(/^@+/, "");
-        return trimmed.length > 0 ? trimmed : null;
+        if (trimmed.length === 0) return null;
+        return trimmed.slice(0, 30);
       };
       if (socialXHandle !== undefined) {
         updateData.socialXHandle = stripAt(socialXHandle);
@@ -7519,8 +7551,7 @@ Only return the JSON object.`;
         updateData.socialInstagramHandle = stripAt(socialInstagramHandle);
       }
       if (occupationIndustry !== undefined) {
-        updateData.occupationIndustry =
-          occupationIndustry === null ? null : String(occupationIndustry).trim() || null;
+        updateData.occupationIndustry = cap(occupationIndustry, 50);
       }
       if (typeof socialHandlesPublic === "boolean") {
         updateData.socialHandlesPublic = socialHandlesPublic;

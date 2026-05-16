@@ -55,10 +55,19 @@ export function registerGamificationRoutes(app: Express): void {
     }
   });
 
-  // Recent XP ledger entries for the current user.
+  // Clamp history `limit` so a malicious caller can't request 1M
+  // ledger rows and slow the database down. Mirrors the
+  // Math.min cap on the admin badge award-log endpoint.
+  const HISTORY_LIMIT_MAX = 100;
+  const parseHistoryLimit = (raw: unknown): number => {
+    const parsed = parseInt(String(raw), 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) return 20;
+    return Math.min(parsed, HISTORY_LIMIT_MAX);
+  };
+
   app.get("/api/gamification/xp-history", requireAuth, async (req: AuthRequest, res) => {
     try {
-      const limit = parseInt(req.query.limit as string) || 20;
+      const limit = parseHistoryLimit(req.query.limit);
       const history = await gamificationService.getXpHistory(req.userId!, limit);
       res.json(history);
     } catch (error: any) {
@@ -67,10 +76,9 @@ export function registerGamificationRoutes(app: Express): void {
     }
   });
 
-  // Recent credit ledger entries for the current user.
   app.get("/api/gamification/credit-history", requireAuth, async (req: AuthRequest, res) => {
     try {
-      const limit = parseInt(req.query.limit as string) || 20;
+      const limit = parseHistoryLimit(req.query.limit);
       const history = await gamificationService.getCreditHistory(req.userId!, limit);
       res.json(history);
     } catch (error: any) {
@@ -211,15 +219,29 @@ export function registerGamificationRoutes(app: Express): void {
       let creditsAwarded = 0;
       if (milestoneHit) {
         const actionKey = streakMilestoneActionKey(milestoneHit);
-        const result = await gamificationService.awardXp(
-          userId,
-          actionKey,
-          `streak_milestone_${milestoneHit}_${userId}`,
-          { milestone: milestoneHit, date: today, streak: nextStreak },
-        );
-        if (result.success) {
-          bonusXpAwarded = result.xpAwarded;
-          bonusActionKey = actionKey;
+        // Wrap the milestone XP award so a transient awardXp throw
+        // (DB blip, idempotency-key race) doesn't 500 the daily
+        // check-in response. The streak counter has already been
+        // persisted above; the idempotency key
+        // `streak_milestone_${day}_${userId}` is lifetime-once, so
+        // a failed award can never be silently lost — the next
+        // check-in attempt re-fires for the same milestoneDay.
+        try {
+          const result = await gamificationService.awardXp(
+            userId,
+            actionKey,
+            `streak_milestone_${milestoneHit}_${userId}`,
+            { milestone: milestoneHit, date: today, streak: nextStreak },
+          );
+          if (result.success) {
+            bonusXpAwarded = result.xpAwarded;
+            bonusActionKey = actionKey;
+          }
+        } catch (err) {
+          console.error(
+            `[daily-checkin] streak_milestone_${milestoneHit} XP failed`,
+            err,
+          );
         }
         // Pair the XP milestone with a credit milestone. Idempotency
         // key (milestoneDay, userId) prevents reset+reclimb from
@@ -256,15 +278,19 @@ export function registerGamificationRoutes(app: Express): void {
           );
         }
       } else if (nextStreak > 1) {
-        const result = await gamificationService.awardXp(
-          userId,
-          "streak_bonus",
-          `streak_bonus_${today}_${userId}`,
-          { date: today, streak: nextStreak, graceUsed },
-        );
-        if (result.success) {
-          bonusXpAwarded = result.xpAwarded;
-          bonusActionKey = "streak_bonus";
+        try {
+          const result = await gamificationService.awardXp(
+            userId,
+            "streak_bonus",
+            `streak_bonus_${today}_${userId}`,
+            { date: today, streak: nextStreak, graceUsed },
+          );
+          if (result.success) {
+            bonusXpAwarded = result.xpAwarded;
+            bonusActionKey = "streak_bonus";
+          }
+        } catch (err) {
+          console.error("[daily-checkin] streak_bonus XP failed", err);
         }
       }
 

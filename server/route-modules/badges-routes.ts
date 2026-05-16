@@ -96,14 +96,14 @@ export function registerBadgesRoutes(app: Express): void {
           .where(eq(profiles.id, userId))
           .limit(1);
 
-        if (!profile) {
-          return res.status(404).json({ error: "Profile not found" });
-        }
-        // Caller is allowed to view their own badges even when
-        // profile is private. Otherwise the public toggle gates
-        // visibility.
+        // Defence in depth: collapse the missing-profile and
+        // private-profile branches into the same empty-array
+        // response. Returning a distinguishable 404 vs 200 here
+        // would leak which userIds exist in `profiles` to anyone
+        // willing to iterate UUIDs. The owner can always view
+        // their own awards regardless of privacy.
         const isOwn = req.userId && req.userId === userId;
-        if (!profile.isPublic && !isOwn) {
+        if (!profile || (!profile.isPublic && !isOwn)) {
           return res.json([]);
         }
 
