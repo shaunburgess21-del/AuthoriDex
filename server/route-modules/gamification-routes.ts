@@ -12,6 +12,9 @@ import {
   streakMilestoneActionKey,
   type StreakMilestone,
 } from "@shared/streak-config";
+import { ALL_CAPABILITIES, type Capability } from "@shared/rank-config";
+
+const CAPABILITY_SET = new Set<Capability>(ALL_CAPABILITIES);
 
 /**
  * Extracted read-only gamification endpoints from the main routes.ts monolith.
@@ -47,7 +50,19 @@ export function registerGamificationRoutes(app: Express): void {
   app.get("/api/gamification/check-permission/:capability", requireAuth, async (req: AuthRequest, res) => {
     try {
       const { capability } = req.params;
-      const hasPermission = await gamificationService.checkPermission(req.userId!, capability as any);
+      // Whitelist against the capability list shared with the client
+      // so an unknown / typo'd capability returns 400 instead of
+      // silently false. Cheaper than letting the service layer log
+      // an unknown-cap warning on every miss, and preserves the
+      // contract that this endpoint only answers for capabilities
+      // declared in shared/rank-config.ts.
+      if (!CAPABILITY_SET.has(capability as Capability)) {
+        return res.status(400).json({ error: "unknown_capability" });
+      }
+      const hasPermission = await gamificationService.checkPermission(
+        req.userId!,
+        capability as Capability,
+      );
       res.json({ capability, hasPermission });
     } catch (error: any) {
       console.error("Error checking permission:", error?.message);

@@ -755,11 +755,29 @@ function CreditEarnTable({ accent }: { accent: string }) {
         Approval-gated rows ship with anti-spam controls — you only earn
         once a moderator approves the suggestion.
       </p>
-      <p className="text-xs text-muted-foreground">
-        Share any VoxDex card or page to earn Credits when someone follows
-        your link. Refer a friend and earn 500 Credits when they make their
-        first move — they get a 2,000 Credit head start too.
-      </p>
+      {(() => {
+        // Derive the referral copy from credit-config so this card and
+        // ReferAFriendCard stay in lockstep with the actual server-side
+        // award amounts (no more "500/2,000" magic numbers drifting from
+        // the live values).
+        const referralReward =
+          CREDIT_ACTIONS.find((a) => a.key === "referral_completed")
+            ?.proposedCredits ?? 0;
+        const referralBonus =
+          CREDIT_ACTIONS.find((a) => a.key === "referral_signup_bonus")
+            ?.proposedCredits ?? 0;
+        const headStart = SIGNUP_CREDIT_GRANT + referralBonus;
+        const f = (n: number) => n.toLocaleString("en-US");
+        return (
+          <p className="text-xs text-muted-foreground">
+            Share any VoxDex card or page to earn Credits when someone
+            follows your link. Refer a friend and earn {f(referralReward)}{" "}
+            Credits when they make their first move — they get{" "}
+            {f(headStart)} Credits to start ({f(SIGNUP_CREDIT_GRANT)} signup
+            grant + {f(referralBonus)} bonus).
+          </p>
+        );
+      })()}
     </Card>
   );
 }

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
-import { getAuthHeaders } from "@/lib/queryClient";
+import { apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { toast } from "sonner";
 import { useRanks } from "@/hooks/useGamification";
 
@@ -863,15 +863,30 @@ function PublicBadgesSection({ userId }: { userId: string }) {
   const { data, isLoading } = useQuery<BadgeCardData[]>({
     queryKey: [`/api/users/${userId}/badges`],
     queryFn: async () => {
-      const res = await fetch(`/api/users/${userId}/badges`, {
-        headers: await getAuthHeaders(),
-      });
-      if (!res.ok) throw new Error("Failed to load badges");
+      const res = await apiRequest("GET", `/api/users/${userId}/badges`);
       return res.json();
     },
   });
 
-  if (isLoading) return null;
+  // L8: render a small skeleton placeholder during fetch so the
+  // section doesn't pop into view after first paint and shift the
+  // layout below it. Earned-empty arrays still hit the null branch
+  // below the loading guard.
+  if (isLoading) {
+    return (
+      <Card className="p-6">
+        <div className="h-5 w-32 mb-4 rounded bg-muted/40 animate-pulse" />
+        <div className="flex flex-wrap gap-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div
+              key={i}
+              className="h-20 w-20 rounded-lg bg-muted/30 animate-pulse"
+            />
+          ))}
+        </div>
+      </Card>
+    );
+  }
   const badges = data ?? [];
   if (badges.length === 0) return null;
 

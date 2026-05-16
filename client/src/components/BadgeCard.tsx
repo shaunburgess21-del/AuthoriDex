@@ -117,7 +117,10 @@ export function BadgeCard({
 
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className={cn(sz.name, "leading-tight truncate")}>
+            <span
+              className={cn(sz.name, "leading-tight truncate")}
+              title={badge.name}
+            >
               {badge.name}
             </span>
             <span

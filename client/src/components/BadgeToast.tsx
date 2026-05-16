@@ -3,8 +3,6 @@ import { cn } from "@/lib/utils";
 import { getBadgeIcon, getRarityStyle } from "@/lib/badge-icons";
 
 interface BadgeToastProps {
-  /** Badge key from shared/badge-config.ts. Drives the icon lookup. */
-  badgeKey: string;
   badgeName: string;
   description?: string | null;
   rarity: string;
@@ -37,7 +35,11 @@ export function BadgeToast({
       data-testid="badge-toast"
       data-rarity={rarity}
       className={cn(
-        "w-[340px] sm:w-[360px] rounded-2xl border-2 p-4 relative bg-card shadow-lg",
+        // Cap at the StreakToast width on roomy screens but never
+        // overflow narrow viewports — small phones (<360px) would
+        // previously bleed past the toast container with the fixed
+        // 340px width. The min() expression keeps a 1rem gutter.
+        "w-[min(340px,calc(100vw-2rem))] sm:w-[360px] rounded-2xl border-2 p-4 relative bg-card shadow-lg",
         rarityStyle.border,
       )}
     >

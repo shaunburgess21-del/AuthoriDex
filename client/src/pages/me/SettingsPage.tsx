@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -850,13 +850,20 @@ function PrivacyRow({
   onChange: (v: boolean) => void;
   testId?: string;
 }) {
+  // Stable id ties the visible Label to the Radix Switch so screen
+  // readers announce them as a pair and (more importantly) clicking
+  // the label flips the toggle. Falls back to testId when present
+  // so duplicate IDs can't collide across rows.
+  const reactId = useId();
+  const switchId = testId ? `privacy-${testId}` : `privacy-${reactId}`;
   return (
     <div className="flex items-start justify-between gap-3">
       <div className="space-y-0.5 min-w-0">
-        <Label>{label}</Label>
+        <Label htmlFor={switchId}>{label}</Label>
         <p className="text-xs text-muted-foreground">{helper}</p>
       </div>
       <Switch
+        id={switchId}
         checked={checked}
         onCheckedChange={onChange}
         data-testid={testId}

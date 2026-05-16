@@ -31,7 +31,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { getAuthHeaders } from "@/lib/queryClient";
+import { apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { ProfileTabs, type ProfileTab } from "@/components/ProfileTabs";
 import { MyVoteCard, type MyVoteCardData } from "@/components/me/MyVoteCard";
 import { BadgeCard, type BadgeCardData } from "@/components/BadgeCard";
@@ -1465,8 +1465,7 @@ function ImpactTab({
   const { data: apiBadges } = useQuery<BadgeCardData[]>({
     queryKey: ["/api/me/badges"],
     queryFn: async () => {
-      const res = await fetch("/api/me/badges", { headers: await getAuthHeaders() });
-      if (!res.ok) throw new Error("Failed to load badges");
+      const res = await apiRequest("GET", "/api/me/badges");
       return res.json();
     },
   });

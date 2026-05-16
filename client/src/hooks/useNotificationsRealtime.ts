@@ -180,7 +180,6 @@ export function useNotificationsRealtime(): void {
                   toast.custom(
                     (id) =>
                       createElement(BadgeToast, {
-                        badgeKey: badgeKey ?? "",
                         badgeName,
                         description,
                         rarity,

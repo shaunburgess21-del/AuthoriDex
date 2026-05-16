@@ -9,6 +9,20 @@ import { toast } from "sonner";
 import { apiRequest } from "@/lib/queryClient";
 import { sharePage } from "@/lib/share";
 import { useAuth } from "@/contexts/AuthContext";
+import { CREDIT_ACTIONS, SIGNUP_CREDIT_GRANT } from "@shared/credit-config";
+
+// Derive the referral copy numbers from credit-config so the marketing
+// blurb in the card and the actual credits awarded by the backend stay
+// in lockstep. If the founders bump the signup bonus next quarter we
+// just edit shared/credit-config.ts and the card reflects it.
+const REFERRAL_SIGNUP_BONUS =
+  CREDIT_ACTIONS.find((a) => a.key === "referral_signup_bonus")
+    ?.proposedCredits ?? 0;
+const REFERRAL_REWARD =
+  CREDIT_ACTIONS.find((a) => a.key === "referral_completed")
+    ?.proposedCredits ?? 0;
+const REFERRED_USER_TOTAL = SIGNUP_CREDIT_GRANT + REFERRAL_SIGNUP_BONUS;
+const fmt = (n: number) => n.toLocaleString();
 
 interface ReferralStats {
   referralCode: string | null;
@@ -155,8 +169,10 @@ export function ReferAFriendCard() {
       </div>
 
       <p className="text-sm text-muted-foreground">
-        Your friend gets 12,000 credits to start (10,000 signup grant + 2,000
-        bonus). You get 500 credits when they make their first move.
+        Your friend gets {fmt(REFERRED_USER_TOTAL)} credits to start (
+        {fmt(SIGNUP_CREDIT_GRANT)} signup grant + {fmt(REFERRAL_SIGNUP_BONUS)}{" "}
+        bonus). You get {fmt(REFERRAL_REWARD)} credits when they make their
+        first move.
       </p>
 
       <div className="flex items-center gap-2 rounded-lg border bg-background px-3 py-2">

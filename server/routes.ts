@@ -20262,9 +20262,18 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       const { name, description, isActive, visibleOnFrontend, sortOrder } = req.body ?? {};
 
       const updates: Record<string, unknown> = {};
-      if (typeof name === "string" && name.trim()) updates.name = name.trim();
-      if (typeof description === "string" && description.trim())
-        updates.description = description.trim();
+      // Length caps on admin-editable copy: badge tiles render in a
+      // fixed-width grid and the toast layout is even tighter, so
+      // unbounded strings would silently truncate or break layout.
+      // Match the UI assumptions: 80 chars for the name (one or two
+      // words usually), 200 chars for the description (single
+      // paragraph).
+      if (typeof name === "string" && name.trim()) {
+        updates.name = name.trim().slice(0, 80);
+      }
+      if (typeof description === "string" && description.trim()) {
+        updates.description = description.trim().slice(0, 200);
+      }
       if (typeof isActive === "boolean") updates.isActive = isActive;
       if (typeof visibleOnFrontend === "boolean")
         updates.visibleOnFrontend = visibleOnFrontend;
