@@ -9492,13 +9492,14 @@ Only return the JSON object.`;
         .where(eq(marketEntries.marketId, id));
       const entryMap = new Map(entries.map((e) => [e.id, e]));
 
-      const { summarizePosition, currentPrices } = await import(
+      const { summarizePosition, currentPrices, quoteSell } = await import(
         "@shared/lib/amm/positions"
       );
       const liquidityB = Number(stateRow.liquidityB);
       const outcomeOrder = stateRow.outcomeOrder as string[];
       const shareQuantities = stateRow.shareQuantities as Record<string, number>;
-      const prices = currentPrices({ liquidityB, outcomeOrder, shareQuantities });
+      const ammState = { liquidityB, outcomeOrder, shareQuantities };
+      const prices = currentPrices(ammState);
 
       const ammRows = myBets
         .filter((b) => b.actionType === "buy" || b.actionType === "sell")
@@ -9513,10 +9514,24 @@ Only return the JSON object.`;
       const positions = Array.from(summary.entries()).map(([entryId, slot]) => {
         const entry = entryMap.get(entryId);
         const currentPrice = prices[entryId] ?? 0;
-        // Current resale value at marginal price (a rough proxy; the
-        // actual sell quote runs through `quoteSell` which is more
-        // pessimistic for large positions due to price impact).
-        const currentValue = slot.netShares * currentPrice;
+        // Resale value uses `quoteSell` (LMSR integral, floored to the
+        // integer the user actually receives at execution) — NOT the
+        // marginal-price proxy `netShares * currentPrice`. The proxy
+        // systematically overstates exit value for convex LMSR (a
+        // 100 cr buy displayed as "Sell now: ~100.7 cr" was the
+        // symptom). Falls back to 0 when there is no live position to
+        // sell. The detail-page UI relies on this single field.
+        let currentValue = 0;
+        if (slot.netShares > 1e-9 && outcomeOrder.includes(entryId)) {
+          try {
+            currentValue = quoteSell(ammState, entryId, slot.netShares).proceeds;
+          } catch {
+            // Defensive: if the entry isn't part of the AMM (shouldn't
+            // happen with the includes-guard above) leave value at 0
+            // rather than 500-erroring the whole position payload.
+            currentValue = 0;
+          }
+        }
         const avgEntryPrice =
           slot.netShares > 0 ? slot.netCreditsIn / slot.netShares : 0;
         return {
