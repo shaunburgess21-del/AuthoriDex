@@ -72,8 +72,7 @@ import { AdminInductionQueue } from "@/components/admin/AdminInductionQueue";
 import { AdminSettlementCenter } from "@/components/admin/AdminSettlementCenter";
 import { AdminAmmSection } from "@/components/admin/AdminAmmSection";
 import { AdminUserCreditHistory } from "@/components/admin/AdminUserCreditHistory";
-import { AdminCreditsSection } from "@/components/admin/AdminCreditsSection";
-import { AdminBadgesSection } from "@/components/admin/AdminBadgesSection";
+import { AdminGamificationSection } from "@/components/admin/AdminGamificationSection";
 import { AdminLeaderboardDiff } from "@/components/admin/AdminLeaderboardDiff";
 import { AdminCategoriesSection } from "@/components/admin/AdminCategoriesSection";
 import { AdminScoreInspector } from "@/components/admin/AdminScoreInspector";
@@ -1161,6 +1160,14 @@ export default function AdminDashboard() {
   const [brandAssetVariant, setBrandAssetVariant] = useState<BrandAssetVariant>("default");
   const [activeSection, setActiveSectionRaw] = useState<AdminSection>(() => {
     const saved = sessionStorage.getItem("admin_active_section");
+    // Backwards compat for the deprecated `credits` / `badges`
+    // sidebar entries: a stale sessionStorage value lands the user
+    // on the new Gamification CMS section with the corresponding
+    // sub-tab pre-selected (handled by the JSX render block via
+    // initialSubTab). We keep the raw saved value here so that
+    // initialSubTab can pick up "credits" / "badges" — the alias
+    // gets normalised to "gamification" the next time the user
+    // clicks any sidebar item.
     return (saved as AdminSection) || "overview";
   });
   const setActiveSection = (section: AdminSection) => {
@@ -2893,8 +2900,7 @@ export default function AdminDashboard() {
     { id: "settlement" as const, label: "Settlement", icon: Gavel },
     { id: "amm" as const, label: "AMM", icon: Activity },
     { id: "users" as const, label: "Users", icon: Users },
-    { id: "credits" as const, label: "Credits", icon: CreditCard },
-    { id: "badges" as const, label: "Badges", icon: Award },
+    { id: "gamification" as const, label: "Gamification CMS", icon: Trophy },
     { id: "agents" as const, label: "Agents", icon: Bot },
     { id: "categories" as const, label: "Categories", icon: Layers },
     { id: "tools" as const, label: "System Tools", icon: Settings },
@@ -6088,13 +6094,23 @@ export default function AdminDashboard() {
           <AdminAmmSection />
         )}
 
-        {/* Credits Section */}
-        {activeSection === "credits" && (
-          <AdminCreditsSection />
-        )}
-
-        {activeSection === "badges" && (
-          <AdminBadgesSection />
+        {/* Gamification CMS — unified XP / Ranks / Streaks / Credits /
+            Badges / User Lookup section. Aliases below keep
+            deep-links to the deprecated `credits` and `badges`
+            sidebar IDs working by mounting the same section with
+            an explicit initialSubTab. */}
+        {(activeSection === "gamification" ||
+          activeSection === "credits" ||
+          activeSection === "badges") && (
+          <AdminGamificationSection
+            initialSubTab={
+              activeSection === "credits"
+                ? "credits"
+                : activeSection === "badges"
+                  ? "badges"
+                  : undefined
+            }
+          />
         )}
 
         {/* Users Section */}

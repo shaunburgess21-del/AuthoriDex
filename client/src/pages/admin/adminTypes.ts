@@ -21,7 +21,12 @@ export type AdminSection =
   | "settlement"
   | "amm"
   | "users"
+  | "gamification"
+  // @deprecated — aliased into Gamification CMS. Remove in
+  // next admin cleanup pass.
   | "credits"
+  // @deprecated — aliased into Gamification CMS. Remove in
+  // next admin cleanup pass.
   | "badges"
   | "agents"
   | "categories"

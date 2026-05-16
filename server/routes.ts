@@ -5,7 +5,7 @@ import { storage } from "./storage";
 import { getBaselineDiagnostics } from "./utils/baseline";
 import { db } from "./db";
 import { syncWinningAvatarForPerson } from "./lib/curateAvatar";
-import { anonVoteBudget, trendSnapshots, trackedPeople, communityInsights, insightVotes, comments as unifiedComments, commentVotes, matchups, votes, voteActions, xpActions, xpLedger, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, creditActions, badges as badgesTable, userBadges, adminAuditLog, predictionMarkets, marketEntries, marketBets, marketAmmState, ammPriceSnapshots, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, contentCategories, userCategoryEngagement, emailUnsubscribeState, insertCommunityInsightSchema, insertInsightVoteSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
+import { anonVoteBudget, trendSnapshots, trackedPeople, communityInsights, insightVotes, comments as unifiedComments, commentVotes, matchups, votes, voteActions, xpActions, xpLedger, ranks as schemaRanks, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, creditActions, badges as badgesTable, userBadges, adminAuditLog, predictionMarkets, marketEntries, marketBets, marketAmmState, ammPriceSnapshots, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, contentCategories, userCategoryEngagement, emailUnsubscribeState, insertCommunityInsightSchema, insertInsightVoteSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
 import { validateSuggestionPayload, SUGGESTION_TYPES } from "@shared/suggestionSchemas";
 import { normaliseSocialHandles, SOCIAL_HANDLE_KEYS } from "@shared/handleNormalise";
 import { eq, desc, and, gt, sql, count, gte, lte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull, isNull } from "drizzle-orm";
@@ -19905,6 +19905,503 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         }
         console.error("Error creating credit action:", error?.message);
         res.status(500).json({ error: "Failed to create credit action" });
+      }
+    },
+  );
+
+  // ----- Admin XP Actions -----
+  // Mirrors the credit-actions admin surface above. xpActions seeds
+  // from server/scripts/seed-gamification.ts; this lets admins tune
+  // xpValue / dailyCap / isActive without a redeploy. Lifetime stats
+  // are aggregated live from xp_ledger so editing the action's
+  // xpValue doesn't rewrite history (the ledger captured the value
+  // at the moment of award).
+  //
+  // The xp_actions table has no `category` column today; we derive a
+  // display category from the actionKey so the admin filter pills can
+  // group the catalogue without a schema migration. If categories
+  // ever become persisted, the helper goes away and we read from the
+  // column directly.
+  const xpActionCategoryFor = (actionKey: string): string => {
+    if (actionKey.startsWith("streak_")) return "STREAK";
+    if (actionKey.startsWith("profile_")) return "PROFILE";
+    if (actionKey.startsWith("vote_")) return "VOTING";
+    if (
+      actionKey.startsWith("place_prediction") ||
+      actionKey.startsWith("prediction_") ||
+      actionKey.startsWith("market_")
+    )
+      return "PREDICTION";
+    if (
+      actionKey.startsWith("post_") ||
+      actionKey.startsWith("submit_") ||
+      actionKey.startsWith("suggestion_") ||
+      actionKey === "image_upload"
+    )
+      return "CONTENT";
+    if (
+      actionKey.startsWith("upvote_") ||
+      actionKey.startsWith("insight_") ||
+      actionKey.startsWith("comment_") ||
+      actionKey === "daily_login"
+    )
+      return "ENGAGEMENT";
+    if (actionKey.startsWith("referral_") || actionKey.startsWith("share_"))
+      return "SOCIAL";
+    return "SPECIAL";
+  };
+
+  app.get(
+    "/api/admin/xp-actions",
+    requireAuth,
+    requireAdmin,
+    async (_req: AuthRequest, res) => {
+      try {
+        const rows = await db.select().from(xpActions).orderBy(xpActions.actionKey);
+        // Lifetime aggregate per action_type. Single GROUP BY query
+        // keeps the read O(actions) rather than N+1 across the
+        // catalogue.
+        const stats = await db
+          .select({
+            actionType: xpLedger.actionType,
+            count: sql<number>`count(*)::int`,
+            sumDelta: sql<number>`coalesce(sum(${xpLedger.xpDelta}), 0)::int`,
+          })
+          .from(xpLedger)
+          .groupBy(xpLedger.actionType);
+        const statMap = new Map<string, { count: number; sum: number }>();
+        for (const s of stats) {
+          statMap.set(s.actionType, {
+            count: Number(s.count) || 0,
+            sum: Number(s.sumDelta) || 0,
+          });
+        }
+        const enriched = rows.map((row) => {
+          const stat = statMap.get(row.actionKey) ?? { count: 0, sum: 0 };
+          return {
+            actionType: row.actionKey,
+            displayName: row.displayName,
+            xpValue: row.xpValue,
+            dailyCap: row.dailyCap,
+            description: row.description,
+            isActive: row.isActive,
+            category: xpActionCategoryFor(row.actionKey),
+            lifetimeAwards: stat.count,
+            lifetimeXpGranted: stat.sum,
+          };
+        });
+        res.json(enriched);
+      } catch (error: any) {
+        console.error("Error listing XP actions:", error?.message);
+        res.status(500).json({ error: "Failed to list XP actions" });
+      }
+    },
+  );
+
+  app.patch(
+    "/api/admin/xp-actions/:actionType",
+    requireAuth,
+    requireAdmin,
+    async (req: AuthRequest, res) => {
+      try {
+        const { actionType } = req.params;
+        const { xpValue, dailyCap, isActive, description } = req.body ?? {};
+
+        const updates: Record<string, unknown> = {};
+        if (xpValue !== undefined) {
+          if (
+            typeof xpValue !== "number" ||
+            !Number.isFinite(xpValue) ||
+            xpValue < 0 ||
+            xpValue > 10000
+          ) {
+            return res.status(400).json({ error: "xpValue must be 0-10000" });
+          }
+          updates.xpValue = Math.trunc(xpValue);
+        }
+        if (dailyCap === null) {
+          updates.dailyCap = null;
+        } else if (dailyCap !== undefined) {
+          if (
+            typeof dailyCap !== "number" ||
+            !Number.isFinite(dailyCap) ||
+            dailyCap < 1 ||
+            dailyCap > 1000
+          ) {
+            return res
+              .status(400)
+              .json({ error: "dailyCap must be 1-1000 or null" });
+          }
+          updates.dailyCap = Math.trunc(dailyCap);
+        }
+        if (typeof isActive === "boolean") updates.isActive = isActive;
+        if (typeof description === "string") {
+          updates.description = description.slice(0, 500);
+        }
+
+        if (Object.keys(updates).length === 0) {
+          return res.status(400).json({ error: "No fields to update" });
+        }
+
+        const [updated] = await db
+          .update(xpActions)
+          .set(updates)
+          .where(eq(xpActions.actionKey, actionType))
+          .returning();
+        if (!updated) {
+          return res.status(404).json({ error: "Action not found" });
+        }
+
+        gamificationService.invalidateCache();
+        res.json({
+          ...updated,
+          actionType: updated.actionKey,
+          category: xpActionCategoryFor(updated.actionKey),
+        });
+      } catch (error: any) {
+        console.error("Error updating XP action:", error?.message);
+        res.status(500).json({ error: "Failed to update XP action" });
+      }
+    },
+  );
+
+  app.post(
+    "/api/admin/xp-actions",
+    requireAuth,
+    requireAdmin,
+    async (req: AuthRequest, res) => {
+      try {
+        const { actionType, displayName, xpValue, dailyCap, description } =
+          req.body ?? {};
+
+        if (typeof actionType !== "string" || !actionType.trim()) {
+          return res.status(400).json({ error: "actionType is required" });
+        }
+        if (!/^[a-z][a-z0-9_]{1,49}$/.test(actionType)) {
+          return res
+            .status(400)
+            .json({ error: "actionType must be snake_case, 2-50 chars, lowercase" });
+        }
+        if (typeof displayName !== "string" || !displayName.trim()) {
+          return res.status(400).json({ error: "displayName is required" });
+        }
+        if (
+          typeof xpValue !== "number" ||
+          !Number.isFinite(xpValue) ||
+          xpValue < 0 ||
+          xpValue > 10000
+        ) {
+          return res.status(400).json({ error: "xpValue must be 0-10000" });
+        }
+        const cap =
+          dailyCap === null || dailyCap === undefined
+            ? null
+            : typeof dailyCap === "number" && Number.isFinite(dailyCap)
+              ? Math.trunc(dailyCap)
+              : NaN;
+        if (Number.isNaN(cap)) {
+          return res.status(400).json({ error: "dailyCap must be a number or null" });
+        }
+
+        const [created] = await db
+          .insert(xpActions)
+          .values({
+            actionKey: actionType.trim(),
+            displayName: displayName.trim().slice(0, 80),
+            xpValue: Math.trunc(xpValue),
+            dailyCap: cap,
+            description:
+              typeof description === "string" ? description.slice(0, 500) : null,
+            isActive: true,
+          })
+          .returning();
+
+        gamificationService.invalidateCache();
+        res.status(201).json({
+          ...created,
+          actionType: created.actionKey,
+          category: xpActionCategoryFor(created.actionKey),
+          lifetimeAwards: 0,
+          lifetimeXpGranted: 0,
+        });
+      } catch (error: any) {
+        if (String(error?.message ?? "").includes("duplicate key")) {
+          return res.status(409).json({ error: "actionType already exists" });
+        }
+        console.error("Error creating XP action:", error?.message);
+        res.status(500).json({ error: "Failed to create XP action" });
+      }
+    },
+  );
+
+  // ----- Admin Ranks -----
+  // Live `ranks` table is the runtime source of truth for the rank
+  // ladder; shared/rank-config.ts is the seed default. Edits via
+  // PATCH below survive until the next reseed (which would overwrite
+  // them) — admins should treat these as runtime tweaks while
+  // experimenting with thresholds, then promote winning values into
+  // shared/rank-config.ts as the permanent config.
+  app.get(
+    "/api/admin/ranks",
+    requireAuth,
+    requireAdmin,
+    async (_req: AuthRequest, res) => {
+      try {
+        const rows = await db
+          .select()
+          .from(schemaRanks)
+          .orderBy(schemaRanks.tier);
+        res.json(rows);
+      } catch (error: any) {
+        console.error("Error listing ranks:", error?.message);
+        res.status(500).json({ error: "Failed to list ranks" });
+      }
+    },
+  );
+
+  app.patch(
+    "/api/admin/ranks/:tier",
+    requireAuth,
+    requireAdmin,
+    async (req: AuthRequest, res) => {
+      try {
+        const tierNum = Number(req.params.tier);
+        if (!Number.isInteger(tierNum) || tierNum < 1 || tierNum > 8) {
+          return res.status(400).json({ error: "tier must be 1-8" });
+        }
+        const { minXp, maxXp, voteMultiplier, description } = req.body ?? {};
+
+        const all = await db
+          .select()
+          .from(schemaRanks)
+          .orderBy(schemaRanks.tier);
+        const current = all.find((r) => r.tier === tierNum);
+        if (!current) {
+          return res.status(404).json({ error: "Rank not found" });
+        }
+
+        const nextMinXp =
+          typeof minXp === "number" && Number.isFinite(minXp)
+            ? Math.trunc(minXp)
+            : current.minXp;
+        const nextMaxXp =
+          maxXp === null
+            ? null
+            : typeof maxXp === "number" && Number.isFinite(maxXp)
+              ? Math.trunc(maxXp)
+              : current.maxXp;
+
+        // Threshold validation: minXp < maxXp (when present), and
+        // adjacent tiers must dovetail with no gaps or overlaps.
+        // Tier 8 is open-ended (maxXp must be null).
+        if (nextMinXp < 0) {
+          return res.status(400).json({ error: "minXp must be >= 0" });
+        }
+        if (tierNum === 8 && nextMaxXp !== null) {
+          return res
+            .status(400)
+            .json({ error: "tier 8 maxXp must be null (open-ended)" });
+        }
+        if (nextMaxXp !== null && nextMinXp >= nextMaxXp) {
+          return res.status(400).json({ error: "minXp must be less than maxXp" });
+        }
+        const prev = all.find((r) => r.tier === tierNum - 1);
+        const next = all.find((r) => r.tier === tierNum + 1);
+        if (prev && prev.maxXp !== null && prev.maxXp !== nextMinXp) {
+          return res.status(400).json({
+            error: `minXp must equal tier ${prev.tier}'s maxXp (${prev.maxXp}) — no gaps or overlaps`,
+          });
+        }
+        if (next && nextMaxXp !== null && nextMaxXp !== next.minXp) {
+          return res.status(400).json({
+            error: `maxXp must equal tier ${next.tier}'s minXp (${next.minXp})`,
+          });
+        }
+
+        const updates: Record<string, unknown> = {
+          minXp: nextMinXp,
+          maxXp: nextMaxXp,
+        };
+        if (typeof voteMultiplier === "number" && Number.isFinite(voteMultiplier)) {
+          if (voteMultiplier < 1 || voteMultiplier > 3) {
+            return res
+              .status(400)
+              .json({ error: "voteMultiplier must be 1.0-3.0" });
+          }
+          updates.voteMultiplier = voteMultiplier;
+        }
+        if (typeof description === "string") {
+          updates.description = description.slice(0, 200);
+        }
+
+        const [updated] = await db
+          .update(schemaRanks)
+          .set(updates)
+          .where(eq(schemaRanks.tier, tierNum))
+          .returning();
+        gamificationService.invalidateCache();
+        res.json(updated);
+      } catch (error: any) {
+        console.error("Error updating rank:", error?.message);
+        res.status(500).json({ error: "Failed to update rank" });
+      }
+    },
+  );
+
+  // ----- Admin User Gamification Lookup -----
+  // Aggregates everything the User Gamification panel needs in a
+  // single round-trip. Profile snapshot + recent ledgers + earned
+  // badges + streak summary. Limits applied per slice so no single
+  // user with thousands of ledger rows blows up the response.
+  app.get(
+    "/api/admin/users/:id/gamification",
+    requireAuth,
+    requireAdmin,
+    async (req: AuthRequest, res) => {
+      try {
+        const userId = req.params.id;
+        const [profile] = await db
+          .select()
+          .from(profiles)
+          .where(eq(profiles.id, userId))
+          .limit(1);
+        if (!profile) {
+          return res.status(404).json({ error: "User not found" });
+        }
+
+        const recentXp = await db
+          .select({
+            actionType: xpLedger.actionType,
+            xpValue: xpLedger.xpDelta,
+            createdAt: xpLedger.createdAt,
+            idempotencyKey: xpLedger.idempotencyKey,
+          })
+          .from(xpLedger)
+          .where(eq(xpLedger.userId, userId))
+          .orderBy(desc(xpLedger.createdAt))
+          .limit(20);
+
+        const recentCredits = await db
+          .select({
+            txnType: creditLedger.txnType,
+            amount: creditLedger.amount,
+            balanceAfter: creditLedger.balanceAfter,
+            createdAt: creditLedger.createdAt,
+          })
+          .from(creditLedger)
+          .where(eq(creditLedger.userId, userId))
+          .orderBy(desc(creditLedger.createdAt))
+          .limit(20);
+
+        const userBadgesRows = await db
+          .select({
+            badgeKey: userBadges.badgeKey,
+            earnedAt: userBadges.earnedAt,
+            name: badgesTable.name,
+            rarity: badgesTable.rarity,
+            category: badgesTable.category,
+            icon: badgesTable.icon,
+          })
+          .from(userBadges)
+          .innerJoin(badgesTable, eq(userBadges.badgeKey, badgesTable.key))
+          .where(eq(userBadges.userId, userId))
+          .orderBy(desc(userBadges.earnedAt));
+
+        // Grace = the last login was exactly yesterday (UTC); the
+        // streak machine forgives a single-day gap. Two or more days
+        // missed and the streak is already broken.
+        const todayUtc = new Date().toISOString().split("T")[0];
+        const yesterdayUtc = new Date(Date.now() - 86_400_000)
+          .toISOString()
+          .split("T")[0];
+        const lastLogin = profile.lastLoginDate ?? null;
+        const hasGraceAvailable =
+          !!lastLogin && lastLogin !== todayUtc && lastLogin === yesterdayUtc;
+
+        res.json({
+          profile: {
+            userId: profile.id,
+            username: profile.username,
+            avatarUrl: profile.avatarUrl,
+            rank: profile.rank,
+            xpPoints: profile.xpPoints,
+            predictCredits: profile.predictCredits,
+            currentStreak: profile.currentStreak,
+            longestStreak: profile.longestStreak,
+            lastLoginDate: profile.lastLoginDate,
+            highestRank: profile.highestRank,
+            createdAt: profile.createdAt,
+          },
+          recentXp,
+          recentCredits,
+          badges: userBadgesRows,
+          streakHealth: {
+            currentStreak: profile.currentStreak ?? 0,
+            longestStreak: profile.longestStreak ?? 0,
+            lastLoginDate: profile.lastLoginDate,
+            hasGraceAvailable,
+          },
+        });
+      } catch (error: any) {
+        console.error("Error fetching user gamification:", error?.message);
+        res.status(500).json({ error: "Failed to fetch user gamification" });
+      }
+    },
+  );
+
+  // ----- Admin Streak Health -----
+  // Aggregate distribution of currentStreak values across the user
+  // base. Bucket boundaries align with the streak milestones in
+  // shared/streak-config.ts so admins can read straight off this
+  // chart whether the milestone tail is doing its job.
+  app.get(
+    "/api/admin/streak-health",
+    requireAuth,
+    requireAdmin,
+    async (_req: AuthRequest, res) => {
+      try {
+        const [{ totalUsers, activeStreaks, longest, avg }] = await db
+          .select({
+            totalUsers: sql<number>`count(*)::int`,
+            activeStreaks: sql<number>`count(*) filter (where coalesce(${profiles.currentStreak}, 0) > 0)::int`,
+            longest: sql<number>`coalesce(max(${profiles.currentStreak}), 0)::int`,
+            avg: sql<number>`coalesce(avg(case when coalesce(${profiles.currentStreak}, 0) > 0 then ${profiles.currentStreak} end), 0)::float`,
+          })
+          .from(profiles);
+
+        const buckets = await db
+          .select({
+            range: sql<string>`case
+              when coalesce(${profiles.currentStreak}, 0) between 1 and 6 then '1-6'
+              when ${profiles.currentStreak} between 7 and 13 then '7-13'
+              when ${profiles.currentStreak} between 14 and 29 then '14-29'
+              when ${profiles.currentStreak} between 30 and 99 then '30-99'
+              when ${profiles.currentStreak} >= 100 then '100+'
+              else 'zero'
+            end`,
+            count: sql<number>`count(*)::int`,
+          })
+          .from(profiles)
+          .groupBy(sql`1`);
+
+        const bucketMap = new Map<string, number>();
+        for (const b of buckets) bucketMap.set(b.range, Number(b.count) || 0);
+        const ordered = ["1-6", "7-13", "14-29", "30-99", "100+"];
+        const streakDistribution = ordered.map((range) => ({
+          range,
+          count: bucketMap.get(range) ?? 0,
+        }));
+
+        res.json({
+          totalUsers: Number(totalUsers) || 0,
+          activeStreaks: Number(activeStreaks) || 0,
+          streakDistribution,
+          longestCurrentStreak: Number(longest) || 0,
+          avgStreak: Number(avg) || 0,
+        });
+      } catch (error: any) {
+        console.error("Error fetching streak health:", error?.message);
+        res.status(500).json({ error: "Failed to fetch streak health" });
       }
     },
   );
