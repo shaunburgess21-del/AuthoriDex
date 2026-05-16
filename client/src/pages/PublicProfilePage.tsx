@@ -62,7 +62,10 @@ interface PublicProfile {
   volume?: number;
   totalBets?: number;
   biggestWin?: number;
-  /** Live mark-to-market value of every open AMM position (sum of netShares*currentPrice). */
+  /** Realizable sell-quote value of every open AMM position summed up
+   *  (LMSR-convexity + credit-floor aware — matches the per-market
+   *  detail page so the headline tile and the detail page never
+   *  disagree on what a position is worth). */
   openPositionsValue?: number;
   /** Count of distinct (market, entry) rows with non-zero net shares. */
   openPositionsCount?: number;

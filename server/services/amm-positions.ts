@@ -18,7 +18,8 @@
  *   realised_from_resolution  = sum(buy.payoutAmount[won|lost])
  *                                 - cost_basis_resolved   (won/lost only)
  *                             = 0                          (void; full refund)
- *   unrealised        = remaining_shares * (currentPrice - avg_buy_cost)
+ *   unrealised        = quoteSell(state, entry, remaining_shares).proceeds
+ *                         - remaining_shares * avg_buy_cost
  *
  * Total open-position P&L = realised_from_sells + unrealised
  * Total settled P&L       = realised_from_sells + realised_from_resolution
@@ -30,6 +31,16 @@
  * sell users, and double-counts the sell proceeds when added on top.
  * Weighted-avg keeps the math invariant across the sell/resolve
  * transition.
+ *
+ * Why `quoteSell.proceeds` and not `remaining_shares * marginal_price`
+ * for unrealised: the marginal price overstates what the user could
+ * actually realize because LMSR is convex — selling N shares moves
+ * the price unfavourably along the curve, and proceeds are floored at
+ * the credit boundary. Reporting marginal MTM made fresh buys look
+ * like instant profits (the LMSR spread the house keeps was invisible)
+ * and disagreed with the per-market detail page that already uses
+ * `quoteSell`. Quote-sell math is honest and consistent across every
+ * surface that shows AMM P&L.
  */
 
 import { and, eq, sql, type SQL } from "drizzle-orm";
@@ -41,7 +52,11 @@ import {
   predictionMarkets,
   trendingPeople,
 } from "@shared/schema";
-import { currentPrices } from "@shared/lib/amm/positions";
+import {
+  currentPrices,
+  quoteSell,
+  type AmmStateSnapshot,
+} from "@shared/lib/amm/positions";
 
 export interface AmmOpenPosition {
   marketId: string;
@@ -62,10 +77,16 @@ export interface AmmOpenPosition {
   netCreditsIn: number;
   /** Weighted-average cost per share at buy time. */
   avgEntryPrice: number;
+  /** Marginal price per share at the current state (NOT the realizable
+   *  per-share rate for selling `netShares`; see `currentValue`). Kept
+   *  on the wire for callers that want a "current price" tag. */
   currentPrice: number;
-  /** netShares * currentPrice. */
+  /** Realizable sell proceeds: floored integer credits the user would
+   *  receive from selling all `netShares` right now (LMSR-convexity
+   *  and credit-floor aware — matches the per-market detail page). */
   currentValue: number;
-  /** (currentPrice - avgEntryPrice) * netShares. */
+  /** `currentValue - netShares * avgEntryPrice` — gain/loss vs. the
+   *  amortized cost basis on the remaining shares. */
   unrealisedPnl: number;
 }
 
@@ -77,10 +98,16 @@ export interface AmmAggregatePnl {
    *  across all the user's AMM (market, entry) groups whose markets
    *  have resolved. Void markets contribute 0 (full refund). */
   realisedFromResolution: number;
-  /** Sum of remaining_shares * (currentPrice - avg_buy_cost) across all
-   *  the user's open AMM (market, entry) groups. */
+  /** Sum of `quoteSell(state, entry, remaining_shares).proceeds
+   *  - remaining_shares * avg_buy_cost` across the user's open AMM
+   *  (market, entry) groups — gain/loss vs. amortized cost basis,
+   *  measured at the realizable sell quote (same math as the
+   *  per-market detail page). */
   unrealised: number;
-  /** Sum of remaining_shares * currentPrice (gross MTM, not P&L). */
+  /** Sum of `quoteSell(state, entry, remaining_shares).proceeds`
+   *  across the user's open AMM positions — gross realizable value
+   *  if every position were closed now (NOT P&L; honest about LMSR
+   *  spread). */
   openPositionsValue: number;
   /** Count of (market, entry) groups with non-zero remaining shares. */
   openPositionsCount: number;
@@ -270,7 +297,7 @@ export async function loadAmmAggregatePnlPerUser(
     }
   }
 
-  let pricesByMarket = new Map<string, Record<string, number>>();
+  let stateByMarket = new Map<string, AmmStateSnapshot>();
   if (openMarketIds.size > 0) {
     const stateRows = await db
       .select()
@@ -281,14 +308,14 @@ export async function loadAmmAggregatePnlPerUser(
           sql`, `,
         )})`,
       );
-    pricesByMarket = new Map(
+    stateByMarket = new Map(
       stateRows.map((s) => [
         s.marketId,
-        currentPrices({
+        {
           liquidityB: Number(s.liquidityB),
           outcomeOrder: s.outcomeOrder as string[],
           shareQuantities: s.shareQuantities as Record<string, number>,
-        }),
+        } satisfies AmmStateSnapshot,
       ]),
     );
   }
@@ -310,13 +337,26 @@ export async function loadAmmAggregatePnlPerUser(
       g.marketStatus === "OPEN" || g.marketStatus === "CLOSED_PENDING";
 
     if (isMarketOpen) {
-      // Open: remaining shares contribute MTM-style unrealised.
+      // Open: remaining shares contribute quote-sell-style unrealised.
+      // `openValue` is the floored realizable proceeds from selling all
+      // remaining shares right now — same math the per-market detail
+      // page uses, so the leaderboard / profile headline / public
+      // profile / predict cards all agree with the detail page.
       if (Math.abs(remainingShares) > 1e-9) {
-        const prices = pricesByMarket.get(g.marketId);
-        const currentPrice = prices?.[g.entryId] ?? 0;
-        unrealised = remainingShares * (currentPrice - avgBuyCost);
-        openValue = remainingShares * currentPrice;
-        openCount = 1;
+        const state = stateByMarket.get(g.marketId);
+        if (
+          state &&
+          remainingShares > 0 &&
+          state.outcomeOrder.includes(g.entryId)
+        ) {
+          try {
+            openValue = quoteSell(state, g.entryId, remainingShares).proceeds;
+          } catch {
+            openValue = 0;
+          }
+          unrealised = openValue - remainingShares * avgBuyCost;
+          openCount = 1;
+        }
       }
     } else if (g.hasResolution) {
       // Resolved (won/lost): the resolver wrote payoutAmount based on
@@ -484,15 +524,45 @@ export async function loadAmmPositionsFor(
 
     const stateRow = stateByMarket.get(slot.sample.marketId);
     if (!stateRow) continue;
-    const prices = currentPrices({
+    const ammState: AmmStateSnapshot = {
       liquidityB: Number(stateRow.liquidityB),
       outcomeOrder: stateRow.outcomeOrder as string[],
       shareQuantities: stateRow.shareQuantities as Record<string, number>,
-    });
+    };
+    const prices = currentPrices(ammState);
     const currentPrice = prices[slot.sample.entryId] ?? 0;
     const avgEntryPrice = slot.totalBuyCost / slot.totalBuyShares;
-    const currentValue = netShares * currentPrice;
-    const unrealisedPnl = netShares * (currentPrice - avgEntryPrice);
+
+    // Quote-sell math: report what the user would actually realize if
+    // they sold all remaining shares right now. This is the floored
+    // integer-credit proceeds (LMSR convexity + Math.floor at the
+    // credit boundary) — matches the per-market detail page so the
+    // same position never reports two different P&L numbers depending
+    // on which screen the user is looking at.
+    //
+    // currentValue and unrealisedPnl are computed together: if we
+    // can't price the position (negative/zero netShares, entry not in
+    // outcomeOrder, or quoteSell throws for any reason) BOTH fall
+    // back to 0 — fabricating a "−cost basis" loss when we don't
+    // have a quote would mislead the user worse than reporting zero.
+    let currentValue = 0;
+    let unrealisedPnl = 0;
+    if (
+      netShares > 0 &&
+      ammState.outcomeOrder.includes(slot.sample.entryId)
+    ) {
+      try {
+        currentValue = quoteSell(
+          ammState,
+          slot.sample.entryId,
+          netShares,
+        ).proceeds;
+        unrealisedPnl = currentValue - netShares * avgEntryPrice;
+      } catch {
+        currentValue = 0;
+        unrealisedPnl = 0;
+      }
+    }
     // netCreditsIn kept for back-compat with existing UI; it's
     // signed-cash-flow ("how much net cash is tied up here").
     const netCreditsIn =
@@ -526,8 +596,9 @@ export async function loadAmmPositionsFor(
 }
 
 /**
- * Aggregate stats for headline tiles: total mark-to-market value of
- * every open position and the count of distinct (market, entry) rows.
+ * Aggregate stats for headline tiles: total realizable sell-quote value
+ * of every open position (sum of `quoteSell.proceeds`) and the count of
+ * distinct (market, entry) rows.
  */
 export async function loadAmmPositionTotals(
   userId: string,

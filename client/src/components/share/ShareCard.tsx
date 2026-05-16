@@ -104,7 +104,9 @@ export interface ShareCardPositionData {
   /** Live LMSR mid for this entry, 0..1. */
   currentPrice: number;
   costBasis: number;
-  /** netShares * currentPrice. */
+  /** Realizable sell-quote proceeds for `netShares` (floored integer
+   *  credits — same value the per-market detail page and the open-
+   *  positions endpoint report). */
   currentValue: number;
   /** floor(netShares) — payout if entry wins. */
   potentialPayout: number;
