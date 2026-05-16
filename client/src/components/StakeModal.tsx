@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Target, TrendingUp, TrendingDown, LogIn, Star, MessageSquarePlus, HelpCircle, Lock, CreditCard, Loader2, ChevronDown } from "lucide-react";
+import { Target, LogIn, Star, MessageSquarePlus, HelpCircle, Lock, CreditCard, Loader2, ChevronDown } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { useMarketCycle } from "@/hooks/useMarketCycle";
@@ -16,8 +16,6 @@ import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
 import { WhatNeedsToHappen } from "@/components/predict/WhatNeedsToHappen";
 import { OutcomePathChart } from "@/components/predict/OutcomePathChart";
 import { RULES_CONTENT, RulesExplainer } from "@/components/predict/RulesContent";
-import { shouldRenderCrowdSentiment } from "@/lib/predict-display";
-import { estimateCreditsIfWin, computeEarlyBirdMultiplier } from "@/lib/parimutuel";
 import {
   type ApiAmmStateBlock,
   deriveBuyQuote,
@@ -27,26 +25,18 @@ import {
   snapshotFromApi,
 } from "@/lib/ammClient";
 
-const MISSION_HEADERS: Record<string, string> = {
-  jackpot: "Predict the exact Trend Score at week's end to win the pot.",
-  updown: "Will their Trend Score be higher or lower by close?",
-  h2h: "Back your champion to win this weekly matchup.",
-  gainer: "Pick the biggest mover — whoever gains the most % in their Trend Score wins.",
-  community: "Cast your vote on this real-world prediction.",
-};
-
 /**
- * AMM markets trade continuously and pay 1 credit per winning share,
- * so the parimutuel "back your champion" / "will their score be higher"
- * framing under-sells the mechanics. We swap in a share-based mission
- * line for the two market types currently flipped to AMM (h2h, updown).
- * Gainer / jackpot / community fall through to MISSION_HEADERS until
- * their AMM flip lands in a later phase.
+ * AMM mission copy — all non-jackpot StakeModal flows are LMSR now.
+ * Jackpot uses its own JackpotEntryModal so it never lands here.
  */
-const AMM_MISSION_HEADERS: Record<string, string> = {
+const MISSION_HEADERS: Record<string, string> = {
   updown:
     "Buy UP or DOWN shares. Each winning share pays 1 credit at close. Trade until 5 min before close.",
   h2h: "Buy shares of your pick. Winning shares pay 1 credit each at close. Sell anytime before close.",
+  gainer:
+    "Buy shares of the candidate you think will gain the most. Each winning share pays 1 credit at close.",
+  community:
+    "Buy Yes or No shares. Each winning share pays 1 credit on resolution. Sell anytime before close.",
 };
 
 export interface StakeSelection {
@@ -68,12 +58,12 @@ export interface StakeSelection {
   opponentScore?: number;
   opponentName?: string;
   crowdSentiment?: number;
-  poolTotal?: number;
-  estimatedPayout?: number;
   baselineScore?: number;
   baselineTimestamp?: string;
+  /** AMM always voids on tie, but H2H / Up/Down detail UIs still pass
+   *  this through to drive "Exact tie: refund" copy. Defaults to
+   *  "refund" wherever read. */
   tieRule?: string;
-  resolveMethod?: string;
   endAt?: string;
   confidence?: number;
   thesis?: string;
@@ -103,17 +93,15 @@ export interface StakeSelection {
   isTopUp?: boolean;
   /** Total stake the user already has on this side (sum across prior bets). */
   existingStake?: number;
-  /** Market open time — used to calculate the early-bird boost indicator. */
-  marketStartAt?: string;
   /**
-   * Phase 4 (AMM markets only):
-   *   - `engine === 'amm'` flips the modal into LMSR mode: live price
-   *     quote, share-based payout framing, no early-bird pill.
+   * AMM state for live quote computation:
    *   - `ammState` is the canonical snapshot from the API; quotes are
    *     computed off it client-side so we don't round-trip on every
    *     keystroke.
    *   - `ammNetShares` is the user's current netShares for THIS entry
    *     (used to enable / disable the Sell tab).
+   *   - `engine` is kept for backward compat but always treated as AMM
+   *     post-parimutuel-sunset. Future cleanup can drop it entirely.
    */
   engine?: "parimutuel" | "amm";
   ammState?: ApiAmmStateBlock | null;
@@ -227,18 +215,13 @@ export function StakeModal({
   const isH2H = selection.type === "h2h";
   const isGainer = selection.type === "gainer";
   const isCommunity = selection.type === "community";
-  const isAmm = selection.engine === "amm";
   const ammNetShares = Number(selection.ammNetShares ?? 0);
-  const canSellAmm = isAmm && ammNetShares > 1e-6 && !!onConfirmAmmSell;
-  // Prefer the parent-supplied live state when available so quotes
-  // re-derive on every refetch (round-2 polish: fixes the 879→898
-  // discrepancy reported in smoke testing — the snapshot frozen at
-  // modal-open time goes stale fast when agents keep trading).
+  const canSellAmm = ammNetShares > 1e-6 && !!onConfirmAmmSell;
   const effectiveAmmState = liveAmmState ?? selection.ammState ?? null;
-  const ammSnapshot = isAmm ? snapshotFromApi(effectiveAmmState) : null;
+  const ammSnapshot = snapshotFromApi(effectiveAmmState);
   const ammPriceMap = ammSnapshot ? pricesFor(ammSnapshot) : null;
   const ammEntryPrice =
-    isAmm && ammPriceMap && selection.entryId
+    ammPriceMap && selection.entryId
       ? ammPriceMap[selection.entryId] ?? null
       : null;
   /**
@@ -251,18 +234,18 @@ export function StakeModal({
    * tiles only render for binary types (updown / h2h).
    */
   const oppositeEntryId =
-    isAmm && ammSnapshot && selection.entryId
+    ammSnapshot && selection.entryId
       ? (ammSnapshot.outcomeOrder ?? []).find((id) => id !== selection.entryId) ?? null
       : null;
   const ammOppositePrice =
-    isAmm && ammPriceMap && oppositeEntryId
+    ammPriceMap && oppositeEntryId
       ? ammPriceMap[oppositeEntryId] ?? null
       : null;
-  const ammBuyQuote = isAmm && ammMode === "buy" && parsedAmount >= MIN_STAKE && selection.entryId
+  const ammBuyQuote = ammMode === "buy" && parsedAmount >= MIN_STAKE && selection.entryId
     ? deriveBuyQuote(effectiveAmmState, selection.entryId, parsedAmount)
     : null;
   const parsedSellShares = Number(sellShares);
-  const ammSellQuote = isAmm && ammMode === "sell" && Number.isFinite(parsedSellShares) && parsedSellShares > 0 && selection.entryId
+  const ammSellQuote = ammMode === "sell" && Number.isFinite(parsedSellShares) && parsedSellShares > 0 && selection.entryId
     ? deriveSellQuote(effectiveAmmState, selection.entryId, Math.min(parsedSellShares, ammNetShares))
     : null;
   const isCommunityNo = isCommunity && selection.direction === "no";
@@ -278,7 +261,7 @@ export function StakeModal({
   const isDown = selection.choice.includes("DOWN");
 
   const isTopUp = !!selection.isTopUp;
-  const isAmmSellMode = isAmm && ammMode === "sell";
+  const isAmmSellMode = ammMode === "sell";
   // Sell-mode header: the user reached this modal by clicking a Sell
   // button on the detail page (or by toggling the Sell tab inside an
   // already-open modal), so the title + mission text need to reflect
@@ -322,9 +305,7 @@ export function StakeModal({
     ? "Cash out at the live market price. Bigger orders push the price along the curve."
     : isTopUp
       ? "Adding more credits compounds onto your existing position."
-      : isAmm && AMM_MISSION_HEADERS[selection.type]
-        ? AMM_MISSION_HEADERS[selection.type]
-        : MISSION_HEADERS[selection.type] || "Place your prediction on this market.";
+      : MISSION_HEADERS[selection.type] || "Place your prediction on this market.";
 
   const fireConfetti = (origin: { x: number; y: number }) => {
     confetti({
@@ -342,7 +323,7 @@ export function StakeModal({
   const handleConfirm = async () => {
     if (submitting) return;
 
-    const isAmmSell = isAmm && ammMode === "sell" && !!onConfirmAmmSell;
+    const isAmmSell = ammMode === "sell" && !!onConfirmAmmSell;
     if (isAmmSell) {
       const sharesToSell = Math.min(parsedSellShares, ammNetShares);
       if (!Number.isFinite(sharesToSell) || sharesToSell <= 0) return;
@@ -445,7 +426,7 @@ export function StakeModal({
             bettingCutoff={selection.bettingCutoff ?? null}
             resolveAt={selection.endAt ?? null}
             variant="modal"
-            engine={isAmm ? "amm" : "parimutuel"}
+            engine="amm"
           />
         )}
 
@@ -466,7 +447,7 @@ export function StakeModal({
 
               H2H tiles stay passive because H2H markets don't carry
               an `onDirectionChange` handler at the call sites yet. */}
-          {isAmm && (isUpDown || isH2H) && ammPriceMap && (() => {
+          {(isUpDown || isH2H) && ammPriceMap && (() => {
             const pickPrice = ammEntryPrice;
             const oppositePrice = ammOppositePrice;
             if (pickPrice == null || oppositePrice == null) return null;
@@ -647,46 +628,10 @@ export function StakeModal({
               </button>
             )}
 
-            {/* Direction toggles let a user who misclicked on the card
-                flip without closing + reopening the modal — useful for a
-                fresh pick. When `isTopUp` is true the user is adding to
-                an existing position, so flipping the toggle would let
-                them sneak past the no-hedging rule (which is enforced
-                client-side at the call sites and server-side at place-bet
-                time). Hide the toggle in that case so the only path to
-                the other side is closing the modal and the lock-out chip
-                already greys out the opposite button on the card. */}
-            {/* Parimutuel-only Up/Down toggle. AMM Up/Down markets now
-                use the clickable hero tiles above as the toggle, so
-                rendering this row would just duplicate the same control
-                with worse hierarchy. Top-up bets hide the toggle on
-                both engines (no hedging). */}
-            {isUpDown && onDirectionChange && !isTopUp && !isAmm && (
-              <div className="flex gap-2 mt-2">
-                <button
-                  onClick={() => onDirectionChange("up")}
-                  className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md text-xs font-medium border transition-all ${
-                    isUp
-                      ? "bg-[#00C853]/20 border-[#00C853]/60 text-[#00C853]"
-                      : "bg-transparent border-slate-700 text-slate-600 dark:text-slate-400 hover:border-[#00C853]/40 hover:text-[#00C853]/60"
-                  }`}
-                  data-testid="stake-modal-toggle-up"
-                >
-                  <TrendingUp className="h-3 w-3" /> Up
-                </button>
-                <button
-                  onClick={() => onDirectionChange("down")}
-                  className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md text-xs font-medium border transition-all ${
-                    isDown
-                      ? "bg-[#FF0000]/20 border-[#FF0000]/60 text-[#FF0000]"
-                      : "bg-transparent border-slate-700 text-slate-600 dark:text-slate-400 hover:border-[#FF0000]/40 hover:text-[#FF0000]/60"
-                  }`}
-                  data-testid="stake-modal-toggle-down"
-                >
-                  <TrendingDown className="h-3 w-3" /> Down
-                </button>
-              </div>
-            )}
+            {/* Up/Down toggle for AMM Up/Down markets is rendered via the
+                clickable hero tiles above this card — no separate row
+                needed. Yes/No toggle for community-multi markets stays
+                below. */}
 
             {/* Community-market direction toggle — mirrors the upDown one
                 so a user who tapped the wrong side on the card can flip
@@ -808,95 +753,6 @@ export function StakeModal({
             );
           })()}
 
-          {!isAmm && selection.estimatedPayout && !isNaN(selection.estimatedPayout) && (
-            <p className="text-xs text-muted-foreground text-center">
-              Estimated Payout:{" "}
-              <span className="font-mono font-medium text-green-700 dark:text-green-500">
-                {selection.estimatedPayout.toFixed(1)}x your stake
-              </span>
-              {parsedAmount >= MIN_STAKE && (
-                <>
-                  <span className="text-muted-foreground/70"> · </span>
-                  <span className="font-mono font-medium text-green-700 dark:text-green-500">
-                    ~{estimateCreditsIfWin(parsedAmount, selection.estimatedPayout).toLocaleString("en-US")}
-                  </span>{" "}
-                  credits if you win
-                </>
-              )}
-            </p>
-          )}
-
-          {/* Polymarket pass: the AMM receipt (Payout / shares / final
-              price) now renders BELOW the credit input so it updates
-              directly under what the user is typing. Find the restyled
-              block right after the input + presets. The slot here keeps
-              parimutuel's Early Bird Boost pill in place below. */}
-
-          {!isAmm && (() => {
-            let startRef = selection.marketStartAt ?? selection.baselineTimestamp;
-            if (!startRef && selection.endAt) {
-              const d = new Date(selection.endAt);
-              d.setUTCDate(d.getUTCDate() - 7);
-              startRef = d.toISOString();
-            }
-            const boost = computeEarlyBirdMultiplier(
-              new Date(),
-              startRef,
-              selection.bettingCutoff,
-            );
-            if (boost <= 1.05) return null;
-            return (
-              <div className="flex items-center justify-center gap-1.5 text-xs">
-                <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 text-amber-800 dark:text-amber-300 font-medium">
-                  <Star className="h-3 w-3" />
-                  Early Bird Boost: {boost.toFixed(1)}x
-                </span>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <button className="text-muted-foreground hover:text-foreground">
-                      <HelpCircle className="h-3 w-3" />
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent className="text-xs max-w-64 space-y-1.5" side="top">
-                    <p>
-                      Predict earlier in the week to earn a bigger share of the winnings.
-                      Monday bettors get up to 1.5x weight — the boost decays linearly to 1x at cutoff.
-                    </p>
-                    <p className="text-muted-foreground">
-                      Boost only redistributes the losing side's pool, so correct picks always at least get their stake back.
-                    </p>
-                  </PopoverContent>
-                </Popover>
-              </div>
-            );
-          })()}
-
-          {!isAmm &&
-            (shouldRenderCrowdSentiment(selection.crowdSentiment) ||
-              (typeof selection.poolTotal === "number" && selection.poolTotal > 0)) && (
-              <p className="text-xs text-muted-foreground text-center">
-                {typeof selection.poolTotal === "number" && selection.poolTotal > 0 && (
-                  <>
-                    Pool:{" "}
-                    <span className="font-mono font-medium text-foreground">
-                      {selection.poolTotal.toLocaleString("en-US")} credits
-                    </span>
-                  </>
-                )}
-                {typeof selection.poolTotal === "number" &&
-                  selection.poolTotal > 0 &&
-                  shouldRenderCrowdSentiment(selection.crowdSentiment) && (
-                    <span className="text-muted-foreground/70"> · </span>
-                  )}
-                {shouldRenderCrowdSentiment(selection.crowdSentiment) && (
-                  <>
-                    <span className="font-mono font-medium text-foreground">{selection.crowdSentiment}%</span>{" "}
-                    backing your pick
-                  </>
-                )}
-              </p>
-            )}
-
           {isUpDown && (() => {
             // Prose uses personName so we say "UP wins if Bieber..."
             // not "UP wins if Bieber: Up or Down? closes above ...".
@@ -951,7 +807,7 @@ export function StakeModal({
                   compact
                   userPick={isUp ? "up" : isDown ? "down" : null}
                   ammUpEntryId={
-                    isAmm && isUpDown
+                    isUpDown
                       ? isUp
                         ? selection.entryId ?? null
                         : oppositeEntryId
@@ -962,7 +818,7 @@ export function StakeModal({
             </div>
           )}
 
-          {isAmm && canSellAmm && (
+          {canSellAmm && (
             <div className="flex gap-2 rounded-md border border-border/50 p-1 bg-muted/30">
               <button
                 type="button"
@@ -991,7 +847,7 @@ export function StakeModal({
             </div>
           )}
 
-          {isAmm && ammMode === "sell" ? (
+          {ammMode === "sell" ? (
             <div className="space-y-2">
               <label className="text-sm font-medium">Shares to sell</label>
               <Input
@@ -1040,7 +896,7 @@ export function StakeModal({
             <>
               <div className="space-y-2">
                 <label className="text-sm font-medium">
-                  {isAmm ? "Credit budget" : "Stake Amount"}
+                  Credit budget
                 </label>
                 <Input
                   type="number"
@@ -1094,7 +950,7 @@ export function StakeModal({
               so the receipt updates immediately as the user types — the
               same pattern Polymarket uses with their "To win $X" line.
               Slippage warning still surfaces on >=1pp moves. */}
-          {isAmm && ammEntryPrice != null && (() => {
+          {ammEntryPrice != null && (() => {
             const buyFinalPrice =
               ammMode === "buy" && ammBuyQuote && ammBuyQuote.shares > 0 && selection.entryId
                 ? Number(ammBuyQuote.newPrices[selection.entryId] ?? 0)
@@ -1313,7 +1169,7 @@ export function StakeModal({
               <span className="text-muted-foreground">Current Balance: </span>
               <span className="font-mono font-medium">{walletBalance.toLocaleString('en-US')}</span>
             </div>
-            {isAmm && ammMode === "sell" ? (
+            {ammMode === "sell" ? (
               <div>
                 <span className="text-muted-foreground">After Sell: </span>
                 <span className="font-mono font-medium text-green-700 dark:text-green-500">
@@ -1322,7 +1178,7 @@ export function StakeModal({
               </div>
             ) : (
               <div>
-                <span className="text-muted-foreground">{isAmm ? "After Buy: " : "After Stake: "}</span>
+                <span className="text-muted-foreground">After Buy: </span>
                 <span className={`font-mono font-medium ${balanceAfter < 0 ? 'text-red-700 dark:text-red-500' : 'text-green-700 dark:text-green-500'}`}>
                   {balanceAfter >= 0 ? balanceAfter.toLocaleString('en-US') : 'Insufficient'}
                 </span>
@@ -1372,7 +1228,7 @@ export function StakeModal({
             bettingCutoff={selection.bettingCutoff}
             tieRule={selection.tieRule || "refund"}
             personName={selection.personName ?? selection.marketName}
-            engine={isAmm ? "amm" : "parimutuel"}
+            engine="amm"
             compact
           />
         )}
@@ -1453,7 +1309,7 @@ export function StakeModal({
                 className="flex-1 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
                 disabled={(() => {
                   if (submitting) return true;
-                  if (isAmm && ammMode === "sell") {
+                  if (ammMode === "sell") {
                     return !parsedSellShares || parsedSellShares <= 0 || parsedSellShares > ammNetShares + 1e-6;
                   }
                   return !stakeAmount || parsedAmount < MIN_STAKE || balanceAfter < 0;
@@ -1463,10 +1319,10 @@ export function StakeModal({
                 {submitting ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
-                    {isAmm && ammMode === "sell" ? "Selling…" : "Placing…"}
+                    {ammMode === "sell" ? "Selling…" : "Placing…"}
                   </>
                 ) : (
-                  isAmm && ammMode === "sell" ? "Sell" : (isAmm ? "Buy" : "Confirm")
+                  ammMode === "sell" ? "Sell" : "Buy"
                 )}
               </Button>
             )

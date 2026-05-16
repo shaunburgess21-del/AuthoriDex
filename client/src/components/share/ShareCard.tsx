@@ -52,8 +52,8 @@ export interface ShareCardPortfolioData {
 
 /**
  * "Just bought / sold" share card. Captures the high-emotion moment of
- * placing or closing an AMM position, with the LMSR-specific shape (shares
- * + price/share rather than parimutuel stake + multiplier).
+ * placing or closing an AMM position, with the LMSR-specific shape
+ * (shares + price/share).
  *
  * Pricing is in 0..1 share-price units (LMSR convention); the layout
  * formats it as a percentage for legibility on the card.

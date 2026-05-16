@@ -11,16 +11,14 @@ export interface ParticipantPreview {
 export function ParticipantAvatarStack({
   participants = [],
   totalCount = 0,
-  engine = "parimutuel",
+  engine = "amm",
 }: {
   participants?: ParticipantPreview[];
   totalCount?: number;
   /**
-   * For AMM markets we relabel "participants" -> "traders" because
-   * users open *and* close positions throughout the week (so the
-   * parimutuel "participant" framing reads wrong). Phase 12 will
-   * replace this with a credit-volume number, at which point this
-   * label can be revisited.
+   * AMM markets label this stack "traders" (continuous buy/sell).
+   * Jackpot markets pass `"parimutuel"` to keep the "participants"
+   * framing (one-shot entries, no resale).
    */
   engine?: "amm" | "parimutuel";
 }) {

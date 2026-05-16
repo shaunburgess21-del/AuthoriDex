@@ -58,8 +58,8 @@ interface MarketHistory {
     enteredScore: number | null;
     /**
      * AMM marginal price (0–1) on the side the user took, at the
-     * moment of their first bet. Null for parimutuel markets or
-     * legacy bets that pre-date the `pricePerShare` column.
+     * moment of their first bet. Null for legacy bets that pre-date
+     * the `pricePerShare` column or jackpot tickets.
      */
     enteredAmmPrice: number | null;
     /** entryId of the side the user took — UP, DOWN, or community side. */
@@ -147,7 +147,7 @@ export function OutcomePathChart({
   // AMM probability history (UP entry only — DOWN = 1 - UP for a binary
   // market so a single line is enough). 1h buckets over 7d match the
   // headline score chart's granularity. Disabled when no entry is
-  // passed (parimutuel markets) so we don't fire unused requests.
+  // passed so we don't fire unused requests.
   const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
   const { data: ammHistory } = usePriceHistory(marketId, {
     bucket: "1h",
@@ -250,9 +250,9 @@ export function OutcomePathChart({
     // the caller and the server gave us one (UP/DOWN markets, modern
     // /history response) because the pick label can be free-text on
     // H2H / Race. Falls back to the legacy pick-string match for
-    // parimutuel-era responses without entryId, and for a brief window
-    // during deploys when a freshly-rebuilt client may talk to a
-    // still-warming server.
+    // legacy responses without entryId and for a brief window during
+    // deploys when a freshly-rebuilt client may talk to a still-warming
+    // server.
     const pickStr = entry.pick?.toLowerCase();
     const isUpPick = ammUpEntryId && entry.entryId
       ? entry.entryId === ammUpEntryId

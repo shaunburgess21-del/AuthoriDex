@@ -13,7 +13,6 @@ import { MarketDetailSkeleton } from "@/components/predict/MarketDetailSkeleton"
 import { AmmPriceHistoryChart } from "@/components/predict/AmmPriceHistoryChart";
 import { MarketActivityFeed } from "@/components/predict/MarketActivityFeed";
 import { MarketResolutionInfo } from "@/components/predict/MarketResolutionInfo";
-import { MyPositionCard } from "@/components/predict/MyPositionCard";
 import { ShareIconButton } from "@/components/predict/ShareIconButton";
 import { useShareCard } from "@/contexts/ShareCardContext";
 import { buildTradeShareData, buildPositionShareData } from "@/lib/share-data";
@@ -30,7 +29,6 @@ import { h2hUserPickFromBet } from "@/components/predict/HeadToHeadCard";
 import { normalizeMarketCategory } from "@shared/constants";
 import { apiRequest, parseApiError } from "@/lib/queryClient";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
-import { computePayoutMultiplier, computeEarlyBirdMultiplier } from "@/lib/parimutuel";
 import { goBack } from "@/lib/goBack";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import {
@@ -43,12 +41,10 @@ import {
   ArrowLeft,
   Swords,
   Clock,
-  Users,
   TrendingUp,
   TrendingDown,
   Shield,
   Crown,
-  Zap,
   Activity,
 } from "lucide-react";
 
@@ -61,16 +57,13 @@ interface HydratedH2H {
   person1EntryLabel?: string;
   person2EntryLabel?: string;
   category: string;
-  totalPool: number;
-  person1Stake: number;
-  person2Stake: number;
   person1Percent: number;
   totalParticipants: number;
   tieRule: string;
   startAt?: string;
   endAt?: string;
   bettingCutoff?: string | null;
-  engine: "parimutuel" | "amm";
+  engine: "amm";
   ammState: ApiAmmStateBlock | null;
 }
 
@@ -113,7 +106,7 @@ export default function H2HDetailPage() {
   const { data: allH2hMarkets, isLoading } = useQuery<any[]>({
     queryKey: ["/api/native-markets/h2h"],
     // Keep live trend scores / pool numbers fresh while the user is
-    // on the page. 60s matches MyPositionCard + OutcomePathChart.
+    // on the page. 60s matches OutcomePathChart.
     refetchInterval: (query) => {
       if (typeof document !== "undefined" && document.hidden) return false;
       const list = query.state.data as any[] | undefined;
@@ -162,28 +155,20 @@ export default function H2HDetailPage() {
     const e2 = entries[1] || {};
     const p1 = e1.person || {};
     const p2 = e2.person || {};
-    const s1 = Number(e1.totalStake || 0);
-    const s2 = Number(e2.totalStake || 0);
-    const total = s1 + s2 || 1;
-    const totalPool = entries.reduce(
-      (sum: number, entry: any) => sum + Number(entry.totalStake || 0),
-      0,
-    );
     const totalParticipants = Number(market.activeParticipantCount || 0) || 0;
 
-    const engine: "parimutuel" | "amm" = market.engine === "amm" ? "amm" : "parimutuel";
+    // Parimutuel sunset: every native H2H is AMM. Probability from
+    // the LMSR snapshot.
     const ammState: ApiAmmStateBlock | null = market.ammState ?? null;
 
-    let person1Percent: number;
-    if (engine === "amm" && ammState) {
+    let person1Percent = 50;
+    if (ammState) {
       const snap = snapshotFromApi(ammState);
       const prices = snap ? pricesFor(snap) : null;
       const p1Price = prices && e1.id ? Number(prices[e1.id] ?? 0) : 0;
       const p2Price = prices && e2.id ? Number(prices[e2.id] ?? 0) : 0;
       const sumP = p1Price + p2Price;
       person1Percent = sumP > 0 ? Math.round((p1Price / sumP) * 100) : 50;
-    } else {
-      person1Percent = s1 + s2 === 0 ? 50 : Math.round((s1 / total) * 100);
     }
 
     return {
@@ -205,25 +190,20 @@ export default function H2HDetailPage() {
       person1EntryLabel: typeof e1.label === "string" ? e1.label : undefined,
       person2EntryLabel: typeof e2.label === "string" ? e2.label : undefined,
       category: normalizeMarketCategory(market.category || "misc"),
-      totalPool,
-      person1Stake: s1,
-      person2Stake: s2,
       person1Percent,
       totalParticipants,
       tieRule: market.tieRule || "refund",
       startAt: market.startAt,
       endAt: market.endAt,
       bettingCutoff: market.bettingCutoff || null,
-      engine,
+      engine: "amm" as const,
       ammState,
     };
   }, [market]);
 
-  const isAmm = hydrated?.engine === "amm";
-
   const { data: ammPositionData } = useQuery<{ positions: AmmPositionRow[] }>({
     queryKey: ["/api/markets", marketId, "amm-position"],
-    enabled: !!user && !!marketId && !!isAmm,
+    enabled: !!user && !!marketId,
     refetchInterval: (query) => {
       if (typeof document !== "undefined" && document.hidden) return false;
       const status = (query.state.data as any)?.marketStatus;
@@ -302,15 +282,6 @@ export default function H2HDetailPage() {
       const picked = person === 1 ? hydrated.person1 : hydrated.person2;
       const opponent = person === 1 ? hydrated.person2 : hydrated.person1;
       const sentiment = person === 1 ? hydrated.person1Percent : 100 - hydrated.person1Percent;
-      // Use raw stakes (not the rounded percent) so extreme splits like
-      // 999/1 don't collapse to a 2.0x default in the modal.
-      const pickedStake = person === 1 ? hydrated.person1Stake : hydrated.person2Stake;
-      const otherStake = person === 1 ? hydrated.person2Stake : hydrated.person1Stake;
-      const userStakeTotal = pickedStake + otherStake;
-      const pickedPool = userStakeTotal === 0
-        ? hydrated.totalPool / 2
-        : (pickedStake / userStakeTotal) * hydrated.totalPool;
-      const estimatedPayout = computePayoutMultiplier(hydrated.totalPool, pickedPool);
       const isTopUp = !!userPickSide;
       const entryId = person === 1 ? hydrated.person1EntryId : hydrated.person2EntryId;
       setPendingSelection({
@@ -324,8 +295,6 @@ export default function H2HDetailPage() {
         currentScore: picked.currentScore,
         opponentScore: opponent.currentScore,
         crowdSentiment: sentiment,
-        poolTotal: hydrated.totalPool,
-        estimatedPayout,
         tieRule: hydrated.tieRule ?? "refund",
         endAt: hydrated.endAt,
         bettingCutoff: hydrated.bettingCutoff,
@@ -333,7 +302,7 @@ export default function H2HDetailPage() {
         existingStake: isTopUp ? userPickTotalStake : undefined,
         engine: hydrated.engine,
         ammState: hydrated.ammState,
-        ammNetShares: hydrated.engine === "amm" ? ammNetSharesFor(entryId) : 0,
+        ammNetShares: ammNetSharesFor(entryId),
       });
       setModalIntent("buy");
       setStakeModalOpen(true);
@@ -365,11 +334,10 @@ export default function H2HDetailPage() {
       if (data?.xp?.xpAwarded) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }
-      // AMM-gated share moment. H2H trades are always one of two named
-      // people — we resolve which side via the entryId from
-      // `pendingSelection` so the share card hero is the right face.
-      const isAmmTrade = data?.engine === "amm";
-      if (isAmmTrade && hydrated && pendingSelection?.entryId) {
+      // Every native H2H trade is AMM. Resolve which side via the
+      // entryId from `pendingSelection` so the share card hero is the
+      // right face.
+      if (hydrated && pendingSelection?.entryId) {
         const picked =
           pendingSelection.entryId === hydrated.person1EntryId
             ? hydrated.person1
@@ -522,7 +490,7 @@ export default function H2HDetailPage() {
 
   const openSellModal = useCallback(
     (person: 1 | 2) => {
-      if (!hydrated || !isAmm) return;
+      if (!hydrated) return;
       const picked = person === 1 ? hydrated.person1 : hydrated.person2;
       const opponent = person === 1 ? hydrated.person2 : hydrated.person1;
       const entryId = person === 1 ? hydrated.person1EntryId : hydrated.person2EntryId;
@@ -538,7 +506,6 @@ export default function H2HDetailPage() {
         currentScore: picked.currentScore,
         opponentScore: opponent.currentScore,
         crowdSentiment: sentiment,
-        poolTotal: hydrated.totalPool,
         tieRule: hydrated.tieRule ?? "refund",
         endAt: hydrated.endAt,
         bettingCutoff: hydrated.bettingCutoff,
@@ -549,7 +516,7 @@ export default function H2HDetailPage() {
       setModalIntent("sell");
       setStakeModalOpen(true);
     },
-    [hydrated, isAmm, marketId, ammNetSharesFor],
+    [hydrated, marketId, ammNetSharesFor],
   );
 
   const { timeRemaining } = marketState;
@@ -627,7 +594,7 @@ export default function H2HDetailPage() {
           bettingCutoff={hydrated.bettingCutoff}
           resolveAt={hydrated.endAt}
           variant="full"
-          engine={isAmm ? "amm" : "parimutuel"}
+          engine="amm"
         />
 
         {/* Hero – Side-by-side portraits */}
@@ -725,27 +692,13 @@ export default function H2HDetailPage() {
               </div>
             </div>
 
-            {/* Quick stats. On AMM markets the "Pool" stat is
-                meaningless (LMSR liquidity is seeded by the house,
-                not by player stakes) and always reads as zero — we
-                hide it and collapse to a two-column layout. */}
-            <div className={`grid ${isAmm ? "grid-cols-2" : "grid-cols-3"} gap-3 text-center`}>
-              {!isAmm && (
-                <div>
-                  <p className="text-lg md:text-xl font-bold text-violet-600 dark:text-violet-400">
-                    {hydrated.totalPool.toLocaleString("en-US")}
-                  </p>
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                    Pool
-                  </p>
-                </div>
-              )}
+            <div className="grid grid-cols-2 gap-3 text-center">
               <div>
                 <p className="text-lg md:text-xl font-bold">
                   {hydrated.totalParticipants}
                 </p>
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                  {isAmm ? "Traders" : "Participants"}
+                  Traders
                 </p>
               </div>
               <div>
@@ -760,84 +713,11 @@ export default function H2HDetailPage() {
           </div>
         </Card>
 
-        {/* Your Position — unified across all detail pages. The H2H
-            sticky bar already shows Winning / Tied / Behind so we hide
-            the card's CTA and let the sticky strip drive action; this
-            block exists so users always see live "your position" near
-            the top of the page (matching the community/jackpot UX). */}
-        <MyPositionCard
-          marketId={marketId}
-          marketType="h2h"
-          isAmm={isAmm}
-          ctaLabel={
-            userPickSide
-              ? `Add to your ${userPickSide === 1 ? hydrated.person1.name : hydrated.person2.name} stake`
-              : undefined
-          }
-          onAddEntry={
-            userPickSide ? () => handleSelect(userPickSide) : undefined
-          }
-          livePoolContext={
-            userPickSide && Number.isFinite(hydrated.totalPool) && hydrated.totalPool > 0
-              ? {
-                  totalPool: hydrated.totalPool,
-                  userSidePercent:
-                    userPickSide === 1
-                      ? hydrated.person1Percent
-                      : 100 - hydrated.person1Percent,
-                }
-              : null
-          }
-          // Sprint 3.1: persistent Share for AMM open positions. Picks
-          // the biggest open side (H2H bars hedging across both
-          // entries, but we tolerate it defensively). Person info
-          // resolves from the entry the position is on.
-          onShare={(() => {
-            if (!isAmm) return undefined;
-            const positions = (ammPositionData?.positions ?? []).filter(
-              (p) => p.netShares > 1e-6,
-            );
-            if (positions.length === 0) return undefined;
-            const pos = positions.reduce((biggest, p) =>
-              p.currentValue > biggest.currentValue ? p : biggest,
-            );
-            return () => {
-              const onPerson1 = pos.entryId === hydrated.person1EntryId;
-              const person = onPerson1 ? hydrated.person1 : hydrated.person2;
-              const data = buildPositionShareData({
-                username: profile?.username || "you",
-                personName: person.name ?? null,
-                personAvatar: person.avatar ?? null,
-                marketTitle: hydrated.title,
-                category: hydrated.category,
-                entryLabel: pos.entryLabel,
-                direction: "other",
-                netShares: pos.netShares,
-                avgEntryPrice: pos.avgEntryPrice,
-                currentPrice: pos.currentPrice,
-                costBasis: pos.netCreditsIn,
-                currentValue: pos.currentValue,
-                endAt: hydrated.endAt || "",
-              });
-              const origin =
-                typeof window !== "undefined" ? window.location.origin : "";
-              const pathname =
-                typeof window !== "undefined" ? window.location.pathname : "";
-              openShareCard({
-                data,
-                fallbackText: `I'm holding ${Math.floor(pos.netShares)} shares on ${pos.entryLabel} in "${hydrated.title}" on VoxDex!\n${origin}${pathname}`,
-                shareUrl: `${origin}${pathname}`,
-                filenameBase: `voxdex-position-${marketId.slice(0, 8)}`,
-              });
-            };
-          })()}
-        />
-
         {/* AMM live probability + per-side position card. Surfaces
             netShares + avg entry price + current value, plus an
             inline "Sell" button so users can close out without
             hunting through MyPredictions. */}
-        {isAmm && (() => {
+        {(() => {
           const ammSnap = snapshotFromApi(hydrated.ammState);
           const ammPriceMap = ammSnap ? pricesFor(ammSnap) : null;
           const p1Price = ammPriceMap && hydrated.person1EntryId ? Number(ammPriceMap[hydrated.person1EntryId] ?? 0) : 0;
@@ -957,9 +837,8 @@ export default function H2HDetailPage() {
 
         {/* AMM Price History - week-over-week market consensus. Sits
             above the Score Comparison so users see the market signal
-            first, then the underlying trend-score gap. Parimutuel H2H
-            markets skip this. */}
-        {isAmm && hydrated.person1EntryId && hydrated.person2EntryId && (() => {
+            first, then the underlying trend-score gap. */}
+        {hydrated.person1EntryId && hydrated.person2EntryId && (() => {
           const ammSnap = snapshotFromApi(hydrated.ammState);
           const livePrices = ammSnap ? pricesFor(ammSnap) : {};
           return (
@@ -1072,62 +951,6 @@ export default function H2HDetailPage() {
           </div>
         </Card>
 
-        {/* Crowd Picks - parimutuel only. For AMM markets the same
-            percentage already appears in the Live Market panel + the
-            Score Comparison block, so this would be a third copy of
-            the same data. Hidden to keep the page concise. */}
-        {!isAmm && (
-          <Card className="border-border/50">
-            <div className="p-4">
-              <h2 className="text-sm font-semibold flex items-center gap-1.5 mb-3">
-                <Users className="h-4 w-4 text-violet-600 dark:text-violet-400" />
-                Crowd Picks
-              </h2>
-              <div className="space-y-3">
-                <div className="h-4 rounded-full overflow-hidden flex">
-                  <div
-                    className="h-full bg-gradient-to-r from-blue-500 to-blue-400 transition-all"
-                    style={{ width: `${hydrated.person1Percent}%` }}
-                  />
-                  <div
-                    className="h-full bg-gradient-to-l from-purple-500 to-purple-400 transition-all"
-                    style={{ width: `${100 - hydrated.person1Percent}%` }}
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <PersonAvatar
-                      name={hydrated.person1.name}
-                      avatar={hydrated.person1.avatar}
-                      className="h-8 w-8"
-                    />
-                    <div>
-                      <p className="text-sm font-semibold text-blue-600 dark:text-blue-400">
-                        {smartName(hydrated.person1.name)} {hydrated.person1Percent}%
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div>
-                      <p className="text-sm font-semibold text-purple-600 dark:text-purple-400 text-right">
-                        {100 - hydrated.person1Percent}% {smartName(hydrated.person2.name)}
-                      </p>
-                    </div>
-                    <PersonAvatar
-                      name={hydrated.person2.name}
-                      avatar={hydrated.person2.avatar}
-                      className="h-8 w-8"
-                    />
-                  </div>
-                </div>
-                <p className="text-[11px] text-muted-foreground text-center">
-                  Based on current pool distribution across {hydrated.totalParticipants} participants
-                </p>
-              </div>
-            </div>
-          </Card>
-        )}
-
         {/* How This Resolves */}
         <MarketResolutionInfo
           mode="h2h"
@@ -1136,7 +959,7 @@ export default function H2HDetailPage() {
           tieRule={hydrated.tieRule}
           person1Name={hydrated.person1.name}
           person2Name={hydrated.person2.name}
-          engine={isAmm ? "amm" : "parimutuel"}
+          engine="amm"
         />
 
         {/* Related markets — bottom-of-page so it's out of the way of
@@ -1214,18 +1037,7 @@ export default function H2HDetailPage() {
                   </Button>
                 </ClosedMarketActionTrigger>
               </div>
-              {!isMarketClosed && !isAmm && (() => {
-                const startRef = hydrated?.endAt ? new Date(new Date(hydrated.endAt).getTime() - 7 * 24 * 60 * 60 * 1000).toISOString() : null;
-                const boost = computeEarlyBirdMultiplier(new Date(), startRef, hydrated?.bettingCutoff);
-                if (boost <= 1.05) return null;
-                return (
-                  <p className="text-[11px] text-amber-700 dark:text-amber-400 text-center mt-2 flex items-center justify-center gap-1">
-                    <Zap className="h-3.5 w-3.5" />
-                    Early Bird Boost active: {boost.toFixed(1)}x — predict earlier for bigger payouts
-                  </p>
-                );
-              })()}
-              {!isMarketClosed && isAmm && (
+              {!isMarketClosed && (
                 <p className="text-[11px] text-emerald-700 dark:text-emerald-400 text-center mt-2 flex items-center justify-center gap-1">
                   <Activity className="h-3.5 w-3.5" />
                   Live LMSR pricing — trade until 5 minutes before resolution
@@ -1245,8 +1057,8 @@ export default function H2HDetailPage() {
           setPendingSelection(null);
         }}
         onConfirm={handleConfirmStake}
-        onConfirmAmmSell={isAmm ? handleConfirmAmmSell : undefined}
-        liveAmmState={isAmm ? hydrated?.ammState ?? null : null}
+        onConfirmAmmSell={handleConfirmAmmSell}
+        liveAmmState={hydrated?.ammState ?? null}
         initialAmmMode={modalIntent}
         walletBalance={walletCredits}
       />

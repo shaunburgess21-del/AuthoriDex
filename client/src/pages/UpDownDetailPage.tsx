@@ -12,7 +12,6 @@ import { CategoryPill } from "@/components/CategoryPill";
 import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { OutcomePathChart } from "@/components/predict/OutcomePathChart";
 import { WhatNeedsToHappen } from "@/components/predict/WhatNeedsToHappen";
-import { MyPositionCard } from "@/components/predict/MyPositionCard";
 import { MarketDetailSkeleton } from "@/components/predict/MarketDetailSkeleton";
 import { AmmPriceHistoryChart } from "@/components/predict/AmmPriceHistoryChart";
 import { MarketActivityFeed } from "@/components/predict/MarketActivityFeed";
@@ -31,7 +30,6 @@ import { normalizeMarketCategory } from "@shared/constants";
 import { apiRequest, parseApiError } from "@/lib/queryClient";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { getMarketBaselineScore } from "@/lib/predict-market-baseline";
-import { computePayoutMultiplier, computeEarlyBirdMultiplier } from "@/lib/parimutuel";
 import { getUpDownWinningState, UP_DOWN_STATE_LABELS } from "@/lib/updownState";
 import { formatVolumeCredits } from "@/lib/formatNumber";
 import { goBack } from "@/lib/goBack";
@@ -47,10 +45,8 @@ import {
   TrendingUp,
   TrendingDown,
   Clock,
-  Users,
   BarChart3,
   ListChecks,
-  Zap,
   Activity,
   Plus,
   Share2,
@@ -108,7 +104,7 @@ export default function UpDownDetailPage() {
   const { data: allUpdownMarkets, isLoading } = useQuery<any[]>({
     queryKey: ["/api/native-markets/updown"],
     // Keep the live trend score / pool numbers fresh while the user
-    // is on the page. 60s matches MyPositionCard + OutcomePathChart;
+    // is on the page. 60s matches OutcomePathChart;
     // we pause when the market closes since nothing's changing.
     refetchInterval: (query) => {
       if (typeof document !== "undefined" && document.hidden) return false;
@@ -157,23 +153,17 @@ export default function UpDownDetailPage() {
     const entries = market.entries || [];
     const upEntry = entries.find((e: any) => e.label?.toLowerCase() === "up");
     const downEntry = entries.find((e: any) => e.label?.toLowerCase() === "down");
-    const upStake = Number(upEntry?.totalStake || 0);
-    const downStake = Number(downEntry?.totalStake || 0);
-    const total = upStake + downStake || 1;
-    const upPercent = Math.round((upStake / total) * 100);
-    const upMultiplier = computePayoutMultiplier(upStake + downStake, upStake);
-    const downMultiplier = computePayoutMultiplier(upStake + downStake, downStake);
     const currentScore = Number(person.trendScore || person.fameIndex || 0);
     const baselineScore = getMarketBaselineScore(market, currentScore) ?? currentScore;
-    const totalPool = upStake + downStake;
     const totalParticipants = Number(market.activeParticipantCount || 0) || 0;
     const volume = Number((market as { volume?: number }).volume ?? market.ammState?.totalUserCreditsIn ?? 0) || 0;
 
-    const engine: "parimutuel" | "amm" = market.engine === "amm" ? "amm" : "parimutuel";
+    // Parimutuel sunset: every native Up/Down market is AMM. Prices
+    // come from the LMSR snapshot.
     const ammState: ApiAmmStateBlock | null = market.ammState ?? null;
 
-    let resolvedUpPercent = upPercent || 50;
-    if (engine === "amm" && ammState) {
+    let resolvedUpPercent = 50;
+    if (ammState) {
       const snap = snapshotFromApi(ammState);
       const prices = snap ? pricesFor(snap) : null;
       const upPrice = prices && upEntry?.id ? Number(prices[upEntry.id] ?? 0) : 0;
@@ -191,26 +181,21 @@ export default function UpDownDetailPage() {
       category: normalizeMarketCategory(market.category || person.category || "misc"),
       upEntryId: upEntry?.id,
       downEntryId: downEntry?.id,
-      upMultiplier,
-      downMultiplier,
       upPercent: resolvedUpPercent,
-      totalPool,
       totalParticipants,
       volume,
       tieRule: market.tieRule || "refund",
       startAt: market.startAt,
       endAt: market.endAt,
       bettingCutoff: market.bettingCutoff || null,
-      engine,
+      engine: "amm" as const,
       ammState,
     };
   }, [market]);
 
-  const isAmm = hydrated?.engine === "amm";
-
   const { data: ammPositionData } = useQuery<{ positions: AmmPositionRow[]; marketStatus?: string }>({
     queryKey: ["/api/markets", marketId, "amm-position"],
-    enabled: !!user && !!marketId && !!isAmm,
+    enabled: !!user && !!marketId,
     refetchInterval: (query) => {
       if (typeof document !== "undefined" && document.hidden) return false;
       const status = (query.state.data as any)?.marketStatus;
@@ -291,8 +276,6 @@ export default function UpDownDetailPage() {
         baselineScore: hydrated.baselineScore,
         baselineTimestamp: hydrated.startAt,
         crowdSentiment: choice === "up" ? hydrated.upPercent : 100 - hydrated.upPercent,
-        poolTotal: hydrated.totalPool,
-        estimatedPayout: choice === "up" ? hydrated.upMultiplier : hydrated.downMultiplier,
         tieRule: hydrated.tieRule,
         endAt: hydrated.endAt,
         bettingCutoff: hydrated.bettingCutoff,
@@ -300,7 +283,7 @@ export default function UpDownDetailPage() {
         existingStake: isTopUp ? userPickTotalStake : undefined,
         engine: hydrated.engine,
         ammState: hydrated.ammState,
-        ammNetShares: hydrated.engine === "amm" ? ammNetSharesFor(entryId) : 0,
+        ammNetShares: ammNetSharesFor(entryId),
       });
       setModalIntent("buy");
       setStakeModalOpen(true);
@@ -332,11 +315,9 @@ export default function UpDownDetailPage() {
       if (data?.xp?.xpAwarded) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }
-      // AMM-gated share moment. For parimutuel the existing static toast
-      // stays — the share card variants are LMSR-specific (shares + fill
-      // price), so we don't pretend pari trades fit the same mould.
-      const isAmmTrade = data?.engine === "amm";
-      if (isAmmTrade && hydrated && pendingSelection) {
+      // Share moment is LMSR-specific (shares + fill price) and every
+      // native Up/Down trade is AMM after the parimutuel sunset.
+      if (hydrated && pendingSelection) {
         const choice = pendingSelection.choice.toLowerCase();
         const direction: "up" | "down" | "other" =
           choice === "up" ? "up" : choice === "down" ? "down" : "other";
@@ -378,10 +359,6 @@ export default function UpDownDetailPage() {
                 filenameBase: `voxdex-trade-${(data?.betId ?? "buy").toString().slice(0, 8)}`,
               }),
           },
-        });
-      } else {
-        toast("Prediction placed!", {
-          description: "Your Up/Down prediction has been recorded.",
         });
       }
       setStakeModalOpen(false);
@@ -491,7 +468,7 @@ export default function UpDownDetailPage() {
 
   const openSellModal = useCallback(
     (choice: "up" | "down") => {
-      if (!hydrated || !isAmm) return;
+      if (!hydrated) return;
       const entryId = choice === "up" ? hydrated.upEntryId : hydrated.downEntryId;
       setPendingSelection({
         type: "updown",
@@ -505,7 +482,6 @@ export default function UpDownDetailPage() {
         baselineScore: hydrated.baselineScore,
         baselineTimestamp: hydrated.startAt,
         crowdSentiment: choice === "up" ? hydrated.upPercent : 100 - hydrated.upPercent,
-        poolTotal: hydrated.totalPool,
         tieRule: hydrated.tieRule,
         endAt: hydrated.endAt,
         bettingCutoff: hydrated.bettingCutoff,
@@ -516,7 +492,7 @@ export default function UpDownDetailPage() {
       setModalIntent("sell");
       setStakeModalOpen(true);
     },
-    [hydrated, isAmm, marketId, ammNetSharesFor],
+    [hydrated, marketId, ammNetSharesFor],
   );
 
   const handleDirectionChange = useCallback(
@@ -533,7 +509,6 @@ export default function UpDownDetailPage() {
               entryId: dir === "up" ? hydrated.upEntryId : hydrated.downEntryId,
               choice: dir.toUpperCase(),
               crowdSentiment: dir === "up" ? hydrated.upPercent : 100 - hydrated.upPercent,
-              estimatedPayout: dir === "up" ? hydrated.upMultiplier : hydrated.downMultiplier,
             }
           : null
       );
@@ -618,7 +593,7 @@ export default function UpDownDetailPage() {
           bettingCutoff={hydrated.bettingCutoff}
           resolveAt={hydrated.endAt}
           variant="full"
-          engine={isAmm ? "amm" : "parimutuel"}
+          engine="amm"
         />
 
         {/* Hero */}
@@ -651,16 +626,8 @@ export default function UpDownDetailPage() {
             </div>
 
             {(() => {
-              // Sprint 4.3: detail-page header gets the same "Vol." chip
-              // the card now shows, so users don't have to remember the
-              // number from the predict list. Cell is only added when
-              // we have a finite, positive AMM volume (parimutuel
-              // markets in their last week stay on the 3-column layout).
-              const volText = isAmm ? formatVolumeCredits(hydrated.volume) : null;
-              const columns = (() => {
-                if (!isAmm) return "grid-cols-4";
-                return volText ? "grid-cols-4" : "grid-cols-3";
-              })();
+              const volText = formatVolumeCredits(hydrated.volume);
+              const columns = volText ? "grid-cols-4" : "grid-cols-3";
               return (
                 <div className={`grid ${columns} gap-3 text-center`}>
                   <div>
@@ -679,16 +646,6 @@ export default function UpDownDetailPage() {
                       Current
                     </p>
                   </div>
-                  {!isAmm && (
-                    <div>
-                      <p className="text-sm md:text-base font-bold text-violet-600 dark:text-violet-400">
-                        {hydrated.totalPool.toLocaleString("en-US")}
-                      </p>
-                      <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                        Pool
-                      </p>
-                    </div>
-                  )}
                   {volText && (
                     <div>
                       <p className="text-sm md:text-base font-bold font-mono text-violet-600 dark:text-violet-400">
@@ -704,7 +661,7 @@ export default function UpDownDetailPage() {
                       {hydrated.totalParticipants}
                     </p>
                     <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                      {isAmm ? "Traders" : "Players"}
+                      Traders
                     </p>
                   </div>
                 </div>
@@ -717,7 +674,7 @@ export default function UpDownDetailPage() {
             netShares + avg entry price + current value, plus an
             inline "Sell" button so users can close out without
             hunting through MyPredictions. */}
-        {isAmm && (() => {
+        {(() => {
           const ammSnap = snapshotFromApi(hydrated.ammState);
           const ammPriceMap = ammSnap ? pricesFor(ammSnap) : null;
           const upPrice = ammPriceMap && hydrated.upEntryId ? Number(ammPriceMap[hydrated.upEntryId] ?? 0) : 0;
@@ -889,47 +846,10 @@ export default function UpDownDetailPage() {
           );
         })()}
 
-        {/* Your Position — unified across all detail pages so the "what
-            am I in for" panel feels the same on community, jackpot,
-            updown, h2h, and race.
-
-            Sprint 4 polish: on AMM Up/Down markets the inline "Your
-            position" block inside the Live Market card above now
-            carries the per-side shares/avg/cost/PnL plus Add, Sell
-            and Share buttons, so mounting MyPositionCard underneath
-            would just print the same data again with different
-            framing. We render it only for parimutuel markets, where
-            the Live Market card isn't shown and MyPositionCard is
-            the only position surface. (Jackpot stays parimutuel
-            forever, by design, so this branch matters past sunset.) */}
-        {!isAmm && (
-          <MyPositionCard
-            marketId={marketId}
-            marketType="updown"
-            isAmm={isAmm}
-            ctaLabel={
-              userPick ? `Add to your ${userPick.toUpperCase()} stake` : undefined
-            }
-            onAddEntry={userPick ? () => handleSelect(userPick) : undefined}
-            livePoolContext={
-              userPick && Number.isFinite(hydrated.totalPool) && hydrated.totalPool > 0
-                ? {
-                    totalPool: hydrated.totalPool,
-                    userSidePercent:
-                      userPick === "up"
-                        ? hydrated.upPercent
-                        : 100 - hydrated.upPercent,
-                  }
-                : null
-            }
-          />
-        )}
-
-        {/* AMM Price History - the market consensus over time. Shown
-            above the underlying Trend Score chart so users see the
-            *market's* signal first, then the input data. Parimutuel
-            markets skip this card. */}
-        {isAmm && hydrated.upEntryId && hydrated.downEntryId && (() => {
+        {/* AMM Price History — the market consensus over time, above
+            the underlying Trend Score chart so users see the market's
+            signal first, then the input data. */}
+        {hydrated.upEntryId && hydrated.downEntryId && (() => {
           const ammSnap = snapshotFromApi(hydrated.ammState);
           const livePrices = ammSnap ? pricesFor(ammSnap) : {};
           return (
@@ -971,7 +891,7 @@ export default function UpDownDetailPage() {
               personName={hydrated.personName}
               height={280}
               userPick={userPick}
-              ammUpEntryId={isAmm ? hydrated.upEntryId ?? null : null}
+              ammUpEntryId={hydrated.upEntryId ?? null}
             />
           </div>
         </Card>
@@ -988,64 +908,6 @@ export default function UpDownDetailPage() {
           />
         )}
 
-        {/* Pool sentiment - parimutuel only. For AMM the live LMSR
-            price panel above already conveys the same information
-            (and uses the correct underlying signal), so we hide this
-            entirely to avoid double-rendering the same %. */}
-        {!isAmm && (
-          <Card className="border-border/50">
-            <div className="p-4">
-              <h2 className="text-sm font-semibold flex items-center gap-1.5 mb-3">
-                <Users className="h-4 w-4 text-violet-600 dark:text-violet-400" />
-                Pool sentiment
-              </h2>
-              <div className="space-y-3">
-                <div className="h-4 rounded-full overflow-hidden flex">
-                  <div
-                    className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all"
-                    style={{ width: `${hydrated.upPercent}%` }}
-                  />
-                  <div
-                    className="h-full bg-gradient-to-l from-red-500 to-red-400 transition-all"
-                    style={{ width: `${100 - hydrated.upPercent}%` }}
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="h-8 w-8 rounded-full bg-green-500/25 dark:bg-green-500/20 border border-green-500/50 dark:border-green-500/40 flex items-center justify-center">
-                      <TrendingUp className="h-4 w-4 text-green-700 dark:text-green-500" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-green-700 dark:text-green-500">
-                        UP {hydrated.upPercent}%
-                      </p>
-                      <p className="text-[10px] text-muted-foreground">
-                        {hydrated.upMultiplier}x payout
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div>
-                      <p className="text-sm font-semibold text-red-700 dark:text-red-500 text-right">
-                        DOWN {100 - hydrated.upPercent}%
-                      </p>
-                      <p className="text-[10px] text-muted-foreground text-right">
-                        {hydrated.downMultiplier}x payout
-                      </p>
-                    </div>
-                    <div className="h-8 w-8 rounded-full bg-red-500/25 dark:bg-red-500/20 border border-red-500/50 dark:border-red-500/40 flex items-center justify-center">
-                      <TrendingDown className="h-4 w-4 text-red-700 dark:text-red-500" />
-                    </div>
-                  </div>
-                </div>
-                <p className="text-[11px] text-muted-foreground text-center">
-                  Based on current pool distribution across {hydrated.totalParticipants} participants
-                </p>
-              </div>
-            </div>
-          </Card>
-        )}
-
         {/* How This Resolves */}
         <MarketResolutionInfo
           baselineScore={hydrated.baselineScore}
@@ -1054,7 +916,7 @@ export default function UpDownDetailPage() {
           bettingCutoff={hydrated.bettingCutoff}
           tieRule={hydrated.tieRule}
           personName={hydrated.personName}
-          engine={isAmm ? "amm" : "parimutuel"}
+          engine="amm"
         />
 
         {hydrated.personId.trim().length > 0 && (
@@ -1159,17 +1021,7 @@ export default function UpDownDetailPage() {
                   </Button>
                 </ClosedMarketActionTrigger>
               </div>
-              {!isMarketClosed && !isAmm && (() => {
-                const boost = computeEarlyBirdMultiplier(new Date(), hydrated?.startAt, hydrated?.bettingCutoff);
-                if (boost <= 1.05) return null;
-                return (
-                  <p className="text-[11px] text-amber-700 dark:text-amber-400 text-center mt-2 flex items-center justify-center gap-1">
-                    <Zap className="h-3.5 w-3.5" />
-                    Early Bird Boost active: {boost.toFixed(1)}x — predict earlier for bigger payouts
-                  </p>
-                );
-              })()}
-              {!isMarketClosed && isAmm && (
+              {!isMarketClosed && (
                 <p className="text-[11px] text-emerald-700 dark:text-emerald-400 text-center mt-2 flex items-center justify-center gap-1">
                   <Activity className="h-3.5 w-3.5" />
                   Live LMSR pricing — trade until 5 minutes before resolution
@@ -1189,15 +1041,14 @@ export default function UpDownDetailPage() {
           setPendingSelection(null);
         }}
         onConfirm={handleConfirmStake}
-        onConfirmAmmSell={isAmm ? handleConfirmAmmSell : undefined}
+        onConfirmAmmSell={handleConfirmAmmSell}
         walletBalance={walletCredits}
         onDirectionChange={handleDirectionChange}
         initialAmmMode={modalIntent}
         // Detail page polls /api/native-markets/updown every 60 s so
         // the modal can lean on the parent's refreshed state instead
-        // of the snapshot frozen at `handleSelect` time. Parimutuel
-        // markets render `null` here so the snapshot path is used.
-        liveAmmState={isAmm ? hydrated.ammState ?? null : null}
+        // of the snapshot frozen at `handleSelect` time.
+        liveAmmState={hydrated.ammState ?? null}
       />
     </div>
   );

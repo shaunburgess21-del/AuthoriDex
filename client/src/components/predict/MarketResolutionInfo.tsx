@@ -48,9 +48,9 @@ interface MarketResolutionInfoProps {
   /** Community only — caller-supplied free-form Yes/No criteria. */
   resolutionCriteria?: string;
   /**
-   * Engine of the underlying market. Drives the "Entries close" /
-   * "Trading closes" verb swap so AMM markets read correctly.
-   * Defaults to parimutuel for legacy callers.
+   * Engine of the underlying market. AMM is the default verb
+   * ("Trading closes"); jackpot keeps "Entries close" by passing
+   * `"parimutuel"` explicitly.
    */
   engine?: "amm" | "parimutuel";
   compact?: boolean;
@@ -99,7 +99,7 @@ export function MarketResolutionInfo({
   person2Name,
   categoryLabel,
   resolutionCriteria,
-  engine = "parimutuel",
+  engine = "amm",
   compact = false,
 }: MarketResolutionInfoProps) {
   const tieLabel = TIE_RULE_LABELS[tieRule] || "All positions refunded";

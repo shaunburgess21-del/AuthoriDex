@@ -12,10 +12,10 @@ export interface MarketCycleStripProps {
   variant?: MarketCycleStripVariant;
   /**
    * Engine of the underlying market. AMM markets allow continuous
-   * buying *and* selling all week, so the parimutuel "Entries close"
-   * phrasing (which implies a one-shot opt-in) reads wrong. We swap
-   * the verb to "Trading closes" / "Trading closed" while keeping the
-   * timestamps identical. Defaults to parimutuel for legacy callers.
+   * buying *and* selling all week, so the verb is "Trading closes".
+   * Jackpot markets are one-shot opt-ins, so they pass `"parimutuel"`
+   * to keep the "Entries close" phrasing. Defaults to AMM since
+   * jackpot is now the only parimutuel surface.
    */
   engine?: "amm" | "parimutuel";
   className?: string;
@@ -44,7 +44,7 @@ export function MarketCycleStrip({
   bettingCutoff,
   resolveAt,
   variant = "compact",
-  engine = "parimutuel",
+  engine = "amm",
   className,
 }: MarketCycleStripProps) {
   const cycle = useMarketCycle({

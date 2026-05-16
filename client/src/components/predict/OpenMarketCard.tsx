@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { Drawer } from "vaul";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,7 +9,6 @@ import { PredictCard } from "@/components/predict/PredictCard";
 import { ParticipantAvatarStack } from "@/components/predict/ParticipantAvatarStack";
 import { Link, useLocation } from "wouter";
 import { Check, ChevronRight, Clock, Lock, Trophy, XCircle, RotateCcw, X, ExternalLink } from "lucide-react";
-import { computePayoutMultiplier, formatMultiplier } from "@/lib/parimutuel";
 import { resolveMarketHeadlineImageUrl } from "@/lib/predictMarketImage";
 import { pricesFor, snapshotFromApi, type ApiAmmStateBlock } from "@/lib/ammClient";
 import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
@@ -48,47 +46,6 @@ function MarketAvatarOrSpacer({ market }: { market: any }) {
   return <MarketAvatar market={market} />;
 }
 
-function PayoutDetails({ marketId }: { marketId: string }) {
-  const [open, setOpen] = useState(false);
-  const { data, isLoading } = useQuery<{ totalPool: number; userStake: number; winnerPoolTotal: number; userPayout: number; remainderPolicy: string }>({
-    queryKey: ['/api/markets', marketId, 'my-payout'],
-    enabled: open,
-  });
-
-  if (!open) {
-    return (
-      <button onClick={() => setOpen(true)} className="text-[10px] text-muted-foreground underline underline-offset-2 mt-1" data-testid="button-payout-details">
-        View details
-      </button>
-    );
-  }
-
-  return (
-    <div className="mt-1.5 text-[10px] text-muted-foreground space-y-0.5 border-t border-border/50 pt-1.5" data-testid="section-payout-details">
-      {isLoading ? (
-        <span>Loading...</span>
-      ) : data ? (
-        (() => {
-          const netPL = data.userPayout - data.userStake;
-          const plColor = netPL > 0 ? 'text-emerald-600 dark:text-emerald-400' : netPL < 0 ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground';
-          const plSign = netPL > 0 ? '+' : '';
-          return (
-            <>
-              <div className="flex items-center justify-between gap-2"><span>Your stake</span><span className="font-mono">{data.userStake.toLocaleString()}</span></div>
-              <div className="flex items-center justify-between gap-2"><span>Your payout</span><span className="font-mono font-semibold">{data.userPayout.toLocaleString()}</span></div>
-              <div className="flex items-center justify-between gap-2"><span>Net P&L</span><span className={`font-mono font-semibold ${plColor}`}>{plSign}{netPL.toLocaleString()}</span></div>
-              <div className="flex items-center justify-between gap-2 pt-0.5 border-t border-border/30"><span>Total pool</span><span className="font-mono">{data.totalPool.toLocaleString()}</span></div>
-              {data.winnerPoolTotal > 0 && <div className="flex items-center justify-between gap-2"><span>Winner pool</span><span className="font-mono">{data.winnerPoolTotal.toLocaleString()}</span></div>}
-            </>
-          );
-        })()
-      ) : (
-        <span>Could not load details</span>
-      )}
-    </div>
-  );
-}
-
 function UserBetResult({ betResult, isMarketClosed = false }: { betResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number; marketId?: string }; isMarketClosed?: boolean }) {
   if (!betResult) return null;
   if (betResult.result === 'pending') {
@@ -101,23 +58,23 @@ function UserBetResult({ betResult, isMarketClosed = false }: { betResult?: { re
       </div>
     );
   }
-  const isResolved = betResult.result === 'won' || betResult.result === 'lost';
+  // Parimutuel sunset: resolved community markets are AMM, so the
+  // payout on `marketBets` already encodes the final credits and the
+  // "Total pool / Winner pool" breakdown no longer applies. We just
+  // surface the badge and the user's pick.
   return (
-    <div>
-      <div className={`flex items-center gap-2 text-xs font-semibold px-2 py-1.5 rounded-md mt-2 ${
-        betResult.result === 'won' ? 'bg-emerald-500/15 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' :
-        betResult.result === 'refunded' ? 'bg-yellow-500/15 dark:bg-yellow-500/10 text-yellow-600 dark:text-yellow-400' :
-        'bg-red-500/15 dark:bg-red-500/10 text-red-600 dark:text-red-400'
-      }`} data-testid="text-bet-result">
-        {betResult.result === 'won' && <Trophy className="h-3.5 w-3.5" />}
-        {betResult.result === 'lost' && <XCircle className="h-3.5 w-3.5" />}
-        {betResult.result === 'refunded' && <RotateCcw className="h-3.5 w-3.5" />}
-        {betResult.result === 'won' ? `Won +${betResult.payout} credits` :
-         betResult.result === 'refunded' ? `Refunded ${betResult.stakeAmount} credits` :
-         `Lost ${betResult.stakeAmount} credits`}
-        <span className="text-muted-foreground font-normal ml-auto">Picked: {betResult.entryLabel}</span>
-      </div>
-      {isResolved && betResult.marketId && <PayoutDetails marketId={betResult.marketId} />}
+    <div className={`flex items-center gap-2 text-xs font-semibold px-2 py-1.5 rounded-md mt-2 ${
+      betResult.result === 'won' ? 'bg-emerald-500/15 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' :
+      betResult.result === 'refunded' ? 'bg-yellow-500/15 dark:bg-yellow-500/10 text-yellow-600 dark:text-yellow-400' :
+      'bg-red-500/15 dark:bg-red-500/10 text-red-600 dark:text-red-400'
+    }`} data-testid="text-bet-result">
+      {betResult.result === 'won' && <Trophy className="h-3.5 w-3.5" />}
+      {betResult.result === 'lost' && <XCircle className="h-3.5 w-3.5" />}
+      {betResult.result === 'refunded' && <RotateCcw className="h-3.5 w-3.5" />}
+      {betResult.result === 'won' ? `Won +${betResult.payout} credits` :
+       betResult.result === 'refunded' ? `Refunded ${betResult.stakeAmount} credits` :
+       `Lost ${betResult.stakeAmount} credits`}
+      <span className="text-muted-foreground font-normal ml-auto">Picked: {betResult.entryLabel}</span>
     </div>
   );
 }
@@ -127,13 +84,12 @@ function isYesLikeLabel(label: string) {
   return l === "yes" || l === "above";
 }
 
-function PendingBetLinkRow({ entryLabel, stakeAmount, href, onTopUp, onLinkClick, unrealisedPnl }: { entryLabel: string; stakeAmount: number; href: string; /** When provided, the row becomes a button that triggers an in-place top-up modal instead of navigating to the detail page. Mirrors the native pattern (WeeklyUpDownYourPositionPanel). */ onTopUp?: () => void; /** Fired right before wouter navigates so the parent can stash a predict-return anchor. */ onLinkClick?: () => void; /** Sprint 5 / Phase 4.5: AMM unrealised P&L. Shown next to Stake. Null on parimutuel community markets. */ unrealisedPnl?: number | null }) {
+function PendingBetLinkRow({ entryLabel, stakeAmount, href, onTopUp, onLinkClick, unrealisedPnl }: { entryLabel: string; stakeAmount: number; href: string; /** When provided, the row becomes a button that triggers an in-place top-up modal instead of navigating to the detail page. Mirrors the native pattern (WeeklyUpDownYourPositionPanel). */ onTopUp?: () => void; /** Fired right before wouter navigates so the parent can stash a predict-return anchor. */ onLinkClick?: () => void; /** AMM unrealised P&L (`buy.netShares × livePrice − costBasis`). Shown next to Stake. */ unrealisedPnl?: number | null }) {
   const yesLike = isYesLikeLabel(entryLabel);
   const accent = yesLike ? "#00C853" : "#FF0000";
 
-  // Sprint 5 / Phase 4.5: P&L delta with the same sub-cent zero
-  // clamp we apply on Up/Down + H2H + Race cards. Hides entirely on
-  // parimutuel markets where `unrealisedPnl` is undefined / null.
+  // P&L delta with the same sub-cent zero clamp we apply on Up/Down +
+  // H2H + Race cards. Hidden when `unrealisedPnl` is unavailable.
   const hasPnl = typeof unrealisedPnl === "number" && Number.isFinite(unrealisedPnl);
   const pnlValue = hasPnl ? (unrealisedPnl as number) : 0;
   const pnlIsZero = Math.abs(pnlValue) < 0.005;
@@ -211,43 +167,27 @@ function PendingBetLinkRow({ entryLabel, stakeAmount, href, onTopUp, onLinkClick
   );
 }
 
-function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel, onNavigate, onPickEntry, isMarketClosed, isInactive = false, inactiveMessage, userBetResult, userBetsPerEntry, onFilterCategory, categoryRaceMap, leaderboardCategories, onBrowseFullScreen, unrealisedPnl }: { market: any; entries: any[]; totalPool: number; participants: number; timeLabel: string; onNavigate: (slug: string, pick?: string, direction?: string) => void; /** When provided, tapping the "Your pick" pin opens the StakeModal in topUp mode instead of routing to the detail page. */ onPickEntry?: (market: any, entry: any, direction: "yes" | "no") => void; isMarketClosed: boolean; isInactive?: boolean; inactiveMessage?: string; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number }; userBetsPerEntry?: Map<string, { yesStake: number; noStake: number }>; onFilterCategory?: (cat: string) => void; categoryRaceMap?: Map<string, string>; leaderboardCategories?: Set<string>; onBrowseFullScreen?: () => void; /** Sprint 5 / Phase 4.5: AMM unrealised P&L for the user's top position on this market. Null for parimutuel community markets. */ unrealisedPnl?: number | null }) {
+function BinaryMarketCard({ market, entries, participants, timeLabel, onNavigate, onPickEntry, isMarketClosed, isInactive = false, inactiveMessage, userBetResult, userBetsPerEntry, onFilterCategory, categoryRaceMap, leaderboardCategories, onBrowseFullScreen, unrealisedPnl }: { market: any; entries: any[]; participants: number; timeLabel: string; onNavigate: (slug: string, pick?: string, direction?: string) => void; /** When provided, tapping the "Your pick" pin opens the StakeModal in topUp mode instead of routing to the detail page. */ onPickEntry?: (market: any, entry: any, direction: "yes" | "no") => void; isMarketClosed: boolean; isInactive?: boolean; inactiveMessage?: string; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number }; userBetsPerEntry?: Map<string, { yesStake: number; noStake: number }>; onFilterCategory?: (cat: string) => void; categoryRaceMap?: Map<string, string>; leaderboardCategories?: Set<string>; onBrowseFullScreen?: () => void; /** AMM unrealised P&L for the user's top position on this market. */ unrealisedPnl?: number | null }) {
   const rememberAnchor = () => rememberCommunityCardAnchor(market?.id);
   const navigateWithAnchor = (slug: string, pick?: string, direction?: string) => {
     rememberAnchor();
     onNavigate(slug, pick, direction);
   };
-  const isAmm = market.engine === "amm";
-  // Sprint 5 / Phase 4.5: market volume chip — uses the same source
-  // of truth (`market.volume`, projected by /api/open-markets in
-  // Phase 1.6 from `ammState.totalUserCreditsIn`) and the same
-  // formatter as H2H / Race cards so the chip reads identically
-  // across all market types. Parimutuel rows have `volume === 0`,
-  // which suppresses the chip.
+  // Parimutuel sunset: every community market is AMM. Volume chip
+  // mirrors H2H / Race using `market.volume` (projected by the
+  // /api/open-markets feed from `ammState.totalUserCreditsIn`).
   const volumeRaw = Number((market as any)?.volume ?? 0);
   const volumeLabel = volumeRaw > 0 ? formatVolumeCredits(volumeRaw) : null;
-  const ammSnap = isAmm ? snapshotFromApi((market.ammState as ApiAmmStateBlock | null | undefined) ?? null) : null;
+  const ammSnap = snapshotFromApi((market.ammState as ApiAmmStateBlock | null | undefined) ?? null);
   const ammPrices = ammSnap ? pricesFor(ammSnap) : null;
   const yesEntry = entries.find((e: any) => e.label === "Yes") || entries[0];
   const noEntry = entries.find((e: any) => e.label === "No") || entries[1];
-  const yesStake = Number(yesEntry?.totalStake || 0);
-  const noStake = Number(noEntry?.totalStake || 0);
-  const total = yesStake + noStake || 1;
-  // AMM markets price each share class via LMSR, not pool share.
-  // We override the % display so the bar matches the live market.
+  // AMM markets price each share class via LMSR. We map prices to %
+  // for the bar and the button label.
   const ammYesPrice = ammPrices && yesEntry?.id ? Number(ammPrices[yesEntry.id] ?? 0) : 0;
   const ammNoPrice = ammPrices && noEntry?.id ? Number(ammPrices[noEntry.id] ?? 0) : 0;
-  const yesPercent = isAmm
-    ? Math.max(0, Math.min(100, Math.round(ammYesPrice * 100)))
-    : Math.round((yesStake / total) * 100);
-  const noPercent = isAmm
-    ? Math.max(0, Math.min(100, Math.round(ammNoPrice * 100)))
-    : 100 - Math.round((yesStake / total) * 100);
-  // Multipliers use raw stakes (not the rounded percent) so thin pools
-  // like 1 vs 999 don't collapse to a misleading 1.9x default.
-  // 0.95 haircut matches MarketDetailPage so card and detail agree.
-  const yesMultiplier = +(computePayoutMultiplier(total, yesStake) * 0.95).toFixed(1);
-  const noMultiplier = +(computePayoutMultiplier(total, noStake) * 0.95).toFixed(1);
+  const yesPercent = Math.max(0, Math.min(100, Math.round(ammYesPrice * 100)));
+  const noPercent = Math.max(0, Math.min(100, Math.round(ammNoPrice * 100)));
 
   return (
     <PredictCard testId={`card-market-${market.slug}`} className={`${isMarketClosed && !isInactive ? 'opacity-75' : ''}`} inactive={isInactive} inactiveMessage={inactiveMessage}>
@@ -303,12 +243,6 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
         </div>
 
         <div className="max-md:mt-1">
-          {!isAmm && (
-            <div className="flex items-center justify-center mb-1.5">
-              <span className="text-sm font-semibold text-muted-foreground">Pool: {totalPool.toLocaleString('en-US')} credits</span>
-            </div>
-          )}
-
           {isMarketClosed ? (
             <Button className="w-full bg-muted text-muted-foreground cursor-not-allowed" disabled>
               <Lock className="h-4 w-4 mr-2" />
@@ -343,7 +277,7 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
                   href={`/markets/${market.slug}`}
                   onLinkClick={rememberAnchor}
                   onTopUp={pickedEntry && onPickEntry ? () => onPickEntry(market, pickedEntry, pickedDirection) : undefined}
-                  unrealisedPnl={isAmm ? unrealisedPnl ?? null : null}
+                  unrealisedPnl={unrealisedPnl ?? null}
                 />
               );
             })()
@@ -354,14 +288,14 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
                 onClick={() => navigateWithAnchor(market.slug, 'yes')}
                 data-testid={`button-yes-${market.slug}`}
               >
-                Yes {isAmm ? `${yesPercent}%` : formatMultiplier(yesMultiplier)}
+                Yes {yesPercent}%
               </Button>
               <Button
                 className="!min-h-0 px-4 py-3.5 md:py-2.5 bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20"
                 onClick={() => navigateWithAnchor(market.slug, 'no')}
                 data-testid={`button-no-${market.slug}`}
               >
-                No {isAmm ? `${noPercent}%` : formatMultiplier(noMultiplier)}
+                No {noPercent}%
               </Button>
             </div>
           )}
@@ -509,42 +443,22 @@ function MultiMarketEntryRow({
           </Link>
         )
       ) : !isMarketClosed ? (
-        market.engine === "amm" ? (
-          // AMM markets price each outcome as its own share class, so
-          // the row gets a single "Buy" button instead of the Yes/No
-          // pair. The label shows price/share (cr) on the drawer view
-          // and just "Buy" in the compact card preview.
-          <div className="flex shrink-0">
-            <button
-              className={`${buttonClass} w-[72px] md:w-[80px] bg-emerald-500/10 border border-emerald-500/50 text-emerald-600 hover:border-emerald-500/80 hover:bg-emerald-500/20`}
-              onClick={(e) => handlePick(e, "yes")}
-              data-testid={`button-buy-${entry.id}`}
-            >
-              {compact
-                ? "Buy"
-                : `${Number(entry.ammPrice ?? 0).toFixed(2)} cr`}
-            </button>
-          </div>
-        ) : (
-          <div className="flex gap-1 md:gap-1.5 shrink-0">
-            <button
-              className={`${buttonClass} bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20`}
-              onClick={(e) => handlePick(e, "yes")}
-              data-testid={`button-yes-${entry.id}`}
-            >
-              {compact ? "Yes" : `Yes ${formatMultiplier(entry.yesMultiplier)}`}
-            </button>
-            <button
-              className={`${buttonClass} bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20`}
-              onClick={(e) => handlePick(e, "no")}
-              data-testid={`button-no-${entry.id}`}
-            >
-              {compact ? "No" : `No ${formatMultiplier(entry.noMultiplier)}`}
-            </button>
-          </div>
-        )
+        // Parimutuel sunset: every community market is AMM. Each
+        // outcome is its own share class, so the row gets a single
+        // "Buy" button instead of the Yes/No pair. The label shows
+        // price/share (cr) on the drawer view and just "Buy" in the
+        // compact card preview.
+        <div className="flex shrink-0">
+          <button
+            className={`${buttonClass} w-[72px] md:w-[80px] bg-emerald-500/10 border border-emerald-500/50 text-emerald-600 hover:border-emerald-500/80 hover:bg-emerald-500/20`}
+            onClick={(e) => handlePick(e, "yes")}
+            data-testid={`button-buy-${entry.id}`}
+          >
+            {compact ? "Buy" : `${Number(entry.ammPrice ?? 0).toFixed(2)} cr`}
+          </button>
+        </div>
       ) : (
-        <span className="text-xs text-muted-foreground shrink-0 w-24 text-right">{entry.yesPct}% Yes / {entry.noPct}% No</span>
+        <span className="text-xs text-muted-foreground shrink-0 w-24 text-right">{entry.pct}%</span>
       )}
     </div>
   );
@@ -552,7 +466,7 @@ function MultiMarketEntryRow({
 
 const MULTI_MARKET_PREVIEW_COUNT = 4;
 
-function MultiMarketCard({ market, entries, participants, timeLabel, onNavigate, onPickEntry, isMarketClosed, isInactive = false, inactiveMessage, userBetResult, userBetsPerEntry, onFilterCategory, categoryRaceMap, leaderboardCategories, onBrowseFullScreen, unrealisedPnl }: { market: any; entries: any[]; participants: number; timeLabel: string; onNavigate: (slug: string, pick?: string, direction?: string) => void; onPickEntry?: (market: any, entry: any, direction: "yes" | "no") => void; isMarketClosed: boolean; isInactive?: boolean; inactiveMessage?: string; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number }; userBetsPerEntry?: Map<string, { yesStake: number; noStake: number }>; onFilterCategory?: (cat: string) => void; categoryRaceMap?: Map<string, string>; leaderboardCategories?: Set<string>; onBrowseFullScreen?: () => void; /** Sprint 5 / Phase 4.5: AMM unrealised P&L for the user's top position on this market. Null for parimutuel community markets. */ unrealisedPnl?: number | null }) {
+function MultiMarketCard({ market, entries, participants, timeLabel, onNavigate, onPickEntry, isMarketClosed, isInactive = false, inactiveMessage, userBetResult, userBetsPerEntry, onFilterCategory, categoryRaceMap, leaderboardCategories, onBrowseFullScreen, unrealisedPnl }: { market: any; entries: any[]; participants: number; timeLabel: string; onNavigate: (slug: string, pick?: string, direction?: string) => void; onPickEntry?: (market: any, entry: any, direction: "yes" | "no") => void; isMarketClosed: boolean; isInactive?: boolean; inactiveMessage?: string; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number }; userBetsPerEntry?: Map<string, { yesStake: number; noStake: number }>; onFilterCategory?: (cat: string) => void; categoryRaceMap?: Map<string, string>; leaderboardCategories?: Set<string>; onBrowseFullScreen?: () => void; /** AMM unrealised P&L for the user's top position on this market. */ unrealisedPnl?: number | null }) {
   const [, setLocation] = useLocation();
   const [optionsDrawerOpen, setOptionsDrawerOpen] = useState(false);
   const rememberAnchor = () => rememberCommunityCardAnchor(market?.id);
@@ -561,13 +475,11 @@ function MultiMarketCard({ market, entries, participants, timeLabel, onNavigate,
     onNavigate(slug, pick, direction);
   };
 
-  const isAmm = market.engine === "amm";
-  // Sprint 5 / Phase 4.5: volume chip + P&L parity with H2H / Race
-  // / Up/Down cards. `market.volume` comes from /api/open-markets
-  // (projected in Phase 1.6); parimutuel markets emit 0.
+  // Parimutuel sunset: every community market is AMM. Volume chip
+  // mirrors H2H / Race using `market.volume`.
   const volumeRaw = Number((market as any)?.volume ?? 0);
   const volumeLabel = volumeRaw > 0 ? formatVolumeCredits(volumeRaw) : null;
-  const hasPnl = isAmm && typeof unrealisedPnl === "number" && Number.isFinite(unrealisedPnl);
+  const hasPnl = typeof unrealisedPnl === "number" && Number.isFinite(unrealisedPnl);
   const pnlValue = hasPnl ? (unrealisedPnl as number) : 0;
   const pnlIsZero = Math.abs(pnlValue) < 0.005;
   const pnlClass = pnlIsZero
@@ -580,33 +492,19 @@ function MultiMarketCard({ market, entries, participants, timeLabel, onNavigate,
     : pnlIsZero
       ? "0.00 cr"
       : `${pnlValue >= 0 ? "+" : ""}${pnlValue.toFixed(2)} cr`;
-  const ammSnap = isAmm ? snapshotFromApi((market.ammState as ApiAmmStateBlock | null | undefined) ?? null) : null;
+  const ammSnap = snapshotFromApi((market.ammState as ApiAmmStateBlock | null | undefined) ?? null);
   const ammPrices = ammSnap ? pricesFor(ammSnap) : null;
 
-  const totalEntryStake = entries.reduce((sum: number, e: any) => sum + Number(e.totalStake || 0) + Number(e.noStake || 0), 0) || 1;
   const hasPendingResult = userBetResult?.result === "pending";
 
-  // Per-entry parimutuel multipliers (matches binary card + detail page).
-  // 0.95 haircut keeps the card and the detail page in agreement.
-  // computePayoutMultiplier already falls back to DEFAULT_PAYOUT_MULTIPLIER
-  // when pool or stake is 0, so no extra null-guarding is needed — empty
-  // entries show "Yes 1.9x" / "No 1.9x" exactly like the binary card.
-  // For AMM markets `pct` is overridden with the LMSR marginal price so
-  // the bars/sort order match the live market.
+  // AMM markets price each outcome as its own share class. `pct` is
+  // the LMSR marginal price so the bars + sort order match the live
+  // market.
   const enriched = entries.map((e: any) => {
-    const yesStake = Number(e.totalStake || 0);
-    const noStake = Number(e.noStake || 0);
-    const entryPool = yesStake + noStake;
     const ammPrice = ammPrices ? Number(ammPrices[e.id] ?? 0) : 0;
     return {
       ...e,
-      pct: isAmm
-        ? Math.max(0, Math.min(100, Math.round(ammPrice * 100)))
-        : Math.round((entryPool / totalEntryStake) * 100),
-      yesPct: entryPool > 0 ? Math.round((yesStake / entryPool) * 100) : 50,
-      noPct: entryPool > 0 ? 100 - Math.round((yesStake / entryPool) * 100) : 50,
-      yesMultiplier: +(computePayoutMultiplier(entryPool, yesStake) * 0.95).toFixed(1),
-      noMultiplier: +(computePayoutMultiplier(entryPool, noStake) * 0.95).toFixed(1),
+      pct: Math.max(0, Math.min(100, Math.round(ammPrice * 100))),
       ammPrice,
     };
   });
@@ -634,8 +532,7 @@ function MultiMarketCard({ market, entries, participants, timeLabel, onNavigate,
             <Clock className="h-3 w-3 mr-1" />
             {timeLabel}
           </Badge>
-          {/* Sprint 5 / Phase 4.5: volume chip mirrors H2H + Race +
-              Up/Down. Suppressed on parimutuel markets (volume === 0).
+          {/* Volume chip mirrors H2H + Race + Up/Down.
               `formatVolumeCredits` already returns "N cr" so we only
               suffix " vol" (avoiding a duplicate "cr cr"). */}
           {volumeLabel && (
@@ -668,25 +565,14 @@ function MultiMarketCard({ market, entries, participants, timeLabel, onNavigate,
 
       <div className="mb-3 flex items-center gap-2">
         <ParticipantAvatarStack participants={market.recentParticipants} totalCount={participants} />
-        {/* Polymarket-style total pool readout — gives users a quick sense of
-            how much liquidity the market has accumulated. We sum across all
-            entries (live stake only, excluding seed) so it tracks real money.
-            Hidden when the pool is empty to avoid a noisy "0 in pool" line.
-            AMM markets price each share class via LMSR rather than a shared
-            pool, so this volume line doesn't apply. */}
-        {!isAmm && totalEntryStake > 1 && (
-          <span className="text-[11px] text-muted-foreground tabular-nums" data-testid={`pool-volume-${market.slug}`}>
-            {totalEntryStake.toLocaleString("en-US")} in pool
-          </span>
-        )}
         <Badge variant="outline" className="text-[10px] ml-auto">{entries.length} options</Badge>
       </div>
 
-      {/* Sprint 5 / Phase 4.5: P&L banner for AMM community markets
-          where the user holds a position. Multi-outcome markets can
-          have positions on several entries, but a single market-level
-          P&L still has signal value — we show the user's TOP position
-          P&L (PredictPage's `ammPositionByMarket` already picks the
+      {/* AMM unrealised P&L banner for community markets where the
+          user holds a position. Multi-outcome markets can have
+          positions on several entries, but a single market-level P&L
+          still has signal value — we show the TOP position P&L
+          (PredictPage's `ammPositionByMarket` already picks the
           largest currentValue), which mirrors the Race pattern. */}
       {hasPnl && pnlText && (
         <div
@@ -800,27 +686,57 @@ function MultiMarketCard({ market, entries, participants, timeLabel, onNavigate,
   );
 }
 
-function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel, onNavigate, isMarketClosed, isInactive = false, inactiveMessage, userBetResult, onFilterCategory, categoryRaceMap, leaderboardCategories, onBrowseFullScreen }: { market: any; entries: any[]; totalPool: number; participants: number; timeLabel: string; onNavigate: (slug: string, pick?: string, direction?: string) => void; isMarketClosed: boolean; isInactive?: boolean; inactiveMessage?: string; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number }; onFilterCategory?: (cat: string) => void; categoryRaceMap?: Map<string, string>; leaderboardCategories?: Set<string>; onBrowseFullScreen?: () => void }) {
+function UpDownMarketCard({ market, entries, participants, timeLabel, onNavigate, isMarketClosed, isInactive = false, inactiveMessage, userBetResult, onFilterCategory, categoryRaceMap, leaderboardCategories, onBrowseFullScreen, unrealisedPnl }: { market: any; entries: any[]; participants: number; timeLabel: string; onNavigate: (slug: string, pick?: string, direction?: string) => void; isMarketClosed: boolean; isInactive?: boolean; inactiveMessage?: string; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number }; onFilterCategory?: (cat: string) => void; categoryRaceMap?: Map<string, string>; leaderboardCategories?: Set<string>; onBrowseFullScreen?: () => void; /** AMM unrealised P&L for the user's position on this market. */ unrealisedPnl?: number | null }) {
   const rememberAnchor = () => rememberCommunityCardAnchor(market?.id);
   const navigateWithAnchor = (slug: string, pick?: string, direction?: string) => {
     rememberAnchor();
     onNavigate(slug, pick, direction);
   };
+  // Parimutuel sunset: every community market is AMM, including the
+  // community-built Above/Below up-down format. Prices come from the
+  // AMM snapshot, volume from `market.volume`.
   const aboveEntry = entries.find((e: any) => e.label === "Above") || entries[0];
   const belowEntry = entries.find((e: any) => e.label === "Below") || entries[1];
-  const aboveStake = Number(aboveEntry?.totalStake || 0);
-  const belowStake = Number(belowEntry?.totalStake || 0);
-  const total = aboveStake + belowStake || 1;
-  const abovePercent = Math.round((aboveStake / total) * 100);
-  const belowPercent = 100 - abovePercent;
+  const ammSnap = snapshotFromApi((market.ammState as ApiAmmStateBlock | null | undefined) ?? null);
+  const ammPrices = ammSnap ? pricesFor(ammSnap) : null;
+  const abovePrice = ammPrices && aboveEntry?.id ? Number(ammPrices[aboveEntry.id] ?? 0) : 0;
+  const belowPrice = ammPrices && belowEntry?.id ? Number(ammPrices[belowEntry.id] ?? 0) : 0;
+  const abovePercent = Math.max(0, Math.min(100, Math.round(abovePrice * 100)));
+  const belowPercent = Math.max(0, Math.min(100, Math.round(belowPrice * 100)));
+  const volumeRaw = Number((market as any)?.volume ?? 0);
+  const volumeLabel = volumeRaw > 0 ? formatVolumeCredits(volumeRaw) : null;
+  const hasPnl = typeof unrealisedPnl === "number" && Number.isFinite(unrealisedPnl);
+  const pnlValue = hasPnl ? (unrealisedPnl as number) : 0;
+  const pnlIsZero = Math.abs(pnlValue) < 0.005;
+  const pnlClass = pnlIsZero
+    ? "text-muted-foreground"
+    : pnlValue >= 0
+      ? "text-green-700 dark:text-green-500"
+      : "text-red-700 dark:text-red-500";
+  const pnlText = !hasPnl
+    ? null
+    : pnlIsZero
+      ? "0.00 cr"
+      : `${pnlValue >= 0 ? "+" : ""}${pnlValue.toFixed(2)} cr`;
 
   return (
     <PredictCard testId={`card-market-${market.slug}`} className={`${isMarketClosed && !isInactive ? 'opacity-75' : ''}`} inactive={isInactive} inactiveMessage={inactiveMessage}>
       <div className="flex items-center justify-between mb-3 flex-wrap gap-1">
-        <Badge variant="outline" className="text-xs">
-          <Clock className="h-3 w-3 mr-1" />
-          {timeLabel}
-        </Badge>
+        <div className="flex items-center gap-1.5">
+          <Badge variant="outline" className="text-xs">
+            <Clock className="h-3 w-3 mr-1" />
+            {timeLabel}
+          </Badge>
+          {volumeLabel && (
+            <Badge
+              variant="outline"
+              className="text-[10px] tabular-nums text-muted-foreground border-border/50"
+              data-testid={`community-card-volume-${market.slug}`}
+            >
+              {volumeLabel} vol
+            </Badge>
+          )}
+        </div>
         {market.category && <InteractiveCategoryPill category={market.category} onFilter={() => onFilterCategory?.(market.category)} leaderboardCategories={leaderboardCategories} detailHref={`/markets/${market.slug}`} detailLabel="View Market Details" onBrowseFullScreen={onBrowseFullScreen} />}
       </div>
 
@@ -853,20 +769,36 @@ function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel,
             <span className="text-red-500 font-semibold">Below {belowPercent}%</span>
           </div>
         </div>
+
+        {hasPnl && pnlText && (
+          <div
+            className="mb-2 flex items-center justify-between gap-2 rounded-md border border-border/40 bg-muted/30 px-3 py-2"
+            data-testid={`community-card-pnl-${market.slug}`}
+          >
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Your position
+            </span>
+            <span className={`text-xs font-semibold font-mono tabular-nums ${pnlClass}`}>
+              {pnlText}
+            </span>
+          </div>
+        )}
       </div>
 
       <div>
-        <div className="flex items-center justify-center mb-1.5">
-          <span className="text-sm font-semibold text-muted-foreground">Pool: {totalPool.toLocaleString('en-US')} credits</span>
-        </div>
-
         {isMarketClosed ? (
           <Button className="w-full bg-muted text-muted-foreground cursor-not-allowed" disabled>
             <Lock className="h-4 w-4 mr-2" />
             Closed
           </Button>
         ) : userBetResult?.result === "pending" ? (
-          <PendingBetLinkRow entryLabel={userBetResult.entryLabel} stakeAmount={userBetResult.stakeAmount} href={`/markets/${market.slug}`} onLinkClick={rememberAnchor} />
+          <PendingBetLinkRow
+            entryLabel={userBetResult.entryLabel}
+            stakeAmount={userBetResult.stakeAmount}
+            href={`/markets/${market.slug}`}
+            onLinkClick={rememberAnchor}
+            unrealisedPnl={unrealisedPnl ?? null}
+          />
         ) : (
           <div className="grid grid-cols-2 gap-2">
             <Button
@@ -891,10 +823,8 @@ function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel,
   );
 }
 
-export function OpenMarketCard({ market, onNavigate, onPickEntry, isMarketClosed = false, userBetResult, userBetsPerEntry, onFilterCategory, categoryRaceMap, leaderboardCategories, onBrowseFullScreen, unrealisedPnl }: { market: any; onNavigate: (slug: string, pick?: string, direction?: string) => void; /** When provided, multi-option Yes/No clicks open an in-page stake modal instead of navigating to /markets/:slug. Falls through to onNavigate for binary/up-down cards. */ onPickEntry?: (market: any, entry: any, direction: "yes" | "no") => void; isMarketClosed?: boolean; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number }; userBetsPerEntry?: Map<string, { yesStake: number; noStake: number }>; onFilterCategory?: (cat: string) => void; categoryRaceMap?: Map<string, string>; leaderboardCategories?: Set<string>; onBrowseFullScreen?: () => void; /** Sprint 5 / Phase 4.5: AMM unrealised P&L for the user's top position. Threaded through to Binary + Multi sub-cards. */ unrealisedPnl?: number | null }) {
+export function OpenMarketCard({ market, onNavigate, onPickEntry, isMarketClosed = false, userBetResult, userBetsPerEntry, onFilterCategory, categoryRaceMap, leaderboardCategories, onBrowseFullScreen, unrealisedPnl }: { market: any; onNavigate: (slug: string, pick?: string, direction?: string) => void; /** When provided, multi-option Yes/No clicks open an in-page stake modal instead of navigating to /markets/:slug. Falls through to onNavigate for binary/up-down cards. */ onPickEntry?: (market: any, entry: any, direction: "yes" | "no") => void; isMarketClosed?: boolean; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number }; userBetsPerEntry?: Map<string, { yesStake: number; noStake: number }>; onFilterCategory?: (cat: string) => void; categoryRaceMap?: Map<string, string>; leaderboardCategories?: Set<string>; onBrowseFullScreen?: () => void; /** AMM unrealised P&L for the user's top position. Threaded through to Binary + Multi + UpDown sub-cards. */ unrealisedPnl?: number | null }) {
   const entries = market.entries || [];
-  const totalStake = entries.reduce((sum: number, e: any) => sum + Number(e.totalStake || 0) + Number(e.noStake || 0), 0);
-  const totalPool = totalStake;
   const participants = market.activeParticipantCount || market.betCount || 0;
   const isInactive = market.visibility === "inactive";
 
@@ -904,10 +834,10 @@ export function OpenMarketCard({ market, onNavigate, onPickEntry, isMarketClosed
   const timeLabel = daysLeft > 1 ? `${daysLeft}d left` : daysLeft === 1 ? "1d left" : "Closing soon";
 
   if (market.openMarketType === "updown") {
-    return <UpDownMarketCard market={market} entries={entries} totalPool={totalPool} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} isMarketClosed={isMarketClosed || isInactive} isInactive={isInactive} inactiveMessage={market.inactiveMessage} userBetResult={userBetResult} onFilterCategory={onFilterCategory} categoryRaceMap={categoryRaceMap} leaderboardCategories={leaderboardCategories} onBrowseFullScreen={onBrowseFullScreen} />;
+    return <UpDownMarketCard market={market} entries={entries} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} isMarketClosed={isMarketClosed || isInactive} isInactive={isInactive} inactiveMessage={market.inactiveMessage} userBetResult={userBetResult} onFilterCategory={onFilterCategory} categoryRaceMap={categoryRaceMap} leaderboardCategories={leaderboardCategories} onBrowseFullScreen={onBrowseFullScreen} unrealisedPnl={unrealisedPnl} />;
   }
   if (market.openMarketType === "multi") {
     return <MultiMarketCard market={market} entries={entries} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} onPickEntry={onPickEntry} isMarketClosed={isMarketClosed || isInactive} isInactive={isInactive} inactiveMessage={market.inactiveMessage} userBetResult={userBetResult} userBetsPerEntry={userBetsPerEntry} onFilterCategory={onFilterCategory} categoryRaceMap={categoryRaceMap} leaderboardCategories={leaderboardCategories} onBrowseFullScreen={onBrowseFullScreen} unrealisedPnl={unrealisedPnl} />;
   }
-  return <BinaryMarketCard market={market} entries={entries} totalPool={totalPool} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} onPickEntry={onPickEntry} isMarketClosed={isMarketClosed || isInactive} isInactive={isInactive} inactiveMessage={market.inactiveMessage} userBetResult={userBetResult} userBetsPerEntry={userBetsPerEntry} onFilterCategory={onFilterCategory} categoryRaceMap={categoryRaceMap} leaderboardCategories={leaderboardCategories} onBrowseFullScreen={onBrowseFullScreen} unrealisedPnl={unrealisedPnl} />;
+  return <BinaryMarketCard market={market} entries={entries} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} onPickEntry={onPickEntry} isMarketClosed={isMarketClosed || isInactive} isInactive={isInactive} inactiveMessage={market.inactiveMessage} userBetResult={userBetResult} userBetsPerEntry={userBetsPerEntry} onFilterCategory={onFilterCategory} categoryRaceMap={categoryRaceMap} leaderboardCategories={leaderboardCategories} onBrowseFullScreen={onBrowseFullScreen} unrealisedPnl={unrealisedPnl} />;
 }

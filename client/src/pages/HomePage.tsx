@@ -68,7 +68,6 @@ import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { getMarketBaselineScore, type MarketBaselineSource } from "@/lib/predict-market-baseline";
 import { fireAmmTradeToast } from "@/lib/share-data";
 import { useShareCard } from "@/contexts/ShareCardContext";
-import { computePayoutMultiplier } from "@/lib/parimutuel";
 import { TrendingPerson } from "@shared/schema";
 import { useIntersectionObserver } from "@/hooks/useIntersectionObserver";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
@@ -1203,7 +1202,6 @@ export default function HomePage() {
       const downStake = Number(downEntry?.totalStake || 0);
       const total = upStake + downStake || 1;
       const upPercent = Math.round((upStake / total) * 100);
-      const totalPool = upStake + downStake;
       const currentScore = Number(person.trendScore || 0);
       const baselineScore = getMarketBaselineScore(m as MarketBaselineSource, currentScore) ?? currentScore;
       return {
@@ -1216,19 +1214,11 @@ export default function HomePage() {
         baselineScore,
         upEntryId: upEntry?.id as string | undefined,
         downEntryId: downEntry?.id as string | undefined,
-        upMultiplier: computePayoutMultiplier(upStake + downStake, upStake),
-        downMultiplier: computePayoutMultiplier(upStake + downStake, downStake),
         upPoolPercent: upPercent || 50,
-        totalPool,
         bettingCutoff: (m.bettingCutoff as string) || null,
         startAt: (m.startAt as string) || null,
         endAt: (m.endAt as string) || null,
-        tieRule: (m.tieRule as string) || "refund",
-        // Sprint 3.1: thread engine + ammState through so the
-        // StakeModal renders LMSR UI (live price, sell mode, no
-        // "Early Bird Boost") for AMM markets and the buy mutation
-        // can build the AMM-flavoured share-card toast.
-        engine: (m.engine as string) === "amm" ? "amm" : "parimutuel",
+        engine: "amm" as const,
         ammState: (m as { ammState?: unknown }).ammState ?? null,
         category: (m.category as string | null) ?? null,
       };
@@ -1312,7 +1302,6 @@ export default function HomePage() {
     const isTopUp = !!existing;
 
     const crowdSentiment = direction === "up" ? market.upPoolPercent : (100 - market.upPoolPercent);
-    const estimatedPayout = direction === "up" ? market.upMultiplier : market.downMultiplier;
     setPendingSelection({
       type: "updown",
       choice: direction === "up" ? "Trend Score UP" : "Trend Score DOWN",
@@ -1322,20 +1311,13 @@ export default function HomePage() {
       startScore: market.startScore,
       currentScore: market.currentScore,
       crowdSentiment,
-      poolTotal: market.totalPool,
-      estimatedPayout,
       baselineScore: market.baselineScore,
       baselineTimestamp: market.startAt || undefined,
-      tieRule: market.tieRule,
       endAt: market.endAt || undefined,
       bettingCutoff: market.bettingCutoff,
       isTopUp,
       existingStake: isTopUp ? existing.stakeAmount : undefined,
-      // Sprint 3.1: AMM-aware modal. Without these the StakeModal
-      // falls back to parimutuel UI (Early Bird Boost / 2.0x stake
-      // payout copy) even on AMM markets — the bug that surfaced on
-      // home leaderboard taps during external testing.
-      engine: market.engine === "amm" ? "amm" : "parimutuel",
+      engine: "amm",
       ammState: (market.ammState ?? null) as StakeSelection["ammState"],
     });
     refreshProfile?.().catch(() => {});
@@ -1359,15 +1341,10 @@ export default function HomePage() {
       if (data?.xp?.xpAwarded) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }
-      // Sprint 3.1: AMM responses get the shareable trade toast that
-      // Sprint 2 added on the detail pages. Parimutuel responses keep
-      // the legacy static description so we don't claim a Share moment
-      // on engines that don't have the LMSR data to back a trade card.
-      const isAmmTrade = data?.engine === "amm";
       const market = updownMarkets.find(
         (m) => String(m.id) === String(variables.marketId),
       );
-      if (isAmmTrade && market) {
+      if (market) {
         const choice =
           variables.entryId === market.downEntryId ? "DOWN" : "UP";
         const origin =
@@ -2613,7 +2590,6 @@ export default function HomePage() {
           const market = updownMarkets.find(m => m.id === pendingSelection.marketId);
           if (!market) return;
           const crowdSentiment = dir === "up" ? market.upPoolPercent : (100 - market.upPoolPercent);
-          const estimatedPayout = dir === "up" ? market.upMultiplier : market.downMultiplier;
           setPendingSelection({
             type: "updown",
             choice: dir === "up" ? "Trend Score UP" : "Trend Score DOWN",
@@ -2623,21 +2599,11 @@ export default function HomePage() {
             startScore: market.startScore,
             currentScore: market.currentScore,
             crowdSentiment,
-            poolTotal: market.totalPool,
-            estimatedPayout,
             baselineScore: market.baselineScore,
             baselineTimestamp: market.startAt || undefined,
-            tieRule: market.tieRule,
             endAt: market.endAt || undefined,
             bettingCutoff: market.bettingCutoff,
-            // Bug fix: thread engine + ammState back through on direction
-            // toggle. Without these the StakeModal falls back to parimutuel
-            // UI ("Early Bird Boost", estimated payout multiplier) the
-            // moment a user flips Up ↔ Down inside an AMM market that
-            // was opened from the leaderboard. The cast mirrors the open
-            // handler — `updownMarkets` types `ammState` as `unknown` so
-            // we trust the server-supplied shape here.
-            engine: market.engine === "amm" ? "amm" : "parimutuel",
+            engine: "amm",
             ammState: (market.ammState ?? null) as StakeSelection["ammState"],
           });
         }}

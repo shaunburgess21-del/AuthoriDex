@@ -9,10 +9,8 @@ import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
 import type { ParticipantPreview } from "@/components/predict/ParticipantAvatarStack";
 import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { cn } from "@/lib/utils";
-import { multiplierFromPercent, formatMultiplier, computeEarlyBirdMultiplier } from "@/lib/parimutuel";
 import { type ApiAmmStateBlock, pricesFor, snapshotFromApi } from "@/lib/ammClient";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Activity, Check, ChevronRight, Zap } from "lucide-react";
+import { Activity, Check, ChevronRight } from "lucide-react";
 import { Link } from "wouter";
 import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
 import { formatVolumeCredits } from "@/lib/formatNumber";
@@ -35,7 +33,6 @@ export interface HeadToHeadMarket {
   endTime: string;
   endAt?: string | null;
   startAt?: string | null;
-  totalPool: number;
   person1Percent: number;
   totalBets?: number;
   activeParticipantCount?: number;
@@ -45,17 +42,14 @@ export interface HeadToHeadMarket {
   modelP1Percent?: number;
   /** Confidence bucket derived from the gap from 50/50. */
   modelConfidence?: "low" | "medium" | "high";
-  /** Phase 4: market engine — 'amm' flips the card into Polymarket-style
-   *  live probability rendering; 'parimutuel' (default) keeps the
-   *  pari-mutuel multipliers + pool view. */
-  engine?: "parimutuel" | "amm" | string | null;
-  /** Phase 4: live AMM state snapshot from the list endpoint. Used to
-   *  compute the live probability bar for AMM markets. */
+  /** Always 'amm' for native H2H post-sunset. Kept typed so call
+   *  sites that still pass it don't break. */
+  engine?: "amm" | string | null;
+  /** Live AMM state snapshot from the list endpoint. */
   ammState?: ApiAmmStateBlock | null;
   /**
-   * Sprint 5 / Phase 1.4: total AMM credits in for the market. Drives
-   * a Polymarket-style "1.2K cr vol" chip on the card. Parimutuel
-   * markets get 0 and the chip suppresses (no AMM volume to show).
+   * Total AMM credits in for the market. Drives a Polymarket-style
+   * "1.2K cr vol" chip on the card.
    */
   volume?: number;
 }
@@ -114,16 +108,14 @@ export function HeadToHeadCard({
   /** Aggregated stake for this market when the user has a pick (optional). */
   userStake?: number;
   /**
-   * Sprint 5 / Phase 2: live unrealised P&L (credits) for the user's
-   * open AMM position on this market. Replaces the legacy "Winning /
-   * Behind" pill which was anchored to the trend score crossing the
-   * baseline — that signal can disagree with the AMM odds (the score
-   * dipped but the market is pricing your side to win), so P&L is the
-   * truer "where do I stand?" readout for AMM markets. Null for
-   * parimutuel positions and for cards whose AMM position summary
-   * hasn't loaded yet, in which case we fall back to a stake-only row
-   * with no status pill at all (rather than a misleading score-based
-   * one). Mirrors the Up/Down banner we shipped in Sprint 4.3.
+   * Live unrealised P&L (credits) for the user's open AMM position on
+   * this market. Replaces the legacy "Winning / Behind" pill which
+   * was anchored to the trend score crossing the baseline — that
+   * signal can disagree with the AMM odds (the score dipped but the
+   * market is pricing your side to win), so P&L is the truer "where
+   * do I stand?" readout. Null when the position summary hasn't
+   * loaded yet, in which case we fall back to a stake-only row with
+   * no status pill at all (rather than a misleading score-based one).
    */
   unrealisedPnl?: number | null;
   onFilterCategory?: (category: string) => void;
@@ -132,18 +124,13 @@ export function HeadToHeadCard({
 }) {
   const hasPicked = userPick === 1 || userPick === 2;
   const pickedName = userPick === 1 ? market.person1.name : userPick === 2 ? market.person2.name : "";
-  // Sprint 5 / Phase 2: trend-score based Winning/Behind pill removed.
-  // We now surface P&L instead (computed below) because P&L is the
-  // truer "where do I stand?" readout for AMM markets — see the
-  // WeeklyUpDownYourPositionPanel comments for the same rationale.
   const volumeLabel = formatVolumeCredits(market.volume ?? 0);
 
   /**
-   * Sprint 5 / Phase 2: AMM P&L delta + sub-cent zero clamp.
-   * `-0.0001 cr` rounds to "-0.00 cr" via `.toFixed(2)`, which reads as
-   * a bug; we clamp anything inside half a cent of zero to a neutral
-   * "0.00 cr" with no sign prefix. Identical treatment to
-   * `WeeklyUpDownYourPositionPanel` so the two card types feel the same.
+   * AMM P&L delta + sub-cent zero clamp. `-0.0001 cr` rounds to
+   * "-0.00 cr" via `.toFixed(2)`, which reads as a bug; we clamp
+   * anything inside half a cent of zero to a neutral "0.00 cr" with
+   * no sign prefix. Mirrors the WeeklyUpDownYourPositionPanel banner.
    */
   const hasPnl = unrealisedPnl != null && Number.isFinite(unrealisedPnl);
   const pnlValue = hasPnl ? (unrealisedPnl as number) : 0;
@@ -169,17 +156,13 @@ export function HeadToHeadCard({
     userPick === 1
       ? "bg-[#3B82F6]/90 text-white border border-[#3B82F6]"
       : "bg-[#7C3AED]/90 text-white border border-[#7C3AED]";
-  const isHot = market.totalPool > 5000 || (market.totalBets ?? market.activeParticipantCount ?? 0) > 50;
 
-  // Phase 4: AMM markets render a live LMSR probability instead of the
-  // pari-mutuel pool ratio. We override `person1Percent` from the
-  // current AMM prices so the existing bar + percent labels just work
-  // without per-callsite changes.
-  const isAmm = market.engine === "amm";
-  const ammSnapshot = isAmm ? snapshotFromApi(market.ammState ?? null) : null;
+  // Parimutuel sunset: every native H2H is AMM. Probability comes from
+  // the live LMSR prices in the AMM snapshot.
+  const ammSnapshot = snapshotFromApi(market.ammState ?? null);
   const ammPrices = ammSnapshot ? pricesFor(ammSnapshot) : null;
   let person1Percent = market.person1Percent;
-  if (isAmm && ammPrices && market.person1EntryId && market.person2EntryId) {
+  if (ammPrices && market.person1EntryId && market.person2EntryId) {
     const p1 = Number(ammPrices[market.person1EntryId] ?? 0);
     const p2 = Number(ammPrices[market.person2EntryId] ?? 0);
     const total = p1 + p2;
@@ -188,8 +171,8 @@ export function HeadToHeadCard({
     }
   }
   const person2Percent = 100 - person1Percent;
-  const ammP1Price = isAmm && ammPrices && market.person1EntryId ? ammPrices[market.person1EntryId] : null;
-  const ammP2Price = isAmm && ammPrices && market.person2EntryId ? ammPrices[market.person2EntryId] : null;
+  const ammP1Price = ammPrices && market.person1EntryId ? ammPrices[market.person1EntryId] : null;
+  const ammP2Price = ammPrices && market.person2EntryId ? ammPrices[market.person2EntryId] : null;
 
   return (
     <PredictCard testId={`card-h2h-${market.id}`} className={`relative overflow-hidden max-w-sm mx-auto ${isMarketClosed && !hasPicked ? 'opacity-75' : ''}`}>
@@ -204,34 +187,13 @@ export function HeadToHeadCard({
             <Badge variant="outline" className="text-violet-600 dark:text-violet-400 border-violet-500/40 dark:border-violet-500/30 text-[10px]">
               Weekly
             </Badge>
-            {isHot && !isAmm && (
-              <Badge variant="outline" className="text-orange-600 dark:text-orange-400 border-orange-500/40 dark:border-orange-500/30 text-[10px]">
-                Hot
-              </Badge>
-            )}
-            {isAmm && !isMarketClosed && (
+            {!isMarketClosed && (
               <Badge variant="outline" className="text-emerald-600 dark:text-emerald-400 border-emerald-500/40 dark:border-emerald-500/30 text-[10px]">
                 <Activity className="h-3 w-3 mr-0.5" />LIVE
               </Badge>
             )}
-            {!isAmm && !isMarketClosed && (() => {
-              const startRef = market.startAt ?? (market.endAt ? new Date(new Date(market.endAt).getTime() - 7 * 24 * 60 * 60 * 1000).toISOString() : null);
-              const boost = computeEarlyBirdMultiplier(new Date(), startRef, market.bettingCutoff);
-              if (boost <= 1.05) return null;
-              return (
-                <Badge variant="outline" className="text-amber-700 dark:text-amber-300 border-amber-500/40 dark:border-amber-500/30 text-[10px]">
-                  <Zap className="h-3 w-3 mr-0.5" />{boost.toFixed(1)}x Boost
-                </Badge>
-              );
-            })()}
           </div>
           <div className="flex items-center gap-1.5">
-            {/*
-             * Sprint 5 / Phase 2: Polymarket-style volume chip. We show
-             * it inline with the category pill so the card chrome stays
-             * the same height. Suppressed for parimutuel markets (volume
-             * is 0 there — no AMM trades to summarise).
-             */}
             {volumeLabel && (
               <Badge
                 variant="outline"
@@ -254,7 +216,7 @@ export function HeadToHeadCard({
           bettingCutoff={market.bettingCutoff ?? null}
           resolveAt={market.endAt ?? null}
           variant="compact"
-          engine={isAmm ? "amm" : "parimutuel"}
+          engine="amm"
           className="mb-2"
         />
 
@@ -379,54 +341,11 @@ export function HeadToHeadCard({
           />
         </div>
 
-        {!isAmm && typeof market.modelP1Percent === "number" && (
-          <div className="flex items-center justify-center mb-2">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Badge
-                  variant="outline"
-                  data-testid={`badge-h2h-model-${market.id}`}
-                  className="text-[10px] font-medium cursor-help px-2 py-0.5 border-violet-400/40 bg-violet-500/5 text-violet-700 dark:text-violet-300"
-                >
-                  <span className="mr-1 opacity-70">VoxDex Model:</span>
-                  <span className="font-semibold">
-                    {smartName(
-                      market.modelP1Percent >= 50 ? market.person1.name : market.person2.name,
-                    )}{" "}
-                    {Math.max(market.modelP1Percent, 100 - market.modelP1Percent)}%
-                  </span>
-                  {market.modelConfidence && (
-                    <span className="ml-1.5 opacity-70">
-                      · {market.modelConfidence}
-                    </span>
-                  )}
-                </Badge>
-              </TooltipTrigger>
-              <TooltipContent className="max-w-[240px]">
-                <p className="text-xs leading-snug">
-                  Based on fame index and momentum. Not a guarantee — you're still
-                  predicting.
-                </p>
-              </TooltipContent>
-            </Tooltip>
-          </div>
-        )}
-
-        {!isAmm && (
-          <div className="flex items-center justify-center mb-2">
-            <span className="text-sm font-semibold text-violet-700 dark:text-violet-500">
-              Pool: {market.totalPool.toLocaleString('en-US')} credits
-            </span>
-          </div>
-        )}
-
-        {isAmm && ammP1Price != null && ammP2Price != null ? (
-          // R3: name is already shown above in big text. Just show
-          // the per-share price here as muted secondary info so the
-          // headline %% stays primary and we don't print "Peter Thiel"
-          // three times on one card. We tuck a small sparkline of the
-          // person-1 series in between so users get a 7-day price feel
-          // at a glance without enlarging the card.
+        {ammP1Price != null && ammP2Price != null && (
+          // Name is already shown above in big text. We show per-share
+          // price here as muted secondary info so the headline %% stays
+          // primary, with a small sparkline of the person-1 series so
+          // users get a 7-day price feel at a glance.
           <div className="flex items-center justify-between px-2 text-[10px] mb-2 text-muted-foreground">
             <span>{ammP1Price.toFixed(3)} cr/share</span>
             {market.person1EntryId && (
@@ -440,15 +359,6 @@ export function HeadToHeadCard({
               />
             )}
             <span>{ammP2Price.toFixed(3)} cr/share</span>
-          </div>
-        ) : (
-          <div className="flex items-center justify-between px-2 text-[11px] font-semibold mb-2">
-            <span className="text-blue-600 dark:text-blue-400">
-              {smartName(market.person1.name)} {formatMultiplier(multiplierFromPercent(person1Percent))}
-            </span>
-            <span className="text-purple-600 dark:text-purple-400">
-              {smartName(market.person2.name)} {formatMultiplier(multiplierFromPercent(person2Percent))}
-            </span>
           </div>
         )}
 

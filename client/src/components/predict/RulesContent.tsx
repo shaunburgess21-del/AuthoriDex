@@ -26,49 +26,49 @@ export const RULES_CONTENT: Record<string, RulesEntry> = {
   },
   updown: {
     title: "How Up/Down Works",
-    description: "Each week, a fixed baseline score is captured at market open (Monday 00:00 UTC). Everyone predicts whether the final score at close (Sunday 23:59 UTC) finishes above or below that same baseline.",
+    description: "Each week, a fixed baseline score is captured at market open (Monday 00:00 UTC). Buy UP or DOWN shares — each winning share pays 1 credit at close.",
     steps: [
-      { icon: <TrendingUp className="h-4 w-4 text-violet-500" />, title: "Fixed Baseline", description: "A baseline score is locked at the start of each market period. All participants stake against this same reference point — not their personal entry time." },
-      { icon: <Target className="h-4 w-4 text-violet-500" />, title: "Pick UP or DOWN", description: "UP wins if the closing score finishes above the baseline. DOWN wins if it finishes below. Exact tie = full refund for all positions." },
-      { icon: <Trophy className="h-4 w-4 text-violet-500" />, title: "Payout Depends on the Crowd", description: "All stakes go into one pool. If most people pick Up and you also pick Up, you share with the crowd — smaller payout. If you go against the crowd and win, you get a much bigger share. The contrarian edge: going against popular opinion is riskier, but the reward is much higher." },
+      { icon: <TrendingUp className="h-4 w-4 text-violet-500" />, title: "Fixed Baseline", description: "A baseline score is locked at the start of each market period. Every share trades against the same reference point until close on Sunday 23:59 UTC." },
+      { icon: <Target className="h-4 w-4 text-violet-500" />, title: "Buy UP or DOWN Shares", description: "Each share you buy pays 1 credit if your side wins. UP wins if the closing score finishes above the baseline; DOWN wins if it finishes below. Exact tie = full refund." },
+      { icon: <Trophy className="h-4 w-4 text-violet-500" />, title: "Price = Crowd Probability", description: "Live share prices reflect the crowd's view in real time — a 0.30 cr share implies a 30% chance. Cheaper shares pay more if your side wins. Sell anytime before close to lock in profits or cut losses." },
     ]
   },
   h2h: {
-    title: "How Head-to-Head Settles",
-    description: "Predict who will finish the week with the higher Trend Score at market close.",
+    title: "How Head-to-Head Works",
+    description: "Buy shares of the person you think will finish the week with the higher Trend Score. Winning shares pay 1 credit each at close.",
     steps: [
-      { icon: <Swords className="h-4 w-4 text-violet-500" />, title: "Pick The Higher Closer", description: "Choose which person you think will have the higher Trend Score when the weekly market closes." },
-      { icon: <Target className="h-4 w-4 text-violet-500" />, title: "Closing Score Decides", description: "This market settles on the final closing Trend Score at weekly close, not on who gained more points during the week." },
-      { icon: <Trophy className="h-4 w-4 text-violet-500" />, title: "Winner Takes the Pool", description: "If your pick finishes with the higher closing Trend Score, you split the total pool with other winners." },
+      { icon: <Swords className="h-4 w-4 text-violet-500" />, title: "Pick The Higher Closer", description: "Buy shares of the person you think will have the higher Trend Score when the weekly market closes." },
+      { icon: <Target className="h-4 w-4 text-violet-500" />, title: "Closing Score Decides", description: "This market settles on the final closing Trend Score at weekly close, not on who gained more points during the week. Ties refund." },
+      { icon: <Trophy className="h-4 w-4 text-violet-500" />, title: "Trade Anytime, Pay 1cr/Win", description: "Share prices move with the crowd as news drops. Each winning share pays 1 credit at close — and you can sell early to lock in a profit before the buzzer." },
     ]
   },
   gainer: {
     title: "How Category Races Work",
-    description: "Pick who will be the biggest mover in their category this week.",
+    description: "Buy shares of the candidate you think will be the biggest mover. Winning shares pay 1 credit each at close.",
     steps: [
       { icon: <TrendingUp className="h-4 w-4 text-violet-500" />, title: "Biggest Mover Wins", description: "The winner is whoever has the highest % gain in their Trend Score by Sunday close — not the highest ranked person." },
-      { icon: <Target className="h-4 w-4 text-violet-500" />, title: "Spot the Climber", description: "Look for people with momentum — news cycles, viral moments, or rising buzz can push someone's score up fast." },
-      { icon: <Trophy className="h-4 w-4 text-violet-500" />, title: "Underdogs Can Win", description: "A lower-ranked person with a big % spike beats a top-ranked person who barely moves. Pick smart, not obvious." },
+      { icon: <Target className="h-4 w-4 text-violet-500" />, title: "Spot the Climber", description: "Look for people with momentum — news cycles, viral moments, or rising buzz can push someone's score up fast. Buy their shares cheap, before the crowd catches on." },
+      { icon: <Trophy className="h-4 w-4 text-violet-500" />, title: "Underdogs Pay More", description: "Long-shot candidates trade at lower prices, so winning shares pay a multiple of what you paid. Pick smart and let the curve work for you." },
     ]
   },
   community: {
     title: "World Markets",
-    description: "These markets track verifiable global events (e.g., elections, business acquisitions, viral moments). Predictions are settled based on definitive public outcomes.",
+    description: "These markets track verifiable global events (elections, business acquisitions, viral moments). Buy Yes or No shares — winners pay 1 credit per share on resolution.",
     steps: [
-      { icon: <Globe className="h-4 w-4 text-violet-500" />, title: "Verifiable Events", description: "Markets are based on real-world outcomes that can be publicly verified - elections, acquisitions, viral milestones, and more." },
-      { icon: <Target className="h-4 w-4 text-violet-500" />, title: "Yes/No Predictions", description: "Each market has a clear binary outcome. Stake your credits on what you believe will happen." },
-      { icon: <Trophy className="h-4 w-4 text-violet-500" />, title: "Public Resolution", description: "Markets are settled based on definitive public information. Winners split the pool proportionally." },
+      { icon: <Globe className="h-4 w-4 text-violet-500" />, title: "Verifiable Events", description: "Markets are based on real-world outcomes that can be publicly verified — elections, acquisitions, viral milestones, and more." },
+      { icon: <Target className="h-4 w-4 text-violet-500" />, title: "Yes/No Shares", description: "Buy Yes shares if you think the event happens, No shares if you think it doesn't. Each winning share pays 1 credit on resolution." },
+      { icon: <Trophy className="h-4 w-4 text-violet-500" />, title: "Sell Anytime Before Close", description: "Share prices move as news breaks. Sell early to lock in a profit or cut losses — or hold to settlement for the full 1 credit per winning share." },
     ]
   },
   predictions: {
     title: "Welcome to Predictions",
-    description: "Make predictions on the world's most talked-about people and win credits. Credits are virtual — climb the prediction leaderboard and prove you know who the world is paying attention to.",
+    description: "Trade shares on the world's most talked-about people. Credits are virtual — climb the prediction leaderboard and prove you know who the world is paying attention to.",
     steps: [
       { icon: <Crown className="h-4 w-4 text-amber-500" />, title: "Weekly Jackpot", description: "Guess the exact closing Trend Score for any person. Closest guess wins the pool. Entries close Friday 23:59 UTC." },
-      { icon: <TrendingUp className="h-4 w-4 text-violet-500" />, title: "Up or Down", description: "Predict whether someone's Trend Score will finish above or below their weekly baseline. The less popular your pick, the bigger the potential payout." },
-      { icon: <Swords className="h-4 w-4 text-violet-500" />, title: "Head-to-Head", description: "Pick who will have the higher Trend Score at close. Back the underdog for bigger rewards." },
-      { icon: <BarChart3 className="h-4 w-4 text-violet-500" />, title: "Category Races", description: "Pick the biggest mover in each category. Whoever has the highest % gain in their Trend Score by Sunday wins." },
-      { icon: <Globe className="h-4 w-4 text-violet-500" />, title: "World Markets", description: "Predict the outcome of verifiable global events — elections, acquisitions, viral milestones, and more." },
+      { icon: <TrendingUp className="h-4 w-4 text-violet-500" />, title: "Up or Down", description: "Buy UP or DOWN shares on whether someone's Trend Score finishes above or below their weekly baseline. Winning shares pay 1 credit at close." },
+      { icon: <Swords className="h-4 w-4 text-violet-500" />, title: "Head-to-Head", description: "Buy shares of the person you think will close higher. Trade in and out as news shifts the price." },
+      { icon: <BarChart3 className="h-4 w-4 text-violet-500" />, title: "Category Races", description: "Buy shares of the biggest mover in each category. Whoever has the highest % gain in their Trend Score by Sunday wins." },
+      { icon: <Globe className="h-4 w-4 text-violet-500" />, title: "World Markets", description: "Trade Yes/No shares on verifiable global events — elections, acquisitions, viral milestones, and more." },
     ]
   }
 };

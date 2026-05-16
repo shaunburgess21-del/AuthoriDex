@@ -317,6 +317,7 @@ export function WeeklyJackpotHero(props: WeeklyJackpotHeroProps) {
               bettingCutoff={jackpotMarket?.bettingCutoff ?? null}
               resolveAt={jackpotMarket?.endAt ?? null}
               variant="compact"
+              engine="parimutuel"
               className="mb-4"
             />
 

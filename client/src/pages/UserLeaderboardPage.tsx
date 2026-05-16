@@ -55,7 +55,7 @@ interface LeaderboardUser {
   lastActiveAt?: string | null;
   /** Total P&L (realised + unrealised). Same value as `totalPnl`; kept for back-compat. */
   profitLoss: number;
-  /** Settled bets only: parimutuel + AMM buys at resolve + AMM sells. */
+  /** Settled bets only: jackpot tickets + AMM buys at resolve + AMM sells. */
   realisedPnl?: number;
   /** Live mark-to-market on open AMM positions. */
   unrealisedPnl?: number;
@@ -144,7 +144,7 @@ function PnLCell({
   // Only show the split tooltip when both pieces are present AND there's
   // actually something to disclose — i.e. the user has at least one
   // open AMM trade contributing unrealised P&L. Hides the tooltip on
-  // pure-parimutuel rows where the split would just be "X / 0".
+  // jackpot-only rows where the split would just be "X / 0".
   const hasSplit =
     realised !== undefined &&
     unrealised !== undefined &&

@@ -44,16 +44,15 @@ export function WeeklyUpDownYourPositionPanel({
   className?: string;
   tieRule?: string | null;
   /**
-   * Sprint 4.3: live unrealised P&L (credits) for the user's open
-   * position on this market, shown next to Stake on the card banner.
-   * Null for parimutuel positions and for cards whose AMM position
-   * summary hasn't loaded yet — in which case we fall back to the
-   * Stake-only layout. We deliberately omit a Winning/Behind pill
-   * here even though `getUpDownWinningState` is available: that
-   * pill is anchored to the trend score crossing the baseline,
-   * which can disagree with AMM-driven P&L (the score moved down
-   * but the market is pricing your side to win, etc.). P&L is the
-   * truer "where do I stand?" signal in an AMM market.
+   * Live unrealised P&L (credits) for the user's open position on
+   * this market, shown next to Stake on the card banner. Null when
+   * the AMM position summary hasn't loaded yet — in which case we
+   * fall back to the Stake-only layout. We deliberately omit a
+   * Winning/Behind pill here even though `getUpDownWinningState` is
+   * available: that pill is anchored to the trend score crossing the
+   * baseline, which can disagree with AMM-driven P&L (the score
+   * moved down but the market is pricing your side to win, etc.).
+   * P&L is the truer "where do I stand?" signal.
    */
   unrealisedPnl?: number | null;
 }) {

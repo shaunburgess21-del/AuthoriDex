@@ -229,6 +229,7 @@ export function WeeklyJackpotCard({
               bettingCutoff={bettingCutoff ?? null}
               resolveAt={resolveAt ?? null}
               variant="compact"
+              engine="parimutuel"
               className="mb-4"
             />
 

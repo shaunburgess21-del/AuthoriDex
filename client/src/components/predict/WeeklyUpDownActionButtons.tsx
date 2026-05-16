@@ -1,10 +1,9 @@
 import { Button } from "@/components/ui/button";
-import { TrendingDown, TrendingUp, Zap } from "lucide-react";
+import { TrendingDown, TrendingUp } from "lucide-react";
 import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { ClosedMarketActionTrigger } from "./ClosedMarketActionTrigger";
 import { WeeklyUpDownYourPositionPanel } from "./WeeklyUpDownYourPositionPanel";
 import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
-import { computeEarlyBirdMultiplier } from "@/lib/parimutuel";
 
 export function WeeklyUpDownActionButtons({
   marketId,
@@ -15,9 +14,6 @@ export function WeeklyUpDownActionButtons({
   closedMessage,
   onSelect,
   pendingPosition,
-  marketStartAt,
-  bettingCutoff,
-  engine,
   upPrice,
   downPrice,
   unrealisedPnl,
@@ -30,34 +26,15 @@ export function WeeklyUpDownActionButtons({
   closedMessage: Pick<ClosedMarketMessage, "title" | "lines">;
   onSelect?: (choice: "up" | "down") => void;
   pendingPosition?: { pick: "up" | "down" | null; stakeAmount: number } | null;
-  marketStartAt?: string | null;
-  bettingCutoff?: string | null;
-  /** Phase 4: AMM markets price via LMSR and have no early-bird boost. */
-  engine?: "parimutuel" | "amm" | string | null;
-  /**
-   * Polymarket pass: when set, each button surfaces the live cr/share
-   * directly under its Up/Down label so users can comparison-shop the
-   * sides at a glance. Parimutuel markets pass null and fall back to
-   * the legacy plain-text buttons.
-   */
+  /** AMM markets price via LMSR; each button surfaces live cr/share. */
   upPrice?: number | null;
   downPrice?: number | null;
-  /**
-   * Sprint 4.3: live unrealised P&L threaded into the position banner
-   * so users can see "+13.41 cr" next to their Stake. Null for
-   * parimutuel positions / cards where the AMM position summary
-   * hasn't loaded yet.
-   */
+  /** Live unrealised P&L threaded into the position banner so users can
+   *  see "+13.41 cr" next to their Stake. Null when the position
+   *  summary hasn't loaded yet. */
   unrealisedPnl?: number | null;
 }) {
   if (!isMarketClosed && pendingPosition) {
-    // Sprint 4 polish: this banner now navigates to the detail page
-    // (chevron-right glyph already implies that affordance) so users
-    // land on the full buy/sell/hedge surface rather than the
-    // add-only top-up modal. Previously `onAddTopUp` short-circuited
-    // the Link path and opened StakeModal in `isTopUp` mode, which
-    // hid the Sell tab and the opposite-side flip — a regression
-    // surfaced in smoke testing.
     return (
       <WeeklyUpDownYourPositionPanel
         variant="cardLink"
@@ -73,10 +50,7 @@ export function WeeklyUpDownActionButtons({
     );
   }
 
-  const isAmm = engine === "amm";
-  const boost = isAmm ? 1 : computeEarlyBirdMultiplier(new Date(), marketStartAt, bettingCutoff);
-  const showBoostHint = !isAmm && !isMarketClosed && boost > 1.05;
-  const showAmmPrices = isAmm && upPrice != null && downPrice != null;
+  const showAmmPrices = upPrice != null && downPrice != null;
 
   return (
     <div>
@@ -116,12 +90,6 @@ export function WeeklyUpDownActionButtons({
           </Button>
         </ClosedMarketActionTrigger>
       </div>
-      {showBoostHint && (
-        <p className="text-[10px] text-amber-700 dark:text-amber-400 text-center mt-1.5 flex items-center justify-center gap-1">
-          <Zap className="h-3 w-3" />
-          Early predictions get boosted payouts
-        </p>
-      )}
     </div>
   );
 }

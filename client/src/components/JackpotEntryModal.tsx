@@ -325,6 +325,7 @@ export function JackpotEntryModal({
                 bettingCutoff={bettingCutoff}
                 resolveAt={resolveAt ?? null}
                 variant="modal"
+                engine="parimutuel"
               />
             </div>
 

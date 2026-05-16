@@ -33,8 +33,7 @@ export function compactVotes(count: number | null | undefined): string {
  * Format an AMM market's user-credit volume into a compact Polymarket-style
  * chip — e.g. `850 cr`, `1.2K cr`, `12K cr`, `1.5M cr`. Returns `null` when
  * the value isn't finite or is non-positive, so callers can decide whether
- * to render the chip at all (parimutuel markets, fresh AMM markets with no
- * trades yet, etc.).
+ * to render the chip at all (fresh AMM markets with no trades yet, etc.).
  */
 export function formatVolumeCredits(value: number | null | undefined): string | null {
   if (value == null || !Number.isFinite(value) || value <= 0) return null;

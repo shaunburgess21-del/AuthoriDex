@@ -137,8 +137,12 @@ The importer accepts both the structured `entries` array format and the flat `Op
 ## Architecture Notes
 
 - All imported markets use `marketType: "community"` and `visibility: "draft"`
-- Seed values (`seedCount`) are display-only; they do not affect parimutuel payout math
-- Settlement is manual via admin (`resolveMethod: "admin_manual"`)
+- Imported markets are AMM (LMSR) post-parimutuel-sunset; the importer
+  calls `seedAmmMarket` right after the row insert
+- Seed values (`seedCount`) are display-only; they do not affect AMM
+  pricing (AMM prices are driven by `marketAmmState.shareQuantities`)
+- Settlement is manual via admin (`resolveMethod: "admin_manual"`) →
+  routes to `resolveAmmMarket` with a chosen winner entry
 - The `closeAt` field defaults to `endAt` but can be adjusted per-market in the edit modal
 - Linked persons are resolved by name against `tracked_people`; if not found, the market is created without a link (with a warning)
 - Secondary person names (e.g., "Joe Rogan / Donald Trump") are stored in `metadata.secondaryPerson`

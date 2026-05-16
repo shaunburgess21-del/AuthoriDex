@@ -143,18 +143,10 @@ export function inferDirection(
 }
 
 /**
- * Sprint 3.1 — single source of truth for the AMM buy / sell success
- * toast (with embedded Share action) shared across every surface that
- * fires an AMM trade: detail pages, predict carousel, home leaderboard,
- * PersonDetail predict tab.
- *
- * Why a helper rather than 5 inline copies:
- *   - Sprint 2 only patched the dedicated detail pages, and three other
- *     surfaces (home leaderboard, predict carousel, PersonDetail tab)
- *     kept the legacy parimutuel toast — surfaced during testing as
- *     "Your weekly up/down prediction has been recorded" on AMM buys.
- *   - The toast description ("X shares · Y cr") + Share-button payload
- *     are identical across surfaces; copy-pasting them invites drift.
+ * Single source of truth for the AMM buy / sell success toast (with
+ * embedded Share action) shared across every surface that fires an
+ * AMM trade: detail pages, predict carousel, home leaderboard, and
+ * the PersonDetail predict tab.
  *
  * The helper builds the trade share-card data, constructs the toast
  * with a Share action, and dispatches to the global ShareCard context
@@ -163,9 +155,8 @@ export function inferDirection(
  * pages — community + race AMM sells don't have UI yet.
  */
 export interface FireAmmTradeToastArgs {
-  /** AMM trade response from the API (must have engine='amm'). */
+  /** AMM trade response from the API. */
   response: {
-    engine?: string;
     betId?: string;
     sharesPurchased?: number;
     sharesSold?: number;
@@ -207,9 +198,8 @@ export interface FireAmmTradeToastArgs {
 
 /**
  * Fires the AMM trade success toast with an embedded Share action.
- * Returns nothing — fire-and-forget. Parimutuel callers should branch
- * on `response.engine === "amm"` themselves and keep their existing
- * static toast for the non-AMM path.
+ * Returns nothing — fire-and-forget. All non-jackpot markets run on AMM
+ * post-parimutuel-sunset, so callers can fire this unconditionally.
  */
 export function fireAmmTradeToast(args: FireAmmTradeToastArgs): void {
   const isBuy = args.actionType === "buy";
@@ -222,9 +212,6 @@ export function fireAmmTradeToast(args: FireAmmTradeToastArgs): void {
   const pricePerShare = (() => {
     const fromApi = Number(args.response.pricePerShareAvg);
     if (Number.isFinite(fromApi) && fromApi > 0) return fromApi;
-    // Defensive — community AMM buys briefly omitted pricePerShareAvg;
-    // derive from chargeCredits / shares so the share card never shows
-    // "0%" on the trade card.
     if (shares > 0 && credits > 0) return credits / shares;
     return 0;
   })();

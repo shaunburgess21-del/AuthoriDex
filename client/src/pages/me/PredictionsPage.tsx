@@ -1598,27 +1598,27 @@ function OpenTabPanel({
   );
 
   // Don't double-count: AMM markets are aggregated via /amm-positions, so
-  // hide their per-bet rows in the open list. Parimutuel rows continue
-  // to render through MyPredictionCard with the existing projected-PnL
-  // framing.
-  const parimutuelOpenBets = useMemo(
-    () => openBets.filter((p) => (p.engine ?? "parimutuel") !== "amm"),
+  // hide their per-bet rows in the open list. Jackpot tickets are the only
+  // surviving non-AMM bets — they continue to render through MyPredictionCard
+  // with the projected-payout framing the parimutuel jackpot resolver supports.
+  const jackpotOpenBets = useMemo(
+    () => openBets.filter((p) => (p.engine ?? "amm") !== "amm"),
     [openBets],
   );
 
   const totalStake = useMemo(
     () =>
-      parimutuelOpenBets.reduce((sum, p) => sum + (p.stakeAmount || 0), 0) +
+      jackpotOpenBets.reduce((sum, p) => sum + (p.stakeAmount || 0), 0) +
       ammPositions.reduce((sum, p) => sum + (p.netCreditsIn || 0), 0),
-    [parimutuelOpenBets, ammPositions],
+    [jackpotOpenBets, ammPositions],
   );
   const projectedPayout = useMemo(
     () =>
-      parimutuelOpenBets.reduce((sum, p) => sum + (p.potentialPayout || 0), 0) +
+      jackpotOpenBets.reduce((sum, p) => sum + (p.potentialPayout || 0), 0) +
       ammPositions.reduce((sum, p) => sum + (p.netShares || 0), 0),
-    [parimutuelOpenBets, ammPositions],
+    [jackpotOpenBets, ammPositions],
   );
-  const totalOpenCount = parimutuelOpenBets.length + ammPositions.length;
+  const totalOpenCount = jackpotOpenBets.length + ammPositions.length;
 
   if (isLoading || isLoadingAmm) {
     return (
@@ -1698,7 +1698,7 @@ function OpenTabPanel({
             onShare={() => onSharePosition(p)}
           />
         ))}
-        {parimutuelOpenBets.map((p) => (
+        {jackpotOpenBets.map((p) => (
           <MyPredictionCard
             key={p.betId}
             prediction={p}

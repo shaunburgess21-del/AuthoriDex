@@ -13,7 +13,7 @@ import { MarketCycleHero } from "@/components/MarketCycleHero";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
 import { formatSignedPercent, formatSignedPoints } from "@/lib/predict-display";
-import { computePayoutMultiplier } from "@/lib/parimutuel";
+import { pricesFor, snapshotFromApi } from "@/lib/ammClient";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation, Link } from "wouter";
 import { navigateToLogin } from "@/lib/authReturn";
@@ -365,8 +365,6 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
     const downStake = Number(downEntry?.totalStake || 0);
     const total = upStake + downStake || 1;
     const upPercent = Math.round((upStake / total) * 100);
-    const upMultiplier = computePayoutMultiplier(upStake + downStake, upStake);
-    const downMultiplier = computePayoutMultiplier(upStake + downStake, downStake);
     const cs = Number(person.trendScore || person.fameIndex || 0);
     const baselineScore = getMarketBaselineScore(m, cs) ?? cs;
     return {
@@ -378,10 +376,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       baselineScore,
       startScore: baselineScore,
       change7d: Number(person.change7d || 0),
-      upMultiplier,
-      downMultiplier,
       endTime: "",
-      totalPool: upStake + downStake,
       upPoolPercent: upPercent || 50,
       category: normalizeMarketCategory(m.category || person.category || "misc") as CategoryFilter,
       upEntryId: upEntry?.id,
@@ -389,8 +384,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       startAt: m.startAt,
       endAt: m.endAt,
       bettingCutoff: m.bettingCutoff || null,
-      tieRule: m.metadata?.tieRule ?? "refund",
-      engine: m.engine ?? "parimutuel",
+      engine: "amm",
       ammState: m.ammState ?? null,
     };
   }, [nativeUpdownData, personId]);
@@ -406,7 +400,6 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       const s1 = Number(e1.totalStake || 0);
       const s2 = Number(e2.totalStake || 0);
       const total = s1 + s2 || 1;
-      const totalPool = entries.reduce((sum: number, entry: any) => sum + Number(entry.totalStake || 0), 0);
       return {
         id: m.id,
         title: m.title || `${p1.name || "?"} vs ${p2.name || "?"}`,
@@ -423,11 +416,10 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
         endAt: m.endAt || null,
         startAt: m.startAt || null,
         bettingCutoff: m.bettingCutoff || null,
-        totalPool,
         person1Percent: (s1 + s2) === 0 ? 50 : Math.round((s1 / total) * 100),
         modelP1Percent: typeof m.modelP1Percent === "number" ? m.modelP1Percent : undefined,
         modelConfidence: m.modelConfidence ?? undefined,
-        engine: m.engine ?? "parimutuel",
+        engine: "amm",
         ammState: m.ammState ?? null,
       };
     });
@@ -438,7 +430,6 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
     const dbMarkets = (nativeGainerData || []).filter((m: any) => m.visibility === "live");
     const all: TopGainerMarket[] = dbMarkets.map((m: any) => {
       const entries = m.entries || [];
-      const totalPool = entries.reduce((sum: number, entry: any) => sum + Number(entry.totalStake || 0), 0);
       const openingScoresMap = new Map<string, number>();
       const rawOpeningScores = (m.metadata as any)?.openingScores;
       if (Array.isArray(rawOpeningScores)) {
@@ -473,7 +464,6 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
         category: normalizeMarketCategory(m.category || "misc") as CategoryFilter,
         leaders: allCandidates.slice(0, 3),
         allCandidates,
-        totalPool,
         endTime: "",
         endAt: m.endAt || null,
         startAt: m.startAt || null,
@@ -481,6 +471,8 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
         totalEntries: entries.length,
         candidateCount: allCandidates.length,
         teaser: typeof m.teaser === "string" && m.teaser.trim() ? m.teaser.trim() : null,
+        engine: "amm" as const,
+        ammState: m.ammState ?? null,
       };
     });
     return all.filter(g => (g.allCandidates || g.leaders).some(l => l.personId === personId));
@@ -716,17 +708,11 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       startScore: market.baselineScore,
       currentScore: market.currentScore,
       crowdSentiment: choice === "up" ? market.upPoolPercent : 100 - market.upPoolPercent,
-      poolTotal: market.totalPool,
-      estimatedPayout: choice === "up" ? market.upMultiplier : market.downMultiplier,
       baselineScore: market.baselineScore,
       baselineTimestamp: market.startAt,
-      tieRule: market.tieRule ?? "refund",
       endAt: serverResolutionDeadline ?? undefined,
       bettingCutoff: serverBettingCutoff,
-      // Sprint 3.1: thread engine + ammState so the StakeModal renders
-      // the LMSR UI on AMM Up/Down markets opened from a person's
-      // detail page (PersonDetailPage → PredictTab).
-      engine: market.engine === "amm" ? "amm" : "parimutuel",
+      engine: "amm",
       ammState: market.ammState ?? null,
     });
     setModalIntent("buy");
@@ -750,9 +736,6 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
     const picked = person === 1 ? market.person1 : market.person2;
     const opponent = person === 1 ? market.person2 : market.person1;
     const sentiment = person === 1 ? market.person1Percent : 100 - market.person1Percent;
-    const stakePool = market.totalPool || 1;
-    const pickedPool = (sentiment / 100) * stakePool || 1;
-    const estimatedPayout = Math.round((stakePool / pickedPool) * 10) / 10;
     setPendingSelection({
       type: "h2h",
       choice: picked.name,
@@ -764,17 +747,9 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       currentScore: picked.currentScore,
       opponentScore: opponent.currentScore,
       crowdSentiment: sentiment,
-      poolTotal: market.totalPool,
-      estimatedPayout,
-      tieRule: (market as { tieRule?: string }).tieRule ?? "refund",
       endAt: serverResolutionDeadline ?? undefined,
       bettingCutoff: serverBettingCutoff,
-      // Sprint 5 / Phase 1.3: thread engine + ammState so the
-      // StakeModal renders the LMSR UI (live cr/share, buy/sell
-      // tabs) on AMM H2H markets opened from a person's profile.
-      // Without these the modal falls back to parimutuel copy even
-      // when the underlying market has flipped to AMM.
-      engine: (market as { engine?: string }).engine === "amm" ? "amm" : "parimutuel",
+      engine: "amm",
       ammState: (market as { ammState?: unknown }).ammState as StakeSelection["ammState"] ?? null,
     });
     setModalIntent("buy");
@@ -795,10 +770,11 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       return;
     }
     const categoryLabel = getMarketCategoryLabel(market.category);
-    const candidateStake = Number(candidate.totalStake || 0);
-    const estimatedPayout = computePayoutMultiplier(market.totalPool, candidateStake);
-    const crowdSentiment = market.totalPool > 0
-      ? Math.round((candidateStake / market.totalPool) * 100)
+    const ammStateLike = (market as { ammState?: unknown }).ammState as Parameters<typeof snapshotFromApi>[0] | null;
+    const snapshot = ammStateLike ? snapshotFromApi(ammStateLike) : null;
+    const prices = snapshot ? pricesFor(snapshot) : null;
+    const crowdSentiment = prices && candidate.entryId
+      ? Math.round((prices[candidate.entryId] ?? 0) * 100)
       : 0;
     setPendingSelection({
       type: "gainer",
@@ -811,15 +787,9 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       candidatePercentGain: candidate.percentGain,
       candidatePointsAdded: candidate.currentGain,
       crowdSentiment,
-      poolTotal: market.totalPool,
-      estimatedPayout,
       endAt: serverResolutionDeadline ?? undefined,
       bettingCutoff: serverBettingCutoff,
-      // Sprint 5 / Phase 1.3: same fix as H2H — Race markets that
-      // flipped to AMM were rendering parimutuel copy from the
-      // predict tab. The cast follows the rest of the file's pattern
-      // (`market.ammState` is loosely typed on the upstream type).
-      engine: (market as { engine?: string }).engine === "amm" ? "amm" : "parimutuel",
+      engine: "amm",
       ammState: (market as { ammState?: unknown }).ammState as StakeSelection["ammState"] ?? null,
     });
     setModalIntent("buy");
@@ -1226,8 +1196,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
             choice: dir === "up" ? "Trend Score UP" : "Trend Score DOWN",
             entryId,
             crowdSentiment: dir === "up" ? weeklyMarket.upPoolPercent : 100 - weeklyMarket.upPoolPercent,
-            estimatedPayout: dir === "up" ? weeklyMarket.upMultiplier : weeklyMarket.downMultiplier,
-            engine: weeklyMarket.engine === "amm" ? "amm" : "parimutuel",
+            engine: "amm",
             ammState: weeklyMarket.ammState ?? null,
           });
         }}

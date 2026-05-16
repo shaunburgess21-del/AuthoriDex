@@ -14,7 +14,7 @@ interface ActivityItem {
   id: string;
   createdAt: string;
   stakeAmount: number;
-  /** "parimutuel" for legacy pool bets, "buy"/"sell" for AMM trades. */
+  /** "parimutuel" exclusively for jackpot tickets, "buy"/"sell" for AMM trades. */
   actionType?: "parimutuel" | "buy" | "sell";
   shareCount?: number | null;
   pricePerShare?: number | null;
@@ -150,8 +150,8 @@ export default function TownSquarePage() {
                   item.shareCount != null
                     ? Math.round(item.shareCount).toLocaleString()
                     : null;
-                // Buys are green, sells amber, parimutuel neutral — keeps the
-                // visual feel of an order book without shouting.
+                // Buys are green, sells amber, jackpot tickets neutral —
+                // keeps the visual feel of an order book without shouting.
                 const dotColor = isAmmBuy
                   ? "bg-emerald-500"
                   : isAmmSell

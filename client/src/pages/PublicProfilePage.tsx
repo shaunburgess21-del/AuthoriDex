@@ -52,7 +52,7 @@ interface PublicProfile {
   createdAt?: string;
   message?: string;
   profitLoss?: number;
-  /** Same as profitLoss (= parimutuel realised + AMM realised-from-
+  /** Same as profitLoss (= jackpot realised + AMM realised-from-
    *  sells + AMM realised-from-resolution). Surfaced as its own
    *  field so future UX can split realised vs. unrealised without
    *  another contract change. */
@@ -92,7 +92,7 @@ interface BetRecord {
   payout: number;
   pnl: number;
   status: string;
-  /** "parimutuel" for legacy pool bets, "buy"/"sell" for AMM trades. */
+  /** "parimutuel" exclusively for jackpot tickets, "buy"/"sell" for AMM trades. */
   actionType?: "parimutuel" | "buy" | "sell";
   shareCount?: number | null;
   pricePerShare?: number | null;
@@ -771,7 +771,7 @@ export default function PublicProfilePage() {
 
           {/* Open AMM positions highlight (mark-to-market + unrealised
               P&L). Skipped when the user has no open AMM book so
-              parimutuel-only profiles don't get an empty/zero tile.
+              jackpot-only profiles don't get an empty/zero tile.
               The unrealised P&L delta is the most useful number on
               this tile — it's what changes when prices move. */}
           {(profile.openPositionsCount ?? 0) > 0 && (

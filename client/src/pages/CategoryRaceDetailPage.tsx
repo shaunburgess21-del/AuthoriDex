@@ -11,7 +11,6 @@ import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActi
 import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
 import { MarketDetailSkeleton } from "@/components/predict/MarketDetailSkeleton";
 import { MarketResolutionInfo } from "@/components/predict/MarketResolutionInfo";
-import { MyPositionCard } from "@/components/predict/MyPositionCard";
 import { ShareIconButton } from "@/components/predict/ShareIconButton";
 import { RelatedMarkets } from "@/components/predict/RelatedMarkets";
 import { MuteMarketToggle } from "@/components/predict/MuteMarketToggle";
@@ -31,8 +30,7 @@ import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { goBack } from "@/lib/goBack";
 import { formatVolumeCredits } from "@/lib/formatNumber";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
-import { computePayoutMultiplier, computeEarlyBirdMultiplier } from "@/lib/parimutuel";
-import { pricesFor, priceToPercent, snapshotFromApi } from "@/lib/ammClient";
+import { pricesFor, snapshotFromApi } from "@/lib/ammClient";
 import { AmmPriceHistoryChart } from "@/components/predict/AmmPriceHistoryChart";
 import { MarketActivityFeed } from "@/components/predict/MarketActivityFeed";
 import { useShareCard } from "@/contexts/ShareCardContext";
@@ -98,7 +96,7 @@ export default function CategoryRaceDetailPage() {
   const { data: allGainerMarkets, isLoading } = useQuery<any[]>({
     queryKey: ["/api/native-markets/gainer"],
     // Keep live % gain numbers fresh while the user is on the page.
-    // 60s matches MyPositionCard + OutcomePathChart.
+    // 60s matches OutcomePathChart.
     refetchInterval: (query) => {
       if (typeof document !== "undefined" && document.hidden) return false;
       const list = query.state.data as any[] | undefined;
@@ -151,12 +149,10 @@ export default function CategoryRaceDetailPage() {
     retry: false,
   });
 
-  // Sprint 3.1: parallel AMM position query so the persistent Share
-  // button on MyPositionCard can build an honest position payload
-  // (netShares, avgEntryPrice, currentPrice) without re-deriving them
-  // from raw bets. Only enabled on AMM markets — parimutuel Race
-  // markets fall back to the at-entry stake-based summary and don't
-  // get the share button anyway.
+  // Parallel AMM position query so the persistent Share button on
+  // open positions can build an honest payload (netShares,
+  // avgEntryPrice, currentPrice) without re-deriving them from raw
+  // bets.
   const { data: ammPositionData } = useQuery<{
     positions: Array<{
       entryId: string;
@@ -190,10 +186,9 @@ export default function CategoryRaceDetailPage() {
     return allGainerMarkets.find((m: any) => m.id === marketId) || null;
   }, [allGainerMarkets, marketId]);
 
-  const isAmm = (market as any)?.engine === "amm";
   const ammSnapshot = useMemo(
-    () => (isAmm ? snapshotFromApi((market as any)?.ammState ?? null) : null),
-    [isAmm, market],
+    () => snapshotFromApi((market as any)?.ammState ?? null),
+    [market],
   );
   const ammPriceMap = useMemo(
     () => (ammSnapshot ? pricesFor(ammSnapshot) : null),
@@ -238,15 +233,6 @@ export default function CategoryRaceDetailPage() {
         };
       })
       .sort((a: GainerCandidate, b: GainerCandidate) => b.percentGain - a.percentGain);
-  }, [market]);
-
-  const totalPool = useMemo(() => {
-    if (!market) return 0;
-    const entries = market.entries || [];
-    return entries.reduce(
-      (sum: number, e: any) => sum + Number(e.totalStake || 0),
-      0,
-    );
   }, [market]);
 
   const totalParticipants = useMemo(() => {
@@ -309,14 +295,9 @@ export default function CategoryRaceDetailPage() {
       // it as a same-side top-up (StakeModal copy adapts).
       const priorStake = existingStakeFor(candidate.entryId);
       const isTopUp = priorStake > 0;
-      const candidateStake = Number(candidate.totalStake || 0);
-      const estimatedPayout = computePayoutMultiplier(totalPool, candidateStake);
-      // On AMM races the "crowd sentiment" % is just the LMSR price.
-      const crowdSentiment = isAmm && ammPriceMap && candidate.entryId
+      const crowdSentiment = ammPriceMap && candidate.entryId
         ? Math.round(Number(ammPriceMap[candidate.entryId] ?? 0) * 100)
-        : totalPool > 0
-          ? Math.round((candidateStake / totalPool) * 100)
-          : 0;
+        : 0;
       pendingShareCandidateRef.current = candidate;
       setPendingSelection({
         type: "gainer",
@@ -328,18 +309,17 @@ export default function CategoryRaceDetailPage() {
         candidatePercentGain: candidate.percentGain,
         candidatePointsAdded: candidate.currentGain,
         crowdSentiment,
-        estimatedPayout,
         endAt: serverResolutionDeadline ?? undefined,
         bettingCutoff: market?.bettingCutoff || null,
         isTopUp,
         existingStake: isTopUp ? priorStake : undefined,
-        engine: isAmm ? "amm" : "parimutuel",
-        ammState: isAmm ? ((market as any)?.ammState ?? null) : null,
+        engine: "amm",
+        ammState: (market as any)?.ammState ?? null,
       } as StakeSelection);
       setModalIntent("buy");
       setStakeModalOpen(true);
     },
-    [isMarketClosed, marketId, categoryLabel, totalPool, market, serverResolutionDeadline, existingStakeFor, isAmm, ammPriceMap]
+    [isMarketClosed, marketId, categoryLabel, market, serverResolutionDeadline, existingStakeFor, ammPriceMap]
   );
 
   const betMutation = useMutation({
@@ -355,9 +335,8 @@ export default function CategoryRaceDetailPage() {
       if (data?.xp?.xpAwarded) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }
-      const isAmmTrade = data?.engine === "amm";
       const candidate = pendingShareCandidateRef.current;
-      if (isAmmTrade && candidate) {
+      if (candidate) {
         const shares = Number(data?.sharesPurchased) || 0;
         const chargeCredits = Number(data?.chargeCredits) || 0;
         const pricePerShare = Number(data?.pricePerShareAvg) || 0;
@@ -369,9 +348,6 @@ export default function CategoryRaceDetailPage() {
           marketTitle: `Category Race: ${categoryLabel}`,
           category: market ? normalizeMarketCategory(market.category || "misc") : null,
           entryLabel: candidate.name,
-          // Race entries are multi-candidate picks, not a binary
-          // up/down call — render the share card with the neutral
-          // violet accent rather than emerald/rose.
           direction: "other",
           shares,
           pricePerShare,
@@ -379,8 +355,6 @@ export default function CategoryRaceDetailPage() {
         });
         const origin = typeof window !== "undefined" ? window.location.origin : "";
         const pathname = typeof window !== "undefined" ? window.location.pathname : "";
-        // Sprint 3: per-bet URL so Race shares preview the candidate
-        // pick + current leader chip row.
         const shareUrl = data?.betId
           ? `${origin}/share/bet/${data.betId}`
           : `${origin}${pathname}`;
@@ -399,14 +373,11 @@ export default function CategoryRaceDetailPage() {
           },
         });
       } else {
-        toast(
-          isAmmTrade ? "Shares purchased" : "Prediction placed!",
-          {
-            description: isAmmTrade && Number.isFinite(Number(data?.sharesPurchased))
-              ? `You bought ${Number(data.sharesPurchased).toFixed(2)} shares for ${data.chargeCredits ?? "—"} credits.`
-              : "Your top gainer prediction has been recorded.",
-          },
-        );
+        toast("Shares purchased", {
+          description: Number.isFinite(Number(data?.sharesPurchased))
+            ? `You bought ${Number(data.sharesPurchased).toFixed(2)} shares for ${data.chargeCredits ?? "—"} credits.`
+            : "Your race prediction has been recorded.",
+        });
       }
       pendingShareCandidateRef.current = null;
       setStakeModalOpen(false);
@@ -500,7 +471,7 @@ export default function CategoryRaceDetailPage() {
 
   const openSellModal = useCallback(
     (candidate: GainerCandidate, netShares: number) => {
-      if (!isAmm || !candidate.entryId) return;
+      if (!candidate.entryId) return;
       const livePrice = ammPriceMap && candidate.entryId ? Number(ammPriceMap[candidate.entryId] ?? 0) : 0;
       const crowdSentiment = Math.round(Math.max(0, Math.min(1, livePrice)) * 100);
       // Note: pendingShareCandidateRef is only read by the BUY mutation
@@ -533,7 +504,7 @@ export default function CategoryRaceDetailPage() {
       setModalIntent("sell");
       setStakeModalOpen(true);
     },
-    [isAmm, ammPriceMap, marketId, categoryLabel, serverResolutionDeadline, market],
+    [ammPriceMap, marketId, categoryLabel, serverResolutionDeadline, market],
   );
 
   const { timeRemaining } = marketState;
@@ -595,12 +566,9 @@ export default function CategoryRaceDetailPage() {
           bettingCutoff={market?.bettingCutoff ?? null}
           resolveAt={market?.endAt ?? null}
           variant="full"
-          engine={isAmm ? "amm" : "parimutuel"}
+          engine="amm"
         />
 
-        {/* Hero Stats — Pool tile is meaningless on AMM races (LMSR
-            liquidity is house-seeded, not crowd-funded) so we hide it
-            and collapse to a two-column layout. */}
         <Card className="relative overflow-hidden border-violet-500/30 dark:border-violet-500/20">
           <div className="absolute inset-0 bg-gradient-to-r from-violet-500/5 via-transparent to-fuchsia-500/5" />
           <div className="relative p-4 md:p-5">
@@ -608,15 +576,7 @@ export default function CategoryRaceDetailPage() {
               <CategoryPill category={normalizeMarketCategory(market.category || "misc")} />
             </div>
 
-            <div className={`grid ${isAmm ? "grid-cols-2" : "grid-cols-3"} gap-3 text-center`}>
-              {!isAmm && (
-                <div>
-                  <p className="text-lg md:text-xl font-bold text-violet-600 dark:text-violet-400">
-                    {totalPool.toLocaleString("en-US")}
-                  </p>
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Pool</p>
-                </div>
-              )}
+            <div className="grid grid-cols-2 gap-3 text-center">
               <div>
                 <p className="text-lg md:text-xl font-bold">{candidates.length}</p>
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
@@ -626,86 +586,12 @@ export default function CategoryRaceDetailPage() {
               <div>
                 <p className="text-lg md:text-xl font-bold">{totalParticipants}</p>
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                  {isAmm ? "Traders" : "Participants"}
+                  Traders
                 </p>
               </div>
             </div>
           </div>
         </Card>
-
-        {/* Your Position — for parimutuel races we keep MyPositionCard
-            (familiar legacy UI). For AMM races we hide it and let the
-            new Live Market card below render per-candidate position
-            rows inline (Sprint 5 / Phase 3.3) so the user's net
-            shares + Sell button live next to the live market price. */}
-        {!isAmm && <MyPositionCard
-          marketId={marketId}
-          marketType="race"
-          isAmm={isAmm}
-          ctaLabel="Back another candidate"
-          onAddEntry={() => {
-            const input = candidateSearchRef.current;
-            if (input) {
-              input.scrollIntoView({ block: "center", behavior: "smooth" });
-              input.focus({ preventScroll: true });
-            }
-          }}
-          livePoolContext={
-            userPick && totalPool > 0
-              ? {
-                  totalPool,
-                  userSidePool: userPick.totalStake ?? 0,
-                }
-              : null
-          }
-          // Sprint 3.1: persistent Share affordance for AMM open
-          // positions. Race users can hold multiple candidates — we
-          // share the biggest position by current value.
-          onShare={(() => {
-            if (!isAmm) return undefined;
-            const positions = (ammPositionData?.positions ?? []).filter(
-              (p) => p.netShares > 1e-6,
-            );
-            if (positions.length === 0) return undefined;
-            const pos = positions.reduce((biggest, p) =>
-              p.currentValue > biggest.currentValue ? p : biggest,
-            );
-            return () => {
-              const candidate = candidates.find(
-                (c) => c.entryId === pos.entryId,
-              );
-              const data = buildPositionShareData({
-                username: profile?.username || "you",
-                personName: candidate?.name ?? pos.entryLabel ?? null,
-                personAvatar: candidate?.avatar ?? null,
-                // Match the existing trade share format on this page
-                // ("Category Race: <Label>") so the buy / position
-                // share-card titles read identically for the same
-                // market.
-                marketTitle: `Category Race: ${categoryLabel}`,
-                category: categoryLabel,
-                entryLabel: candidate?.name ?? pos.entryLabel,
-                direction: "other",
-                netShares: pos.netShares,
-                avgEntryPrice: pos.avgEntryPrice,
-                currentPrice: pos.currentPrice,
-                costBasis: pos.netCreditsIn,
-                currentValue: pos.currentValue,
-                endAt: (market as any)?.endAt || "",
-              });
-              const origin =
-                typeof window !== "undefined" ? window.location.origin : "";
-              const pathname =
-                typeof window !== "undefined" ? window.location.pathname : "";
-              openShareCard({
-                data,
-                fallbackText: `I'm backing ${candidate?.name ?? pos.entryLabel} in the ${categoryLabel} Category Race on VoxDex!\n${origin}${pathname}`,
-                shareUrl: `${origin}${pathname}`,
-                filenameBase: `voxdex-position-${marketId.slice(0, 8)}`,
-              });
-            };
-          })()}
-        />}
 
         {/* Path-to-win callout — quantifies how far behind the leader
             the user's pick is (in % gain points). Race resolves on the
@@ -719,17 +605,15 @@ export default function CategoryRaceDetailPage() {
           />
         )}
 
-        {/* AMM Live Market — consolidated card (Sprint 5 / Phase 3.3).
+        {/* AMM Live Market — consolidated card.
             Renders three layers in priority order:
               1. Volume + Traders chips (parity with H2H / Up/Down)
               2. Per-candidate position rows for candidates the user
                  holds — net shares, avg, cost, conversational sell-now
                  / if-wins copy, plus inline Add / Sell / Share buttons
               3. Top-6 candidates by live LMSR price (existing market
-                 consensus surface)
-            This replaces MyPositionCard for AMM races so the position
-            rows live next to the live prices that drive them. */}
-        {isAmm && ammPriceMap && candidates.length > 0 && (() => {
+                 consensus surface) */}
+        {ammPriceMap && candidates.length > 0 && (() => {
           const liveVolume = Number(
             ((market as any)?.ammState?.totalUserCreditsIn ?? (market as any)?.volume ?? 0),
           );
@@ -940,7 +824,7 @@ export default function CategoryRaceDetailPage() {
             the chart matches the Live Market panel above it, rather
             than mixing the leaderboard score ordering with the market
             price ordering. */}
-        {isAmm && candidates.length > 0 && (() => {
+        {candidates.length > 0 && (() => {
           const palette = ["#10b981", "#3b82f6", "#a855f7", "#f59e0b", "#ef4444", "#06b6d4"];
           const series = [...candidates]
             .filter(c => c.entryId)
@@ -1123,44 +1007,6 @@ export default function CategoryRaceDetailPage() {
               Race Insights
             </h2>
 
-            {/* Pool Distribution — parimutuel-only. On AMM races
-                the equivalent signal is the LMSR price, which lives
-                in the Live Market panel above this card. */}
-            {!isAmm && (
-              <div className="mb-4">
-                <p className="text-xs text-muted-foreground mb-2 font-medium uppercase tracking-wider">
-                  Pool Distribution
-                </p>
-                <div className="space-y-1.5">
-                  {candidates.slice(0, 5).map((c) => {
-                    const stakeTotal = candidates.reduce(
-                      (sum, x) => sum + (x.totalStake || 0),
-                      0
-                    );
-                    const pct =
-                      stakeTotal > 0
-                        ? Math.round(((c.totalStake || 0) / stakeTotal) * 100)
-                        : 0;
-                    return (
-                      <div key={c.entryId || c.name} className="flex items-center gap-2">
-                        <PersonAvatar name={c.name} avatar={c.avatar} className="h-6 w-6" />
-                        <span className="text-xs truncate flex-1">{c.name}</span>
-                        <div className="w-24 h-2 rounded-full bg-muted overflow-hidden">
-                          <div
-                            className="h-full bg-violet-500/60 rounded-full transition-all"
-                            style={{ width: `${Math.max(pct, 2)}%` }}
-                          />
-                        </div>
-                        <span className="text-[10px] text-muted-foreground font-mono w-8 text-right">
-                          {pct}%
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
             {/* Momentum */}
             <div>
               <p className="text-xs text-muted-foreground mb-2 font-medium uppercase tracking-wider">
@@ -1211,7 +1057,7 @@ export default function CategoryRaceDetailPage() {
           bettingCutoff={serverCutoff}
           closeTime={serverResolutionDeadline ? new Date(serverResolutionDeadline).toUTCString().replace(/ GMT$/, " UTC") : undefined}
           categoryLabel={categoryLabel}
-          engine={isAmm ? "amm" : "parimutuel"}
+          engine="amm"
         />
 
         {/* Related markets — bottom-of-page so it's out of the way of
@@ -1292,12 +1138,8 @@ export default function CategoryRaceDetailPage() {
           setPendingSelection(null);
         }}
         onConfirm={handleConfirmStake}
-        // Sprint 5 / Phase 3.4: AMM sell wiring + live AMM state +
-        // initialAmmMode parity with Up/Down and H2H. Together they
-        // unlock the Sell tab inside the modal and keep cr/share
-        // pricing in sync with the LMSR snapshot as the user trades.
-        onConfirmAmmSell={isAmm ? handleConfirmAmmSell : undefined}
-        liveAmmState={isAmm ? ((market as any)?.ammState ?? null) : null}
+        onConfirmAmmSell={handleConfirmAmmSell}
+        liveAmmState={(market as any)?.ammState ?? null}
         initialAmmMode={modalIntent}
         walletBalance={walletCredits}
         onChangePick={() => {

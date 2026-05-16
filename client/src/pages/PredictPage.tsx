@@ -36,10 +36,9 @@ import { getCanonicalNativeCycle } from "@/lib/nativeMarketLifecycle";
 import { fireAmmTradeToast } from "@/lib/share-data";
 import { useShareCard } from "@/contexts/ShareCardContext";
 import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
-import { WeeklyUpDownActionButtons } from "@/components/predict/WeeklyUpDownActionButtons";
+import { pricesFor, snapshotFromApi } from "@/lib/ammClient";
 import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { formatSignedPercent, formatSignedPoints, getRecentActivityMarketPath } from "@/lib/predict-display";
-import { computePayoutMultiplier } from "@/lib/parimutuel";
 import {
   AGENT_AVATAR_FALLBACK_CLASS,
   getAvatarGradient,
@@ -204,202 +203,6 @@ type PredictionType = "all" | "jackpot" | "updown" | "h2h" | "gainer" | "communi
 type CategoryFilter = string;
 
 
-const mockMarkets: PredictionMarket[] = [
-  {
-    id: "market-1",
-    personId: "1",
-    personName: "Elon Musk",
-    personAvatar: "",
-    currentScore: 515809,
-    baselineScore: 492100,
-    startScore: 492100,
-    change7d: 4.78,
-    upMultiplier: 1.7,
-    downMultiplier: 2.3,
-    endTime: "Sun 23:59 UTC",
-    totalPool: 15420,
-    upPoolPercent: 58,
-    category: "tech",
-  },
-  {
-    id: "market-2",
-    personId: "2",
-    personName: "Taylor Swift",
-    personAvatar: "",
-    currentScore: 489234,
-    baselineScore: 505500,
-    startScore: 505500,
-    change7d: -3.2,
-    upMultiplier: 2.1,
-    downMultiplier: 1.8,
-    endTime: "Sun 23:59 UTC",
-    totalPool: 12350,
-    upPoolPercent: 45,
-    category: "music",
-  },
-  {
-    id: "market-3",
-    personId: "3",
-    personName: "MrBeast",
-    personAvatar: "",
-    currentScore: 504734,
-    baselineScore: 531000,
-    startScore: 531000,
-    change7d: -4.95,
-    upMultiplier: 1.5,
-    downMultiplier: 2.8,
-    endTime: "Sun 23:59 UTC",
-    totalPool: 9870,
-    upPoolPercent: 65,
-    category: "creator",
-  },
-  {
-    id: "market-4",
-    personId: "4",
-    personName: "Donald Trump",
-    personAvatar: "",
-    currentScore: 484531,
-    baselineScore: 501300,
-    startScore: 501300,
-    change7d: -3.35,
-    upMultiplier: 1.4,
-    downMultiplier: 3.2,
-    endTime: "Sun 23:59 UTC",
-    totalPool: 22100,
-    upPoolPercent: 72,
-    category: "politics",
-  },
-  {
-    id: "market-5",
-    personId: "5",
-    personName: "Kim Kardashian",
-    personAvatar: "",
-    currentScore: 398456,
-    baselineScore: 405800,
-    startScore: 405800,
-    change7d: -1.8,
-    upMultiplier: 2.2,
-    downMultiplier: 1.7,
-    endTime: "Sun 23:59 UTC",
-    totalPool: 8540,
-    upPoolPercent: 42,
-    category: "creator",
-  },
-  {
-    id: "market-6",
-    personId: "6",
-    personName: "Cristiano Ronaldo",
-    personAvatar: "",
-    currentScore: 445678,
-    baselineScore: 436500,
-    startScore: 436500,
-    change7d: 2.1,
-    upMultiplier: 1.9,
-    downMultiplier: 2.0,
-    endTime: "Sun 23:59 UTC",
-    totalPool: 11200,
-    upPoolPercent: 51,
-    category: "sports",
-  },
-  {
-    id: "market-7",
-    personId: "7",
-    personName: "Jensen Huang",
-    personAvatar: "",
-    currentScore: 412300,
-    baselineScore: 381000,
-    startScore: 381000,
-    change7d: 8.2,
-    upMultiplier: 1.3,
-    downMultiplier: 3.1,
-    endTime: "Sun 23:59 UTC",
-    totalPool: 18900,
-    upPoolPercent: 78,
-    category: "tech",
-  },
-  {
-    id: "market-8",
-    personId: "8",
-    personName: "Beyoncé",
-    personAvatar: "",
-    currentScore: 478200,
-    baselineScore: 471100,
-    startScore: 471100,
-    change7d: 1.5,
-    upMultiplier: 1.8,
-    downMultiplier: 2.1,
-    endTime: "Sun 23:59 UTC",
-    totalPool: 14200,
-    upPoolPercent: 52,
-    category: "music",
-  },
-];
-
-
-const headToHeadMarkets: HeadToHeadMarket[] = [
-  {
-    id: "h2h-1",
-    title: "Drake vs Kendrick",
-    person1: { name: "Drake", avatar: "", currentScore: 425600 },
-    person2: { name: "Kendrick Lamar", avatar: "", currentScore: 398200 },
-    category: "music",
-    endTime: "Sun 23:59 UTC",
-    totalPool: 28450,
-    person1Percent: 42,
-  },
-  {
-    id: "h2h-2",
-    title: "Musk vs Zuckerberg",
-    person1: { name: "Elon Musk", avatar: "", currentScore: 515809 },
-    person2: { name: "Mark Zuckerberg", avatar: "", currentScore: 312400 },
-    category: "tech",
-    endTime: "Sun 23:59 UTC",
-    totalPool: 19200,
-    person1Percent: 68,
-  },
-  {
-    id: "h2h-3",
-    title: "Swift vs Beyoncé",
-    person1: { name: "Taylor Swift", avatar: "", currentScore: 489234 },
-    person2: { name: "Beyoncé", avatar: "", currentScore: 478200 },
-    category: "music",
-    endTime: "Sun 23:59 UTC",
-    totalPool: 15780,
-    person1Percent: 55,
-  },
-  {
-    id: "h2h-4",
-    title: "Ronaldo vs Messi",
-    person1: { name: "Cristiano Ronaldo", avatar: "", currentScore: 445678 },
-    person2: { name: "Lionel Messi", avatar: "", currentScore: 432100 },
-    category: "sports",
-    endTime: "Sun 23:59 UTC",
-    totalPool: 34100,
-    person1Percent: 48,
-  },
-  {
-    id: "h2h-5",
-    title: "Biden vs Trump",
-    person1: { name: "Joe Biden", avatar: "", currentScore: 298400 },
-    person2: { name: "Donald Trump", avatar: "", currentScore: 484531 },
-    category: "politics",
-    endTime: "Sun 23:59 UTC",
-    totalPool: 45200,
-    person1Percent: 38,
-  },
-  {
-    id: "h2h-6",
-    title: "Bezos vs Musk",
-    person1: { name: "Jeff Bezos", avatar: "", currentScore: 287600 },
-    person2: { name: "Elon Musk", avatar: "", currentScore: 515809 },
-    category: "business",
-    endTime: "Sun 23:59 UTC",
-    totalPool: 21800,
-    person1Percent: 35,
-  },
-];
-
-
 /**
  * Sprint 4.3: minimal shape of /api/me/amm-positions for the
  * predict-page card banner. Only the fields we actually need to
@@ -438,54 +241,6 @@ interface RecentPredictionActivity {
   isPublic: boolean;
   rationale: string | null;
 }
-
-const topGainerMarkets: TopGainerMarket[] = [
-  {
-    id: "gainer-1",
-    category: "music",
-    leaders: [
-      { name: "Taylor Swift", avatar: "", currentGain: 12450, percentGain: 4.2 },
-      { name: "Drake", avatar: "", currentGain: 8920, percentGain: 3.8 },
-      { name: "Bad Bunny", avatar: "", currentGain: 7340, percentGain: 2.9 },
-    ],
-    totalPool: 14200,
-    endTime: "Sun 23:59 UTC",
-  },
-  {
-    id: "gainer-2",
-    category: "tech",
-    leaders: [
-      { name: "Jensen Huang", avatar: "", currentGain: 15780, percentGain: 8.5 },
-      { name: "Elon Musk", avatar: "", currentGain: 11200, percentGain: 2.1 },
-      { name: "Sam Altman", avatar: "", currentGain: 9850, percentGain: 5.2 },
-    ],
-    totalPool: 19800,
-    endTime: "Sun 23:59 UTC",
-  },
-  {
-    id: "gainer-3",
-    category: "creator",
-    leaders: [
-      { name: "MrBeast", avatar: "", currentGain: 18900, percentGain: 6.1 },
-      { name: "Logan Paul", avatar: "", currentGain: 12100, percentGain: 4.8 },
-      { name: "KSI", avatar: "", currentGain: 8750, percentGain: 3.5 },
-    ],
-    totalPool: 11500,
-    endTime: "Sun 23:59 UTC",
-  },
-  {
-    id: "gainer-4",
-    category: "sports",
-    leaders: [
-      { name: "Cristiano Ronaldo", avatar: "", currentGain: 9800, percentGain: 2.4 },
-      { name: "LeBron James", avatar: "", currentGain: 8900, percentGain: 1.9 },
-      { name: "Lionel Messi", avatar: "", currentGain: 7200, percentGain: 1.6 },
-    ],
-    totalPool: 13400,
-    endTime: "Sun 23:59 UTC",
-  },
-];
-
 
 type MarketType = "JACKPOT_EXACT" | "BINARY_TREND" | "VERSUS" | "COMMUNITY" | "GAINER";
 
@@ -1779,8 +1534,6 @@ export default function PredictPage() {
         const downStake = Number(downEntry?.totalStake || 0);
         const total = upStake + downStake || 1;
         const upPercent = Math.round((upStake / total) * 100);
-        const upMultiplier = computePayoutMultiplier(upStake + downStake, upStake);
-        const downMultiplier = computePayoutMultiplier(upStake + downStake, downStake);
         const currentScore = Number(person.trendScore || person.fameIndex || 0);
         const baselineScore = getMarketBaselineScore(m, currentScore) ?? currentScore;
         return {
@@ -1792,16 +1545,12 @@ export default function PredictPage() {
           baselineScore,
           startScore: baselineScore,
           change7d: Number(person.change7d || 0),
-          upMultiplier,
-          downMultiplier,
           endTime: "",
-          totalPool: upStake + downStake,
           upPoolPercent: upPercent || 50,
           category: normalizeMarketCategory(m.category || person.category || "misc") as CategoryFilter,
           upEntryId: upEntry?.id,
           downEntryId: downEntry?.id,
           cadence: m.cadence || "weekly",
-          tieRule: m.tieRule || "refund",
           startAt: m.startAt,
           endAt: m.endAt,
           totalBets: Number(m.activeParticipantCount || 0) || 0,
@@ -1809,13 +1558,12 @@ export default function PredictPage() {
           activeParticipantCount: Number(m.activeParticipantCount || 0),
           recentParticipants: m.recentParticipants || [],
           bettingCutoff: m.bettingCutoff || null,
-          engine: m.engine ?? "parimutuel",
+          engine: "amm",
           ammState: m.ammState ?? null,
           volume: Number(m.volume ?? m.ammState?.totalUserCreditsIn ?? 0) || 0,
         } as PredictionMarket;
       });
     }
-    if (import.meta.env.VITE_USE_MOCK_PREDICT_DATA === "true") return mockMarkets;
     return [];
   }, [nativeUpdownData]);
 
@@ -1831,7 +1579,6 @@ export default function PredictPage() {
         const s1 = Number(e1.totalStake || 0);
         const s2 = Number(e2.totalStake || 0);
         const total = s1 + s2 || 1;
-        const totalPool = entries.reduce((sum: number, entry: any) => sum + Number(entry.totalStake || 0), 0);
         return {
           id: m.id,
           title: m.title || `${p1.name || "?"} vs ${p2.name || "?"}`,
@@ -1847,7 +1594,6 @@ export default function PredictPage() {
           endTime: "",
           endAt: m.endAt || null,
           startAt: m.startAt || null,
-          totalPool,
           person1Percent: (s1 + s2) === 0 ? 50 : Math.round((s1 / total) * 100),
           totalBets: Number(m.activeParticipantCount || 0) || 0,
           activeParticipantCount: Number(m.activeParticipantCount || 0),
@@ -1855,18 +1601,12 @@ export default function PredictPage() {
           bettingCutoff: m.bettingCutoff || null,
           modelP1Percent: typeof m.modelP1Percent === "number" ? m.modelP1Percent : undefined,
           modelConfidence: m.modelConfidence ?? undefined,
-          engine: m.engine ?? "parimutuel",
+          engine: "amm",
           ammState: m.ammState ?? null,
-          // Sprint 5 / Phase 1.4: server-side volume (sum of net AMM
-          // credits in) for the H2H volume chip + feed sort. Falls back
-          // to the legacy `ammState.totalUserCreditsIn` if the server
-          // hasn't been redeployed yet — same shape PredictPage already
-          // uses for Up/Down hydration.
           volume: Number(m.volume ?? m.ammState?.totalUserCreditsIn ?? 0) || 0,
         } as HeadToHeadMarket;
       });
     }
-    if (import.meta.env.VITE_USE_MOCK_PREDICT_DATA === "true") return headToHeadMarkets;
     return [];
   }, [nativeH2hData]);
 
@@ -1875,7 +1615,6 @@ export default function PredictPage() {
     if (dbMarkets.length > 0) {
       return dbMarkets.map((m: any) => {
         const entries = m.entries || [];
-        const totalPool = entries.reduce((sum: number, entry: any) => sum + Number(entry.totalStake || 0), 0);
         const openingScoresMap = new Map<string, number>();
         const rawOpeningScores = (m.metadata as any)?.openingScores;
         if (Array.isArray(rawOpeningScores)) {
@@ -1911,7 +1650,6 @@ export default function PredictPage() {
           category: normalizeMarketCategory(m.category || "misc") as CategoryFilter,
           leaders: allCandidates.slice(0, 3),
           allCandidates,
-          totalPool,
           endTime: "",
           endAt: m.endAt || null,
           startAt: m.startAt || null,
@@ -1922,15 +1660,12 @@ export default function PredictPage() {
           recentParticipants: m.recentParticipants || [],
           bettingCutoff: m.bettingCutoff || null,
           teaser: typeof m.teaser === "string" && m.teaser.trim() ? m.teaser.trim() : null,
-          engine: m.engine || "parimutuel",
+          engine: "amm",
           ammState: m.ammState ?? null,
-          // Sprint 5 / Phase 1.4: see HeadToHeadMarket comment above —
-          // identical fallback chain for the Race feed.
           volume: Number(m.volume ?? m.ammState?.totalUserCreditsIn ?? 0) || 0,
         } as TopGainerMarket;
       });
     }
-    if (import.meta.env.VITE_USE_MOCK_PREDICT_DATA === "true") return topGainerMarkets;
     return [];
   }, [nativeGainerData]);
   
@@ -2098,10 +1833,7 @@ export default function PredictPage() {
         else if (variables.entryId === market.upEntryId) entryLabel = "Up";
       }
 
-      // Sprint 3.1: AMM responses get the shareable trade toast that
-      // the detail pages already use. Parimutuel keeps the static
-      // description because there's no LMSR data to back a trade card.
-      if (data?.engine === "amm" && market) {
+      if (market) {
         const origin =
           typeof window !== "undefined" ? window.location.origin : "";
         fireAmmTradeToast({
@@ -2187,74 +1919,63 @@ export default function PredictPage() {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }
 
-      // Sprint 3.1: AMM-aware share toast for H2H + Gainer (Race). The
-      // detail pages have their own handler, but the carousel was
-      // still on the legacy static toast.
-      if (data?.engine === "amm") {
-        const origin =
-          typeof window !== "undefined" ? window.location.origin : "";
-        if (variables.marketType === "h2h") {
-          const market = hydratedH2H.find(
-            (m) => String(m.id) === String(variables.marketId),
-          );
-          if (market) {
-            const pickedFirst = variables.entryId === market.person1EntryId;
-            const picked = pickedFirst ? market.person1 : market.person2;
-            const entryLabel =
-              (pickedFirst ? market.person1EntryLabel : market.person2EntryLabel) ??
-              picked.name;
-            fireAmmTradeToast({
-              response: data,
-              actionType: "buy",
-              username: profile?.username || "you",
-              personName: picked.name ?? null,
-              personAvatar: picked.avatar ?? null,
-              marketTitle: market.title,
-              category: market.category,
-              entryLabel,
-              direction: "other",
-              openShareCard,
-              fallbackShareUrl: `${origin}/predict/h2h/${market.id}`,
-            });
-          }
+      const origin =
+        typeof window !== "undefined" ? window.location.origin : "";
+      if (variables.marketType === "h2h") {
+        const market = hydratedH2H.find(
+          (m) => String(m.id) === String(variables.marketId),
+        );
+        if (market) {
+          const pickedFirst = variables.entryId === market.person1EntryId;
+          const picked = pickedFirst ? market.person1 : market.person2;
+          const entryLabel =
+            (pickedFirst ? market.person1EntryLabel : market.person2EntryLabel) ??
+            picked.name;
+          fireAmmTradeToast({
+            response: data,
+            actionType: "buy",
+            username: profile?.username || "you",
+            personName: picked.name ?? null,
+            personAvatar: picked.avatar ?? null,
+            marketTitle: market.title,
+            category: market.category,
+            entryLabel,
+            direction: "other",
+            openShareCard,
+            fallbackShareUrl: `${origin}/predict/h2h/${market.id}`,
+          });
         } else {
-          const market = hydratedGainers.find(
-            (m) => String(m.id) === String(variables.marketId),
-          );
-          const candidate = market?.allCandidates?.find(
-            (c) => c.entryId === variables.entryId,
-          );
-          if (market && candidate) {
-            // Use the human-friendly category label (e.g. "Tech &
-            // business") rather than the normalized code ("tech") so
-            // the share card and toast read naturally — mirrors what
-            // CategoryRaceDetailPage already does for its own share.
-            const categoryLabel = getMarketCategoryLabel(market.category);
-            fireAmmTradeToast({
-              response: data,
-              actionType: "buy",
-              username: profile?.username || "you",
-              personName: candidate.name ?? null,
-              personAvatar: candidate.avatar ?? null,
-              // Match the existing share format on the dedicated Race
-              // detail page ("Category Race: <Label>") so the carousel
-              // and detail-page shares read identically.
-              marketTitle: `Category Race: ${categoryLabel}`,
-              category: categoryLabel,
-              entryLabel: candidate.name,
-              direction: "other",
-              openShareCard,
-              fallbackShareUrl: `${origin}/predict/gainer/${market.id}`,
-            });
-          }
+          toast("Prediction placed!", {
+            description: "Your head-to-head prediction has been recorded.",
+          });
         }
       } else {
-        toast("Prediction placed!", {
-          description:
-            variables.marketType === "h2h"
-              ? "Your head-to-head prediction has been recorded."
-              : "Your top gainer prediction has been recorded.",
-        });
+        const market = hydratedGainers.find(
+          (m) => String(m.id) === String(variables.marketId),
+        );
+        const candidate = market?.allCandidates?.find(
+          (c) => c.entryId === variables.entryId,
+        );
+        if (market && candidate) {
+          const categoryLabel = getMarketCategoryLabel(market.category);
+          fireAmmTradeToast({
+            response: data,
+            actionType: "buy",
+            username: profile?.username || "you",
+            personName: candidate.name ?? null,
+            personAvatar: candidate.avatar ?? null,
+            marketTitle: `Category Race: ${categoryLabel}`,
+            category: categoryLabel,
+            entryLabel: candidate.name,
+            direction: "other",
+            openShareCard,
+            fallbackShareUrl: `${origin}/predict/gainer/${market.id}`,
+          });
+        } else {
+          toast("Prediction placed!", {
+            description: "Your top gainer prediction has been recorded.",
+          });
+        }
       }
       setStakeModalOpen(false);
       setPendingSelection(null);
@@ -2294,53 +2015,42 @@ export default function PredictPage() {
       if (data?.xp?.xpAwarded) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }
-      // Sprint 3.1: community-market buys get the AMM-aware share
-      // toast when the response confirms the engine. Multi-option
-      // entries route by Yes/No direction; binary markets carry the
-      // side in the entry label so we keep direction as "other" for
-      // the share card. Mirrors what the community detail page does.
-      if (data?.engine === "amm") {
-        const origin =
-          typeof window !== "undefined" ? window.location.origin : "";
-        const market = openMarkets.find(
-          (m: any) => String(m.slug) === String(variables.slug),
-        );
-        const entry =
-          market?.entries?.find(
-            (e: any) => String(e.id) === String(variables.entryId),
-          ) ?? null;
-        const person = entry?.person ?? null;
-        const isBinary = market?.openMarketType === "binary";
-        const entryLabel = isBinary
-          ? variables.direction === "no"
-            ? "No"
-            : "Yes"
-          : entry?.label ?? person?.name ?? variables.direction.toUpperCase();
-        const direction: "up" | "down" | "other" = isBinary
-          ? variables.direction === "no"
-            ? "down"
-            : "up"
-          : "other";
-        fireAmmTradeToast({
-          response: data,
-          actionType: "buy",
-          username: profile?.username || "you",
-          personName: person?.name ?? null,
-          personAvatar: person?.avatar ?? null,
-          marketTitle: market?.title ?? "Community market",
-          category: market?.category ?? null,
-          entryLabel: String(entryLabel),
-          direction,
-          openShareCard,
-          fallbackShareUrl: market?.slug
-            ? `${origin}/markets/${market.slug}`
-            : origin,
-        });
-      } else {
-        toast("Prediction placed!", {
-          description: "Your world-market prediction has been recorded.",
-        });
-      }
+      const origin =
+        typeof window !== "undefined" ? window.location.origin : "";
+      const market = openMarkets.find(
+        (m: any) => String(m.slug) === String(variables.slug),
+      );
+      const entry =
+        market?.entries?.find(
+          (e: any) => String(e.id) === String(variables.entryId),
+        ) ?? null;
+      const person = entry?.person ?? null;
+      const isBinary = market?.openMarketType === "binary";
+      const entryLabel = isBinary
+        ? variables.direction === "no"
+          ? "No"
+          : "Yes"
+        : entry?.label ?? person?.name ?? variables.direction.toUpperCase();
+      const direction: "up" | "down" | "other" = isBinary
+        ? variables.direction === "no"
+          ? "down"
+          : "up"
+        : "other";
+      fireAmmTradeToast({
+        response: data,
+        actionType: "buy",
+        username: profile?.username || "you",
+        personName: person?.name ?? null,
+        personAvatar: person?.avatar ?? null,
+        marketTitle: market?.title ?? "Community market",
+        category: market?.category ?? null,
+        entryLabel: String(entryLabel),
+        direction,
+        openShareCard,
+        fallbackShareUrl: market?.slug
+          ? `${origin}/markets/${market.slug}`
+          : origin,
+      });
       setStakeModalOpen(false);
       setPendingSelection(null);
       await Promise.all([
@@ -2526,42 +2236,19 @@ export default function PredictPage() {
 
     const isTopUp = sameDirStake > 0;
 
-    const yesStake = Number(entry.totalStake || 0);
-    const noStake = Number(entry.noStake || 0);
-    const entryPool = yesStake + noStake;
-    const sideStake = direction === "yes" ? yesStake : noStake;
-    const estimatedPayout = +(computePayoutMultiplier(entryPool, sideStake) * 0.95).toFixed(1);
-
     setPendingSelection({
       type: "community",
-      // Direction is rendered as a coloured pill in the StakeModal header
-      // and via the Yes/No toggle directly below the pick line, so we no
-      // longer prefix the choice string with "Yes ·" / "No ·" (was double
-      // print before the pill treatment).
       choice: entry.label,
       marketName: market.title,
       marketId: market.id,
       entryId: entry.id,
-      estimatedPayout,
-      poolTotal: entryPool,
-      // Community markets resolve at endAt; no separate weekly betting cutoff.
       endAt: market.endAt,
       bettingCutoff: null,
       direction,
-      // Threaded so StakeModal can suppress the Yes/No badge + toggle
-      // for binary community markets where the entry label IS the side.
       openMarketType: market.openMarketType ?? null,
       isTopUp,
       existingStake: isTopUp ? sameDirStake : undefined,
-      // Sprint 5 / Phase 1.2: community markets historically built the
-      // selection without `engine` / `ammState`, so `selection.engine ===
-      // "amm"` was never true downstream and the StakeModal silently
-      // fell back to parimutuel-flavoured copy + no live cr/share. The
-      // server now stamps `engine` + `ammState` on every market in
-      // `/api/open-markets`, so we just thread it through here. Parimutuel
-      // community markets land as `engine: "parimutuel"` (or undefined)
-      // and continue to render the old multiplier UI.
-      engine: market.engine === "amm" ? "amm" : "parimutuel",
+      engine: "amm",
       ammState: market.ammState ?? null,
     });
     openStakeModal();
@@ -2612,16 +2299,13 @@ export default function PredictPage() {
       startScore: market.baselineScore,
       currentScore: market.currentScore,
       crowdSentiment: choice === "up" ? market.upPoolPercent : 100 - market.upPoolPercent,
-      poolTotal: market.totalPool,
-      estimatedPayout: choice === "up" ? market.upMultiplier : market.downMultiplier,
       baselineScore: market.baselineScore,
       baselineTimestamp: market.startAt,
-      tieRule: market.tieRule || "refund",
       endAt: market.endAt,
       bettingCutoff: market.bettingCutoff,
       isTopUp,
       existingStake: isTopUp ? existing?.stakeAmount : undefined,
-      engine: market.engine === "amm" ? "amm" : "parimutuel",
+      engine: "amm",
       ammState: market.ammState ?? null,
     });
     openStakeModal();
@@ -2648,9 +2332,6 @@ export default function PredictPage() {
     const picked = person === 1 ? market.person1 : market.person2;
     const opponent = person === 1 ? market.person2 : market.person1;
     const sentiment = person === 1 ? market.person1Percent : 100 - market.person1Percent;
-    const stakePool = market.totalPool || 0;
-    const pickedPool = (sentiment / 100) * stakePool;
-    const estimatedPayout = computePayoutMultiplier(stakePool, pickedPool);
 
     // Same-side top-up vs opposite-side hedge guard. Mirrors the detail
     // page logic — opposite-side hedges are blocked everywhere users
@@ -2680,15 +2361,11 @@ export default function PredictPage() {
       currentScore: picked.currentScore,
       opponentScore: opponent.currentScore,
       crowdSentiment: sentiment,
-      poolTotal: market.totalPool,
-      estimatedPayout,
-      tieRule: (market as { tieRule?: string }).tieRule ?? "refund",
       endAt: serverResolutionDeadline ?? undefined,
       bettingCutoff: market.bettingCutoff,
-      marketStartAt: market.startAt ?? undefined,
       isTopUp,
       existingStake: isTopUp ? existing?.stakeAmount : undefined,
-      engine: market.engine === "amm" ? "amm" : "parimutuel",
+      engine: "amm",
       ammState: market.ammState ?? null,
     });
     openStakeModal();
@@ -2712,20 +2389,18 @@ export default function PredictPage() {
     }
 
     const categoryLabel = getMarketCategoryLabel(market.category);
-    const isAmm = market.engine === "amm";
 
-    const candidateStake = Number(candidate.totalStake || 0);
-    const estimatedPayout = computePayoutMultiplier(market.totalPool, candidateStake);
-    const crowdSentiment = market.totalPool > 0
-      ? Math.round((candidateStake / market.totalPool) * 100)
-      : 0;
+    // Crowd sentiment on AMM races derives from the live LMSR price,
+    // not pool share. We compute it client-side from `ammState` when
+    // present and fall back to 0 otherwise.
+    const ammSnapshot = market.ammState ? snapshotFromApi(market.ammState as any) : null;
+    const livePrices = ammSnapshot ? pricesFor(ammSnapshot) : {};
+    const livePrice = Number(livePrices[String(candidate.entryId)] ?? 0);
+    const crowdSentiment = Math.round(Math.max(0, Math.min(1, livePrice)) * 100);
 
     // Race lets users back any candidate at any time; if they re-pick
     // one they've already backed we treat it as a same-side top-up so
     // the StakeModal subline shows their existing position.
-    // Native gainer bets always carry direction='yes' so we just read
-    // yesStake — the new map shape preserves both sides, but for native
-    // markets only one is ever populated.
     const priorStake = userBetsPerEntry.get(String(market.id))?.get(String(candidate.entryId))?.yesStake ?? 0;
     const isTopUp = priorStake > 0;
 
@@ -2742,15 +2417,12 @@ export default function PredictPage() {
       candidatePercentGain: candidate.percentGain,
       candidatePointsAdded: candidate.currentGain,
       crowdSentiment,
-      poolTotal: market.totalPool,
-      estimatedPayout,
       endAt: serverResolutionDeadline ?? undefined,
       bettingCutoff: market.bettingCutoff,
-      marketStartAt: market.startAt ?? undefined,
       isTopUp,
       existingStake: isTopUp ? priorStake : undefined,
-      engine: isAmm ? "amm" : "parimutuel",
-      ammState: isAmm ? ((market.ammState as any) ?? null) : null,
+      engine: "amm",
+      ammState: (market.ammState as any) ?? null,
     });
     openStakeModal();
   };
@@ -2863,7 +2535,7 @@ export default function PredictPage() {
   const gainerFame = (m: TopGainerMarket): number =>
     (m.allCandidates || m.leaders || []).reduce(
       (best, l) => Math.max(best, Number((l as any).currentScore ?? 0)),
-      Number(m.totalPool ?? 0),
+      0,
     );
   // Sum of real stakes across an /api/open-markets row's entries. Replaces the
   // old `seedVolume` fallback used by the Trending sort, so trending now ranks
@@ -4233,29 +3905,19 @@ export default function PredictPage() {
               choice: dir === "up" ? "Trend Score UP" : "Trend Score DOWN",
               entryId,
               crowdSentiment: dir === "up" ? market.upPoolPercent : 100 - market.upPoolPercent,
-              estimatedPayout: dir === "up" ? market.upMultiplier : market.downMultiplier,
-              engine: market.engine === "amm" ? "amm" : "parimutuel",
+              engine: "amm",
               ammState: market.ammState ?? null,
             });
             return;
           }
 
           if (pendingSelection.type === "community" && (dir === "yes" || dir === "no")) {
-            // Recompute multiplier and label for the new side without closing
-            // the modal. We re-derive from the current openMarkets snapshot so
-            // a stale pendingSelection picks up any pool drift since the click.
             const market = openMarkets.find((m: any) => String(m.id) === String(pendingSelection.marketId));
             const entry = market?.entries?.find((e: any) => String(e.id) === String(pendingSelection.entryId));
             if (!market || !entry) return;
-            const yesStake = Number(entry.totalStake || 0);
-            const noStake = Number(entry.noStake || 0);
-            const entryPool = yesStake + noStake;
-            const sideStake = dir === "yes" ? yesStake : noStake;
-            const estimatedPayout = +(computePayoutMultiplier(entryPool, sideStake) * 0.95).toFixed(1);
             setPendingSelection({
               ...pendingSelection,
               choice: `${dir === "no" ? "No" : "Yes"} \u00b7 ${entry.label}`,
-              estimatedPayout,
               direction: dir,
             });
           }

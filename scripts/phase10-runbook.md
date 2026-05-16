@@ -165,10 +165,12 @@ When the smoke test is green:
    GROUP BY engine, market_type ORDER BY engine, market_type;
    ```
 
-   Expect rows for `amm/updown`, `amm/h2h`, `parimutuel/gainer`,
-   `parimutuel/jackpot`. If `amm/*` rows are missing, the cron didn't fire —
-   investigate via Railway logs (`[MarketGenerator]` lines) or trigger
-   `/api/cron/generate-weekly-markets` manually before proceeding.
+   Expect rows for `amm/updown`, `amm/h2h`, `amm/gainer`,
+   `parimutuel/jackpot`. After the parimutuel sunset, jackpot is the
+   only `parimutuel` market type. If `amm/*` rows are missing, the cron
+   didn't fire — investigate via Railway logs (`[MarketGenerator]` lines)
+   or trigger `/api/cron/generate-weekly-markets` manually before
+   proceeding.
 
 2. Open the admin **AMM > Health** tab (browser tab visible — polling pauses on hidden tabs).
 
@@ -180,7 +182,7 @@ When the smoke test is green:
    - Agent runner sweeps every 30 minutes (default). Expect 1-2 sweeps in the first hour.
    - Worker ticks every 2 minutes; trades tab fills as it drains the queue.
    - **`DEFAULT_AGENT_EDGE_BAND = 0.10`** caps the per-trade price impact at 10pp.
-   - **Per-agent budget cap is `MAX_AGENT_STAKE = 300`** (unchanged from parimutuel).
+   - **Per-agent budget cap is `MAX_AGENT_STAKE = 300`** (carried over from the pre-AMM cohort tuning).
 
 5. Sanity checks during the soak:
    - Run **AMM > Health > Run audit** every ~15 minutes. Stay green throughout.
@@ -207,7 +209,6 @@ new actions and the next worker tick will refuse to execute pending ones.
 - Continuous re-trading (agents revisit AMM markets every hour as prices move).
   Today they bet once + maybe one conviction.
 - Agent **sells**. AMM lets them, but `decisionEngine` has no exit signal yet.
-- World-market AMM. Community markets remain parimutuel.
 - Bumping `MAX_AGENT_STAKE` for AMM. Same 300-credit cap stays, just reinterpreted
   as a budget ceiling instead of a flat-stake amount.
 

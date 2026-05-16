@@ -8,10 +8,9 @@ import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
 import { PredictCard } from "@/components/predict/PredictCard";
 import { ParticipantAvatarStack, type ParticipantPreview } from "@/components/predict/ParticipantAvatarStack";
 import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
-import { Activity, Star, Flame, ListChecks, Zap } from "lucide-react";
+import { Activity, Star, ListChecks } from "lucide-react";
 import { Link } from "wouter";
 import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
-import { computeEarlyBirdMultiplier } from "@/lib/parimutuel";
 import { type ApiAmmStateBlock, pricesFor, snapshotFromApi } from "@/lib/ammClient";
 import { formatVolumeCredits } from "@/lib/formatNumber";
 
@@ -26,16 +25,12 @@ export interface PredictionMarket {
   baselineScore: number;
   startScore: number;
   change7d: number;
-  upMultiplier: number;
-  downMultiplier: number;
   endTime: string;
-  totalPool: number;
   upPoolPercent: number;
   category: CategoryFilter;
   upEntryId?: string;
   downEntryId?: string;
   cadence?: string;
-  tieRule?: string;
   startAt?: string;
   endAt?: string;
   totalBets?: number;
@@ -43,15 +38,16 @@ export interface PredictionMarket {
   activeParticipantCount?: number;
   recentParticipants?: ParticipantPreview[];
   bettingCutoff?: string | null;
-  /** Phase 4: 'amm' flips the card into live LMSR pricing mode. */
-  engine?: "parimutuel" | "amm" | string | null;
-  /** Phase 4: live AMM state snapshot from `/api/native-markets/updown`. */
+  /** Always 'amm' for weekly Up/Down post-sunset. Kept as a typed
+   *  field because callers/snapshots still emit it. */
+  engine?: "amm" | string | null;
+  /** Live AMM state snapshot from `/api/native-markets/updown`. */
   ammState?: ApiAmmStateBlock | null;
   /**
-   * Sprint 4.3: cumulative credits users have spent buying shares on this
-   * market (mirrors ammState.totalUserCreditsIn). Powers the Polymarket-
-   * style "1.2K cr vol" chip on the card and feeds the default sort on
-   * the Up/Down feed. Parimutuel markets get 0 and the chip suppresses.
+   * Cumulative credits users have spent buying shares on this market
+   * (mirrors `ammState.totalUserCreditsIn`). Powers the Polymarket-
+   * style "1.2K cr vol" chip on the card and feeds the default sort
+   * on the Up/Down feed.
    */
   volume?: number;
 }
@@ -78,11 +74,10 @@ export function WeeklyUpDownCard({
   pendingPosition?: { pick: "up" | "down" | null; stakeAmount: number } | null;
   onBrowseFullScreen?: () => void;
   /**
-   * Sprint 4.3: AMM-only live P&L for the current user's open position
-   * on this market. Threaded through to the position banner so the
-   * card can read `[Winning] +13.41 cr   Stake 100`. Null for
-   * parimutuel positions (no per-share P&L concept) and for cards
-   * where the position summary hasn't loaded yet.
+   * AMM live unrealised P&L for the current user's open position on
+   * this market. Threaded through to the position banner so the card
+   * can read `[Winning] +13.41 cr   Stake 100`. Null when no position
+   * summary has loaded yet.
    */
   unrealisedPnl?: number | null;
 }) {
@@ -90,15 +85,15 @@ export function WeeklyUpDownCard({
   const pctDelta = market.baselineScore > 0 ? ((delta / market.baselineScore) * 100).toFixed(1) : "0";
   const cadenceLabel = (market.cadence || "weekly").charAt(0).toUpperCase() + (market.cadence || "weekly").slice(1);
 
-  const isAmm = market.engine === "amm";
-  const ammSnapshot = isAmm ? snapshotFromApi(market.ammState ?? null) : null;
+  // Parimutuel sunset: every non-jackpot native Up/Down market is AMM.
+  // Prices come from the AMM snapshot; the cadence strip and labels
+  // hardcode the AMM variant.
+  const ammSnapshot = snapshotFromApi(market.ammState ?? null);
   const ammPrices = ammSnapshot ? pricesFor(ammSnapshot) : null;
   let upPoolPercent = market.upPoolPercent;
-  let upMult = market.upMultiplier;
-  let downMult = market.downMultiplier;
-  let upPrice: number | null = null;
-  let downPrice: number | null = null;
-  if (isAmm && ammPrices && market.upEntryId && market.downEntryId) {
+  let upPrice = 0;
+  let downPrice = 0;
+  if (ammPrices && market.upEntryId && market.downEntryId) {
     const pUp = Number(ammPrices[market.upEntryId] ?? 0);
     const pDown = Number(ammPrices[market.downEntryId] ?? 0);
     const total = pUp + pDown;
@@ -124,30 +119,11 @@ export function WeeklyUpDownCard({
               <Star className="h-3 w-3 mr-0.5" />Featured
             </Badge>
           )}
-          {!isAmm && (market.totalPool > 5000 || (market.totalBets ?? 0) > 50) && (
-            <Badge variant="outline" className="text-orange-600 dark:text-orange-400 border-orange-500/40 dark:border-orange-500/30 text-[10px]">
-              <Flame className="h-3 w-3 mr-0.5" />Hot
-            </Badge>
-          )}
-          {!isAmm && market.totalPool < 100 && (
-            <Badge variant="outline" className="text-amber-600 dark:text-amber-400 border-amber-500/40 dark:border-amber-500/30 text-[10px]">
-              Thin Pool
-            </Badge>
-          )}
-          {isAmm && !isMarketClosed && (
+          {!isMarketClosed && (
             <Badge variant="outline" className="text-emerald-600 dark:text-emerald-400 border-emerald-500/40 dark:border-emerald-500/30 text-[10px]">
               <Activity className="h-3 w-3 mr-0.5" />LIVE
             </Badge>
           )}
-          {!isAmm && !isMarketClosed && (() => {
-            const boost = computeEarlyBirdMultiplier(new Date(), market.startAt, market.bettingCutoff);
-            if (boost <= 1.05) return null;
-            return (
-              <Badge variant="outline" className="text-amber-700 dark:text-amber-300 border-amber-500/40 dark:border-amber-500/30 text-[10px]">
-                <Zap className="h-3 w-3 mr-0.5" />{boost.toFixed(1)}x Boost
-              </Badge>
-            );
-          })()}
           {pendingPosition && !isMarketClosed && (
             <Badge
               variant="outline"
@@ -173,7 +149,7 @@ export function WeeklyUpDownCard({
         bettingCutoff={market.bettingCutoff ?? null}
         resolveAt={market.endAt ?? null}
         variant="compact"
-        engine={isAmm ? "amm" : "parimutuel"}
+        engine="amm"
         className="mb-2"
       />
 
@@ -203,11 +179,6 @@ export function WeeklyUpDownCard({
           <div>
             <span>Change: <span className={`font-mono ${delta >= 0 ? "text-green-500" : "text-red-500"}`}>{delta >= 0 ? "+" : ""}{delta.toLocaleString('en-US')} ({delta >= 0 ? "+" : ""}{pctDelta}%)</span></span>
           </div>
-          {!isAmm && (
-            <div>
-              <span>Pool: <span className="font-mono text-violet-600 dark:text-violet-400">{market.totalPool.toLocaleString('en-US')}</span> credits</span>
-            </div>
-          )}
         </div>
 
         <div className="hidden sm:block text-[11px] text-muted-foreground space-y-1">
@@ -218,26 +189,17 @@ export function WeeklyUpDownCard({
             <span className="text-muted-foreground/40">&middot;</span>
             <span>Change: <span className={`font-mono ${delta >= 0 ? "text-green-500" : "text-red-500"}`}>{delta >= 0 ? "+" : ""}{delta.toLocaleString('en-US')} ({delta >= 0 ? "+" : ""}{pctDelta}%)</span></span>
           </div>
-          {!isAmm && (
-            <div>
-              <span>Pool: <span className="font-mono text-violet-600 dark:text-violet-400">{market.totalPool.toLocaleString('en-US')}</span> credits</span>
-            </div>
-          )}
         </div>
       </Link>
 
       <div className="mt-auto">
-      {/* Trader stack + Polymarket-style volume chip. The chip suppresses
-          when there's no AMM volume yet (parimutuel markets and brand-new
-          AMM markets with zero buys) so cold-start cards don't show
-          `0 cr vol`. Bullet separator keeps the row visually tight. */}
       <div className="mb-2 flex items-center gap-2 flex-wrap">
         <ParticipantAvatarStack
           participants={market.recentParticipants}
           totalCount={market.totalBets ?? market.activeParticipantCount ?? 0}
-          engine={isAmm ? "amm" : "parimutuel"}
+          engine="amm"
         />
-        {isAmm && (() => {
+        {(() => {
           const volText = formatVolumeCredits(market.volume);
           if (!volText) return null;
           return (
@@ -256,24 +218,10 @@ export function WeeklyUpDownCard({
             style={{ width: `${upPoolPercent}%` }}
           />
         </div>
-        {/* Sub-bar context line. On AMM we surface Up%/Down% on either
-            side — the coloured split bar above already shows the same
-            balance graphically, and the cr/share figures live on the
-            Up/Down buttons below, so the % here is the consumer-
-            friendly read. (Round-3 polish: dropped the mid-row
-            sparkline; users found it didn't add enough signal next
-            to the bar.) Parimutuel falls back to multiplier labels. */}
-        {isAmm && upPrice != null && downPrice != null ? (
-          <div className="flex items-center justify-between gap-2 text-[11px] mt-1">
-            <span className="text-green-500 font-semibold">Up {Math.round(upPrice * 100)}%</span>
-            <span className="text-red-500 font-semibold">Down {Math.round(downPrice * 100)}%</span>
-          </div>
-        ) : (
-          <div className="flex items-center justify-between text-[11px] mt-1">
-            <span className="text-green-500 font-semibold">Up {upMult}x</span>
-            <span className="text-red-500 font-semibold">Down {downMult}x</span>
-          </div>
-        )}
+        <div className="flex items-center justify-between gap-2 text-[11px] mt-1">
+          <span className="text-green-500 font-semibold">Up {Math.round(upPrice * 100)}%</span>
+          <span className="text-red-500 font-semibold">Down {Math.round(downPrice * 100)}%</span>
+        </div>
       </div>
 
       <WeeklyUpDownActionButtons
@@ -285,9 +233,6 @@ export function WeeklyUpDownCard({
         closedMessage={closedMessage}
         onSelect={onSelect}
         pendingPosition={pendingPosition ?? null}
-        marketStartAt={market.startAt}
-        bettingCutoff={market.bettingCutoff}
-        engine={market.engine}
         upPrice={upPrice}
         downPrice={downPrice}
         unrealisedPnl={unrealisedPnl}
