@@ -213,6 +213,69 @@ export function registerCronRoutes(app: Express): void {
     }
   });
 
+  // AMM operational health check. Read-only audit: orphan ledger rows,
+  // seed-return drift, stuck CLOSED_PENDING markets, negative credits,
+  // duplicate idempotency keys, agent pause state. Returns 200 with
+  // `ok: false` on any failed check (so the JSON body is the source of
+  // truth for downstream monitors); only uncaught exceptions return 500.
+  // Recommended Railway schedule: every 15 minutes.
+  // See ops/AMM_MONITORING_RUNBOOK.md for setup + alerting guidance.
+  app.post("/api/cron/amm-health-check", verifyCronSecret, async (req, res) => {
+    const startTime = Date.now();
+    try {
+      const { runAmmHealthCheck } = await import("../jobs/amm-health");
+      const lookbackDaysRaw = req.query.days ?? req.body?.days;
+      const lookbackDays =
+        lookbackDaysRaw !== undefined && lookbackDaysRaw !== null && lookbackDaysRaw !== ""
+          ? Number(lookbackDaysRaw)
+          : undefined;
+
+      const result = await runAmmHealthCheck({
+        lookbackDays: Number.isFinite(lookbackDays as number) ? (lookbackDays as number) : undefined,
+      });
+
+      // Surface failed checks at log level WARN so Railway / Sentry / Slack
+      // log integrations can alert on them without parsing the JSON body.
+      if (!result.ok) {
+        const failedNames = result.checks.filter((c) => c.status === "fail").map((c) => c.name);
+        console.warn(
+          `[Cron][amm-health-check] FAIL — ${result.failed} failed check(s): ${failedNames.join(", ")}`,
+        );
+      } else if (result.warned > 0) {
+        const warnedNames = result.checks.filter((c) => c.status === "warn").map((c) => c.name);
+        console.log(
+          `[Cron][amm-health-check] PASS with ${result.warned} warning(s): ${warnedNames.join(", ")}`,
+        );
+      } else {
+        console.log(`[Cron][amm-health-check] PASS — all ${result.total} checks clean`);
+      }
+
+      res.json({
+        success: result.ok,
+        ok: result.ok,
+        message: result.ok ? "AMM health check passed" : "AMM health check found failing audits",
+        summary: {
+          total: result.total,
+          passed: result.passed,
+          warned: result.warned,
+          failed: result.failed,
+        },
+        lookbackDays: result.lookbackDays,
+        checks: result.checks,
+        duration: result.durationMs,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error("[Cron][amm-health-check] Uncaught error:", error);
+      res.status(500).json({
+        success: false,
+        error: error?.message ?? String(error),
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  });
+
   app.get("/api/cron/health", verifyCronSecret, async (_req, res) => {
     // Include upstream provider state so external monitors can alert on Serper
     // auth/quota/rate-limit outages instead of silently degrading product features.

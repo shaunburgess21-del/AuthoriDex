@@ -312,7 +312,103 @@ it: `--market-id "<id>"`. Either form works under bash too.
 
 ---
 
-## 8. Escalation
+## 8. Automated health-check cron (Railway)
+
+The same audit logic from `scripts/amm-health-check.ts` is also exposed
+as `POST /api/cron/amm-health-check` so external schedulers can run it
+without spawning a one-off Node process. Recommended cadence: **every
+15 minutes** in prod.
+
+### Endpoint contract
+
+```
+POST /api/cron/amm-health-check
+Authorization: Bearer ${CRON_SECRET}
+```
+
+Optional query / body param: `days=N` (override the default 30-day
+seed-return-drift lookback window).
+
+Response shape (always `200 OK` for valid runs — failed audits are
+reported in the body, only uncaught exceptions return 500):
+
+```json
+{
+  "success": true,           // mirrors `ok`; flips false when any check failed
+  "ok": true,
+  "message": "AMM health check passed",
+  "summary": { "total": 6, "passed": 5, "warned": 1, "failed": 0 },
+  "lookbackDays": 30,
+  "checks": [
+    { "name": "Orphan credit_ledger rows", "status": "pass", "details": "...", "rowCount": 0 },
+    ...
+  ],
+  "duration": 412,
+  "timestamp": "2026-05-17T14:00:00.000Z"
+}
+```
+
+The endpoint also emits a single summary log line per run so Railway
+saved searches can alert on it without parsing the JSON body:
+
+| Status | Log line |
+|---|---|
+| Pass clean | `[Cron][amm-health-check] PASS — all 6 checks clean` |
+| Pass + warns | `[Cron][amm-health-check] PASS with N warning(s): <names>` |
+| Fail | `[Cron][amm-health-check] FAIL — N failed check(s): <names>` |
+
+### Railway setup (one-time)
+
+In the Railway dashboard:
+
+1. Create a new **Cron** service in the same project as the main
+   deployment.
+2. **Schedule:** `*/15 * * * *` (every 15 min).
+3. **Command:**
+   ```bash
+   curl -fsS -X POST \
+     -H "Authorization: Bearer $CRON_SECRET" \
+     "$RAILWAY_PUBLIC_DOMAIN/api/cron/amm-health-check"
+   ```
+   (`$RAILWAY_PUBLIC_DOMAIN` resolves to e.g. `https://authoridex-production.up.railway.app`;
+   `curl -f` makes the cron run fail on HTTP ≥ 400, so 500s show red in the dashboard.)
+4. Variables: `CRON_SECRET` is shared with the main service; reference
+   it via `${{ shared.CRON_SECRET }}` in the cron service settings.
+
+### Alerting
+
+Two complementary paths, pick whichever fits your stack:
+
+- **Railway log search** → Slack webhook on the saved search
+  `[Cron][amm-health-check] FAIL`. Severity: P1.
+- **Sentry HTTP alert** on response body where `ok=false`. Useful if
+  you want richer context (the `checks` array drops straight into
+  Sentry's structured-event panel).
+
+### Failure modes worth pre-paging on
+
+| Failed check | Likely cause | First response |
+|---|---|---|
+| `Orphan credit_ledger rows` | Manual sunset/wipe script ran in prod and left ledger rows behind. | Investigate which markets were deleted; consider voiding the orphan ledger rows. |
+| `AMM seed-return drift` | A non-`executeBuy`/`executeSell` codepath wrote credits, or a payout was non-idempotent. | Pause agents. Read section 3. |
+| `Stuck CLOSED_PENDING markets (> 24h)` | Resolver cron is wedged or upstream snapshot data is missing. | Read section 4. |
+| `Profiles with negative predict_credits` | Missing `FOR UPDATE` somewhere in a debit path. | Hard P0. Pause agents and inspect the most recent debit ledger rows for that user. |
+
+### Backfill / replay
+
+If you want to run a one-off audit against a wider window (e.g. all
+RESOLVED markets ever) without disturbing the cron:
+
+```
+npm run amm:health -- --days 365
+```
+
+The CLI and the cron endpoint share the exact same module
+(`server/jobs/amm-health.ts`), so the two surfaces never drift.
+
+---
+
+## 9. Escalation
 
 - **Money moved incorrectly** (drift > 1 credit on seed-return, or
   `credit_ledger` and `market_bets` disagree): pause agents, freeze
@@ -329,12 +425,14 @@ it: `--market-id "<id>"`. Either form works under bash too.
 
 ---
 
-## 9. Related files
+## 10. Related files
 
 - `server/services/amm-trades.ts` — `executeBuy` / `executeSell`
 - `server/services/amm-resolver.ts` — `resolveAmmMarket`
 - `server/jobs/market-resolver.ts` — cron loop + `resolveJackpot`
+- `server/jobs/amm-health.ts` — shared health-check audit module (CLI + cron)
 - `server/services/amm-bet-hooks.ts` — post-trade side effects helper
+- `server/route-modules/cron-routes.ts` — `POST /api/cron/amm-health-check`
 - `scripts/amm-smoke.ts` — lifecycle smoke (Phase A/B/C)
 - `scripts/amm-loadgen.ts` — concurrent buy stress test
-- `scripts/amm-health-check.ts` — read-only audits
+- `scripts/amm-health-check.ts` — read-only audits CLI wrapper
