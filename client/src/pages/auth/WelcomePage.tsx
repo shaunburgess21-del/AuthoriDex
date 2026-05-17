@@ -92,6 +92,13 @@ export default function WelcomePage() {
       return;
     }
     if (profileLoading || !profile) return;
+    // Skip the home-redirect while the user is on the live completion
+    // screen — they just stamped onboardingCompletedAt themselves and
+    // should dwell on the rewards until they tap the CTA. Returning
+    // users land here with step=0 (initial useState), so this effect
+    // still runs the bounce path on their first paint before the
+    // resume effect ever updates step to 5.
+    if (step === 5) return;
     if (profile.onboardingCompletedAt) {
       if (hasPendingAuthReturnSnapshot()) {
         redirectAfterLogin(setLocation);
@@ -99,7 +106,7 @@ export default function WelcomePage() {
         setLocation("/", { replace: true });
       }
     }
-  }, [authLoading, user, profile, profileLoading, setLocation]);
+  }, [authLoading, user, profile, profileLoading, setLocation, step]);
 
   // Resume at the highest step the user has reached. Clamp to
   // [0, 5] in case a future migration ever sets a wider range.
