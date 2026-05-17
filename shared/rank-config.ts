@@ -143,13 +143,14 @@ export const RANKS: readonly RankConfig[] = [
  * unlocked, which makes the matrix easier to scan when grepping.
  */
 export type Capability =
-  // Tier 1 — open to everyone
+  // Tier 1 — open to everyone (voting is never rank-gated; we want new
+  // Citizens to be able to vote on every card surface from day one).
   | "can_vote_sentiment"
   | "can_vote_matchup"
   | "can_predict"
-  // Tier 2 — Aspirant
   | "can_vote_induction"
   | "can_vote_curation"
+  // Tier 2 — Aspirant
   | "can_post_insight"
   | "can_comment"
   // Tier 3 — Insider
@@ -176,6 +177,8 @@ export const TIER_1_CAPABILITIES = [
   "can_vote_sentiment",
   "can_vote_matchup",
   "can_predict",
+  "can_vote_induction",
+  "can_vote_curation",
 ] as const satisfies readonly Capability[];
 
 export interface CapabilityGate {
@@ -199,20 +202,9 @@ export interface CapabilityGate {
  */
 export const CAPABILITY_GATES: readonly CapabilityGate[] = [
   // Tier 2 — Aspirant. The trust-gated baseline that protects the
-  // induction board, image curation, and the comments / insights
-  // surfaces from cold-start spam.
-  {
-    capability: "can_vote_induction",
-    minTier: 2,
-    label: "Vote on inductions",
-    description: "Decide who joins the main leaderboard.",
-  },
-  {
-    capability: "can_vote_curation",
-    minTier: 2,
-    label: "Vote on profile images",
-    description: "Curate candidate images with image voting.",
-  },
+  // comments / insights surfaces from cold-start spam. Voting on any
+  // card (induction, curation, sentiment, matchup, opinion poll) is
+  // intentionally NOT gated — see TIER_1_CAPABILITIES.
   {
     capability: "can_post_insight",
     minTier: 2,

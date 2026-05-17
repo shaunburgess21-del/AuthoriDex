@@ -3395,7 +3395,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Vote on a celebrity image (for Curate Profile feature)
-  app.post("/api/people/:personId/images/:imageId/vote", requireAuth, requireMinTier("can_vote_curation"), async (req: AuthRequest, res) => {
+  app.post("/api/people/:personId/images/:imageId/vote", requireAuth, async (req: AuthRequest, res) => {
     try {
       const { personId, imageId } = req.params;
       const { direction } = req.body;
@@ -22029,7 +22029,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
   });
 
   // POST /api/vote/induction/:id/vote - Auth-or-anon: vote for an induction candidate (one vote per identity per candidate)
-  app.post("/api/vote/induction/:id/vote", optionalAuth, requireMinTier("can_vote_induction"), anonVoteIpRateLimit, async (req: AuthRequest, res) => {
+  app.post("/api/vote/induction/:id/vote", optionalAuth, anonVoteIpRateLimit, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
       const writerId = req.userId || req.sessionId;
