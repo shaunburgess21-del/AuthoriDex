@@ -22,6 +22,52 @@ const MARKET_RESOLVER_LOCK_KEY = 5_202;
 const LEGACY_BLOCK_AUTO_VOID_DAYS = 14;
 
 /**
+ * Gainer (race) tie threshold, in **percentage points**.
+ *
+ * `pctChange` for each entry is computed as
+ * `((closeScore - openScore) / openScore) * 100`, so a value of `0.01`
+ * here means "two entries whose pctChange agrees to two decimal places
+ * are treated as tied, and the market auto-voids."
+ *
+ * Two-decimal precision matches what we display everywhere in the UI
+ * (the `pctChange.toFixed(2) + "%"` evidence written into
+ * `resolution_notes`, the leaderboard cells, the share cards, etc.),
+ * so a pair that *looks* identical to a user is correctly flagged
+ * here. The previous `0.001` was so tight it would only fire on a
+ * literal floating-point match — a real-world tie at 5.12% vs 5.13%
+ * would have arbitrarily picked one side as the winner.
+ *
+ * Kept as a code constant rather than an `amm_runtime_settings` knob:
+ * there's no operational reason to vary "do these two numbers round
+ * to the same display value" at runtime, and a redeploy is the right
+ * cadence if we ever decide we want a different precision floor.
+ */
+export const GAINER_TIE_EPSILON_PCT = 0.01;
+
+/**
+ * Pure predicate exposed for unit testing. Returns true iff the two
+ * pctChange values are within `GAINER_TIE_EPSILON_PCT` percentage
+ * points of each other, i.e. should be auto-voided as a tie.
+ *
+ * Both inputs are expected to be finite numbers in **percentage
+ * points** (the same units as `pctChange` in `resolveGainer`). NaN /
+ * Infinity inputs return `false` so callers fall through to the
+ * normal winner-pick path — a NaN race can't sensibly be tied.
+ *
+ * Edge case: a "nominal 0.01 gap" like `5.12` vs `5.13` evaluates to
+ * `Math.abs(5.12 - 5.13) === 0.00999...` in IEEE-754, so it satisfies
+ * the strict-less-than and is treated as a tie. This is intentional —
+ * an exactly-0.01-percentage-point gap is operationally indistinguishable
+ * from noise in the underlying score snapshots, and voiding is the
+ * safe call. Pairs that are clearly farther apart (e.g. `5.12` vs `5.14`,
+ * gap `0.02`) are correctly NOT tied.
+ */
+export function isGainerTie(a: number, b: number): boolean {
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return false;
+  return Math.abs(a - b) < GAINER_TIE_EPSILON_PCT;
+}
+
+/**
  * Compose the JSON payload we persist into `prediction_markets.resolution_notes`
  * for AMM-resolved (or auto-voided) native markets.
  *
@@ -645,7 +691,7 @@ async function resolveGainer(market: any): Promise<"resolved" | "voided" | "bloc
     })),
   };
 
-  if (gains.length >= 2 && Math.abs(gains[0].pctChange - gains[1].pctChange) < 0.001) {
+  if (gains.length >= 2 && isGainerTie(gains[0].pctChange, gains[1].pctChange)) {
     const ammResult = await resolveAmmMarket({
       marketId: market.id,
       voidMarket: true,
@@ -662,7 +708,11 @@ async function resolveGainer(market: any): Promise<"resolved" | "voided" | "bloc
       resolutionNotes: JSON.stringify(buildAmmResolutionNotes(evidence, "void_tie", ammResult)),
       updatedAt: new Date(),
     }).where(eq(predictionMarkets.id, market.id));
-    log(`[MarketResolver] gainer ${market.id}: AMM VOID (tied at ${gains[0].pctChange.toFixed(2)}%), house P&L=${ammResult.creditedToHouse}`);
+    log(
+      `[MarketResolver] gainer ${market.id}: AMM VOID (tied within ${GAINER_TIE_EPSILON_PCT}pct: ` +
+        `${gains[0].pctChange.toFixed(2)}% vs ${gains[1].pctChange.toFixed(2)}%), ` +
+        `house P&L=${ammResult.creditedToHouse}`,
+    );
     return "voided";
   }
 

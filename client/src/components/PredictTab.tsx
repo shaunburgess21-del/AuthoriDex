@@ -65,6 +65,25 @@ interface PredictTabProps {
   personRank?: number | null;
 }
 
+/**
+ * Minimal shape of `/api/me/amm-positions` for the profile predict
+ * tab card banners. Just the fields we render on UpDown / H2H / race
+ * cards — `unrealisedPnl` (current $ swing) plus `currentValue`
+ * (used as the tie-breaker when a market has multiple entries open
+ * for the same user, e.g. multi-pick races). Mirrors the type in
+ * `client/src/pages/PredictPage.tsx` (kept local rather than shared
+ * because both files only need the same handful of fields and a
+ * shared client type would pull in the heavier server-side
+ * AmmOpenPosition).
+ */
+interface PredictTabAmmOpenPosition {
+  marketId: string;
+  entryId: string;
+  netCreditsIn: number;
+  currentValue: number;
+  unrealisedPnl: number;
+}
+
 /** Center 1–2 cards; use 3-column grid when there are 3+ cards. */
 function predictSectionGridClass(n: number): { container: string; item: string } {
   if (n <= 0) return { container: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4", item: "" };
@@ -515,6 +534,35 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
     queryKey: ["/api/me/predictions"],
     enabled: !!user,
   });
+
+  // Live AMM open positions for the signed-in user. Drives the
+  // `unrealisedPnl` banner on UpDown / H2H / race cards on this
+  // profile tab so the P&L matches what `PredictPage` already shows
+  // on the main markets surface. Auth-gated and tab-aware (pauses
+  // when the document is hidden) — same shape as the query in
+  // `PredictPage` and `PredictionsPage`. Buy / sell mutations below
+  // already invalidate this key on success, so post-trade rehydrate
+  // is automatic.
+  const { data: ammPositionsData } = useQuery<{ positions: PredictTabAmmOpenPosition[] }>({
+    queryKey: ["/api/me/amm-positions"],
+    enabled: !!user,
+    refetchInterval: () => (typeof document !== "undefined" && document.hidden ? false : 60_000),
+  });
+  const ammPositionByMarket = useMemo(() => {
+    const map = new Map<string, PredictTabAmmOpenPosition>();
+    for (const p of ammPositionsData?.positions ?? []) {
+      // Pick the largest `currentValue` per market when a user has
+      // multiple entries open (multi-pick races). UpDown / H2H only
+      // ever have one open side per user (server-enforced), so the
+      // first hit is canonical there. Same algorithm as
+      // `PredictPage.ammPositionByMarket` for consistent banner P&L.
+      const existing = map.get(p.marketId);
+      if (!existing || p.currentValue > existing.currentValue) {
+        map.set(p.marketId, p);
+      }
+    }
+    return map;
+  }, [ammPositionsData]);
 
   const openMarketBets = useMemo(() => {
     const map = new Map<
@@ -1130,6 +1178,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
             categoryRaceMap={categoryRaceMap}
             leaderboardCategories={leaderboardCategories}
             pendingPosition={pendingWeeklyUpDownPositionFromBet(openMarketBets.get(String(weeklyMarket.id)))}
+            unrealisedPnl={ammPositionByMarket.get(String(weeklyMarket.id))?.unrealisedPnl ?? null}
           />
         ) : (
           <div className="text-center py-6 text-muted-foreground">
@@ -1164,6 +1213,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
                     onSelect={(person) => handleH2HSelect(battle, person)}
                     userPick={h2hUserPick}
                     userStake={aggregated?.stakeAmount}
+                    unrealisedPnl={ammPositionByMarket.get(String(battle.id))?.unrealisedPnl ?? null}
                     onFilterCategory={handleCategoryFilter}
                     categoryRaceMap={categoryRaceMap}
                     leaderboardCategories={leaderboardCategories}
@@ -1219,6 +1269,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
                   onFilterCategory={handleCategoryFilter}
                   categoryRaceMap={categoryRaceMap}
                   leaderboardCategories={leaderboardCategories}
+                  unrealisedPnl={ammPositionByMarket.get(String(gainer.id))?.unrealisedPnl ?? null}
                 />
               </div>
               );
