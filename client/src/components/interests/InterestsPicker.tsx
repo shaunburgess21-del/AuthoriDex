@@ -302,7 +302,7 @@ function PickerBody({
                 aria-pressed={isSelected}
                 data-testid={`interest-pill-${cat.id}`}
                 className={cn(
-                  "relative flex aspect-[5/6] flex-col items-center justify-center gap-2 rounded-2xl border p-3 transition-all duration-200 active:scale-[0.97]",
+                  "relative flex aspect-square flex-col items-center justify-center gap-2 rounded-2xl border p-3 transition-all duration-200 active:scale-[0.97]",
                   style.bg,
                   style.border,
                   isSelected
