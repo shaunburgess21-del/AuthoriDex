@@ -334,8 +334,8 @@ export default function WelcomePage() {
       );
       break;
     case 4:
-      title = "What are you into?";
-      subtitle = "Pick a few categories — we'll surface what matters to you.";
+      title = "What do you want to see first?";
+      subtitle = "These topics get priority — the rest is always a scroll away.";
       onSkip = () => void skipInterests();
       // The inline picker has its own Save button + selection state,
       // so the container doesn't render an external footer for this
