@@ -169,9 +169,17 @@ export async function getSharpRanking(
 
   if (inflight && inflightKey === inputKey) return inflight;
 
+  // Two different keys can be in flight simultaneously (e.g. sweep
+  // N+1 starts with a slightly different market set while sweep N's
+  // generation is still pending). The `.finally()` below MUST only
+  // clear the bookkeeping when WE are still the registered in-flight
+  // promise — otherwise an older generation finishing first would
+  // blank the bookkeeping for a newer in-flight, leading to a third
+  // call duplicating the LLM work. Capture our own promise in a
+  // local and ref-check before clearing.
   inflightKey = inputKey;
-  inflight = generateRanking(rankable, inputKey)
-    .catch((err) => {
+  const myPromise: Promise<SharpRankerSnapshot> = generateRanking(rankable, inputKey).catch(
+    (err) => {
       log(`[SharpRanker] generation failed: ${err instanceof Error ? err.message : err}`);
       const fallback: SharpRankerSnapshot = {
         picks: [],
@@ -183,13 +191,16 @@ export async function getSharpRanking(
       };
       lastSnapshot = fallback;
       return fallback;
-    })
-    .finally(() => {
+    },
+  );
+  inflight = myPromise;
+  void myPromise.finally(() => {
+    if (inflight === myPromise) {
       inflight = null;
       inflightKey = null;
-    });
-
-  return inflight;
+    }
+  });
+  return myPromise;
 }
 
 export function getCachedSharpRanking(): SharpRankerSnapshot | null {

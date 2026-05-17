@@ -857,10 +857,16 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       // Build the AMM share-toast meta from the race market + chosen
       // candidate so the success handler can fire `fireAmmTradeToast`
       // with the right avatar / category — matches PredictPage parity.
+      // Search BOTH `leaders` (top few visible on the card) AND
+      // `allCandidates` (full pool reachable through the picker dialog),
+      // because a user picking from the dialog can land on a candidate
+      // that isn't in the top-leaders slice. Without that fallback the
+      // toast meta would be undefined and we'd silently downgrade to
+      // the plain "Prediction placed!" toast.
       const gainerMarket = gainerMarkets.find((m) => m.id === pendingSelection.marketId);
-      const candidate = gainerMarket?.leaders.find(
-        (c) => c.entryId === pendingSelection.entryId,
-      );
+      const candidate =
+        gainerMarket?.leaders.find((c) => c.entryId === pendingSelection.entryId) ??
+        gainerMarket?.allCandidates?.find((c) => c.entryId === pendingSelection.entryId);
       const origin = typeof window !== "undefined" ? window.location.origin : "";
       const toastMeta: NativeBetToastMeta | undefined = gainerMarket
         ? {
