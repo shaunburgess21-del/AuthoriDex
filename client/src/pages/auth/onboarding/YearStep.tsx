@@ -178,11 +178,21 @@ export function YearWheel({ initialDateOfBirth, onChange }: YearWheelProps) {
 
   return (
     <div className="relative mx-auto w-full max-w-[14rem] select-none">
-      {/* Selection band — sits behind the rows. */}
+      {/* Selection band — sits behind the rows.
+          The 3px upward nudge in `transform` accounts for the gap
+          between the geometric centre of the line-box (where the row
+          flex-centres the digits) and the optical centre of the digit
+          glyphs themselves. Latin numerals sit on the baseline near
+          the bottom of the line-box, so the cap-height midpoint of
+          "1990" is ~3px above the line-box midpoint at text-3xl.
+          Lifting the band by 3px puts the digits dead-centre inside it. */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 top-1/2 z-10 -translate-y-1/2"
-        style={{ height: ROW_HEIGHT }}
+        className="pointer-events-none absolute inset-x-0 top-1/2 z-10"
+        style={{
+          height: ROW_HEIGHT,
+          transform: "translateY(calc(-50% - 3px))",
+        }}
       >
         <div className="mx-2 h-full rounded-2xl border border-primary/40 bg-primary/5 shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.15),0_0_24px_-6px_hsl(var(--primary)/0.5)]" />
       </div>
