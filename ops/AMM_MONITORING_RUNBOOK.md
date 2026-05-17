@@ -262,13 +262,26 @@ the first 5 min after resume.
 
 ## 7. Production smoke + loadgen quick reference
 
-Three scripts you can run from any clone of the repo:
+Three scripts you can run from any clone of the repo. All three
+auto-load `.env` (and `.env.smoke` where applicable), so plain
+invocations work without `--env-file` flags.
 
-| Command | What it does |
-|---|---|
-| `npx tsx scripts/amm-smoke.ts` | Full lifecycle smoke. Creates a draft market, sweeps live H2H / UpDown / Race markets, runs an env-gated jackpot smoke. Reads `.env.smoke`. |
-| `npx tsx scripts/amm-loadgen.ts --market-id <id> --buys-per-user 20` | Concurrent-buy stress test against one market. Reports p50/p95/p99 latency and DB invariants. |
-| `npx tsx scripts/amm-health-check.ts` | Read-only health audit (orphan ledger / seed drift / stuck markets / negative credits / dup idem keys / agent pause). Cron-able. Exits non-zero on issues. |
+| npm script | Direct command | What it does |
+|---|---|---|
+| `npm run amm:smoke` | `npx tsx scripts/amm-smoke.ts` | Full lifecycle smoke. Creates a draft market, sweeps live H2H / UpDown / Race markets, runs an env-gated jackpot smoke. Reads `.env` + `.env.smoke`. |
+| `npm run amm:loadgen -- --market-id <id> --buys-per-user 20` | `npx tsx scripts/amm-loadgen.ts --market-id <id> --buys-per-user 20` | Concurrent-buy stress test against one market. Reports p50/p95/p99 latency and DB invariants. Reads `.env` + `.env.smoke`. |
+| `npm run amm:health` | `npx tsx scripts/amm-health-check.ts` | Read-only health audit (orphan ledger / seed drift / stuck markets / negative credits / dup idem keys / agent pause). Cron-able. Reads `.env`. Exits non-zero on issues. |
+
+> `<id>` in the loadgen command is a **placeholder** — replace it with an
+> actual market UUID. Find one fast with:
+> ```sql
+> SELECT id, slug, market_type, status
+> FROM prediction_markets
+> WHERE engine = 'amm' AND status = 'OPEN'
+> ORDER BY created_at DESC LIMIT 5;
+> ```
+> Quoting the id is harmless and avoids any shell-parser surprises:
+> `npm run amm:loadgen -- --market-id "01J5..."`.
 
 Required env vars (in `.env.smoke`):
 
@@ -285,6 +298,17 @@ SMOKE_PHASE_C=skip         # set to skip jackpot phase
 `SMOKE_FORCE_RESOLVE` is the kill-switch for the jackpot smoke
 endpoint. Leave it unset (or `false`) in normal production deploys so
 the endpoint returns 403 even if an admin token leaks.
+
+### Windows / PowerShell note
+
+PowerShell treats `<` as a reserved redirection operator. If you copy
+a command like `--market-id <id>` verbatim into PowerShell (with the
+angle brackets), you'll get:
+```
+The '<' operator is reserved for future use.
+```
+Either replace `<id>` with the real UUID (no angle brackets), or quote
+it: `--market-id "<id>"`. Either form works under bash too.
 
 ---
 

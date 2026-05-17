@@ -29,6 +29,8 @@
     "validate:induction-post-import": "tsx --env-file=.env server/scripts/validate-induction-post-import.ts",
     "backfill:curate-seed-votes": "tsx --env-file=.env server/scripts/backfill-curate-seed-votes.ts",
     "amm:smoke": "tsx scripts/amm-smoke.ts",
+    "amm:loadgen": "tsx scripts/amm-loadgen.ts",
+    "amm:health": "tsx scripts/amm-health-check.ts",
     "amm:create-open": "tsx scripts/amm-create-open-market.ts",
     "amm:void": "tsx scripts/amm-void-market.ts"
   },

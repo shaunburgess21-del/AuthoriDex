@@ -27,13 +27,33 @@
  * additional env vars required beyond what the dev server needs.
  */
 
-import { and, eq, lt, sql } from "drizzle-orm";
-import { db } from "../server/db";
-import {
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
+
+// Auto-load `.env` so plain `tsx scripts/amm-health-check.ts` works
+// without remembering `--env-file=.env`. Must happen BEFORE the db /
+// schema imports below because `../server/db` throws at import time
+// if `DATABASE_URL` is missing. The dynamic-import + top-level-await
+// pattern is required to defer those imports until after the loader
+// has populated `process.env` — static ESM imports get hoisted above
+// any code in the module body, so a plain `import { db }` here would
+// fire before this loader ran.
+//
+// In Railway / cron environments DATABASE_URL is already set via the
+// host, so the .env file may not exist — the existsSync guard keeps
+// that path silent.
+const envPath = resolve(process.cwd(), ".env");
+if (existsSync(envPath)) {
+  process.loadEnvFile(envPath);
+}
+
+const { and, eq, lt, sql } = await import("drizzle-orm");
+const { db } = await import("../server/db");
+const {
   agentRuntimeState,
   predictionMarkets,
   profiles,
-} from "@shared/schema";
+} = await import("@shared/schema");
 
 // ---------------------------------------------------------------------------
 // CLI

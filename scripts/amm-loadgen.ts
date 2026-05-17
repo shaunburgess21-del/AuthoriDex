@@ -30,16 +30,20 @@
  *   npx tsx scripts/amm-loadgen.ts --market-id abc123 [--buys-per-user 10]
  */
 
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { and, eq, gte, sql } from "drizzle-orm";
-import { db } from "../server/db";
-import { creditLedger, marketBets, marketAmmState, marketEntries } from "@shared/schema";
-import { pricesAll } from "@shared/lib/amm/lmsr";
 
 // ---------------------------------------------------------------------------
-// Lightweight .env loader (same as scripts/amm-smoke.ts to avoid a dep).
+// Lightweight .env loader (same shape as scripts/amm-smoke.ts to avoid a
+// `dotenv` dep). Loads BOTH `.env` (DATABASE_URL, supabase keys) and
+// `.env.smoke` (alice/bob credentials + base URL).
+//
+// Must run BEFORE the dynamic imports below because `../server/db`
+// throws at import time if `DATABASE_URL` is missing. Static ESM
+// imports get hoisted above any code in the module body, so a plain
+// `import { db }` here would fire before this loader ran — the
+// `await import(...)` + top-level-await pattern defers the db /
+// schema resolution until after env is populated.
 // ---------------------------------------------------------------------------
 function loadEnvFile(path: string): void {
   if (!existsSync(path)) return;
@@ -65,6 +69,13 @@ function loadEnvFile(path: string): void {
 
 loadEnvFile(resolve(process.cwd(), ".env"));
 loadEnvFile(resolve(process.cwd(), ".env.smoke"));
+
+const { createClient } = await import("@supabase/supabase-js");
+type SupabaseClient = import("@supabase/supabase-js").SupabaseClient;
+const { and, eq, gte, sql } = await import("drizzle-orm");
+const { db } = await import("../server/db");
+const { creditLedger, marketBets, marketAmmState, marketEntries } = await import("@shared/schema");
+const { pricesAll } = await import("@shared/lib/amm/lmsr");
 
 function requireEnv(name: string): string {
   const value = process.env[name]?.trim();
