@@ -1303,8 +1303,68 @@ async function runSellSweep(
 
     // Aggregate buys minus sells per (market, entry). Anchor is the
     // weighted average of buy prices ONLY (sells don't dilute the
-    // anchor — the engine compares "live" vs. "what I paid").
+    // anchor — the engine compares "live" vs. "what I paid"). Note
+    // this differs from runConvictionSweep which uses first-fill
+    // price; the conviction sweep cares about "did the price move
+    // in my favour since I opened?" while the sell sweep cares
+    // about "have I made/lost money on the position as it stands?"
     const positions = aggregateSellSweepPositions(ammBets);
+
+    // Pre-load all sell/conviction blocker actions for this agent
+    // across the in-scope markets in ONE query (was N+1 — one
+    // query per position). Group by marketId for O(1) lookup in
+    // the position loop.
+    const blockerRows = await db
+      .select({
+        marketId: scheduledAgentActions.marketId,
+        actionType: scheduledAgentActions.actionType,
+        status: scheduledAgentActions.status,
+      })
+      .from(scheduledAgentActions)
+      .where(
+        and(
+          eq(scheduledAgentActions.agentId, agent.id),
+          inArray(scheduledAgentActions.marketId, ammUpdown.map((m) => m.id)),
+          sql`${scheduledAgentActions.actionType} IN ('sell', 'conviction')`,
+        ),
+      );
+    const blockersByMarket = new Map<string, typeof blockerRows>();
+    for (const row of blockerRows) {
+      const list = blockersByMarket.get(row.marketId) ?? [];
+      list.push(row);
+      blockersByMarket.set(row.marketId, list);
+    }
+
+    // Pre-load the latest executed (predict | conviction) decision
+    // payload per (market, entry) so the conviction-fallback chain
+    // can read it without hitting the DB inside the position loop.
+    // ORDER BY executedAt DESC + take-first-per-key gives us the
+    // most-recent payload per group in one query.
+    const decisionRows = await db
+      .select({
+        marketId: scheduledAgentActions.marketId,
+        entryId: scheduledAgentActions.entryId,
+        decisionPayload: scheduledAgentActions.decisionPayload,
+      })
+      .from(scheduledAgentActions)
+      .where(
+        and(
+          eq(scheduledAgentActions.agentId, agent.id),
+          inArray(scheduledAgentActions.marketId, ammUpdown.map((m) => m.id)),
+          sql`${scheduledAgentActions.actionType} IN ('predict', 'conviction')`,
+          eq(scheduledAgentActions.status, "executed"),
+        ),
+      )
+      .orderBy(desc(scheduledAgentActions.executedAt));
+    const latestDecisionByEntry = new Map<string, unknown>();
+    for (const row of decisionRows) {
+      const key = `${row.marketId}|${row.entryId}`;
+      if (!latestDecisionByEntry.has(key)) {
+        latestDecisionByEntry.set(key, row.decisionPayload);
+      }
+    }
+
+    const personaBand = getSimulationProfile(agent.simulationProfile).personaBand;
 
     for (const pos of Array.from(positions.values())) {
       if (pos.netShares < MIN_NET_SHARES_FOR_SELL_EVAL) continue;
@@ -1324,28 +1384,15 @@ async function runSellSweep(
 
       // Idempotency / mutual exclusion: skip if any pending or
       // in-progress sell or conviction action already exists for
-      // (agent, market). Also enforce the lifetime sell cap.
-      const blockingActions = await db
-        .select({
-          id: scheduledAgentActions.id,
-          actionType: scheduledAgentActions.actionType,
-          status: scheduledAgentActions.status,
-        })
-        .from(scheduledAgentActions)
-        .where(
-          and(
-            eq(scheduledAgentActions.agentId, agent.id),
-            eq(scheduledAgentActions.marketId, market.id),
-            sql`${scheduledAgentActions.actionType} IN ('sell', 'conviction')`,
-          ),
-        );
-
-      const hasOpenBlocker = blockingActions.some(
+      // (agent, market). Lifetime sell cap is per-market, NOT
+      // per-entry — an agent that flips between up/down on the
+      // same market still counts toward the same MAX_SELLS budget.
+      const marketBlockers = blockersByMarket.get(market.id) ?? [];
+      const hasOpenBlocker = marketBlockers.some(
         (row) => row.status === "pending" || row.status === "in_progress",
       );
       if (hasOpenBlocker) continue;
-
-      const lifetimeSells = blockingActions.filter(
+      const lifetimeSells = marketBlockers.filter(
         (row) => row.actionType === "sell" && row.status === "executed",
       ).length;
       if (lifetimeSells >= MAX_SELLS_PER_MARKET_PER_AGENT) continue;
@@ -1355,22 +1402,9 @@ async function runSellSweep(
       // then `market_bets.confidence` from the latest buy row, then
       // a wide default. Either may be absent for legacy positions.
       let conviction: number | undefined;
-      const [latestDecision] = await db
-        .select({ decisionPayload: scheduledAgentActions.decisionPayload })
-        .from(scheduledAgentActions)
-        .where(
-          and(
-            eq(scheduledAgentActions.agentId, agent.id),
-            eq(scheduledAgentActions.marketId, market.id),
-            eq(scheduledAgentActions.entryId, pos.entryId),
-            sql`${scheduledAgentActions.actionType} IN ('predict', 'conviction')`,
-            eq(scheduledAgentActions.status, "executed"),
-          ),
-        )
-        .orderBy(desc(scheduledAgentActions.executedAt))
-        .limit(1);
-      if (latestDecision?.decisionPayload) {
-        const payload = latestDecision.decisionPayload as { rankerConviction?: number; confidence?: number };
+      const cachedPayload = latestDecisionByEntry.get(`${market.id}|${pos.entryId}`);
+      if (cachedPayload && typeof cachedPayload === "object") {
+        const payload = cachedPayload as { rankerConviction?: number; confidence?: number };
         if (typeof payload.rankerConviction === "number" && Number.isFinite(payload.rankerConviction)) {
           conviction = payload.rankerConviction;
         } else if (typeof payload.confidence === "number" && Number.isFinite(payload.confidence)) {
@@ -1382,7 +1416,6 @@ async function runSellSweep(
       }
       if (conviction == null) conviction = SELL_DEFAULT_CONVICTION;
 
-      const personaBand = getSimulationProfile(agent.simulationProfile).personaBand;
       const decision = computeSellDecision({
         personaBand,
         anchor,

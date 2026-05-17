@@ -520,24 +520,33 @@ async function executeAmmSell(
 
   // 2. Compute sharesToSell. Defensive clamp on the fraction in case
   // an upstream bug snuck a >1 or <=0 value into the decision.
+  //
+  // De minimis policy: if the intended fraction × netShares is below
+  // MIN_SHARES_TO_SELL we SKIP, not floor. Flooring would silently
+  // amplify tiny intents (e.g. 5% of a 0.5-share position = 0.025
+  // shares getting bumped up to 0.1 — a 4x over-sell). Easy edge to
+  // hit because liquidity's earlyFractionRange goes as low as 0.15
+  // and the runner's MIN_NET_SHARES_FOR_SELL_EVAL is 0.5, so 0.075 <
+  // 0.1 is reachable with current tuning.
   const fraction = Math.min(
     1,
     Math.max(0, Number.isFinite(decision.sellFraction) ? decision.sellFraction : 0),
   );
   const rawSharesToSell = netShares * fraction;
-  const sharesToSell = Math.max(MIN_SHARES_TO_SELL, Math.min(rawSharesToSell, netShares));
 
-  if (sharesToSell < MIN_SHARES_TO_SELL || fraction <= 0) {
+  if (fraction <= 0 || rawSharesToSell < MIN_SHARES_TO_SELL) {
     await db
       .update(scheduledAgentActions)
       .set({
         status: "skipped",
-        errorMessage: `amm_de_minimis_sell (fraction=${fraction.toFixed(3)} shares=${sharesToSell.toFixed(6)})`,
+        errorMessage: `amm_de_minimis_sell (fraction=${fraction.toFixed(3)} raw=${rawSharesToSell.toFixed(6)} netShares=${netShares.toFixed(6)})`,
         executedAt: new Date(),
       })
       .where(eq(scheduledAgentActions.id, action.id));
     return;
   }
+
+  const sharesToSell = Math.min(rawSharesToSell, netShares);
 
   // 3. Execute the sell. `executeSell` handles the LMSR proceeds math,
   // credit transfer, market_bets/credit_ledger inserts, and final
