@@ -179,18 +179,17 @@ export function YearWheel({ initialDateOfBirth, onChange }: YearWheelProps) {
   return (
     <div className="relative mx-auto w-full max-w-[14rem] select-none">
       {/* Selection band — sits behind the rows.
-          Lifted 25px above geometric centre so the digit glyphs sit
-          visually centred inside it. Tuned by eye against the
-          rendered viewport rather than purely against the line-box
-          metrics — at text-3xl with our serif stack 25px landed dead
-          on; smaller values still read as the band hanging below
-          the year. */}
+          Lifted 18px above geometric centre so the digit glyphs sit
+          visually centred inside it. Tuned by eye at text-3xl with
+          our serif stack — smaller values still read as the band
+          hanging below the year, larger values read as the year
+          floating above. */}
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-x-0 top-1/2 z-10"
         style={{
           height: ROW_HEIGHT,
-          transform: "translateY(calc(-50% - 25px))",
+          transform: "translateY(calc(-50% - 18px))",
         }}
       >
         <div className="mx-2 h-full rounded-2xl border border-primary/40 bg-primary/5 shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.15),0_0_24px_-6px_hsl(var(--primary)/0.5)]" />
