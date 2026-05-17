@@ -18,6 +18,7 @@ export type AuthErrorCode =
   | "invalid_credentials"
   | "email_not_confirmed"
   | "user_already_registered"
+  | "weak_password"
   | "rate_limited"
   | "network"
   | "otp_expired"
@@ -104,6 +105,26 @@ export function mapAuthError(err: unknown): MappedAuthError {
       code: "otp_expired",
       message: "That code expired or is invalid.",
       suggestion: "Tap Resend to get a new one.",
+    };
+  }
+
+  // Supabase HIBP rejection (the "Prevent use of leaked passwords" toggle).
+  // The error code on signUp is `weak_password`; the message reads
+  // "Password is known to be weak and easy to guess, please choose a
+  // different one." We match on either to stay resilient to copy
+  // changes upstream.
+  if (
+    code === "weak_password" ||
+    lc.includes("known to be weak") ||
+    lc.includes("known to be easy") ||
+    lc.includes("pwned") ||
+    lc.includes("data breach")
+  ) {
+    return {
+      code: "weak_password",
+      message: "That password has appeared in a known data breach.",
+      suggestion:
+        "Try something more unique \u2014 a passphrase or random mix works best.",
     };
   }
 

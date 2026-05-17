@@ -107,6 +107,49 @@ export function YearWheel({ initialDateOfBirth, onChange }: YearWheelProps) {
     };
   }, []);
 
+  // Mouse-wheel support: native browsers fire a single wheel detent at
+  // ~100px deltaY which lands BETWEEN two rows at our 56px row height,
+  // so the rounded scroll handler intermittently snapped to the row
+  // 2 away from where the user expected. Take the wheel over and
+  // step exactly one year per detent. Trackpads send small fractional
+  // deltas, so we accumulate until |accum| >= 1 before stepping.
+  //
+  // Bound as a non-passive native listener (React's synthetic onWheel
+  // is passive in modern browsers, which silently no-ops
+  // preventDefault). We intentionally only handle vertical wheel —
+  // shift+wheel / horizontal trackpad gestures are ignored.
+  const wheelAccumRef = useRef(0);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+
+    const onWheel = (e: WheelEvent) => {
+      // Horizontal-only gestures (trackpad swipe, shift+wheel) shouldn't
+      // hijack the year wheel — let them pass through harmlessly.
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+      e.preventDefault();
+
+      // Normalise the delta so a typical mouse detent (~100px) and a
+      // small trackpad nudge each contribute proportionally to one
+      // "tick". 100 was tuned to feel like one year per click, with
+      // a small trackpad scroll still requiring a real gesture.
+      wheelAccumRef.current += e.deltaY / 100;
+      const steps = Math.trunc(wheelAccumRef.current);
+      if (steps === 0) return;
+      wheelAccumRef.current -= steps;
+
+      const currentIdx = Math.round(el.scrollTop / ROW_HEIGHT);
+      const nextIdx = Math.max(
+        0,
+        Math.min(years.length - 1, currentIdx + steps),
+      );
+      el.scrollTo({ top: nextIdx * ROW_HEIGHT, behavior: "smooth" });
+    };
+
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [years.length]);
+
   // Keyboard support: ArrowUp / ArrowDown step one year. The browser
   // would otherwise scroll by ~40px which doesn't align to a row, so
   // we override and call scrollTo with smooth behaviour.

@@ -26,7 +26,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { X } from "lucide-react";
+import { Check, X } from "lucide-react";
 import { toast } from "sonner";
 import { Drawer, DrawerContent, DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
 import {
@@ -41,6 +41,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/contexts/AuthContext";
 import { CANONICAL_CATEGORIES } from "@shared/constants";
 import { getCategoryStyle } from "@/components/CategoryPill";
+import { getCategoryIcon } from "@/components/interests/categoryIcons";
 import { cn } from "@/lib/utils";
 
 export type InterestsPickerMode = "onboarding" | "settings" | "reprompt" | "inline";
@@ -207,7 +208,18 @@ function PickerBody({
   const showSkip = copy.skipLabel !== null;
 
   return (
-    <div className="relative flex flex-col gap-5 px-5 pb-6 pt-5 sm:px-6 sm:pt-6">
+    <div
+      className={cn(
+        "relative flex flex-col gap-5",
+        // Inline mode lives inside StepShell's flex-1 body — fill the
+        // available vertical space so the Continue button can anchor
+        // to the bottom via `mt-auto`. The other modes get their own
+        // padding from the Drawer / Dialog wrapper.
+        mode === "inline"
+          ? "flex-1 px-0 pb-0 pt-0"
+          : "px-5 pb-6 pt-5 sm:px-6 sm:pt-6",
+      )}
+    >
       {showSkip && (
         <button
           type="button"
@@ -221,46 +233,125 @@ function PickerBody({
         </button>
       )}
 
-      <div className="pr-10">
-        <h2 className="text-xl font-bold tracking-tight sm:text-2xl">
-          {copy.title}
-        </h2>
-        <p className="mt-1 text-sm text-muted-foreground">{copy.subtitle}</p>
-      </div>
+      {/* Inline mode is rendered inside StepShell which already shows the
+          step title above the body. The other modes (onboarding,
+          reprompt, settings) launch in their own surface and need the
+          title here. */}
+      {mode !== "inline" ? (
+        <div className="pr-10">
+          <h2 className="text-xl font-bold tracking-tight sm:text-2xl">
+            {copy.title}
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">{copy.subtitle}</p>
+        </div>
+      ) : null}
 
-      <div
-        role="group"
-        aria-label="Category interests"
-        className="flex flex-wrap gap-2"
-        data-testid="interests-pill-grid"
-      >
-        {interestCategories.map((cat) => {
-          const isSelected = selected.has(cat.id);
-          const style = getCategoryStyle(cat.id);
-          return (
-            <button
-              key={cat.id}
-              type="button"
-              onClick={() => toggle(cat.id)}
-              aria-pressed={isSelected}
-              data-testid={`interest-pill-${cat.id}`}
-              className={cn(
-                "inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-all duration-150 active:scale-95",
-                isSelected
-                  ? `${style.bg} ${style.border} ${style.text}`
-                  : "border-border bg-transparent text-muted-foreground hover:border-foreground/40 hover:text-foreground",
-              )}
-            >
-              {cat.label}
-            </button>
-          );
-        })}
-      </div>
+      {mode === "settings" ? (
+        // Settings keeps the dense pill row so it nests cleanly alongside
+        // the demographic + privacy sections on /me/settings. The icon
+        // grid would crowd the page.
+        <div
+          role="group"
+          aria-label="Category interests"
+          className="flex flex-wrap gap-2"
+          data-testid="interests-pill-grid"
+        >
+          {interestCategories.map((cat) => {
+            const isSelected = selected.has(cat.id);
+            const style = getCategoryStyle(cat.id);
+            return (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => toggle(cat.id)}
+                aria-pressed={isSelected}
+                data-testid={`interest-pill-${cat.id}`}
+                className={cn(
+                  "inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-all duration-150 active:scale-95",
+                  isSelected
+                    ? `${style.bg} ${style.border} ${style.text}`
+                    : "border-border bg-transparent text-muted-foreground hover:border-foreground/40 hover:text-foreground",
+                )}
+              >
+                {cat.label}
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        // Reddit-style icon grid. Each tile always shows its category
+        // colour so palettes that read "muted" (politics, misc) don't
+        // disappear in the unselected state. Selection bumps opacity
+        // to 100 and adds a check pip — a clear, palette-independent
+        // signal.
+        <div
+          role="group"
+          aria-label="Category interests"
+          className="grid grid-cols-3 gap-3 sm:grid-cols-4"
+          data-testid="interests-pill-grid"
+        >
+          {interestCategories.map((cat) => {
+            const isSelected = selected.has(cat.id);
+            const style = getCategoryStyle(cat.id);
+            const Icon = getCategoryIcon(cat.id);
+            return (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => toggle(cat.id)}
+                aria-pressed={isSelected}
+                data-testid={`interest-pill-${cat.id}`}
+                className={cn(
+                  "relative flex aspect-[5/6] flex-col items-center justify-center gap-2 rounded-2xl border p-3 transition-all duration-200 active:scale-[0.97]",
+                  style.bg,
+                  style.border,
+                  isSelected
+                    ? "opacity-100 shadow-[0_0_24px_-8px_currentColor]"
+                    : "opacity-55 hover:opacity-90",
+                  // Bind the shadow's currentColor to the category accent
+                  // by routing the text colour onto the wrapper. The
+                  // child label re-overrides foreground/muted as needed.
+                  style.text,
+                )}
+              >
+                <span
+                  className={cn(
+                    "flex h-12 w-12 items-center justify-center rounded-full bg-background/40 ring-1 ring-inset ring-white/5",
+                    style.text,
+                  )}
+                >
+                  <Icon className="h-6 w-6" strokeWidth={1.75} />
+                </span>
+                <span
+                  className={cn(
+                    "text-center text-sm font-medium leading-tight",
+                    isSelected ? "text-foreground" : "text-muted-foreground",
+                  )}
+                >
+                  {cat.label}
+                </span>
+                {isSelected ? (
+                  <span
+                    aria-hidden="true"
+                    className={cn(
+                      "absolute right-2 top-2 flex h-5 w-5 items-center justify-center rounded-full bg-background/80 ring-1 ring-inset ring-white/10",
+                      style.text,
+                    )}
+                  >
+                    <Check className="h-3 w-3" strokeWidth={3} />
+                  </span>
+                ) : null}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       <Button
         onClick={handleSave}
         disabled={!canSave}
-        className="w-full"
+        className={cn("w-full", mode === "inline" && "mt-auto")}
+        size={mode === "inline" ? "lg" : "default"}
         data-testid="interests-save"
       >
         {saving ? "Saving…" : copy.cta}
