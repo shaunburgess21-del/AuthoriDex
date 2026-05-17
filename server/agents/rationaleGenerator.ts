@@ -8,9 +8,17 @@ import { getRecentMemory } from "./memoryManager";
 import type { AgentConfigData, MarketWithEntries, PredictionDecision } from "./types";
 import { getAiModel, getChatCompletionTokenLimit } from "../config/ai-models";
 
-const openai = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
-});
+// Lazy-init — see `sharpRanker.getOpenAIClient` for the rationale.
+// Importing this module from a key-less context (CI test workers etc.)
+// must not crash; only throw if/when an LLM call is actually fired.
+let _openaiClient: OpenAI | null = null;
+function getOpenAIClient(): OpenAI {
+  if (_openaiClient) return _openaiClient;
+  _openaiClient = new OpenAI({
+    apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
+  });
+  return _openaiClient;
+}
 
 export async function generateRationale(
   agent: AgentConfigData,
@@ -38,7 +46,7 @@ My pick: ${chosenEntry?.label ?? "Unknown"} (confidence: ${confidencePct}%)
 Write the rationale.`;
 
     const model = getAiModel("agentRationale");
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAIClient().chat.completions.create({
       model,
       ...getChatCompletionTokenLimit(model, 80),
       temperature: 0.85,

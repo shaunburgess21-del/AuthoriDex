@@ -24,9 +24,25 @@ import { log } from "../log";
 import { getAiModel, getChatCompletionTokenLimit } from "../config/ai-models";
 import type { MarketWithEntries, TrendSignals } from "./types";
 
-const openai = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
-});
+/**
+ * Lazy-init the OpenAI client.
+ *
+ * Constructing `new OpenAI()` at module-load time throws in any environment
+ * that doesn't have `OPENAI_API_KEY` (or `AI_INTEGRATIONS_OPENAI_API_KEY`)
+ * set — including CI runners and unit-test workers that exercise the
+ * ranker's pure parser without ever firing an LLM call. The lazy form
+ * preserves the same eventual behaviour (throws iff the key is missing
+ * AND the ranker is actually invoked) while letting `parseRankerResponse`
+ * and friends be imported safely from tests.
+ */
+let _openaiClient: OpenAI | null = null;
+function getOpenAIClient(): OpenAI {
+  if (_openaiClient) return _openaiClient;
+  _openaiClient = new OpenAI({
+    apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
+  });
+  return _openaiClient;
+}
 
 const SHARP_RANKER_LLM_ENABLED = process.env.SHARP_RANKER_LLM_ENABLED !== "false";
 const SHARP_RANKER_TTL_MS = 25 * 60 * 1000;
@@ -197,7 +213,7 @@ async function generateRanking(rankable: RankableMarket[]): Promise<SharpRankerS
   const tokenLimit = getChatCompletionTokenLimit(model, SHARP_RANKER_MAX_TOKENS);
 
   const completion = await Promise.race([
-    openai.chat.completions.create({
+    getOpenAIClient().chat.completions.create({
       model,
       messages: [
         { role: "system", content: systemPrompt },

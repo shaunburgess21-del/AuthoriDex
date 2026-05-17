@@ -27,9 +27,20 @@ import {
 } from "./constants";
 import { getAiModel } from "../config/ai-models";
 
-const openai = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
-});
+// Lazy-init the OpenAI client so importing this module from a context
+// without `OPENAI_API_KEY` set (CI test workers, scripts that exercise
+// pure helpers from this file) doesn't crash at module-load time. Same
+// reasoning as `sharpRanker.getOpenAIClient` — preserves prod behaviour
+// (still throws iff the key is missing AND the engine is actually called)
+// while keeping the import side-effect-free.
+let _openaiClient: OpenAI | null = null;
+function getOpenAIClient(): OpenAI {
+  if (_openaiClient) return _openaiClient;
+  _openaiClient = new OpenAI({
+    apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
+  });
+  return _openaiClient;
+}
 
 const API_TIMEOUT_MS = 45_000;
 const MAX_OUTPUT_TOKENS = 400;
@@ -259,7 +270,7 @@ async function callWorldMarketLlm(
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
 
-    const response = await openai.responses.create(
+    const response = await getOpenAIClient().responses.create(
       {
         model: getAiModel("worldMarkets"),
         tools: [{ type: "web_search" as any }],
