@@ -279,7 +279,7 @@ export default function WelcomePage() {
       break;
     case 1:
       title = "When were you born?";
-      subtitle = "Just the year — we use this to tune what you see.";
+      subtitle = "Used to analyse how different generations vote and predict.";
       onSkip = () => void goNext(1);
       content = (
         <YearWheel
