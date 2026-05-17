@@ -44,11 +44,25 @@ if (existsSync(envPath)) {
 
 const args = process.argv.slice(2);
 const DRY_RUN = args.includes("--dry-run");
-const targetIdx = args.indexOf("--target");
 const DEFAULT_TARGET = 1_000_000_000;
-const TARGET = targetIdx >= 0 && args[targetIdx + 1] != null
-  ? Math.max(0, Math.floor(Number(args[targetIdx + 1])))
-  : DEFAULT_TARGET;
+
+function parsePositiveInt(flag: string, fallback: number): number {
+  const idx = args.indexOf(flag);
+  if (idx < 0) return fallback;
+  const raw = args[idx + 1];
+  if (raw == null) {
+    console.error(`\n[restore:house-wallet] ${flag} requires a numeric value.`);
+    process.exit(1);
+  }
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) {
+    console.error(`\n[restore:house-wallet] Invalid value for ${flag}: "${raw}". Expected a non-negative number.`);
+    process.exit(1);
+  }
+  return Math.floor(n);
+}
+
+const TARGET = parsePositiveInt("--target", DEFAULT_TARGET);
 
 const HOUSE_PROFILE_ID = "00000000-0000-0000-0000-0000000000aa";
 

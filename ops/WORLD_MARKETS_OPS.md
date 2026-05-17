@@ -213,10 +213,23 @@ persons (so "Kylian Mbappé" in the xlsx matches "Kylian Mbappe" in
 Pre-reqs:
 1. `DATABASE_URL` set in `.env` (script auto-loads via `process.loadEnvFile`).
 2. House wallet has enough virtual credits to seed every new market
-   (~5,000 per market by default). Run `restore-house-wallet.ts` first
-   if you've recently run the sunset reset.
+   (~5,000 per market by default). The script runs an explicit
+   pre-flight check and aborts with a clear pointer at
+   `restore-house-wallet.ts` if the house is short.
 
 After import, the 25 markets land in **Admin > Predictions > World
-Markets > Draft filter**. Review titles, dates and entries, add cover
-images, then bulk-publish via the "Publish [N]" button (or the
+Markets > Draft filter**. Each row is tagged with
+`metadata.restoredFromSunsetWipe = { bumpedPastDate, on }` so future
+audits can identify rows that came back via this recovery path.
+Review titles, dates and entries, add cover images, then bulk-publish
+via the "Publish [N]" button (or the
 `/api/admin/open-markets/batch-visibility` route).
+
+### XLSX parser dependency
+
+`ops/restore-world-markets.ts` parses the xlsx via SheetJS. We pin the
+patched tarball from `cdn.sheetjs.com` (e.g. `xlsx-0.20.3`) rather
+than the npmjs registry version, which is permanently stuck on
+`0.18.5` with unpatched HIGH-severity prototype-pollution + ReDoS
+advisories. The SheetJS ESM build doesn't auto-bind `node:fs`, so the
+script calls `XLSX.set_fs(fs)` before `readFile`.

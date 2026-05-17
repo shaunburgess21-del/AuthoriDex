@@ -48,13 +48,35 @@ if (existsSync(envPath)) {
 const args = process.argv.slice(2);
 const DRY_RUN = args.includes("--dry-run");
 
-const fileIdx = args.indexOf("--file");
-const FILE_ARG = fileIdx >= 0 && args[fileIdx + 1] ? args[fileIdx + 1] : null;
+function getStringArg(flag: string): string | null {
+  const idx = args.indexOf(flag);
+  if (idx < 0) return null;
+  const raw = args[idx + 1];
+  if (raw == null || raw.startsWith("--")) {
+    console.error(`\n[restore:world-markets] ${flag} requires a value.`);
+    process.exit(1);
+  }
+  return raw;
+}
 
-const bumpIdx = args.indexOf("--bump-past-days");
-const BUMP_PAST_DAYS = bumpIdx >= 0 && args[bumpIdx + 1] != null
-  ? Math.max(0, Math.floor(Number(args[bumpIdx + 1])))
-  : 30;
+function parseNonNegInt(flag: string, fallback: number): number {
+  const idx = args.indexOf(flag);
+  if (idx < 0) return fallback;
+  const raw = args[idx + 1];
+  if (raw == null) {
+    console.error(`\n[restore:world-markets] ${flag} requires a numeric value.`);
+    process.exit(1);
+  }
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) {
+    console.error(`\n[restore:world-markets] Invalid value for ${flag}: "${raw}". Expected a non-negative number.`);
+    process.exit(1);
+  }
+  return Math.floor(n);
+}
+
+const FILE_ARG = getStringArg("--file");
+const BUMP_PAST_DAYS = parseNonNegInt("--bump-past-days", 30);
 
 const DEFAULT_FILES = [
   path.resolve(process.cwd(), "ops/authoridex_world_markets_launch_top25_final.xlsx"),
@@ -90,10 +112,12 @@ const CATEGORY_NORMALIZE: Record<string, string> = {
 };
 
 const VALID_TYPES = ["binary", "multi", "updown"];
-const VALID_CATEGORIES = [
-  "politics", "tech", "music", "sports", "business", "creator",
-  "Film & TV", "gaming", "misc", "Food & Drink", "Lifestyle",
-];
+// Case-insensitive lookup so categories like "Film & TV" / "Food & Drink" /
+// "Lifestyle" don't false-trigger the warning after the lowercase pass.
+const VALID_CATEGORIES_LOWER = new Set(
+  ["politics", "tech", "music", "sports", "business", "creator",
+   "Film & TV", "gaming", "misc", "Food & Drink", "Lifestyle"].map((c) => c.toLowerCase()),
+);
 const SLUG_REGEX = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 type CellValue = string | number | Date | null;
@@ -189,11 +213,20 @@ function rowToPayload(row: RawRow): RowPayload {
 async function readSheetRows(filePath: string, sheetName: string): Promise<RawRow[]> {
   // SheetJS reads more xlsx variants cleanly than ExcelJS (which chokes on
   // some defined-name structures with "Cannot read properties of undefined
-  // (reading 'name')"). The file source here is trusted (local admin op),
-  // so the known SheetJS CVEs (prototype pollution on hostile xlsx) do not
-  // apply.
+  // (reading 'name')"). We pin to the patched 0.20.3+ build distributed
+  // via cdn.sheetjs.com (npmjs only ships 0.18.5 which has unpatched
+  // prototype-pollution + ReDoS advisories). Even with the patched build,
+  // file sources here should remain trusted (local admin op) — SheetJS's
+  // CVEs were exploitable only via hostile xlsx input.
+  //
+  // The ESM build doesn't auto-link node:fs, so we have to bind it
+  // explicitly via set_fs before calling readFile.
   const XLSXMod = await import("xlsx");
   const XLSX = (XLSXMod as unknown as { default?: typeof XLSXMod }).default ?? XLSXMod;
+  const fs = await import("node:fs");
+  if (typeof (XLSX as unknown as { set_fs?: (m: unknown) => void }).set_fs === "function") {
+    (XLSX as unknown as { set_fs: (m: unknown) => void }).set_fs(fs);
+  }
   const wb = XLSX.readFile(filePath, { cellDates: true });
   if (!wb.SheetNames.includes(sheetName)) {
     throw new Error(`Sheet "${sheetName}" not found. Available: ${wb.SheetNames.join(", ")}`);
@@ -263,9 +296,9 @@ async function main(): Promise<void> {
   }
 
   const { db } = await import("../server/db");
-  const { predictionMarkets, marketEntries, trackedPeople } = await import("../shared/schema");
+  const { predictionMarkets, marketEntries, trackedPeople, profiles } = await import("../shared/schema");
   const { eq, sql } = await import("drizzle-orm");
-  const { seedAmmMarket } = await import("../server/services/amm-house");
+  const { seedAmmMarket, HOUSE_PROFILE_ID } = await import("../server/services/amm-house");
 
   const allPeople = await db
     .select({ id: trackedPeople.id, name: trackedPeople.name })
@@ -361,7 +394,7 @@ async function main(): Promise<void> {
       }
     }
 
-    if (payload.category && !VALID_CATEGORIES.includes(payload.category)) {
+    if (payload.category && !VALID_CATEGORIES_LOWER.has(payload.category.toLowerCase())) {
       msgs.push({ severity: "warning", field: "category", message: `Category "${payload.category}" not in standard list; will be used as-is` });
     }
 
@@ -445,6 +478,33 @@ async function main(): Promise<void> {
     }
   }
 
+  // ── House-wallet pre-flight ───────────────────────────────────────
+  // seedAmmMarket fails loudly if the house has insufficient credits,
+  // but it does so mid-loop after some rows have already been inserted.
+  // Cheaper to fail fast with a clear message that points at the
+  // restore-house-wallet.ts companion script.
+  const ESTIMATED_SEED_PER_MARKET = 5_000;
+  const expectedSpend = okCount * ESTIMATED_SEED_PER_MARKET;
+  const [houseRow] = await db
+    .select({ predictCredits: profiles.predictCredits, isHouse: profiles.isHouse })
+    .from(profiles)
+    .where(eq(profiles.id, HOUSE_PROFILE_ID))
+    .limit(1);
+  if (!houseRow) {
+    console.error(`\n[restore:world-markets] House profile ${HOUSE_PROFILE_ID} not found. Did migration 0052 run?`);
+    process.exit(1);
+  }
+  console.log(`\nHouse wallet pre-flight:`);
+  console.log(`  current balance       ${houseRow.predictCredits.toLocaleString()}`);
+  console.log(`  rough seed estimate   ${expectedSpend.toLocaleString()} (${okCount} x ~${ESTIMATED_SEED_PER_MARKET})`);
+  if (houseRow.predictCredits < expectedSpend) {
+    console.error(
+      `\n[restore:world-markets] House wallet has insufficient credits for the estimated seed cost.\n` +
+      `  Run "npx tsx ops/restore-house-wallet.ts" first to top it up, then re-run this script.\n`,
+    );
+    process.exit(1);
+  }
+
   if (DRY_RUN) {
     console.log(`\n[restore:world-markets] DRY RUN complete. Re-run without --dry-run to write.\n`);
     process.exit(0);
@@ -459,7 +519,6 @@ async function main(): Promise<void> {
   console.log(`\n[restore:world-markets] Writing ${okCount} markets...`);
 
   let createdCount = 0;
-  const created: Array<{ slug: string; id: string; title: string }> = [];
 
   for (const v of validated) {
     if (v.hasError) continue;
@@ -472,7 +531,13 @@ async function main(): Promise<void> {
     if (payload.settlementDifficulty) metadata.settlementDifficulty = payload.settlementDifficulty;
     if (payload.timeHorizon) metadata.timeHorizon = payload.timeHorizon;
     if (payload.launchWave) metadata.launchWave = payload.launchWave;
-    if (v.endAtBumped) metadata.restoredFromSunsetWipe = { bumpedPastDate: true, on: now.toISOString() };
+    // Tag every row imported via this recovery script (not just the
+    // bumped-date ones) so future audits can identify "post-wipe
+    // restorations" cleanly.
+    metadata.restoredFromSunsetWipe = {
+      bumpedPastDate: v.endAtBumped,
+      on: now.toISOString(),
+    };
 
     try {
       // Allocate next CMS display order inside the loop so concurrent rows don't collide.
@@ -541,7 +606,6 @@ async function main(): Promise<void> {
       });
 
       createdCount += 1;
-      created.push({ slug: inserted.slug, id: inserted.id, title: inserted.title });
       console.log(`  + ${inserted.slug}  ${inserted.id}`);
     } catch (err) {
       const code = (err as { code?: string })?.code;
