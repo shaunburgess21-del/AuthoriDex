@@ -442,6 +442,13 @@
       "when": 1779744000000,
       "tag": "0062_parimutuel_sunset_creation_gates",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1779830400000,
+      "tag": "0063_onboarding_progress",
+      "breakpoints": true
     }
   ]
 }

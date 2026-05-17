@@ -53,6 +53,12 @@ export interface UserProfile {
   // to show the modal and when to soft re-prompt.
   statedInterests: string[];
   interestsPromptDismissedAt: string | null;
+  // Multi-step onboarding (migration 0063). `onboardingStep` is the highest
+  // step the user has reached (0..5); `onboardingCompletedAt` is set when
+  // they hit the completion screen and is the canonical signal the
+  // NewUserGate keys on.
+  onboardingStep: number;
+  onboardingCompletedAt: string | null;
   createdAt: string;
 }
 

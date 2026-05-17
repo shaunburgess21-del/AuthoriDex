@@ -1026,6 +1026,14 @@ export const profiles = pgTable("profiles", {
   // re-prompt gate together with totalVotes / totalPredictions and time
   // elapsed so we soft-nudge engaged users instead of nagging on every visit.
   interestsPromptDismissedAt: timestamp("interests_prompt_dismissed_at"),
+  // Multi-step onboarding (migration 0063). `onboardingStep` is the highest
+  // step the user has reached (0..5 — see WelcomePage container for the
+  // ordered list). `onboardingCompletedAt` is stamped when the user lands
+  // on the completion screen and is the canonical signal for NewUserGate:
+  // a NULL value means the user is still in the flow and must finish before
+  // they're released into the rest of the app.
+  onboardingStep: integer("onboarding_step").notNull().default(0),
+  onboardingCompletedAt: timestamp("onboarding_completed_at", { withTimezone: true }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

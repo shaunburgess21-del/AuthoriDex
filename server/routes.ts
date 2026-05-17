@@ -7455,6 +7455,8 @@ Only return the JSON object.`;
         occupationIndustry,
         socialHandlesPublic,
         occupationPublic,
+        onboardingStep,
+        onboardingCompletedAt,
       } = req.body;
 
       // Build update object with only provided fields
@@ -7599,6 +7601,43 @@ Only return the JSON object.`;
       if (typeof occupationPublic === "boolean") {
         updateData.occupationPublic = occupationPublic;
       }
+      // Multi-step onboarding (migration 0063). `onboardingStep` is
+      // monotonic — only accept it when it's a valid 0..5 integer and
+      // equal-or-greater than the user's current step (preserves the
+      // "highest step reached" semantics the gate relies on). The
+      // resume-step compare lives below after we've read the existing
+      // row; here we just validate the shape.
+      if (onboardingStep !== undefined) {
+        if (
+          typeof onboardingStep !== "number" ||
+          !Number.isInteger(onboardingStep) ||
+          onboardingStep < 0 ||
+          onboardingStep > 5
+        ) {
+          return res.status(400).json({ error: "invalid_onboarding_step" });
+        }
+        updateData.onboardingStep = onboardingStep;
+      }
+      // `onboardingCompletedAt` is write-once-from-client: pass `true`
+      // (or any truthy non-string) to stamp NOW(), pass an ISO string
+      // for an explicit timestamp (used by tooling), pass `null` to
+      // clear (admin-only path; clients should never send null). The
+      // server is the source of truth for "when did onboarding finish".
+      if (onboardingCompletedAt !== undefined) {
+        if (onboardingCompletedAt === null) {
+          updateData.onboardingCompletedAt = null;
+        } else if (onboardingCompletedAt === true) {
+          updateData.onboardingCompletedAt = new Date();
+        } else if (typeof onboardingCompletedAt === "string") {
+          const parsed = new Date(onboardingCompletedAt);
+          if (Number.isNaN(parsed.getTime())) {
+            return res.status(400).json({ error: "invalid_onboarding_completed_at" });
+          }
+          updateData.onboardingCompletedAt = parsed;
+        } else {
+          return res.status(400).json({ error: "invalid_onboarding_completed_at" });
+        }
+      }
 
       if (Object.keys(updateData).length === 0) {
         return res.status(400).json({ error: "No fields to update" });
@@ -7719,6 +7758,51 @@ Only return the JSON object.`;
     } catch (error: any) {
       console.error("Error setting username:", error.message);
       res.status(500).json({ error: "Failed to set username" });
+    }
+  });
+
+  // Onboarding step pointer — lightweight companion to PATCH
+  // /api/profile/me. Called from the onboarding container every time
+  // the user advances or skips a step so we can resume them at the
+  // right place if they drop off mid-flow. Monotonic: never moves the
+  // pointer backwards (a back-button in the UI doesn't roll the saved
+  // resume step back, only the unsaved local one).
+  app.patch("/api/profile/me/onboarding-step", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.userId!;
+      const { step } = (req.body ?? {}) as { step?: unknown };
+
+      if (
+        typeof step !== "number" ||
+        !Number.isInteger(step) ||
+        step < 0 ||
+        step > 5
+      ) {
+        return res.status(400).json({ error: "invalid_step" });
+      }
+
+      const existingRows = await db
+        .select({ onboardingStep: profiles.onboardingStep })
+        .from(profiles)
+        .where(eq(profiles.id, userId))
+        .limit(1);
+      if (existingRows.length === 0) {
+        return res.status(404).json({ error: "Profile not found" });
+      }
+      const currentStep = existingRows[0].onboardingStep ?? 0;
+      const nextStep = Math.max(currentStep, step);
+
+      if (nextStep !== currentStep) {
+        await db
+          .update(profiles)
+          .set({ onboardingStep: nextStep })
+          .where(eq(profiles.id, userId));
+      }
+
+      res.json({ step: nextStep });
+    } catch (error: any) {
+      console.error("Error updating onboarding step:", error.message);
+      res.status(500).json({ error: "Failed to update onboarding step" });
     }
   });
 

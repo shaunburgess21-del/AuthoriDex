@@ -1,86 +1,98 @@
 /**
- * /login/welcome — one-time onboarding for first-time authenticated users.
+ * /login/welcome — multi-step onboarding container.
  *
- * The user types their own username (debounced availability check), the
- * generative avatar seeded by /api/profile/sync is shown with a "Change"
- * affordance, and submit is gated on Terms + Privacy acceptance. On
- * success calls PATCH /api/profile/me/username (which also writes
- * `tos_accepted_at`) and redirects to `/`.
+ * Step order (also persisted in `profiles.onboarding_step`, see
+ * migration 0063):
  *
- * Username field starts BLANK by design — /api/profile/sync no longer
- * auto-generates a default. The pre-fill effect below is retained as a
- * defensive measure for any legacy account whose username was generated
- * pre-change and that somehow still has `tosAcceptedAt` null; in that
- * narrow case the existing handle is treated as "available" without
- * firing a wasteful availability check.
+ *   0  Welcome     — avatar + username + ToS         (required)
+ *   1  Year born   — scroll-wheel year picker        (skippable)
+ *   2  Gender      — tap-to-select                   (skippable)
+ *   3  Country     — searchable list                 (skippable)
+ *   4  Interests   — InterestsPicker inline mode     (skippable)
+ *   5  Completion  — reward / celebration screen     (terminal)
  *
- * Bounce rules:
- *   - Unauthenticated visitors → /login
- *   - Returning users with `tosAcceptedAt` already set → /
+ * Resumability:
+ *   The container reads `profile.onboardingStep` on mount and starts
+ *   the user at the highest step they've reached. Step 0 always
+ *   advances when the user submits a username + ToS (because that's
+ *   how `tosAcceptedAt` lands). After every advance/skip we persist
+ *   the new step via PATCH /api/profile/me/onboarding-step so a
+ *   reload or device-swap picks up where they left off.
  *
- * Avatar flow:
- *   Sync writes a default `avatarSeed = "{userId}:default:v1"`. The user
- *   either keeps it (Continue persists it via the same upload path the
- *   picker uses) or opens AvatarPicker to choose another (picker save
- *   commits immediately and short-circuits the auto-save on Continue).
- *   Either way, by the time we leave this page `profile.avatarUrl` is
- *   set, so the rest of the app shows the avatar instead of falling
- *   back to initials.
+ *   onboardingCompletedAt is stamped server-side on entry to step 5
+ *   (the completion screen submits a single PATCH that sets it). The
+ *   NewUserGate keys on this field — once it's set, the user is
+ *   released into the rest of the app and can no longer re-enter
+ *   /login/welcome (the bounce-out effect below sends them to /).
+ *
+ * Animation:
+ *   Direction-aware slide between steps via framer-motion. Forward
+ *   navigation slides left; back slides right. Animation happens on
+ *   the body of the step only — the top bar (progress + skip + back)
+ *   stays static so the user always has a stable navigation anchor.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
+import { AnimatePresence, motion } from "framer-motion";
 import { toast } from "sonner";
-import { Check, Loader2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { VoxDexLogo } from "@/components/VoxDexLogo";
-import { AvatarPicker } from "@/components/avatar/AvatarPicker";
-import { GenerativeAvatar } from "@/components/avatar/GenerativeAvatar";
-import { uploadGeneratedAvatar } from "@/lib/avatar/upload";
-
 import { useAuth } from "@/contexts/AuthContext";
-import { ApiError, apiRequest } from "@/lib/queryClient";
+import { apiRequest } from "@/lib/queryClient";
 import { redirectAfterLogin, hasPendingAuthReturnSnapshot } from "@/lib/authReturn";
+import { InterestsPicker } from "@/components/interests/InterestsPicker";
 
-const USERNAME_PATTERN = /^[A-Za-z0-9_]{3,30}$/;
-const DEBOUNCE_MS = 400;
+import { StepShell } from "./onboarding/StepShell";
+import { WelcomeStep } from "./onboarding/WelcomeStep";
+import { YearWheel, buildDateOfBirth } from "./onboarding/YearStep";
+import { GenderList } from "./onboarding/GenderStep";
+import { CountryList } from "./onboarding/CountryStep";
+import { CompletionStep } from "./onboarding/CompletionStep";
 
-type Availability =
-  | { status: "idle" }
-  | { status: "checking" }
-  | { status: "ok" }
-  | { status: "taken" }
-  | { status: "invalid"; reason: string }
-  | { status: "error" };
+const TOTAL_STEPS = 6;
+
+type StepId = 0 | 1 | 2 | 3 | 4 | 5;
 
 export default function WelcomePage() {
   const [, setLocation] = useLocation();
-  const { user, loading: authLoading, profile, profileLoading, refreshProfile } = useAuth();
+  const {
+    user,
+    loading: authLoading,
+    profile,
+    profileLoading,
+    refreshProfile,
+  } = useAuth();
 
-  const [username, setUsername] = useState("");
-  const [tosAccepted, setTosAccepted] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [availability, setAvailability] = useState<Availability>({ status: "idle" });
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [pickerOpen, setPickerOpen] = useState(false);
+  // Local step state. Initialised from profile.onboardingStep once
+  // the profile lands. The `bootstrapped` flag prevents us from
+  // animating through a flash of step 0 while the profile loads.
+  const [step, setStep] = useState<StepId>(0);
+  const [direction, setDirection] = useState<1 | -1>(1);
+  const [bootstrapped, setBootstrapped] = useState(false);
 
-  const initializedRef = useRef(false);
-  const initialUsernameRef = useRef<string>("");
+  // Per-step staged values. We hold them in container state so the
+  // user can hit Back without losing what they typed, and so the
+  // Continue button can sit in the footer (outside the step body).
+  const [year, setYear] = useState<number | null>(null);
+  const [gender, setGender] = useState<string | null>(null);
+  const [country, setCountry] = useState<string | null>(null);
 
-  // Bounce: unauth users → /login, returning users with ToS already accepted
-  // → home (or any pending auth-return snapshot).
+  const advancePersistedRef = useRef<Set<number>>(new Set());
+
+  // Bounce: unauthenticated users go to /login. Returning users with
+  // onboarding ALREADY completed go straight home (or back to where
+  // they were trying to land via the auth-return snapshot). The
+  // tosAcceptedAt-based bounce was previously how this worked; we
+  // now key on onboardingCompletedAt so partially-completed users
+  // stay in the flow on their next visit.
   useEffect(() => {
     if (authLoading) return;
     if (!user) {
       setLocation("/login", { replace: true });
       return;
     }
-    if (profileLoading) return;
-    if (profile?.tosAcceptedAt) {
+    if (profileLoading || !profile) return;
+    if (profile.onboardingCompletedAt) {
       if (hasPendingAuthReturnSnapshot()) {
         redirectAfterLogin(setLocation);
       } else {
@@ -89,370 +101,286 @@ export default function WelcomePage() {
     }
   }, [authLoading, user, profile, profileLoading, setLocation]);
 
-  // Pre-fill from auto-generated username once the profile lands. The ref
-  // guard means we won't clobber the user's edits if the profile object
-  // updates again (e.g. after a refresh).
+  // Resume at the highest step the user has reached. Clamp to
+  // [0, 5] in case a future migration ever sets a wider range.
   useEffect(() => {
-    if (initializedRef.current) return;
-    if (!profile?.username) return;
-    initializedRef.current = true;
-    initialUsernameRef.current = profile.username;
-    setUsername(profile.username);
-    setAvailability({ status: "ok" });
-  }, [profile?.username]);
+    if (bootstrapped) return;
+    if (!profile) return;
+    const raw = profile.onboardingStep ?? 0;
+    const clamped = Math.max(0, Math.min(5, raw)) as StepId;
+    setStep(clamped);
+    // Pre-populate staged values so the user sees their previous
+    // choices when navigating back. This matters more for back-button
+    // returns than for cross-device resumes (we never re-render an
+    // already-saved demographic step's UI on the next visit because
+    // the gate releases them once onboardingCompletedAt is set).
+    if (profile.dateOfBirth && /^\d{4}-/.test(profile.dateOfBirth)) {
+      const y = Number(profile.dateOfBirth.slice(0, 4));
+      if (!Number.isNaN(y)) setYear(y);
+    }
+    if (profile.gender) setGender(profile.gender);
+    if (profile.countryOfResidence) setCountry(profile.countryOfResidence);
+    setBootstrapped(true);
+  }, [profile, bootstrapped]);
 
-  // Debounced availability check. Skips the check if the value is the
-  // auto-generated username we already trust from /api/profile/sync.
-  useEffect(() => {
-    const trimmed = username.trim();
-    if (!trimmed) {
-      setAvailability({ status: "idle" });
-      return;
-    }
-    if (trimmed === initialUsernameRef.current) {
-      setAvailability({ status: "ok" });
-      return;
-    }
-    if (!USERNAME_PATTERN.test(trimmed)) {
-      setAvailability({
-        status: "invalid",
-        reason: "3–30 letters, numbers, or underscores.",
+  /** Persist the new highest step. Idempotent; the server clamps. */
+  const persistStep = useCallback(async (next: number) => {
+    if (advancePersistedRef.current.has(next)) return;
+    advancePersistedRef.current.add(next);
+    try {
+      await apiRequest("PATCH", "/api/profile/me/onboarding-step", {
+        step: next,
       });
-      return;
+    } catch (err) {
+      // Non-fatal: the next /api/profile/sync will set the right
+      // step from the server's perspective. We log + swallow.
+      console.warn("[WelcomePage] persist onboarding step failed:", err);
+      advancePersistedRef.current.delete(next);
     }
+  }, []);
 
-    setAvailability({ status: "checking" });
-    let cancelled = false;
-    const handle = setTimeout(async () => {
-      try {
-        const res = await apiRequest(
-          "GET",
-          `/api/profile/username-available?username=${encodeURIComponent(trimmed)}`,
-        );
-        const data = (await res.json()) as { available?: boolean };
-        if (cancelled) return;
-        setAvailability(data.available ? { status: "ok" } : { status: "taken" });
-      } catch {
-        if (!cancelled) setAvailability({ status: "error" });
-      }
-    }, DEBOUNCE_MS);
-
-    return () => {
-      cancelled = true;
-      clearTimeout(handle);
-    };
-  }, [username]);
-
-  const canSubmit = useMemo(() => {
-    if (submitting) return false;
-    if (!tosAccepted) return false;
-    const trimmed = username.trim();
-    if (!trimmed) return false;
-    if (trimmed === initialUsernameRef.current) return true;
-    if (!USERNAME_PATTERN.test(trimmed)) return false;
-    return availability.status === "ok";
-  }, [submitting, tosAccepted, username, availability.status]);
-
-  // Mirrors SettingsPage's avatar save: render seed → upload PNG →
-  // PATCH /api/profile/avatar → refresh profile so the new avatar
-  // shows everywhere (including this card). The picker handles its
-  // own loading state; we just need to throw on error so it stays
-  // open with feedback rather than closing as if successful.
-  const handleSaveAvatar = useCallback(
-    async (seed: string) => {
-      if (!user) return;
-      try {
-        const userId = profile?.id || user.id;
-        const { url } = await uploadGeneratedAvatar(userId, seed);
-        await apiRequest("PATCH", "/api/profile/avatar", {
-          seed,
-          avatarUrl: url,
-        });
-        await refreshProfile();
-        toast.success("Avatar updated", { description: "Looking sharp." });
-      } catch (err) {
-        console.error("[WelcomePage] Avatar save failed:", err);
-        toast.error("Could not save avatar", {
-          description: err instanceof Error ? err.message : "Please try again.",
-        });
-        throw err;
-      }
+  const goNext = useCallback(
+    async (from: StepId) => {
+      const next = Math.min(5, from + 1) as StepId;
+      setDirection(1);
+      setStep(next);
+      void persistStep(next);
     },
-    [user, profile?.id, refreshProfile],
+    [persistStep],
   );
 
-  const handleSubmit = useCallback(
-    async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!canSubmit) return;
-      setSubmitting(true);
-      setSubmitError(null);
-      try {
-        // Persist the seeded generative avatar if the user never opened
-        // the picker. Previous behaviour treated "Continue without
-        // Change" as a skip — `avatarUrl` stayed null and the rest of
-        // the app fell back to initials, even though the user clearly
-        // saw an attractive default on this screen and tacitly accepted
-        // it. Saving here makes the on-screen preview the actual avatar
-        // everywhere.
-        //
-        // Best-effort only: a failed upload should not block onboarding
-        // completion (the user can re-roll from Settings later). We
-        // surface a quiet toast and continue with the username submit.
-        const seed = profile?.avatarSeed;
-        const userIdForAvatar = profile?.id || user?.id;
-        if (!profile?.avatarUrl && seed && userIdForAvatar) {
-          try {
-            const { url } = await uploadGeneratedAvatar(userIdForAvatar, seed);
-            await apiRequest("PATCH", "/api/profile/avatar", {
-              seed,
-              avatarUrl: url,
-            });
-          } catch (avatarErr) {
-            console.warn(
-              "[WelcomePage] Auto-save default avatar failed; continuing:",
-              avatarErr,
-            );
-            toast.error("Couldn't save your avatar", {
-              description: "Don't worry — you can pick one in Settings any time.",
-            });
-          }
-        }
+  const goBack = useCallback(() => {
+    setDirection(-1);
+    setStep((s) => (s > 0 ? ((s - 1) as StepId) : s));
+  }, []);
 
-        await apiRequest("PATCH", "/api/profile/me/username", {
-          username: username.trim(),
-          tosAccepted: true,
-        });
-        await refreshProfile();
-        toast.success("You're in", { description: "Welcome to VoxDex." });
-        if (hasPendingAuthReturnSnapshot()) {
-          redirectAfterLogin(setLocation);
-        } else {
-          setLocation("/", { replace: true });
-        }
-      } catch (err) {
-        if (err instanceof ApiError && err.status === 409) {
-          setAvailability({ status: "taken" });
-          setSubmitError("That username was just taken — try another.");
-        } else {
-          setSubmitError(
-            err instanceof Error ? err.message : "Something went wrong. Please try again.",
-          );
-        }
-      } finally {
-        setSubmitting(false);
-      }
-    },
-    [
-      canSubmit,
-      username,
-      refreshProfile,
-      setLocation,
-      profile?.avatarUrl,
-      profile?.avatarSeed,
-      profile?.id,
-      user?.id,
-    ],
+  // Step 1 — Year Born: confirm action.
+  const submitYear = useCallback(async () => {
+    if (year === null) return;
+    try {
+      await apiRequest("PATCH", "/api/profile/me", {
+        dateOfBirth: buildDateOfBirth(year),
+      });
+      await refreshProfile();
+      void goNext(1);
+    } catch (err) {
+      console.error("[WelcomePage] save year failed:", err);
+      toast.error("Couldn't save your year. Please try again.");
+    }
+  }, [year, refreshProfile, goNext]);
+
+  // Step 2 — Gender: confirm action.
+  const submitGender = useCallback(async () => {
+    if (!gender) return;
+    try {
+      await apiRequest("PATCH", "/api/profile/me", { gender });
+      await refreshProfile();
+      void goNext(2);
+    } catch (err) {
+      console.error("[WelcomePage] save gender failed:", err);
+      toast.error("Couldn't save. Please try again.");
+    }
+  }, [gender, refreshProfile, goNext]);
+
+  // Step 3 — Country: confirm action.
+  const submitCountry = useCallback(async () => {
+    if (!country) return;
+    try {
+      await apiRequest("PATCH", "/api/profile/me", {
+        countryOfResidence: country,
+      });
+      await refreshProfile();
+      void goNext(3);
+    } catch (err) {
+      console.error("[WelcomePage] save country failed:", err);
+      toast.error("Couldn't save. Please try again.");
+    }
+  }, [country, refreshProfile, goNext]);
+
+  // Step 4 — Interests: skip route. The InterestsPicker save path
+  // already calls PATCH /api/profile/me/interests internally, so the
+  // "saved" callback just needs to advance. The skip path stamps
+  // interestsPromptDismissedAt server-side via the same endpoint so
+  // the post-onboarding InterestsGate modal won't fire.
+  const skipInterests = useCallback(async () => {
+    try {
+      await apiRequest("PATCH", "/api/profile/me/interests", {
+        interests: [],
+        dismissed: true,
+      });
+      await refreshProfile();
+    } catch (err) {
+      console.warn("[WelcomePage] skip interests failed:", err);
+    }
+    void goNext(4);
+  }, [refreshProfile, goNext]);
+
+  const onInterestsSaved = useCallback(async () => {
+    await refreshProfile();
+    void goNext(4);
+  }, [refreshProfile, goNext]);
+
+  // Step 5 — Completion: stamp onboardingCompletedAt + onboardingStep=5
+  // server-side on first render. The completion screen calls onMounted
+  // exactly once.
+  const onCompletionMounted = useCallback(async () => {
+    try {
+      await apiRequest("PATCH", "/api/profile/me", {
+        onboardingStep: 5,
+        onboardingCompletedAt: true,
+      });
+      await refreshProfile();
+    } catch (err) {
+      console.warn("[WelcomePage] stamp completion failed:", err);
+    }
+  }, [refreshProfile]);
+
+  // Direction-aware variants. We slide ~16% of viewport width — wide
+  // enough to feel like motion, tight enough to keep the next step
+  // landing on the screen quickly.
+  const variants = useMemo(
+    () => ({
+      initial: (dir: 1 | -1) => ({
+        x: dir > 0 ? "16%" : "-16%",
+        opacity: 0,
+      }),
+      animate: { x: 0, opacity: 1 },
+      exit: (dir: 1 | -1) => ({
+        x: dir > 0 ? "-16%" : "16%",
+        opacity: 0,
+      }),
+    }),
+    [],
   );
 
-  if (authLoading || !user) {
+  if (authLoading || !user || !bootstrapped) {
     return null;
   }
 
-  return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-background">
-      <div className="w-full max-w-md">
-        <div className="mb-8 text-center">
-          <div className="flex items-center justify-center gap-2 mb-2">
-            <VoxDexLogo size={48} />
-            <span className="font-serif font-bold text-3xl">VoxDex</span>
-          </div>
-          <p className="text-muted-foreground">Pick a handle and you're in.</p>
-        </div>
+  // Top-bar handlers per step.
+  const onBack = step > 0 && step < 5 ? goBack : undefined;
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Welcome to VoxDex</CardTitle>
-            <CardDescription>
-              Choose a username for your public profile. You can change it later in Settings.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-5" noValidate>
-              {/* Avatar preview + Change-avatar affordance.
-                  Shown above the username field on purpose: the
-                  username is the user's "name" and the avatar is
-                  their "face" — pairing them visually previews how
-                  their identity will read across the product. */}
-              <div className="flex items-center gap-4">
-                <div className="h-16 w-16 overflow-hidden rounded-full border bg-muted flex-shrink-0">
-                  {profile?.avatarSeed ? (
-                    <GenerativeAvatar seed={profile.avatarSeed} alt="Your avatar" />
-                  ) : null}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium leading-tight">Your avatar</p>
-                  <p className="text-xs text-muted-foreground leading-snug">
-                    We auto-generated one — keep it or pick something else.
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPickerOpen(true)}
-                  data-testid="button-welcome-change-avatar"
-                  disabled={!user}
-                >
-                  Change
-                </Button>
-              </div>
+  let content: React.ReactNode = null;
+  let title = "";
+  let subtitle: string | undefined;
+  let footer: React.ReactNode = null;
+  let onSkip: (() => void) | undefined;
+  let hideProgress = false;
 
-              <div className="space-y-2">
-                <Label htmlFor="welcome-username">Username</Label>
-                <div className="relative">
-                  <Input
-                    id="welcome-username"
-                    autoComplete="username"
-                    autoCapitalize="none"
-                    spellCheck={false}
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    onFocus={(e) => e.currentTarget.select()}
-                    placeholder="yourname"
-                    data-testid="input-welcome-username"
-                    className="pr-10"
-                  />
-                  <div className="absolute inset-y-0 right-3 flex items-center">
-                    <UsernameStatusIcon availability={availability} />
-                  </div>
-                </div>
-                <UsernameStatusText availability={availability} username={username} />
-              </div>
-
-              <div className="flex items-start gap-3 rounded-md border bg-muted/30 p-3">
-                <Checkbox
-                  id="welcome-tos"
-                  checked={tosAccepted}
-                  onCheckedChange={(c) => setTosAccepted(c === true)}
-                  data-testid="checkbox-tos"
-                  className="mt-0.5"
-                />
-                <Label htmlFor="welcome-tos" className="text-sm font-normal leading-snug">
-                  I agree to the{" "}
-                  <a
-                    href="/terms"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline underline-offset-2 hover:text-foreground"
-                  >
-                    Terms of Service
-                  </a>{" "}
-                  and{" "}
-                  <a
-                    href="/privacy"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline underline-offset-2 hover:text-foreground"
-                  >
-                    Privacy Policy
-                  </a>
-                  .
-                </Label>
-              </div>
-
-              {submitError ? (
-                <p role="alert" className="text-sm text-destructive">
-                  {submitError}
-                </p>
-              ) : null}
-
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={!canSubmit}
-                data-testid="button-welcome-submit"
-              >
-                {submitting ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Saving…
-                  </>
-                ) : (
-                  "Continue"
-                )}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Mounted at the page root so the dialog escapes the card's
-          stacking context. Only renders an interactive picker when
-          we have a user id to attach the upload to. */}
-      {user ? (
-        <AvatarPicker
-          open={pickerOpen}
-          onOpenChange={setPickerOpen}
-          userId={profile?.id || user.id}
-          username={profile?.username}
-          currentSeed={profile?.avatarSeed}
-          onSave={handleSaveAvatar}
+  switch (step) {
+    case 0:
+      title = "Welcome to VoxDex";
+      subtitle = "Pick a handle and you're in. You can change it any time.";
+      content = (
+        <WelcomeStep onCompleted={() => void goNext(0)} />
+      );
+      // Step 0 owns its own submit button (inside the form). No
+      // external footer or back/skip controls.
+      break;
+    case 1:
+      title = "When were you born?";
+      subtitle = "Just the year — we use this to tune what you see.";
+      onSkip = () => void goNext(1);
+      content = (
+        <YearWheel
+          initialDateOfBirth={profile?.dateOfBirth ?? null}
+          onChange={setYear}
         />
-      ) : null}
-    </div>
+      );
+      footer = (
+        <Button
+          onClick={() => void submitYear()}
+          className="w-full"
+          size="lg"
+          disabled={year === null}
+          data-testid="year-continue"
+        >
+          Continue
+        </Button>
+      );
+      break;
+    case 2:
+      title = "How do you identify?";
+      subtitle = "Optional. Helps us serve a more relevant feed.";
+      onSkip = () => void goNext(2);
+      content = <GenderList value={gender} onChange={setGender} />;
+      footer = (
+        <Button
+          onClick={() => void submitGender()}
+          className="w-full"
+          size="lg"
+          disabled={!gender}
+          data-testid="gender-continue"
+        >
+          Continue
+        </Button>
+      );
+      break;
+    case 3:
+      title = "Where are you based?";
+      subtitle = "Country only. We never share this.";
+      onSkip = () => void goNext(3);
+      content = <CountryList value={country} onChange={setCountry} />;
+      footer = (
+        <Button
+          onClick={() => void submitCountry()}
+          className="w-full"
+          size="lg"
+          disabled={!country}
+          data-testid="country-continue"
+        >
+          Continue
+        </Button>
+      );
+      break;
+    case 4:
+      title = "What are you into?";
+      subtitle = "Pick a few categories — we'll surface what matters to you.";
+      onSkip = () => void skipInterests();
+      // The inline picker has its own Save button + selection state,
+      // so the container doesn't render an external footer for this
+      // step. onInterestsSaved is fired via the picker's onSaved cb.
+      content = (
+        <InterestsPicker
+          mode="inline"
+          defaultValue={profile?.statedInterests ?? []}
+          onSaved={() => void onInterestsSaved()}
+        />
+      );
+      break;
+    case 5:
+      title = "";
+      hideProgress = true;
+      content = <CompletionStep onMounted={() => void onCompletionMounted()} />;
+      break;
+  }
+
+  return (
+    <StepShell
+      stepIndex={step}
+      totalSteps={TOTAL_STEPS}
+      title={title}
+      subtitle={subtitle}
+      onBack={onBack}
+      onSkip={onSkip}
+      hideProgress={hideProgress || step === 5}
+      footer={footer}
+      testId={`onboarding-step-${step}`}
+    >
+      <AnimatePresence mode="wait" custom={direction} initial={false}>
+        <motion.div
+          key={step}
+          custom={direction}
+          variants={variants}
+          initial="initial"
+          animate="animate"
+          exit="exit"
+          transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+          className="flex flex-1 flex-col"
+        >
+          {content}
+        </motion.div>
+      </AnimatePresence>
+    </StepShell>
   );
-}
-
-function UsernameStatusIcon({ availability }: { availability: Availability }) {
-  switch (availability.status) {
-    case "checking":
-      return <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />;
-    case "ok":
-      return <Check className="h-4 w-4 text-emerald-500" />;
-    case "taken":
-    case "invalid":
-    case "error":
-      return <X className="h-4 w-4 text-destructive" />;
-    default:
-      return null;
-  }
-}
-
-function UsernameStatusText({
-  availability,
-  username,
-}: {
-  availability: Availability;
-  username: string;
-}) {
-  if (!username.trim()) {
-    return (
-      <p className="text-xs text-muted-foreground">
-        3–30 letters, numbers, or underscores.
-      </p>
-    );
-  }
-  switch (availability.status) {
-    case "checking":
-      return <p className="text-xs text-muted-foreground">Checking availability…</p>;
-    case "ok":
-      return <p className="text-xs text-emerald-600">Available.</p>;
-    case "taken":
-      return <p className="text-xs text-destructive">That username is taken.</p>;
-    case "invalid":
-      return <p className="text-xs text-destructive">{availability.reason}</p>;
-    case "error":
-      return (
-        <p className="text-xs text-destructive">
-          Couldn't check availability. Try again in a moment.
-        </p>
-      );
-    default:
-      return (
-        <p className="text-xs text-muted-foreground">
-          3–30 letters, numbers, or underscores.
-        </p>
-      );
-  }
 }

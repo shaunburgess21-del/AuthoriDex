@@ -1,14 +1,20 @@
 // Interest Picker — Phase 1 shared modal.
 //
-// Renders the same content in three "modes" so the picker is reusable for:
+// Renders the same content in four "modes" so the picker is reusable for:
 //   * onboarding  — first-time prompt after /login/welcome (Skip available)
 //   * settings    — inline card on /me/settings (no Skip, persistent)
 //   * reprompt    — soft re-prompt for skippers (Skip = "Not now")
+//   * inline      — embedded as a step inside the multi-step onboarding
+//                   container. Like `settings` it returns just the body
+//                   (no Drawer/Dialog chrome) but uses the onboarding
+//                   copy and exposes the same Save/Skip semantics —
+//                   the container drives advance/skip via `onSaved`.
 //
 // Layout:
 //   * Mobile (<768px): vaul Drawer for thumb-reach (mirrors OnboardingDrawer).
 //   * Desktop:         Radix Dialog centered modal.
 //   * Settings mode:   never wrapped — caller embeds the body in a Card.
+//   * Inline mode:     never wrapped — used inside the onboarding flow.
 //
 // Persistence:
 //   * Save  -> PATCH /api/profile/me/interests { interests: [...] }
@@ -37,7 +43,7 @@ import { CANONICAL_CATEGORIES } from "@shared/constants";
 import { getCategoryStyle } from "@/components/CategoryPill";
 import { cn } from "@/lib/utils";
 
-export type InterestsPickerMode = "onboarding" | "settings" | "reprompt";
+export type InterestsPickerMode = "onboarding" | "settings" | "reprompt" | "inline";
 
 interface InterestsPickerProps {
   mode: InterestsPickerMode;
@@ -72,6 +78,16 @@ const MODE_COPY: Record<
     subtitle: "Pick what you're into so we can tailor your feed.",
     cta: "Let's go",
     skipLabel: "Not now",
+  },
+  // Inline mode borrows onboarding copy but the container renders the
+  // step header above us — the body keeps its own pill grid + CTA so
+  // Save / Skip wire through unchanged. Skip is owned by the container
+  // (top-right "Skip" affordance) so the body suppresses its own.
+  inline: {
+    title: "Pick what you're into.",
+    subtitle: "Choose any you like — tap again to deselect.",
+    cta: "Continue",
+    skipLabel: null,
   },
 };
 
@@ -137,8 +153,9 @@ function PickerBody({
   }, [selected, initialSet]);
 
   // Settings mode allows saving an empty selection (clears interests, keeps
-  // cold-start ordering on). Modal modes only enable the CTA when something
-  // is picked so users don't accidentally "Let's go" with an empty set.
+  // cold-start ordering on). Modal + inline modes only enable the CTA when
+  // something is picked so users don't accidentally "Continue" with an
+  // empty set — the container offers an explicit Skip for that path.
   const canSave =
     !saving && (mode === "settings" ? dirty : selected.size > 0);
 
@@ -266,7 +283,7 @@ export function InterestsPicker({
 }: InterestsPickerProps) {
   const isMobile = useIsMobile();
 
-  if (mode === "settings") {
+  if (mode === "settings" || mode === "inline") {
     return (
       <PickerBody
         mode={mode}

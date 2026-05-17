@@ -232,10 +232,16 @@ function ShareAttributionWatcher() {
 }
 
 /**
- * Force first-time users (no `tosAcceptedAt`) through /login/welcome before
+ * Force first-time users through the multi-step /login/welcome flow before
  * they can land anywhere else. Catches the Google-OAuth signup path, which
  * skips the email verify screen entirely and would otherwise drop the user
  * straight on the home page without a username choice / ToS acceptance.
+ *
+ * Gate keys on `onboardingCompletedAt` (migration 0063) — the canonical
+ * "user finished the whole flow" signal. `tosAcceptedAt` is now internal
+ * to step 0 of the flow; a user who only got past ToS but bailed on the
+ * later steps still has `onboardingCompletedAt = null` and gets sent
+ * back into the flow to resume where they left off.
  *
  * Excludes /login/* (so the email signup flow can stay in place) and the
  * legal / pricing reference pages — opening Terms, Privacy, Takedown,
@@ -258,7 +264,7 @@ function NewUserGate() {
   useEffect(() => {
     if (loading || profileLoading) return;
     if (!user || !profile) return;
-    if (profile.tosAcceptedAt) return;
+    if (profile.onboardingCompletedAt) return;
     if (location.startsWith("/login")) return;
     if (NEW_USER_GATE_ALLOWLIST.has(location)) return;
     setLocation("/login/welcome", { replace: true });
