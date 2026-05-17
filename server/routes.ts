@@ -17758,16 +17758,16 @@ Target length: about 90-150 words.`;
         ? `\nLinked to: ${linkedPerson.name} (current trend score: ${linkedPerson.trendScore?.toLocaleString() ?? "N/A"}, category: ${linkedPerson.category ?? "N/A"})`
         : "";
 
-      const systemPrompt = `You are writing a brief market context summary for a prediction market on VoxDex, a trend-tracking and prediction platform. Use web search to ensure all facts are current and accurate. Write plain text only — no markdown, no headers, no bullets, no bold. Use blank lines between paragraphs for readability.`;
+      const systemPrompt = `You are writing a brief market context summary for a prediction market on VoxDex, a trend-tracking and prediction platform. Use web search to ensure all facts are current and accurate, but write in durable, evergreen phrasing. Do not mention the generation date or use phrases like "as of today", "as of [date]", or "currently on [date]". Write plain text only — no markdown, no headers, no bullets, no bold. Use blank lines between paragraphs for readability.`;
 
       const userPrompt = `Market: "${market.title}"
 Category: ${market.category || "General"}
 ${market.teaser ? `Teaser: "${market.teaser}"` : ""}
-Resolution Date: ${resolutionDate}
+Prediction Deadline (market resolution date): ${resolutionDate}
 Resolution Criteria: ${resolutionCriteria}
 Outcomes: ${outcomesStr}${linkedPersonBlock}
 
-Write 2-3 short paragraphs (separated by blank lines) that help users make an informed prediction. Focus on enduring background context, the stakes involved, historical precedent, and the key factors that will ultimately decide the outcome. Be factual and neutral — do not recommend a side.`;
+Write 2-3 short paragraphs (separated by blank lines) that help users make an informed prediction. Focus on enduring background context, the stakes involved, historical precedent, and the key factors that will ultimately decide the outcome. Use the prediction deadline only when it helps explain how the market resolves. Be factual and neutral — do not recommend a side.`;
 
       const openai = new OpenAI({
         apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
