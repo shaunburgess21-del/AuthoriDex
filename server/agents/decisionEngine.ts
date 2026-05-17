@@ -120,18 +120,38 @@ export function computePrediction(
     if (sA && sB) {
       const fA = Math.max(sA.fameIndex ?? 0, 1);
       const fB = Math.max(sB.fameIndex ?? 0, 1);
-      // Multiplicative bonus that combines momentum (delta + wiki pulse) and
-      // explicit `trendDirection`. Direction is layered on top so a person
-      // who is decisively DOWN (per the priority ladder) loses a few percent
-      // of fame weight even when their 7d delta and wiki pulse are flat —
-      // this is the H2H equivalent of the per-entry tilt added to
-      // computeSignalBoost above.
+      // Multiplicative bonus that combines three signals on each side:
+      //   - momentum: 7d delta + wiki pulse  (max ±10%)
+      //   - vs-open baseline: pctChangeVsOpen, saturating at ±20%  (max ±10%)
+      //   - explicit trendDirection: small constant tilt  (max ±4%)
+      //
+      // The vs-open factor is the magnitude-aware completion of Phase 1b:
+      // we now resolve a per-entry baseline from `trend_snapshots` at-or-
+      // before market.createdAt, so a person who has tanked 30% from open
+      // SHOULD lose meaningful fame weight in an H2H, not just the 4%
+      // direction-tilt nudge. Saturates at ±20% with a 0.10 coefficient
+      // — half of `computeSignalBoost`'s 0.18, because H2H is a mutual
+      // comparison (both sides get the factor) so net effect on the
+      // probability split roughly doubles.
+      //
+      // Why direction tilt stays ON TOP of the vs-open factor: when
+      // pctChangeVsOpen is small/zero but `change24h` and `change7d`
+      // agree (rung 2 of the priority ladder), direction is still UP/DOWN
+      // and provides a sign-aware nudge that the vs-open factor (near 1.0)
+      // wouldn't catch.
       const momBonus = (s: TrendSignals): number => {
         const delta = s.scoreDelta7d ?? 0;
         let bonus = 1.0;
         if (s.wikiPulse === "rising" && delta > 8) bonus = 1.10;
         else if (delta > 3) bonus = 1.05;
         else if (s.wikiPulse === "falling" || delta < -3) bonus = 0.95;
+        if (
+          s.pctChangeVsOpen != null &&
+          Number.isFinite(s.pctChangeVsOpen)
+        ) {
+          const normalized = Math.max(-1, Math.min(1, s.pctChangeVsOpen / 0.20));
+          bonus *= 1 + normalized * 0.10;
+        }
         if (s.trendDirection === "UP") bonus *= 1.04;
         else if (s.trendDirection === "DOWN") bonus *= 0.96;
         return bonus;
@@ -189,14 +209,25 @@ export function computePrediction(
       const momentum = entrySig.scoreDelta7d / 15;
       const wikiBoost = entrySig.wikiPulse === "rising" ? 0.08 : entrySig.wikiPulse === "falling" ? -0.08 : 0;
       const newsBoost = entrySig.newsLevel === "red" ? 0.05 : entrySig.newsLevel === "green" ? -0.03 : 0;
+      // Vs-open baseline: the magnitude-aware completion of Phase 1b for
+      // race markets. Saturates at ±20% with a 0.10 coefficient — smaller
+      // than computeSignalBoost's 0.18 because race entries dilute (all
+      // entries' boosts get re-normalised at Step 3c), but big enough to
+      // visibly fade an entry that has tanked materially since the
+      // market opened. Skipped silently when no baseline could be resolved
+      // (no snapshot pre-dating market.createdAt for this person).
+      const vsOpenBoost =
+        entrySig.pctChangeVsOpen != null && Number.isFinite(entrySig.pctChangeVsOpen)
+          ? Math.max(-1, Math.min(1, entrySig.pctChangeVsOpen / 0.20)) * 0.10
+          : 0;
       // Direction tilt for race-style multi-entry comparisons: small
-      // additive nudge so a clearly-trending-up entry gets ~3 points more
-      // than a flat one, all else equal.
+      // additive nudge that catches the case where vsOpen is near zero
+      // but the priority ladder still agrees on direction (rung 2/3).
       const dirBoost =
         entrySig.trendDirection === "UP" ? 0.03
         : entrySig.trendDirection === "DOWN" ? -0.03
         : 0;
-      const entryBoost = (momentum * 0.12 + wikiBoost + newsBoost + dirBoost) * agent.recencyWeight;
+      const entryBoost = (momentum * 0.12 + wikiBoost + newsBoost + vsOpenBoost + dirBoost) * agent.recencyWeight;
       scores[entryId] = Math.max(0.05, (scores[entryId] ?? (1 / n)) + entryBoost);
     }
   }

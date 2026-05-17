@@ -341,6 +341,246 @@ test("contrarianism is disarmed on decisive weekly moves (|pctChangeVsOpen| >= 0
   }
 });
 
+// ---------------------------------------------------------------------------
+// H2H per-entry pctChangeVsOpen — Phase 1b completion
+// ---------------------------------------------------------------------------
+//
+// The H2H seeding path (lines ~115-165 in decisionEngine.ts) computes a
+// fame-weighted base, then layers a multiplicative momBonus per side.
+// Phase 1b populates `pctChangeVsOpen` on per-entry signals; the follow-up
+// here is the magnitude-aware factor inside momBonus (saturating ±10% at
+// pctChangeVsOpen ±20%). These tests pin two contracts:
+//   1. A decisively-DOWN entry loses meaningful weight even when its
+//      `scoreDelta7d` and `wikiPulse` are flat.
+//   2. The vs-open factor stacks ON TOP of the existing 7d/wiki/direction
+//      signals, not as a replacement (so flat-on-everything-else still
+//      produces the same baseline as before).
+
+function makeH2HMarket(): MarketWithEntries {
+  const entries: MarketEntryData[] = [
+    { id: "entry-a", label: "Putin", totalStake: 0, personId: "person-a" },
+    { id: "entry-b", label: "Macron", totalStake: 0, personId: "person-b" },
+  ];
+  return {
+    id: "market-h2h",
+    marketType: "h2h",
+    status: "OPEN",
+    title: "Putin vs Macron — bigger mover this week",
+    category: "politics",
+    personId: null, // H2H markets have no single anchor person
+    endAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+    entries,
+  };
+}
+
+/**
+ * Resolve a stable, non-abstaining decision for an H2H market across the
+ * first few seeds. H2H uses weighted random selection in Step 4, so the
+ * `entryId` chosen on any single seed is noisy — but `rawProbability` is
+ * deterministic for any seed that doesn't abstain, because it's the
+ * Step-3c-normalised seed weight of the chosen side. We pick the first
+ * seed that produces a non-abstain decision and read `rawProbability`
+ * from it; whichever side was rolled, we know the OTHER side has
+ * probability `1 - rawProbability` (binary market).
+ */
+function firstNonAbstain(
+  agent: AgentConfigData,
+  market: MarketWithEntries,
+  signals: TrendSignals,
+  crowd: CrowdSplit,
+  entrySignals: Map<string, TrendSignals> | undefined,
+): ReturnType<typeof computePrediction> {
+  for (let seed = 1; seed <= 50; seed++) {
+    const d = computePrediction(agent, market, signals, crowd, createPRNG(seed), entrySignals);
+    if (!d.abstain) return d;
+  }
+  throw new Error("no non-abstain decision found in 50 seeds");
+}
+
+test("H2H: vs-open factor fades a decisively-down side beyond direction tilt alone", () => {
+  // Equal fame, equal scoreDelta7d, equal wikiPulse. Putin has -30%
+  // pctChangeVsOpen and DOWN trendDirection; Macron is flat. Without the
+  // new factor, momBonus would be 0.96 (DOWN) vs 1.0 (FLAT) — a 49/51
+  // split. With the new vs-open factor saturated at -10% on top, the
+  // bonus becomes 0.864 (Putin) vs 1.0 (Macron) — a 46.35/53.65 split.
+  // We pin the seed weight to that exact ratio so future regressions in
+  // either the factor coefficient or the saturation cap surface here.
+  const market = makeH2HMarket();
+  const agent = makeSharpAgent({ specialties: ["politics"] });
+  const entrySignals = new Map<string, TrendSignals>([
+    ["entry-a", makeSignals({ fameIndex: 6000, pctChangeVsOpen: -0.30, trendDirection: "DOWN" })],
+    ["entry-b", makeSignals({ fameIndex: 6000, pctChangeVsOpen: 0, trendDirection: "FLAT" })],
+  ]);
+
+  const decision = firstNonAbstain(agent, market, makeSignals(), {}, entrySignals);
+  // Whichever side weighted-random picked, derive Macron's seed weight.
+  const macronProb =
+    decision.entryId === "entry-b" ? decision.rawProbability! : 1 - decision.rawProbability!;
+  // Expected: 1.0 / (0.864 + 1.0) ≈ 0.5365. Direction tilt alone would
+  // give 1.0 / (0.96 + 1.0) ≈ 0.5102.
+  assert.ok(
+    macronProb > 0.53 && macronProb < 0.54,
+    `Macron seed weight outside expected band: ${macronProb} (expected ~0.5365)`,
+  );
+});
+
+test("H2H: vs-open factor stacks with momentum (decisive down vs decisive up)", () => {
+  // Putin DOWN -30% with negative 7d delta + falling wiki vs Macron UP
+  // +30% with positive 7d delta + rising wiki. Every signal points the
+  // same way; the seed weight should be heavily skewed toward Macron.
+  // Putin: bonus=0.95 (delta<-3 AND wiki=falling => 0.95), * 0.9 (vs-open
+  // saturated -10%), * 0.96 (DOWN) ≈ 0.821. Macron: 1.10 (delta>8 AND
+  // wiki=rising) * 1.10 (vs-open +10%) * 1.04 (UP) ≈ 1.258. Macron
+  // probability ≈ 1.258 / (0.821 + 1.258) ≈ 0.605.
+  const market = makeH2HMarket();
+  const agent = makeSharpAgent({ specialties: ["politics"] });
+  const entrySignals = new Map<string, TrendSignals>([
+    ["entry-a", makeSignals({
+      fameIndex: 6000,
+      pctChangeVsOpen: -0.30,
+      scoreDelta7d: -10,
+      wikiPulse: "falling",
+      trendDirection: "DOWN",
+    })],
+    ["entry-b", makeSignals({
+      fameIndex: 6000,
+      pctChangeVsOpen: 0.30,
+      scoreDelta7d: 10,
+      wikiPulse: "rising",
+      trendDirection: "UP",
+    })],
+  ]);
+
+  const decision = firstNonAbstain(agent, market, makeSignals(), {}, entrySignals);
+  const macronProb =
+    decision.entryId === "entry-b" ? decision.rawProbability! : 1 - decision.rawProbability!;
+  assert.ok(
+    macronProb > 0.58,
+    `expected Macron seed weight > 0.58 with all-aligned signals; got ${macronProb}`,
+  );
+});
+
+test("H2H: equal pctChangeVsOpen on both sides leaves seeding fame-driven", () => {
+  // Symmetric vs-open eliminates the new factor's effect (both sides
+  // multiply by the same number). 2:1 fame ratio should still cleanly
+  // favour entry-a — the factor doesn't introduce asymmetry where there
+  // shouldn't be any.
+  const market = makeH2HMarket();
+  const agent = makeSharpAgent({ specialties: ["politics"] });
+  const entrySignals = new Map<string, TrendSignals>([
+    ["entry-a", makeSignals({ fameIndex: 8000, pctChangeVsOpen: 0.05, trendDirection: "FLAT" })],
+    ["entry-b", makeSignals({ fameIndex: 4000, pctChangeVsOpen: 0.05, trendDirection: "FLAT" })],
+  ]);
+
+  const decision = firstNonAbstain(agent, market, makeSignals(), {}, entrySignals);
+  const aProb =
+    decision.entryId === "entry-a" ? decision.rawProbability! : 1 - decision.rawProbability!;
+  // 8000 / (8000 + 4000) = 0.6667. Both sides have identical momBonus
+  // (1.025 from the symmetric +5% vs-open) so the ratio is preserved.
+  assert.ok(
+    aProb > 0.65 && aProb < 0.68,
+    `fame should still dominate when vs-open is symmetric; got entry-a probability ${aProb}`,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Race per-entry pctChangeVsOpen — Phase 1b completion
+// ---------------------------------------------------------------------------
+//
+// Race markets (gainer) hit the non-H2H per-entry pass (`if (!isH2H && ...)`)
+// where each entry's score is bumped additively. The vs-open boost
+// saturates at ±0.10 (0.10 coefficient on pctChangeVsOpen / 0.20). Test
+// that an entry trending decisively up gets visibly more score than the
+// pre-factor world.
+
+function makeRaceMarket(): MarketWithEntries {
+  const entries: MarketEntryData[] = [
+    { id: "racer-1", label: "Alice", totalStake: 0, personId: "person-1" },
+    { id: "racer-2", label: "Bob", totalStake: 0, personId: "person-2" },
+    { id: "racer-3", label: "Cara", totalStake: 0, personId: "person-3" },
+    { id: "racer-4", label: "Dan", totalStake: 0, personId: "person-4" },
+  ];
+  return {
+    id: "market-race",
+    marketType: "gainer",
+    status: "OPEN",
+    title: "Top mover this week",
+    category: "politics",
+    personId: null,
+    endAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+    entries,
+  };
+}
+
+test("Race: a +30% entry beats flat peers with the same fame and 7d delta", () => {
+  // All four racers have identical fame and momentum; only Alice's
+  // vs-open differs. The new vs-open boost is the only differentiator,
+  // so Alice should be the deterministic top pick.
+  const market = makeRaceMarket();
+  const agent = makeSharpAgent({ specialties: ["politics"] });
+  const flat = makeSignals({ pctChangeVsOpen: 0, trendDirection: "FLAT" });
+  const entrySignals = new Map<string, TrendSignals>([
+    ["racer-1", makeSignals({ pctChangeVsOpen: 0.30, trendDirection: "UP" })],
+    ["racer-2", flat],
+    ["racer-3", flat],
+    ["racer-4", flat],
+  ]);
+  const rng = createPRNG(PRNG_SEED);
+
+  const decision = computePrediction(agent, market, makeSignals(), {}, rng, entrySignals);
+
+  assert.equal(decision.abstain, false, `unexpected abstain: ${decision.abstainReason}`);
+  assert.equal(decision.entryId, "racer-1", "the +30% racer should be the top pick");
+});
+
+test("Race: a -25% entry is materially less likely than flat peers", () => {
+  // Flip case — Alice tanking 25% should be the LEAST likely pick.
+  // We don't assert which of the three flat peers wins (the seed picks
+  // one), only that Alice is not the chosen entry — i.e. the negative
+  // vs-open boost successfully fades her below the others.
+  const market = makeRaceMarket();
+  const agent = makeSharpAgent({ specialties: ["politics"] });
+  const flat = makeSignals({ pctChangeVsOpen: 0, trendDirection: "FLAT" });
+  const entrySignals = new Map<string, TrendSignals>([
+    ["racer-1", makeSignals({ pctChangeVsOpen: -0.25, trendDirection: "DOWN" })],
+    ["racer-2", flat],
+    ["racer-3", flat],
+    ["racer-4", flat],
+  ]);
+  const rng = createPRNG(PRNG_SEED);
+
+  const decision = computePrediction(agent, market, makeSignals(), {}, rng, entrySignals);
+
+  assert.equal(decision.abstain, false, `unexpected abstain: ${decision.abstainReason}`);
+  assert.notEqual(decision.entryId, "racer-1", "the -25% racer should not be the top pick");
+});
+
+test("Race: missing pctChangeVsOpen on entries falls back gracefully (no crash, no boost)", () => {
+  // When the per-entry baseline can't be resolved (no snapshot pre-dates
+  // market.createdAt for that person), `entrySig.pctChangeVsOpen` is
+  // undefined and the boost should silently be 0. With everything else
+  // equal, the racer with a strong scoreDelta7d should still win — i.e.
+  // legacy behaviour is preserved when the new signal is absent.
+  const market = makeRaceMarket();
+  const agent = makeSharpAgent({ specialties: ["politics"] });
+  const entrySignals = new Map<string, TrendSignals>([
+    ["racer-1", makeSignals({ scoreDelta7d: 12 })], // no pctChangeVsOpen
+    ["racer-2", makeSignals({ scoreDelta7d: 0 })],
+    ["racer-3", makeSignals({ scoreDelta7d: 0 })],
+    ["racer-4", makeSignals({ scoreDelta7d: 0 })],
+  ]);
+  const rng = createPRNG(PRNG_SEED);
+
+  const decision = computePrediction(agent, market, makeSignals(), {}, rng, entrySignals);
+
+  assert.equal(decision.abstain, false, `unexpected abstain: ${decision.abstainReason}`);
+  assert.equal(decision.entryId, "racer-1", "legacy 7d momentum path should still pick the strong mover");
+});
+
+// ---------------------------------------------------------------------------
+// Original test resumes here
+// ---------------------------------------------------------------------------
+
 test("contrarianism fires normally on borderline moves (|pctChangeVsOpen| < 0.15)", () => {
   // 10% drawdown is decisivelyDown (< -0.05) so prestige stays gated,
   // but is NOT a decisive weekly move (< 0.15) so contrarianism is
