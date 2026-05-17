@@ -760,6 +760,17 @@ async function startServer() {
 
     // Start approval snapshot scheduler (captures approval metrics every 6 hours for pulse chart)
     startScheduler("ApprovalSnapshots", startApprovalSnapshotScheduler);
+
+    // Start AMM operational health check (read-only audit every 15 min:
+    // orphan ledger rows, seed-return drift, stuck CLOSED_PENDING markets,
+    // negative credits, dup idempotency keys, agent pause state). Logs a
+    // single summary line per run; fails are emitted at WARN level so
+    // log-based alerts can fire without parsing JSON.
+    if (!SERVERLESS_MODE) {
+      startScheduler("AmmHealthCheck", startAmmHealthCheckScheduler);
+    } else {
+      log("[AmmHealthCheck] Skipped - serverless mode. Use POST /api/cron/amm-health-check.");
+    }
   });
 }
 
@@ -807,6 +818,52 @@ function startApprovalSnapshotScheduler() {
     captureApprovalSnapshots();
     setInterval(captureApprovalSnapshots, APPROVAL_SNAPSHOT_INTERVAL_MS);
   }, 30_000);
+}
+
+// Every 15 minutes — frequent enough to surface a freshly-introduced
+// regression within one cycle, infrequent enough that the audit's six
+// SQL queries don't add meaningful load. Mirrors the recommended Railway
+// cron cadence in ops/AMM_MONITORING_RUNBOOK.md.
+const AMM_HEALTH_CHECK_INTERVAL_MS = 15 * 60 * 1000;
+
+async function runScheduledAmmHealthCheck(): Promise<void> {
+  try {
+    const { runAmmHealthCheck } = await import("./jobs/amm-health");
+    const result = await runAmmHealthCheck();
+
+    // Match the log-line shape used by POST /api/cron/amm-health-check so a
+    // single saved-search filter (`[AmmHealthCheck] FAIL`) catches both the
+    // in-process scheduler AND any future external cron invocation.
+    if (!result.ok) {
+      const failedNames = result.checks.filter((c) => c.status === "fail").map((c) => c.name);
+      log(`[AmmHealthCheck] FAIL — ${result.failed} failed check(s): ${failedNames.join(", ")}`);
+    } else if (result.warned > 0) {
+      const warnedNames = result.checks.filter((c) => c.status === "warn").map((c) => c.name);
+      log(`[AmmHealthCheck] PASS with ${result.warned} warning(s): ${warnedNames.join(", ")}`);
+    } else {
+      log(`[AmmHealthCheck] PASS — all ${result.total} checks clean (${result.durationMs}ms)`);
+    }
+  } catch (err: any) {
+    // Never let a scheduler tick crash the parent process. The next tick
+    // will retry. If the audit itself is broken (e.g. DB unreachable) the
+    // upstream error will fire its own alert via the regular Pool error path.
+    log(`[AmmHealthCheck] Scheduler tick failed (will retry next interval): ${err?.message ?? err}`);
+  }
+}
+
+function startAmmHealthCheckScheduler() {
+  if (SERVERLESS_MODE) {
+    log("[AmmHealthCheck] Skipped - serverless mode.");
+    return;
+  }
+  log("[AmmHealthCheck] Starting (every 15 min)");
+  // Stagger initial run by 60s so the audit doesn't pile onto boot-time
+  // DB load alongside Ingestion / MarketGenerator / AgentRunner all firing
+  // their first ticks in the same window.
+  setTimeout(() => {
+    void runScheduledAmmHealthCheck();
+    setInterval(() => void runScheduledAmmHealthCheck(), AMM_HEALTH_CHECK_INTERVAL_MS);
+  }, 60_000);
 }
 
 startServer().catch((error) => {
