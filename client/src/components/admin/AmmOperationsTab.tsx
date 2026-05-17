@@ -48,15 +48,17 @@ import {
   AlertTriangle,
   CheckCircle,
   Clock,
+  Cloud,
   Copy,
   Loader2,
   RefreshCw,
   ShieldCheck,
   XCircle,
   Zap,
+  type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, ApiError } from "@/lib/queryClient";
 
 // ---------------------------------------------------------------------------
 // API response shapes — mirror server/jobs/amm-health.ts + the three admin
@@ -157,9 +159,24 @@ function relativeTime(iso: string): string {
   }
 }
 
-function nextSchedulerRunIn(latestStartedAt: string | null): string {
-  if (!latestStartedAt) return "—";
-  const next = new Date(latestStartedAt).getTime() + 15 * 60 * 1000;
+/**
+ * Estimate when the next in-process scheduler tick will fire.
+ *
+ * Important subtlety: the scheduler ticks every 15 min on its own setInterval
+ * clock (see server/index.ts), independent of any `manual` or `cron` runs.
+ * Basing the estimate on `latest.startedAt` would lie whenever the latest
+ * persisted run was a manual or cron one — so we look up the most recent
+ * row whose `source==='scheduler'` instead and project from that.
+ *
+ * Returns "—" if we can't see a scheduler row in the trend window (e.g.
+ * fresh deploy before the first tick, or scheduler disabled in serverless
+ * mode where only cron runs land in the table).
+ */
+function nextSchedulerRunIn(history: HistoryResponse | undefined): string {
+  if (!history) return "—";
+  const lastScheduler = history.runs.find((r) => r.source === "scheduler");
+  if (!lastScheduler) return "—";
+  const next = new Date(lastScheduler.startedAt).getTime() + 15 * 60 * 1000;
   const ms = next - Date.now();
   if (ms <= 0) return "any moment";
   const min = Math.ceil(ms / 60_000);
@@ -228,7 +245,14 @@ function CheckIcon({ status, className = "h-4 w-4" }: { status: CheckStatus; cla
 }
 
 function SourceBadge({ source }: { source: "scheduler" | "cron" | "manual" }) {
-  const map: Record<string, { label: string; cls: string; Icon: typeof Zap }> = {
+  // Three distinct icons + colours so a glance at the badge is enough to know
+  // which writer landed the run: in-process scheduler (Clock, violet),
+  // external cron POSTed by Railway / GH Actions (Cloud, sky-blue), or a
+  // human-clicked "Run now" (Zap, indigo).
+  const map: Record<
+    "scheduler" | "cron" | "manual",
+    { label: string; cls: string; Icon: LucideIcon }
+  > = {
     scheduler: {
       label: "SCHEDULER",
       cls: "border-violet-500/40 text-violet-600 dark:text-violet-400 bg-violet-500/10",
@@ -237,7 +261,7 @@ function SourceBadge({ source }: { source: "scheduler" | "cron" | "manual" }) {
     cron: {
       label: "CRON",
       cls: "border-sky-500/40 text-sky-600 dark:text-sky-400 bg-sky-500/10",
-      Icon: Clock,
+      Icon: Cloud,
     },
     manual: {
       label: "MANUAL",
@@ -475,16 +499,20 @@ export function AmmOperationsTab() {
         description: `${data.result.passed} pass · ${data.result.warned} warn · ${data.result.failed} fail · ${data.result.durationMs}ms`,
       });
     },
-    onError: (err: any) => {
-      const msg = err?.message ?? String(err);
-      // Server returns a Retry-After header + JSON body for the 60s
-      // cooldown; surface that distinctly from real errors.
-      const isRateLimit = /429|rate limit|wait/i.test(msg);
-      toast(isRateLimit ? "Rate limited" : "Run failed", {
-        description: isRateLimit
-          ? "Please wait a minute before re-running. The 15-min scheduler covers regular monitoring."
-          : msg,
-      });
+    onError: (err: unknown) => {
+      // Server returns a 429 + Retry-After header + structured JSON body for
+      // the 60s manual-run cooldown. Branch off the typed `ApiError.status`
+      // (more reliable than scraping the message) and surface the exact
+      // wait-time the server prescribed instead of a generic "wait a minute".
+      if (err instanceof ApiError && err.status === 429) {
+        const seconds = err.retryAfter ?? 60;
+        toast("Rate limited", {
+          description: `Please wait ${seconds}s before re-running. The 15-min scheduler covers regular monitoring.`,
+        });
+        return;
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      toast("Run failed", { description: msg });
     },
   });
 
@@ -598,10 +626,13 @@ export function AmmOperationsTab() {
                 <div className="text-muted-foreground">Lookback window</div>
                 <div className="text-base font-semibold mt-0.5">{latest.lookbackDays}d</div>
               </div>
-              <div className="rounded-md bg-muted/30 px-3 py-2">
+              <div
+                className="rounded-md bg-muted/30 px-3 py-2"
+                title="Projected from the most recent SCHEDULER row in the trend window. Manual / cron runs do not affect this estimate."
+              >
                 <div className="text-muted-foreground">Next scheduler run</div>
                 <div className="text-base font-semibold mt-0.5">
-                  {nextSchedulerRunIn(latest.startedAt)}
+                  {nextSchedulerRunIn(history)}
                 </div>
               </div>
             </div>
