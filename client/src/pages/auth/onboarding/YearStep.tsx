@@ -220,7 +220,15 @@ export function YearWheel({ initialDateOfBirth, onChange }: YearWheelProps) {
             scroll into the centre band. */}
         <div style={{ height: PAD_ROWS * ROW_HEIGHT }} aria-hidden="true" />
         {years.map((year, idx) => {
-          const rowCentre = idx * ROW_HEIGHT + ROW_HEIGHT / 2;
+          // The PAD_ROWS spacer above the first year row shifts every
+          // year[idx] down by PAD_ROWS * ROW_HEIGHT in the DOM. Account
+          // for that here — without it the depth math thinks the
+          // viewport centre is PAD_ROWS rows higher than it actually
+          // is, so the row in the selection band scores the LARGEST
+          // distance and renders smallest while rows below the band
+          // render biggest. Adding PAD_ROWS to the index makes the
+          // selected row score distance=0 (full scale, full opacity).
+          const rowCentre = (idx + PAD_ROWS) * ROW_HEIGHT + ROW_HEIGHT / 2;
           const viewportCentre = scrollTop + VIEWPORT_HEIGHT / 2;
           const distance = Math.abs(rowCentre - viewportCentre);
           // Translate distance → scale + opacity. Rows within ~half a row

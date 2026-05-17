@@ -31,7 +31,6 @@ interface BadgeRow {
   rarity?: string | null;
 }
 
-const AUTO_ADVANCE_MS = 4000;
 const RECENT_BADGE_WINDOW_MS = 10 * 60 * 1000;
 
 interface CompletionStepProps {
@@ -87,12 +86,11 @@ export function CompletionStep({ onMounted }: CompletionStepProps) {
     };
   }, [setLocation]);
 
-  // Auto-advance after AUTO_ADVANCE_MS — gives users time to read
-  // the rewards but never strands them on a dead-end screen.
-  useEffect(() => {
-    const timer = setTimeout(finish, AUTO_ADVANCE_MS);
-    return () => clearTimeout(timer);
-  }, [finish]);
+  // No auto-advance: users dwell on the rewards screen as long as
+  // they want and leave only by tapping the CTA. If they refresh the
+  // page mid-dwell, NewUserGate sees onboardingCompletedAt set (we
+  // PATCH it on mount) and bounces them straight to /, so getting
+  // stuck on this screen forever is impossible.
 
   const credits = profile?.predictCredits ?? 0;
   const xp = profile?.xpPoints ?? 0;
@@ -154,9 +152,6 @@ export function CompletionStep({ onMounted }: CompletionStepProps) {
         >
           Start VoxMaxing
         </Button>
-        <p className="mt-3 text-center text-xs text-muted-foreground">
-          Continuing automatically…
-        </p>
       </div>
     </div>
   );

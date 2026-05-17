@@ -2,28 +2,34 @@
  * Canonical category → Lucide icon registry.
  *
  * Used by the onboarding / re-prompt InterestsPicker to render an icon
- * grid in the spirit of Reddit's interest selector. Kept as a single
- * source of truth so any other surface that needs a category icon
- * (badges, leaderboards, marketing) can reuse the same mapping
- * instead of re-picking icons ad-hoc.
+ * grid in the spirit of Reddit's interest selector. The mapping mirrors
+ * the inline icon ladder in
+ * [client/src/components/home/VoteDeckView.tsx](client/src/components/home/VoteDeckView.tsx)
+ * so the same glyph represents the same category everywhere — Creator
+ * is a video recorder, Film & TV is a clapperboard, etc. Misc inherits
+ * Creator's icon (the canonical set never gave Misc its own glyph and
+ * the video icon reads as a sensible "miscellaneous content" cue).
  *
- * Dynamic categories from the registry that aren't in this map fall
- * back to `Layers` (the same icon used for `misc`) — visually neutral,
- * never blocks rendering.
+ * Dynamic admin-added categories (Media & Podcast, Streaming, Science)
+ * each get their own icon so they don't all collapse onto the fallback.
+ * Anything still un-mapped falls back to `Video` for visual continuity
+ * with Misc.
  */
 import {
   Briefcase,
+  Clapperboard,
   Cpu,
-  Film,
   Gamepad2,
   Heart,
   Landmark,
-  Layers,
+  Laugh,
+  Mic,
+  Microscope,
   Music2,
-  Smile,
-  Sparkles,
   Trophy,
+  Tv,
   UtensilsCrossed,
+  Video,
   type LucideIcon,
 } from "lucide-react";
 
@@ -33,15 +39,23 @@ export const CATEGORY_ICONS: Record<string, LucideIcon> = {
   business: Briefcase,
   music: Music2,
   sports: Trophy,
-  "film-tv": Film,
+  "film-tv": Clapperboard,
   gaming: Gamepad2,
-  creator: Sparkles,
-  comedy: Smile,
+  creator: Video,
+  comedy: Laugh,
   "food-drink": UtensilsCrossed,
   lifestyle: Heart,
-  misc: Layers,
+  misc: Video,
+  // Dynamic categories registered through the admin CMS. The
+  // `media-podcast` alias is defensive — depending on how the row was
+  // created, the registry id may be either `media` (matches
+  // EXTRA_CATEGORY_STYLES in CategoryPill.tsx) or the slugified label.
+  media: Mic,
+  "media-podcast": Mic,
+  streaming: Tv,
+  science: Microscope,
 };
 
 export function getCategoryIcon(id: string): LucideIcon {
-  return CATEGORY_ICONS[id] ?? Layers;
+  return CATEGORY_ICONS[id] ?? Video;
 }
