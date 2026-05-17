@@ -7,6 +7,11 @@ import {
 } from "../server/native-markets/lifecycle";
 import { getWeekContext } from "../server/native-markets/week-context";
 
+process.env.DATABASE_URL =
+  process.env.DATABASE_URL ?? "postgres://test:test@127.0.0.1:5432/test";
+
+const { decideMissingMarketTypes } = await import("../server/jobs/market-generator");
+
 test("getWeeklyBettingCutoff sets Friday 23:59:59.999 UTC for Sunday close", () => {
   const sundayEnd = new Date("2026-04-05T23:59:59.999Z");
   const cutoff = getWeeklyBettingCutoff(sundayEnd);
@@ -81,4 +86,51 @@ test("deriveNativeMarketLifecycle (amm default) transitions OPEN -> ENTRIES_CLOS
   );
   assert.equal(resolvedState.status, "RESOLVED");
   assert.equal(resolvedState.isCutoffPassed, true);
+});
+
+// ---------------------------------------------------------------------------
+// decideMissingMarketTypes (Phase A4)
+// ---------------------------------------------------------------------------
+//
+// Pre-A4 bug: ensureWeeklyMarketsForCurrentWeek early-returned the
+// moment ANY native market was open for the week, so a partial-week
+// failure (e.g. UpDown succeeded, H2H generator threw) was never
+// repaired by the Monday in-process tick or the read-path self-heal.
+// The new per-type decision helper is what lets the ensure path back-
+// fill ONLY the missing product(s); these tests pin its behaviour.
+
+test("decideMissingMarketTypes returns nothing when every type has an open market", () => {
+  const counts = { updown: 1, h2h: 1, gainer: 1, jackpot: 1 };
+  assert.deepEqual(decideMissingMarketTypes(counts), []);
+});
+
+test("decideMissingMarketTypes returns all four when none are open (fresh week)", () => {
+  const counts = { updown: 0, h2h: 0, gainer: 0, jackpot: 0 };
+  assert.deepEqual(decideMissingMarketTypes(counts), ["updown", "h2h", "gainer", "jackpot"]);
+});
+
+test("decideMissingMarketTypes returns only the missing types (partial-week backfill)", () => {
+  // The exact failure mode A4 is meant to fix: UpDown succeeded but
+  // H2H + gainer failed. Pre-A4 the ensure tick saw `openBefore = 1`
+  // and short-circuited; now it must return the two missing types.
+  const counts = { updown: 5, h2h: 0, gainer: 0, jackpot: 1 };
+  assert.deepEqual(decideMissingMarketTypes(counts), ["h2h", "gainer"]);
+});
+
+test("decideMissingMarketTypes preserves stable order (updown, h2h, gainer, jackpot)", () => {
+  // Order matters because the ensure helper iterates and runs
+  // generators in this exact order — pinning it here means a future
+  // refactor of the helper can't quietly reorder generation (e.g.
+  // running jackpot before H2H, which would matter if a generator
+  // depends on the people pool churned by an earlier one).
+  const counts = { updown: 0, h2h: 0, gainer: 0, jackpot: 0 };
+  assert.deepEqual(decideMissingMarketTypes(counts), ["updown", "h2h", "gainer", "jackpot"]);
+});
+
+test("decideMissingMarketTypes only flags zero-count types — counts > 0 are 'open enough'", () => {
+  // Fresh week always has count=1 per type. Higher counts (multiple
+  // open H2H matchups in the same week) are still 'open enough' from
+  // the ensure helper's perspective.
+  const counts = { updown: 4, h2h: 12, gainer: 2, jackpot: 1 };
+  assert.deepEqual(decideMissingMarketTypes(counts), []);
 });

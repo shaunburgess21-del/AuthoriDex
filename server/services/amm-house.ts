@@ -245,7 +245,7 @@ export async function seedAmmMarket(
 }
 
 // ---------------------------------------------------------------------------
-// Settlement-time seed return (stub for Phase 3 to wire)
+// Settlement-time seed return
 // ---------------------------------------------------------------------------
 
 export interface ReturnAmmSeedInput {
@@ -267,16 +267,26 @@ export interface ReturnAmmSeedResult {
 }
 
 /**
- * Phase 3 will call this from the AMM settlement path. Computes
- * `seed + totalUserCreditsIn − payoutLiability`, credits the house,
- * writes a `credit_ledger` entry with `txnType='amm_settle_credit'`,
- * `idempotencyKey='amm_settle_${marketId}'`. Idempotent on retry.
+ * Settle the house wallet for an AMM market. Called once per market
+ * from `amm-resolver.ts::resolveAmmMarket` (both the winner-payout
+ * path and the void/refund path). Live and exercised in production.
  *
- * Returns the net amount credited to house. May be negative (house
- * loss); the credit_ledger always stores the signed amount.
+ * Behaviour:
+ *   - Computes `creditedToHouse = round(houseSeed + totalUserCreditsIn − payoutLiability)`.
+ *   - Credits `HOUSE_PROFILE_ID`'s `predictCredits` and writes a
+ *     `credit_ledger` row with `txnType='amm_settle_credit'` and
+ *     `idempotencyKey='amm_settle_${marketId}'`.
+ *   - Idempotent on retry — re-invocation after a partial crash returns
+ *     the previously-credited amount with `returned=false`.
  *
- * NOT called from anywhere yet — just shipped here so Phase 3 has a
- * single-import target and the file owns the full lifecycle.
+ * The returned amount can be negative (house took an LMSR loss bounded
+ * by `b · ln(N)`); the credit_ledger always stores the signed amount.
+ *
+ * The same audit fields (`creditedToHouse`, `payoutLiability`) are also
+ * stamped into `prediction_markets.resolution_notes` by the auto-resolver
+ * so the seed-return drift health check (`server/jobs/amm-health.ts`) can
+ * reconcile every native auto-resolved market without re-querying the
+ * ledger.
  */
 export async function returnAmmSeedAtSettlement(
   input: ReturnAmmSeedInput,

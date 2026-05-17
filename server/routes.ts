@@ -10118,11 +10118,16 @@ Only return the JSON object.`;
       if (typeof entryId !== "string" || entryId.length === 0) {
         return res.status(400).json({ error: "entryId is required" });
       }
-      if (!Number.isInteger(creditBudget) || creditBudget <= 0) {
-        return res.status(400).json({ error: "creditBudget must be a positive integer" });
+      // Match the service-layer floor (`MIN_AMM_BUY_CREDITS`) at the
+      // route boundary so we reject the request before doing any DB work
+      // — and so the user sees the same minimum they'd hit downstream.
+      const { executeBuy, MIN_AMM_BUY_CREDITS } = await import("./services/amm-trades");
+      if (!Number.isInteger(creditBudget) || creditBudget < MIN_AMM_BUY_CREDITS) {
+        return res.status(400).json({
+          error: "validation",
+          message: `creditBudget must be an integer >= ${MIN_AMM_BUY_CREDITS}`,
+        });
       }
-
-      const { executeBuy } = await import("./services/amm-trades");
       const result = await executeBuy({
         marketId: id,
         userId: req.userId!,
@@ -10176,7 +10181,17 @@ Only return the JSON object.`;
         return res.status(400).json({ error: "shares must be a positive number" });
       }
 
-      const { executeSell } = await import("./services/amm-trades");
+      // Surface the human-side minimum at the route boundary so we
+      // bounce dust attempts before doing any DB work. The service
+      // layer ALSO rejects sub-1-credit proceeds, but this gives a
+      // clearer up-front error for legitimate users.
+      const { executeSell, MIN_HUMAN_SELL_SHARES } = await import("./services/amm-trades");
+      if (sharesNum < MIN_HUMAN_SELL_SHARES) {
+        return res.status(400).json({
+          error: "validation",
+          message: `shares must be >= ${MIN_HUMAN_SELL_SHARES}`,
+        });
+      }
       const result = await executeSell({
         marketId: id,
         userId: req.userId!,

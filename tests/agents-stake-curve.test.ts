@@ -224,3 +224,96 @@ test("edge beyond 15% does not keep stretching size unboundedly", () => {
   assert.ok(at15 >= at10, `at15(${at15}) >= at10(${at10})`);
   assert.equal(at50, at15, `at50(${at50}) should equal at15(${at15}) — cap holds`);
 });
+
+// ---------------------------------------------------------------------------
+// NaN / undefined guards (Phase A2)
+// ---------------------------------------------------------------------------
+//
+// `decision.edge` and `decision.confidence` are typed `number?` but
+// nothing prevents a corrupted upstream payload from delivering NaN —
+// e.g. a JSON-deserialised cached scheduled action with bad arithmetic
+// upstream, or a future engine that returns NaN on division-by-zero
+// edge cases. `?? 0` does NOT catch NaN (`NaN ?? 0 === NaN`), and once
+// NaN enters the curve it propagates through Math.max / Math.min and
+// we'd schedule a NaN stake row that breaks the worker. These tests
+// pin that the function returns a finite, sane stake even under
+// adversarial input.
+
+test("NaN edge falls back to 0 (no smartness stretch, finite stake)", () => {
+  const agent = sharpAgent();
+  const stake = withFixedRandom([0.5, 0.5], () =>
+    computeAgentStakeAmount(agent, { ...decision(0.7, NaN) }),
+  );
+  assert.ok(Number.isFinite(stake), `stake(${stake}) must be finite`);
+  assert.ok(stake >= agent.simulationProfile.minStake, `stake(${stake}) >= minStake`);
+});
+
+test("NaN confidence falls back to 0.5 baseline, finite stake", () => {
+  const agent = sharpAgent();
+  const stake = withFixedRandom([0.5, 0.5], () =>
+    computeAgentStakeAmount(agent, { ...decision(NaN, 0.05) }),
+  );
+  assert.ok(Number.isFinite(stake));
+  assert.ok(stake >= agent.simulationProfile.minStake);
+});
+
+test("undefined edge is treated as 0 (existing nullish coalesce path)", () => {
+  const agent = sharpAgent();
+  const stake = withFixedRandom([0.5, 0.5], () =>
+    computeAgentStakeAmount(agent, {
+      abstain: false,
+      entryId: "e-1",
+      direction: "yes",
+      confidence: 0.7,
+      // no `edge` field at all
+      impliedProbability: 0.5,
+      rawProbability: 0.5,
+      source: "deterministic",
+    }),
+  );
+  assert.ok(Number.isFinite(stake));
+  assert.ok(stake >= agent.simulationProfile.minStake);
+});
+
+test("NaN pick conviction falls back to band-default conviction", () => {
+  const agent = sharpAgent();
+  const stake = withFixedRandom([0.5, 0.5], () =>
+    computeAgentStakeAmount(agent, decision(0.7, 0.05), {
+      conviction: NaN,
+      edge: 0.10,
+    }),
+  );
+  assert.ok(Number.isFinite(stake));
+  assert.ok(stake >= agent.simulationProfile.minStake);
+});
+
+test("NaN pick edge falls through to decision.edge magnitude", () => {
+  const agent = sharpAgent();
+  // pick.edge=NaN → ignored → falls back to decision.edge=0.10
+  // → smartness = 0.8 * 1.0 = 0.8 → multiplier 1.48x baseline
+  const baseline = withFixedRandom([0.5, 0.5], () =>
+    computeAgentStakeAmount(agent, decision(0.7, 0.10)),
+  );
+  const fallback = withFixedRandom([0.5, 0.5], () =>
+    computeAgentStakeAmount(agent, decision(0.7, 0.10), {
+      conviction: 0.8,
+      edge: NaN,
+    }),
+  );
+  assert.ok(Number.isFinite(fallback));
+  assert.ok(fallback > baseline, `pick edge=NaN fallback(${fallback}) > baseline(${baseline})`);
+});
+
+test("all-bad input still produces a sane >= minStake stake", () => {
+  const agent = sharpAgent();
+  const stake = withFixedRandom([0.5, 0.5], () =>
+    computeAgentStakeAmount(
+      agent,
+      { ...decision(NaN, NaN) },
+      { conviction: NaN, edge: NaN },
+    ),
+  );
+  assert.ok(Number.isFinite(stake));
+  assert.ok(stake >= agent.simulationProfile.minStake);
+  assert.ok(stake <= agent.simulationProfile.maxStake * 1.08);
+});

@@ -95,6 +95,15 @@ export interface SharpRankerSnapshot {
   marketsConsidered: number;
   source: "llm" | "fallback" | "disabled" | "cache";
   costEstimateUsd: number | null;
+  /**
+   * Stable hash of the sorted market-IDs that produced this snapshot.
+   * Used by `getSharpRanking` to invalidate the cache when consecutive
+   * sweeps see a different market set — without this, picks generated
+   * for sweep N would silently leak into sweep N+1, where some of those
+   * markets may not even appear (so an agent could be told "this is a
+   * priority market" for a market that isn't in its current loop).
+   */
+  inputKey: string;
 }
 
 interface RankableMarket {
@@ -105,11 +114,34 @@ interface RankableMarket {
 
 let lastSnapshot: SharpRankerSnapshot | null = null;
 let inflight: Promise<SharpRankerSnapshot> | null = null;
+let inflightKey: string | null = null;
+
+/**
+ * Stable cache key for the input set. We hash sorted market IDs only:
+ * if the same markets are submitted in a different order across sweeps
+ * we still hit the cache. We don't include signals because the same
+ * market with slightly different signal values within the TTL window
+ * is exactly the case the cache is designed to absorb.
+ */
+function computeInputKey(rankable: RankableMarket[]): string {
+  return rankable
+    .map((r) => r.market.id)
+    .filter((id) => typeof id === "string" && id.length > 0)
+    .sort()
+    .join(",");
+}
 
 /**
  * Returns the latest sharp-ranking snapshot, regenerating if it's stale.
  * Safe to call from many call sites in the same sweep — the in-flight
  * dedupe guarantees only ONE LLM call per regeneration window.
+ *
+ * Cache validity requires BOTH: (a) the snapshot is within
+ * `SHARP_RANKER_TTL_MS`, AND (b) it was generated for the same set of
+ * market IDs. Different market set → regenerate, even within TTL,
+ * because handing back picks targeting markets the caller isn't
+ * iterating over silently breaks the runner's `priority: high`
+ * routing (agents would never see those picks).
  */
 export async function getSharpRanking(
   rankable: RankableMarket[],
@@ -121,16 +153,24 @@ export async function getSharpRanking(
       marketsConsidered: rankable.length,
       source: "disabled",
       costEstimateUsd: 0,
+      inputKey: computeInputKey(rankable),
     };
   }
 
-  if (lastSnapshot && Date.now() - lastSnapshot.generatedAt < SHARP_RANKER_TTL_MS) {
+  const inputKey = computeInputKey(rankable);
+
+  if (
+    lastSnapshot &&
+    lastSnapshot.inputKey === inputKey &&
+    Date.now() - lastSnapshot.generatedAt < SHARP_RANKER_TTL_MS
+  ) {
     return { ...lastSnapshot, source: "cache" };
   }
 
-  if (inflight) return inflight;
+  if (inflight && inflightKey === inputKey) return inflight;
 
-  inflight = generateRanking(rankable)
+  inflightKey = inputKey;
+  inflight = generateRanking(rankable, inputKey)
     .catch((err) => {
       log(`[SharpRanker] generation failed: ${err instanceof Error ? err.message : err}`);
       const fallback: SharpRankerSnapshot = {
@@ -139,12 +179,14 @@ export async function getSharpRanking(
         marketsConsidered: rankable.length,
         source: "fallback",
         costEstimateUsd: 0,
+        inputKey,
       };
       lastSnapshot = fallback;
       return fallback;
     })
     .finally(() => {
       inflight = null;
+      inflightKey = null;
     });
 
   return inflight;
@@ -154,7 +196,10 @@ export function getCachedSharpRanking(): SharpRankerSnapshot | null {
   return lastSnapshot;
 }
 
-async function generateRanking(rankable: RankableMarket[]): Promise<SharpRankerSnapshot> {
+async function generateRanking(
+  rankable: RankableMarket[],
+  inputKey: string,
+): Promise<SharpRankerSnapshot> {
   // Community markets are now eligible alongside native ones. They use
   // a different formatter (no per-person `signals`, free-text options
   // instead of entries), but the LLM treats them under the same edge
@@ -168,6 +213,7 @@ async function generateRanking(rankable: RankableMarket[]): Promise<SharpRankerS
       marketsConsidered: 0,
       source: "llm",
       costEstimateUsd: 0,
+      inputKey,
     };
     lastSnapshot = empty;
     return empty;
@@ -241,6 +287,7 @@ async function generateRanking(rankable: RankableMarket[]): Promise<SharpRankerS
     marketsConsidered: eligible.length,
     source: "llm",
     costEstimateUsd,
+    inputKey,
   };
 
   lastSnapshot = snapshot;
@@ -248,6 +295,29 @@ async function generateRanking(rankable: RankableMarket[]): Promise<SharpRankerS
     `[SharpRanker] picked ${parsed.length}/${SHARP_RANKER_TOP_N} from ${eligible.length} markets, cost≈$${costEstimateUsd?.toFixed(4) ?? "?"}`,
   );
   return snapshot;
+}
+
+/**
+ * How many entries to include in the LLM prompt per native market.
+ *
+ * H2H and UpDown always have exactly two entries, so the cap is moot
+ * for them. Race / gainer markets, however, can carry 5+ candidates —
+ * with the old hard cap of 4 entries, candidates 5+ never appeared in
+ * the prompt at all (silent under-coverage: the LLM literally couldn't
+ * pick them, no matter how strong the edge). Race markets now use a
+ * larger cap that keeps a sensible token budget without arbitrarily
+ * dropping entries.
+ *
+ * 12 was chosen as a safe upper bound — it covers every race configured
+ * in the generator today, leaves headroom for one or two oversized
+ * cards, and keeps the per-market prompt block well under 600 chars
+ * even at full population (entries lines are ~40 chars each).
+ */
+const SHARP_RANKER_ENTRY_CAP_DEFAULT = 4;
+const SHARP_RANKER_ENTRY_CAP_RACE = 12;
+
+function entryCapForMarket(marketType: string): number {
+  return marketType === "gainer" ? SHARP_RANKER_ENTRY_CAP_RACE : SHARP_RANKER_ENTRY_CAP_DEFAULT;
 }
 
 function formatMarketForRanker(item: RankableMarket): string {
@@ -264,8 +334,9 @@ function formatMarketForRanker(item: RankableMarket): string {
     );
   }
 
+  const cap = entryCapForMarket(market.marketType);
   const entries = market.entries
-    .slice(0, 4)
+    .slice(0, cap)
     .map((e) => {
       const sig = entrySignals?.get(e.id);
       // Crowd-implied price computed the same way the parser will, so the
@@ -284,6 +355,23 @@ function formatMarketForRanker(item: RankableMarket): string {
   if (entries) lines.push(entries);
 
   return lines.join("\n");
+}
+
+/**
+ * Test-only export of the per-market-type entry cap. Used by the
+ * formatter test to assert race markets surface all candidates while
+ * H2H / UpDown stay capped at the conservative default.
+ */
+export function _entryCapForMarketForTesting(marketType: string): number {
+  return entryCapForMarket(marketType);
+}
+
+/**
+ * Test-only re-export of the formatter so we can assert end-to-end
+ * that race markets with 6+ entries render every entry in the prompt.
+ */
+export function _formatMarketForRankerForTesting(item: RankableMarket): string {
+  return formatMarketForRanker(item);
 }
 
 /**
@@ -380,6 +468,15 @@ export function _parseRankerResponseForTesting(
   eligible: RankableMarket[],
 ): SharpRankerPick[] {
   return parseRankerResponse(raw, eligible);
+}
+
+/**
+ * Test-only export of the cache-key derivation. Exposing the helper
+ * (rather than testing through `getSharpRanking`) avoids any need to
+ * mock the OpenAI client just to assert on key behaviour.
+ */
+export function _computeInputKeyForTesting(rankable: RankableMarket[]): string {
+  return computeInputKey(rankable);
 }
 
 export type _RankableMarketForTesting = RankableMarket;

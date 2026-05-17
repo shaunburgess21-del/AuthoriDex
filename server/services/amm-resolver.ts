@@ -51,6 +51,16 @@ export interface ResolveAmmMarketInput {
   voidMarket?: boolean;
   /** Admin user id (or null for system-initiated). */
   settledBy?: string | null;
+  /**
+   * Reason persisted into `prediction_markets.void_reason` when this
+   * call results in a void. Defaults to `"amm_admin_void"` so existing
+   * admin call sites keep their semantics. Cron-driven auto-voids
+   * (tie / stale-blocked) should pass a distinct value (e.g.
+   * `"amm_auto_tie"`, `"amm_auto_void_stale"`) so ops dashboards can
+   * separate human-triggered voids from system-triggered voids when
+   * triaging incidents.
+   */
+  voidReason?: string;
 }
 
 export interface ResolveAmmMarketResult {
@@ -80,7 +90,13 @@ export type ResolveAmmMarketError =
 export async function resolveAmmMarket(
   input: ResolveAmmMarketInput,
 ): Promise<ResolveAmmMarketResult | ResolveAmmMarketError> {
-  const { marketId, winnerEntryId = null, voidMarket = false, settledBy = null } = input;
+  const {
+    marketId,
+    winnerEntryId = null,
+    voidMarket = false,
+    settledBy = null,
+    voidReason = "amm_admin_void",
+  } = input;
 
   const txResult: ResolveAmmMarketResult | ResolveAmmMarketError = await db.transaction(async (txRaw) => {
     const tx = txRaw as unknown as DbOrTx;
@@ -208,7 +224,7 @@ export async function resolveAmmMarket(
     const settledAt = new Date();
 
     if (voidMarket) {
-      const result = await runVoidPath(tx, marketId, settledBy, settledAt);
+      const result = await runVoidPath(tx, marketId, settledBy, settledAt, voidReason);
       return result;
     }
 
@@ -591,6 +607,7 @@ async function runVoidPath(
   marketId: string,
   settledBy: string | null,
   settledAt: Date,
+  voidReason: string,
 ): Promise<ResolveAmmMarketResult> {
   // Net credits in per user = SUM(stakeAmount) over all AMM rows for
   // this market. Buys store +chargeCredits, sells store -proceeds, so
@@ -683,7 +700,7 @@ async function runVoidPath(
       status: "VOID",
       resolvedAt: settledAt,
       settledBy: settledBy ?? undefined,
-      voidReason: "amm_admin_void",
+      voidReason,
       updatedAt: settledAt,
     })
     .where(eq(predictionMarkets.id, marketId));

@@ -1944,20 +1944,35 @@ function computeAgentStakeAmount(
 ): number {
   const simulation = getSimulationProfile(agent.simulationProfile);
   const isSharp = simulation.personaBand === "sharp";
-  const confidence = decision.confidence ?? 0.5;
+
+  // Defensive NaN/undefined coercion. `decision.confidence` /
+  // `decision.edge` are both typed as `number?` but a corrupted upstream
+  // payload (e.g. cached scheduled action with bad JSON, world-engine
+  // returning NaN, etc.) could leak NaN here. `?? 0` does NOT catch NaN
+  // — `NaN ?? 0` is `NaN`, and once NaN enters the curve it propagates
+  // through `Math.max` / `Math.min` and we'd end up scheduling a NaN
+  // stake row that breaks the worker. Always sanitise to a finite
+  // fallback before any arithmetic.
+  const confidence = Number.isFinite(decision.confidence)
+    ? (decision.confidence as number)
+    : 0.5;
 
   const fallbackConviction = isSharp ? 0.6 : 0.4;
+  const pickConviction =
+    pick?.conviction != null && Number.isFinite(pick.conviction) ? pick.conviction : null;
   const convictionFactor = Math.max(
     0,
-    Math.min(1, pick?.conviction ?? fallbackConviction),
+    Math.min(1, pickConviction ?? fallbackConviction),
   );
 
   // |edge|: ranker pick first, deterministic engine second. Both are
-  // signed; magnitude is what matters for sizing intent.
+  // signed; magnitude is what matters for sizing intent. Each branch
+  // is finite-guarded so a corrupted edge can't poison the curve.
+  const decisionEdge = Number.isFinite(decision.edge) ? (decision.edge as number) : 0;
   const edgeMagnitude =
     pick?.edge != null && Number.isFinite(pick.edge)
       ? Math.abs(pick.edge)
-      : Math.max(0, decision.edge ?? 0);
+      : Math.max(0, decisionEdge);
   // 10% edge = full size; larger edges get extra stretch up to 1.5x. Cap
   // is intentional — beyond ~15% edge the LLM is probably overconfident.
   const edgeFactor = Math.max(0, Math.min(1.5, edgeMagnitude / 0.10));
@@ -1969,13 +1984,19 @@ function computeAgentStakeAmount(
   // signals drive size, not RNG.
   const variance = 0.85 + Math.random() * 0.30;
   const base = computeStakeAmount(confidence);
-  const stake = Math.round(base * simulation.stakeMultiplier * smartnessMultiplier * variance);
+  const rawStake = base * simulation.stakeMultiplier * smartnessMultiplier * variance;
+  const stake = Number.isFinite(rawStake) ? Math.round(rawStake) : simulation.minStake;
 
   // Soft cap: ±8% per-agent jitter on the persona maxStake so high-stake
   // bets don't all hit the cap at the exact same number.
   const capJitter = 1 + (Math.random() * 0.16 - 0.08);
   const softMax = Math.round(simulation.maxStake * capJitter);
-  return Math.max(simulation.minStake, Math.min(softMax, stake));
+
+  // Final belt-and-braces. `Math.max(min, NaN)` is NaN in JS, so even
+  // after the rawStake guard above, an unexpected NaN slip elsewhere
+  // (capJitter, softMax) would still poison the result. Clamp again.
+  const final = Math.max(simulation.minStake, Math.min(softMax, stake));
+  return Number.isFinite(final) ? final : simulation.minStake;
 }
 
 /**

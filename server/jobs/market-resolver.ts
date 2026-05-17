@@ -7,7 +7,7 @@ import { computeEarlyBirdMultiplier } from "./settlement-utils";
 // It's now invoked from inside `resolveAmmMarket` (post-tx fanout) so the
 // three resolvers (updown/h2h/gainer) don't need to wire it manually — the
 // AMM resolver covers both manual admin settles and the cron path.
-import { resolveAmmMarket } from "../services/amm-resolver";
+import { resolveAmmMarket, type ResolveAmmMarketResult } from "../services/amm-resolver";
 import { getAiModel, getChatCompletionTokenLimit } from "../config/ai-models";
 import { gamificationService } from "../services/gamification";
 import { checkAndAwardPredictionWinBadges } from "../services/badges";
@@ -20,6 +20,48 @@ const RESOLVER_STARTUP_DELAY_MS = 2 * 60 * 1000;
 const SNAPSHOT_TOLERANCE_HOURS = 3;
 const MARKET_RESOLVER_LOCK_KEY = 5_202;
 const LEGACY_BLOCK_AUTO_VOID_DAYS = 14;
+
+/**
+ * Compose the JSON payload we persist into `prediction_markets.resolution_notes`
+ * for AMM-resolved (or auto-voided) native markets.
+ *
+ * The seed-return drift health check
+ * (`server/jobs/amm-health.ts::checkSeedReturnDrift`) filters resolved markets
+ * with `resolution_notes::jsonb ? 'creditedToHouse' AND ? 'payoutLiability'`.
+ * Without those keys present in the JSON, native auto-resolved markets were
+ * silently excluded from the audit (they only appeared in process logs). This
+ * helper guarantees both keys are written for every native AMM resolution path
+ * so the weekly drift audit covers every resolved native, every time.
+ *
+ * `engine: "amm"` is preserved for filterability in admin queries / dashboards.
+ */
+function buildAmmResolutionNotes(
+  evidence: Record<string, unknown>,
+  outcome: string,
+  ammResult: ResolveAmmMarketResult,
+): Record<string, unknown> {
+  return {
+    ...evidence,
+    outcome,
+    engine: "amm",
+    creditedToHouse: ammResult.creditedToHouse,
+    payoutLiability: ammResult.payoutLiability,
+    settledUserCount: ammResult.settledUserCount,
+  };
+}
+
+/**
+ * Test-only export. Lets the unit suite assert the helper's contract
+ * (creditedToHouse + payoutLiability keys present, evidence preserved,
+ * outcome+engine stamped) without spinning up a DB.
+ */
+export function _buildAmmResolutionNotesForTesting(
+  evidence: Record<string, unknown>,
+  outcome: string,
+  ammResult: ResolveAmmMarketResult,
+): Record<string, unknown> {
+  return buildAmmResolutionNotes(evidence, outcome, ammResult);
+}
 
 let _lastResolverRunAt: Date | null = null;
 export function getLastResolverRunAt(): Date | null { return _lastResolverRunAt; }
@@ -443,7 +485,12 @@ async function resolveUpDown(market: any): Promise<"resolved" | "voided" | "bloc
   };
 
   if (closeSnap.score === openSnap.score) {
-    const ammResult = await resolveAmmMarket({ marketId: market.id, voidMarket: true, settledBy: null });
+    const ammResult = await resolveAmmMarket({
+      marketId: market.id,
+      voidMarket: true,
+      settledBy: null,
+      voidReason: "amm_auto_tie",
+    });
     if ("error" in ammResult) {
       log(`[MarketResolver] updown ${market.id}: AMM void failed: ${ammResult.error} ${ammResult.message}`);
       return "blocked";
@@ -451,7 +498,7 @@ async function resolveUpDown(market: any): Promise<"resolved" | "voided" | "bloc
     await db.update(predictionMarkets).set({
       resolveMethod: "auto",
       voidReason: "Tie — score unchanged",
-      resolutionNotes: JSON.stringify({ ...evidence, outcome: "void_tie", engine: "amm" }),
+      resolutionNotes: JSON.stringify(buildAmmResolutionNotes(evidence, "void_tie", ammResult)),
       updatedAt: new Date(),
     }).where(eq(predictionMarkets.id, market.id));
     log(`[MarketResolver] updown ${market.id}: AMM VOID (tie), house P&L=${ammResult.creditedToHouse}`);
@@ -472,7 +519,7 @@ async function resolveUpDown(market: any): Promise<"resolved" | "voided" | "bloc
   }
   await db.update(predictionMarkets).set({
     resolveMethod: "auto",
-    resolutionNotes: JSON.stringify({ ...evidence, outcome: winnerLabel, engine: "amm" }),
+    resolutionNotes: JSON.stringify(buildAmmResolutionNotes(evidence, winnerLabel, ammResult)),
     updatedAt: new Date(),
   }).where(eq(predictionMarkets.id, market.id));
   log(`[MarketResolver] updown ${market.id}: AMM ${winnerLabel} wins (${openSnap.score} → ${closeSnap.score}), payoutLiability=${ammResult.payoutLiability}, house P&L=${ammResult.creditedToHouse}, settledUsers=${ammResult.settledUserCount}`);
@@ -512,7 +559,12 @@ async function resolveH2H(market: any): Promise<"resolved" | "voided" | "blocked
   };
 
   if (closeA.score === closeB.score) {
-    const ammResult = await resolveAmmMarket({ marketId: market.id, voidMarket: true, settledBy: null });
+    const ammResult = await resolveAmmMarket({
+      marketId: market.id,
+      voidMarket: true,
+      settledBy: null,
+      voidReason: "amm_auto_tie",
+    });
     if ("error" in ammResult) {
       log(`[MarketResolver] h2h ${market.id}: AMM void failed: ${ammResult.error} ${ammResult.message}`);
       return "blocked";
@@ -520,7 +572,7 @@ async function resolveH2H(market: any): Promise<"resolved" | "voided" | "blocked
     await db.update(predictionMarkets).set({
       resolveMethod: "auto",
       voidReason: "Tie — identical scores",
-      resolutionNotes: JSON.stringify({ ...evidence, outcome: "void_tie", engine: "amm" }),
+      resolutionNotes: JSON.stringify(buildAmmResolutionNotes(evidence, "void_tie", ammResult)),
       updatedAt: new Date(),
     }).where(eq(predictionMarkets.id, market.id));
     log(`[MarketResolver] h2h ${market.id}: AMM VOID (tie at ${closeA.score}), house P&L=${ammResult.creditedToHouse}`);
@@ -539,7 +591,7 @@ async function resolveH2H(market: any): Promise<"resolved" | "voided" | "blocked
   }
   await db.update(predictionMarkets).set({
     resolveMethod: "auto",
-    resolutionNotes: JSON.stringify({ ...evidence, outcome: winner.label, engine: "amm" }),
+    resolutionNotes: JSON.stringify(buildAmmResolutionNotes(evidence, winner.label, ammResult)),
     updatedAt: new Date(),
   }).where(eq(predictionMarkets.id, market.id));
   log(`[MarketResolver] h2h ${market.id}: AMM ${winner.label} wins (${closeA.score} vs ${closeB.score}), payoutLiability=${ammResult.payoutLiability}, house P&L=${ammResult.creditedToHouse}, settledUsers=${ammResult.settledUserCount}`);
@@ -594,7 +646,12 @@ async function resolveGainer(market: any): Promise<"resolved" | "voided" | "bloc
   };
 
   if (gains.length >= 2 && Math.abs(gains[0].pctChange - gains[1].pctChange) < 0.001) {
-    const ammResult = await resolveAmmMarket({ marketId: market.id, voidMarket: true, settledBy: null });
+    const ammResult = await resolveAmmMarket({
+      marketId: market.id,
+      voidMarket: true,
+      settledBy: null,
+      voidReason: "amm_auto_tie",
+    });
     if ("error" in ammResult) {
       log(`[MarketResolver] gainer ${market.id}: AMM void failed: ${ammResult.error} ${ammResult.message}`);
       return "blocked";
@@ -602,7 +659,7 @@ async function resolveGainer(market: any): Promise<"resolved" | "voided" | "bloc
     await db.update(predictionMarkets).set({
       resolveMethod: "auto",
       voidReason: "Tie — identical top gain percentage",
-      resolutionNotes: JSON.stringify({ ...evidence, outcome: "void_tie", engine: "amm" }),
+      resolutionNotes: JSON.stringify(buildAmmResolutionNotes(evidence, "void_tie", ammResult)),
       updatedAt: new Date(),
     }).where(eq(predictionMarkets.id, market.id));
     log(`[MarketResolver] gainer ${market.id}: AMM VOID (tied at ${gains[0].pctChange.toFixed(2)}%), house P&L=${ammResult.creditedToHouse}`);
@@ -621,7 +678,7 @@ async function resolveGainer(market: any): Promise<"resolved" | "voided" | "bloc
   }
   await db.update(predictionMarkets).set({
     resolveMethod: "auto",
-    resolutionNotes: JSON.stringify({ ...evidence, outcome: winner.label, engine: "amm" }),
+    resolutionNotes: JSON.stringify(buildAmmResolutionNotes(evidence, winner.label, ammResult)),
     updatedAt: new Date(),
   }).where(eq(predictionMarkets.id, market.id));
   log(`[MarketResolver] gainer ${market.id}: AMM ${winner.label} wins (+${gains[0].pctChange.toFixed(2)}%), payoutLiability=${ammResult.payoutLiability}, house P&L=${ammResult.creditedToHouse}, settledUsers=${ammResult.settledUserCount}`);
@@ -896,7 +953,12 @@ async function autoVoidBlockedLegacyMarket(market: any, now: Date): Promise<bool
     // refund semantics. A naive parimutuel refund on AMM rows would
     // double-credit users for any sells they made before the block.
     if (market?.engine === "amm") {
-      const ammResult = await resolveAmmMarket({ marketId: market.id, voidMarket: true, settledBy: null });
+      const ammResult = await resolveAmmMarket({
+        marketId: market.id,
+        voidMarket: true,
+        settledBy: null,
+        voidReason: "amm_auto_void_stale",
+      });
       if ("error" in ammResult) {
         log(`[MarketResolver] Failed AMM auto-void for stale blocked market ${market.id}: ${ammResult.error} ${ammResult.message}`);
         return false;
@@ -904,12 +966,17 @@ async function autoVoidBlockedLegacyMarket(market: any, now: Date): Promise<bool
       await db.update(predictionMarkets).set({
         resolveMethod: "auto",
         voidReason: "Auto-voided stale blocked AMM market",
-        resolutionNotes: JSON.stringify({
-          type: market.marketType,
-          pendingReason: "auto_void_stale_blocked_legacy",
-          thresholdDays: LEGACY_BLOCK_AUTO_VOID_DAYS,
-          engine: "amm",
-        }),
+        resolutionNotes: JSON.stringify(
+          buildAmmResolutionNotes(
+            {
+              type: market.marketType,
+              pendingReason: "auto_void_stale_blocked_legacy",
+              thresholdDays: LEGACY_BLOCK_AUTO_VOID_DAYS,
+            },
+            "void_stale",
+            ammResult,
+          ),
+        ),
         updatedAt: now,
       }).where(eq(predictionMarkets.id, market.id));
       log(`[MarketResolver] Auto-voided stale blocked AMM market ${market.id} (${market.marketType}), house P&L=${ammResult.creditedToHouse}`);

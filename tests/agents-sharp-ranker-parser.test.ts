@@ -19,6 +19,9 @@ import assert from "node:assert/strict";
 
 import {
   _parseRankerResponseForTesting as parseRankerResponse,
+  _computeInputKeyForTesting as computeInputKey,
+  _entryCapForMarketForTesting as entryCapForMarket,
+  _formatMarketForRankerForTesting as formatMarketForRanker,
   type _RankableMarketForTesting as RankableMarket,
 } from "../server/agents/sharpRanker";
 import type { MarketWithEntries } from "../server/agents/types";
@@ -249,4 +252,112 @@ test("drops picks for unknown marketIds, keeps the good ones", () => {
   const out = parseRankerResponse(raw, [rankable(m)]);
   assert.equal(out.length, 1);
   assert.equal(out[0].marketId, "m-1");
+});
+
+// ---------------------------------------------------------------------------
+// Cache-key derivation (Phase A1)
+// ---------------------------------------------------------------------------
+//
+// `getSharpRanking` only re-uses its in-memory snapshot when the input
+// market set is identical — keyed by `computeInputKey`. These tests pin
+// the key contract so a future refactor can't silently let stale picks
+// from sweep N target markets that aren't in sweep N+1.
+
+function rankableWithId(id: string): RankableMarket {
+  const m = makeBinaryMarket();
+  return { market: { ...m, id }, signals: null };
+}
+
+test("input-key is order-independent (same set in different orders → same key)", () => {
+  const a = rankableWithId("m-aaa");
+  const b = rankableWithId("m-bbb");
+  const c = rankableWithId("m-ccc");
+  const k1 = computeInputKey([a, b, c]);
+  const k2 = computeInputKey([c, a, b]);
+  const k3 = computeInputKey([b, c, a]);
+  assert.equal(k1, k2);
+  assert.equal(k2, k3);
+  assert.ok(k1.length > 0);
+});
+
+test("input-key differs when the market set differs", () => {
+  const a = rankableWithId("m-aaa");
+  const b = rankableWithId("m-bbb");
+  const c = rankableWithId("m-ccc");
+  const setAB = computeInputKey([a, b]);
+  const setBC = computeInputKey([b, c]);
+  const setABC = computeInputKey([a, b, c]);
+  assert.notEqual(setAB, setBC);
+  assert.notEqual(setAB, setABC);
+  assert.notEqual(setBC, setABC);
+});
+
+test("input-key for empty set is empty string (not undefined)", () => {
+  assert.equal(computeInputKey([]), "");
+});
+
+test("input-key filters out non-string / empty market IDs defensively", () => {
+  const a = rankableWithId("m-aaa");
+  // Force an invalid id past the type guard — protects against runtime
+  // surprises (cached row with a null id, etc.) silently changing the key.
+  const broken = { ...a, market: { ...a.market, id: "" } };
+  const key = computeInputKey([a, broken]);
+  assert.equal(key, "m-aaa");
+});
+
+// ---------------------------------------------------------------------------
+// Per-market-type entry cap (Phase B1)
+// ---------------------------------------------------------------------------
+//
+// Pre-B1 bug: the formatter hard-capped entries at 4 across every native
+// market type, which silently under-covered race / gainer markets where
+// the candidate pool routinely exceeds 4. The LLM literally never saw
+// candidates 5+ in the prompt and so couldn't pick them, no matter how
+// strong the edge. These tests pin the per-type cap.
+
+test("entry cap is 4 for h2h and updown (the formats with exactly 2 entries)", () => {
+  assert.equal(entryCapForMarket("h2h"), 4);
+  assert.equal(entryCapForMarket("updown"), 4);
+});
+
+test("entry cap is 12 for race / gainer markets (room for full candidate pool)", () => {
+  assert.equal(entryCapForMarket("gainer"), 12);
+});
+
+test("entry cap defaults to 4 for unknown / community types (conservative fallback)", () => {
+  assert.equal(entryCapForMarket("community"), 4);
+  assert.equal(entryCapForMarket("jackpot"), 4);
+  assert.equal(entryCapForMarket("???"), 4);
+});
+
+test("formatter renders all 6 race entries (regression: pre-B1 dropped entries 5+)", () => {
+  const sixWayRace: MarketWithEntries = {
+    id: "m-race-6",
+    marketType: "gainer",
+    status: "OPEN",
+    title: "Six-way race",
+    category: "music",
+    personId: null,
+    endAt: new Date(Date.now() + 86400_000),
+    entries: [
+      { id: "e-a", label: "Alice", totalStake: 100, personId: "p-a" },
+      { id: "e-b", label: "Bob", totalStake: 100, personId: "p-b" },
+      { id: "e-c", label: "Cara", totalStake: 100, personId: "p-c" },
+      { id: "e-d", label: "Dave", totalStake: 100, personId: "p-d" },
+      { id: "e-e", label: "Eve", totalStake: 100, personId: "p-e" },
+      { id: "e-f", label: "Frank", totalStake: 100, personId: "p-f" },
+    ],
+  };
+  const out = formatMarketForRanker({ market: sixWayRace, signals: null });
+  for (const name of ["Alice", "Bob", "Cara", "Dave", "Eve", "Frank"]) {
+    assert.ok(out.includes(name), `expected formatter to include ${name}: ${out}`);
+  }
+});
+
+test("formatter still caps h2h at 2 entries (defence — engine never produces > 2)", () => {
+  const m = makeBinaryMarket();
+  const out = formatMarketForRanker({ market: m, signals: null });
+  // Both labels render
+  assert.ok(out.includes("Up"));
+  assert.ok(out.includes("Down"));
 });

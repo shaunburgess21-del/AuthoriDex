@@ -663,13 +663,57 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
     },
   });
 
+  /**
+   * Phase C1 (PredictTab parity): metadata passed alongside the H2H /
+   * race buy mutation so the success handler can fire the same AMM
+   * share-toast that PredictPage and the dedicated detail pages already
+   * use. Without this, profile-tab buyers got a flat "Prediction
+   * placed!" toast while the same buy from /predict produced a confetti
+   * + share-card moment — a meaningful UX gap that gets worse as
+   * profile traffic ramps. Fields mirror `FireAmmTradeToastArgs`.
+   */
+  type NativeBetToastMeta = {
+    personName: string | null;
+    personAvatar: string | null;
+    marketTitle: string;
+    category: string | null;
+    entryLabel: string;
+    direction: "up" | "down" | "other";
+    fallbackShareUrl: string;
+  };
+
   const nativeMarketBetMutation = useMutation({
-    mutationFn: async ({ marketId, entryId, stakeAmount, marketType }: { marketId: string; entryId: string; stakeAmount: number; marketType: string }) => {
+    mutationFn: async ({ marketId, entryId, stakeAmount, marketType: _marketType, toastMeta: _toastMeta }: {
+      marketId: string;
+      entryId: string;
+      stakeAmount: number;
+      marketType: string;
+      toastMeta?: NativeBetToastMeta;
+    }) => {
       const res = await apiRequest("POST", `/api/native-markets/${marketId}/bet`, { entryId, stakeAmount });
       return res.json();
     },
-    onSuccess: async (_data, variables) => {
-      toast("Prediction placed!", { description: variables.marketType === "h2h" ? "Your head-to-head prediction has been recorded." : "Your prediction has been recorded." });
+    onSuccess: async (data: any, variables) => {
+      // AMM share-toast on success when we have enough metadata to
+      // build a sensible share card; legacy / non-AMM paths or callers
+      // that didn't pass meta still get the simple confirmation toast.
+      if (data?.engine === "amm" && variables.toastMeta) {
+        fireAmmTradeToast({
+          response: data,
+          actionType: "buy",
+          username: profile?.username || "you",
+          personName: variables.toastMeta.personName,
+          personAvatar: variables.toastMeta.personAvatar,
+          marketTitle: variables.toastMeta.marketTitle,
+          category: variables.toastMeta.category,
+          entryLabel: variables.toastMeta.entryLabel,
+          direction: variables.toastMeta.direction,
+          openShareCard,
+          fallbackShareUrl: variables.toastMeta.fallbackShareUrl,
+        });
+      } else {
+        toast("Prediction placed!", { description: variables.marketType === "h2h" ? "Your head-to-head prediction has been recorded." : "Your prediction has been recorded." });
+      }
       setStakeModalOpen(false);
       setPendingSelection(null);
       await Promise.all([
@@ -810,20 +854,60 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       return;
     }
     if (pendingSelection.type === "gainer" && pendingSelection.entryId) {
+      // Build the AMM share-toast meta from the race market + chosen
+      // candidate so the success handler can fire `fireAmmTradeToast`
+      // with the right avatar / category — matches PredictPage parity.
+      const gainerMarket = gainerMarkets.find((m) => m.id === pendingSelection.marketId);
+      const candidate = gainerMarket?.leaders.find(
+        (c) => c.entryId === pendingSelection.entryId,
+      );
+      const origin = typeof window !== "undefined" ? window.location.origin : "";
+      const toastMeta: NativeBetToastMeta | undefined = gainerMarket
+        ? {
+            personName: candidate?.name ?? pendingSelection.choice,
+            personAvatar: candidate?.avatar ?? null,
+            marketTitle: pendingSelection.marketName ?? `Category Race: ${getMarketCategoryLabel(gainerMarket.category)}`,
+            category: gainerMarket.category,
+            entryLabel: candidate?.name ?? pendingSelection.choice,
+            direction: "other",
+            fallbackShareUrl: `${origin}/predict/race/${pendingSelection.marketId}`,
+          }
+        : undefined;
       await nativeMarketBetMutation.mutateAsync({
         marketId: pendingSelection.marketId,
         entryId: pendingSelection.entryId,
         stakeAmount: amount,
         marketType: "gainer",
+        toastMeta,
       });
       return;
     }
     if (pendingSelection.type === "h2h" && pendingSelection.entryId) {
+      // Build H2H toast meta (picked person's avatar / category) so the
+      // confirmation experience matches /predict's H2H flow.
+      const h2hMarket = h2hBattles.find((m) => m.id === pendingSelection.marketId);
+      const picked =
+        h2hMarket && pendingSelection.entryId === h2hMarket.person1EntryId
+          ? h2hMarket.person1
+          : h2hMarket?.person2;
+      const origin = typeof window !== "undefined" ? window.location.origin : "";
+      const toastMeta: NativeBetToastMeta | undefined = h2hMarket && picked
+        ? {
+            personName: picked.name,
+            personAvatar: picked.avatar ?? null,
+            marketTitle: h2hMarket.title ?? pendingSelection.marketName ?? "Head-to-head",
+            category: h2hMarket.category,
+            entryLabel: picked.name,
+            direction: "other",
+            fallbackShareUrl: `${origin}/predict/h2h/${pendingSelection.marketId}`,
+          }
+        : undefined;
       await nativeMarketBetMutation.mutateAsync({
         marketId: pendingSelection.marketId,
         entryId: pendingSelection.entryId,
         stakeAmount: amount,
         marketType: "h2h",
+        toastMeta,
       });
       return;
     }

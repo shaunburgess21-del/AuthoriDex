@@ -55,6 +55,55 @@ async function countOpenNativeMarketsForWeek(weekNumber: number, monday: Date): 
   return openCount?.count ?? 0;
 }
 
+/**
+ * Per-market-type OPEN counts for the current week. Used by
+ * `ensureWeeklyMarketsForCurrentWeek` to backfill ONLY the missing
+ * product(s) when an earlier generation pass partially failed —
+ * previously, the early-return on `countOpenNativeMarketsForWeek > 0`
+ * meant a successful UpDown could prevent a subsequent H2H/gainer
+ * backfill from ever happening, leaving the week incomplete until
+ * the next Monday.
+ */
+export type WeeklyNativeCounts = { updown: number; h2h: number; gainer: number; jackpot: number };
+
+async function countOpenNativeMarketsByTypeForWeek(
+  weekNumber: number,
+  monday: Date,
+): Promise<WeeklyNativeCounts> {
+  const rows = await db
+    .select({
+      marketType: predictionMarkets.marketType,
+      count: sql<number>`count(*)`,
+    })
+    .from(predictionMarkets)
+    .where(and(
+      eq(predictionMarkets.status, "OPEN"),
+      inArray(predictionMarkets.marketType, ["updown", "h2h", "gainer", "jackpot"]),
+      eq(predictionMarkets.weekNumber, weekNumber),
+      gte(predictionMarkets.endAt, monday),
+    ))
+    .groupBy(predictionMarkets.marketType);
+
+  const counts: WeeklyNativeCounts = { updown: 0, h2h: 0, gainer: 0, jackpot: 0 };
+  for (const row of rows) {
+    const key = row.marketType as keyof WeeklyNativeCounts;
+    if (key in counts) counts[key] = Number(row.count) || 0;
+  }
+  return counts;
+}
+
+/**
+ * Pure helper: given per-type OPEN counts for the current week, return
+ * the list of market types that still need to be generated. Extracted
+ * for testability — the actual DB query is a thin wrapper around this.
+ */
+export function decideMissingMarketTypes(
+  counts: WeeklyNativeCounts,
+): Array<keyof WeeklyNativeCounts> {
+  const order: Array<keyof WeeklyNativeCounts> = ["updown", "h2h", "gainer", "jackpot"];
+  return order.filter((t) => counts[t] === 0);
+}
+
 export async function generateWeeklyUpDown(): Promise<number> {
   const { monday, sunday, weekNumber } = getWeekContext();
   let people = await db.select().from(trackedPeople).where(eq(trackedPeople.status, "main_leaderboard"));
@@ -985,40 +1034,110 @@ export async function generateAllWeeklyMarkets(): Promise<{ updown: number; jack
   return { updown, jackpot, h2h, gainer: gainerResult.created, gainerUpdated: gainerResult.updated, weekNumber };
 }
 
+function sumCounts(c: WeeklyNativeCounts): number {
+  return c.updown + c.h2h + c.gainer + c.jackpot;
+}
+
 export async function ensureWeeklyMarketsForCurrentWeek(reason: "read-self-heal" | "startup" | "scheduled" | "retry" | "cron" = "scheduled"): Promise<{
   outcome: "already-open" | "generated" | "lock-busy";
   weekNumber: number;
   openBefore: number;
   openAfter: number;
+  /** Market types newly generated this call (empty when nothing was missing). */
+  generatedTypes: Array<keyof WeeklyNativeCounts>;
 }> {
   const { weekNumber, monday } = getWeekContext();
-  const openBefore = await countOpenNativeMarketsForWeek(weekNumber, monday);
-  if (openBefore > 0) {
-    return { outcome: "already-open", weekNumber, openBefore, openAfter: openBefore };
+  const beforeByType = await countOpenNativeMarketsByTypeForWeek(weekNumber, monday);
+  const openBefore = sumCounts(beforeByType);
+  const initiallyMissing = decideMissingMarketTypes(beforeByType);
+
+  // Full week already in place — nothing to do. We only short-circuit
+  // when EVERY type has at least one open market; partial weeks fall
+  // through into the lock so the missing product(s) get backfilled.
+  if (initiallyMissing.length === 0) {
+    return {
+      outcome: "already-open",
+      weekNumber,
+      openBefore,
+      openAfter: openBefore,
+      generatedTypes: [],
+    };
   }
 
   const locked = await withDbAdvisoryLock(
     MARKET_GENERATOR_LOCK_KEY,
     "MarketGenerator",
     async () => {
-      const openInsideLock = await countOpenNativeMarketsForWeek(weekNumber, monday);
-      if (openInsideLock > 0) {
-        return { generated: false, openAfter: openInsideLock };
+      // Re-check inside the lock — another runner may have just
+      // finished generating while we were waiting for the lock.
+      const insideByType = await countOpenNativeMarketsByTypeForWeek(weekNumber, monday);
+      const missing = decideMissingMarketTypes(insideByType);
+      if (missing.length === 0) {
+        return { generatedTypes: [] as Array<keyof WeeklyNativeCounts>, openAfter: sumCounts(insideByType) };
       }
-      await generateAllWeeklyMarkets();
-      const openAfterGenerate = await countOpenNativeMarketsForWeek(weekNumber, monday);
-      return { generated: true, openAfter: openAfterGenerate };
+
+      // Run only the generators for the missing types. Each generator
+      // is internally idempotent (e.g. H2H short-circuits if any open
+      // H2H exists, UpDown skips per-person duplicates) so calling
+      // them is safe even if a race put the type in place; but
+      // skipping the call up-front saves wasted work.
+      const generatedTypes: Array<keyof WeeklyNativeCounts> = [];
+      for (const type of missing) {
+        try {
+          if (type === "updown") {
+            const n = await generateWeeklyUpDown();
+            if (n > 0) generatedTypes.push("updown");
+          } else if (type === "h2h") {
+            const n = await generateWeeklyH2H();
+            if (n > 0) generatedTypes.push("h2h");
+          } else if (type === "gainer") {
+            const r = await generateWeeklyGainer();
+            if (r.created > 0) generatedTypes.push("gainer");
+          } else if (type === "jackpot") {
+            const n = await generateWeeklyJackpot();
+            if (n > 0) generatedTypes.push("jackpot");
+          }
+        } catch (err) {
+          // Swallow per-type errors so a failed jackpot generator
+          // doesn't block UpDown/H2H/gainer from being persisted.
+          // The retry scheduler will re-enter and pick up whatever's
+          // still missing on its next tick.
+          log(
+            `[MarketGenerator] ensureWeeklyMarkets(${reason}) generator ${type} failed: ${err instanceof Error ? err.message : err}`,
+          );
+        }
+      }
+
+      const afterByType = await countOpenNativeMarketsByTypeForWeek(weekNumber, monday);
+      return { generatedTypes, openAfter: sumCounts(afterByType) };
     },
   );
 
   if (!locked.acquired) {
-    return { outcome: "lock-busy", weekNumber, openBefore, openAfter: openBefore };
+    return {
+      outcome: "lock-busy",
+      weekNumber,
+      openBefore,
+      openAfter: openBefore,
+      generatedTypes: [],
+    };
   }
 
-  const lockResult = locked.result ?? { generated: false, openAfter: openBefore };
-  const outcome = lockResult.generated ? "generated" : "already-open";
-  log(`[MarketGenerator] ensureWeeklyMarkets(${reason}) outcome=${outcome} week=${weekNumber} before=${openBefore} after=${lockResult.openAfter}`);
-  return { outcome, weekNumber, openBefore, openAfter: lockResult.openAfter };
+  const lockResult = locked.result ?? { generatedTypes: [] as Array<keyof WeeklyNativeCounts>, openAfter: openBefore };
+  const outcome: "already-open" | "generated" | "lock-busy" =
+    lockResult.generatedTypes.length > 0 ? "generated" : "already-open";
+  log(
+    `[MarketGenerator] ensureWeeklyMarkets(${reason}) outcome=${outcome} ` +
+      `week=${weekNumber} before=${openBefore} after=${lockResult.openAfter} ` +
+      `missingBefore=[${initiallyMissing.join(",")}] generated=[${lockResult.generatedTypes.join(",")}]`,
+  );
+  return {
+    outcome,
+    weekNumber,
+    openBefore,
+    openAfter: lockResult.openAfter,
+    generatedTypes: lockResult.generatedTypes,
+  };
 }
 
 export function getNextMondayGenerationAt(now = new Date()): Date {

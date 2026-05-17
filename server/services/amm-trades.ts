@@ -53,6 +53,19 @@ type DbOrTx = Pick<typeof db, "select" | "insert" | "update" | "execute">;
  */
 export const MIN_AMM_BUY_CREDITS = 5;
 
+/**
+ * Soft per-call minimum on human-initiated sells (in shares). The
+ * executeSell service layer ultimately rejects any sell whose proceeds
+ * round below 1 credit — so this floor exists mainly to cut off micro-
+ * spam at the route boundary and surface a friendlier validation error
+ * BEFORE we spend a DB transaction quoting the LMSR proceeds. The agent
+ * worker uses a stricter floor (`MIN_SHARES_TO_SELL = 0.1`) because
+ * agents have a budget envelope and shouldn't be exiting in dust; the
+ * human floor is gentler so a real user with a thin position can still
+ * close it cleanly.
+ */
+export const MIN_HUMAN_SELL_SHARES = 0.01;
+
 // ---------------------------------------------------------------------------
 // Public API — buy
 // ---------------------------------------------------------------------------
