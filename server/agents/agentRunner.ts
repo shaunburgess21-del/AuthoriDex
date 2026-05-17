@@ -31,6 +31,8 @@ import type {
   AgentConfigData,
   MarketWithEntries,
   TrendSignals,
+  TrendDirection,
+  TrendMomentum,
   CrowdSplit,
   PredictionDecision,
 } from "./types";
@@ -214,6 +216,9 @@ async function runAgentBatchOnce(): Promise<{
       resolutionCriteria: predictionMarkets.resolutionCriteria,
       metadata: predictionMarkets.metadata,
       engine: predictionMarkets.engine,
+      // Used as the per-entry opening-score cutoff for H2H / Race so the
+      // ranker + decision engine see `pctChangeVsOpen` at the entry level.
+      createdAt: predictionMarkets.createdAt,
     })
     .from(predictionMarkets)
     .where(
@@ -223,6 +228,12 @@ async function runAgentBatchOnce(): Promise<{
         gte(predictionMarkets.endAt, now),
       )
     );
+
+  // Sweep-scoped cache for per-entry opening scores. Memory hygiene only —
+  // the closest-at-or-before snapshot for a fixed (personId, marketCreatedAt)
+  // pair shouldn't change between sweeps in normal operation, but clearing
+  // every 30 min keeps the map bounded as old markets resolve.
+  entryOpeningScoreCache.clear();
 
   if (!markets.length) {
     log("[AgentRunner] No active markets found");
@@ -299,10 +310,16 @@ async function runAgentBatchOnce(): Promise<{
   // getTrendSignals is internally idempotent for the same person within a
   // sweep, so sharp agents re-evaluating the same markets seconds later
   // don't re-pay the DB cost.
-  const nativeForRanker = sweepMarkets.filter((m) => m.marketType !== "community");
+  // All sweep markets are eligible — community markets get a separate
+  // formatter inside the ranker since they have free-text options
+  // instead of person entries. The world-market LLM (`worldMarketEngine`)
+  // still drives community decisions; the ranker just becomes an
+  // additional edge signal that bumps `priority` to "high" for sharp
+  // agents on whichever community markets the ranker flags.
+  const rankableMarkets = sweepMarkets;
   const rankerInputs = (
     await Promise.all(
-      nativeForRanker.map(async (m): Promise<
+      rankableMarkets.map(async (m): Promise<
         | { market: MarketWithEntries; signals: TrendSignals | null; entrySignals?: Map<string, TrendSignals> }
         | null
       > => {
@@ -319,13 +336,25 @@ async function runAgentBatchOnce(): Promise<{
         if (entries.length === 0) return null;
 
         const marketData: MarketWithEntries = { ...m, entries };
+        const isPerEntry = m.marketType === "h2h" || m.marketType === "gainer";
         const [personSignals, entrySignalsMap] = await Promise.all([
           m.personId ? getTrendSignals(m.personId) : Promise.resolve(null),
-          (m.marketType === "h2h" || m.marketType === "gainer")
+          isPerEntry
             ? Promise.all(
                 entries
                   .filter((e) => e.personId)
-                  .map(async (e) => [e.id, await getTrendSignals(e.personId!)] as const),
+                  .map(async (e) => {
+                    // Look up the entry's opening score so the ranker sees
+                    // `pctChangeVsOpen` per entry, not just per market.
+                    // Falls back gracefully when no snapshot pre-dates the
+                    // market (returns null -> getTrendSignals skips the
+                    // pctChangeVsOpen calc).
+                    const openingScore = m.createdAt
+                      ? await getEntryOpeningScore(e.personId!, m.id, m.createdAt)
+                      : null;
+                    const sig = await getTrendSignals(e.personId!, { openingScore });
+                    return [e.id, sig] as const;
+                  }),
               ).then((pairs) => new Map(pairs))
             : Promise.resolve(undefined),
         ]);
@@ -341,7 +370,12 @@ async function runAgentBatchOnce(): Promise<{
     log(`[AgentRunner] sharp ranker failed: ${err instanceof Error ? err.message : err}`);
     return { picks: [], generatedAt: Date.now(), marketsConsidered: 0, source: "fallback" as const, costEstimateUsd: 0 };
   });
-  const sharpPickedMarketIds = new Set(rankerSnapshot.picks.map((p) => p.marketId));
+  // Build a marketId-keyed map so the per-agent stake-sizing pass can
+  // look up the LLM's edge + conviction in O(1) and feed them into the
+  // smartness curve. Set of IDs is kept for the existing priority-bump
+  // logic that doesn't care about per-pick numerics.
+  const sharpPicksByMarketId = new Map(rankerSnapshot.picks.map((p) => [p.marketId, p] as const));
+  const sharpPickedMarketIds = new Set(sharpPicksByMarketId.keys());
   if (sharpPickedMarketIds.size > 0) {
     log(`[AgentRunner] Sharp ranker picks (${rankerSnapshot.source}): ${Array.from(sharpPickedMarketIds).map((id) => id.slice(0, 8)).join(", ")}`);
   }
@@ -612,11 +646,9 @@ async function runAgentBatchOnce(): Promise<{
       } else {
         const sharpFetch = getSimulationProfile(agent.simulationProfile).personaBand === "sharp";
         // Pull the per-market opening score out of metadata so the deterministic
-        // engine can read `signals.pctChangeVsOpen`. Only meaningful on binary
-        // up/down per-person markets — metadata.openingScore lives at the
-        // market level, not per entry. H2H / gainer per-entry signals below
-        // intentionally do NOT receive openingScore (no per-entry baseline
-        // exists in the current schema; revisit in a later sprint).
+        // engine can read `signals.pctChangeVsOpen`. Up/Down per-person markets
+        // carry it as `metadata.openingScore.score`; H2H / Race resolve their
+        // per-entry baselines below via `getEntryOpeningScore`.
         const meta = market.metadata as Record<string, any> | null;
         const openingScore =
           typeof meta?.openingScore?.score === "number"
@@ -633,7 +665,20 @@ async function runAgentBatchOnce(): Promise<{
           entrySignals = new Map();
           for (const entry of entries) {
             if (entry.personId) {
-              entrySignals.set(entry.id, await getTrendSignals(entry.personId, { includeMultiWindow: sharpFetch }));
+              // Per-entry baseline: closest snapshot at-or-before the
+              // market's createdAt. This is the Putin fix — without it,
+              // pctChangeVsOpen would always be undefined for entries
+              // and `decisionEngine` couldn't tilt on direction.
+              const entryOpeningScore = market.createdAt
+                ? await getEntryOpeningScore(entry.personId, market.id, market.createdAt)
+                : null;
+              entrySignals.set(
+                entry.id,
+                await getTrendSignals(entry.personId, {
+                  includeMultiWindow: sharpFetch,
+                  openingScore: entryOpeningScore,
+                }),
+              );
             }
           }
         }
@@ -758,7 +803,29 @@ async function runAgentBatchOnce(): Promise<{
         : computeExecuteAfter(agent.archetype);
 
       const chosenEntry = entries.find((entry) => entry.id === chosenEntryId);
-      let stakeAmount = computeAgentStakeAmount(agentData, decision);
+
+      // Only feed the LLM ranker's edge/conviction into sizing when the
+      // agent ended up on the SAME side as the LLM. If the agent picked
+      // the other entry (contrarian persona, deterministic-engine
+      // disagreement, etc.) the LLM's `edge` doesn't apply — it was
+      // computed for the OTHER side. In that case `null` falls back to
+      // the deterministic-engine edge inside computeAgentStakeAmount.
+      const rankerPick = sharpPicksByMarketId.get(market.id) ?? null;
+      const pickSidesAgree =
+        rankerPick &&
+        chosenEntry?.label != null &&
+        chosenEntry.label.toLowerCase() === rankerPick.side.toLowerCase();
+      const sizingPick = pickSidesAgree ? rankerPick : null;
+
+      let stakeAmount = computeAgentStakeAmount(agentData, decision, sizingPick);
+
+      // Persist the LLM ranker's conviction into the queued decision so
+      // the worker can scale the AMM edge band for high-conviction trades
+      // (see `sizeAmmBudget` + `resolveEdgeBand`). Only stamped when sides
+      // agree — sizingPick is already gated on side agreement above.
+      if (sizingPick && typeof sizingPick.conviction === "number") {
+        decision = { ...decision, rankerConviction: sizingPick.conviction };
+      }
 
       // Agent-specific stake overrides
       const override = AGENT_STAKE_OVERRIDES[agent.username];
@@ -1059,6 +1126,66 @@ function toAgentData(row: typeof agentConfigs.$inferSelect): AgentConfigData {
   };
 }
 
+/**
+ * Derive a coarse UP/DOWN/FLAT direction from the underlying signals.
+ *
+ * Priority ladder — first rule that fires wins:
+ *   1. `pctChangeVsOpen` is the strongest "vs baseline" signal because it's
+ *      anchored to the market's actual open. If we have it and it's
+ *      meaningful (> 2% in either direction), trust it.
+ *   2. Fall back to deltas, but require BOTH the 24h and 7d windows to
+ *      agree in sign. Disagreement = noisy / mean-reverting → don't tilt.
+ *      24h threshold of 0.5 (raw fame-index points) keeps tiny intraday
+ *      jitter from flipping the bucket.
+ *   3. Last resort: read the snapshot's `momentum` label. "Breakout" maps
+ *      to UP, "Cooling" to DOWN. "Sustained"/"Stable"/"Unknown" stay FLAT
+ *      because they tell us about the regime, not the direction.
+ *
+ * Conservative by design — see comment on `TrendDirection` in types.ts.
+ */
+export function _deriveTrendDirectionForTesting(input: {
+  pctChangeVsOpen?: number;
+  change24h: number;
+  change7d: number;
+  momentum: TrendMomentum;
+}): TrendDirection {
+  return deriveTrendDirection(input);
+}
+
+function deriveTrendDirection(input: {
+  pctChangeVsOpen?: number;
+  change24h: number;
+  change7d: number;
+  momentum: TrendMomentum;
+}): TrendDirection {
+  if (
+    input.pctChangeVsOpen != null &&
+    Number.isFinite(input.pctChangeVsOpen) &&
+    Math.abs(input.pctChangeVsOpen) > 0.02
+  ) {
+    return input.pctChangeVsOpen > 0 ? "UP" : "DOWN";
+  }
+  if (Math.abs(input.change24h) > 0.5) {
+    if (input.change24h > 0 && input.change7d >= 0) return "UP";
+    if (input.change24h < 0 && input.change7d <= 0) return "DOWN";
+  }
+  if (input.momentum === "Breakout") return "UP";
+  if (input.momentum === "Cooling") return "DOWN";
+  return "FLAT";
+}
+
+function normaliseMomentum(raw: string | null | undefined): TrendMomentum {
+  switch (raw) {
+    case "Breakout":
+    case "Sustained":
+    case "Cooling":
+    case "Stable":
+      return raw;
+    default:
+      return "Unknown";
+  }
+}
+
 async function getTrendSignals(
   personId: string | null,
   options: { includeMultiWindow?: boolean; openingScore?: number | null } = {},
@@ -1069,6 +1196,9 @@ async function getTrendSignals(
       fameIndex: 5000,
       scoreBaseline: 5000,
       scoreDelta7d: 0,
+      change24h: 0,
+      momentum: "Unknown",
+      trendDirection: "FLAT",
       wikiPulse: "stable",
       newsLevel: "amber",
     };
@@ -1079,18 +1209,22 @@ async function getTrendSignals(
       trendScore: trendingPeople.trendScore,
       fameIndex: trendingPeople.fameIndex,
       change7d: trendingPeople.change7d,
+      change24h: trendingPeople.change24h,
     })
     .from(trendingPeople)
     .where(eq(trendingPeople.id, personId))
     .limit(1);
 
-  // Get latest snapshot for wiki/news signals
+  // Get latest snapshot for wiki/news signals AND the stored momentum
+  // label. Momentum is free-text in the schema; we narrow it via
+  // `normaliseMomentum` to the five buckets the scoring job emits.
   const [snap] = await db
     .select({
       wikiDelta: trendSnapshots.wikiDelta,
       newsDelta: trendSnapshots.newsDelta,
       fameIndex: trendSnapshots.fameIndex,
       trendScore: trendSnapshots.trendScore,
+      momentum: trendSnapshots.momentum,
       timestamp: trendSnapshots.timestamp,
     })
     .from(trendSnapshots)
@@ -1101,6 +1235,8 @@ async function getTrendSignals(
   const trendScore = person?.trendScore ?? 50;
   const fameIndex = person?.fameIndex ?? 5000;
   const change7d = person?.change7d ?? 0;
+  const change24h = person?.change24h ?? 0;
+  const momentum = normaliseMomentum(snap?.momentum);
 
   const wikiDelta = snap?.wikiDelta ?? 0;
   const newsDelta = snap?.newsDelta ?? 0;
@@ -1113,26 +1249,42 @@ async function getTrendSignals(
   if (newsDelta > 0.3) newsLevel = "red";
   else if (newsDelta < -0.1) newsLevel = "green";
 
-  const result: TrendSignals = {
-    trendScore,
-    fameIndex,
-    scoreBaseline: snap?.fameIndex ?? fameIndex,
-    scoreDelta7d: change7d,
-    wikiPulse,
-    newsLevel,
-  };
-
-  // Weekly-open delta — only meaningful when the caller has a market
-  // context (Up/Down per-person markets carry `metadata.openingScore`).
-  // Guard against a zero/missing baseline so we never emit NaN/Infinity:
-  // an opening score of 0 would mean the person was unranked at open,
-  // in which case "% change vs open" isn't a coherent quantity.
+  // Weekly-open delta — only meaningful when the caller passed an
+  // `openingScore`. Guard against a zero/missing baseline so we never
+  // emit NaN/Infinity: an opening score of 0 means the person was
+  // unranked at open, in which case "% change vs open" isn't a coherent
+  // quantity. Computed BEFORE direction derivation because direction
+  // uses it as the highest-priority signal.
+  let pctChangeVsOpen: number | undefined;
   if (
     options.openingScore != null &&
     Number.isFinite(options.openingScore) &&
     options.openingScore > 0
   ) {
-    result.pctChangeVsOpen = (fameIndex - options.openingScore) / options.openingScore;
+    pctChangeVsOpen = (fameIndex - options.openingScore) / options.openingScore;
+  }
+
+  const trendDirection = deriveTrendDirection({
+    pctChangeVsOpen,
+    change24h,
+    change7d,
+    momentum,
+  });
+
+  const result: TrendSignals = {
+    trendScore,
+    fameIndex,
+    scoreBaseline: snap?.fameIndex ?? fameIndex,
+    scoreDelta7d: change7d,
+    change24h,
+    momentum,
+    trendDirection,
+    wikiPulse,
+    newsLevel,
+  };
+
+  if (pctChangeVsOpen !== undefined) {
+    result.pctChangeVsOpen = pctChangeVsOpen;
   }
 
   // Multi-window momentum for sharps. Two extra ranged queries — kept off
@@ -1170,6 +1322,55 @@ const multiWindowCache = new Map<
   string,
   { delta14d: number | null; delta30d: number | null; fetchedAt: number }
 >();
+
+/**
+ * Per-entry opening score cache, keyed by `${personId}:${marketId}`.
+ * Sweep-scoped — cleared at the top of each `runAgentBatch`. See call site
+ * for why clearing is safe (closest-at-or-before is stable for a fixed
+ * `(personId, marketCreatedAt)` pair).
+ *
+ * Bounds the worst case at ~90 lookups per sweep (30 markets * ~3 entries
+ * each), all served by the existing `(person_id, timestamp)` index on
+ * `trend_snapshots`.
+ */
+const entryOpeningScoreCache = new Map<string, number | null>();
+
+/**
+ * Resolve the trend_snapshots fame index for `personId` at-or-just-before
+ * `marketCreatedAt`. Used as the "opening score" for H2H / Race per-entry
+ * `pctChangeVsOpen` calculations, since `market_entries` doesn't store an
+ * opening baseline of its own.
+ *
+ * Returns null when this person has no snapshot rows at-or-before the
+ * cutoff (rare — would mean the market was created before the person was
+ * ever ingested). Callers should treat null as "no opening baseline";
+ * `getTrendSignals` already guards against zero/null openings.
+ */
+async function getEntryOpeningScore(
+  personId: string,
+  marketId: string,
+  marketCreatedAt: Date,
+): Promise<number | null> {
+  const cacheKey = `${personId}:${marketId}`;
+  const cached = entryOpeningScoreCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+
+  const [row] = await db
+    .select({ fameIndex: trendSnapshots.fameIndex })
+    .from(trendSnapshots)
+    .where(
+      and(
+        eq(trendSnapshots.personId, personId),
+        lte(trendSnapshots.timestamp, marketCreatedAt),
+      ),
+    )
+    .orderBy(desc(trendSnapshots.timestamp))
+    .limit(1);
+
+  const score = row?.fameIndex ?? null;
+  entryOpeningScoreCache.set(cacheKey, score);
+  return score;
+}
 
 async function loadHistoricalSnapshot(
   personId: string,
@@ -1334,37 +1535,81 @@ function computeModelProbability(
   return Math.max(0.05, Math.min(0.95, fallback));
 }
 
+/**
+ * Conviction-times-edge sizing curve (Agent v2).
+ *
+ * Replaces the old `edgeBoost * wide-random-variance` formula with:
+ *   smartness = convictionFactor * edgeFactor          // 0..1.5
+ *   stake     = base(confidence) * stakeMultiplier
+ *               * (1 + 0.6 * smartness)                // up to ~1.9x floor
+ *               * narrowVariance(0.85..1.15)           // ±15%
+ *   then clamped to persona min..softMax (with ±8% cap jitter).
+ *
+ * Inputs:
+ *   - `pick.conviction` (0..1) — the LLM ranker's self-reported confidence
+ *     in this market's edge. `null` (no pick / sides disagreed) falls back
+ *     to a band-tuned conviction (sharps default 0.6, others 0.4).
+ *   - `pick.edge` (signed) — LLM's edgeProb minus crowd-implied price.
+ *     Falls back to `decision.edge` (deterministic engine) when no pick.
+ *     We take `|edge|` here because a "no" decision on a -0.10 edge is
+ *     just as actionable as "yes" on +0.10.
+ *
+ * Why this shape (vs the old edgeBoost):
+ *   - Random jitter range narrowed (0.70-1.30 → 0.85-1.15) so identical
+ *     decisions don't produce wildly different stakes the way the old
+ *     formula did. Town Square should still feel varied — the variance
+ *     now comes mostly from `confidence` and `smartness` differing across
+ *     agents, not from RNG noise.
+ *   - Worst-case multiplier is ~1.9x the floor (vs ~2.4x old), keeping
+ *     the loadgen-tested price-impact bound in place.
+ *   - Non-sharp personas with `fallbackConviction = 0.4` and the
+ *     deterministic edge (capped at 0.10 -> edgeFactor=1) get smartness=0.4
+ *     -> multiplier=1.24 — close to the old casual-band edgeBoost average.
+ */
+export function _computeAgentStakeAmountForTesting(
+  agent: AgentConfigData,
+  decision: PredictionDecision,
+  pick: { conviction?: number; edge?: number } | null = null,
+): number {
+  return computeAgentStakeAmount(agent, decision, pick);
+}
+
 function computeAgentStakeAmount(
   agent: AgentConfigData,
   decision: PredictionDecision,
+  pick: { conviction?: number; edge?: number } | null = null,
 ): number {
   const simulation = getSimulationProfile(agent.simulationProfile);
   const isSharp = simulation.personaBand === "sharp";
   const confidence = decision.confidence ?? 0.5;
-  const edge = Math.max(0, decision.edge ?? 0);
 
-  // Edge-aware stake sizing. Sharps use a steeper curve so genuine value
-  // bets (edge > 0.15) get pushed materially higher, and marginal-edge
-  // bets get a smaller boost — they bet to confidence the way real sharps
-  // do (Kelly-ish, not flat-stake). Non-sharps keep the flatter curve so
-  // their stake distribution feels more "casual punter".
-  const edgeBoost = isSharp
-    ? 1 + Math.min(edge, 0.35) * 4.0
-    : 1 + Math.min(edge, 0.35) * 2.5;
+  const fallbackConviction = isSharp ? 0.6 : 0.4;
+  const convictionFactor = Math.max(
+    0,
+    Math.min(1, pick?.conviction ?? fallbackConviction),
+  );
 
-  // Widened from 0.85-1.20 → 0.70-1.30. Town Square was showing the same
-  // stakes (220, 300, 209) appearing 5+ times in a row because the narrow
-  // variance + persona maxStake clamp produced clusters at the cap. Wider
-  // variance plus the soft cap below spreads numbers out so the feed
-  // reads like a real cohort instead of identical bot output.
-  const variance = 0.70 + Math.random() * 0.60;
+  // |edge|: ranker pick first, deterministic engine second. Both are
+  // signed; magnitude is what matters for sizing intent.
+  const edgeMagnitude =
+    pick?.edge != null && Number.isFinite(pick.edge)
+      ? Math.abs(pick.edge)
+      : Math.max(0, decision.edge ?? 0);
+  // 10% edge = full size; larger edges get extra stretch up to 1.5x. Cap
+  // is intentional — beyond ~15% edge the LLM is probably overconfident.
+  const edgeFactor = Math.max(0, Math.min(1.5, edgeMagnitude / 0.10));
+
+  const smartness = convictionFactor * edgeFactor;
+  const smartnessMultiplier = 1 + 0.6 * smartness;
+
+  // Narrow variance — ±15%. The point of the new curve is that smart
+  // signals drive size, not RNG.
+  const variance = 0.85 + Math.random() * 0.30;
   const base = computeStakeAmount(confidence);
-  const stake = Math.round(base * simulation.stakeMultiplier * edgeBoost * variance);
+  const stake = Math.round(base * simulation.stakeMultiplier * smartnessMultiplier * variance);
 
-  // Soft cap: instead of a hard clamp at the persona maxStake (which made
-  // every casual band hit 220 exactly when they wanted to bet big), allow
-  // ±8% per-agent jitter on the cap so high-stake bets land at varied
-  // numbers like 213, 218, 221, 226, etc.
+  // Soft cap: ±8% per-agent jitter on the persona maxStake so high-stake
+  // bets don't all hit the cap at the exact same number.
   const capJitter = 1 + (Math.random() * 0.16 - 0.08);
   const softMax = Math.round(simulation.maxStake * capJitter);
   return Math.max(simulation.minStake, Math.min(softMax, stake));

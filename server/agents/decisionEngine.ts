@@ -120,12 +120,21 @@ export function computePrediction(
     if (sA && sB) {
       const fA = Math.max(sA.fameIndex ?? 0, 1);
       const fB = Math.max(sB.fameIndex ?? 0, 1);
+      // Multiplicative bonus that combines momentum (delta + wiki pulse) and
+      // explicit `trendDirection`. Direction is layered on top so a person
+      // who is decisively DOWN (per the priority ladder) loses a few percent
+      // of fame weight even when their 7d delta and wiki pulse are flat —
+      // this is the H2H equivalent of the per-entry tilt added to
+      // computeSignalBoost above.
       const momBonus = (s: TrendSignals): number => {
         const delta = s.scoreDelta7d ?? 0;
-        if (s.wikiPulse === "rising" && delta > 8) return 1.10;
-        if (delta > 3) return 1.05;
-        if (s.wikiPulse === "falling" || delta < -3) return 0.95;
-        return 1.0;
+        let bonus = 1.0;
+        if (s.wikiPulse === "rising" && delta > 8) bonus = 1.10;
+        else if (delta > 3) bonus = 1.05;
+        else if (s.wikiPulse === "falling" || delta < -3) bonus = 0.95;
+        if (s.trendDirection === "UP") bonus *= 1.04;
+        else if (s.trendDirection === "DOWN") bonus *= 0.96;
+        return bonus;
       };
       const wA = fA * momBonus(sA);
       const wB = fB * momBonus(sB);
@@ -180,7 +189,14 @@ export function computePrediction(
       const momentum = entrySig.scoreDelta7d / 15;
       const wikiBoost = entrySig.wikiPulse === "rising" ? 0.08 : entrySig.wikiPulse === "falling" ? -0.08 : 0;
       const newsBoost = entrySig.newsLevel === "red" ? 0.05 : entrySig.newsLevel === "green" ? -0.03 : 0;
-      const entryBoost = (momentum * 0.12 + wikiBoost + newsBoost) * agent.recencyWeight;
+      // Direction tilt for race-style multi-entry comparisons: small
+      // additive nudge so a clearly-trending-up entry gets ~3 points more
+      // than a flat one, all else equal.
+      const dirBoost =
+        entrySig.trendDirection === "UP" ? 0.03
+        : entrySig.trendDirection === "DOWN" ? -0.03
+        : 0;
+      const entryBoost = (momentum * 0.12 + wikiBoost + newsBoost + dirBoost) * agent.recencyWeight;
       scores[entryId] = Math.max(0.05, (scores[entryId] ?? (1 / n)) + entryBoost);
     }
   }
@@ -418,10 +434,16 @@ function computeSignalBoost(
   // down by the same amount), which on a 0.50 base gives ~0.68/0.32 —
   // enough to clear the existing edge gate without going extreme.
   //
-  // When `pctChangeVsOpen` is missing (jackpot evaluation, H2H per-entry
-  // signals, community markets, or pre-Sprint-6 markets that never had
-  // metadata.openingScore stamped) we fall back to the original 7d
-  // rolling momentum read so legacy behaviour is preserved.
+  // When `pctChangeVsOpen` is missing (jackpot evaluation, community
+  // markets, or pre-Sprint-6 markets that never had metadata.openingScore
+  // stamped) we fall back to the original 7d rolling momentum read so
+  // legacy behaviour is preserved.
+  //
+  // Note: as of the Agent v2 sprint, H2H/Race per-entry signals DO carry
+  // `pctChangeVsOpen` (resolved via `getEntryOpeningScore` against
+  // `trend_snapshots` at market createdAt), so the strong-coefficient path
+  // now applies to per-entry comparisons too — fixing the "Putin baseline
+  // -DOWN doesn't read through" bug.
   if (signals.pctChangeVsOpen != null && Number.isFinite(signals.pctChangeVsOpen)) {
     const normalizedOpen = Math.max(-1, Math.min(1, signals.pctChangeVsOpen / 0.20));
     boost += normalizedOpen * 0.18 * agent.recencyWeight;
@@ -433,6 +455,16 @@ function computeSignalBoost(
     );
     boost += normalizedDelta * 0.1 * agent.recencyWeight;
   }
+
+  // Explicit `trendDirection` tilt — small uniform bump that survives when
+  // the underlying signals are individually weak but agree on direction.
+  // Magnitude (0.03) is intentionally a third of the pctChangeVsOpen
+  // coefficient so this can't overwhelm the primary "vs open" read; its
+  // job is to tilt borderline cases the right way, not to dominate.
+  // FLAT contributes nothing — see TrendDirection priority ladder for why
+  // FLAT means "no signals agree clearly" rather than "neutral".
+  if (signals.trendDirection === "UP") boost += 0.03 * agent.recencyWeight;
+  else if (signals.trendDirection === "DOWN") boost -= 0.03 * agent.recencyWeight;
 
   return boost;
 }

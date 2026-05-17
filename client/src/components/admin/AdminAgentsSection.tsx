@@ -1383,6 +1383,16 @@ function ActivityStreamCard() {
 interface SharpRankerPick {
   marketId: string;
   side: string;
+  /**
+   * Numeric fields added in the Agent v2 sprint. Optional on the type so
+   * an old cached snapshot (pre-deploy) renders without crashing — any
+   * undefined reads fall through to the legacy compact view.
+   */
+  edgeProb?: number;
+  currentPrice?: number;
+  edge?: number;
+  conviction?: number;
+  direction?: "UP" | "DOWN" | "FLAT";
   reasoning: string;
   marketTitle?: string;
   marketType?: string;
@@ -1460,27 +1470,73 @@ function SharpRankerCard() {
               </div>
             ) : (
               <ul className="space-y-2">
-                {snapshot.picks.map((p) => (
-                  <li key={p.marketId} className="rounded-md border border-border/40 p-2.5">
-                    <div className="flex flex-wrap items-center gap-2 text-sm">
-                      {p.marketTitle ? (
-                        <span className="font-medium">{p.marketTitle}</span>
-                      ) : (
-                        <code className="text-xs text-muted-foreground">{p.marketId.slice(0, 8)}</code>
+                {snapshot.picks.map((p) => {
+                  const dirCls =
+                    p.direction === "UP"
+                      ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
+                      : p.direction === "DOWN"
+                        ? "border-rose-500/40 text-rose-600 dark:text-rose-400"
+                        : "border-muted-foreground/30 text-muted-foreground";
+                  // Edge is signed: green when LLM is more bullish than crowd,
+                  // amber when bearish (still a bet, just on the other side).
+                  // Magnitude is what tells the admin "is this a real conviction
+                  // pick vs a marginal one"; we surface as bp percentage points.
+                  const edgePct = p.edge != null ? (p.edge * 100).toFixed(1) : null;
+                  const edgeCls =
+                    p.edge == null
+                      ? ""
+                      : p.edge > 0
+                        ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
+                        : "border-amber-500/40 text-amber-600 dark:text-amber-400";
+                  return (
+                    <li key={p.marketId} className="rounded-md border border-border/40 p-2.5">
+                      <div className="flex flex-wrap items-center gap-2 text-sm">
+                        {p.marketTitle ? (
+                          <span className="font-medium">{p.marketTitle}</span>
+                        ) : (
+                          <code className="text-xs text-muted-foreground">{p.marketId.slice(0, 8)}</code>
+                        )}
+                        {p.marketType && (
+                          <Badge variant="outline" className="text-xs">{p.marketType}</Badge>
+                        )}
+                        {p.side && <Badge variant="secondary">{p.side}</Badge>}
+                        {p.direction && (
+                          <Badge variant="outline" className={`text-[10px] ${dirCls}`}>
+                            {p.direction}
+                          </Badge>
+                        )}
+                      </div>
+                      {(edgePct != null || p.conviction != null || p.edgeProb != null) && (
+                        <div className="flex flex-wrap items-center gap-2 mt-1.5 text-[11px]">
+                          {p.edgeProb != null && p.currentPrice != null && (
+                            <span
+                              className="text-muted-foreground"
+                              title="LLM's view vs crowd's implied price"
+                            >
+                              {(p.edgeProb * 100).toFixed(0)}% vs {(p.currentPrice * 100).toFixed(0)}%
+                            </span>
+                          )}
+                          {edgePct != null && (
+                            <Badge variant="outline" className={`text-[10px] ${edgeCls}`}>
+                              edge {p.edge! > 0 ? "+" : ""}{edgePct}%
+                            </Badge>
+                          )}
+                          {p.conviction != null && (
+                            <Badge variant="outline" className="text-[10px]">
+                              conviction {(p.conviction * 100).toFixed(0)}%
+                            </Badge>
+                          )}
+                        </div>
                       )}
-                      {p.marketType && p.marketType !== "community" && (
-                        <Badge variant="outline" className="text-xs">{p.marketType}</Badge>
+                      {p.reasoning && (
+                        <div className="text-xs text-muted-foreground mt-1.5">{p.reasoning}</div>
                       )}
-                      {p.side && <Badge variant="secondary">{p.side}</Badge>}
-                    </div>
-                    {p.reasoning && (
-                      <div className="text-xs text-muted-foreground mt-1.5">{p.reasoning}</div>
-                    )}
-                    {p.marketTitle && (
-                      <code className="text-[10px] text-muted-foreground/60 mt-1 inline-block">{p.marketId.slice(0, 8)}</code>
-                    )}
-                  </li>
-                ))}
+                      {p.marketTitle && (
+                        <code className="text-[10px] text-muted-foreground/60 mt-1 inline-block">{p.marketId.slice(0, 8)}</code>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </>

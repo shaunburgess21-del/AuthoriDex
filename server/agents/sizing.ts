@@ -34,6 +34,16 @@ import {
  *  to 90/10 in the first sweep. Tunable later if we want sharper sharps. */
 export const DEFAULT_AGENT_EDGE_BAND = 0.10;
 
+/**
+ * Hard ceiling on per-trade price impact, even for max-conviction LLM picks.
+ * Picked so a single high-conviction sharp trade can lift price by ~20pp at
+ * most (vs the 10pp default), but cannot dump a market straight from 50/50
+ * to 80/20 in one buy. Bound was loadgen-validated against the AMM hot path
+ * — beyond this, the price-discovery story for the rest of the cohort
+ * degrades because subsequent buys hit a much steeper curve.
+ */
+export const MAX_AGENT_EDGE_BAND = 0.20;
+
 /** Tiny slop on the "no edge" comparison — protects against rounding
  *  artifacts where current price is already 0.4999... and confidence is
  *  0.5. Below this delta we treat the bet as no-EV and return 0. */
@@ -50,8 +60,17 @@ export interface SizeAmmBudgetInput {
   /** Lower bound on a viable trade. Defaults to `MIN_AMM_BUY_CREDITS`
    *  so we never schedule a trade the trade endpoint would reject. */
   minBudget?: number;
-  /** Override the default per-trade price-move cap (mostly for tests). */
+  /** Override the default per-trade price-move cap (mostly for tests).
+   *  When set, `conviction` is ignored — explicit > derived. */
   edgeBand?: number;
+  /**
+   * Sharp-ranker conviction (0..1). When set and > 0.5, the effective
+   * edge band scales linearly from `DEFAULT_AGENT_EDGE_BAND` toward
+   * `MAX_AGENT_EDGE_BAND`, letting high-conviction sharps push price
+   * further toward their target in a single buy. Below 0.5 the default
+   * band applies — low conviction shouldn't unlock more impact.
+   */
+  conviction?: number;
 }
 
 export interface SizeAmmBudgetResult {
@@ -77,8 +96,8 @@ export function sizeAmmBudget(input: SizeAmmBudgetInput): SizeAmmBudgetResult {
     confidence,
     maxBudget,
     minBudget = 5,
-    edgeBand = DEFAULT_AGENT_EDGE_BAND,
   } = input;
+  const edgeBand = resolveEdgeBand(input.edgeBand, input.conviction);
 
   if (!Number.isFinite(confidence) || confidence < 0 || confidence > 1) {
     return {
@@ -164,4 +183,38 @@ export function sizeAmmBudget(input: SizeAmmBudgetInput): SizeAmmBudgetResult {
     };
   }
   return { creditBudget: best, currentPrice: cur, targetPrice };
+}
+
+/**
+ * Resolve the effective edge band for a sizing call.
+ *
+ * Precedence (highest first):
+ *   1. Explicit `edgeBandOverride` (used by tests and special-case callers).
+ *   2. `conviction > 0.5` → linear interpolation from DEFAULT to MAX.
+ *      conviction=0.5 stays at DEFAULT (0.10), conviction=1.0 hits MAX (0.20).
+ *   3. Otherwise DEFAULT.
+ *
+ * Exported as `_internal` test surface only — callers should pass
+ * `conviction` / `edgeBand` through `SizeAmmBudgetInput` rather than calling
+ * this directly. Naming chosen to discourage accidental reach-through.
+ */
+export function _resolveEdgeBandForTesting(
+  edgeBandOverride: number | undefined,
+  conviction: number | undefined,
+): number {
+  return resolveEdgeBand(edgeBandOverride, conviction);
+}
+
+function resolveEdgeBand(
+  edgeBandOverride: number | undefined,
+  conviction: number | undefined,
+): number {
+  if (typeof edgeBandOverride === "number") return edgeBandOverride;
+  if (typeof conviction === "number" && Number.isFinite(conviction) && conviction > 0.5) {
+    const span = MAX_AGENT_EDGE_BAND - DEFAULT_AGENT_EDGE_BAND;
+    // Map (0.5, 1.0] -> (0, 1] linearly, then scale the band span.
+    const t = Math.min(1, (conviction - 0.5) * 2);
+    return DEFAULT_AGENT_EDGE_BAND + t * span;
+  }
+  return DEFAULT_AGENT_EDGE_BAND;
 }

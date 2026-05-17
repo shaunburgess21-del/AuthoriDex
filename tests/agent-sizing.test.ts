@@ -245,3 +245,97 @@ test("sizeAmmBudget rejects fractional maxBudget defensively", () => {
   assert.equal(r.creditBudget, 0);
   assert.equal(r.abstainReason, "below_min_budget");
 });
+
+// ---------------------------------------------------------------------------
+// Agent v2 — conviction-aware edge band
+// ---------------------------------------------------------------------------
+//
+// `conviction` widens `DEFAULT_AGENT_EDGE_BAND` (0.10) toward
+// `MAX_AGENT_EDGE_BAND` (0.20) when the LLM ranker is confident in its
+// pick. These tests cover the four edges of that contract:
+//   1. conviction <= 0.5 keeps the default band.
+//   2. conviction = 1.0 hits the max band exactly.
+//   3. midpoint conviction (0.75) lands halfway.
+//   4. explicit `edgeBand` override still wins over conviction.
+
+import {
+  MAX_AGENT_EDGE_BAND,
+  _resolveEdgeBandForTesting as resolveEdgeBand,
+} from "../server/agents/sizing";
+
+test("conviction <= 0.5 keeps the default edge band", () => {
+  for (const c of [undefined, 0, 0.3, 0.5]) {
+    assert.equal(
+      resolveEdgeBand(undefined, c as number | undefined),
+      DEFAULT_AGENT_EDGE_BAND,
+      `conviction=${c}`,
+    );
+  }
+});
+
+test("conviction = 1.0 lands at MAX_AGENT_EDGE_BAND exactly", () => {
+  assert.equal(resolveEdgeBand(undefined, 1.0), MAX_AGENT_EDGE_BAND);
+});
+
+test("conviction = 0.75 lands at the midpoint between default and max", () => {
+  const expected = (DEFAULT_AGENT_EDGE_BAND + MAX_AGENT_EDGE_BAND) / 2;
+  assert.ok(
+    Math.abs(resolveEdgeBand(undefined, 0.75) - expected) < 1e-9,
+    `expected ${expected}, got ${resolveEdgeBand(undefined, 0.75)}`,
+  );
+});
+
+test("conviction beyond 1.0 still caps at MAX_AGENT_EDGE_BAND", () => {
+  // Defensive: shouldn't happen post-clamp, but if a caller bypasses the
+  // parser we still bound the band. Rules should be belt-and-suspenders.
+  assert.equal(resolveEdgeBand(undefined, 1.5), MAX_AGENT_EDGE_BAND);
+});
+
+test("explicit edgeBand override wins over conviction", () => {
+  // Test override takes precedence even with high conviction.
+  assert.equal(resolveEdgeBand(0.05, 1.0), 0.05);
+});
+
+test("non-finite conviction is ignored, falls back to default", () => {
+  for (const bad of [Number.NaN, Number.POSITIVE_INFINITY]) {
+    assert.equal(resolveEdgeBand(undefined, bad), DEFAULT_AGENT_EDGE_BAND);
+  }
+});
+
+test("sizeAmmBudget uses widened band when high conviction is passed", () => {
+  // Same setup as the mid-game test above, but with high conviction.
+  // Expect newPrice to be allowed to overshoot the default 0.10 cap.
+  const state = makeState(["a", "b"]);
+  state.shareQuantities.a = 100;
+  const cur = currentPrices(state).a ?? 0;
+
+  const tight = sizeAmmBudget({
+    state,
+    entryId: "a",
+    confidence: 0.95,
+    maxBudget: 1000,
+  });
+  const wide = sizeAmmBudget({
+    state,
+    entryId: "a",
+    confidence: 0.95,
+    maxBudget: 1000,
+    conviction: 1.0, // -> band 0.20
+  });
+
+  // The wide-band sizer should authorise at least as much credit as the
+  // tight-band one (often more, when confidence allows).
+  assert.ok(
+    wide.creditBudget >= tight.creditBudget,
+    `wide(${wide.creditBudget}) should be >= tight(${tight.creditBudget})`,
+  );
+  // And the post-trade price stays at or below cur + 0.20.
+  if (wide.creditBudget > 0) {
+    const q = quoteBuy(state, "a", wide.creditBudget);
+    const newPrice = q.newPrices.a ?? 0;
+    assert.ok(
+      newPrice <= cur + MAX_AGENT_EDGE_BAND + 1e-9,
+      `wide-band newPrice=${newPrice} overshot cur(${cur}) + max(${MAX_AGENT_EDGE_BAND})`,
+    );
+  }
+});

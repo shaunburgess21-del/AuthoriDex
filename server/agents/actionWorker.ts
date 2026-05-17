@@ -377,6 +377,14 @@ async function executeAmmBuy(
     entryId: action.entryId,
     confidence: decision.confidence ?? 0.5,
     maxBudget,
+    // Read back the LLM ranker's conviction (Agent v2). When present and
+    // > 0.5, `sizeAmmBudget` linearly widens the per-trade edge band from
+    // DEFAULT (0.10) toward MAX (0.20), letting a high-conviction sharp
+    // push price meaningfully closer to their target in one buy. Falls
+    // back silently to the default band when the field is absent (older
+    // queued actions, agents that disagreed with the ranker, or markets
+    // the ranker didn't pick at all).
+    conviction: decision.rankerConviction,
   });
 
   if (sizing.creditBudget === 0) {
