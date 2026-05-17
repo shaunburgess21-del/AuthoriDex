@@ -662,25 +662,32 @@ async function runAgentBatchOnce(): Promise<{
 
         let entrySignals: Map<string, TrendSignals> | undefined;
         if ((market.marketType === "h2h" || market.marketType === "gainer") && entries.some(e => e.personId)) {
-          entrySignals = new Map();
-          for (const entry of entries) {
-            if (entry.personId) {
-              // Per-entry baseline: closest snapshot at-or-before the
-              // market's createdAt. This is the Putin fix — without it,
-              // pctChangeVsOpen would always be undefined for entries
-              // and `decisionEngine` couldn't tilt on direction.
-              const entryOpeningScore = market.createdAt
-                ? await getEntryOpeningScore(entry.personId, market.id, market.createdAt)
-                : null;
-              entrySignals.set(
-                entry.id,
-                await getTrendSignals(entry.personId, {
+          // Parallelise per-entry signal/baseline lookups. H2H = 2 entries,
+          // Race = up to ~8. Sequential awaits used to stack 16-24 round
+          // trips per market (3 queries deep × N entries); parallel cuts
+          // that to one round trip per entry batch. The opening-score
+          // cache + multi-window cache absorb most of the cost on later
+          // agents' visits anyway, so this mainly helps the first agent
+          // through each market.
+          const pairs = await Promise.all(
+            entries
+              .filter((entry) => entry.personId)
+              .map(async (entry) => {
+                // Per-entry baseline: closest snapshot at-or-before the
+                // market's createdAt. This is the Putin fix — without it,
+                // pctChangeVsOpen would always be undefined for entries
+                // and `decisionEngine` couldn't tilt on direction.
+                const entryOpeningScore = market.createdAt
+                  ? await getEntryOpeningScore(entry.personId!, market.id, market.createdAt)
+                  : null;
+                const sig = await getTrendSignals(entry.personId!, {
                   includeMultiWindow: sharpFetch,
                   openingScore: entryOpeningScore,
-                }),
-              );
-            }
-          }
+                });
+                return [entry.id, sig] as const;
+              }),
+          );
+          entrySignals = new Map(pairs);
         }
 
         // High-priority signal for sharps: the LLM market-ranker has flagged
@@ -811,11 +818,8 @@ async function runAgentBatchOnce(): Promise<{
       // computed for the OTHER side. In that case `null` falls back to
       // the deterministic-engine edge inside computeAgentStakeAmount.
       const rankerPick = sharpPicksByMarketId.get(market.id) ?? null;
-      const pickSidesAgree =
-        rankerPick &&
-        chosenEntry?.label != null &&
-        chosenEntry.label.toLowerCase() === rankerPick.side.toLowerCase();
-      const sizingPick = pickSidesAgree ? rankerPick : null;
+      const sidesAgree = rankerPickMatchesChosenEntry(rankerPick, chosenEntry);
+      const sizingPick = sidesAgree ? rankerPick : null;
 
       let stakeAmount = computeAgentStakeAmount(agentData, decision, sizingPick);
 
@@ -854,8 +858,15 @@ async function runAgentBatchOnce(): Promise<{
         status: "pending",
       });
 
+      // Tag the log with ranker context when this trade was sized off an
+      // LLM pick (sides agreed). Lets manual smoke verify "stake amounts
+      // vary smoothly with conviction" without reading two log streams.
+      const rankerLogTag = sizingPick
+        ? ` ranker=[edge=${sizingPick.edge >= 0 ? "+" : ""}${(sizingPick.edge * 100).toFixed(1)}%, conv=${(sizingPick.conviction * 100).toFixed(0)}%, dir=${sizingPick.direction}]`
+        : "";
+
       scheduled++;
-      log(`[AgentRunner] ${agent.displayName} → ${market.title?.slice(0, 30)} (engine=${market.engine}, entry=${chosenEntryId.slice(0, 8)}, confidence=${decision.confidence?.toFixed(2)}, stake=${stakeAmount}, source=${decision.source ?? "deterministic"}, execAfter=${executeAfter.toISOString()})`);
+      log(`[AgentRunner] ${agent.displayName} → ${market.title?.slice(0, 30)} (engine=${market.engine}, entry=${chosenEntryId.slice(0, 8)}, confidence=${decision.confidence?.toFixed(2)}, stake=${stakeAmount}, source=${decision.source ?? "deterministic"}, execAfter=${executeAfter.toISOString()})${rankerLogTag}`);
     }
   }
 
@@ -1613,6 +1624,25 @@ function computeAgentStakeAmount(
   const capJitter = 1 + (Math.random() * 0.16 - 0.08);
   const softMax = Math.round(simulation.maxStake * capJitter);
   return Math.max(simulation.minStake, Math.min(softMax, stake));
+}
+
+/**
+ * True iff the LLM ranker picked the same side the agent's deterministic
+ * engine ended up on. We compare on entry label with case-insensitive
+ * fallback to match the parser's resolution semantics — a pick that
+ * survived `parseRankerResponse` already has its `side` set to the
+ * canonical entry label, so the lower-case compare is mostly belt-and-
+ * suspenders for any future drift.
+ *
+ * Only when this returns true do we feed the LLM's conviction/edge into
+ * the sizing curve and persist `rankerConviction` for the worker.
+ */
+function rankerPickMatchesChosenEntry(
+  pick: { side: string } | null,
+  chosenEntry: { label: string | null } | undefined,
+): boolean {
+  if (!pick || !chosenEntry?.label) return false;
+  return chosenEntry.label.toLowerCase() === pick.side.toLowerCase();
 }
 
 function isOtherStyleOutcome(label: string | null): boolean {
