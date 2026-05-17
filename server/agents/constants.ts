@@ -110,18 +110,22 @@ export const WORLD_MARKETS_LLM_ENABLED = envFlag(process.env.WORLD_MARKETS_LLM_E
 // expected this week) ARE news-sensitive and need a tighter cache.
 //
 // Tiers (read by `getAssessmentTtlMs` in worldMarketEngine):
-//   • < 3 days to resolve  → 6h   (final stretch, news swings outcomes)
-//   • 3-14 days            → 24h  (this week's news still matters)
-//   • 14-60 days           → 3d   (medium horizon, occasional refresh)
-//   • > 60 days OR unknown → 7d   (long horizon — noise > signal)
+//   • < 3 days to resolve  → 12h  (final stretch, news swings outcomes)
+//   • 3-14 days            → 48h  (this week's news still matters)
+//   • 14-60 days           → 5d   (medium horizon, occasional refresh)
+//   • > 60 days OR unknown → 14d  (long horizon — noise > signal)
 //
-// Versus a flat 24h, the typical world-market mix (most are 1-12 months out)
-// drops average refresh frequency ~5-7x, with no loss of news responsiveness
-// where it actually matters.
-export const WORLD_MARKET_ASSESSMENT_TTL_FINAL_MS = 6 * 60 * 60 * 1000;
-export const WORLD_MARKET_ASSESSMENT_TTL_NEAR_MS = 24 * 60 * 60 * 1000;
-export const WORLD_MARKET_ASSESSMENT_TTL_MEDIUM_MS = 3 * 24 * 60 * 60 * 1000;
-export const WORLD_MARKET_ASSESSMENT_TTL_LONG_MS = 7 * 24 * 60 * 60 * 1000;
+// 2026-05-17 cost trim: each tier was doubled from its original value
+// (6h/24h/3d/7d) to roughly halve average per-market spend with minimal
+// loss of news freshness — a final-stretch market still refreshes twice
+// per day, near markets every other day, which is well inside the news
+// cycles that actually move outcomes. Versus a flat 24h, the typical
+// world-market mix (most are 1-12 months out) now drops average refresh
+// frequency ~10-14x, with no meaningful loss of responsiveness.
+export const WORLD_MARKET_ASSESSMENT_TTL_FINAL_MS = 12 * 60 * 60 * 1000;
+export const WORLD_MARKET_ASSESSMENT_TTL_NEAR_MS = 48 * 60 * 60 * 1000;
+export const WORLD_MARKET_ASSESSMENT_TTL_MEDIUM_MS = 5 * 24 * 60 * 60 * 1000;
+export const WORLD_MARKET_ASSESSMENT_TTL_LONG_MS = 14 * 24 * 60 * 60 * 1000;
 /** Effective ceiling — used by admin diagnostics & cache cleanup. */
 export const WORLD_MARKET_ASSESSMENT_TTL_MAX_MS = WORLD_MARKET_ASSESSMENT_TTL_LONG_MS;
 /** @deprecated Kept for backwards compatibility with admin status JSON. */
