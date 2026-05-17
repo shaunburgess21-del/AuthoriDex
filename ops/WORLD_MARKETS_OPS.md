@@ -146,3 +146,77 @@ The importer accepts both the structured `entries` array format and the flat `Op
 - The `closeAt` field defaults to `endAt` but can be adjusted per-market in the edit modal
 - Linked persons are resolved by name against `tracked_people`; if not found, the market is created without a link (with a warning)
 - Secondary person names (e.g., "Joe Rogan / Donald Trump") are stored in `metadata.secondaryPerson`
+
+---
+
+## Emergency Recovery (post-sunset wipe)
+
+The parimutuel sunset wipe (`scripts/sunset-wipe-parimutuel.ts`) deletes
+every non-jackpot row where `engine='parimutuel'`. Community markets had
+`engine='parimutuel'` at that moment and were caught by the predicate.
+If you ever need to redo the wipe in the future, **carve out
+`market_type='community'` first** (flip them to AMM and seed) or accept
+that the curated launch wave will be lost.
+
+### ops/restore-house-wallet.ts
+
+`scripts/sunset-reset-credits.ts` had a bug — it treated the
+`__house__` profile as a regular human and reset its balance to
+`SIGNUP_CREDIT_GRANT` (10,000). After two market seeds (~5k each) the
+house ran dry and `seedAmmMarket` started throwing "insufficient
+credits". This blocked every new AMM market creation (community
+imports, weekly h2h/updown/gainer regeneration, admin-created
+markets).
+
+Restore the house to its design baseline (1B virtual credits per
+migration 0052):
+
+```bash
+npx tsx ops/restore-house-wallet.ts --dry-run
+npx tsx ops/restore-house-wallet.ts
+npx tsx ops/restore-house-wallet.ts --target 500000000   # alternative
+```
+
+Writes a `credit_ledger` audit row with `txn_type='house_restore'`.
+Idempotent: no-op if the house is already at (or above) the target.
+
+The bug in `scripts/sunset-reset-credits.ts` was patched at the same
+time to skip `is_house=true` profiles, so a future re-run of the
+sunset script won't recreate this problem.
+
+### ops/restore-world-markets.ts
+
+Direct-DB version of the admin import route. Re-imports community
+markets from the curated XLSX (`authoridex_world_markets_launch_top25_final.xlsx`)
+without needing a running server or admin token.
+
+```bash
+# Defaults: looks for the xlsx in ops/, then ~/Downloads/
+npx tsx ops/restore-world-markets.ts --dry-run
+npx tsx ops/restore-world-markets.ts
+
+# Or specify the file
+npx tsx ops/restore-world-markets.ts \
+  --file "C:/Users/you/Downloads/authoridex_world_markets_launch_top25_final.xlsx"
+
+# Past resolution dates get auto-bumped by N days (default 30)
+npx tsx ops/restore-world-markets.ts --bump-past-days 45
+npx tsx ops/restore-world-markets.ts --bump-past-days 0   # skip past-dated rows instead
+```
+
+Created markets are `engine='amm'`, `visibility='draft'`, `status='OPEN'`,
+AMM-seeded inside the same transaction as the row insert. The script
+applies accent-folding + whitespace-collapse when resolving linked
+persons (so "Kylian Mbappé" in the xlsx matches "Kylian Mbappe" in
+`tracked_people`).
+
+Pre-reqs:
+1. `DATABASE_URL` set in `.env` (script auto-loads via `process.loadEnvFile`).
+2. House wallet has enough virtual credits to seed every new market
+   (~5,000 per market by default). Run `restore-house-wallet.ts` first
+   if you've recently run the sunset reset.
+
+After import, the 25 markets land in **Admin > Predictions > World
+Markets > Draft filter**. Review titles, dates and entries, add cover
+images, then bulk-publish via the "Publish [N]" button (or the
+`/api/admin/open-markets/batch-visibility` route).

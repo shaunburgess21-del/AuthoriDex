@@ -46,15 +46,25 @@ async function main(): Promise<void> {
       id: profiles.id,
       handle: profiles.handle,
       isAgent: profiles.isAgent,
+      isHouse: profiles.isHouse,
       predictCredits: profiles.predictCredits,
     })
     .from(profiles);
 
-  const humans = rows.filter((r) => !r.isAgent);
-  const agents = rows.filter((r) => r.isAgent);
+  // The house wallet (is_house=true) has is_agent=false but is NOT a
+  // human — it owns virtual AMM liquidity (~1B credits per migration
+  // 0052) and must not be reset to the human signup grant or it will
+  // run dry on the next seedAmmMarket call. Originally this script
+  // missed that carve-out; keep the explicit skip below so any future
+  // re-run is safe.
+  const houseRows = rows.filter((r) => r.isHouse);
+  const userRows = rows.filter((r) => !r.isHouse);
+  const humans = userRows.filter((r) => !r.isAgent);
+  const agents = userRows.filter((r) => r.isAgent);
   console.log(`\n[sunset:reset-credits] Found:`);
   console.log(`  humans  ${humans.length}`);
   console.log(`  agents  ${agents.length}`);
+  console.log(`  house   ${houseRows.length}    (skipped — virtual AMM liquidity)`);
 
   if (DRY_RUN) {
     console.log(`\n[sunset:reset-credits] DRY RUN complete. Re-run without --dry-run to execute.\n`);
@@ -65,7 +75,7 @@ async function main(): Promise<void> {
   const runId = randomUUID().slice(0, 8);
 
   await db.transaction(async (tx) => {
-    for (const row of rows) {
+    for (const row of userRows) {
       const target = row.isAgent ? AGENT_CREDIT_TOPUP_TARGET : SIGNUP_CREDIT_GRANT;
       const delta = target - row.predictCredits;
 
@@ -98,14 +108,15 @@ async function main(): Promise<void> {
   });
 
   console.log(`\n[sunset:reset-credits] Done.`);
-  console.log(`  resets       ${rows.length}`);
+  console.log(`  resets       ${userRows.length}    (humans + agents only)`);
+  console.log(`  house        skipped (virtual AMM liquidity preserved)`);
   console.log(`  run_id       ${runId}`);
   console.log(`  ledger_tag   sunset_reset`);
 
-  // Post-flight sanity: every row should be at the target balance now.
+  // Post-flight sanity: every non-house row should be at the target balance now.
   const [{ humansOff }] = (await db.execute(sql`
     SELECT COUNT(*)::int AS "humansOff" FROM profiles
-    WHERE is_agent = false AND predict_credits != ${SIGNUP_CREDIT_GRANT}
+    WHERE is_agent = false AND is_house = false AND predict_credits != ${SIGNUP_CREDIT_GRANT}
   `)).rows as unknown as Array<{ humansOff: number }>;
 
   const [{ agentsOff }] = (await db.execute(sql`
