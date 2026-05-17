@@ -408,7 +408,69 @@ The CLI and the cron endpoint share the exact same module
 
 ---
 
-## 9. Escalation
+## 9. Admin "Operations" sub-tab
+
+Live admin-panel view over the persisted health-check history. Sits at
+**Admin → AMM → Operations**, alongside the existing manual financial-
+invariants `Health` sub-tab (which it does NOT replace — different concern).
+
+What it surfaces:
+
+- **Status header.** Big overall pill (green ALL CLEAR / amber PASS WITH
+  WARNINGS / red FAILING), `N pass · M warn · K fail` counts, relative
+  time since the last run, source badge (SCHEDULER / CRON / MANUAL), and
+  a row of small stat tiles (total checks, last-run duration, lookback
+  window, time until next scheduler tick).
+- **Last 24h trend strip.** One coloured cell per persisted run, hover
+  for per-run breakdown. Fastest possible glance at "did anything go
+  wrong overnight?". Driven by the `amm_health_check_runs` table.
+- **Per-check cards.** One card per audit on the latest run — sorted
+  failures first, then warnings, then passes. Each card shows the
+  `details` text, an expandable JSON drawer of the affected-rows
+  sample, and a `Copy IDs` button when the sample carries `marketId`.
+
+Auto-refresh every 60s while the tab is open and the browser tab is
+visible (pauses when the tab is hidden so background sessions don't hit
+the DB). A `Run now` button triggers an immediate audit, server-side
+rate-limited to one run per 60 seconds per admin to prevent dogpiling.
+
+### Endpoints
+
+All gated by `requireAdmin`:
+
+```
+GET  /api/admin/amm/operational-health/latest
+GET  /api/admin/amm/operational-health/history?hours=24    (max 168)
+POST /api/admin/amm/operational-health/run                 (rate-limited)
+```
+
+### Reading the trend strip
+
+| Cell colour | Meaning |
+|---|---|
+| Green | All checks passed cleanly. Default state. |
+| Amber | At least one check returned `warn` (e.g. agent runtime is paused, dup idempotency keys observed in 24h). Read but don't page. |
+| Red | At least one check returned `fail`. Page someone. |
+
+A run of green cells with one red mid-strip is the most useful incident
+fingerprint: hover the red cell to see exactly which check failed and
+which markets were affected, then walk forward through the cells to see
+when it self-resolved (or didn't).
+
+### When to use this vs. the manual `Health` tab
+
+- **Operations** (this section, auto-refresh): "is anything wrong right
+  now and was anything wrong overnight?". Continuous monitoring.
+- **Health** (manual, separate sub-tab): "I want to run a deep
+  financial-invariants audit right now to chase a specific suspicion".
+  Runs heavier queries (state vs bets math) on demand.
+
+The two share no data — Operations reads the persisted scheduler runs;
+Health re-queries every market's invariants from scratch on click.
+
+---
+
+## 10. Escalation
 
 - **Money moved incorrectly** (drift > 1 credit on seed-return, or
   `credit_ledger` and `market_bets` disagree): pause agents, freeze
@@ -425,14 +487,17 @@ The CLI and the cron endpoint share the exact same module
 
 ---
 
-## 10. Related files
+## 11. Related files
 
 - `server/services/amm-trades.ts` — `executeBuy` / `executeSell`
 - `server/services/amm-resolver.ts` — `resolveAmmMarket`
 - `server/jobs/market-resolver.ts` — cron loop + `resolveJackpot`
-- `server/jobs/amm-health.ts` — shared health-check audit module (CLI + cron)
+- `server/jobs/amm-health.ts` — shared health-check audit module (CLI + cron + scheduler + admin endpoints) and `runAndPersistAmmHealthCheck`
 - `server/services/amm-bet-hooks.ts` — post-trade side effects helper
 - `server/route-modules/cron-routes.ts` — `POST /api/cron/amm-health-check`
+- `server/index.ts` — `startAmmHealthCheckScheduler` (in-process, 15-min cadence; persists each run)
+- `client/src/components/admin/AmmOperationsTab.tsx` — admin Operations sub-tab UI
+- `migrations/0063_amm_health_check_runs.sql` — persisted history table
 - `scripts/amm-smoke.ts` — lifecycle smoke (Phase A/B/C)
 - `scripts/amm-loadgen.ts` — concurrent buy stress test
 - `scripts/amm-health-check.ts` — read-only audits CLI wrapper

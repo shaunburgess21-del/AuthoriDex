@@ -223,15 +223,19 @@ export function registerCronRoutes(app: Express): void {
   app.post("/api/cron/amm-health-check", verifyCronSecret, async (req, res) => {
     const startTime = Date.now();
     try {
-      const { runAmmHealthCheck } = await import("../jobs/amm-health");
+      const { runAndPersistAmmHealthCheck } = await import("../jobs/amm-health");
       const lookbackDaysRaw = req.query.days ?? req.body?.days;
       const lookbackDays =
         lookbackDaysRaw !== undefined && lookbackDaysRaw !== null && lookbackDaysRaw !== ""
           ? Number(lookbackDaysRaw)
           : undefined;
 
-      const result = await runAmmHealthCheck({
+      // Persists each invocation alongside the in-process scheduler runs,
+      // so the admin Operations dashboard's 24h trend covers external
+      // crons too (Railway / GitHub Actions / wherever this is triggered).
+      const result = await runAndPersistAmmHealthCheck({
         lookbackDays: Number.isFinite(lookbackDays as number) ? (lookbackDays as number) : undefined,
+        source: "cron",
       });
 
       // Surface failed checks at log level WARN so Railway / Sentry / Slack

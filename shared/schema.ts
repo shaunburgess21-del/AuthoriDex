@@ -1905,6 +1905,45 @@ export const ammRuntimeSettings = pgTable("amm_runtime_settings", {
 
 export type AmmRuntimeSettings = typeof ammRuntimeSettings.$inferSelect;
 
+/**
+ * Persisted history of every AMM operational health-check run.
+ *
+ * Three writers (all via `runAndPersistAmmHealthCheck` in
+ * server/jobs/amm-health.ts):
+ *   - in-process scheduler in server/index.ts (every 15 min)
+ *   - POST /api/cron/amm-health-check (external Railway / cron)
+ *   - POST /api/admin/amm/operational-health/run (manual, rate-limited)
+ *
+ * Read by the admin "Operations" sub-tab in AdminAmmSection:
+ *   - GET /api/admin/amm/operational-health/latest
+ *   - GET /api/admin/amm/operational-health/history?hours=24
+ *
+ * `checks` is the full `CheckResult[]` from `runAmmHealthCheck` — name,
+ * status, details, rowCount, sample. Stored as JSONB so the existing
+ * `HealthCheckResult` shape maps 1:1 (no DTO drift).
+ *
+ * Migration: 0063_amm_health_check_runs.sql
+ */
+export const ammHealthCheckRuns = pgTable("amm_health_check_runs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  startedAt: timestamp("started_at").notNull().defaultNow(),
+  durationMs: integer("duration_ms").notNull(),
+  ok: boolean("ok").notNull(),
+  total: integer("total").notNull(),
+  passed: integer("passed").notNull(),
+  warned: integer("warned").notNull(),
+  failed: integer("failed").notNull(),
+  lookbackDays: integer("lookback_days").notNull(),
+  source: text("source").notNull(), // 'scheduler' | 'cron' | 'manual'
+  triggeredBy: varchar("triggered_by").references(() => profiles.id, { onDelete: "set null" }),
+  checks: jsonb("checks").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("amm_health_runs_started_at_idx").on(table.startedAt.desc()),
+]);
+
+export type AmmHealthCheckRun = typeof ammHealthCheckRuns.$inferSelect;
+
 export const agentConfigs = pgTable("agent_configs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),

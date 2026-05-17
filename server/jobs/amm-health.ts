@@ -28,7 +28,12 @@
 
 import { and, eq, lt, sql } from "drizzle-orm";
 import { db } from "../db";
-import { agentRuntimeState, predictionMarkets, profiles } from "@shared/schema";
+import {
+  agentRuntimeState,
+  ammHealthCheckRuns,
+  predictionMarkets,
+  profiles,
+} from "@shared/schema";
 
 export type CheckStatus = "pass" | "warn" | "fail";
 
@@ -53,6 +58,13 @@ export interface HealthCheckResult {
 
 export interface RunAmmHealthCheckOptions {
   lookbackDays?: number;
+}
+
+export type AmmHealthSource = "scheduler" | "cron" | "manual";
+
+export interface PersistOptions {
+  source: AmmHealthSource;
+  triggeredBy?: string | null;
 }
 
 const DEFAULT_LOOKBACK_DAYS = 30;
@@ -355,4 +367,64 @@ async function checkAgentPause(): Promise<CheckResult> {
     status: "warn",
     details: `Agents are PAUSED ${since}. Reason: ${reason}. If this was intentional, ignore. Otherwise resume via Supabase.`,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Persistence — write each run to amm_health_check_runs so the admin
+// "Operations" sub-tab can render a 24h trend strip without re-running the
+// audit on every page load.
+// ---------------------------------------------------------------------------
+
+/**
+ * Persist a completed health-check run. Best-effort — failures here are
+ * logged but never propagated back to the caller, so a transient DB hiccup
+ * (or a missing migration on a dev DB) doesn't break the audit semantics.
+ *
+ * Writes the full `CheckResult[]` into `checks` as JSONB. The `started_at`
+ * column defaults to now() on insert which approximates the run's start
+ * time within ~queryDuration of reality — exact enough for trend bucketing.
+ */
+export async function persistAmmHealthRun(
+  result: HealthCheckResult,
+  source: AmmHealthSource,
+  triggeredBy: string | null = null,
+): Promise<void> {
+  await db.insert(ammHealthCheckRuns).values({
+    durationMs: result.durationMs,
+    ok: result.ok,
+    total: result.total,
+    passed: result.passed,
+    warned: result.warned,
+    failed: result.failed,
+    lookbackDays: result.lookbackDays,
+    source,
+    triggeredBy,
+    checks: result.checks,
+  });
+}
+
+/**
+ * Convenience wrapper: run the audit and then persist the result. Used by
+ * the in-process scheduler, the cron endpoint, and the admin "Run now"
+ * button so all three surfaces feed the same history table without each
+ * having to know the persist helper exists.
+ *
+ * Persist failures are caught and logged — the original `HealthCheckResult`
+ * is always returned to the caller regardless of persist outcome. This keeps
+ * the unit-tested pure path (`runAmmHealthCheck`) decoupled from any DB
+ * write behaviour.
+ */
+export async function runAndPersistAmmHealthCheck(
+  opts: RunAmmHealthCheckOptions & PersistOptions,
+): Promise<HealthCheckResult> {
+  const result = await runAmmHealthCheck(opts);
+  try {
+    await persistAmmHealthRun(result, opts.source, opts.triggeredBy ?? null);
+  } catch (err) {
+    console.warn(
+      `[AmmHealth] Persist failed (source=${opts.source}); audit result still returned to caller:`,
+      err,
+    );
+  }
+  return result;
 }

@@ -5,7 +5,7 @@ import { storage } from "./storage";
 import { getBaselineDiagnostics } from "./utils/baseline";
 import { db } from "./db";
 import { syncWinningAvatarForPerson } from "./lib/curateAvatar";
-import { anonVoteBudget, trendSnapshots, trackedPeople, communityInsights, insightVotes, comments as unifiedComments, commentVotes, matchups, votes, voteActions, xpActions, xpLedger, ranks as schemaRanks, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, creditActions, badges as badgesTable, userBadges, adminAuditLog, predictionMarkets, marketEntries, marketBets, marketAmmState, ammPriceSnapshots, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, contentCategories, userCategoryEngagement, emailUnsubscribeState, insertCommunityInsightSchema, insertInsightVoteSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
+import { anonVoteBudget, trendSnapshots, trackedPeople, communityInsights, insightVotes, comments as unifiedComments, commentVotes, matchups, votes, voteActions, xpActions, xpLedger, ranks as schemaRanks, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, creditActions, badges as badgesTable, userBadges, adminAuditLog, predictionMarkets, marketEntries, marketBets, marketAmmState, ammPriceSnapshots, ammHealthCheckRuns, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, contentCategories, userCategoryEngagement, emailUnsubscribeState, insertCommunityInsightSchema, insertInsightVoteSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
 import { validateSuggestionPayload, SUGGESTION_TYPES } from "@shared/suggestionSchemas";
 import { normaliseSocialHandles, SOCIAL_HANDLE_KEYS } from "@shared/handleNormalise";
 import { eq, desc, and, gt, sql, count, gte, lte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull, isNull } from "drizzle-orm";
@@ -23401,6 +23401,130 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
     } catch (err: any) {
       console.error("[AmmAdmin] health audit failed:", err);
       res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
+    }
+  });
+
+  // ============================================================================
+  // AMM OPERATIONAL HEALTH DASHBOARD ENDPOINTS
+  // ----------------------------------------------------------------------------
+  // Read-only views over `amm_health_check_runs` (populated every 15 min by
+  // the in-process scheduler in server/index.ts) plus a manual "Run now"
+  // trigger for ad-hoc verification. Power the admin "Operations" sub-tab.
+  //
+  //   GET  /api/admin/amm/operational-health/latest     latest single run
+  //   GET  /api/admin/amm/operational-health/history    last N hours of runs
+  //   POST /api/admin/amm/operational-health/run        trigger + persist now
+  //                                                     (rate-limited 60s)
+  // ============================================================================
+
+  // In-memory rate limiter for the manual "Run now" trigger. Per-process is
+  // fine on a single Railway service; the audit takes ~7s and dogpiling it
+  // accomplishes nothing. Map cleanup is implicit — entries are tiny and
+  // get overwritten on every successful run.
+  const ammHealthManualRunCooldown = new Map<string, number>();
+  const AMM_HEALTH_MANUAL_RUN_COOLDOWN_MS = 60_000;
+
+  app.get("/api/admin/amm/operational-health/latest", requireAuth, requireAdmin, async (_req: AuthRequest, res) => {
+    try {
+      const [latest] = await db
+        .select()
+        .from(ammHealthCheckRuns)
+        .orderBy(desc(ammHealthCheckRuns.startedAt))
+        .limit(1);
+
+      if (!latest) {
+        // Fresh deploy: scheduler hasn't ticked yet (first run is staggered
+        // 60s after boot). Returning 200 with `null` is friendlier to the
+        // client than 404 because react-query treats 4xx as "real errors"
+        // and would render the network-error UI for a perfectly healthy
+        // just-booted system.
+        return res.json({ run: null });
+      }
+
+      res.json({ run: latest });
+    } catch (err: any) {
+      console.error("[AmmAdmin] operational-health/latest failed:", err);
+      res.status(500).json({ error: err?.message ?? "Unknown error" });
+    }
+  });
+
+  app.get("/api/admin/amm/operational-health/history", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const hoursRaw = Number(req.query.hours ?? "24");
+      // Clamp to [1, 168] (1 hour to 1 week). At 96 runs/day even the upper
+      // bound is only ~672 rows — still cheap to ship over the wire.
+      const hours = Number.isFinite(hoursRaw)
+        ? Math.min(168, Math.max(1, Math.floor(hoursRaw)))
+        : 24;
+      const cutoff = new Date(Date.now() - hours * 60 * 60 * 1000);
+
+      // Trim per-row payload before serialising. The trend strip only needs
+      // the summary cells; the full `checks` array can run to a few KB and
+      // multiplies by ~672 over a 1-week window. The `latest` endpoint
+      // serves the full payload when the user actually wants the details.
+      const rows = await db
+        .select({
+          id: ammHealthCheckRuns.id,
+          startedAt: ammHealthCheckRuns.startedAt,
+          durationMs: ammHealthCheckRuns.durationMs,
+          ok: ammHealthCheckRuns.ok,
+          total: ammHealthCheckRuns.total,
+          passed: ammHealthCheckRuns.passed,
+          warned: ammHealthCheckRuns.warned,
+          failed: ammHealthCheckRuns.failed,
+          source: ammHealthCheckRuns.source,
+        })
+        .from(ammHealthCheckRuns)
+        .where(gte(ammHealthCheckRuns.startedAt, cutoff))
+        .orderBy(desc(ammHealthCheckRuns.startedAt));
+
+      res.json({
+        hours,
+        cutoff: cutoff.toISOString(),
+        runs: rows,
+      });
+    } catch (err: any) {
+      console.error("[AmmAdmin] operational-health/history failed:", err);
+      res.status(500).json({ error: err?.message ?? "Unknown error" });
+    }
+  });
+
+  app.post("/api/admin/amm/operational-health/run", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const adminId = req.userId ?? "unknown";
+      const last = ammHealthManualRunCooldown.get(adminId) ?? 0;
+      const elapsed = Date.now() - last;
+      if (elapsed < AMM_HEALTH_MANUAL_RUN_COOLDOWN_MS) {
+        const retryAfterSec = Math.ceil((AMM_HEALTH_MANUAL_RUN_COOLDOWN_MS - elapsed) / 1000);
+        res.setHeader("Retry-After", String(retryAfterSec));
+        return res.status(429).json({
+          error: "Rate limited",
+          message: `Please wait ${retryAfterSec}s before re-running. The 15-min scheduler covers regular monitoring.`,
+          retryAfterSec,
+        });
+      }
+
+      const { runAndPersistAmmHealthCheck } = await import("./jobs/amm-health");
+      // Update the cooldown BEFORE awaiting the audit so two clicks in
+      // quick succession (button double-click, slow client) can't both
+      // pass the gate.
+      ammHealthManualRunCooldown.set(adminId, Date.now());
+
+      const result = await runAndPersistAmmHealthCheck({
+        source: "manual",
+        triggeredBy: req.userId ?? null,
+      });
+
+      res.json({
+        ok: result.ok,
+        result,
+        message: result.ok
+          ? "Health check passed"
+          : "Health check found failing audits — see `result.checks`.",
+      });
+    } catch (err: any) {
+      console.error("[AmmAdmin] operational-health/run failed:", err);
+      res.status(500).json({ error: err?.message ?? "Unknown error" });
     }
   });
 

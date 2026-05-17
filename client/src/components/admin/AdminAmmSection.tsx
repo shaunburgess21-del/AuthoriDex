@@ -46,6 +46,7 @@ import {
   Clock,
   Coins,
   Copy,
+  Gauge,
   Gavel,
   Landmark,
   Loader2,
@@ -58,6 +59,7 @@ import {
 import { toast } from "sonner";
 import { apiRequest } from "@/lib/queryClient";
 import { AmmResolutionDialog, type ResolvableMarket } from "./AmmResolutionDialog";
+import { AmmOperationsTab } from "./AmmOperationsTab";
 
 // ---------------------------------------------------------------------------
 // API response shapes (mirroring server/routes.ts)
@@ -1162,6 +1164,7 @@ export function AdminAmmSection() {
       { id: "markets", label: "Markets", icon: Coins },
       { id: "trades", label: "Trades", icon: TrendingUp },
       { id: "health", label: "Health", icon: ShieldCheck },
+      { id: "operations", label: "Operations", icon: Gauge },
     ],
     [],
   );
@@ -1192,6 +1195,7 @@ export function AdminAmmSection() {
         <TabsContent value="markets"><MarketsTab /></TabsContent>
         <TabsContent value="trades"><TradesTab /></TabsContent>
         <TabsContent value="health"><HealthTab /></TabsContent>
+        <TabsContent value="operations"><AmmOperationsTab /></TabsContent>
       </Tabs>
     </div>
   );

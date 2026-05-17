@@ -828,8 +828,11 @@ const AMM_HEALTH_CHECK_INTERVAL_MS = 15 * 60 * 1000;
 
 async function runScheduledAmmHealthCheck(): Promise<void> {
   try {
-    const { runAmmHealthCheck } = await import("./jobs/amm-health");
-    const result = await runAmmHealthCheck();
+    const { runAndPersistAmmHealthCheck } = await import("./jobs/amm-health");
+    // Persists into amm_health_check_runs so the admin Operations sub-tab
+    // can render the 24h trend strip without re-running the audit on every
+    // page load. Persist failures are swallowed inside the wrapper.
+    const result = await runAndPersistAmmHealthCheck({ source: "scheduler" });
 
     // Match the log-line shape used by POST /api/cron/amm-health-check so a
     // single saved-search filter (`[AmmHealthCheck] FAIL`) catches both the
