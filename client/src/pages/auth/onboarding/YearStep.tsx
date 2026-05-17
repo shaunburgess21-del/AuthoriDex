@@ -177,7 +177,7 @@ export function YearWheel({ initialDateOfBirth, onChange }: YearWheelProps) {
   );
 
   return (
-    <div className="relative mx-auto w-full max-w-[14rem] select-none">
+    <div className="relative mx-auto my-auto w-full max-w-[14rem] select-none">
       {/* Selection band — sits behind the rows.
           Lifted 18px above geometric centre so the digit glyphs sit
           visually centred inside it. Tuned by eye at text-3xl with
