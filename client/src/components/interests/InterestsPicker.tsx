@@ -46,6 +46,14 @@ import { cn } from "@/lib/utils";
 
 export type InterestsPickerMode = "onboarding" | "settings" | "reprompt" | "inline";
 
+/**
+ * Category ids whose labels wrap to two lines at the icon-grid tile size
+ * ("Food & Drink", "Media & Podcast"). These get pushed to the tail of
+ * the grid so they share a row instead of stretching siblings on rows
+ * that would otherwise be all single-line.
+ */
+const TRAILING_INTEREST_IDS = new Set(["food-drink", "media", "media-podcast"]);
+
 interface InterestsPickerProps {
   mode: InterestsPickerMode;
   /** Drives `<Dialog open>` / `<Drawer open>` for modal modes. Ignored in settings mode. */
@@ -120,12 +128,24 @@ function PickerBody({
     },
   });
   const interestCategories = useMemo(() => {
-    if (Array.isArray(categoryRegistry) && categoryRegistry.length > 0) {
-      return [...categoryRegistry]
-        .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.id.localeCompare(b.id))
-        .map((row) => ({ id: row.id, label: row.label }));
-    }
-    return CANONICAL_CATEGORIES;
+    const base: ReadonlyArray<{ id: string; label: string }> =
+      Array.isArray(categoryRegistry) && categoryRegistry.length > 0
+        ? [...categoryRegistry]
+            .sort(
+              (a, b) =>
+                (a.sortOrder ?? 0) - (b.sortOrder ?? 0) ||
+                a.id.localeCompare(b.id),
+            )
+            .map((row) => ({ id: row.id, label: row.label }))
+        : CANONICAL_CATEGORIES;
+    // Send categories whose labels wrap to two lines on a 4-col grid to
+    // the tail. Without this they'd stretch their row past `aspect-square`
+    // and visually break the grid. The internal sizing (see the tile
+    // markup below) is also tuned to accommodate two lines, so even after
+    // this re-order every tile renders as a true square.
+    const head = base.filter((c) => !TRAILING_INTEREST_IDS.has(c.id));
+    const tail = base.filter((c) => TRAILING_INTEREST_IDS.has(c.id));
+    return [...head, ...tail];
   }, [categoryRegistry]);
   const initialSet = useMemo(() => new Set(defaultValue), [defaultValue]);
   const [selected, setSelected] = useState<Set<string>>(() => new Set(initialSet));
@@ -302,7 +322,7 @@ function PickerBody({
                 aria-pressed={isSelected}
                 data-testid={`interest-pill-${cat.id}`}
                 className={cn(
-                  "relative flex aspect-square flex-col items-center justify-center gap-2 rounded-2xl border p-3 transition-all duration-200 active:scale-[0.97]",
+                  "relative flex aspect-square flex-col items-center justify-center gap-1.5 rounded-2xl border p-3 transition-all duration-200 active:scale-[0.97]",
                   style.bg,
                   style.border,
                   isSelected
@@ -316,15 +336,15 @@ function PickerBody({
               >
                 <span
                   className={cn(
-                    "flex h-12 w-12 items-center justify-center rounded-full bg-background/40 ring-1 ring-inset ring-white/5",
+                    "flex h-10 w-10 items-center justify-center rounded-full bg-background/40 ring-1 ring-inset ring-white/5",
                     style.text,
                   )}
                 >
-                  <Icon className="h-6 w-6" strokeWidth={1.75} />
+                  <Icon className="h-5 w-5" strokeWidth={1.75} />
                 </span>
                 <span
                   className={cn(
-                    "text-center text-sm font-medium leading-tight",
+                    "text-center text-[13px] font-medium leading-tight",
                     isSelected ? "text-foreground" : "text-muted-foreground",
                   )}
                 >
