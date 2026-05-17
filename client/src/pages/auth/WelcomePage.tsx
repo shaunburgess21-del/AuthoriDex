@@ -334,7 +334,7 @@ export default function WelcomePage() {
       );
       break;
     case 4:
-      title = "What do you want to see first?";
+      title = "What are you into?";
       subtitle = "These topics get priority — the rest is always a scroll away.";
       onSkip = () => void skipInterests();
       // The inline picker has its own Save button + selection state,
