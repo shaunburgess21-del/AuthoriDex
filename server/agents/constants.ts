@@ -135,6 +135,125 @@ export const WORLD_MARKET_ASSESSMENT_TTL_MS = WORLD_MARKET_ASSESSMENT_TTL_NEAR_M
 export const CONVICTION_SCORE_THRESHOLD_PCT = 0.05; // 5% move from baseline
 export const CONVICTION_MAX_PER_MARKET = 1; // max 1 conviction bet per agent per market
 
+// ---------------------------------------------------------------------------
+// Agent sells (Phase 1 — AMM up/down only)
+// ---------------------------------------------------------------------------
+//
+// Each agent's open AMM position has a "conviction band" anchored on their
+// weighted-average buy price. When the live AMM price exits the band on
+// either side, the agent becomes a CANDIDATE to sell. Whether they actually
+// do is filtered through several persona-specific gates designed to capture
+// human imperfection — the cohort should NOT sell in lockstep on every
+// breach.
+//
+// Five gates, in order:
+//   1. Forgot to look       — agent doesn't even evaluate this position
+//   2. Persona pSell        — even when the band is breached, they may not act
+//   3. Hope for reversal    — extra hold-anyway gate when in the loss zone
+//   4. Inside-band early    — small chance to take partial profit pre-breach
+//   5. Sell fraction        — how much of the position to dump (rarely 100%)
+//
+// Tuning rationale per band:
+//   - sharp     : disciplined exits, tight bands, mostly clean-exit fractions
+//   - casual    : paper hands of profit / diamond hands of loss; wide bands
+//   - noisy     : impulsive, takes early profits, inconsistent on losses
+//   - liquidity : passive market-makers; rarely exit, hold to resolution
+//   - whale     : selective, big positions, careful but decisive when they act
+export const MAX_SELLS_PER_MARKET_PER_AGENT = 2;
+export const MIN_SHARES_TO_SELL = 0.1;
+export const MIN_NET_SHARES_FOR_SELL_EVAL = 0.5;
+
+export interface SellPersonaTuning {
+  /** Probability the agent skips the entire evaluation this sweep. */
+  forgetSkipPct: number;
+  /** P(act on a top-of-band breach — profit zone). */
+  pSellTop: number;
+  /** P(act on a bottom-of-band breach — loss zone). */
+  pSellBottom: number;
+  /** P(stubbornly hold despite a loss-zone breach — denial / hope). */
+  hopeForReversalPct: number;
+  /** P(opportunistic partial profit-take inside the band, upper half only). */
+  earlyProfitPct: number;
+  /** [min, max] sell fraction at top breach (0.85-1.00 for sharps, etc.). */
+  topFractionRange: [number, number];
+  /** [min, max] sell fraction at bottom breach. */
+  bottomFractionRange: [number, number];
+  /** [min, max] sell fraction at early-profit-take. */
+  earlyFractionRange: [number, number];
+  /** Multiplier on the conviction-derived band radius. <1 = tighter exits. */
+  bandRadiusScale: number;
+}
+
+export const SELL_PERSONA_TUNING: Record<
+  "sharp" | "casual" | "noisy" | "liquidity" | "whale",
+  SellPersonaTuning
+> = {
+  sharp: {
+    forgetSkipPct: 0.20,
+    pSellTop: 0.65,
+    pSellBottom: 0.55,
+    hopeForReversalPct: 0.15,
+    earlyProfitPct: 0.05,
+    topFractionRange: [0.85, 1.00],
+    bottomFractionRange: [0.70, 1.00],
+    earlyFractionRange: [0.20, 0.35],
+    bandRadiusScale: 0.85,
+  },
+  casual: {
+    forgetSkipPct: 0.50,
+    pSellTop: 0.30,
+    pSellBottom: 0.20,
+    hopeForReversalPct: 0.40,
+    earlyProfitPct: 0.12,
+    topFractionRange: [0.40, 0.70],
+    bottomFractionRange: [0.30, 0.60],
+    earlyFractionRange: [0.20, 0.40],
+    bandRadiusScale: 1.10,
+  },
+  noisy: {
+    forgetSkipPct: 0.40,
+    pSellTop: 0.45,
+    pSellBottom: 0.30,
+    hopeForReversalPct: 0.30,
+    earlyProfitPct: 0.15,
+    topFractionRange: [0.50, 0.90],
+    bottomFractionRange: [0.40, 0.75],
+    earlyFractionRange: [0.20, 0.45],
+    bandRadiusScale: 1.00,
+  },
+  liquidity: {
+    forgetSkipPct: 0.60,
+    pSellTop: 0.20,
+    pSellBottom: 0.15,
+    hopeForReversalPct: 0.50,
+    earlyProfitPct: 0.05,
+    topFractionRange: [0.30, 0.55],
+    bottomFractionRange: [0.25, 0.50],
+    earlyFractionRange: [0.15, 0.30],
+    bandRadiusScale: 1.20,
+  },
+  whale: {
+    forgetSkipPct: 0.30,
+    pSellTop: 0.40,
+    pSellBottom: 0.35,
+    hopeForReversalPct: 0.25,
+    earlyProfitPct: 0.08,
+    topFractionRange: [0.55, 0.85],
+    bottomFractionRange: [0.50, 0.80],
+    earlyFractionRange: [0.20, 0.40],
+    bandRadiusScale: 0.95,
+  },
+};
+
+/**
+ * Default conviction used when the agent's original buy decision payload
+ * doesn't carry one (legacy positions opened before Agent v2 stamped
+ * `rankerConviction` into `decision_payload`). Lower default = wider band
+ * = fewer false-positive sell candidates fired, which is the safer side
+ * of the trade-off for legacy data.
+ */
+export const SELL_DEFAULT_CONVICTION = 0.5;
+
 // World Market re-evaluation timing
 export const WORLD_REEVAL_INTERVAL_DAYS = 7;
 export const WORLD_CONVICTION_INTERVAL_DAYS = 30;

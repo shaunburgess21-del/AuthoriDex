@@ -160,10 +160,68 @@ export interface ScheduledActionData {
   agentId: string;
   marketId: string;
   entryId: string;
-  actionType: "predict" | "jackpot_bet" | "conviction";
-  decisionPayload: PredictionDecision;
+  actionType: "predict" | "jackpot_bet" | "conviction" | "sell";
+  decisionPayload: PredictionDecision | SellDecision;
   stakeAmount: number;
   executeAfter: Date;
+}
+
+/**
+ * Why a sell candidate fired:
+ *   - take_profit  : live price >= bandTop  (profit-zone breach, edge realized)
+ *   - cut_loss     : live price <= bandBottom (loss-zone breach, thesis broken)
+ *   - early_profit : live price inside band but in the upper half — opportunistic
+ *                    partial profit-take (lower probability, smaller fraction).
+ *
+ * The persona cascade in `sellEngine.computeSellDecision` decides which (if
+ * any) of these fires per agent×market×sweep.
+ */
+export type SellReason = "take_profit" | "cut_loss" | "early_profit";
+
+/**
+ * Output of `computeSellDecision` — null means "agent does NOT sell this
+ * sweep" (most agent×market×sweep combinations). When non-null, downstream
+ * code reads `sellFraction` to derive `sharesToSell = netShares × fraction`
+ * (clamped) and persists the rest of the fields into the scheduled-action
+ * `decisionPayload` for the worker.
+ *
+ * Mirrors `PredictionDecision` rather than reusing it because the shape is
+ * fundamentally different: predictions pick AN ENTRY at a confidence;
+ * sells already KNOW the entry (from the agent's existing position) and
+ * only need to decide whether and how much to exit.
+ */
+export interface SellDecision {
+  reason: SellReason;
+  /**
+   * Fractional share count to sell (0..1 of the agent's net position on
+   * this entry). Tuned per persona band — sharps usually clean-exit
+   * (0.85-1.0), casuals often take partials (0.30-0.70). The action
+   * worker is the one that applies this to live netShares so any
+   * intervening human/agent activity since scheduling reduces the sell
+   * proportionally rather than overflowing.
+   */
+  sellFraction: number;
+  /**
+   * Agent's anchor (weighted-average buy price) at decision time. Stored
+   * for telemetry / explainability — agent reads this in the future
+   * "show me my exit P&L" admin tile.
+   */
+  anchor: number;
+  /** Live AMM price at decision time. */
+  livePrice: number;
+  /** Top edge of conviction band (anchor + topRadius). */
+  bandTop: number;
+  /** Bottom edge of conviction band (anchor - bottomRadius). */
+  bandBottom: number;
+  /**
+   * Conviction (0..1) used to derive band width. Pulled from the original
+   * buy's decision payload when available, otherwise defaulted to 0.5
+   * (widest band). Persisted so we can correlate later: did high-conviction
+   * positions exit cleaner than low-conviction ones?
+   */
+  conviction: number;
+  /** Persona band that drove the cascade — for log readability. */
+  personaBand: string;
 }
 
 export interface AgentMemoryData {

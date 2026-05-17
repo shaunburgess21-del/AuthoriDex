@@ -252,6 +252,11 @@ export interface ExecuteSellInput {
    *  worker so the inserted `market_bets` sell row joins back to
    *  `agent_configs` for Town Square + admin trade analytics. */
   agentId?: string;
+  /** Optional metadata persisted to `market_bets.bet_metadata`. The
+   *  agent worker passes `{ actionId }` here so the worker's claim/
+   *  reclaim idempotency check can find existing sell rows the same
+   *  way it finds buy rows — see `executeAction` in actionWorker.ts. */
+  betMetadata?: Record<string, unknown>;
 }
 
 export interface ExecuteSellResult {
@@ -270,7 +275,7 @@ export async function executeSell(
   input: ExecuteSellInput,
   txOpt?: DbOrTx,
 ): Promise<ExecuteSellResult | TradeError> {
-  const { marketId, userId, entryId, shares, isAdmin = false, agentId } = input;
+  const { marketId, userId, entryId, shares, isAdmin = false, agentId, betMetadata } = input;
 
   if (!Number.isFinite(shares) || shares <= 0) {
     return {
@@ -380,6 +385,7 @@ export async function executeSell(
         status: "settled",
         payoutAmount: proceeds,
         settledAt: new Date(),
+        ...(betMetadata ? { betMetadata } : {}),
       })
       .returning({ id: marketBets.id });
 

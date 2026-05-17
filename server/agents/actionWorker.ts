@@ -24,12 +24,12 @@ import {
   MAX_AGENT_STAKE,
 } from "./constants";
 import { JACKPOT_TICKET_COST } from "../config/constants";
-import { WORLD_MARKETS_LLM_ENABLED } from "./constants";
-import type { PredictionDecision } from "./types";
+import { WORLD_MARKETS_LLM_ENABLED, MIN_SHARES_TO_SELL } from "./constants";
+import type { PredictionDecision, SellDecision } from "./types";
 import { buildAgentActionStakeIdempotencyKey, buildAgentBetMetadata } from "./actionWorker-utils";
 import { getMarketBettingCutoff } from "../native-markets/lifecycle";
 import { isAgentsPaused } from "./runtime-state";
-import { executeBuy, type TradeError } from "../services/amm-trades";
+import { executeBuy, executeSell, type TradeError } from "../services/amm-trades";
 import { sizeAmmBudget } from "./sizing";
 import { type AmmStateSnapshot } from "@shared/lib/amm/positions";
 
@@ -268,6 +268,19 @@ async function executeAction(action: {
       return;
     }
 
+    // Sells route to a dedicated handler. Same idempotency, same
+    // [ActionWorker] log shape, different terminal effect on the AMM.
+    if (action.actionType === "sell") {
+      await executeAmmSell(
+        action,
+        action.decisionPayload as SellDecision,
+        agent,
+        market,
+        entry,
+      );
+      return;
+    }
+
     await executeAmmBuy(action, decision, agent, market, entry);
     return;
   } catch (err: any) {
@@ -428,6 +441,127 @@ async function executeAmmBuy(
 
   log(
     `[ActionWorker] AMM executed: agent=${agent.displayName} market=${action.marketId} entry=${entry.label} confidence=${decision.confidence} sized=${sizing.creditBudget}/${maxBudget} (current=${sizing.currentPrice.toFixed(4)} target=${sizing.targetPrice.toFixed(4)} -> ${result.newSharePrice.toFixed(4)}, charge=${result.chargeCredits}, shares=${result.sharesPurchased.toFixed(4)})`,
+  );
+}
+
+/**
+ * AMM sell path. Mirrors `executeAmmBuy` but for the exit half of a
+ * position. The runner already decided WHETHER to sell and at what
+ * fraction; this function:
+ *   1. Looks up the agent's current netShares (buys minus sells).
+ *      Sized live (not from the decision payload) so a partial sell
+ *      that landed between scheduling and execution doesn't cause us
+ *      to over-sell.
+ *   2. Computes `sharesToSell = clamp(netShares * sellFraction, MIN, netShares)`.
+ *   3. Calls `executeSell` with `betMetadata: {actionId}` so the
+ *      worker's idempotency check matches sell rows the same way it
+ *      matches buy rows.
+ *
+ * Note: the position-size check is intentionally LIVE rather than
+ * trusting a snapshot from the runner — a 30-min gap between the
+ * sell sweep and the action worker is plenty of time for another
+ * sell action to have landed first or for the agent to have done a
+ * conviction add-on (which doesn't unschedule pending sells).
+ */
+async function executeAmmSell(
+  action: {
+    id: string;
+    agentId: string;
+    marketId: string;
+    entryId: string;
+    decisionPayload: unknown;
+    stakeAmount: number;
+    actionType: string;
+  },
+  decision: SellDecision,
+  agent: typeof agentConfigs.$inferSelect,
+  market: { id: string; title: string | null; marketType: string | null },
+  entry: typeof marketEntries.$inferSelect,
+): Promise<void> {
+  // 1. Resolve current netShares for this (agent, market, entry). Sum
+  // buys minus sells. If the position has been fully exited since the
+  // sell was scheduled, mark this action as a no-op skip.
+  const positionRows = await db
+    .select({
+      actionType: marketBets.actionType,
+      shareCount: marketBets.shareCount,
+    })
+    .from(marketBets)
+    .where(
+      and(
+        eq(marketBets.userId, agent.userId),
+        eq(marketBets.marketId, action.marketId),
+        eq(marketBets.entryId, action.entryId),
+      ),
+    );
+
+  let netShares = 0;
+  for (const row of positionRows) {
+    if (row.actionType !== "buy" && row.actionType !== "sell") continue;
+    const sc = Number(row.shareCount ?? 0);
+    if (!Number.isFinite(sc)) continue;
+    netShares += row.actionType === "buy" ? sc : -sc;
+  }
+
+  if (netShares < MIN_SHARES_TO_SELL) {
+    await db
+      .update(scheduledAgentActions)
+      .set({
+        status: "skipped",
+        errorMessage: `amm_no_position (netShares=${netShares.toFixed(6)})`,
+        executedAt: new Date(),
+      })
+      .where(eq(scheduledAgentActions.id, action.id));
+    log(
+      `[ActionWorker] AMM sell skipped (no position): agent=${agent.displayName} market=${action.marketId} entry=${entry.label} netShares=${netShares.toFixed(6)}`,
+    );
+    return;
+  }
+
+  // 2. Compute sharesToSell. Defensive clamp on the fraction in case
+  // an upstream bug snuck a >1 or <=0 value into the decision.
+  const fraction = Math.min(
+    1,
+    Math.max(0, Number.isFinite(decision.sellFraction) ? decision.sellFraction : 0),
+  );
+  const rawSharesToSell = netShares * fraction;
+  const sharesToSell = Math.max(MIN_SHARES_TO_SELL, Math.min(rawSharesToSell, netShares));
+
+  if (sharesToSell < MIN_SHARES_TO_SELL || fraction <= 0) {
+    await db
+      .update(scheduledAgentActions)
+      .set({
+        status: "skipped",
+        errorMessage: `amm_de_minimis_sell (fraction=${fraction.toFixed(3)} shares=${sharesToSell.toFixed(6)})`,
+        executedAt: new Date(),
+      })
+      .where(eq(scheduledAgentActions.id, action.id));
+    return;
+  }
+
+  // 3. Execute the sell. `executeSell` handles the LMSR proceeds math,
+  // credit transfer, market_bets/credit_ledger inserts, and final
+  // market state mutation. We pass `betMetadata: {actionId}` so the
+  // reclaim-after-commit idempotency path in `executeAction` finds
+  // sell rows identically to how it finds buy rows.
+  const result = await executeSell({
+    marketId: action.marketId,
+    userId: agent.userId,
+    entryId: action.entryId,
+    shares: sharesToSell,
+    agentId: agent.id,
+    betMetadata: buildAgentBetMetadata(action.id),
+  });
+
+  if ("error" in result) {
+    await handleAmmTradeError(action.id, result, agent, market.id);
+    return;
+  }
+
+  await markExecuted(action.id);
+
+  log(
+    `[ActionWorker] AMM sold: agent=${agent.displayName} market=${action.marketId} entry=${entry.label} reason=${decision.reason} fraction=${fraction.toFixed(2)} shares=${result.sharesSold.toFixed(4)}/${netShares.toFixed(4)} proceeds=${result.proceeds} (anchor=${decision.anchor.toFixed(4)} live=${decision.livePrice.toFixed(4)} -> ${result.newSharePrice.toFixed(4)}, conviction=${decision.conviction.toFixed(2)})`,
   );
 }
 

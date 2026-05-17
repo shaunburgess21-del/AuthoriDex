@@ -35,9 +35,11 @@ import type {
   TrendMomentum,
   CrowdSplit,
   PredictionDecision,
+  SellDecision,
 } from "./types";
 import { getSimulationProfile } from "./simulationProfile";
 import { getSharpRanking } from "./sharpRanker";
+import { computeSellDecision } from "./sellEngine";
 import {
   ARCHETYPE_DELAY_RANGES,
   WORLD_MARKET_DELAY_RANGES,
@@ -60,6 +62,9 @@ import {
   WORLD_CONVICTION_CHANCE,
   WORLD_CONVICTION_MIN_DAYS_OPEN,
   JACKPOT_AGENT_MIN_BUFFER_HOURS,
+  MAX_SELLS_PER_MARKET_PER_AGENT,
+  MIN_NET_SHARES_FOR_SELL_EVAL,
+  SELL_DEFAULT_CONVICTION,
 } from "./constants";
 import { isAgentsPaused } from "./runtime-state";
 import { sizeAmmBudget } from "./sizing";
@@ -881,7 +886,18 @@ async function runAgentBatchOnce(): Promise<{
     log(`[AgentRunner] Conviction sweep error: ${convErr instanceof Error ? convErr.message : convErr}`);
   }
 
-  const exitStats = { scheduled, abstained, skipped, skippedNoEntries, skippedNoEntryId, convictionScheduled };
+  // Sell sweep — Agent v3 phase 1. Independent of conviction sweep on
+  // purpose: a market that just triggered a conviction add-on still
+  // gets evaluated for sells (the runner's idempotency check below
+  // makes them mutually exclusive at the per-(agent, market) level).
+  let sellsScheduled = 0;
+  try {
+    sellsScheduled = await runSellSweep(agents, markets);
+  } catch (sellErr) {
+    log(`[AgentRunner] Sell sweep error: ${sellErr instanceof Error ? sellErr.message : sellErr}`);
+  }
+
+  const exitStats = { scheduled, abstained, skipped, skippedNoEntries, skippedNoEntryId, convictionScheduled, sellsScheduled };
   log(`[AgentRunner] Batch complete: ${JSON.stringify(exitStats)}`);
   return { ...exitStats, diagnostics: diag };
 }
@@ -1115,6 +1131,307 @@ async function runConvictionSweep(
   return convictionScheduled;
 }
 
+/**
+ * Sell sweep — Agent v3 phase 1.
+ *
+ * For each agent's open AMM up/down position, run the persona-aware
+ * `computeSellDecision`. If the cascade produces a `SellDecision`,
+ * persist a `scheduled_agent_actions` row with `actionType='sell'` so
+ * the existing action worker poll picks it up on its next pass.
+ *
+ * Scope: AMM up/down only (mirrors `runConvictionSweep`). H2H, race,
+ * and community AMM markets stay buy-only for this phase — those
+ * market types need bespoke anchor logic and are deferred to phase 2.
+ *
+ * Imperfection by design:
+ *   - The cascade in `computeSellDecision` rejects most agent×market
+ *     pairs even when the band is breached (forgot-to-look + persona
+ *     pSell + hope-for-reversal gates).
+ *   - We DO NOT pre-filter on "in profit" / "in loss" before calling
+ *     the engine. The engine's gate ordering means agents waste a
+ *     dice roll on positions inside the band, but that's the right
+ *     shape — it's how a "did I check my portfolio today?" model
+ *     actually behaves.
+ *
+ * Mutual exclusion with conviction sweep:
+ *   - Skip if a pending or in-progress sell or conviction action
+ *     already exists for this (agent, market). The conviction sweep
+ *     ran first this batch; if it scheduled an add-on, we silently
+ *     defer the sell to next sweep.
+ *   - Cap lifetime sells at MAX_SELLS_PER_MARKET_PER_AGENT to prevent
+ *     a death-spiral of partial-sell-then-sell-again.
+ */
+/**
+ * Aggregated position state for a single (agent, market, entry).
+ * Exported (via the test-only re-export below) so unit tests can
+ * exercise the buy/sell aggregation math without standing up Drizzle.
+ */
+export interface SellSweepPositionAgg {
+  marketId: string;
+  entryId: string;
+  /** Net shares = sum(buy.shares) - sum(sell.shares). */
+  netShares: number;
+  /** Sum of buy share counts only — denominator for the anchor. */
+  buyShares: number;
+  /** Sum of buy.shares × buy.pricePerShare — numerator for the anchor. */
+  buyCostNotional: number;
+  /** Most recent buy's `confidence` column (used in conviction fallback chain). */
+  latestBuyConfidence?: number;
+}
+
+/**
+ * Pure aggregator for the sell sweep — collapses a list of buy/sell
+ * bet rows into one entry per (market, entry) with net-share + cost-
+ * basis fields ready for `computeSellDecision`.
+ *
+ * Skips rows with non-finite or non-positive shareCount (defensive
+ * — the upstream insert code clamps these but a future bug shouldn't
+ * blow up the sweep). Sells dilute `netShares` only — they don't
+ * touch `buyCostNotional` or `buyShares` because the anchor is
+ * "what I paid", not "what's left".
+ *
+ * Internal helper, exported via `_aggregateSellSweepPositionsForTesting`.
+ */
+function aggregateSellSweepPositions(
+  bets: ReadonlyArray<{
+    marketId: string;
+    entryId: string;
+    actionType: string | null;
+    shareCount: string | number | null;
+    pricePerShare: string | number | null;
+    confidence: string | number | null;
+  }>,
+): Map<string, SellSweepPositionAgg> {
+  const positions = new Map<string, SellSweepPositionAgg>();
+  for (const bet of bets) {
+    if (bet.actionType !== "buy" && bet.actionType !== "sell") continue;
+    const sc = Number(bet.shareCount ?? 0);
+    if (!Number.isFinite(sc) || sc <= 0) continue;
+    const key = `${bet.marketId}|${bet.entryId}`;
+    let agg = positions.get(key);
+    if (!agg) {
+      agg = {
+        marketId: bet.marketId,
+        entryId: bet.entryId,
+        netShares: 0,
+        buyShares: 0,
+        buyCostNotional: 0,
+      };
+      positions.set(key, agg);
+    }
+    if (bet.actionType === "buy") {
+      const ps = parseFloat(String(bet.pricePerShare ?? "0"));
+      if (Number.isFinite(ps) && ps > 0) {
+        agg.buyCostNotional += sc * ps;
+        agg.buyShares += sc;
+      }
+      agg.netShares += sc;
+      const conf = bet.confidence == null ? null : parseFloat(String(bet.confidence));
+      if (conf != null && Number.isFinite(conf)) agg.latestBuyConfidence = conf;
+    } else {
+      agg.netShares -= sc;
+    }
+  }
+  return positions;
+}
+
+async function runSellSweep(
+  agents: (typeof agentConfigs.$inferSelect)[],
+  allMarkets: { id: string; personId: string | null; marketType: string | null; openMarketType?: string | null; title: string | null; engine?: string | null; status?: string | null }[],
+): Promise<number> {
+  let sellsScheduled = 0;
+
+  // Same scope as the conviction sweep — AMM up/down only. Defensive
+  // engine='amm' filter mirrors that function's own guard.
+  const ammUpdown = allMarkets.filter((m) =>
+    m.personId &&
+    (m.marketType === "updown" || (m.marketType === "community" && m.openMarketType === "updown")) &&
+    m.engine === "amm",
+  );
+  if (!ammUpdown.length) return 0;
+
+  // Pre-load AMM state for every market once. Same pattern as the
+  // conviction sweep — one batched query, reused across all agents.
+  const ammStateByMarket = new Map<string, AmmStateSnapshot>();
+  const stateRows = await db
+    .select({
+      marketId: marketAmmState.marketId,
+      liquidityB: marketAmmState.liquidityB,
+      outcomeOrder: marketAmmState.outcomeOrder,
+      shareQuantities: marketAmmState.shareQuantities,
+    })
+    .from(marketAmmState)
+    .where(inArray(marketAmmState.marketId, ammUpdown.map((m) => m.id)));
+  for (const row of stateRows) {
+    const b = Number(row.liquidityB);
+    if (!Number.isFinite(b) || b <= 0) continue;
+    ammStateByMarket.set(row.marketId, {
+      liquidityB: b,
+      outcomeOrder: row.outcomeOrder as string[],
+      shareQuantities: row.shareQuantities as Record<string, number>,
+    });
+  }
+
+  for (const agent of agents) {
+    if (!agent.isActive) continue;
+
+    // Pull every AMM trade (buys AND sells) for this agent across
+    // the in-scope markets. Net shares per (market, entry) drives
+    // whether a position even exists; weighted-average cost-basis
+    // drives the sell engine's anchor.
+    const ammBets = await db
+      .select({
+        marketId: marketBets.marketId,
+        entryId: marketBets.entryId,
+        actionType: marketBets.actionType,
+        shareCount: marketBets.shareCount,
+        pricePerShare: marketBets.pricePerShare,
+        confidence: marketBets.confidence,
+        betMetadata: marketBets.betMetadata,
+        createdAt: marketBets.createdAt,
+      })
+      .from(marketBets)
+      .where(
+        and(
+          eq(marketBets.agentId, agent.id),
+          inArray(marketBets.marketId, ammUpdown.map((m) => m.id)),
+        ),
+      )
+      .orderBy(marketBets.createdAt);
+
+    if (!ammBets.length) continue;
+
+    // Aggregate buys minus sells per (market, entry). Anchor is the
+    // weighted average of buy prices ONLY (sells don't dilute the
+    // anchor — the engine compares "live" vs. "what I paid").
+    const positions = aggregateSellSweepPositions(ammBets);
+
+    for (const pos of Array.from(positions.values())) {
+      if (pos.netShares < MIN_NET_SHARES_FOR_SELL_EVAL) continue;
+      if (pos.buyShares <= 0) continue;
+      const market = ammUpdown.find((m) => m.id === pos.marketId);
+      if (!market) continue;
+      const state = ammStateByMarket.get(market.id);
+      if (!state) continue;
+
+      // Weighted-average buy price = total notional / total bought
+      // shares. Sells don't contribute (anchor is "what I paid").
+      const anchor = pos.buyCostNotional / pos.buyShares;
+      if (!Number.isFinite(anchor) || anchor <= 0) continue;
+
+      const livePrice = ammCurrentPrices(state)[pos.entryId];
+      if (!Number.isFinite(livePrice) || livePrice <= 0) continue;
+
+      // Idempotency / mutual exclusion: skip if any pending or
+      // in-progress sell or conviction action already exists for
+      // (agent, market). Also enforce the lifetime sell cap.
+      const blockingActions = await db
+        .select({
+          id: scheduledAgentActions.id,
+          actionType: scheduledAgentActions.actionType,
+          status: scheduledAgentActions.status,
+        })
+        .from(scheduledAgentActions)
+        .where(
+          and(
+            eq(scheduledAgentActions.agentId, agent.id),
+            eq(scheduledAgentActions.marketId, market.id),
+            sql`${scheduledAgentActions.actionType} IN ('sell', 'conviction')`,
+          ),
+        );
+
+      const hasOpenBlocker = blockingActions.some(
+        (row) => row.status === "pending" || row.status === "in_progress",
+      );
+      if (hasOpenBlocker) continue;
+
+      const lifetimeSells = blockingActions.filter(
+        (row) => row.actionType === "sell" && row.status === "executed",
+      ).length;
+      if (lifetimeSells >= MAX_SELLS_PER_MARKET_PER_AGENT) continue;
+
+      // Look up the original conviction (rankerConviction stamped at
+      // buy time). Fallback chain: most-recent decision_payload first,
+      // then `market_bets.confidence` from the latest buy row, then
+      // a wide default. Either may be absent for legacy positions.
+      let conviction: number | undefined;
+      const [latestDecision] = await db
+        .select({ decisionPayload: scheduledAgentActions.decisionPayload })
+        .from(scheduledAgentActions)
+        .where(
+          and(
+            eq(scheduledAgentActions.agentId, agent.id),
+            eq(scheduledAgentActions.marketId, market.id),
+            eq(scheduledAgentActions.entryId, pos.entryId),
+            sql`${scheduledAgentActions.actionType} IN ('predict', 'conviction')`,
+            eq(scheduledAgentActions.status, "executed"),
+          ),
+        )
+        .orderBy(desc(scheduledAgentActions.executedAt))
+        .limit(1);
+      if (latestDecision?.decisionPayload) {
+        const payload = latestDecision.decisionPayload as { rankerConviction?: number; confidence?: number };
+        if (typeof payload.rankerConviction === "number" && Number.isFinite(payload.rankerConviction)) {
+          conviction = payload.rankerConviction;
+        } else if (typeof payload.confidence === "number" && Number.isFinite(payload.confidence)) {
+          conviction = payload.confidence;
+        }
+      }
+      if (conviction == null && pos.latestBuyConfidence != null) {
+        conviction = pos.latestBuyConfidence;
+      }
+      if (conviction == null) conviction = SELL_DEFAULT_CONVICTION;
+
+      const personaBand = getSimulationProfile(agent.simulationProfile).personaBand;
+      const decision = computeSellDecision({
+        personaBand,
+        anchor,
+        livePrice,
+        conviction,
+        netShares: pos.netShares,
+      });
+      if (!decision) continue;
+
+      // Schedule the sell. We re-use ARCHETYPE_DELAY_RANGES so the
+      // execute_after stagger lines up with the existing buy/conviction
+      // pacing — nothing about a sell needs to be more urgent than a
+      // buy decision.
+      const executeAfter = computeExecuteAfter(agent.archetype);
+      const decisionPayload: SellDecision = decision;
+
+      await db.insert(scheduledAgentActions).values({
+        agentId: agent.id,
+        marketId: market.id,
+        entryId: pos.entryId,
+        actionType: "sell",
+        decisionPayload,
+        // For sells, `stake_amount` carries the live notional value
+        // of the position fraction we're exiting. Purely informational
+        // — the worker re-computes shares from netShares × fraction
+        // at execution time. Use 0 if math doesn't produce a finite
+        // value to avoid storing NaN.
+        stakeAmount: Math.max(
+          0,
+          Math.round(pos.netShares * decision.sellFraction * livePrice),
+        ),
+        executeAfter,
+        status: "pending",
+      });
+
+      sellsScheduled++;
+      log(
+        `[AgentRunner] AMM Sell scheduled: ${agent.displayName} ${decision.reason} on ${market.title?.slice(0, 30)} (anchor=${anchor.toFixed(3)} live=${livePrice.toFixed(3)} band=${decision.bandBottom.toFixed(3)}-${decision.bandTop.toFixed(3)} fraction=${decision.sellFraction.toFixed(2)} band=${personaBand} conviction=${conviction.toFixed(2)})`,
+      );
+    }
+  }
+
+  if (sellsScheduled > 0) {
+    log(`[AgentRunner] Sell sweep scheduled ${sellsScheduled} exits`);
+  }
+
+  return sellsScheduled;
+}
+
 function toAgentData(row: typeof agentConfigs.$inferSelect): AgentConfigData {
   return {
     id: row.id,
@@ -1154,6 +1471,8 @@ function toAgentData(row: typeof agentConfigs.$inferSelect): AgentConfigData {
  *
  * Conservative by design — see comment on `TrendDirection` in types.ts.
  */
+export const _aggregateSellSweepPositionsForTesting = aggregateSellSweepPositions;
+
 export function _deriveTrendDirectionForTesting(input: {
   pctChangeVsOpen?: number;
   change24h: number;
