@@ -244,6 +244,25 @@ export async function seedAmmMarket(
   return db.transaction(async (tx) => run(tx as DbOrTx));
 }
 
+/**
+ * Seed a world (community) market when it goes live. No-op if AMM state
+ * already exists (idempotent).
+ */
+export async function ensureWorldMarketAmmSeeded(
+  marketId: string,
+  entryIdsInOrder: string[],
+  txOpt?: DbOrTx,
+): Promise<void> {
+  const conn = txOpt ?? db;
+  const [existing] = await conn
+    .select({ marketId: marketAmmState.marketId })
+    .from(marketAmmState)
+    .where(eq(marketAmmState.marketId, marketId))
+    .limit(1);
+  if (existing) return;
+  await seedAmmMarket({ marketId, marketType: "community", entryIdsInOrder }, txOpt);
+}
+
 // ---------------------------------------------------------------------------
 // Settlement-time seed return
 // ---------------------------------------------------------------------------

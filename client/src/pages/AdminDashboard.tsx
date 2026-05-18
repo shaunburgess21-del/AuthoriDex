@@ -106,6 +106,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { apiRequest } from "@/lib/queryClient";
+import { dateToLocal, localDatetimeToIso } from "@/lib/datetime-local";
 import { cn } from "@/lib/utils";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { getAdminAccessBlock } from "@/pages/admin/AdminAccessGate";
@@ -396,8 +397,8 @@ function CreateMarketModal({
       setTeaser(editMarket.teaser || "");
       setSummary(editMarket.summary || "");
       setCategory(normalizeMarketCategory(editMarket.category) || "misc");
-      setEndAt(editMarket.endAt ? new Date(editMarket.endAt).toISOString().slice(0, 16) : "");
-      setCloseAt(editMarket.closeAt ? new Date(editMarket.closeAt).toISOString().slice(0, 16) : "");
+      setEndAt(dateToLocal(editMarket.endAt));
+      setCloseAt(dateToLocal(editMarket.closeAt));
       setFeatured(editMarket.featured || false);
       setSourceUrl(editMarket.sourceUrl || "");
       setResolveMethod(editMarket.resolveMethod || "admin_manual");
@@ -450,6 +451,9 @@ function CreateMarketModal({
                 entryPersonId: e.personId || "",
                 entryPersonName: "",
               })));
+            }
+            if (data?.relatedPeople?.length) {
+              setRelatedPeople(data.relatedPeople);
             }
           })
           .catch(() => {});
@@ -610,8 +614,8 @@ function CreateMarketModal({
       teaser: teaser || null,
       summary: summary || null,
       category,
-      endAt: new Date(endAt).toISOString(),
-      closeAt: closeAt ? new Date(closeAt).toISOString() : undefined,
+      endAt: localDatetimeToIso(endAt),
+      closeAt: closeAt ? localDatetimeToIso(closeAt) : undefined,
       featured,
       sourceUrl: sourceUrl || null,
       resolveMethod,
@@ -1868,8 +1872,8 @@ export default function AdminDashboard() {
     mutationFn: async (id: string) => {
       const res = await fetchWithAuth(`/api/admin/open-markets/${id}`, { method: "DELETE" });
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error((err as { error?: string }).error || "Failed to delete market");
+        const err = await res.json().catch(() => ({})) as { error?: string; message?: string };
+        throw new Error(err.message || err.error || "Failed to delete market");
       }
       return res.json();
     },
@@ -3164,7 +3168,7 @@ export default function AdminDashboard() {
       personId: poll.personId || "",
       description: poll.description || "",
       timeline: poll.timeline || "",
-      deadlineAt: poll.deadlineAt ? new Date(poll.deadlineAt).toISOString().slice(0, 16) : "",
+      deadlineAt: dateToLocal(poll.deadlineAt),
       imageUrl: poll.imageUrl || "",
       seedSupportCount: poll.seedSupportCount,
       seedNeutralCount: poll.seedNeutralCount,

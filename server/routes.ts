@@ -12637,7 +12637,17 @@ Only return the JSON object.`;
         .select()
         .from(predictionMarkets)
         .orderBy(asc(predictionMarkets.cmsDisplayOrder), desc(predictionMarkets.createdAt));
-      res.json(markets);
+      const communityIds = markets
+        .filter((m) => m.marketType === "community")
+        .map((m) => m.id);
+      const relatedMap = await getRelatedPeopleForCards("world_market", communityIds);
+      res.json(
+        markets.map((m) => ({
+          ...m,
+          relatedPeople: relatedMap[m.id] || [],
+          relatedPersonIds: (relatedMap[m.id] || []).map((rp) => rp.id),
+        })),
+      );
     } catch (error: any) {
       console.error("Error fetching markets:", error.message);
       res.status(500).json({ error: "Failed to fetch markets" });
@@ -17502,15 +17512,20 @@ Target length: about 90-150 words.`;
           )
           .returning();
 
-        const { seedAmmMarket } = await import("./services/amm-house");
-        const entryIdsInOrder = createdEntries
-          .slice()
-          .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
-          .map((e) => e.id);
-        await seedAmmMarket(
-          { marketId: createdMarket.id, marketType: "community", entryIdsInOrder },
-          tx,
-        );
+        const effectiveVisibility = ["draft", "live", "inactive", "archived"].includes(visibility)
+          ? visibility
+          : "live";
+        if (effectiveVisibility !== "draft") {
+          const { seedAmmMarket } = await import("./services/amm-house");
+          const entryIdsInOrder = createdEntries
+            .slice()
+            .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
+            .map((e) => e.id);
+          await seedAmmMarket(
+            { marketId: createdMarket.id, marketType: "community", entryIdsInOrder },
+            tx,
+          );
+        }
 
         return { createdMarket, createdEntries };
       });
@@ -17519,7 +17534,13 @@ Target length: about 90-150 words.`;
         await syncRelatedPeople("world_market", createdMarket.id, relatedPersonIds.filter(Boolean));
       }
 
-      res.json({ ...createdMarket, entries: createdEntries });
+      const relatedMap = await getRelatedPeopleForCards("world_market", [createdMarket.id]);
+      res.json({
+        ...createdMarket,
+        entries: createdEntries,
+        relatedPeople: relatedMap[createdMarket.id] || [],
+        relatedPersonIds: (relatedMap[createdMarket.id] || []).map((rp) => rp.id),
+      });
     } catch (error: any) {
       console.error("[Open Markets] Create error:", error);
       if (error?.code === "23505") {
@@ -17651,7 +17672,30 @@ Target length: about 90-150 words.`;
         .where(eq(marketEntries.marketId, id))
         .orderBy(asc(marketEntries.displayOrder));
 
-      res.json({ ...updated, entries: finalEntries });
+      const prevVisibility = existing.visibility;
+      const nextVisibility =
+        visibility !== undefined && ["draft", "live", "inactive", "archived"].includes(visibility)
+          ? visibility
+          : prevVisibility;
+      if (
+        prevVisibility === "draft" &&
+        (nextVisibility === "live" || nextVisibility === "inactive")
+      ) {
+        const entryIdsInOrder = finalEntries
+          .slice()
+          .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
+          .map((e) => e.id);
+        const { ensureWorldMarketAmmSeeded } = await import("./services/amm-house");
+        await ensureWorldMarketAmmSeeded(id, entryIdsInOrder);
+      }
+
+      const relatedMap = await getRelatedPeopleForCards("world_market", [id]);
+      res.json({
+        ...updated,
+        entries: finalEntries,
+        relatedPeople: relatedMap[id] || [],
+        relatedPersonIds: (relatedMap[id] || []).map((rp) => rp.id),
+      });
     } catch (error) {
       console.error("[Open Markets] Update error:", error);
       res.status(500).json({ error: "Failed to update market" });
@@ -17912,13 +17956,8 @@ Target length: about 90-150 words.`;
         return res.status(404).json({ error: "World market not found" });
       }
 
-      // Hard-delete gate (added after the 2026-05-17 orphan-seed incident):
-      // refuse to delete a market whose AMM seed is still on the ledger.
-      // `market_amm_state` exists from create-time; the seed-return ledger
-      // row (`amm_settle_<marketId>`) is only written when the resolver runs.
-      // If state exists but no settle row → seed is still debited from the
-      // house. Hard-delete here would cascade away the state row and orphan
-      // the seed-debit ledger entry. Admin must Resolve/Void first.
+      // Return AMM seed before hard-delete when state exists but settle row
+      // does not (avoids orphaning amm_seed_debit on credit_ledger).
       const [ammState] = await db
         .select({ marketId: marketAmmState.marketId })
         .from(marketAmmState)
@@ -17936,13 +17975,21 @@ Target length: about 90-150 words.`;
           )
           .limit(1);
         if (!settled) {
-          return res.status(409).json({
-            error: "amm_seeded",
-            message:
-              "This market has an AMM seed on the ledger that hasn't been returned. " +
-              "Void or resolve it via Admin > AMM > Markets > Resolve/Void first so " +
-              "the house seed is credited back, then delete.",
+          const { resolveAmmMarket } = await import("./services/amm-resolver");
+          const ammResult = await resolveAmmMarket({
+            marketId: id,
+            winnerEntryId: null,
+            voidMarket: true,
+            voidReason: "admin_delete",
+            settledBy: req.userId ?? null,
           });
+          if ("error" in ammResult) {
+            const status = ammResult.error === "market_not_found" ? 404 : 400;
+            return res.status(status).json({
+              error: ammResult.error,
+              message: ammResult.message,
+            });
+          }
         }
       }
 
@@ -18196,15 +18243,7 @@ Target length: about 90-150 words.`;
               }))
             ).returning({ id: marketEntries.id, displayOrder: marketEntries.displayOrder });
 
-            const { seedAmmMarket } = await import("./services/amm-house");
-            const entryIdsInOrder = insertedEntries
-              .slice()
-              .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
-              .map((e) => e.id);
-            await seedAmmMarket(
-              { marketId: createdRow.id, marketType: "community", entryIdsInOrder },
-              tx,
-            );
+            // Imports are draft — AMM seed deferred until go-live.
 
             return createdRow;
           });
@@ -18250,6 +18289,16 @@ Target length: about 90-150 words.`;
         return res.status(400).json({ error: "visibility must be draft, live, inactive, or archived" });
       }
 
+      const marketsBefore = await db
+        .select({ id: predictionMarkets.id, visibility: predictionMarkets.visibility })
+        .from(predictionMarkets)
+        .where(
+          and(
+            inArray(predictionMarkets.id, marketIds),
+            eq(predictionMarkets.marketType, "community"),
+          ),
+        );
+
       const updated = await db.update(predictionMarkets)
         .set({
           visibility,
@@ -18263,6 +18312,22 @@ Target length: about 90-150 words.`;
           )
         )
         .returning({ id: predictionMarkets.id, title: predictionMarkets.title, visibility: predictionMarkets.visibility });
+
+      if (visibility === "live" || visibility === "inactive") {
+        const { ensureWorldMarketAmmSeeded } = await import("./services/amm-house");
+        const draftToLive = marketsBefore.filter((m) => m.visibility === "draft");
+        for (const m of draftToLive) {
+          const entries = await db
+            .select({ id: marketEntries.id, displayOrder: marketEntries.displayOrder })
+            .from(marketEntries)
+            .where(eq(marketEntries.marketId, m.id))
+            .orderBy(asc(marketEntries.displayOrder));
+          const entryIdsInOrder = entries.map((e) => e.id);
+          if (entryIdsInOrder.length > 0) {
+            await ensureWorldMarketAmmSeeded(m.id, entryIdsInOrder);
+          }
+        }
+      }
 
       res.json({ updated: updated.length, markets: updated });
     } catch (error) {
@@ -18285,7 +18350,13 @@ Target length: about 90-150 words.`;
         .where(eq(marketEntries.marketId, id))
         .orderBy(asc(marketEntries.displayOrder));
 
-      res.json({ ...market, entries });
+      const relatedMap = await getRelatedPeopleForCards("world_market", [id]);
+      res.json({
+        ...market,
+        entries,
+        relatedPeople: relatedMap[id] || [],
+        relatedPersonIds: (relatedMap[id] || []).map((rp) => rp.id),
+      });
     } catch (error) {
       console.error("[Open Markets] Admin detail error:", error);
       res.status(500).json({ error: "Failed to fetch market" });
