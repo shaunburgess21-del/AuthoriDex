@@ -17406,6 +17406,41 @@ Target length: about 90-150 words.`;
         .where(eq(predictionMarkets.id, id))
         .limit(1);
 
+      // Audit log: settle is one of the two highest-impact admin actions
+      // (it distributes credit balances), so it must show up in the
+      // unified /admin/audit-log view. The market-level `settledBy` /
+      // `resolveMethod` columns are still the forensic source of truth,
+      // but the audit row keeps the central log complete. Best-effort
+      // insert after the resolver commits — a failure here doesn't roll
+      // back the settlement (which has already paid out users), but it
+      // does get logged for follow-up.
+      try {
+        await db.insert(adminAuditLog).values({
+          adminId: authReq.userId!,
+          actionType: "amm_market_settle",
+          targetTable: "prediction_markets",
+          targetId: id,
+          previousData: {
+            status: market.status,
+            settledBy: market.settledBy,
+          },
+          newData: {
+            status: updatedMarket?.status ?? "RESOLVED",
+            winnerEntryId,
+            settledBy: authReq.userId ?? null,
+          },
+          metadata: {
+            marketType: market.marketType,
+            slug: market.slug,
+            title: market.title,
+            resolutionNotes: resolutionNotes ?? null,
+            idempotentSkip: "idempotentSkip" in ammResult ? ammResult.idempotentSkip : false,
+          },
+        });
+      } catch (auditErr) {
+        console.error("[Open Markets] Settle audit-log insert failed (settlement still committed):", auditErr);
+      }
+
       res.json({ ...updatedMarket, settlement: ammResult });
     } catch (error) {
       console.error("[Open Markets] Settle error:", error);
@@ -17471,6 +17506,35 @@ Target length: about 90-150 words.`;
         })
         .where(eq(predictionMarkets.id, id))
         .returning();
+
+      // Audit log: void distributes refunds across every position, so it
+      // sits in the same tier of financial impact as settle. Same best-
+      // effort insert pattern — see the settle handler for rationale.
+      try {
+        await db.insert(adminAuditLog).values({
+          adminId: (req as AuthRequest).userId!,
+          actionType: "amm_market_void",
+          targetTable: "prediction_markets",
+          targetId: id,
+          previousData: {
+            status: market.status,
+            voidReason: market.voidReason ?? null,
+          },
+          newData: {
+            status: updatedMarket?.status ?? "VOID",
+            voidReason,
+            settledBy: (req as AuthRequest).userId ?? null,
+          },
+          metadata: {
+            marketType: market.marketType,
+            slug: market.slug,
+            title: market.title,
+            idempotentSkip: "idempotentSkip" in ammResult ? ammResult.idempotentSkip : false,
+          },
+        });
+      } catch (auditErr) {
+        console.error("[Open Markets] Void audit-log insert failed (void still committed):", auditErr);
+      }
 
       res.json(updatedMarket);
     } catch (error) {
@@ -23072,6 +23136,12 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         ? String(req.body.reason).slice(0, 500)
         : null;
       const { setAgentsPaused, getAgentRuntimeState } = await import("./agents/runtime-state");
+
+      // Snapshot the prior state BEFORE flipping so the audit log can
+      // record the actual before/after. The runtime-state helper does
+      // not return the prior value.
+      const priorState = await getAgentRuntimeState();
+
       await setAgentsPaused({
         paused,
         reason,
@@ -23081,6 +23151,35 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       console.log(
         `[AgentAdmin] Agents ${paused ? "PAUSED" : "RESUMED"} by ${req.userId ?? "unknown"}${reason ? ` (reason: ${reason})` : ""}`,
       );
+
+      // Audit log: the global agent kill switch is the operator's
+      // primary lever for halting the entire simulation cohort. It
+      // belongs in the unified audit view alongside per-agent toggles
+      // (which already audit). Best-effort insert after the flip
+      // commits; failure here is logged but doesn't surface to the
+      // operator since the flip itself succeeded.
+      try {
+        await db.insert(adminAuditLog).values({
+          adminId: req.userId!,
+          actionType: paused ? "agents_global_pause" : "agents_global_resume",
+          targetTable: "agent_runtime_state",
+          targetId: "global",
+          previousData: {
+            paused: priorState.paused,
+            reason: priorState.reason,
+          },
+          newData: {
+            paused: state.paused,
+            reason: state.reason,
+          },
+          metadata: {
+            pausedBy: state.pausedBy,
+          },
+        });
+      } catch (auditErr) {
+        console.error("[AgentAdmin] pause-toggle audit-log insert failed (toggle still committed):", auditErr);
+      }
+
       res.json({
         ok: true,
         paused: state.paused,
@@ -23144,10 +23243,16 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         });
       }
       const {
+        getAmmSettings,
         setAmmCooldownMs,
         MIN_PRE_RESOLVE_COOLDOWN_MS,
         MAX_PRE_RESOLVE_COOLDOWN_MS,
       } = await import("./native-markets/amm-settings");
+
+      // Snapshot prior so the audit row can record the actual before/
+      // after (the setter does not return the prior value).
+      const priorState = await getAmmSettings();
+
       const state = await setAmmCooldownMs({
         preResolveCooldownMs: ms,
         actorId: req.userId ?? null,
@@ -23157,6 +23262,38 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         `[AmmSettings] preResolveCooldownMs set to ${state.preResolveCooldownMs}ms by ${req.userId ?? "unknown"}` +
           (clampedDifferent ? ` (clamped from ${Math.round(ms)}ms; bounds [${MIN_PRE_RESOLVE_COOLDOWN_MS}, ${MAX_PRE_RESOLVE_COOLDOWN_MS}])` : ""),
       );
+
+      // Audit log: the pre-resolve cooldown directly affects late-window
+      // trade safety on every AMM market. Operator changes here belong
+      // in the unified audit view. Best-effort insert; failure logged
+      // but doesn't surface since the setting itself already persisted.
+      try {
+        await db.insert(adminAuditLog).values({
+          adminId: req.userId!,
+          actionType: "amm_settings_update",
+          targetTable: "amm_runtime_settings",
+          targetId: "global",
+          previousData: {
+            preResolveCooldownMs: priorState.preResolveCooldownMs,
+            updatedBy: priorState.updatedBy,
+          },
+          newData: {
+            preResolveCooldownMs: state.preResolveCooldownMs,
+            updatedBy: state.updatedBy,
+          },
+          metadata: {
+            requestedMs: Math.round(ms),
+            clamped: clampedDifferent,
+            bounds: {
+              minMs: MIN_PRE_RESOLVE_COOLDOWN_MS,
+              maxMs: MAX_PRE_RESOLVE_COOLDOWN_MS,
+            },
+          },
+        });
+      } catch (auditErr) {
+        console.error("[AmmSettings] settings-update audit-log insert failed (update still committed):", auditErr);
+      }
+
       res.json({
         ok: true,
         preResolveCooldownMs: state.preResolveCooldownMs,
