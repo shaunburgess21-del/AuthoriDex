@@ -20,6 +20,13 @@ import {
   POSITION_MOVE_MIN_NOTIONAL_DEFAULT,
   POSITION_MOVE_PCT_THRESHOLD_DEFAULT,
 } from "./position-move-notification";
+import {
+  formatWeeklyDigestBody,
+  isoYearWeek,
+  isWeeklyDigestFireWindow,
+  WEEKLY_DIGEST_TITLE,
+  type WeeklyDigestStats,
+} from "./weekly-digest-utils";
 import { STREAK_MILESTONES } from "@shared/streak-config";
 
 /**
@@ -851,6 +858,151 @@ async function derivePositionMoveAlerts(): Promise<number> {
 }
 
 /**
+ * Weekly P&L digest.
+ *
+ * Fires every Sunday 18:00-18:30 UTC for users who placed at least one
+ * marketBet in the past 7 days. One notification per (user, ISO-week)
+ * — re-runs within the fire window absorb into the unique constraint.
+ *
+ * Scope decision (planning Q&A): "active-only" = users with >=1
+ * marketBet in last 7d. Avoids spamming dormant accounts and avoids
+ * the dead-week "0 wins, 0 losses" digest that would be noise.
+ *
+ * Body shape via `formatWeeklyDigestBody`:
+ *   "This week: +1,247 credits (8 wins, 3 losses). Best: Jake Paul vs KSI (+470)."
+ *
+ * What "win"/"loss"/"netCredits" mean here:
+ *   - `wins`  = resolved buy rows this week with status='won' AND payoutAmount > 0.
+ *               (won-but-zero-payout — the sold-out-before-resolution case from the
+ *                AMM-resolver audit — is excluded so we don't inflate the count.)
+ *   - `losses` = resolved buy rows this week with status='lost'.
+ *   - `netCredits` = sum of (payoutAmount - stakeAmount) over won+lost buys
+ *                    PLUS the realised P&L from sells this week (sell stakeAmount
+ *                    is stored as -proceeds, so `-stakeAmount` gives the proceeds
+ *                    we add into the tally).
+ *   - `bestPick` = the single won buy with the largest (payout - stake) profit.
+ */
+async function deriveWeeklyDigest(): Promise<number> {
+  if (!isWeeklyDigestFireWindow()) return 0;
+
+  // Find users active in the past 7 days. `marketBets.createdAt`
+  // captures the moment the buy/sell happened, which is what
+  // "active this week" should anchor to.
+  const sevenDaysAgo = sql`NOW() - INTERVAL '7 days'`;
+  const activeUserRows = await db
+    .select({ userId: marketBets.userId })
+    .from(marketBets)
+    .innerJoin(profiles, eq(profiles.id, marketBets.userId))
+    .where(
+      and(
+        eq(profiles.isAgent, false),
+        gte(marketBets.createdAt, sevenDaysAgo),
+      ),
+    )
+    .groupBy(marketBets.userId);
+
+  if (activeUserRows.length === 0) return 0;
+
+  const weekBucket = isoYearWeek(new Date());
+
+  let inserted = 0;
+  for (const { userId } of activeUserRows) {
+    // Per-user roll-up. Three lightweight queries — kept separate for
+    // readability rather than one mega-CTE; the active-user count is
+    // small at this stage of the product so the round-trip cost is
+    // acceptable. If this becomes a hot spot, fold into a single
+    // grouped query.
+    const settledBuys = await db
+      .select({
+        marketId: marketBets.marketId,
+        stakeAmount: marketBets.stakeAmount,
+        payoutAmount: marketBets.payoutAmount,
+        status: marketBets.status,
+        marketTitle: predictionMarkets.title,
+        personName: trackedPeople.name,
+      })
+      .from(marketBets)
+      .innerJoin(predictionMarkets, eq(marketBets.marketId, predictionMarkets.id))
+      .leftJoin(trackedPeople, eq(predictionMarkets.personId, trackedPeople.id))
+      .where(
+        and(
+          eq(marketBets.userId, userId),
+          eq(marketBets.actionType, "buy"),
+          inArray(marketBets.status, ["won", "lost"]),
+          gte(marketBets.settledAt, sevenDaysAgo),
+        ),
+      );
+
+    const sellRows = await db
+      .select({
+        stakeAmount: marketBets.stakeAmount,
+      })
+      .from(marketBets)
+      .where(
+        and(
+          eq(marketBets.userId, userId),
+          eq(marketBets.actionType, "sell"),
+          gte(marketBets.createdAt, sevenDaysAgo),
+        ),
+      );
+
+    let wins = 0;
+    let losses = 0;
+    let netCredits = 0;
+    let bestPick: WeeklyDigestStats["bestPick"] | undefined;
+    for (const bet of settledBuys) {
+      const stake = bet.stakeAmount ?? 0;
+      const payout = bet.payoutAmount ?? 0;
+      if (bet.status === "won" && payout > 0) {
+        wins += 1;
+        const profit = payout - stake;
+        netCredits += profit;
+        if (!bestPick || profit > bestPick.profit) {
+          bestPick = {
+            label: bet.personName ?? bet.marketTitle ?? "Top pick",
+            profit,
+          };
+        }
+      } else if (bet.status === "lost") {
+        losses += 1;
+        netCredits -= stake;
+      }
+    }
+    // Sells: stakeAmount on a sell is stored as -proceeds. The "P&L on
+    // a sell" is realised at sell time as `proceeds - sold_shares *
+    // avg_buy_cost`, but the full per-share-cost-basis math is heavy
+    // — the digest is a roundup, not a leaderboard, so the simpler
+    // "proceeds add into your week" reading is acceptable here. The
+    // matching debits already showed up in the digest of the week the
+    // buys settled (if they did). For week-level roundup purposes, the
+    // proceeds count as positive credit flow.
+    for (const sell of sellRows) {
+      netCredits += -(sell.stakeAmount ?? 0);
+    }
+
+    // No notification if the user only sold and never had a resolved
+    // win or loss this week — the body would read confusingly.
+    if (wins === 0 && losses === 0) continue;
+
+    const body = formatWeeklyDigestBody({ wins, losses, netCredits, bestPick });
+
+    const id = await createNotification({
+      userId,
+      kind: "weekly_pnl_digest",
+      title: WEEKLY_DIGEST_TITLE,
+      body,
+      href: "/me/predictions",
+      entityType: "user",
+      entityId: userId,
+      metadata: { wins, losses, netCredits, bestPick: bestPick ?? null, week: weekBucket },
+      idempotencyKey: `weekly_digest:${userId}:${weekBucket}`,
+    });
+    if (id) inserted += 1;
+  }
+  return inserted;
+}
+
+/**
  * Single entry point for the scheduler. Wraps every derivation in an
  * advisory lock so concurrent ticks (e.g. blue/green deploys) can't
  * cause double-fanout. Catches per-step errors so one slow query
@@ -879,6 +1031,7 @@ export async function runNotificationsDerivation(): Promise<NotificationsDerivat
       ["streak_milestone", deriveStreakMilestones],
       ["credits_low", deriveCreditsLow],
       ["position_move_alert", derivePositionMoveAlerts],
+      ["weekly_pnl_digest", deriveWeeklyDigest],
     ];
     for (const [name, fn] of steps) {
       try {

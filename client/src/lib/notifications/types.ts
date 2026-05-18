@@ -11,6 +11,7 @@ export type NotificationKind =
   | "market_closing_soon"
   | "market_void_refund"
   | "position_move_alert"
+  | "weekly_pnl_digest"
   | "favorite_rank_cross"
   | "favorite_hot_mover"
   | "favorite_new_market"
