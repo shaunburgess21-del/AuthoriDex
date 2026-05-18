@@ -64,6 +64,13 @@ export interface UserProfile {
   totalPredictions: number;
   createdAt: string;
   isBanned?: boolean;
+  /** Wallet vs ledger drift. Present only on rows returned by
+   *  /api/admin/credit-drift-users; absent when the regular
+   *  /api/admin/users endpoint serves the row. */
+  drift?: number;
+  /** SUM(credit_ledger.amount) for the user. Present only alongside
+   *  `drift`. */
+  ledgerSum?: number;
 }
 
 export interface PredictionMarket {

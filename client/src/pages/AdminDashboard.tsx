@@ -1278,6 +1278,12 @@ export default function AdminDashboard() {
   const [moderationSubTab, setModerationSubTabRaw] = useState(() => sessionStorage.getItem("admin_moderation_tab") || "insights");
   const setModerationSubTab = (tab: string) => { sessionStorage.setItem("admin_moderation_tab", tab); setModerationSubTabRaw(tab); };
   const [searchQuery, setSearchQuery] = useState("");
+  // Toggle the Users tab between the full user list and a filtered
+  // view showing only the wallet/ledger drift offenders. Set by the
+  // header "Credit Drift" tile click; also toggleable via a chip in
+  // the Users tab header.
+  const [userFilter, setUserFilter] = useState<"all" | "drift">("all");
+  const [reconcileDriftTarget, setReconcileDriftTarget] = useState<UserProfile | null>(null);
   const [celebritySearch, setCelebritySearch] = useState("");
   // Status filter for the admin Celebrities list. Default to main_leaderboard so
   // the count matches the public leaderboard; induction shadow rows used by
@@ -1478,10 +1484,22 @@ export default function AdminDashboard() {
     enabled: isAdmin,
   });
 
-  // Fetch users for moderation - only when admin and on users section
+  // Fetch users for moderation - only when admin and on users section.
+  // When `userFilter === "drift"` we swap in /api/admin/credit-drift-users
+  // which returns the same UserProfile shape plus `drift` + `ledgerSum`
+  // for inline display and the Reconcile action.
   const { data: users, isLoading: usersLoading } = useQuery<UserProfile[]>({
-    queryKey: ["/api/admin/users", searchQuery],
+    queryKey: ["/api/admin/users", userFilter, searchQuery],
     queryFn: async () => {
+      if (userFilter === "drift") {
+        const res = await fetchWithAuth("/api/admin/credit-drift-users");
+        if (!res.ok) throw new Error("Failed to fetch credit drift users");
+        const data = (await res.json()) as { users: UserProfile[] };
+        const list = data.users ?? [];
+        if (!searchQuery) return list;
+        const needle = searchQuery.toLowerCase();
+        return list.filter((u) => (u.username ?? "").toLowerCase().includes(needle));
+      }
       const params = new URLSearchParams();
       if (searchQuery) params.set("search", searchQuery);
       const url = `/api/admin/users${params.toString() ? `?${params.toString()}` : ""}`;
@@ -2058,6 +2076,43 @@ export default function AdminDashboard() {
     },
     onError: (error: any) => {
       toast.error("Ban Failed", { description: error.message });
+    },
+  });
+
+  // Per-user wallet/ledger drift reconciliation. Writes one
+  // `manual_drift_reconciliation` ledger row equal to `wallet - ledgerSum`
+  // for the target user, bringing their ledger audit trail back into
+  // line with their (authoritative) wallet balance. Idempotent per
+  // (userId, wallet) on the server.
+  const reconcileDriftMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const res = await fetchWithAuth(`/api/admin/users/${userId}/reconcile-drift`, {
+        method: "POST",
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(body?.message || body?.error || "Failed to reconcile drift");
+      }
+      return body as
+        | { noop: true; alreadyReconciled?: boolean; message?: string }
+        | { noop: false; wallet: number; ledgerSumBefore: number; ledgerSumAfter: number; delta: number };
+    },
+    onSuccess: (data) => {
+      if ("noop" in data && data.noop) {
+        toast("Already reconciled", {
+          description: data.message ?? "No drift to close on this user.",
+        });
+      } else if (!data.noop) {
+        toast.success("Drift reconciled", {
+          description: `Wrote a ${data.delta >= 0 ? "+" : ""}${data.delta.toLocaleString()} cr ledger row. Ledger now matches wallet (${data.wallet.toLocaleString()} cr).`,
+        });
+      }
+      setReconcileDriftTarget(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/ops-summary"] });
+    },
+    onError: (error: any) => {
+      toast.error("Reconcile Failed", { description: error?.message ?? String(error) });
     },
   });
 
@@ -3510,7 +3565,10 @@ export default function AdminDashboard() {
               </p>
             </button>
             <button
-              onClick={() => setActiveSection("users")}
+              onClick={() => {
+                setActiveSection("users");
+                setUserFilter(opsSummary.driftUserCount > 0 ? "drift" : "all");
+              }}
               className="rounded-md border p-3 text-left hover-elevate"
               data-testid="card-ops-drift"
             >
@@ -6121,7 +6179,7 @@ export default function AdminDashboard() {
               <p className="text-muted-foreground">Manage user accounts and moderation</p>
             </div>
 
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 flex-wrap">
               <div className="relative flex-1 max-w-md">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -6132,13 +6190,28 @@ export default function AdminDashboard() {
                   data-testid="input-user-search"
                 />
               </div>
+              <Button
+                variant={userFilter === "drift" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setUserFilter(userFilter === "drift" ? "all" : "drift")}
+                data-testid="button-toggle-drift-filter"
+              >
+                <AlertTriangle className="h-4 w-4 mr-2" />
+                {userFilter === "drift"
+                  ? `Showing credit drift${typeof opsSummary?.driftUserCount === "number" ? ` (${opsSummary.driftUserCount})` : ""} — click to clear`
+                  : `Credit drift only${typeof opsSummary?.driftUserCount === "number" ? ` (${opsSummary.driftUserCount})` : ""}`}
+              </Button>
             </div>
 
             <Card>
               <CardHeader>
-                <CardTitle>User Accounts</CardTitle>
+                <CardTitle>{userFilter === "drift" ? "Users with credit drift" : "User Accounts"}</CardTitle>
                 <CardDescription>
-                  {users ? `${users.length} users found` : "Loading users..."}
+                  {users
+                    ? userFilter === "drift"
+                      ? `${users.length} user${users.length === 1 ? "" : "s"} where wallet ≠ ledger sum`
+                      : `${users.length} users found`
+                    : "Loading users..."}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -6168,6 +6241,15 @@ export default function AdminDashboard() {
                               </Badge>
                               <span className="whitespace-nowrap">{user.xpPoints} XP</span>
                               <span className="whitespace-nowrap">{user.predictCredits} credits</span>
+                              {typeof user.drift === "number" && user.drift !== 0 && (
+                                <Badge
+                                  variant="outline"
+                                  className={`text-xs whitespace-nowrap ${user.drift < 0 ? "border-red-500/50 text-red-600 dark:text-red-400" : "border-amber-500/50 text-amber-600 dark:text-amber-400"}`}
+                                  data-testid={`badge-drift-${user.id}`}
+                                >
+                                  Drift: {user.drift > 0 ? "+" : ""}{user.drift.toLocaleString()} cr
+                                </Badge>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -6195,6 +6277,18 @@ export default function AdminDashboard() {
                             <Coins className="h-4 w-4 mr-1" />
                             Credits
                           </Button>
+                          {typeof user.drift === "number" && user.drift !== 0 && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="min-h-11 sm:min-h-8 border-amber-500/50 text-amber-700 dark:text-amber-400"
+                              onClick={() => setReconcileDriftTarget(user)}
+                              data-testid={`button-reconcile-drift-${user.id}`}
+                            >
+                              <AlertTriangle className="h-4 w-4 mr-1" />
+                              Reconcile
+                            </Button>
+                          )}
                           <Button
                             variant="outline"
                             size="sm"
@@ -8092,6 +8186,80 @@ export default function AdminDashboard() {
                 </>
               ) : (
                 "Confirm Adjustment"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reconcile Credit Drift Modal */}
+      <Dialog
+        open={reconcileDriftTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setReconcileDriftTarget(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reconcile credit drift</DialogTitle>
+            <DialogDescription>
+              Writes a single <code>manual_drift_reconciliation</code> ledger row to bring the
+              user's ledger sum in line with their (authoritative) wallet balance. The wallet
+              itself is unchanged; only the audit trail is closed out.
+            </DialogDescription>
+          </DialogHeader>
+          {reconcileDriftTarget && (
+            <div className="space-y-3 py-4 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">User</span>
+                <span className="font-medium">{reconcileDriftTarget.username || reconcileDriftTarget.id}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Wallet (authoritative)</span>
+                <span className="font-medium">{reconcileDriftTarget.predictCredits.toLocaleString()} cr</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Ledger sum (current)</span>
+                <span className="font-medium">
+                  {typeof reconcileDriftTarget.ledgerSum === "number"
+                    ? `${reconcileDriftTarget.ledgerSum.toLocaleString()} cr`
+                    : "—"}
+                </span>
+              </div>
+              <div className="flex justify-between border-t pt-3">
+                <span className="text-muted-foreground">Ledger row to write</span>
+                <span
+                  className={`font-bold ${(reconcileDriftTarget.drift ?? 0) < 0 ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"}`}
+                  data-testid="text-drift-reconcile-delta"
+                >
+                  {(reconcileDriftTarget.drift ?? 0) > 0 ? "+" : ""}
+                  {(reconcileDriftTarget.drift ?? 0).toLocaleString()} cr
+                </span>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setReconcileDriftTarget(null)}
+              disabled={reconcileDriftMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (reconcileDriftTarget) reconcileDriftMutation.mutate(reconcileDriftTarget.id);
+              }}
+              disabled={reconcileDriftMutation.isPending || !reconcileDriftTarget}
+              data-testid="button-confirm-reconcile-drift"
+            >
+              {reconcileDriftMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Reconciling...
+                </>
+              ) : (
+                "Confirm Reconcile"
               )}
             </Button>
           </DialogFooter>

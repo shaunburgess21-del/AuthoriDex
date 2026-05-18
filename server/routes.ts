@@ -78,6 +78,7 @@ import { voidMarketBets } from "./jobs/market-resolver";
 import { deriveNativeMarketLifecycle, getWeeklyBettingCutoff, getMarketBettingCutoff } from "./native-markets/lifecycle";
 import { executeBuy, executeSell } from "./services/amm-trades";
 import { fireAmmPlacementHooks } from "./services/amm-bet-hooks";
+import { computeDriftDelta } from "./services/credit-drift";
 import { computeEarlyBirdMultiplier } from "./jobs/settlement-utils";
 import { recomputeCelebrityMetrics } from "./services/celebrity-metrics-recompute";
 import { z, ZodError } from "zod";
@@ -21025,6 +21026,196 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
     } catch (error: any) {
       console.error("Error fetching ops summary:", error.message);
       res.status(500).json({ error: "Failed to fetch ops summary" });
+    }
+  });
+
+  // GET /api/admin/credit-drift-users
+  //
+  // Per-user breakdown of the drift count exposed by /api/admin/ops-summary.
+  // A "drifted" user is a non-agent profile where `predict_credits` does not
+  // match `SUM(credit_ledger.amount)` — usually parimutuel-sunset residue
+  // where the wallet was reset to 10,000 but the historical ledger entries
+  // still sum to the pre-sunset total.
+  //
+  // Powers the Credit Drift tile's filtered Users-tab view + per-row
+  // Reconcile button. Returns rows ordered by |drift| desc so the worst
+  // case is on top.
+  app.get("/api/admin/credit-drift-users", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const rows = (await db.execute(sql`
+        WITH ls AS (
+          SELECT user_id, SUM(amount)::bigint AS ledger_sum
+          FROM credit_ledger
+          GROUP BY user_id
+        )
+        SELECT
+          p.id,
+          p.username,
+          p.role,
+          p.xp_points       AS xp_points,
+          p.predict_credits AS wallet,
+          ls.ledger_sum     AS ledger_sum,
+          (p.predict_credits - ls.ledger_sum) AS drift
+        FROM profiles p
+        JOIN ls ON ls.user_id = p.id
+        WHERE p.is_agent = false
+          AND p.is_house = false
+          AND p.predict_credits != ls.ledger_sum
+        ORDER BY ABS(p.predict_credits - ls.ledger_sum) DESC
+        LIMIT 100
+      `)).rows as unknown as Array<{
+        id: string;
+        username: string | null;
+        role: string;
+        xp_points: number;
+        wallet: number;
+        ledger_sum: number;
+        drift: number;
+      }>;
+
+      res.json({
+        users: rows.map((r) => ({
+          id: r.id,
+          username: r.username,
+          role: r.role,
+          xpPoints: Number(r.xp_points),
+          predictCredits: Number(r.wallet),
+          ledgerSum: Number(r.ledger_sum),
+          drift: Number(r.drift),
+        })),
+      });
+    } catch (err: any) {
+      console.error("[GET /api/admin/credit-drift-users] failed:", err);
+      res.status(500).json({ error: "Failed to fetch credit drift users" });
+    }
+  });
+
+  // POST /api/admin/users/:userId/reconcile-drift
+  //
+  // Closes a single user's wallet-vs-ledger drift by writing a
+  // `manual_drift_reconciliation` ledger row equal to `wallet - ledgerSum`.
+  // The wallet itself is NOT changed — we're aligning the ledger to the
+  // wallet, same convention as the parimutuel sunset (predict_credits is
+  // the source of truth for "what this user actually has"; the ledger is
+  // an audit log of how they got there).
+  //
+  // Idempotency: keyed on `(userId, "manual_drift_recon_<userId>_<wallet>")`
+  // so a re-fire at the same wallet balance is a no-op. If the user's
+  // wallet later moves and drift reopens, an admin can reconcile again
+  // and the new key won't collide with the previous one.
+  app.post("/api/admin/users/:userId/reconcile-drift", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { userId } = req.params;
+      const adminId = req.userId!;
+
+      const result = await db.transaction(async (tx) => {
+        const [user] = await tx
+          .select({
+            id: profiles.id,
+            username: profiles.username,
+            predictCredits: profiles.predictCredits,
+            isAgent: profiles.isAgent,
+            isHouse: profiles.isHouse,
+          })
+          .from(profiles)
+          .where(eq(profiles.id, userId))
+          .limit(1);
+
+        if (!user) return { status: 404 as const, body: { error: "User not found" } };
+        if (user.isAgent || user.isHouse) {
+          return {
+            status: 400 as const,
+            body: {
+              error: "non_human_profile",
+              message: "Refusing to reconcile drift on agent / house profiles. Use the dedicated AMM tooling.",
+            },
+          };
+        }
+
+        const [{ ledgerSum }] = (await tx.execute(sql`
+          SELECT COALESCE(SUM(amount), 0)::bigint AS "ledgerSum"
+          FROM credit_ledger
+          WHERE user_id = ${userId}
+        `)).rows as unknown as Array<{ ledgerSum: number }>;
+        const currentLedgerSum = Number(ledgerSum);
+        const wallet = user.predictCredits;
+        const delta = computeDriftDelta({ wallet, ledgerSum: currentLedgerSum });
+
+        if (delta === 0) {
+          return {
+            status: 200 as const,
+            body: {
+              noop: true,
+              wallet,
+              ledgerSum: currentLedgerSum,
+              drift: 0,
+            },
+          };
+        }
+
+        const idempotencyKey = `manual_drift_recon_${userId}_${wallet}`;
+
+        await tx.insert(creditLedger).values({
+          userId,
+          txnType: "manual_drift_reconciliation",
+          amount: delta,
+          walletType: "VIRTUAL",
+          balanceAfter: wallet,
+          source: "admin_drift_reconciliation",
+          idempotencyKey,
+          metadata: {
+            originalWallet: wallet,
+            originalLedgerSum: currentLedgerSum,
+            delta,
+            reason: "Admin reconciled wallet/ledger drift (post-parimutuel-sunset alignment).",
+            adminId,
+            appliedAt: new Date().toISOString(),
+          },
+        });
+
+        await tx.insert(adminAuditLog).values({
+          adminId,
+          adminEmail: null,
+          actionType: "reconcile_drift",
+          targetTable: "credit_ledger",
+          targetId: userId,
+          metadata: {
+            username: user.username,
+            wallet,
+            ledgerSumBefore: currentLedgerSum,
+            ledgerSumAfter: currentLedgerSum + delta,
+            delta,
+          },
+        });
+
+        return {
+          status: 200 as const,
+          body: {
+            noop: false,
+            wallet,
+            ledgerSumBefore: currentLedgerSum,
+            ledgerSumAfter: currentLedgerSum + delta,
+            delta,
+          },
+        };
+      });
+
+      res.status(result.status).json(result.body);
+    } catch (err: any) {
+      // Unique-constraint hit means we've already reconciled this exact
+      // (userId, wallet) pair. Treat as a graceful no-op rather than a
+      // 500 so the UI can refresh without surfacing a scary error.
+      if (typeof err?.code === "string" && err.code === "23505") {
+        return res.status(200).json({
+          noop: true,
+          alreadyReconciled: true,
+          message:
+            "A reconciliation row already exists for this user at the current wallet balance. " +
+            "Refresh the Credit Drift list to see the latest state.",
+        });
+      }
+      console.error("[POST /api/admin/users/:userId/reconcile-drift] failed:", err);
+      res.status(500).json({ error: "Failed to reconcile drift" });
     }
   });
 
