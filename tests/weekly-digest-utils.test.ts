@@ -126,6 +126,21 @@ test("formatWeeklyDigestBody: best pick with profit=0 is suppressed", () => {
   assert.equal(body, "This week: 0 credits (1 win, 0 losses).");
 });
 
+test("formatWeeklyDigestBody: best pick with negative profit is suppressed (jackpot edge case)", () => {
+  // Defensive double-gate: the deriver itself filters bestPick to
+  // profit > 0 now (after the post-ship review), but the formatter
+  // must also refuse to render a "Best: <market> (-N)" body if a
+  // future call-site passes one in. Prevents a regression from
+  // sneaking back through the formatter layer.
+  const body = formatWeeklyDigestBody({
+    wins: 1,
+    losses: 0,
+    netCredits: -50,
+    bestPick: { label: "Jackpot underpay", profit: -50 },
+  });
+  assert.equal(body, "This week: -50 credits (1 win, 0 losses).");
+});
+
 test("title is the documented constant", () => {
   assert.equal(WEEKLY_DIGEST_TITLE, "Your week in predictions");
 });

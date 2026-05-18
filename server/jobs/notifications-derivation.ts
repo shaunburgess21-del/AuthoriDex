@@ -806,6 +806,12 @@ async function derivePositionMoveAlerts(): Promise<number> {
       });
       if (!evaluation) continue;
 
+      // Cooldown is per-(user, market, entry) — not per-(user, market) —
+      // so a user holding both UP and DOWN shares on the same market
+      // still gets two distinct alerts when the price diverges. The
+      // metadata JSON predicate filters within the indexed range
+      // (userKindIdx covers `userId, kind, createdAt`); PG falls back
+      // to a small range-scan + filter rather than a seq scan.
       const [recent] = await db
         .select({ id: notifications.id })
         .from(notifications)
@@ -815,6 +821,7 @@ async function derivePositionMoveAlerts(): Promise<number> {
             eq(notifications.kind, "position_move_alert"),
             eq(notifications.entityType, "market"),
             eq(notifications.entityId, pos.marketId),
+            sql`${notifications.metadata}->>'entryId' = ${pos.entryId}`,
             gte(notifications.createdAt, cooldownSince),
           ),
         )
@@ -958,7 +965,12 @@ async function deriveWeeklyDigest(): Promise<number> {
         wins += 1;
         const profit = payout - stake;
         netCredits += profit;
-        if (!bestPick || profit > bestPick.profit) {
+        // Best-pick callout: require profit > 0. Jackpot pari-mutuel
+        // pools that pay out less than the stake can produce a
+        // `status=won && payout > 0 && profit < 0` row; without this
+        // guard the body would render "Best: <market> (-50)" which
+        // reads worse than no best-pick line at all.
+        if (profit > 0 && (!bestPick || profit > bestPick.profit)) {
           bestPick = {
             label: bet.personName ?? bet.marketTitle ?? "Top pick",
             profit,
@@ -1058,14 +1070,19 @@ async function derivePositionResolutionImminent(): Promise<number> {
   for (const market of imminentMarkets) {
     if (!market.endAt) continue;
 
-    // Per-user net shares on this market. Aggregate buys minus sells
-    // across all entries — for the heads-up purpose we don't need
-    // per-entry breakdown (the user can see that on the market page).
-    const positionRows = await db
+    // Per-user net shares on this market, aggregated in SQL so a
+    // weekly market with 1000+ bets doesn't ship every row to the
+    // app. We don't need per-entry breakdown for the heads-up
+    // (users can see that on the market page).
+    //
+    // `shareCount` is a numeric column and Drizzle returns SUM as a
+    // string — Number() at read time keeps the type plumbing simple.
+    // HAVING filters to only users with a real net position so we
+    // don't hand zero/negative rows back to the JS loop at all.
+    const netRows = await db
       .select({
         userId: marketBets.userId,
-        actionType: marketBets.actionType,
-        shareCount: marketBets.shareCount,
+        netShares: sql<string>`SUM(CASE WHEN ${marketBets.actionType} = 'buy' THEN ${marketBets.shareCount}::numeric ELSE -${marketBets.shareCount}::numeric END)`,
       })
       .from(marketBets)
       .innerJoin(profiles, eq(profiles.id, marketBets.userId))
@@ -1075,26 +1092,22 @@ async function derivePositionResolutionImminent(): Promise<number> {
           eq(profiles.isAgent, false),
           inArray(marketBets.actionType, ["buy", "sell"]),
         ),
+      )
+      .groupBy(marketBets.userId)
+      .having(
+        sql`SUM(CASE WHEN ${marketBets.actionType} = 'buy' THEN ${marketBets.shareCount}::numeric ELSE -${marketBets.shareCount}::numeric END) > 0.5`,
       );
 
-    if (positionRows.length === 0) continue;
-
-    // Aggregate: net = sum(buy.shares) - sum(sell.shares) per user.
-    const netByUser = new Map<string, number>();
-    for (const row of positionRows) {
-      const shares = Number(row.shareCount ?? 0);
-      if (!Number.isFinite(shares)) continue;
-      const delta = row.actionType === "buy" ? shares : -shares;
-      netByUser.set(row.userId, (netByUser.get(row.userId) ?? 0) + delta);
-    }
+    if (netRows.length === 0) continue;
 
     const hoursRemaining =
       (market.endAt.getTime() - Date.now()) / (60 * 60 * 1000);
     const subjectLabel = market.personName ?? market.title ?? "Your position";
     const href = market.slug ? `/markets/${market.slug}` : `/me/predictions`;
 
-    for (const [userId, netShares] of netByUser) {
-      if (netShares <= 0.5) continue;
+    for (const { userId, netShares: netSharesRaw } of netRows) {
+      const netShares = Number(netSharesRaw ?? 0);
+      if (!Number.isFinite(netShares) || netShares <= 0.5) continue;
 
       const { title, body } = formatResolutionImminentNotification({
         subjectLabel,
