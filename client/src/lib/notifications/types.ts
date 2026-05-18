@@ -10,6 +10,7 @@ export type NotificationKind =
   | "market_resolved"
   | "market_closing_soon"
   | "market_void_refund"
+  | "position_move_alert"
   | "favorite_rank_cross"
   | "favorite_hot_mover"
   | "favorite_new_market"

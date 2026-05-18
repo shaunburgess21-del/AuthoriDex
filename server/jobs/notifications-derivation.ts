@@ -13,6 +13,13 @@ import {
 import { and, desc, eq, gte, inArray, isNull, lte, lt, sql } from "drizzle-orm";
 import { log } from "../log";
 import { createNotification } from "../services/notifications";
+import { loadAmmPositionsFor } from "../services/amm-positions";
+import {
+  buildPositionMoveNotification,
+  evaluatePositionMove,
+  POSITION_MOVE_MIN_NOTIONAL_DEFAULT,
+  POSITION_MOVE_PCT_THRESHOLD_DEFAULT,
+} from "./position-move-notification";
 import { STREAK_MILESTONES } from "@shared/streak-config";
 
 /**
@@ -708,6 +715,141 @@ async function deriveCreditsLow(): Promise<number> {
   return inserted;
 }
 
+// Position move alert tunables. Default thresholds defined in the
+// pure helper so unit tests can pin the same values; the cooldown
+// (how long to silence the same (user, market, entry) after a fire)
+// lives here because it's a deriver-level concern, not a wording one.
+const POSITION_MOVE_COOLDOWN_HOURS = 12;
+
+/**
+ * "Your position moved significantly" deriver.
+ *
+ * Scans every non-agent profile that holds at least one open AMM buy,
+ * computes the percentage swing between their amortized cost basis
+ * (`netCreditsIn`) and the current realizable sell quote
+ * (`currentValue` — already floored, LMSR-convexity aware via
+ * `quoteSell`), and fires a `position_move_alert` when the move
+ * crosses ±POSITION_MOVE_PCT_THRESHOLD_DEFAULT (15%).
+ *
+ * Filters/gates layered on top:
+ *   - Dust gate: positions with `netCreditsIn < 100` are ignored
+ *     (a 10-credit position swinging 50% trains users to ignore the
+ *     kind).
+ *   - Cooldown: a 12h lookback on `notifications` for the same
+ *     (user, market, entry) — same shape as `favorite_hot_mover`.
+ *   - Idempotency: 12h time bucket key as a second-line defense if
+ *     the cooldown query races.
+ *   - Agent gate + market mute + prefs: handled by `createNotification`.
+ *
+ * Why per-user iteration: `loadAmmPositionsFor` is the existing tested
+ * helper that returns AmmOpenPosition[] for one user with all the math
+ * (avgEntryPrice, currentValue, quoteSell fallbacks) baked in. With
+ * the userbase small the per-user loop is fine; we can batch later by
+ * lifting the helper to multi-user if cron-tick latency creeps up.
+ */
+async function derivePositionMoveAlerts(): Promise<number> {
+  // Find users who hold any open AMM buy on an OPEN or CLOSED_PENDING
+  // market. We restrict to non-agents here so the per-user position
+  // helper isn't called 56 times for nothing — the dispatcher would
+  // still gate at insert, but the upstream work is wasted.
+  const userRows = await db
+    .select({ userId: marketBets.userId })
+    .from(marketBets)
+    .innerJoin(predictionMarkets, eq(marketBets.marketId, predictionMarkets.id))
+    .innerJoin(profiles, eq(profiles.id, marketBets.userId))
+    .where(
+      and(
+        eq(predictionMarkets.engine, "amm"),
+        eq(profiles.isAgent, false),
+        eq(marketBets.actionType, "buy"),
+        inArray(predictionMarkets.status, ["OPEN", "CLOSED_PENDING"]),
+      ),
+    )
+    .groupBy(marketBets.userId);
+
+  if (userRows.length === 0) return 0;
+
+  // 12h bucket → guarantees max one notification per (user, market,
+  // entry) per 12h even if the cooldown query somehow races.
+  const twelveHourBucketMs = 12 * 60 * 60 * 1000;
+  const bucket = Math.floor(Date.now() / twelveHourBucketMs);
+
+  const cooldownSince = sql`NOW() - make_interval(hours => ${POSITION_MOVE_COOLDOWN_HOURS})`;
+
+  let inserted = 0;
+  for (const { userId } of userRows) {
+    let positions;
+    try {
+      positions = await loadAmmPositionsFor(userId);
+    } catch (err) {
+      log(
+        `[NotificationsDerivation] position_move: loadAmmPositionsFor failed ` +
+          `for ${userId}: ${(err as Error)?.message ?? err}`,
+      );
+      continue;
+    }
+
+    for (const pos of positions) {
+      const evaluation = evaluatePositionMove({
+        netCreditsIn: pos.netCreditsIn,
+        currentValue: pos.currentValue,
+        pctThreshold: POSITION_MOVE_PCT_THRESHOLD_DEFAULT,
+        minNotional: POSITION_MOVE_MIN_NOTIONAL_DEFAULT,
+      });
+      if (!evaluation) continue;
+
+      const [recent] = await db
+        .select({ id: notifications.id })
+        .from(notifications)
+        .where(
+          and(
+            eq(notifications.userId, userId),
+            eq(notifications.kind, "position_move_alert"),
+            eq(notifications.entityType, "market"),
+            eq(notifications.entityId, pos.marketId),
+            gte(notifications.createdAt, cooldownSince),
+          ),
+        )
+        .limit(1);
+      if (recent) continue;
+
+      const subjectLabel = pos.personName ?? pos.marketTitle ?? "Your position";
+      const { title, body } = buildPositionMoveNotification({
+        subjectLabel,
+        evaluation,
+      });
+
+      const href = pos.marketSlug ? `/markets/${pos.marketSlug}` : `/me/predictions`;
+
+      const id = await createNotification({
+        userId,
+        kind: "position_move_alert",
+        title,
+        body,
+        href,
+        entityType: "market",
+        entityId: pos.marketId,
+        marketId: pos.marketId,
+        metadata: {
+          marketId: pos.marketId,
+          entryId: pos.entryId,
+          direction: evaluation.direction,
+          pctMove: evaluation.pctMove,
+          netCreditsIn: evaluation.netCreditsIn,
+          currentValue: evaluation.currentValue,
+        },
+        // groupKey collapses prior alerts on the same position so the
+        // panel shows one row per (user, market, entry) rather than a
+        // long ladder as the price oscillates above/below threshold.
+        groupKey: `position_move_alert:${userId}:${pos.marketId}:${pos.entryId}`,
+        idempotencyKey: `position_move:${userId}:${pos.marketId}:${pos.entryId}:${bucket}`,
+      });
+      if (id) inserted += 1;
+    }
+  }
+  return inserted;
+}
+
 /**
  * Single entry point for the scheduler. Wraps every derivation in an
  * advisory lock so concurrent ticks (e.g. blue/green deploys) can't
@@ -736,6 +878,7 @@ export async function runNotificationsDerivation(): Promise<NotificationsDerivat
       ["market_closing_soon_dismiss", dismissClosedMarketClosingSoon],
       ["streak_milestone", deriveStreakMilestones],
       ["credits_low", deriveCreditsLow],
+      ["position_move_alert", derivePositionMoveAlerts],
     ];
     for (const [name, fn] of steps) {
       try {

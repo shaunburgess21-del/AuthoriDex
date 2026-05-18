@@ -72,6 +72,13 @@ export const NOTIFICATION_REGISTRY: Record<NotificationKind, KindMeta> = {
     category: "predictions",
     priority: 1,
   },
+  position_move_alert: {
+    icon: TrendingUp,
+    accent: PREDICTIONS_ACCENT,
+    bgAccent: PREDICTIONS_BG,
+    category: "predictions",
+    priority: 0,
+  },
   favorite_rank_cross: {
     icon: TrendingUp,
     accent: FAVORITES_ACCENT,
