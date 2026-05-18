@@ -35,6 +35,7 @@ import { getUpDownWinningState, UP_DOWN_STATE_LABELS } from "@/lib/updownState";
 import { formatVolumeCredits } from "@/lib/formatNumber";
 import { goBack } from "@/lib/goBack";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
+import { useNativeMarketDetail } from "@/hooks/useNativeMarketDetail";
 import {
   type ApiAmmStateBlock,
   pricesFor,
@@ -108,32 +109,29 @@ export default function UpDownDetailPage() {
     goBack(setLocation, "/predict");
   }, [setLocation]);
 
-  const { data: allUpdownMarkets, isLoading } = useQuery<any[]>({
-    queryKey: ["/api/native-markets/updown"],
-    // Keep the live trend score / pool numbers fresh while the user
-    // is on the page. 60s matches OutcomePathChart;
-    // we pause when the market closes since nothing's changing.
-    refetchInterval: (query) => {
-      if (typeof document !== "undefined" && document.hidden) return false;
-      const list = query.state.data as any[] | undefined;
-      const found = list?.find((m: any) => m.id === marketId);
-      if (found && found.status && found.status !== "OPEN") return false;
-      return 60_000;
+  const { market, isLoading, notFound } = useNativeMarketDetail(
+    marketId,
+    "/api/native-markets/updown",
+    {
+      refetchInterval: (query: { state: { data?: unknown } }) => {
+        if (typeof document !== "undefined" && document.hidden) return false;
+        const list = query.state.data as any[] | undefined;
+        const found = list?.find((m: any) => m.id === marketId);
+        if (found && found.status && found.status !== "OPEN") return false;
+        return 60_000;
+      },
     },
-    refetchOnWindowFocus: true,
-  });
+  );
 
   const serverCutoff = useMemo(() => {
-    if (!allUpdownMarkets) return null;
-    const found = allUpdownMarkets.find((m: any) => m.id === marketId);
-    return found?.bettingCutoff || null;
-  }, [allUpdownMarkets, marketId]);
+    if (!market) return null;
+    return (market as { bettingCutoff?: string | null }).bettingCutoff || null;
+  }, [market]);
 
   const serverResolutionDeadline = useMemo(() => {
-    if (!allUpdownMarkets) return null;
-    const found = allUpdownMarkets.find((m: any) => m.id === marketId);
-    return found?.endAt || null;
-  }, [allUpdownMarkets, marketId]);
+    if (!market) return null;
+    return (market as { endAt?: string | null }).endAt || null;
+  }, [market]);
 
   const marketState = useMarketCycle({ bettingCutoff: serverCutoff, resolutionDeadline: serverResolutionDeadline });
   const isMarketClosed = marketState.status !== "OPEN";
@@ -148,11 +146,6 @@ export default function UpDownDetailPage() {
     queryKey: ["/api/me/predictions"],
     enabled: !!user,
   });
-
-  const market = useMemo(() => {
-    if (!allUpdownMarkets) return null;
-    return allUpdownMarkets.find((m: any) => m.id === marketId) || null;
-  }, [allUpdownMarkets, marketId]);
 
   const hydrated = useMemo(() => {
     if (!market) return null;
@@ -576,7 +569,7 @@ export default function UpDownDetailPage() {
     return <MarketDetailSkeleton variant="weekly" />;
   }
 
-  if (!market || !hydrated) {
+  if (notFound || !market || !hydrated) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4 px-4">
         <TrendingUp className="h-12 w-12 text-muted-foreground" />

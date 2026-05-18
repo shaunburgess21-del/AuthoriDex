@@ -22,6 +22,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { OutcomePathChart } from "@/components/predict/OutcomePathChart";
 import { inferPredictionDirection } from "@/pages/me/predictions-utils";
+import { getRecentActivityMarketPath } from "@/lib/predict-display";
 import { cn } from "@/lib/utils";
 
 export interface MyPredictionCardData {
@@ -123,12 +124,27 @@ function getStatusBadge(status: MyPredictionCardData["result"]) {
   }
 }
 
-function getDirectionIcon(direction: string) {
+function getDirectionIcon(direction: string, result?: MyPredictionCardData["result"]) {
+  const won = result === "won";
   switch (direction) {
     case "up":
-      return <TrendingUp className="h-4 w-4 text-green-600 dark:text-green-400" />;
+      return (
+        <TrendingUp
+          className={cn(
+            "h-4 w-4",
+            won ? "text-emerald-500 dark:text-emerald-400" : "text-green-600 dark:text-green-400",
+          )}
+        />
+      );
     case "down":
-      return <TrendingDown className="h-4 w-4 text-red-600 dark:text-red-400" />;
+      return (
+        <TrendingDown
+          className={cn(
+            "h-4 w-4",
+            won ? "text-emerald-500 dark:text-emerald-400" : "text-red-600 dark:text-red-400",
+          )}
+        />
+      );
     default:
       return <Target className="h-4 w-4 text-violet-600 dark:text-violet-400" />;
   }
@@ -175,10 +191,16 @@ export function MyPredictionCard({
       ? "Your profile is private. This would be hidden from others."
       : "Visible on your public profile. Click to hide.";
 
+  const marketDetailPath = getRecentActivityMarketPath(
+    prediction.marketSlug,
+    prediction.marketType,
+    prediction.marketId,
+  );
+
   const handleCardClick = () => {
     if (openMode) {
-      if (prediction.marketSlug) {
-        setLocation(`/predict/${prediction.marketSlug}`);
+      if (marketDetailPath !== "/predict") {
+        setLocation(marketDetailPath);
       }
       return;
     }
@@ -238,7 +260,7 @@ export function MyPredictionCard({
               {prediction.marketTitle || "Prediction"}
             </p>
             <div className="flex items-center gap-1.5 mt-1 text-xs text-muted-foreground">
-              {getDirectionIcon(direction)}
+              {getDirectionIcon(direction, prediction.result)}
               <span>
                 Picked:{" "}
                 <span className="text-foreground font-medium">
@@ -454,14 +476,14 @@ export function MyPredictionCard({
                 </div>
               </div>
 
-              {prediction.marketSlug && (
+              {marketDetailPath !== "/predict" && (
                 <Button
                   variant="outline"
                   size="sm"
                   className="w-full"
                   onClick={(e) => {
                     e.stopPropagation();
-                    setLocation(`/markets/${prediction.marketSlug}`);
+                    setLocation(marketDetailPath);
                   }}
                 >
                   View Market

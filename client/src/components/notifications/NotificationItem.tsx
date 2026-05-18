@@ -11,6 +11,22 @@ import {
   useMarkNotificationGroupRead,
   useMarkNotificationRead,
 } from "@/hooks/useNotifications";
+import { getRecentActivityMarketPath } from "@/lib/predict-display";
+
+function resolveNotificationHref(notification: NotificationRow): string | null {
+  if (!notification.href) return null;
+  const marketType =
+    notification.metadata &&
+    typeof notification.metadata === "object" &&
+    typeof notification.metadata.marketType === "string"
+      ? notification.metadata.marketType
+      : null;
+  if (notification.entityType === "market" && notification.entityId && marketType) {
+    const path = getRecentActivityMarketPath(null, marketType, notification.entityId);
+    if (path !== "/predict") return path;
+  }
+  return notification.href;
+}
 
 interface NotificationItemProps {
   notification: NotificationRow;
@@ -59,7 +75,8 @@ export function NotificationItem({ notification, onNavigate }: NotificationItemP
         ? "text-red-600 dark:text-red-400"
         : meta.accent;
   const isUnread = !notification.readAt;
-  const isInternalLink = !!notification.href && notification.href.startsWith("/");
+  const resolvedHref = resolveNotificationHref(notification);
+  const isInternalLink = !!resolvedHref && resolvedHref.startsWith("/");
   // True when this row stands in for additional collapsed rows behind
   // it (`flattenNotifications` set `collapsedCount` and we have a
   // groupKey to address the bundle). The click/dismiss handlers route
@@ -76,11 +93,11 @@ export function NotificationItem({ notification, onNavigate }: NotificationItemP
         markRead.mutate(notification.id);
       }
     }
-    if (notification.href) {
+    if (resolvedHref) {
       if (isInternalLink) {
-        setLocation(notification.href);
+        setLocation(resolvedHref);
       } else {
-        window.location.assign(notification.href);
+        window.location.assign(resolvedHref);
       }
     }
     onNavigate?.();

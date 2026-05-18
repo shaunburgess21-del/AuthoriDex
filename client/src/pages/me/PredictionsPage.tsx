@@ -36,6 +36,7 @@ import { useShareCard } from "@/contexts/ShareCardContext";
 import { buildPositionShareData, inferDirection } from "@/lib/share-data";
 import { inferPredictionDirection } from "@/pages/me/predictions-utils";
 import { appendShareAttribution } from "@/lib/share";
+import { getRecentActivityMarketPath } from "@/lib/predict-display";
 
 type UserPrediction = MyPredictionCardData;
 
@@ -1683,17 +1684,12 @@ function OpenTabPanel({
             key={`amm-${p.marketId}-${p.entryId}`}
             position={p}
             onView={() => {
-              const path =
-                p.marketType === "h2h"
-                  ? `/predict/h2h/${p.marketId}`
-                  : p.marketType === "updown"
-                    ? `/predict/updown/${p.marketId}`
-                    : p.marketType === "race" || p.marketType === "gainer"
-                      ? `/predict/race/${p.marketId}`
-                      : p.marketSlug
-                        ? `/predict/${p.marketSlug}`
-                        : null;
-              if (path) setLocation(path);
+              const path = getRecentActivityMarketPath(
+                p.marketSlug,
+                p.marketType,
+                p.marketId,
+              );
+              if (path !== "/predict") setLocation(path);
             }}
             onShare={() => onSharePosition(p)}
           />

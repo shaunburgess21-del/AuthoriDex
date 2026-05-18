@@ -21,8 +21,8 @@ export interface UseShareCardImageOptions {
  *   large cards (1080+) to stay under mobile memory limits.
  * - `cacheBust: true` because we re-use the same DOM node across aspect
  *   toggles and don't want stale image decodes.
- * - `skipFonts: false` — we rely on the site's Google fonts; html-to-image
- *   embeds stylesheet rules so the snapshot matches the preview.
+ * - `skipFonts: true` — avoids SecurityError when inlining cross-origin
+ *   Google Fonts CSS; inline font stacks on the card provide fallbacks.
  */
 export function useShareCardImage({ width, height, pixelRatio }: UseShareCardImageOptions) {
   const cardRef = useRef<HTMLDivElement | null>(null);
@@ -36,6 +36,7 @@ export function useShareCardImage({ width, height, pixelRatio }: UseShareCardIma
     height,
     pixelRatio: effectivePixelRatio,
     cacheBust: true,
+    skipFonts: true,
     // Match the share card background so anti-aliased corners don't pick up
     // the page body color.
     backgroundColor: "#0B0B1B",

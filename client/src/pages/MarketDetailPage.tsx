@@ -650,6 +650,11 @@ export default function MarketDetailPage() {
   // URL and returns to wherever the user actually came from.
   useEffect(() => {
     if (!market?.id || !market?.marketType) return;
+    // Resolved / void natives stay on this page — the OPEN-only native
+    // list feed used to make /predict/updown/:id show "Market not found"
+    // after settlement. OPEN markets still redirect to the polished
+    // native detail surfaces.
+    if (market.status !== "OPEN") return;
     const dest =
       market.marketType === "updown" ? `/predict/updown/${market.id}` :
       market.marketType === "h2h"    ? `/predict/h2h/${market.id}` :
@@ -658,7 +663,7 @@ export default function MarketDetailPage() {
     if (dest) {
       setLocation(dest, { replace: true });
     }
-  }, [market?.id, market?.marketType, setLocation]);
+  }, [market?.id, market?.marketType, market?.status, setLocation]);
 
   // The page used to fetch /api/me/predictions to surface a per-market
   // "your prediction" pill list. That responsibility now belongs to

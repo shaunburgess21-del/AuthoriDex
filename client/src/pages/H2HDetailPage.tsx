@@ -32,6 +32,7 @@ import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { goBack } from "@/lib/goBack";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
+import { useNativeMarketDetail } from "@/hooks/useNativeMarketDetail";
 import {
   type ApiAmmStateBlock,
   pricesFor,
@@ -109,31 +110,29 @@ export default function H2HDetailPage() {
    */
   const [modalIntent, setModalIntent] = useState<"buy" | "sell">("buy");
 
-  const { data: allH2hMarkets, isLoading } = useQuery<any[]>({
-    queryKey: ["/api/native-markets/h2h"],
-    // Keep live trend scores / pool numbers fresh while the user is
-    // on the page. 60s matches OutcomePathChart.
-    refetchInterval: (query) => {
-      if (typeof document !== "undefined" && document.hidden) return false;
-      const list = query.state.data as any[] | undefined;
-      const found = list?.find((m: any) => m.id === marketId);
-      if (found && found.status && found.status !== "OPEN") return false;
-      return 60_000;
+  const { market, isLoading, notFound } = useNativeMarketDetail(
+    marketId,
+    "/api/native-markets/h2h",
+    {
+      refetchInterval: (query: { state: { data?: unknown } }) => {
+        if (typeof document !== "undefined" && document.hidden) return false;
+        const list = query.state.data as any[] | undefined;
+        const found = list?.find((m: any) => m.id === marketId);
+        if (found && found.status && found.status !== "OPEN") return false;
+        return 60_000;
+      },
     },
-    refetchOnWindowFocus: true,
-  });
+  );
 
   const serverCutoff = useMemo(() => {
-    if (!allH2hMarkets) return null;
-    const found = allH2hMarkets.find((m: any) => m.id === marketId);
-    return found?.bettingCutoff || null;
-  }, [allH2hMarkets, marketId]);
+    if (!market) return null;
+    return (market as { bettingCutoff?: string | null }).bettingCutoff || null;
+  }, [market]);
 
   const serverResolutionDeadline = useMemo(() => {
-    if (!allH2hMarkets) return null;
-    const found = allH2hMarkets.find((m: any) => m.id === marketId);
-    return found?.endAt || null;
-  }, [allH2hMarkets, marketId]);
+    if (!market) return null;
+    return (market as { endAt?: string | null }).endAt || null;
+  }, [market]);
 
   const marketState = useMarketCycle({ bettingCutoff: serverCutoff, resolutionDeadline: serverResolutionDeadline });
   const isMarketClosed = marketState.status !== "OPEN";
@@ -148,11 +147,6 @@ export default function H2HDetailPage() {
     queryKey: ["/api/me/predictions"],
     enabled: !!user,
   });
-
-  const market = useMemo(() => {
-    if (!allH2hMarkets) return null;
-    return allH2hMarkets.find((m: any) => m.id === marketId) || null;
-  }, [allH2hMarkets, marketId]);
 
   const hydrated = useMemo((): HydratedH2H | null => {
     if (!market) return null;
@@ -573,7 +567,7 @@ export default function H2HDetailPage() {
     return <MarketDetailSkeleton variant="weekly" />;
   }
 
-  if (!market || !hydrated) {
+  if (notFound || !market || !hydrated) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4 px-4">
         <Swords className="h-12 w-12 text-muted-foreground" />

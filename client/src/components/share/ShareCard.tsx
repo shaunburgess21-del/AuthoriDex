@@ -125,7 +125,12 @@ interface ShareCardProps {
   aspect: ShareAspect;
 }
 
-const SITE_URL = "voxdex.app";
+function getSiteDisplayHost(): string {
+  if (typeof window !== "undefined" && window.location.hostname) {
+    return window.location.hostname.replace(/^www\./, "");
+  }
+  return "voxdex.com";
+}
 
 function formatScore(n: number): string {
   if (!Number.isFinite(n)) return "—";
@@ -259,20 +264,15 @@ function WinLayout({
   isLandscape: boolean;
 }) {
   const pnl = data.payout - data.stakeAmount;
-  const directionAccent =
-    data.direction === "up"
-      ? "#10B981"
-      : data.direction === "down"
-        ? "#F43F5E"
-        : "#A855F7";
+  const winAccent = "#34D399";
+  const hasDirectionalVerb = data.direction === "up" || data.direction === "down";
   const directionLabel =
-    data.direction === "up" ? "UP" : data.direction === "down" ? "DOWN" : "PICKED";
-  const DirectionIcon =
-    data.direction === "up"
-      ? TrendingUp
-      : data.direction === "down"
-        ? TrendingDown
-        : Target;
+    data.direction === "up" ? "UP" : data.direction === "down" ? "DOWN" : "";
+  const calledEyebrow = hasDirectionalVerb
+    ? `Called ${directionLabel}`
+    : data.entryLabel?.trim()
+      ? `Called ${data.entryLabel.trim()}`
+      : "Prediction won";
 
   // Shared content: header (brand) + hero (avatar + title) + result + footer
   return (
@@ -309,7 +309,7 @@ function WinLayout({
                 isLandscape ? "text-[16px]" : "text-[18px]",
               )}
             >
-              Called {directionLabel}
+              {calledEyebrow}
             </p>
             <p
               className={cn(
@@ -333,21 +333,21 @@ function WinLayout({
           <div
             className="rounded-3xl border p-8"
             style={{
-              borderColor: `${directionAccent}55`,
-              background: `linear-gradient(135deg, ${directionAccent}20 0%, rgba(255,255,255,0.03) 100%)`,
+              borderColor: `${winAccent}55`,
+              background: `linear-gradient(135deg, ${winAccent}20 0%, rgba(255,255,255,0.03) 100%)`,
             }}
           >
             <div className="flex items-center gap-3 mb-3">
               <div
                 className="flex items-center justify-center rounded-xl"
                 style={{
-                  background: `${directionAccent}22`,
-                  color: directionAccent,
+                  background: `${winAccent}22`,
+                  color: winAccent,
                   width: isLandscape ? 48 : 56,
                   height: isLandscape ? 48 : 56,
                 }}
               >
-                <DirectionIcon
+                <Trophy
                   style={{ width: isLandscape ? 28 : 32, height: isLandscape ? 28 : 32 }}
                 />
               </div>
@@ -356,7 +356,7 @@ function WinLayout({
                   "uppercase tracking-[0.2em] font-semibold",
                   isLandscape ? "text-[15px]" : "text-[17px]",
                 )}
-                style={{ color: directionAccent }}
+                style={{ color: winAccent }}
               >
                 Prediction Won
               </p>
@@ -1162,7 +1162,7 @@ function Footer({
           letterSpacing: "0.08em",
         }}
       >
-        {SITE_URL}
+        {getSiteDisplayHost()}
       </p>
     </div>
   );

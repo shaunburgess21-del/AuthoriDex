@@ -9757,6 +9757,78 @@ Only return the JSON object.`;
         }
       }
 
+      // Enriched shape for native detail pages when the market is no
+      // longer in the OPEN-only /api/native-markets/:type feed (resolved
+      // / past-week markets users still deep-link to from notifications).
+      let nativeDetail: Record<string, unknown> | null = null;
+      const nativeTypes = ["updown", "h2h", "gainer"] as const;
+      if (nativeTypes.includes(market.marketType as (typeof nativeTypes)[number])) {
+        const nowForCutoff = new Date();
+        const engineKind: "parimutuel" | "amm" = market.engine === "amm" ? "amm" : "parimutuel";
+        const lifecycle = deriveNativeMarketLifecycle(market.endAt, nowForCutoff, engineKind);
+        const engagement = await getMarketEngagementPreview([market.id]);
+        const volume = Number(ammState?.totalUserCreditsIn ?? 0);
+        const lifecycleFields = {
+          bettingCutoff: lifecycle.bettingCutoff?.toISOString() ?? null,
+          resolutionDeadline: lifecycle.resolutionDeadline?.toISOString() ?? null,
+          lifecycleStatus: lifecycle.status,
+          isCutoffPassed: lifecycle.isCutoffPassed,
+        };
+
+        if (market.marketType === "updown") {
+          let person: (typeof trendingPeople.$inferSelect) | null = null;
+          if (market.personId) {
+            const [p] = await db
+              .select()
+              .from(trendingPeople)
+              .where(eq(trendingPeople.id, market.personId))
+              .limit(1);
+            person = p ?? null;
+          }
+          nativeDetail = {
+            ...market,
+            ...lifecycleFields,
+            person,
+            entries,
+            ammState,
+            volume,
+            activeParticipantCount:
+              engagement.activeParticipantCountByMarket.get(market.id) || 0,
+            recentParticipants:
+              engagement.recentParticipantsByMarket.get(market.id) || [],
+            latestRationale: engagement.latestRationaleByMarket.get(market.id) || null,
+          };
+        } else if (market.marketType === "h2h" || market.marketType === "gainer") {
+          const personEntryIds = entries
+            .map((e) => e.personId)
+            .filter((id): id is string => Boolean(id));
+          let personMap: Record<string, (typeof trendingPeople.$inferSelect)> = {};
+          if (personEntryIds.length > 0) {
+            const persons = await db
+              .select()
+              .from(trendingPeople)
+              .where(inArray(trendingPeople.id, personEntryIds));
+            personMap = Object.fromEntries(persons.map((p) => [p.id, p]));
+          }
+          const entriesWithPerson = entries.map((e) => ({
+            ...e,
+            person: e.personId ? personMap[e.personId] || null : null,
+          }));
+          nativeDetail = {
+            ...market,
+            ...lifecycleFields,
+            entries: entriesWithPerson,
+            ammState,
+            volume,
+            activeParticipantCount:
+              engagement.activeParticipantCountByMarket.get(market.id) || 0,
+            recentParticipants:
+              engagement.recentParticipantsByMarket.get(market.id) || [],
+            latestRationale: engagement.latestRationaleByMarket.get(market.id) || null,
+          };
+        }
+      }
+
       res.json({
         market: {
           id: market.id,
@@ -9785,6 +9857,7 @@ Only return the JSON object.`;
           personId: e.personId,
         })),
         ammState,
+        nativeDetail,
       });
     } catch (err: any) {
       console.error("[GET /api/markets/:id] failed:", err);

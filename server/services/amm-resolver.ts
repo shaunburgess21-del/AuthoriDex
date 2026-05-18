@@ -257,12 +257,19 @@ async function emitResolutionSideEffects(result: ResolveAmmMarketResult): Promis
 
   try {
     const [marketMeta] = await db
-      .select({ title: predictionMarkets.title, slug: predictionMarkets.slug })
+      .select({
+        title: predictionMarkets.title,
+        slug: predictionMarkets.slug,
+        marketType: predictionMarkets.marketType,
+      })
       .from(predictionMarkets)
       .where(eq(predictionMarkets.id, marketId))
       .limit(1);
     const marketTitle = marketMeta?.title ?? "your prediction";
-    const href = marketMeta?.slug ? `/markets/${marketMeta.slug}` : `/me/predictions`;
+    const { getRecentActivityMarketPath } = await import("@shared/lib/market-paths");
+    const href = marketMeta
+      ? getRecentActivityMarketPath(marketMeta.slug, marketMeta.marketType, marketId)
+      : "/me/predictions";
 
     if (outcome === "voided") {
       // Pull refund ledger rows (settledUserCount > 0 path) and fan
@@ -293,7 +300,11 @@ async function emitResolutionSideEffects(result: ResolveAmmMarketResult): Promis
           entityType: "market",
           entityId: marketId,
           marketId,
-          metadata: { outcome: "voided", refund },
+          metadata: {
+            outcome: "voided",
+            refund,
+            marketType: marketMeta?.marketType,
+          },
           idempotencyKey: `market_void_refund:${marketId}:${row.userId}`,
         });
       }
@@ -394,6 +405,7 @@ async function emitResolutionSideEffects(result: ResolveAmmMarketResult): Promis
         entityId: marketId,
         marketId,
         metadata: {
+          marketType: marketMeta?.marketType,
           betId: bet.id,
           status: bet.status,
           payout,

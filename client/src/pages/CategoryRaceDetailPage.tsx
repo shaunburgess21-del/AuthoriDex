@@ -31,6 +31,7 @@ import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { goBack } from "@/lib/goBack";
 import { formatVolumeCredits } from "@/lib/formatNumber";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
+import { useNativeMarketDetail } from "@/hooks/useNativeMarketDetail";
 import { pricesFor, snapshotFromApi } from "@/lib/ammClient";
 import { AmmPriceHistoryChart } from "@/components/predict/AmmPriceHistoryChart";
 import { MarketActivityFeed } from "@/components/predict/MarketActivityFeed";
@@ -99,31 +100,29 @@ export default function CategoryRaceDetailPage() {
   const pendingShareCandidateRef = useRef<GainerCandidate | null>(null);
   const candidateSearchRef = useRef<HTMLInputElement | null>(null);
 
-  const { data: allGainerMarkets, isLoading } = useQuery<any[]>({
-    queryKey: ["/api/native-markets/gainer"],
-    // Keep live % gain numbers fresh while the user is on the page.
-    // 60s matches OutcomePathChart.
-    refetchInterval: (query) => {
-      if (typeof document !== "undefined" && document.hidden) return false;
-      const list = query.state.data as any[] | undefined;
-      const found = list?.find((m: any) => m.id === marketId);
-      if (found && found.status && found.status !== "OPEN") return false;
-      return 60_000;
+  const { market, isLoading, notFound } = useNativeMarketDetail(
+    marketId,
+    "/api/native-markets/gainer",
+    {
+      refetchInterval: (query: { state: { data?: unknown } }) => {
+        if (typeof document !== "undefined" && document.hidden) return false;
+        const list = query.state.data as any[] | undefined;
+        const found = list?.find((m: any) => m.id === marketId);
+        if (found && found.status && found.status !== "OPEN") return false;
+        return 60_000;
+      },
     },
-    refetchOnWindowFocus: true,
-  });
+  );
 
   const serverCutoff = useMemo(() => {
-    if (!allGainerMarkets) return null;
-    const found = allGainerMarkets.find((m: any) => m.id === marketId);
-    return found?.bettingCutoff || null;
-  }, [allGainerMarkets, marketId]);
+    if (!market) return null;
+    return (market as { bettingCutoff?: string | null }).bettingCutoff || null;
+  }, [market]);
 
   const serverResolutionDeadline = useMemo(() => {
-    if (!allGainerMarkets) return null;
-    const found = allGainerMarkets.find((m: any) => m.id === marketId);
-    return found?.endAt || null;
-  }, [allGainerMarkets, marketId]);
+    if (!market) return null;
+    return (market as { endAt?: string | null }).endAt || null;
+  }, [market]);
 
   const marketState = useMarketCycle({ bettingCutoff: serverCutoff, resolutionDeadline: serverResolutionDeadline });
   const isMarketClosed = marketState.status !== "OPEN";
@@ -186,11 +185,6 @@ export default function CategoryRaceDetailPage() {
       placedAt: b.placedAt,
     }));
   }, [myPosition, marketId]);
-
-  const market = useMemo(() => {
-    if (!allGainerMarkets) return null;
-    return allGainerMarkets.find((m: any) => m.id === marketId) || null;
-  }, [allGainerMarkets, marketId]);
 
   const ammSnapshot = useMemo(
     () => snapshotFromApi((market as any)?.ammState ?? null),
@@ -559,7 +553,7 @@ export default function CategoryRaceDetailPage() {
     return <MarketDetailSkeleton variant="weekly" />;
   }
 
-  if (!market) {
+  if (notFound || !market) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4 px-4">
         <Trophy className="h-12 w-12 text-muted-foreground" />
