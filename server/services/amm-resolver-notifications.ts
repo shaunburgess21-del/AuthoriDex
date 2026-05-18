@@ -7,19 +7,27 @@
  * and `buildAmmVoidNotification` and fans the results through
  * `createNotification` with the appropriate idempotency keys.
  *
- * Calibration notes (see audit, Sprint: notification-calibration-fixes):
- *   - Returning `null` from `buildAmmResolutionNotification` is how we
- *     suppress the "won-but-fully-sold" edge case (payout=0 on a
- *     winner-side buy row). The user already realized P&L via their
- *     sell trades; pinging them with a self-contradictory
- *     "Stake returned — 0 credits (net -<stake>)" message was the
- *     original bug.
- *   - The "stake returned" branch is structurally unreachable in
- *     production AMM: a winning share always pays out 100 credits,
- *     so any non-zero `payout` strictly exceeds `stake` for a row
- *     marked `won`. The helper still degrades gracefully to a
- *     coherent "didn't land"-style message if it ever hits that
- *     theoretical case — no contradictory text leaks out.
+ * Branch matrix (see audit, Sprint: notification-calibration-fixes):
+ *   - `won && payout === 0` → null (suppressed). The user sold ALL
+ *     their winner-side shares before resolution, so they already
+ *     realized P&L via sells. Pinging them now with the original
+ *     "Stake returned — 0 credits (net -<stake>)" wording was the
+ *     bug visible in the Mark Cuban screenshot. The wallet and
+ *     positions tab are the source of truth for that outcome.
+ *   - `won && profit > 0` → "Your prediction won — +N credits". The
+ *     normal happy path: held the position through resolution, made
+ *     money.
+ *   - `won && profit === 0` → "Stake returned — N credits". Edge case
+ *     where the user bought at price=1.0 (parity) and the share paid
+ *     out 1:1. Structurally near-unreachable in LMSR pricing but the
+ *     wording is accurate for it. Gated behind `payout > 0` above so
+ *     this branch never fires with a self-contradictory "net -<stake>"
+ *     anymore.
+ *   - `!won` → "Your prediction didn't land". Lost the full stake.
+ *
+ * `won && profit < 0` is structurally impossible under current AMM
+ * pricing: max buy price is 1.0 credit/share and a winning share pays
+ * 1 credit, so `payout >= stake` for any winner-side row.
  */
 
 export interface AmmResolutionNotificationInput {
@@ -48,6 +56,13 @@ export function buildAmmResolutionNotification(
     return {
       title: `Your prediction won — ${signedProfit} credits`,
       body: `${marketTitle} resolved. Payout ${payout.toLocaleString("en-US")} credits (net ${signedProfit}).`,
+    };
+  }
+
+  if (won) {
+    return {
+      title: `Stake returned — ${payout.toLocaleString("en-US")} credits`,
+      body: `${marketTitle} resolved. Payout matched your stake (net ${signedProfit}).`,
     };
   }
 

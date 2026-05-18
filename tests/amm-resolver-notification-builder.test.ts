@@ -71,26 +71,38 @@ test("won-but-fully-sold (Mark Cuban case) → suppressed (null)", () => {
   assert.equal(built, null);
 });
 
-test("theoretical won + payout === stake (profit=0) degrades to 'didn't land' wording, never contradictory", () => {
-  // Structurally unreachable in production AMM (winning shares always
-  // pay 100 credits, so non-zero payout strictly exceeds stake), but
-  // we keep the assertion to lock the helper into "no contradictory
-  // text" behaviour even if pricing ever changes.
+test("won + payout === stake (profit=0, parity buy) → 'Stake returned' wording is accurate now that payout=0 is suppressed upstream", () => {
+  // Edge case in LMSR pricing where the user bought at price=1.0
+  // and a winning share paid out 1:1. The 'Stake returned' wording
+  // is semantically correct here — the original bug was only that
+  // this branch also fired for payout=0 (Mark Cuban case), which
+  // is now suppressed at the head of the helper.
   const built = buildAmmResolutionNotification({
-    marketTitle: "Edge case market",
+    marketTitle: "Parity buy market",
     won: true,
     stake: 200,
     payout: 200,
   });
-  assert.ok(built, "expected fallback message, not null");
-  assert.ok(
-    !built!.title.includes("Stake returned"),
-    `title must not claim 'Stake returned' for profit=0 (got: ${built!.title})`,
+  assert.ok(built, "expected a notification, got null");
+  assert.equal(built!.title, "Stake returned — 200 credits");
+  assert.equal(
+    built!.body,
+    "Parity buy market resolved. Payout matched your stake (net +0).",
   );
-  assert.ok(
-    !built!.body.includes("Payout matched your stake"),
-    `body must not claim 'Payout matched your stake' (got: ${built!.body})`,
-  );
+});
+
+test("won + payout=0 must NOT trigger the 'Stake returned' branch (regression guard for Mark Cuban bug)", () => {
+  // Belt-and-braces: the original bug was payout=0 falling into the
+  // 'Stake returned' branch and printing a self-contradictory
+  // 'net -<stake>' body. Even if a future edit reorders branches,
+  // this case must return null.
+  const built = buildAmmResolutionNotification({
+    marketTitle: "Regression guard",
+    won: true,
+    stake: 500,
+    payout: 0,
+  });
+  assert.equal(built, null);
 });
 
 test("void notification matches parimutuel template with thousands separator", () => {

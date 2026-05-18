@@ -221,10 +221,13 @@ export async function createNotification(input: CreateNotificationInput): Promis
     return null;
   }
 
+  // Identity check first: agents never read notifications, so dropping
+  // here saves the per-row prefs + mute lookups for the ~1680 agent
+  // notifications/week the resolver fanouts would otherwise generate.
+  if (await isAgentProfile(input.userId)) return null;
+
   const enabled = await isInAppEnabled(input.userId, meta.category);
   if (!enabled) return null;
-
-  if (await isAgentProfile(input.userId)) return null;
 
   if (input.marketId) {
     const muted = await isMarketMuted(input.userId, input.marketId);
