@@ -799,6 +799,10 @@ export const creditLedger = pgTable("credit_ledger", {
 }, (table) => ({
   uniqueIdempotency: unique().on(table.userId, table.idempotencyKey),
   userHistoryIdx: index("credit_ledger_user_history_idx").on(table.userId, table.createdAt),
+  // txn_type-first index for the /admin/amm/house aggregation and any
+  // future analytics that scan by txn_type independently of user_id.
+  // Added in migration 0064.
+  txnTypeCreatedAtIdx: index("credit_ledger_txn_type_created_at_idx").on(table.txnType, table.createdAt.desc()),
 }));
 
 export const insertCreditLedgerSchema = createInsertSchema(creditLedger).omit({
@@ -1555,7 +1559,14 @@ export const adminAuditLog = pgTable("admin_audit_log", {
   newData: jsonb("new_data"), // Snapshot after change
   metadata: jsonb("metadata"), // Additional context: { reason, ip_address, user_agent, etc. }
   createdAt: timestamp("created_at").notNull().defaultNow(),
-});
+}, (table) => ({
+  // Listing endpoint (/api/admin/audit-log) orders by createdAt DESC
+  // with LIMIT. The `(createdAt DESC)` index turns the top-N into an
+  // index scan; the `(adminId, createdAt DESC)` covers per-admin
+  // filtering. Added in migration 0064.
+  createdAtIdx: index("admin_audit_log_created_at_idx").on(table.createdAt.desc()),
+  adminIdCreatedAtIdx: index("admin_audit_log_admin_id_created_at_idx").on(table.adminId, table.createdAt.desc()),
+}));
 
 export const insertAdminAuditLogSchema = createInsertSchema(adminAuditLog).omit({
   id: true,
