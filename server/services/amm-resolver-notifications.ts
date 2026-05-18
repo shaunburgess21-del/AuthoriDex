@@ -8,12 +8,17 @@
  * `createNotification` with the appropriate idempotency keys.
  *
  * Branch matrix (see audit, Sprint: notification-calibration-fixes):
- *   - `won && payout === 0` → null (suppressed). The user sold ALL
- *     their winner-side shares before resolution, so they already
- *     realized P&L via sells. Pinging them now with the original
- *     "Stake returned — 0 credits (net -<stake>)" wording was the
- *     bug visible in the Mark Cuban screenshot. The wallet and
- *     positions tab are the source of truth for that outcome.
+ *   - `won && payout === 0 && preResolveSellProceeds > 0` →
+ *     "Your market resolved — you'd sold beforehand". The user sold
+ *     all their winner-side shares before resolution, so the on-row
+ *     payout is zero but they DID realise credits via the pre-close
+ *     sells. We surface that realised P&L so the bell entry matches
+ *     what their wallet already shows (Tier 1.7).
+ *   - `won && payout === 0` with no realised proceeds → null
+ *     (suppressed). Structurally near-unreachable (winning row with
+ *     zero payout and zero pre-close sells), but the guard avoids
+ *     the legacy "Stake returned — 0 credits (net -<stake>)" bug
+ *     that was visible in the Mark Cuban screenshot.
  *   - `won && profit > 0` → "Your prediction won — +N credits". The
  *     normal happy path: held the position through resolution, made
  *     money.
@@ -35,6 +40,16 @@ export interface AmmResolutionNotificationInput {
   won: boolean;
   stake: number;
   payout: number;
+  /**
+   * Total credits the user realised via winner-side sells BEFORE this
+   * market resolved. Only consulted on the `won && payout === 0`
+   * branch — i.e. when the on-row settlement payout was zero because
+   * the user had already exited their winning shares. Pass undefined
+   * (or omit) when the caller hasn't aggregated pre-close sells; the
+   * builder degrades to the legacy "suppress null" behaviour so older
+   * call sites don't get a worse experience.
+   */
+  preResolveSellProceeds?: number;
 }
 
 export interface AmmResolutionNotificationOutput {
@@ -45,9 +60,18 @@ export interface AmmResolutionNotificationOutput {
 export function buildAmmResolutionNotification(
   input: AmmResolutionNotificationInput,
 ): AmmResolutionNotificationOutput | null {
-  const { marketTitle, won, stake, payout } = input;
+  const { marketTitle, won, stake, payout, preResolveSellProceeds } = input;
 
-  if (won && payout === 0) return null;
+  if (won && payout === 0) {
+    const proceeds = preResolveSellProceeds ?? 0;
+    if (!Number.isFinite(proceeds) || proceeds <= 0) return null;
+    const netRealised = proceeds - stake;
+    const signedNet = `${netRealised >= 0 ? "+" : ""}${netRealised.toLocaleString("en-US")}`;
+    return {
+      title: `Your market resolved — you'd sold beforehand`,
+      body: `${marketTitle} resolved on your side. You'd already sold those shares for ${proceeds.toLocaleString("en-US")} credits (net ${signedNet}).`,
+    };
+  }
 
   const profit = won ? payout - stake : -stake;
   const signedProfit = `${profit >= 0 ? "+" : ""}${profit.toLocaleString("en-US")}`;

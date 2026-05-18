@@ -163,6 +163,13 @@ export const NOTIFICATION_REGISTRY: Record<NotificationKind, KindMeta> = {
     category: "account",
     priority: 1,
   },
+  trade_executed: {
+    icon: Wallet,
+    accent: PREDICTIONS_ACCENT,
+    bgAccent: PREDICTIONS_BG,
+    category: "predictions",
+    priority: 0,
+  },
   announcement: {
     icon: Megaphone,
     accent: SYSTEM_ACCENT,

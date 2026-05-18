@@ -56,12 +56,13 @@ test("lost → 'Your prediction didn't land' with stake amount", () => {
   );
 });
 
-test("won-but-fully-sold (Mark Cuban case) → suppressed (null)", () => {
+test("won-but-fully-sold without pre-close proceeds (back-compat) → suppressed (null)", () => {
   // Buy row marked status='won' but payoutAmount=0 because the user
-  // sold all their winner-side shares before resolution. Notifying
-  // here would print the self-contradictory
-  // "Stake returned — 0 credits (net -500)" message that this fix
-  // eliminates.
+  // sold all their winner-side shares before resolution. When the
+  // caller hasn't aggregated pre-close sells (preResolveSellProceeds
+  // omitted) the builder degrades to the legacy suppression, so older
+  // call sites don't regress into the self-contradictory
+  // "Stake returned — 0 credits (net -500)" message.
   const built = buildAmmResolutionNotification({
     marketTitle: "Mark Cuban: Up or Down?",
     won: true,
@@ -69,6 +70,86 @@ test("won-but-fully-sold (Mark Cuban case) → suppressed (null)", () => {
     payout: 0,
   });
   assert.equal(built, null);
+});
+
+test("won-but-fully-sold with profitable pre-close proceeds → 'sold beforehand' with positive net", () => {
+  // Tier 1.7: user bought 500 cr of the winning side, sold for 720 cr
+  // before resolution. Settlement row shows payout=0 (no shares left
+  // to pay out) but they DID realise +220 cr. Resolution ping should
+  // reflect that, not stay silent.
+  const built = buildAmmResolutionNotification({
+    marketTitle: "Mark Cuban: Up or Down?",
+    won: true,
+    stake: 500,
+    payout: 0,
+    preResolveSellProceeds: 720,
+  });
+  assert.ok(built, "expected a notification when sold-beforehand proceeds > 0");
+  assert.equal(built!.title, "Your market resolved — you'd sold beforehand");
+  assert.equal(
+    built!.body,
+    "Mark Cuban: Up or Down? resolved on your side. You'd already sold those shares for 720 credits (net +220).",
+  );
+});
+
+test("won-but-fully-sold with pre-close proceeds below stake → signed-negative net is rendered", () => {
+  // User sold winner-side shares early at a loss (e.g. bought at a
+  // high price then panic-sold on a swing). They still get closure
+  // with the realised loss spelled out.
+  const built = buildAmmResolutionNotification({
+    marketTitle: "Some Market",
+    won: true,
+    stake: 1_000,
+    payout: 0,
+    preResolveSellProceeds: 750,
+  });
+  assert.ok(built);
+  assert.equal(built!.title, "Your market resolved — you'd sold beforehand");
+  assert.equal(
+    built!.body,
+    "Some Market resolved on your side. You'd already sold those shares for 750 credits (net -250).",
+  );
+});
+
+test("won-but-fully-sold with preResolveSellProceeds === 0 → suppressed (degenerate)", () => {
+  // Structurally near-unreachable (winner-side buy with payout=0 and
+  // ZERO pre-close sells), but the guard avoids resurrecting the
+  // legacy "net -<stake>" bug if a future code path passes a zero
+  // proceeds figure explicitly.
+  const built = buildAmmResolutionNotification({
+    marketTitle: "Degenerate market",
+    won: true,
+    stake: 500,
+    payout: 0,
+    preResolveSellProceeds: 0,
+  });
+  assert.equal(built, null);
+});
+
+test("won-but-fully-sold with non-finite proceeds → suppressed", () => {
+  const built = buildAmmResolutionNotification({
+    marketTitle: "Defensive",
+    won: true,
+    stake: 500,
+    payout: 0,
+    preResolveSellProceeds: Number.NaN,
+  });
+  assert.equal(built, null);
+});
+
+test("preResolveSellProceeds is ignored on non-zero payout branches", () => {
+  // The new field only matters for the won-but-fully-sold path. A
+  // normal winner with payout > 0 should still render the standard
+  // "Your prediction won" wording even if proceeds is plumbed.
+  const built = buildAmmResolutionNotification({
+    marketTitle: "Plumb-through guard",
+    won: true,
+    stake: 100,
+    payout: 207,
+    preResolveSellProceeds: 999,
+  });
+  assert.ok(built);
+  assert.equal(built!.title, "Your prediction won — +107 credits");
 });
 
 test("won + payout === stake (profit=0, parity buy) → 'Stake returned' wording is accurate now that payout=0 is suppressed upstream", () => {

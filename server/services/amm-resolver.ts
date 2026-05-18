@@ -319,20 +319,71 @@ async function emitResolutionSideEffects(result: ResolveAmmMarketResult): Promis
         ),
       );
 
+    // Tier 1.7: aggregate per-user winner-side sell proceeds so the
+    // "won && payout === 0" branch can emit an accurate "you sold
+    // beforehand" closure notification instead of silently dropping.
+    // Empty map when winnerEntryId is null (defensive — voided paths
+    // already returned above) so the existing suppression fallback
+    // kicks in.
+    const proceedsByUser = new Map<string, number>();
+    if (winnerEntryId) {
+      const winnerSellRows = await db
+        .select({
+          userId: marketBets.userId,
+          sumProceeds: sql<string>`COALESCE(SUM(${marketBets.payoutAmount}), 0)`,
+        })
+        .from(marketBets)
+        .where(
+          and(
+            eq(marketBets.marketId, marketId),
+            eq(marketBets.entryId, winnerEntryId),
+            eq(marketBets.actionType, "sell"),
+          ),
+        )
+        .groupBy(marketBets.userId);
+      for (const row of winnerSellRows) {
+        proceedsByUser.set(row.userId, Number(row.sumProceeds ?? 0));
+      }
+    }
+
+    // A user can hold multiple winner-side buy rows that all settle to
+    // payout=0 (split entry points). Without dedupe we'd fire one
+    // identical "you sold beforehand" notification per row. Track
+    // users we've already pinged on that branch and skip subsequent
+    // rows.
+    const soldOutNotified = new Set<string>();
+
     for (const bet of settledBuys) {
       const won = bet.status === "won";
       const stake = bet.stakeAmount ?? 0;
       const payout = bet.payoutAmount ?? 0;
 
-      // Suppress "won-but-fully-sold" rows: the user already realized
-      // P&L on this buy via sell trades before resolution, so a
-      // resolution ping would print a self-contradictory
-      // "Stake returned — 0 credits (net -<stake>)" message. Wallet
-      // and positions tab are the source of truth in that case.
-      const built = buildAmmResolutionNotification({ marketTitle, won, stake, payout });
-      if (!built) continue;
+      let preResolveSellProceeds: number | undefined;
+      if (won && payout === 0) {
+        if (soldOutNotified.has(bet.userId)) continue;
+        preResolveSellProceeds = proceedsByUser.get(bet.userId) ?? 0;
+      }
 
-      const profit = won ? payout - stake : -stake;
+      const built = buildAmmResolutionNotification({
+        marketTitle,
+        won,
+        stake,
+        payout,
+        preResolveSellProceeds,
+      });
+      if (!built) continue;
+      if (won && payout === 0) soldOutNotified.add(bet.userId);
+
+      // On the sold-out branch the legacy `payout - stake` formula
+      // misrepresents reality (it returns -stake because payout=0 even
+      // though the user realised credits via pre-close sells). Use the
+      // realised proceeds so metadata.profit matches the body text.
+      const profit =
+        won && payout === 0 && preResolveSellProceeds !== undefined
+          ? preResolveSellProceeds - stake
+          : won
+            ? payout - stake
+            : -stake;
       await createNotification({
         userId: bet.userId,
         kind: "market_resolved",
@@ -342,7 +393,16 @@ async function emitResolutionSideEffects(result: ResolveAmmMarketResult): Promis
         entityType: "market",
         entityId: marketId,
         marketId,
-        metadata: { betId: bet.id, status: bet.status, payout, stake, profit },
+        metadata: {
+          betId: bet.id,
+          status: bet.status,
+          payout,
+          stake,
+          profit,
+          ...(preResolveSellProceeds !== undefined
+            ? { preResolveSellProceeds }
+            : {}),
+        },
         idempotencyKey: `market_resolved:${marketId}:${bet.id}`,
       });
     }

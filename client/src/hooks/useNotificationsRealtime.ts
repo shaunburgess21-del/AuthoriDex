@@ -22,6 +22,11 @@ const BALANCE_CHANGING_KINDS = new Set<string>([
   "market_resolved",
   "credits_granted",
   "market_void_refund",
+  // Tier 1.7: human sell that closed a position credits the user
+  // immediately. Originating tab already invalidates locally; this
+  // ensures any *other* open tab refreshes the balance pill on the
+  // realtime ping.
+  "trade_executed",
 ]);
 
 /**

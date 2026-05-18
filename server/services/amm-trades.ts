@@ -48,6 +48,7 @@ import {
   checkSellSlippage,
 } from "./amm-slippage";
 import { notifyPriceChange } from "./amm-price-broadcaster";
+import { createNotification } from "./notifications";
 
 /**
  * Narrow tx-shape the helpers need. Both top-level `db` and the
@@ -730,6 +731,78 @@ export async function executeSell(
       });
     } catch (err) {
       console.error("[amm-trades] notifyPriceChange after sell failed (non-fatal):", err);
+    }
+  }
+
+  // Tier 1.7: persistent "you got filled" bell-notification on
+  // position-closing human sells. Gated tightly so:
+  //   - replays (postTradeShareQuantities==null) do not duplicate
+  //   - errors and validation rejects bail
+  //   - agent sells are skipped (no human to read it)
+  //   - nested-transaction callers skip too — when invoked with an
+  //     outer `txOpt`, this post-commit block fires before the outer
+  //     transaction has actually committed, so a rollback would leave
+  //     an orphan notification row referencing a trade that never
+  //     persisted. Today no caller passes `txOpt`; the gate is
+  //     defensive.
+  //   - partial sells (remainingShares > epsilon) only get the in-
+  //     modal toast — the bell would be noisy for users who trim
+  //     positions in slices.
+  if (
+    !("error" in result) &&
+    postTradeShareQuantities != null &&
+    !agentId &&
+    !txOpt &&
+    result.remainingShares < 1e-6
+  ) {
+    try {
+      // Two parallel reads — keep the join semantics honest. `slug` is
+      // the URL-facing identifier; the resolver follows the same
+      // pattern (see emitResolutionSideEffects → marketMeta.slug).
+      const [marketRow, entryRow] = await Promise.all([
+        db
+          .select({
+            title: predictionMarkets.title,
+            slug: predictionMarkets.slug,
+          })
+          .from(predictionMarkets)
+          .where(eq(predictionMarkets.id, marketId))
+          .limit(1),
+        db
+          .select({ label: marketEntries.label })
+          .from(marketEntries)
+          .where(eq(marketEntries.id, entryId))
+          .limit(1),
+      ]);
+      const marketTitle = marketRow[0]?.title ?? "Your market";
+      const marketSlug = marketRow[0]?.slug ?? null;
+      const entryLabel = entryRow[0]?.label ?? "position";
+      const href = marketSlug ? `/markets/${marketSlug}` : `/me/predictions`;
+
+      const sharesText =
+        result.sharesSold >= 1
+          ? result.sharesSold.toFixed(2)
+          : result.sharesSold.toFixed(4);
+
+      await createNotification({
+        userId,
+        kind: "trade_executed",
+        title: `Position closed — ${result.proceeds.toLocaleString("en-US")} credits`,
+        body: `${marketTitle} (${entryLabel}) — sold ${sharesText} shares.`,
+        href,
+        entityType: "market",
+        entityId: marketId,
+        marketId,
+        metadata: {
+          action: "sell",
+          betId: result.betId,
+          proceeds: result.proceeds,
+          sharesSold: result.sharesSold,
+        },
+        idempotencyKey: `trade_executed:${result.betId}`,
+      });
+    } catch (err) {
+      console.error("[amm-trades] trade_executed notification failed (non-fatal):", err);
     }
   }
   return result;

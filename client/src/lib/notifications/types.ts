@@ -23,6 +23,7 @@ export type NotificationKind =
   | "credits_low"
   | "credits_granted"
   | "badge_awarded"
+  | "trade_executed"
   | "announcement";
 
 export type NotificationCategory =

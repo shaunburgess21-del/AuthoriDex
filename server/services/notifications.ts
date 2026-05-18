@@ -32,6 +32,7 @@ export type NotificationKind =
   | "credits_low"
   | "credits_granted"
   | "badge_awarded"
+  | "trade_executed"
   | "announcement";
 
 export type NotificationCategory =
@@ -63,6 +64,7 @@ const KIND_REGISTRY: Record<NotificationKind, KindMeta> = {
   credits_low: { category: "account", priority: 0 },
   credits_granted: { category: "account", priority: 1 },
   badge_awarded: { category: "account", priority: 1 },
+  trade_executed: { category: "predictions", priority: 0 },
   announcement: { category: "system", priority: 1 },
 };
 
