@@ -46,7 +46,7 @@ const SITE_URL =
   process.env.PUBLIC_SITE_URL?.replace(/\/$/, "") ?? "https://voxdex.com";
 const SITE_NAME = "VoxDex";
 const DEFAULT_DESCRIPTION =
-  "Track how famous people are trending. Predict, vote, and win on real-world events.";
+  "The voice of the people, indexed. Vote, predict, and track the people and topics shaping global conversation.";
 
 const OG_WIDTH = 1200;
 const OG_HEIGHT = 630;
