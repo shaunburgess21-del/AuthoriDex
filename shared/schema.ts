@@ -957,6 +957,25 @@ export const profiles = pgTable("profiles", {
   referredBy: text("referred_by"),
   firstActionAt: timestamp("first_action_at", { withTimezone: true }),
   referralCreditFiredAt: timestamp("referral_credit_fired_at", { withTimezone: true }),
+  // User-initiated account deletion (7-day soft-delete window).
+  // See migration 0065. Lifecycle:
+  //   - `deletionRequestedAt` is set when the user calls
+  //     POST /api/me/account/delete. The matching
+  //     `deletionScheduledFor` is requestedAt + 7 days. The user
+  //     can still log in, see, and CANCEL during this window.
+  //   - `deletedAt` is set by the hourly account-deletion sweeper
+  //     when `deletionScheduledFor` has elapsed. At that point the
+  //     row is anonymised (PII cleared, username randomised,
+  //     isPublic forced false) and `predictCredits` zeroed. The
+  //     row itself remains so credit_ledger / market_bets /
+  //     comments / votes FKs stay intact (the audit-log
+  //     contract). Public profile displays "Deleted user".
+  //   - Cancellation clears both `*RequestedAt` and
+  //     `*ScheduledFor` and is only valid while `deletedAt` is
+  //     null.
+  deletionRequestedAt: timestamp("deletion_requested_at", { withTimezone: true }),
+  deletionScheduledFor: timestamp("deletion_scheduled_for", { withTimezone: true }),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
   // Free-form profile bio. Surfaced on /me + public profile and
   // gates the `getting_personal` PROFILE badge alongside the
   // user's display name.

@@ -327,6 +327,47 @@ export function registerCronRoutes(app: Express): void {
     }
   });
 
+  // Account-deletion sweeper cron endpoint. Mirrors the in-process
+  // scheduler in server/index.ts so external cron drives the sweeper
+  // in serverless mode. Auth-gated by the shared cron secret to
+  // prevent a leaked URL triggering finalisations.
+  app.post("/api/cron/process-account-deletions", verifyCronSecret, async (_req, res) => {
+    const startTime = Date.now();
+    try {
+      const { processOverdueAccountDeletions } = await import("../services/account-deletion");
+      const result = await processOverdueAccountDeletions();
+
+      if (result.failed > 0) {
+        console.warn(
+          `[Cron][process-account-deletions] PARTIAL — processed=${result.processed} failed=${result.failed} candidates=${result.candidates}`,
+        );
+      } else if (result.candidates > 0) {
+        console.log(
+          `[Cron][process-account-deletions] OK — processed=${result.processed} candidates=${result.candidates}`,
+        );
+      } else {
+        console.log("[Cron][process-account-deletions] OK — no overdue deletions");
+      }
+
+      res.json({
+        success: true,
+        processed: result.processed,
+        failed: result.failed,
+        candidates: result.candidates,
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error("[Cron][process-account-deletions] Uncaught error:", error);
+      res.status(500).json({
+        success: false,
+        error: error?.message ?? String(error),
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  });
+
   app.get("/api/cron/health", verifyCronSecret, async (_req, res) => {
     // Include upstream provider state so external monitors can alert on Serper
     // auth/quota/rate-limit outages instead of silently degrading product features.

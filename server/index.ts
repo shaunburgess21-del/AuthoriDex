@@ -780,6 +780,16 @@ async function startServer() {
     } else {
       log("[DrainBreaker] Skipped - serverless mode. Use POST /api/cron/drain-breaker-check.");
     }
+
+    // Start account-deletion sweeper (finalises overdue user-
+    // requested deletions). Runs hourly; the 7-day window means
+    // a missed tick has plenty of grace before any user-visible
+    // issue surfaces.
+    if (!SERVERLESS_MODE) {
+      startScheduler("AccountDeletionSweeper", startAccountDeletionSweeperScheduler);
+    } else {
+      log("[AccountDeletionSweeper] Skipped - serverless mode. Use POST /api/cron/process-account-deletions.");
+    }
   });
 }
 
@@ -926,6 +936,55 @@ function startDrainBreakerScheduler() {
     void runScheduledDrainBreaker();
     setInterval(() => void runScheduledDrainBreaker(), DRAIN_BREAKER_INTERVAL_MS);
   }, 90_000);
+}
+
+// Account-deletion sweeper cadence. Hourly is the right call here:
+// the 7-day window means a few minutes of latency on finalisation
+// don't matter, and we don't want to bias toward "delete the
+// instant the timer hits zero" which feels less safe for a one-
+// way operation.
+const ACCOUNT_DELETION_SWEEPER_INTERVAL_MS = 60 * 60 * 1000;
+
+async function runScheduledAccountDeletionSweeper(): Promise<void> {
+  try {
+    const { processOverdueAccountDeletions } = await import("./services/account-deletion");
+    const result = await processOverdueAccountDeletions();
+    if (result.candidates === 0) {
+      // Don't spam logs when there's nothing to do. Hourly silence
+      // is the expected steady state.
+      return;
+    }
+    if (result.failed > 0) {
+      log(
+        `[AccountDeletionSweeper] PARTIAL — processed=${result.processed} failed=${result.failed} candidates=${result.candidates}`,
+      );
+    } else {
+      log(
+        `[AccountDeletionSweeper] OK — processed=${result.processed} candidates=${result.candidates}`,
+      );
+    }
+  } catch (err: any) {
+    log(
+      `[AccountDeletionSweeper] Scheduler tick failed (will retry next interval): ${err?.message ?? err}`,
+    );
+  }
+}
+
+function startAccountDeletionSweeperScheduler() {
+  if (SERVERLESS_MODE) {
+    log("[AccountDeletionSweeper] Skipped - serverless mode.");
+    return;
+  }
+  log("[AccountDeletionSweeper] Starting (every 60 min)");
+  // Stagger initial run by 120s so it doesn't compete with the
+  // higher-frequency schedulers in the first boot window.
+  setTimeout(() => {
+    void runScheduledAccountDeletionSweeper();
+    setInterval(
+      () => void runScheduledAccountDeletionSweeper(),
+      ACCOUNT_DELETION_SWEEPER_INTERVAL_MS,
+    );
+  }, 120_000);
 }
 
 startServer().catch((error) => {

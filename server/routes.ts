@@ -8740,6 +8740,96 @@ Only return the JSON object.`;
     }
   });
 
+  // ==========================================================================
+  // User-initiated account deletion (7-day soft-delete window)
+  // --------------------------------------------------------------------------
+  // POST /api/me/account/delete           — request deletion (idempotent)
+  // POST /api/me/account/cancel-deletion  — cancel within the 7-day window
+  // GET  /api/me/account/deletion-status  — read current state
+  //
+  // The actual anonymisation happens via the hourly
+  // account-deletion-sweeper scheduler (server/index.ts). During the
+  // window the user can still log in and cancel; after finalisation
+  // the row is anonymised but FK-preserved so the audit trail (credit
+  // ledger / market_bets / comments / votes) survives intact.
+  //
+  // See server/services/account-deletion.ts for the lifecycle docblock.
+  // ==========================================================================
+
+  app.post("/api/me/account/delete", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.userId!;
+      const reasonRaw = typeof req.body?.reason === "string" ? req.body.reason : null;
+      const reason = reasonRaw ? reasonRaw.trim().slice(0, 500) : null;
+      const ipAddress = req.ip || req.socket.remoteAddress || null;
+      const userAgent = req.header("user-agent") || null;
+
+      const { requestAccountDeletion } = await import("./services/account-deletion");
+      const result = await requestAccountDeletion({ userId, reason, ipAddress, userAgent });
+
+      if (!result.ok) {
+        return res.status(result.status).json({ error: result.error, message: result.message });
+      }
+
+      res.json({
+        ok: true,
+        alreadyPending: result.alreadyPending,
+        requestedAt: result.status.requestedAt?.toISOString() ?? null,
+        scheduledFor: result.status.scheduledFor?.toISOString() ?? null,
+        message: result.alreadyPending
+          ? "Your account is already scheduled for deletion. You can still cancel before the date above."
+          : "Your account is scheduled for deletion in 7 days. You can cancel any time before then.",
+      });
+    } catch (error: any) {
+      console.error("[AccountDeletion] Request failed:", error);
+      res.status(500).json({ error: "internal_error", message: "Failed to schedule deletion." });
+    }
+  });
+
+  app.post("/api/me/account/cancel-deletion", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.userId!;
+      const ipAddress = req.ip || req.socket.remoteAddress || null;
+      const userAgent = req.header("user-agent") || null;
+
+      const { cancelAccountDeletion } = await import("./services/account-deletion");
+      const result = await cancelAccountDeletion({ userId, ipAddress, userAgent });
+
+      if (!result.ok) {
+        return res.status(result.status).json({ error: result.error, message: result.message });
+      }
+
+      res.json({
+        ok: true,
+        message: "Account deletion cancelled. Your account is fully active again.",
+      });
+    } catch (error: any) {
+      console.error("[AccountDeletion] Cancel failed:", error);
+      res.status(500).json({ error: "internal_error", message: "Failed to cancel deletion." });
+    }
+  });
+
+  app.get("/api/me/account/deletion-status", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.userId!;
+      const { getDeletionStatus } = await import("./services/account-deletion");
+      const status = await getDeletionStatus(userId);
+      if (!status) {
+        return res.status(404).json({ error: "profile_not_found", message: "Profile not found." });
+      }
+      res.json({
+        pending: status.pending,
+        finalised: status.finalised,
+        requestedAt: status.requestedAt?.toISOString() ?? null,
+        scheduledFor: status.scheduledFor?.toISOString() ?? null,
+        deletedAt: status.deletedAt?.toISOString() ?? null,
+      });
+    } catch (error: any) {
+      console.error("[AccountDeletion] Status fetch failed:", error);
+      res.status(500).json({ error: "internal_error", message: "Failed to fetch deletion status." });
+    }
+  });
+
   // Get user's votes
   app.get("/api/me/vote-stats", requireAuth, async (req: AuthRequest, res) => {
     try {
