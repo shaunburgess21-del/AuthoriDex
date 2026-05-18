@@ -351,8 +351,20 @@ test("wiki/news bullish leg STILL applies when not decisivelyDown — gate doesn
   // Net signalBoost = +0.05 + 0.04 - 0.018 = +0.072 → Up wins ~0.572 / 0.428.
   // Locks in that Fix A's gate is one-sided — bullish wiki/news still
   // contribute on shallow drawdowns, just at half the previous strength.
+  //
+  // We lower riskAppetite to 0.2 so the sharp edge gate (riskAppetite *
+  // 0.25/n = 0.025 at n=2) sits well below the post-Fix Up lean even at
+  // worst-case jitter. The property under test is "the gate didn't
+  // over-fire (agent leans UP)", NOT "the gate didn't trigger an edge
+  // abstain" — keeping those independent makes the test robust to any
+  // future PRNG / jitter-range change.
+  //
+  // Upper-bound assertion (rawProbability < 0.62) catches a regression
+  // where Fix B's halved coefficients are restored: pre-Fix B the same
+  // signal mix would yield rawProbability ≈ 0.642 (boost +0.142),
+  // post-Fix B it sits at ≈ 0.572 (boost +0.072). 0.62 is the midpoint.
   const market = makeBinaryUpDownMarket();
-  const agent = makeSharpAgent();
+  const agent = makeSharpAgent({ riskAppetite: 0.2 });
   const signals = makeSignals({
     pctChangeVsOpen: -0.02,
     wikiPulse: "rising",
@@ -368,6 +380,10 @@ test("wiki/news bullish leg STILL applies when not decisivelyDown — gate doesn
     decision.entryId,
     "entry-up",
     "shallow drawdown should still let bullish wiki/news tilt the read",
+  );
+  assert.ok(
+    (decision.rawProbability ?? 1) < 0.62,
+    `expected rawProbability < 0.62 to pin Fix B halving, got ${decision.rawProbability}`,
   );
 });
 
