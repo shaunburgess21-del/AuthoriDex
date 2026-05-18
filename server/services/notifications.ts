@@ -21,6 +21,7 @@ export type NotificationKind =
   | "market_void_refund"
   | "position_move_alert"
   | "weekly_pnl_digest"
+  | "position_resolution_imminent"
   | "favorite_rank_cross"
   | "favorite_hot_mover"
   | "favorite_new_market"
@@ -51,6 +52,7 @@ const KIND_REGISTRY: Record<NotificationKind, KindMeta> = {
   market_void_refund: { category: "predictions", priority: 1 },
   position_move_alert: { category: "predictions", priority: 0 },
   weekly_pnl_digest: { category: "predictions", priority: 1 },
+  position_resolution_imminent: { category: "predictions", priority: 1 },
   favorite_rank_cross: { category: "favorites", priority: 0 },
   favorite_hot_mover: { category: "favorites", priority: 0 },
   favorite_new_market: { category: "favorites", priority: 0 },

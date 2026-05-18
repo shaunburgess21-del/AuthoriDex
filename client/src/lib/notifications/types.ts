@@ -12,6 +12,7 @@ export type NotificationKind =
   | "market_void_refund"
   | "position_move_alert"
   | "weekly_pnl_digest"
+  | "position_resolution_imminent"
   | "favorite_rank_cross"
   | "favorite_hot_mover"
   | "favorite_new_market"

@@ -27,6 +27,7 @@ import {
   WEEKLY_DIGEST_TITLE,
   type WeeklyDigestStats,
 } from "./weekly-digest-utils";
+import { formatResolutionImminentNotification } from "./resolution-imminent-utils";
 import { STREAK_MILESTONES } from "@shared/streak-config";
 
 /**
@@ -1002,6 +1003,127 @@ async function deriveWeeklyDigest(): Promise<number> {
   return inserted;
 }
 
+// Resolution-imminent: how far before `endAt` to fire the heads-up.
+// Six hours is the sweet spot — long enough that a daytime user
+// catches it before the resolution lands, short enough that it
+// doesn't read as a stale "remember this from days ago" ping. The
+// idempotency key is per (user, market) so even if the lookahead
+// is widened later, each user gets at most one ping per market.
+const RESOLUTION_IMMINENT_LOOKAHEAD_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * "You're still holding through resolution" deriver.
+ *
+ * Scans AMM markets whose `endAt` is within the next 6 hours (and in
+ * the future), finds users with non-zero net shares on those markets,
+ * fires one notification per (user, market).
+ *
+ * Why this is separate from `market_closing_soon`:
+ *   - `market_closing_soon` covers BETTING close (a moment when the
+ *     user could still trade in/out). Fans out at 24h/4h/1h/5m
+ *     milestones to anyone with an interest (favorites + position).
+ *   - This deriver covers RESOLUTION (a moment when the user can no
+ *     longer act, but P&L is about to land). Fans out at a single
+ *     6h heads-up only to users with skin in the game.
+ *
+ * Idempotency: `position_resolution_imminent:${userId}:${marketId}`
+ * — once fired, never re-fires for the same position regardless of
+ * how many ticks land in the 6h window.
+ */
+async function derivePositionResolutionImminent(): Promise<number> {
+  const lookaheadEnd = new Date(Date.now() + RESOLUTION_IMMINENT_LOOKAHEAD_MS);
+
+  const imminentMarkets = await db
+    .select({
+      id: predictionMarkets.id,
+      title: predictionMarkets.title,
+      slug: predictionMarkets.slug,
+      endAt: predictionMarkets.endAt,
+      personName: trackedPeople.name,
+    })
+    .from(predictionMarkets)
+    .leftJoin(trackedPeople, eq(predictionMarkets.personId, trackedPeople.id))
+    .where(
+      and(
+        eq(predictionMarkets.engine, "amm"),
+        inArray(predictionMarkets.status, ["OPEN", "CLOSED_PENDING"]),
+        gte(predictionMarkets.endAt, sql`NOW()`),
+        lte(predictionMarkets.endAt, lookaheadEnd),
+      ),
+    );
+
+  if (imminentMarkets.length === 0) return 0;
+
+  let inserted = 0;
+  for (const market of imminentMarkets) {
+    if (!market.endAt) continue;
+
+    // Per-user net shares on this market. Aggregate buys minus sells
+    // across all entries — for the heads-up purpose we don't need
+    // per-entry breakdown (the user can see that on the market page).
+    const positionRows = await db
+      .select({
+        userId: marketBets.userId,
+        actionType: marketBets.actionType,
+        shareCount: marketBets.shareCount,
+      })
+      .from(marketBets)
+      .innerJoin(profiles, eq(profiles.id, marketBets.userId))
+      .where(
+        and(
+          eq(marketBets.marketId, market.id),
+          eq(profiles.isAgent, false),
+          inArray(marketBets.actionType, ["buy", "sell"]),
+        ),
+      );
+
+    if (positionRows.length === 0) continue;
+
+    // Aggregate: net = sum(buy.shares) - sum(sell.shares) per user.
+    const netByUser = new Map<string, number>();
+    for (const row of positionRows) {
+      const shares = Number(row.shareCount ?? 0);
+      if (!Number.isFinite(shares)) continue;
+      const delta = row.actionType === "buy" ? shares : -shares;
+      netByUser.set(row.userId, (netByUser.get(row.userId) ?? 0) + delta);
+    }
+
+    const hoursRemaining =
+      (market.endAt.getTime() - Date.now()) / (60 * 60 * 1000);
+    const subjectLabel = market.personName ?? market.title ?? "Your position";
+    const href = market.slug ? `/markets/${market.slug}` : `/me/predictions`;
+
+    for (const [userId, netShares] of netByUser) {
+      if (netShares <= 0.5) continue;
+
+      const { title, body } = formatResolutionImminentNotification({
+        subjectLabel,
+        netShares,
+        hoursRemaining,
+      });
+
+      const id = await createNotification({
+        userId,
+        kind: "position_resolution_imminent",
+        title,
+        body,
+        href,
+        entityType: "market",
+        entityId: market.id,
+        marketId: market.id,
+        metadata: {
+          marketId: market.id,
+          netShares: Math.round(netShares),
+          hoursRemaining: Math.max(0, Math.floor(hoursRemaining)),
+        },
+        idempotencyKey: `position_resolution_imminent:${userId}:${market.id}`,
+      });
+      if (id) inserted += 1;
+    }
+  }
+  return inserted;
+}
+
 /**
  * Single entry point for the scheduler. Wraps every derivation in an
  * advisory lock so concurrent ticks (e.g. blue/green deploys) can't
@@ -1032,6 +1154,7 @@ export async function runNotificationsDerivation(): Promise<NotificationsDerivat
       ["credits_low", deriveCreditsLow],
       ["position_move_alert", derivePositionMoveAlerts],
       ["weekly_pnl_digest", deriveWeeklyDigest],
+      ["position_resolution_imminent", derivePositionResolutionImminent],
     ];
     for (const [name, fn] of steps) {
       try {
