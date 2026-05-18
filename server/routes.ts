@@ -17357,6 +17357,20 @@ Target length: about 90-150 words.`;
         return res.status(400).json({ error: "Market is not OPEN or CLOSED_PENDING" });
       }
 
+      // Self-resolution guard. Settle distributes credit balances; the
+      // admin who created the market should not also be the one who
+      // picks the winner. Force them to hand off to another admin.
+      // Native (cron-created) markets have `createdBy = null` so this
+      // never blocks the auto-resolver path.
+      if (market.createdBy && market.createdBy === authReq.userId) {
+        return res.status(403).json({
+          error: "self_resolution_denied",
+          message:
+            "You created this market — another admin must settle it. " +
+            "This guard prevents conflict of interest on community markets.",
+        });
+      }
+
       const [winnerEntry] = await db
         .select()
         .from(marketEntries)
@@ -17474,6 +17488,18 @@ Target length: about 90-150 words.`;
 
       if (market.status === "RESOLVED" || market.status === "VOID") {
         return res.status(400).json({ error: "Market is already resolved or voided" });
+      }
+
+      // Self-resolution guard — see the matching block on the settle
+      // endpoint for rationale. Void also pays out (as refunds) and
+      // sits in the same conflict-of-interest tier.
+      if (market.createdBy && market.createdBy === (req as AuthRequest).userId) {
+        return res.status(403).json({
+          error: "self_resolution_denied",
+          message:
+            "You created this market — another admin must void it. " +
+            "This guard prevents conflict of interest on community markets.",
+        });
       }
 
       // Parimutuel sunset: community markets are AMM. Void = AMM refund

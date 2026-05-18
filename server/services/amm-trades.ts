@@ -126,7 +126,14 @@ export type TradeError =
   | { error: "visibility_denied"; status: 403; message: string }
   | { error: "trade_too_small"; status: 400; message: string }
   | { error: "insufficient_credits"; status: 409; message: string }
-  | { error: "insufficient_shares"; status: 409; message: string };
+  | { error: "insufficient_shares"; status: 409; message: string }
+  // Conflict-of-interest guard: a user who created the market cannot
+  // also trade on it. Today this only fires for admins on community
+  // markets (where `createdBy` is the approving admin) — native
+  // updown/h2h/gainer/jackpot markets are cron-created with a null
+  // `createdBy`, so retail and agents are unaffected. Returned as
+  // 403 because it's an authorisation refusal, not a runtime error.
+  | { error: "self_trade_denied"; status: 403; message: string };
 
 export async function executeBuy(
   input: ExecuteBuyInput,
@@ -156,7 +163,7 @@ export async function executeBuy(
     : null;
 
   const run = async (tx: DbOrTx): Promise<ExecuteBuyResult | TradeError> => {
-    const ctx = await loadAndLockTradeContext(tx, marketId, entryId, isAdmin);
+    const ctx = await loadAndLockTradeContext(tx, marketId, entryId, isAdmin, userId);
     if ("error" in ctx) return ctx;
     const { state, b } = ctx;
 
@@ -438,7 +445,7 @@ export async function executeSell(
     : null;
 
   const run = async (tx: DbOrTx): Promise<ExecuteSellResult | TradeError> => {
-    const ctx = await loadAndLockTradeContext(tx, marketId, entryId, isAdmin);
+    const ctx = await loadAndLockTradeContext(tx, marketId, entryId, isAdmin, userId);
     if ("error" in ctx) return ctx;
     const { state, b } = ctx;
 
@@ -749,6 +756,7 @@ async function loadAndLockTradeContext(
   marketId: string,
   entryId: string,
   isAdmin: boolean,
+  userId: string,
 ): Promise<TradeContext | TradeError> {
   // FOR UPDATE on market_amm_state. Drizzle's chained `.for("update")`
   // is supported on PG selects.
@@ -793,6 +801,7 @@ async function loadAndLockTradeContext(
       closeAt: predictionMarkets.closeAt,
       endAt: predictionMarkets.endAt,
       visibility: predictionMarkets.visibility,
+      createdBy: predictionMarkets.createdBy,
     })
     .from(predictionMarkets)
     .where(eq(predictionMarkets.id, marketId))
@@ -824,6 +833,22 @@ async function loadAndLockTradeContext(
       error: "visibility_denied",
       status: 403,
       message: `Market ${marketId} is not yet open to public trading.`,
+    };
+  }
+
+  // Self-trade guard. The market's `createdBy` is only populated for
+  // community markets (the approving admin) — cron-created native
+  // markets have it as null, so retail and agents are never blocked
+  // by this. Refuse the trade if the caller created the market; the
+  // approver should hand the trade to someone else (or, if they want
+  // a position for liquidity reasons, do it via a non-admin
+  // identity). Keeps the conflict-of-interest surface clean before
+  // monetisation goes live.
+  if (market.createdBy && market.createdBy === userId) {
+    return {
+      error: "self_trade_denied",
+      status: 403,
+      message: `Cannot trade on a market you created (market ${marketId}).`,
     };
   }
 
