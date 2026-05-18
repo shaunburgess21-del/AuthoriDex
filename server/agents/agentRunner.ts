@@ -1389,6 +1389,18 @@ async function runSellSweep(
 
     const personaBand = getSimulationProfile(agent.simulationProfile).personaBand;
 
+    // In-memory tally of sells scheduled per market WITHIN this sweep.
+    // `marketBlockers` is a one-shot snapshot of DB rows taken before
+    // the position loop runs — it can't observe inserts we make
+    // mid-loop. Without this tally, a multi-entry market (Race,
+    // Community-multi) where the agent holds 3+ positions could
+    // schedule a sell on EVERY breached entry in one sweep, blowing
+    // past `MAX_SELLS_PER_MARKET_PER_AGENT` even though the cap is
+    // documented as market-wide. The UpDown-only filter masked this
+    // because UpDown has 2 entries and the cap is also 2; expanding
+    // to all AMM market types exposes the gap.
+    const scheduledThisSweepByMarket = new Map<string, number>();
+
     for (const pos of Array.from(positions.values())) {
       if (pos.netShares < MIN_NET_SHARES_FOR_SELL_EVAL) continue;
       if (pos.buyShares <= 0) continue;
@@ -1407,18 +1419,26 @@ async function runSellSweep(
 
       // Idempotency / mutual exclusion: skip if any pending or
       // in-progress sell or conviction action already exists for
-      // (agent, market). Lifetime sell cap is per-market, NOT
-      // per-entry — an agent that flips between up/down on the
-      // same market still counts toward the same MAX_SELLS budget.
+      // (agent, market) FROM A PRIOR SWEEP. Within the current
+      // sweep, we ALLOW scheduling on multiple entries (per the
+      // plan: a race with N entries can produce N sell decisions,
+      // bounded only by the market-wide cap below).
       const marketBlockers = blockersByMarket.get(market.id) ?? [];
       const hasOpenBlocker = marketBlockers.some(
         (row) => row.status === "pending" || row.status === "in_progress",
       );
       if (hasOpenBlocker) continue;
+      // Cap check: lifetime executed sells PLUS what we've already
+      // scheduled in this sweep. Without the in-sweep counter the
+      // cap silently fails on multi-entry markets (see comment on
+      // `scheduledThisSweepByMarket` above).
       const lifetimeSells = marketBlockers.filter(
         (row) => row.actionType === "sell" && row.status === "executed",
       ).length;
-      if (lifetimeSells >= MAX_SELLS_PER_MARKET_PER_AGENT) continue;
+      const scheduledThisSweep = scheduledThisSweepByMarket.get(market.id) ?? 0;
+      if (lifetimeSells + scheduledThisSweep >= MAX_SELLS_PER_MARKET_PER_AGENT) {
+        continue;
+      }
 
       // Look up the original conviction (rankerConviction stamped at
       // buy time). Fallback chain: most-recent decision_payload first,
@@ -1473,6 +1493,10 @@ async function runSellSweep(
         executeAfter,
         status: "pending",
       });
+      scheduledThisSweepByMarket.set(
+        market.id,
+        (scheduledThisSweepByMarket.get(market.id) ?? 0) + 1,
+      );
 
       sellsScheduled++;
       log(

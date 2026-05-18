@@ -341,9 +341,15 @@ async function replayPriorBuy(
   if (!bet) return null;
 
   // Hard guard: if the client reuses the same key against a DIFFERENT
-  // entryId (UI bug), don't return the wrong bet. Fail closed so the
-  // route layer surfaces a validation error rather than corrupting
-  // analytics with a mismatched response.
+  // entryId (UI bug — shouldn't happen because `useIdempotencyKey`
+  // includes entryId in its dep tuple), refuse to return the wrong
+  // bet. Returning null here doesn't short-circuit — the caller
+  // proceeds with the new request, which then trips the `(userId,
+  // idempotencyKey)` unique constraint at ledger-insert time and
+  // rolls the whole tx back. The user sees a 500, but no duplicate
+  // trade lands. Less elegant than a structured error response, but
+  // the path is purely defensive against a UI regression — we
+  // accept the trade-off to keep the happy path simple.
   if (bet.entryId !== expectedEntryId) return null;
 
   const [walletRow] = await tx
