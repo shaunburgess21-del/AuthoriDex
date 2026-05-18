@@ -9914,6 +9914,168 @@ Only return the JSON object.`;
     }
   });
 
+  // Tier 1.1: Server-Sent Events stream for live AMM price ticks.
+  //
+  // Public (no auth) — prices are not sensitive and the alternative
+  // is forcing every market-detail visitor to authenticate before
+  // they see live updates, which would break logged-out browse.
+  //
+  // Wire protocol:
+  //   - Initial event on connect: the current price snapshot. Sent
+  //     AFTER the subscribe registration so a trade that lands
+  //     between subscribe-and-snapshot is still delivered.
+  //   - One event per committed trade, pushed by
+  //     `notifyPriceChange` in `executeBuy` / `executeSell`.
+  //   - `: ping\n\n` comment frame every 25 s so Railway's edge
+  //     proxy doesn't idle-out the connection (its default is 30 s).
+  //   - Cleanup on `req.on('close')` to prevent listener leaks.
+  app.get("/api/markets/:marketId/amm/stream", async (req, res) => {
+    const { marketId } = req.params;
+
+    // Verify the market exists, is AMM, and is publicly visible.
+    // We bail with a clean HTTP error BEFORE flushing SSE headers so
+    // the response remains a normal JSON error instead of a stuck
+    // event-stream the client can't recover from.
+    //
+    // visibility='live' gates draft / inactive / archived markets out
+    // of public streams — admins trading in a draft market shouldn't
+    // leak its price vector to anyone who guesses the id.
+    const [market] = await db
+      .select({
+        id: predictionMarkets.id,
+        engine: predictionMarkets.engine,
+        visibility: predictionMarkets.visibility,
+      })
+      .from(predictionMarkets)
+      .where(eq(predictionMarkets.id, marketId))
+      .limit(1);
+
+    if (!market) {
+      return res.status(404).json({ error: "Market not found" });
+    }
+    if (market.engine !== "amm") {
+      return res.status(400).json({ error: "Market is not AMM" });
+    }
+    if (market.visibility !== "live") {
+      return res.status(403).json({ error: "Market is not publicly visible" });
+    }
+
+    // Per-market subscriber cap. A single popular market with 500
+    // concurrent listeners is already an enormous town-square crowd;
+    // anything above that on one process is almost certainly a bot
+    // or a leaking client. We reject with 429 so legitimate users
+    // fall back to React Query's polling.
+    const MAX_SUBSCRIBERS_PER_MARKET = 500;
+    const { subscribe, subscriberCount } = await import(
+      "./services/amm-price-broadcaster"
+    );
+    if (subscriberCount(marketId) >= MAX_SUBSCRIBERS_PER_MARKET) {
+      return res
+        .status(429)
+        .json({ error: "Too many concurrent price-stream subscribers for this market" });
+    }
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    // Defeats nginx/Railway proxy response buffering. Without this
+    // the proxy holds the body until enough bytes accumulate, which
+    // makes SSE feel like a 30 s lag.
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders?.();
+
+    const send = (data: unknown) => {
+      try {
+        res.write(`data: ${JSON.stringify(data)}\n\n`);
+      } catch (err) {
+        console.error("[amm/stream] write failed:", err);
+      }
+    };
+
+    // Race-safe ordering: read the initial snapshot BEFORE
+    // subscribing, then subscribe and queue any post-subscribe
+    // events. Without this, a trade that commits between subscribe
+    // and snapshot-read could deliver the event first and the
+    // (older) snapshot second — the client's last-write-wins cache
+    // would regress to a stale price. We solve it with a
+    // `lastTradeAt` low-water mark: the snapshot stamps its
+    // updated-at, and any incoming event with `lastTradeAt` older
+    // than that is dropped (the snapshot already reflects it).
+    let snapshotUpdatedAt = 0;
+    try {
+      const [stateRow] = await db
+        .select()
+        .from(marketAmmState)
+        .where(eq(marketAmmState.marketId, marketId))
+        .limit(1);
+      if (stateRow) {
+        const liquidityB = Number(stateRow.liquidityB);
+        const outcomeOrder = stateRow.outcomeOrder as string[];
+        const shareQuantities = stateRow.shareQuantities as Record<string, number>;
+        const { pricesAll } = await import("@shared/lib/amm/lmsr");
+        const qArr = outcomeOrder.map((id) => shareQuantities[id] ?? 0);
+        const pricesArr = pricesAll(qArr, liquidityB);
+        const outcomePrices: Record<string, number> = {};
+        for (let i = 0; i < outcomeOrder.length; i++) {
+          outcomePrices[outcomeOrder[i]] = pricesArr[i];
+        }
+        const lastTradeAt = stateRow.updatedAt
+          ? new Date(stateRow.updatedAt).toISOString()
+          : new Date().toISOString();
+        snapshotUpdatedAt = new Date(lastTradeAt).getTime();
+        send({
+          outcomePrices,
+          shareQuantities,
+          liquidityB,
+          lastTradeAt,
+        });
+      }
+    } catch (err) {
+      console.error("[amm/stream] initial snapshot failed:", err);
+    }
+
+    // Subscribe AFTER the snapshot is sent. Each incoming event
+    // checks the low-water mark and is dropped if it's older than
+    // the snapshot we just delivered. The combination ensures
+    // monotonic ordering on the wire.
+    const unsubscribe = subscribe(marketId, (snapshot) => {
+      const eventTime = new Date(snapshot.lastTradeAt).getTime();
+      if (Number.isFinite(eventTime) && eventTime < snapshotUpdatedAt) return;
+      send(snapshot);
+    });
+
+    // Heartbeat keeps the connection alive through idle proxies.
+    // SSE comments (`: text\n\n`) are silently consumed by the
+    // EventSource client, so this doesn't surface to the UI.
+    const heartbeat = setInterval(() => {
+      try {
+        res.write(": ping\n\n");
+      } catch {
+        // Connection already gone — `close` cleanup will run.
+      }
+    }, 25_000);
+
+    let cleanedUp = false;
+    const cleanup = () => {
+      // Guard against double-fire: both `close` and `error` can
+      // fire on the same socket teardown. The interval clear and
+      // EventEmitter `off` are idempotent, but `res.end()` after
+      // socket close has historically warned in Node.
+      if (cleanedUp) return;
+      cleanedUp = true;
+      clearInterval(heartbeat);
+      unsubscribe();
+      try {
+        res.end();
+      } catch {
+        // ignore — connection already closed
+      }
+    };
+
+    req.on("close", cleanup);
+    req.on("error", cleanup);
+  });
+
   // GET /api/markets/:id/price-history
   //
   // Time-bucketed marginal LMSR price history for an AMM market.
@@ -10294,6 +10456,10 @@ Only return the JSON object.`;
         header: req.header("Idempotency-Key"),
         body: (req.body as { idempotencyKey?: unknown })?.idempotencyKey,
       });
+      const { parseSlippageBound } = await import("./services/amm-slippage");
+      const minPricePerShare = parseSlippageBound(
+        (req.body as { minPricePerShare?: unknown })?.minPricePerShare,
+      );
       const result = await executeSell({
         marketId: id,
         userId: req.userId!,
@@ -10301,6 +10467,7 @@ Only return the JSON object.`;
         shares: sharesNum,
         isAdmin,
         clientRequestId: clientRequestId ?? undefined,
+        minPricePerShare: minPricePerShare ?? undefined,
       });
 
       if ("error" in result) {
@@ -18291,16 +18458,21 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       }
 
       const { executeBuy } = await import("./services/amm-trades");
+      const { parseSlippageBound } = await import("./services/amm-slippage");
       const budget = Math.floor(Number(stakeAmount));
       if (!Number.isInteger(budget) || budget <= 0) {
         return res.status(400).json({ error: "stakeAmount must be a positive integer" });
       }
+      const maxPricePerShare = parseSlippageBound(
+        (req.body as { maxPricePerShare?: unknown })?.maxPricePerShare,
+      );
       const result = await executeBuy({
         marketId: market.id,
         userId: authReq.userId!,
         entryId,
         creditBudget: budget,
         clientRequestId: clientRequestId ?? undefined,
+        maxPricePerShare: maxPricePerShare ?? undefined,
       });
       if ("error" in result) {
         return res
@@ -18408,6 +18580,14 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         return res.status(400).json({ error: "Betting is closed for this market" });
       }
 
+      const { parseSlippageBound } = await import("./services/amm-slippage");
+      const body = (req.body ?? {}) as {
+        maxPricePerShare?: unknown;
+        minPricePerShare?: unknown;
+      };
+      const maxPricePerShare = parseSlippageBound(body.maxPricePerShare);
+      const minPricePerShare = parseSlippageBound(body.minPricePerShare);
+
       if (actionType === "sell") {
         const sharesNum = Number(shares);
         if (!Number.isFinite(sharesNum) || sharesNum <= 0) {
@@ -18419,9 +18599,17 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           entryId,
           shares: sharesNum,
           clientRequestId: clientRequestId ?? undefined,
+          minPricePerShare: minPricePerShare ?? undefined,
         });
         if ("error" in sellResult) {
-          return res.status(sellResult.status).json({ error: sellResult.message });
+          // Send both the machine-readable code and the human message
+          // so parseApiError on the client can humanise the toast title
+          // and put the detailed reason in the description. Matches the
+          // shape used by /api/open-markets/:slug/bet and
+          // /api/markets/:id/sell.
+          return res
+            .status(sellResult.status)
+            .json({ error: sellResult.error, message: sellResult.message });
         }
         return res.json({
           engine: "amm",
@@ -18448,9 +18636,12 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         entryId,
         creditBudget: budget,
         clientRequestId: clientRequestId ?? undefined,
+        maxPricePerShare: maxPricePerShare ?? undefined,
       });
       if ("error" in buyResult) {
-        return res.status(buyResult.status).json({ error: buyResult.message });
+        return res
+          .status(buyResult.status)
+          .json({ error: buyResult.error, message: buyResult.message });
       }
       const updownHooks = await fireAmmPlacementHooks({
         userId: authReq.userId!,
@@ -18489,17 +18680,25 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       // (10M credits) so a fat-fingered or malicious payload can't try to bet
       // BigInts / Infinity and confuse the downstream credit math.
       // Phase 4: AMM markets accept actionType='sell' + shares for sell trades.
+      // Tier 1.2: optional per-share slippage cap (buy) / floor (sell) in
+      // (0, 1]. Bounds outside that range are silently coerced to null by
+      // the downstream parseSlippageBound; Zod just gates the shape so a
+      // clearly malicious string doesn't reach the helper.
       const betSchema = z.object({
         entryId: z.string().min(1).max(128),
         stakeAmount: z.number().int().positive().max(10_000_000).optional(),
         actionType: z.enum(["buy", "sell"]).optional(),
         shares: z.number().positive().finite().max(1_000_000_000).optional(),
+        maxPricePerShare: z.number().positive().finite().max(1).optional(),
+        minPricePerShare: z.number().positive().finite().max(1).optional(),
       });
       let parsed: {
         entryId: string;
         stakeAmount?: number;
         actionType?: "buy" | "sell";
         shares?: number;
+        maxPricePerShare?: number;
+        minPricePerShare?: number;
       };
       try {
         parsed = betSchema.parse(req.body ?? {});
@@ -18507,7 +18706,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         if (err instanceof ZodError) return sendZodError(res, err);
         return sendBadRequest(res, "Invalid bet body");
       }
-      const { entryId, stakeAmount, actionType, shares } = parsed;
+      const { entryId, stakeAmount, actionType, shares, maxPricePerShare, minPricePerShare } = parsed;
 
       // Parse the Idempotency-Key BEFORE the rate-limit check so an
       // identified retry can replay (via executeBuy/Sell's ledger
@@ -18581,9 +18780,12 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           entryId,
           shares,
           clientRequestId: clientRequestId ?? undefined,
+          minPricePerShare,
         });
         if ("error" in sellResult) {
-          return res.status(sellResult.status).json({ error: sellResult.message });
+          return res
+            .status(sellResult.status)
+            .json({ error: sellResult.error, message: sellResult.message });
         }
         return res.json({
           engine: "amm",
@@ -18609,9 +18811,12 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         entryId,
         creditBudget: stakeAmount,
         clientRequestId: clientRequestId ?? undefined,
+        maxPricePerShare,
       });
       if ("error" in buyResult) {
-        return res.status(buyResult.status).json({ error: buyResult.message });
+        return res
+          .status(buyResult.status)
+          .json({ error: buyResult.error, message: buyResult.message });
       }
       const nativeHooks = await fireAmmPlacementHooks({
         userId: authReq.userId!,

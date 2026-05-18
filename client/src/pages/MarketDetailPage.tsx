@@ -41,6 +41,7 @@ import { useShareCard } from "@/contexts/ShareCardContext";
 import { buildTradeShareData, buildPositionShareData } from "@/lib/share-data";
 import { goBack } from "@/lib/goBack";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
+import { useAmmPriceStream } from "@/hooks/useAmmPriceStream";
 import {
   ArrowLeft,
   Star,
@@ -626,6 +627,17 @@ export default function MarketDetailPage() {
     enabled: !!params.slug,
   });
 
+  // Tier 1.1: live price push. Opens a single SSE connection to
+  // `/api/markets/:id/amm/stream` for this market and merges each
+  // event into the cached payload above, so the price tiles +
+  // receipt card + position rows update instantly when another
+  // trader moves the market. Guarded on `market?.id` so logged-out
+  // browse + native-market redirects don't pay for a stream they
+  // can't render.
+  useAmmPriceStream(market?.id ?? null, {
+    queryKey: ["/api/open-markets", params.slug],
+  });
+
   // Native market types have dedicated detail pages with the live chart,
   // "What needs to happen" callout, sticky position bar, and the
   // same-side top-up / opposite-side hedge guards. Whenever a native
@@ -738,7 +750,17 @@ export default function MarketDetailPage() {
   });
 
   const betMutation = useMutation({
-    mutationFn: async ({ entryId, stakeAmount: amount, direction }: { entryId: string; stakeAmount: number; direction: "yes" | "no" }) => {
+    mutationFn: async ({
+      entryId,
+      stakeAmount: amount,
+      direction,
+      maxPricePerShare,
+    }: {
+      entryId: string;
+      stakeAmount: number;
+      direction: "yes" | "no";
+      maxPricePerShare?: number;
+    }) => {
       if (!market) {
         throw new Error("Market not loaded");
       }
@@ -747,7 +769,7 @@ export default function MarketDetailPage() {
         const res = await apiRequest(
           "POST",
           `/api/open-markets/${params.slug}/bet`,
-          { entryId, stakeAmount: amount, direction },
+          { entryId, stakeAmount: amount, direction, maxPricePerShare },
           { idempotencyKey: tradeIdempotencyKey },
         );
         return res.json();
@@ -763,6 +785,7 @@ export default function MarketDetailPage() {
         {
           entryId,
           stakeAmount: amount,
+          maxPricePerShare,
         },
         { idempotencyKey: tradeIdempotencyKey },
       );
@@ -1047,7 +1070,15 @@ export default function MarketDetailPage() {
    * immediately after a sell.
    */
   const ammSellMutation = useMutation({
-    mutationFn: async ({ entryId, shares }: { entryId: string; shares: number }) => {
+    mutationFn: async ({
+      entryId,
+      shares,
+      minPricePerShare,
+    }: {
+      entryId: string;
+      shares: number;
+      minPricePerShare?: number;
+    }) => {
       if (!market) throw new Error("Market not loaded");
       const res = await apiRequest(
         "POST",
@@ -1055,6 +1086,7 @@ export default function MarketDetailPage() {
         {
           entryId,
           shares,
+          minPricePerShare,
         },
         { idempotencyKey: tradeIdempotencyKey },
       );
@@ -1183,7 +1215,10 @@ export default function MarketDetailPage() {
    * `pendingSelection.entryId / direction` because the modal can flip
    * sides via `onDirectionChange` without reopening.
    */
-  const handleConfirmStakeFromModal = async (amount: number) => {
+  const handleConfirmStakeFromModal = async (
+    amount: number,
+    meta?: { maxPricePerShare?: number },
+  ) => {
     if (!pendingSelection?.entryId) return;
     const direction =
       pendingSelection.direction === "no" ? "no" : "yes";
@@ -1191,6 +1226,7 @@ export default function MarketDetailPage() {
       entryId: pendingSelection.entryId,
       stakeAmount: amount,
       direction,
+      maxPricePerShare: meta?.maxPricePerShare,
     });
     setStakeModalOpen(false);
     setPendingSelection(null);
@@ -1200,11 +1236,15 @@ export default function MarketDetailPage() {
    * Sprint 5 / Phase 4.2: StakeModal sell confirm. Sends `shares` to
    * the community sell endpoint via `ammSellMutation`.
    */
-  const handleConfirmAmmSellFromModal = async (shares: number) => {
+  const handleConfirmAmmSellFromModal = async (
+    shares: number,
+    meta?: { minPricePerShare?: number },
+  ) => {
     if (!pendingSelection?.entryId) return;
     await ammSellMutation.mutateAsync({
       entryId: pendingSelection.entryId,
       shares,
+      minPricePerShare: meta?.minPricePerShare,
     });
   };
 

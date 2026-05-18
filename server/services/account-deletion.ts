@@ -376,6 +376,7 @@ export async function finaliseAccountDeletion(userId: string): Promise<void> {
     .select({
       deletedAt: profiles.deletedAt,
       username: profiles.username,
+      role: profiles.role,
     })
     .from(profiles)
     .where(eq(profiles.id, userId))
@@ -389,7 +390,25 @@ export async function finaliseAccountDeletion(userId: string): Promise<void> {
     return; // Already finalised — idempotent no-op.
   }
 
-  const anonymousUsername = `deleted_${randomUUID().slice(0, 8)}`;
+  // Role escalation guard. The request-side check rejects admin
+  // self-deletion, but a user could be promoted to admin AFTER
+  // scheduling deletion (e.g. an operator hands them the keys).
+  // Refusing to finalise such a row prevents the sweeper from
+  // silently anonymising an active admin. The pending request
+  // stays on the row for an operator to investigate manually.
+  if (existing.role === "admin") {
+    log(
+      `[AccountDeletion] Refusing to finalise admin profile ${userId}; the user was promoted after scheduling deletion. Operator must demote or clear the deletion request.`,
+    );
+    return;
+  }
+
+  // Full UUID (32 hex chars) instead of an 8-char slice so the
+  // anonymous username has effectively zero collision risk against
+  // the `username UNIQUE` constraint. 8 chars = 4 billion combos,
+  // which is fine in normal flow but breaks badly under any kind
+  // of sweep-storm. Full UUID is essentially infinite.
+  const anonymousUsername = `deleted_${randomUUID().replace(/-/g, "")}`;
   const now = new Date();
 
   await db

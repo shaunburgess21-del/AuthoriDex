@@ -43,6 +43,11 @@ import {
   buildBuyReplayResponse,
   buildSellReplayResponse,
 } from "./amm-trades-replay";
+import {
+  checkBuySlippage,
+  checkSellSlippage,
+} from "./amm-slippage";
+import { notifyPriceChange } from "./amm-price-broadcaster";
 
 /**
  * Narrow tx-shape the helpers need. Both top-level `db` and the
@@ -104,6 +109,14 @@ export interface ExecuteBuyInput {
    *  `SELECT ... FOR UPDATE` on `market_amm_state` and the second one
    *  always observes the first's ledger row. */
   clientRequestId?: string;
+  /** Optional client-supplied slippage cap (per-share, 0..1). If the
+   *  realised AVERAGE fill price exceeds this value the trade is
+   *  aborted with `slippage_exceeded` and no DB mutation happens.
+   *  Omitted by the agent runner (agents take whatever fills) so
+   *  this is fully backward-compatible with the existing call sites.
+   *  See `server/services/amm-slippage.ts` for the exact comparison
+   *  semantics. */
+  maxPricePerShare?: number;
 }
 
 export interface ExecuteBuyResult {
@@ -133,7 +146,22 @@ export type TradeError =
   // updown/h2h/gainer/jackpot markets are cron-created with a null
   // `createdBy`, so retail and agents are unaffected. Returned as
   // 403 because it's an authorisation refusal, not a runtime error.
-  | { error: "self_trade_denied"; status: 403; message: string };
+  | { error: "self_trade_denied"; status: 403; message: string }
+  // Client-supplied slippage protection: if the user passed a
+  // `maxPricePerShare` (buy) or `minPricePerShare` (sell), and the
+  // realised average fill price would breach that bound, we abort
+  // without mutating anything so the client can re-quote or relax
+  // tolerance. Returned as 409 (state conflict) so retry logic
+  // distinguishes it from a 400 validation error. `quotedAvgPrice`
+  // and `capOrFloor` echo back the numbers so the client can show
+  // the user the exact gap.
+  | {
+      error: "slippage_exceeded";
+      status: 409;
+      message: string;
+      quotedAvgPrice: number;
+      capOrFloor: number;
+    };
 
 export async function executeBuy(
   input: ExecuteBuyInput,
@@ -148,6 +176,7 @@ export async function executeBuy(
     agentId,
     betMetadata,
     clientRequestId,
+    maxPricePerShare,
   } = input;
 
   if (!Number.isInteger(creditBudget) || creditBudget < MIN_AMM_BUY_CREDITS) {
@@ -162,10 +191,20 @@ export async function executeBuy(
     ? `amm_buy_client_${clientRequestId}`
     : null;
 
+  // Captured by reference so the post-commit notifyPriceChange below
+  // can include the market's current liquidity parameter and the
+  // post-trade share-quantity vector on the SSE event without
+  // re-reading state. Stay `null` if the trade fails before the
+  // load lock / state mutation — we just skip the broadcast in
+  // those cases.
+  let liquidityB: number | null = null;
+  let postTradeShareQuantities: Record<string, number> | null = null;
+
   const run = async (tx: DbOrTx): Promise<ExecuteBuyResult | TradeError> => {
     const ctx = await loadAndLockTradeContext(tx, marketId, entryId, isAdmin, userId);
     if ("error" in ctx) return ctx;
     const { state, b } = ctx;
+    liquidityB = b;
 
     // Idempotency short-circuit. After acquiring the per-market lock
     // (so concurrent retries on the same market serialise) check for
@@ -189,6 +228,28 @@ export async function executeBuy(
       };
     }
     const { shares, chargeCredits, pricePerShareAvg } = quote;
+
+    // Slippage cap check. Lives after the quote but before any
+    // mutation so the abort path is a clean no-op. Helper returns
+    // ok when no cap was supplied (agent runner, older clients), so
+    // this is a strict-superset extension of the existing contract.
+    const slippage = checkBuySlippage({
+      creditsSpent: chargeCredits,
+      sharesOut: shares,
+      cap: maxPricePerShare,
+    });
+    if (!slippage.ok) {
+      return {
+        error: "slippage_exceeded",
+        status: 409,
+        message:
+          `Average fill price ${slippage.avgPrice.toFixed(4)} exceeds your ` +
+          `slippage cap ${slippage.capOrFloor.toFixed(4)}. Try a smaller ` +
+          `stake or relax tolerance.`,
+        quotedAvgPrice: slippage.avgPrice,
+        capOrFloor: slippage.capOrFloor,
+      };
+    }
 
     const [updatedProfile] = await tx
       .update(profiles)
@@ -217,6 +278,7 @@ export async function executeBuy(
 
     const newShareQuantities = { ...state.shareQuantities };
     newShareQuantities[entryId] = (newShareQuantities[entryId] ?? 0) + shares;
+    postTradeShareQuantities = newShareQuantities;
 
     await tx
       .update(marketAmmState)
@@ -293,8 +355,30 @@ export async function executeBuy(
     };
   };
 
-  if (txOpt) return run(txOpt);
-  return db.transaction(async (tx) => run(tx as DbOrTx));
+  const result = txOpt
+    ? await run(txOpt)
+    : await db.transaction(async (tx) => run(tx as DbOrTx));
+
+  // Tier 1.1: best-effort price broadcast. Fires AFTER the transaction
+  // commits so SSE subscribers can't observe a price that gets rolled
+  // back. Wrapped in try/catch so a broken broadcaster (or a listener
+  // that throws) never surfaces to the caller or rolls back the trade.
+  // Skipped on error results and idempotent replays — replays return
+  // current state without a real price change, so notifying again
+  // would just produce a duplicate event.
+  if (!("error" in result) && liquidityB != null && postTradeShareQuantities != null) {
+    try {
+      notifyPriceChange(marketId, {
+        outcomePrices: result.newPrices,
+        shareQuantities: postTradeShareQuantities,
+        liquidityB,
+        lastTradeAt: new Date().toISOString(),
+      });
+    } catch (err) {
+      console.error("[amm-trades] notifyPriceChange after buy failed (non-fatal):", err);
+    }
+  }
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -403,6 +487,11 @@ export interface ExecuteSellInput {
    *  string can be safely re-used by a client that intends buy+sell
    *  flows tied to one modal session. */
   clientRequestId?: string;
+  /** Optional client-supplied slippage floor (per-share, 0..1). If
+   *  the realised AVERAGE per-share proceeds fall below this value,
+   *  the sell aborts with `slippage_exceeded`. Mirror of
+   *  `ExecuteBuyInput.maxPricePerShare`. */
+  minPricePerShare?: number;
 }
 
 export interface ExecuteSellResult {
@@ -430,6 +519,7 @@ export async function executeSell(
     agentId,
     betMetadata,
     clientRequestId,
+    minPricePerShare,
   } = input;
 
   if (!Number.isFinite(shares) || shares <= 0) {
@@ -444,10 +534,15 @@ export async function executeSell(
     ? `amm_sell_client_${clientRequestId}`
     : null;
 
+  // See executeBuy: captured for the post-commit SSE broadcast below.
+  let liquidityB: number | null = null;
+  let postTradeShareQuantities: Record<string, number> | null = null;
+
   const run = async (tx: DbOrTx): Promise<ExecuteSellResult | TradeError> => {
     const ctx = await loadAndLockTradeContext(tx, marketId, entryId, isAdmin, userId);
     if ("error" in ctx) return ctx;
     const { state, b } = ctx;
+    liquidityB = b;
 
     // Idempotency short-circuit. See `executeBuy` for the contract.
     if (idempotencyKey) {
@@ -499,6 +594,27 @@ export async function executeSell(
     }
     const { proceeds, pricePerShareAvg } = quote;
 
+    // Slippage floor check. Same pattern as the buy path: ok when
+    // no floor was supplied, abort cleanly when the realised
+    // average per-share proceeds fall below tolerance.
+    const slippage = checkSellSlippage({
+      creditsReceived: proceeds,
+      sharesIn: sharesToSell,
+      floor: minPricePerShare,
+    });
+    if (!slippage.ok) {
+      return {
+        error: "slippage_exceeded",
+        status: 409,
+        message:
+          `Average proceeds price ${slippage.avgPrice.toFixed(4)} is below ` +
+          `your slippage floor ${slippage.capOrFloor.toFixed(4)}. Try a ` +
+          `smaller share count or relax tolerance.`,
+        quotedAvgPrice: slippage.avgPrice,
+        capOrFloor: slippage.capOrFloor,
+      };
+    }
+
     const [updatedProfile] = await tx
       .update(profiles)
       .set({
@@ -522,6 +638,7 @@ export async function executeSell(
     // mathematically impossible to drive negative through legal sells
     // (proceeds = 0 at q[i] = 0), but defensive against rounding.
     newShareQuantities[entryId] = Math.max(0, remainingMarketShares);
+    postTradeShareQuantities = newShareQuantities;
 
     await tx
       .update(marketAmmState)
@@ -596,8 +713,26 @@ export async function executeSell(
     };
   };
 
-  if (txOpt) return run(txOpt);
-  return db.transaction(async (tx) => run(tx as DbOrTx));
+  const result = txOpt
+    ? await run(txOpt)
+    : await db.transaction(async (tx) => run(tx as DbOrTx));
+
+  // Tier 1.1: best-effort price broadcast after a successful sell.
+  // See `executeBuy` for rationale (post-commit, try/catch, skip on
+  // errors / idempotent replays).
+  if (!("error" in result) && liquidityB != null && postTradeShareQuantities != null) {
+    try {
+      notifyPriceChange(marketId, {
+        outcomePrices: result.newPrices,
+        shareQuantities: postTradeShareQuantities,
+        liquidityB,
+        lastTradeAt: new Date().toISOString(),
+      });
+    } catch (err) {
+      console.error("[amm-trades] notifyPriceChange after sell failed (non-fatal):", err);
+    }
+  }
+  return result;
 }
 
 // ---------------------------------------------------------------------------

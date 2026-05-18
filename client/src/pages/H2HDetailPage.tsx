@@ -328,13 +328,22 @@ export default function H2HDetailPage() {
   }, [queryClient, refreshProfile, marketId]);
 
   const betMutation = useMutation({
-    mutationFn: async ({ entryId, stakeAmount }: { entryId: string; stakeAmount: number }) => {
+    mutationFn: async ({
+      entryId,
+      stakeAmount,
+      maxPricePerShare,
+    }: {
+      entryId: string;
+      stakeAmount: number;
+      maxPricePerShare?: number;
+    }) => {
       const res = await apiRequest(
         "POST",
         `/api/native-markets/${marketId}/bet`,
         {
           entryId,
           stakeAmount,
+          maxPricePerShare,
         },
         { idempotencyKey: tradeIdempotencyKey },
       );
@@ -410,7 +419,15 @@ export default function H2HDetailPage() {
   });
 
   const sellMutation = useMutation({
-    mutationFn: async ({ entryId, shares }: { entryId: string; shares: number }) => {
+    mutationFn: async ({
+      entryId,
+      shares,
+      minPricePerShare,
+    }: {
+      entryId: string;
+      shares: number;
+      minPricePerShare?: number;
+    }) => {
       const res = await apiRequest(
         "POST",
         `/api/native-markets/${marketId}/bet`,
@@ -418,6 +435,7 @@ export default function H2HDetailPage() {
           entryId,
           actionType: "sell",
           shares,
+          minPricePerShare,
         },
         { idempotencyKey: tradeIdempotencyKey },
       );
@@ -483,22 +501,24 @@ export default function H2HDetailPage() {
   });
 
   const handleConfirmStake = useCallback(
-    async (amount: number) => {
+    async (amount: number, meta?: { maxPricePerShare?: number }) => {
       if (!pendingSelection?.entryId) return;
       await betMutation.mutateAsync({
         entryId: pendingSelection.entryId,
         stakeAmount: amount,
+        maxPricePerShare: meta?.maxPricePerShare,
       });
     },
     [pendingSelection, betMutation]
   );
 
   const handleConfirmAmmSell = useCallback(
-    async (shares: number) => {
+    async (shares: number, meta?: { minPricePerShare?: number }) => {
       if (!pendingSelection?.entryId) return;
       await sellMutation.mutateAsync({
         entryId: pendingSelection.entryId,
         shares,
+        minPricePerShare: meta?.minPricePerShare,
       });
     },
     [pendingSelection, sellMutation]

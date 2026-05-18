@@ -117,18 +117,37 @@ interface StakeModalProps {
    * confetti and resetting input state — so a failed bet (e.g. server 400)
    * keeps the modal open with the user's entry intact and never plays the
    * "you won" confetti on top of the parent's error toast.
+   *
+   * Tier 1.2: the optional `meta.maxPricePerShare` is the slippage cap
+   * derived from the user's chosen tolerance (1% / 5% / 10%) and the
+   * modal's live quote. Parents should forward it into the trade route
+   * request body so the server-side guard in `executeBuy` can abort the
+   * trade with `slippage_exceeded` when the realised average fill price
+   * would breach this cap. Callers that don't forward it simply opt out
+   * of slippage protection — backward-compatible.
    */
-  onConfirm: (amount: number) => void | Promise<void>;
+  onConfirm: (
+    amount: number,
+    meta?: { maxPricePerShare?: number },
+  ) => void | Promise<void>;
   onConfirmWithMeta?: (
     amount: number,
-    meta: { confidence?: number; thesis?: string },
+    meta: { confidence?: number; thesis?: string; maxPricePerShare?: number },
   ) => void | Promise<void>;
   /**
    * AMM-only sell handler. Called with a fractional share count when
    * the user confirms in Sell mode. Parent should call
    * `/api/native-markets/:id/bet` with `actionType:'sell'`.
+   *
+   * Tier 1.2: `meta.minPricePerShare` is the slippage floor mirror of
+   * the buy-side cap. Forward it to the server so it can abort the
+   * sell with `slippage_exceeded` when proceeds would slip below
+   * tolerance.
    */
-  onConfirmAmmSell?: (shares: number) => void | Promise<void>;
+  onConfirmAmmSell?: (
+    shares: number,
+    meta?: { minPricePerShare?: number },
+  ) => void | Promise<void>;
   walletBalance: number;
   /** Up/Down for `updown` markets, Yes/No for `community` markets.
    *  When provided, the modal renders an in-place toggle so a misclick on
@@ -176,6 +195,12 @@ export function StakeModal({
   const [stakeAmount, setStakeAmount] = useState("");
   const [ammMode, setAmmMode] = useState<"buy" | "sell">(initialAmmMode ?? "buy");
   const [sellShares, setSellShares] = useState("");
+  // Tier 1.2: slippage tolerance picker. Stored as a fraction (0.05 = 5%).
+  // Default to 5% — generous enough for typical pre-launch liquidity while
+  // still meaningful protection against a whale moving the price between
+  // quote-view and submit. Default is a UX choice, not a safety boundary;
+  // the server treats undefined `maxPricePerShare` as "no cap".
+  const [slippagePct, setSlippagePct] = useState<number>(0.05);
   // Re-seed ammMode whenever the parent's intent changes (e.g. user
   // clicks the inline Sell button on the detail page after the modal
   // has already been opened once for a Buy). Without this the modal
@@ -340,19 +365,36 @@ export function StakeModal({
       };
     }
 
+    // Tier 1.2: derive the slippage cap (buy) or floor (sell) from
+    // the user-chosen tolerance and the live AMM price. We clamp the
+    // cap into the LMSR domain (0, 1] so a degenerate price * (1 +
+    // slippage) > 1 doesn't turn into a no-op when the server's
+    // parseSlippageBound rejects values > 1. Floor is clamped to a
+    // tiny epsilon above 0 for the same reason. Only sent when we
+    // have a live price — without one the bound is meaningless.
+    const maxPricePerShare =
+      ammEntryPrice != null
+        ? Math.min(1, ammEntryPrice * (1 + slippagePct))
+        : undefined;
+    const minPricePerShare =
+      ammEntryPrice != null
+        ? Math.max(1e-6, ammEntryPrice * (1 - slippagePct))
+        : undefined;
+
     setSubmitting(true);
     try {
       let result: void | Promise<void>;
       if (isAmmSell && onConfirmAmmSell) {
         const sharesToSell = Math.min(parsedSellShares, ammNetShares);
-        result = onConfirmAmmSell(sharesToSell);
+        result = onConfirmAmmSell(sharesToSell, { minPricePerShare });
       } else if (onConfirmWithMeta) {
         result = onConfirmWithMeta(parsedAmount, {
           confidence: confidence || undefined,
           thesis: thesis.trim() || undefined,
+          maxPricePerShare,
         });
       } else {
-        result = onConfirm(parsedAmount);
+        result = onConfirm(parsedAmount, { maxPricePerShare });
       }
 
       if (result && typeof (result as Promise<void>).then === "function") {
@@ -940,8 +982,71 @@ export function StakeModal({
                     </Button>
                   );
                 })}
+                {/* Tier 1.2: Max chip clamps to wallet balance (with a
+                    hard ceiling at 99,999 so a power user with millions
+                    of credits doesn't accidentally one-click an entire
+                    market). Disabled when balance is below MIN_STAKE so
+                    a 0-balance user can't tap into a no-op. */}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={walletBalance < MIN_STAKE}
+                  onClick={() => {
+                    const maxStake = Math.min(walletBalance, 99999);
+                    if (maxStake >= MIN_STAKE) setStakeAmount(String(maxStake));
+                  }}
+                  title={`Stakes ${Math.min(walletBalance, 99999).toLocaleString("en-US")} credits (capped at your balance)`}
+                  className="flex-1"
+                  data-testid="button-preset-max"
+                >
+                  Max
+                </Button>
               </div>
             </>
+          )}
+
+          {/* Tier 1.2: slippage tolerance picker. Renders for both buy
+              and sell AMM modes when we have a live price to anchor
+              the cap / floor against — otherwise the bound math
+              (price * (1 + slippage)) is meaningless. The chosen
+              tolerance is plumbed into the request body so
+              `executeBuy` / `executeSell` can abort with
+              `slippage_exceeded` if the realised average fill price
+              breaches it. */}
+          {ammEntryPrice != null && (
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+                  Slippage tolerance
+                </label>
+                <span
+                  className="text-[10px] text-muted-foreground"
+                  title={
+                    ammMode === "buy"
+                      ? "We'll cancel the trade if the average fill price slips above your tolerance from the quoted price."
+                      : "We'll cancel the trade if the average sell price slips below your tolerance from the quoted price."
+                  }
+                >
+                  auto-cancel if exceeded
+                </span>
+              </div>
+              <div className="flex gap-2">
+                {[0.01, 0.05, 0.1].map((pct) => (
+                  <Button
+                    key={pct}
+                    type="button"
+                    variant={slippagePct === pct ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setSlippagePct(pct)}
+                    className="flex-1"
+                    data-testid={`button-slippage-${Math.round(pct * 100)}`}
+                  >
+                    {Math.round(pct * 100)}%
+                  </Button>
+                ))}
+              </div>
+            </div>
           )}
 
           {/* Polymarket pass: restyled AMM receipt. Big "Payout if win"

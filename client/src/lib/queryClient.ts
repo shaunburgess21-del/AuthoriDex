@@ -25,6 +25,25 @@ export class ApiError extends Error {
  *     toast.error(title, { description });
  *   }
  */
+/**
+ * Map a server-side error code (e.g. `slippage_exceeded`) to a
+ * user-facing title. Keeps toast copy friendly without leaking the
+ * raw enum string into the UI. Codes that aren't in the map fall
+ * back to the verbatim code (preserves the previous behaviour for
+ * any error we haven't bothered to humanise yet).
+ */
+function humaniseErrorCode(code: string): string {
+  const map: Record<string, string> = {
+    slippage_exceeded: "Price moved against you",
+    insufficient_credits: "Not enough credits",
+    insufficient_shares: "Not enough shares",
+    trade_too_small: "Trade too small",
+    market_closed: "Market is closed",
+    self_trade_denied: "Can't trade on your own market",
+  };
+  return map[code] ?? code;
+}
+
 export function parseApiError(
   err: unknown,
   fallbackTitle: string,
@@ -36,9 +55,18 @@ export function parseApiError(
     try {
       const body = JSON.parse(m[2]);
       if (body && typeof body === "object" && body.error) {
+        const rawCode = String(body.error);
+        // Slippage gets a richer description so the user knows what
+        // to do next ("try a smaller stake or relax tolerance"). The
+        // server already builds that copy in result.message.
+        const description = body.message
+          ? String(body.message)
+          : body.detail
+            ? String(body.detail)
+            : undefined;
         return {
-          title: String(body.error),
-          description: body.detail ? String(body.detail) : undefined,
+          title: humaniseErrorCode(rawCode),
+          description,
           status,
         };
       }
