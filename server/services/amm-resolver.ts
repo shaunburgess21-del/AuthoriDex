@@ -37,6 +37,10 @@ import { db } from "../db";
 import { log } from "../log";
 import { returnAmmSeedAtSettlement } from "./amm-house";
 import { createNotification } from "./notifications";
+import {
+  buildAmmResolutionNotification,
+  buildAmmVoidNotification,
+} from "./amm-resolver-notifications";
 import { gamificationService } from "./gamification";
 import { checkAndAwardPredictionWinBadges } from "./badges";
 import { scoreResolvedMarket } from "../agents/performanceUpdater";
@@ -279,17 +283,18 @@ async function emitResolutionSideEffects(result: ResolveAmmMarketResult): Promis
 
       for (const row of refundRows) {
         const refund = row.amount ?? 0;
+        const { title, body } = buildAmmVoidNotification({ marketTitle, refund });
         await createNotification({
           userId: row.userId,
-          kind: "market_resolved",
-          title: "Market voided — credits refunded",
-          body: `${marketTitle} was voided. ${refund.toLocaleString("en-US")} credits returned.`,
+          kind: "market_void_refund",
+          title,
+          body,
           href,
           entityType: "market",
           entityId: marketId,
           marketId,
           metadata: { outcome: "voided", refund },
-          idempotencyKey: `market_resolved:${marketId}:void:${row.userId}`,
+          idempotencyKey: `market_void_refund:${marketId}:${row.userId}`,
         });
       }
       return;
@@ -318,25 +323,21 @@ async function emitResolutionSideEffects(result: ResolveAmmMarketResult): Promis
       const won = bet.status === "won";
       const stake = bet.stakeAmount ?? 0;
       const payout = bet.payoutAmount ?? 0;
+
+      // Suppress "won-but-fully-sold" rows: the user already realized
+      // P&L on this buy via sell trades before resolution, so a
+      // resolution ping would print a self-contradictory
+      // "Stake returned — 0 credits (net -<stake>)" message. Wallet
+      // and positions tab are the source of truth in that case.
+      const built = buildAmmResolutionNotification({ marketTitle, won, stake, payout });
+      if (!built) continue;
+
       const profit = won ? payout - stake : -stake;
-      const signedProfit = `${profit >= 0 ? "+" : ""}${profit.toLocaleString("en-US")}`;
-      let title: string;
-      let body: string;
-      if (won && profit > 0) {
-        title = `Your prediction won — ${signedProfit} credits`;
-        body = `${marketTitle} resolved. Payout ${payout.toLocaleString("en-US")} credits (net ${signedProfit}).`;
-      } else if (won) {
-        title = `Stake returned — ${payout.toLocaleString("en-US")} credits`;
-        body = `${marketTitle} resolved. Payout matched your stake (net ${signedProfit}).`;
-      } else {
-        title = `Your prediction didn't land`;
-        body = `${marketTitle} resolved. Lost ${stake.toLocaleString("en-US")} credits — better luck next round.`;
-      }
       await createNotification({
         userId: bet.userId,
         kind: "market_resolved",
-        title,
-        body,
+        title: built.title,
+        body: built.body,
         href,
         entityType: "market",
         entityId: marketId,

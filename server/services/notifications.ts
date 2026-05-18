@@ -154,6 +154,30 @@ async function isInAppEnabled(userId: string, category: NotificationCategory): P
 }
 
 /**
+ * Returns true when the target user is an agent profile. Agents never
+ * read notifications, so writing rows for them is pure storage cost
+ * (~56 agents x ~30 markets/week of dead rows). Gating at the
+ * dispatcher covers every notification kind, including future ones,
+ * without each call site having to remember the check.
+ *
+ * Fail-OPEN: if the lookup blips, we'd rather deliver an extra ping
+ * to an agent (silently absorbed in DB) than drop a human's.
+ */
+async function isAgentProfile(userId: string): Promise<boolean> {
+  try {
+    const [row] = await db
+      .select({ isAgent: profiles.isAgent })
+      .from(profiles)
+      .where(eq(profiles.id, userId))
+      .limit(1);
+    return Boolean(row?.isAgent);
+  } catch (err) {
+    logger.warn({ err, userId }, "[notifications] agent lookup failed; defaulting to non-agent");
+    return false;
+  }
+}
+
+/**
  * Returns true when the user has explicitly muted this market. We
  * fail OPEN here too — a transient DB hiccup shouldn't silently drop
  * a notification (the worst case is the user gets a single ping they
@@ -199,6 +223,8 @@ export async function createNotification(input: CreateNotificationInput): Promis
 
   const enabled = await isInAppEnabled(input.userId, meta.category);
   if (!enabled) return null;
+
+  if (await isAgentProfile(input.userId)) return null;
 
   if (input.marketId) {
     const muted = await isMarketMuted(input.userId, input.marketId);
@@ -279,13 +305,15 @@ export async function createNotificationsBulk(
 ): Promise<number> {
   if (userIds.length === 0) return 0;
 
-  // Filter to existing profiles to avoid pointless FK-failure logs when
-  // an upstream event references a user who has since deleted their
-  // account. One round-trip; cheap.
+  // Filter to existing non-agent profiles in one round-trip. Drops
+  // both deleted accounts (FK guard) and agent rows (storage noise —
+  // see `isAgentProfile`). `createNotification` re-checks `is_agent`
+  // per row as a safety net for any caller bypassing this batched
+  // path.
   const existing = await db
     .select({ id: profiles.id })
     .from(profiles)
-    .where(inArray(profiles.id, userIds));
+    .where(and(inArray(profiles.id, userIds), eq(profiles.isAgent, false)));
   const existingIds = new Set(existing.map((r) => r.id));
 
   let inserted = 0;
@@ -347,11 +375,14 @@ export async function createBroadcastFanout(
   const priority = input.priority ?? meta.priority;
   const inAppColumn = CATEGORY_TO_IN_APP_COLUMN[meta.category];
 
-  // 1. FK guard — drop ids that no longer exist (deleted accounts).
+  // 1. FK + agent guard — drop deleted accounts AND agent profiles
+  // in one round-trip. Agents never read notifications; broadcasts
+  // (admin announcements, etc.) addressed to "all users" must not
+  // bloat the table with thousands of dead agent rows.
   const existing = await db
     .select({ id: profiles.id })
     .from(profiles)
-    .where(inArray(profiles.id, input.userIds));
+    .where(and(inArray(profiles.id, input.userIds), eq(profiles.isAgent, false)));
   let eligible = existing.map((r) => r.id);
   if (eligible.length === 0) return 0;
 
