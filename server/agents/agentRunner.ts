@@ -65,7 +65,9 @@ import {
   MAX_SELLS_PER_MARKET_PER_AGENT,
   MIN_NET_SHARES_FOR_SELL_EVAL,
   SELL_DEFAULT_CONVICTION,
+  WORLD_MARKETS_LLM_ENABLED,
 } from "./constants";
+import { filterRankableMarketsForRanker } from "./sharpRanker-input";
 import { isAgentsPaused } from "./runtime-state";
 import { sizeAmmBudget } from "./sizing";
 
@@ -315,13 +317,22 @@ async function runAgentBatchOnce(): Promise<{
   // getTrendSignals is internally idempotent for the same person within a
   // sweep, so sharp agents re-evaluating the same markets seconds later
   // don't re-pay the DB cost.
-  // All sweep markets are eligible — community markets get a separate
-  // formatter inside the ranker since they have free-text options
-  // instead of person entries. The world-market LLM (`worldMarketEngine`)
-  // still drives community decisions; the ranker just becomes an
-  // additional edge signal that bumps `priority` to "high" for sharp
-  // agents on whichever community markets the ranker flags.
-  const rankableMarkets = sweepMarkets;
+  // Community markets are eligible only when the world-market LLM kill
+  // switch is on. When `WORLD_MARKETS_LLM_ENABLED=false` the action
+  // worker hard-skips community actions, so any ranker slot spent on a
+  // world market is dead weight — we keep all 6 slots aimed at markets
+  // the agents will actually trade this sweep. When the env flag flips
+  // back on, community markets re-enter the pool on the next sweep.
+  const rankerFilter = filterRankableMarketsForRanker(sweepMarkets, {
+    worldMarketsLlmEnabled: WORLD_MARKETS_LLM_ENABLED,
+  });
+  if (rankerFilter.dropped.length > 0) {
+    log(
+      `[AgentRunner] Sharp ranker: dropping ${rankerFilter.dropped.length} community market(s) from input ` +
+      `(WORLD_MARKETS_LLM_ENABLED=false). Keeping ${rankerFilter.kept.length} of ${sweepMarkets.length}.`,
+    );
+  }
+  const rankableMarkets = rankerFilter.kept;
   const rankerInputs = (
     await Promise.all(
       rankableMarkets.map(async (m): Promise<
