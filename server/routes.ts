@@ -18048,7 +18048,19 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         return res.status(400).json({ error: "Valid entryId and positive stakeAmount are required" });
       }
 
-      if (!checkBetRateLimit(authReq.userId!)) {
+      // Parse the Idempotency-Key BEFORE the rate-limit check so an
+      // identified retry can replay (via executeBuy's ledger short-
+      // circuit) instead of hitting 429. Rate-limit only fires when
+      // the request has no valid key — preserves the legacy guard
+      // for legacy clients while letting modern clients with the
+      // useIdempotencyKey hook double-tap safely on flaky networks.
+      const { parseIdempotencyKey } = await import("./services/idempotency-key");
+      const clientRequestId = parseIdempotencyKey({
+        header: req.header("Idempotency-Key"),
+        body: (req.body as { idempotencyKey?: unknown })?.idempotencyKey,
+      });
+
+      if (!clientRequestId && !checkBetRateLimit(authReq.userId!)) {
         return res.status(429).json({ error: "You're moving fast! Try again in a moment" });
       }
 
@@ -18103,11 +18115,6 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       if (!Number.isInteger(budget) || budget <= 0) {
         return res.status(400).json({ error: "stakeAmount must be a positive integer" });
       }
-      const { parseIdempotencyKey } = await import("./services/idempotency-key");
-      const clientRequestId = parseIdempotencyKey({
-        header: req.header("Idempotency-Key"),
-        body: (req.body as { idempotencyKey?: unknown })?.idempotencyKey,
-      });
       const result = await executeBuy({
         marketId: market.id,
         userId: authReq.userId!,
@@ -18158,7 +18165,17 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         return res.status(400).json({ error: "entryId is required" });
       }
 
-      if (!checkBetRateLimit(authReq.userId!)) {
+      // Parse the Idempotency-Key BEFORE the rate-limit check so an
+      // identified retry can replay (via executeBuy/Sell's ledger
+      // short-circuit) instead of hitting 429. See the matching
+      // comment on `/api/open-markets/:slug/bet` for the rationale.
+      const { parseIdempotencyKey } = await import("./services/idempotency-key");
+      const clientRequestId = parseIdempotencyKey({
+        header: req.header("Idempotency-Key"),
+        body: (req.body as { idempotencyKey?: unknown })?.idempotencyKey,
+      });
+
+      if (!clientRequestId && !checkBetRateLimit(authReq.userId!)) {
         return res.status(429).json({ error: "You're moving fast! Try again in a moment" });
       }
 
@@ -18210,12 +18227,6 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       ) {
         return res.status(400).json({ error: "Betting is closed for this market" });
       }
-
-      const { parseIdempotencyKey } = await import("./services/idempotency-key");
-      const clientRequestId = parseIdempotencyKey({
-        header: req.header("Idempotency-Key"),
-        body: (req.body as { idempotencyKey?: unknown })?.idempotencyKey,
-      });
 
       if (actionType === "sell") {
         const sharesNum = Number(shares);
@@ -18318,7 +18329,17 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       }
       const { entryId, stakeAmount, actionType, shares } = parsed;
 
-      if (!checkBetRateLimit(authReq.userId!)) {
+      // Parse the Idempotency-Key BEFORE the rate-limit check so an
+      // identified retry can replay (via executeBuy/Sell's ledger
+      // short-circuit) instead of hitting 429. See the matching
+      // comment on `/api/open-markets/:slug/bet` for the rationale.
+      const { parseIdempotencyKey } = await import("./services/idempotency-key");
+      const clientRequestId = parseIdempotencyKey({
+        header: req.header("Idempotency-Key"),
+        body: (req.body as { idempotencyKey?: unknown })?.idempotencyKey,
+      });
+
+      if (!clientRequestId && !checkBetRateLimit(authReq.userId!)) {
         return res.status(429).json({ error: "You're moving fast! Try again in a moment" });
       }
 
@@ -18369,12 +18390,6 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       ) {
         return res.status(400).json({ error: "Betting is closed for this market" });
       }
-
-      const { parseIdempotencyKey } = await import("./services/idempotency-key");
-      const clientRequestId = parseIdempotencyKey({
-        header: req.header("Idempotency-Key"),
-        body: (req.body as { idempotencyKey?: unknown })?.idempotencyKey,
-      });
 
       if (actionType === "sell") {
         if (!shares || shares <= 0) {
