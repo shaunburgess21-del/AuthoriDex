@@ -280,6 +280,53 @@ export function registerCronRoutes(app: Express): void {
     }
   });
 
+  // Drain-breaker cron endpoint. Mirrors the in-process scheduler in
+  // server/index.ts so external cron (Railway / GitHub Actions) can
+  // drive the breaker in serverless mode where setInterval doesn't
+  // run. Auth-gated by the shared cron secret so a leaked URL can't
+  // pause agents.
+  app.post("/api/cron/drain-breaker-check", verifyCronSecret, async (_req, res) => {
+    const startTime = Date.now();
+    try {
+      const { checkAndTripDrainBreaker } = await import("../agents/drainBreaker");
+      const result = await checkAndTripDrainBreaker();
+
+      if (result.tripped) {
+        console.warn(
+          `[Cron][drain-breaker-check] TRIPPED — houseDelta24h=${result.houseDelta24h} ` +
+            `threshold=${Math.round(result.thresholdApplied)} ` +
+            `houseBalance=${result.houseBalance}`,
+        );
+      } else {
+        console.log(
+          `[Cron][drain-breaker-check] PASS (${result.reason}) — houseDelta24h=${result.houseDelta24h} ` +
+            `threshold=${Math.round(result.thresholdApplied)} ` +
+            `houseBalance=${result.houseBalance}`,
+        );
+      }
+
+      res.json({
+        success: true,
+        tripped: result.tripped,
+        reason: result.reason,
+        houseDelta24h: result.houseDelta24h,
+        houseBalance: result.houseBalance,
+        thresholdApplied: result.thresholdApplied,
+        thresholds: result.thresholds,
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error("[Cron][drain-breaker-check] Uncaught error:", error);
+      res.status(500).json({
+        success: false,
+        error: error?.message ?? String(error),
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  });
+
   app.get("/api/cron/health", verifyCronSecret, async (_req, res) => {
     // Include upstream provider state so external monitors can alert on Serper
     // auth/quota/rate-limit outages instead of silently degrading product features.

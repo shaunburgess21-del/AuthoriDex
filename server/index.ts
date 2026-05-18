@@ -771,6 +771,15 @@ async function startServer() {
     } else {
       log("[AmmHealthCheck] Skipped - serverless mode. Use POST /api/cron/amm-health-check.");
     }
+
+    // Start drain breaker (auto-pause agents on excessive 24h house
+    // loss). Independent of AmmHealthCheck because the breaker has a
+    // mutation side-effect; we want it on its own cadence + log line.
+    if (!SERVERLESS_MODE) {
+      startScheduler("DrainBreaker", startDrainBreakerScheduler);
+    } else {
+      log("[DrainBreaker] Skipped - serverless mode. Use POST /api/cron/drain-breaker-check.");
+    }
   });
 }
 
@@ -867,6 +876,56 @@ function startAmmHealthCheckScheduler() {
     void runScheduledAmmHealthCheck();
     setInterval(() => void runScheduledAmmHealthCheck(), AMM_HEALTH_CHECK_INTERVAL_MS);
   }, 60_000);
+}
+
+// Drain breaker cadence. 15 minutes matches the AMM-health audit;
+// the breaker query (one SUM over 24h credit_ledger rows + one
+// singleton SELECT) is fast and the table is well-indexed after
+// migration 0064. Faster cadence would be marginal because the 24h
+// window itself is the dominant smoothing factor.
+const DRAIN_BREAKER_INTERVAL_MS = 15 * 60 * 1000;
+
+async function runScheduledDrainBreaker(): Promise<void> {
+  try {
+    const { checkAndTripDrainBreaker } = await import("./agents/drainBreaker");
+    const result = await checkAndTripDrainBreaker();
+    if (result.tripped) {
+      // Use a saved-search-friendly prefix matching the AmmHealthCheck
+      // shape so on-call can filter `[DrainBreaker] TRIPPED` quickly.
+      log(
+        `[DrainBreaker] TRIPPED — houseDelta24h=${result.houseDelta24h} ` +
+          `threshold=${Math.round(result.thresholdApplied)} ` +
+          `houseBalance=${result.houseBalance}`,
+      );
+    } else if (result.reason === "below_threshold") {
+      log(
+        `[DrainBreaker] PASS — houseDelta24h=${result.houseDelta24h} ` +
+          `threshold=${Math.round(result.thresholdApplied)} ` +
+          `houseBalance=${result.houseBalance}`,
+      );
+    } else {
+      log(`[DrainBreaker] No-op (${result.reason})`);
+    }
+  } catch (err: any) {
+    log(
+      `[DrainBreaker] Scheduler tick failed (will retry next interval): ${err?.message ?? err}`,
+    );
+  }
+}
+
+function startDrainBreakerScheduler() {
+  if (SERVERLESS_MODE) {
+    log("[DrainBreaker] Skipped - serverless mode.");
+    return;
+  }
+  log("[DrainBreaker] Starting (every 15 min)");
+  // Stagger initial run by 90s so the audit doesn't pile onto boot-
+  // time DB load alongside AmmHealthCheck (60s) and the other
+  // schedulers firing their first ticks.
+  setTimeout(() => {
+    void runScheduledDrainBreaker();
+    setInterval(() => void runScheduledDrainBreaker(), DRAIN_BREAKER_INTERVAL_MS);
+  }, 90_000);
 }
 
 startServer().catch((error) => {
