@@ -266,7 +266,12 @@ test("buildSellReplayResponse: positionRows with non buy/sell actionType are ign
   assert.equal(result.remainingShares, 3);
 });
 
-test("buildSellReplayResponse: positionRows with non-finite shareCount are ignored", () => {
+test("buildSellReplayResponse: positionRows with non-finite shareCount (NaN, Infinity) are ignored", () => {
+  // Both rows exercise the `!Number.isFinite(sc) → continue` branch.
+  // `"not-a-number"` parses to NaN, `"Infinity"` parses to Infinity —
+  // neither contributes to netShares. A `null` shareCount is NOT a
+  // non-finite case (`Number(null ?? 0) === 0`, finite); that path is
+  // covered implicitly by other tests where the contribution is 0.
   const result = buildSellReplayResponse({
     bet: {
       id: "sell-6",
@@ -279,6 +284,34 @@ test("buildSellReplayResponse: positionRows with non-finite shareCount are ignor
     positionRows: [
       { actionType: "buy", shareCount: "5" },
       { actionType: "buy", shareCount: "not-a-number" },
+      { actionType: "sell", shareCount: "Infinity" },
+    ],
+    state: STATE,
+    liquidityB: B,
+    expectedEntryId: "yes",
+  });
+  assert.ok(result);
+  assert.equal(result.remainingShares, 5);
+});
+
+test("buildSellReplayResponse: positionRows with null shareCount coerce to 0 (not ignored, but contribute nothing)", () => {
+  // `Number(null ?? 0)` is `0`, which is finite, so the helper does NOT
+  // skip the row — it accumulates a 0 contribution. Functionally the
+  // same as ignoring, but worth pinning so a future "tighten the null
+  // check" refactor (e.g. `if (row.shareCount == null) continue`) can
+  // be evaluated against this established behaviour.
+  const result = buildSellReplayResponse({
+    bet: {
+      id: "sell-6b",
+      entryId: "yes",
+      shareCount: "1",
+      pricePerShare: "0.5",
+      payoutAmount: 0,
+    },
+    walletRow: { predictCredits: 0 },
+    positionRows: [
+      { actionType: "buy", shareCount: "5" },
+      { actionType: "buy", shareCount: null },
       { actionType: "sell", shareCount: null },
     ],
     state: STATE,
