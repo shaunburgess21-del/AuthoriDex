@@ -29,6 +29,7 @@ import { TrendingPerson } from "@shared/schema";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest, getAuthHeaders, parseApiError } from "@/lib/queryClient";
+import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
 import { getSupabase } from "@/lib/supabase";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { getMarketBaselineScore } from "@/lib/predict-market-baseline";
@@ -1247,6 +1248,18 @@ export default function PredictPage() {
    * hard-coding "buy" at the call site.
    */
   const [modalIntent, setModalIntent] = useState<"buy" | "sell">("buy");
+  /**
+   * Client-supplied `Idempotency-Key` for AMM trade requests. See
+   * `client/src/lib/useIdempotencyKey.ts` for the full contract. The
+   * dep tuple here means: modal close+reopen, swap selection, or flip
+   * buy↔sell each spawn a fresh key; retries within the same intent
+   * reuse it so the server can short-circuit the duplicate.
+   */
+  const tradeIdempotencyKey = useIdempotencyKey(stakeModalOpen, [
+    pendingSelection?.marketId,
+    pendingSelection?.entryId,
+    modalIntent,
+  ]);
   const [townSquareCollapsed, setTownSquareCollapsed] = useState(true);
   const [gainerPickerState, setGainerPickerState] = useState<{ market: TopGainerMarket; initialCandidate?: GainerCandidate | null } | null>(null);
   
@@ -1817,7 +1830,12 @@ export default function PredictPage() {
 
   const nativeUpdownBetMutation = useMutation({
     mutationFn: async ({ marketId, entryId, stakeAmount }: { marketId: string; entryId: string; stakeAmount: number }) => {
-      const res = await apiRequest("POST", `/api/native-markets/updown/${marketId}/bet`, { entryId, stakeAmount });
+      const res = await apiRequest(
+        "POST",
+        `/api/native-markets/updown/${marketId}/bet`,
+        { entryId, stakeAmount },
+        { idempotencyKey: tradeIdempotencyKey },
+      );
       return res.json();
     },
     onSuccess: async (data, variables) => {
@@ -1910,7 +1928,12 @@ export default function PredictPage() {
 
   const nativeMarketBetMutation = useMutation({
     mutationFn: async ({ marketId, entryId, stakeAmount, marketType }: { marketId: string; entryId: string; stakeAmount: number; marketType: string }) => {
-      const res = await apiRequest("POST", `/api/native-markets/${marketId}/bet`, { entryId, stakeAmount });
+      const res = await apiRequest(
+        "POST",
+        `/api/native-markets/${marketId}/bet`,
+        { entryId, stakeAmount },
+        { idempotencyKey: tradeIdempotencyKey },
+      );
       return res.json();
     },
     onSuccess: async (data, variables) => {
@@ -2007,7 +2030,12 @@ export default function PredictPage() {
   // affordance, idempotent retry path, and confetti.
   const communityMarketBetMutation = useMutation({
     mutationFn: async ({ slug, entryId, stakeAmount, direction }: { slug: string; entryId: string; stakeAmount: number; direction: "yes" | "no" }) => {
-      const res = await apiRequest("POST", `/api/open-markets/${slug}/bet`, { entryId, stakeAmount, direction });
+      const res = await apiRequest(
+        "POST",
+        `/api/open-markets/${slug}/bet`,
+        { entryId, stakeAmount, direction },
+        { idempotencyKey: tradeIdempotencyKey },
+      );
       return res.json();
     },
     onSuccess: async (data: any, variables) => {
@@ -2077,11 +2105,16 @@ export default function PredictPage() {
    */
   const nativeAmmSellMutation = useMutation({
     mutationFn: async ({ marketId, entryId, shares }: { marketId: string; entryId: string; shares: number; marketType: "updown" | "h2h" | "gainer" }) => {
-      const res = await apiRequest("POST", `/api/native-markets/${marketId}/bet`, {
-        entryId,
-        actionType: "sell",
-        shares,
-      });
+      const res = await apiRequest(
+        "POST",
+        `/api/native-markets/${marketId}/bet`,
+        {
+          entryId,
+          actionType: "sell",
+          shares,
+        },
+        { idempotencyKey: tradeIdempotencyKey },
+      );
       return res.json();
     },
     onSuccess: async (data: any, variables) => {
@@ -2119,7 +2152,12 @@ export default function PredictPage() {
 
   const communityAmmSellMutation = useMutation({
     mutationFn: async ({ marketId, entryId, shares }: { marketId: string; entryId: string; shares: number }) => {
-      const res = await apiRequest("POST", `/api/markets/${marketId}/sell`, { entryId, shares });
+      const res = await apiRequest(
+        "POST",
+        `/api/markets/${marketId}/sell`,
+        { entryId, shares },
+        { idempotencyKey: tradeIdempotencyKey },
+      );
       return res.json();
     },
     onSuccess: async (data: any) => {

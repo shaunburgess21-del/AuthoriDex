@@ -60,6 +60,7 @@ import { useState, useEffect, useMemo, useRef, useCallback, type ReactNode } fro
 import { useDragScroll } from "@/hooks/use-drag-scroll";
 import { useQuery, useQueries, useInfiniteQuery, useMutation, keepPreviousData } from "@tanstack/react-query";
 import { apiRequest, getAuthHeaders, parseApiError, queryClient } from "@/lib/queryClient";
+import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { hapticSuccess, hapticError } from "@/lib/haptic";
@@ -1162,6 +1163,13 @@ export default function HomePage() {
    * the modal.
    */
   const [modalIntent, setModalIntent] = useState<"buy" | "sell">("buy");
+  // Idempotency key for the active trade-modal intent. See
+  // `client/src/lib/useIdempotencyKey.ts` for the contract.
+  const tradeIdempotencyKey = useIdempotencyKey(stakeModalOpen, [
+    pendingSelection?.marketId,
+    pendingSelection?.entryId,
+    modalIntent,
+  ]);
   // Real wallet balance from the auth profile — was previously a
   // hardcoded `useState(10000)`, which let users on the home
   // leaderboard appear to stake credits they didn't have. The
@@ -1333,7 +1341,12 @@ export default function HomePage() {
   // a hardcoded local balance without ever calling the API.
   const nativeUpdownBetMutation = useMutation({
     mutationFn: async ({ marketId, entryId, stakeAmount }: { marketId: string; entryId: string; stakeAmount: number }) => {
-      const res = await apiRequest("POST", `/api/native-markets/updown/${marketId}/bet`, { entryId, stakeAmount });
+      const res = await apiRequest(
+        "POST",
+        `/api/native-markets/updown/${marketId}/bet`,
+        { entryId, stakeAmount },
+        { idempotencyKey: tradeIdempotencyKey },
+      );
       return res.json();
     },
     onSuccess: async (data, variables) => {
@@ -1415,11 +1428,16 @@ export default function HomePage() {
    */
   const homeAmmSellMutation = useMutation({
     mutationFn: async ({ marketId, entryId, shares }: { marketId: string; entryId: string; shares: number }) => {
-      const res = await apiRequest("POST", `/api/native-markets/${marketId}/bet`, {
-        entryId,
-        actionType: "sell",
-        shares,
-      });
+      const res = await apiRequest(
+        "POST",
+        `/api/native-markets/${marketId}/bet`,
+        {
+          entryId,
+          actionType: "sell",
+          shares,
+        },
+        { idempotencyKey: tradeIdempotencyKey },
+      );
       return res.json();
     },
     onSuccess: async (data: any) => {

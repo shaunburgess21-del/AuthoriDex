@@ -89,6 +89,17 @@ export interface ExecuteBuyInput {
    *  check (`betMetadata->>'actionId' = ${id}`) catches reclaim-after-
    *  commit races on AMM bets. */
   betMetadata?: Record<string, unknown>;
+  /** Optional client-supplied idempotency key (validated UUID or safe
+   *  token — see `server/services/idempotency-key.ts`). When set, the
+   *  function looks up an existing `credit_ledger` row keyed on
+   *  `amm_buy_client_${id}` for this user; if found, the prior trade
+   *  is returned without re-executing. Mirrors the agent worker's
+   *  `betMetadata.actionId` pre-check but for human routes. The lookup
+   *  runs inside the same locked transaction as the trade itself, so
+   *  concurrent retries on the same market serialise via the existing
+   *  `SELECT ... FOR UPDATE` on `market_amm_state` and the second one
+   *  always observes the first's ledger row. */
+  clientRequestId?: string;
 }
 
 export interface ExecuteBuyResult {
@@ -117,7 +128,16 @@ export async function executeBuy(
   input: ExecuteBuyInput,
   txOpt?: DbOrTx,
 ): Promise<ExecuteBuyResult | TradeError> {
-  const { marketId, userId, entryId, creditBudget, isAdmin = false, agentId, betMetadata } = input;
+  const {
+    marketId,
+    userId,
+    entryId,
+    creditBudget,
+    isAdmin = false,
+    agentId,
+    betMetadata,
+    clientRequestId,
+  } = input;
 
   if (!Number.isInteger(creditBudget) || creditBudget < MIN_AMM_BUY_CREDITS) {
     return {
@@ -127,10 +147,27 @@ export async function executeBuy(
     };
   }
 
+  const idempotencyKey = clientRequestId
+    ? `amm_buy_client_${clientRequestId}`
+    : null;
+
   const run = async (tx: DbOrTx): Promise<ExecuteBuyResult | TradeError> => {
     const ctx = await loadAndLockTradeContext(tx, marketId, entryId, isAdmin);
     if ("error" in ctx) return ctx;
     const { state, b } = ctx;
+
+    // Idempotency short-circuit. After acquiring the per-market lock
+    // (so concurrent retries on the same market serialise) check for
+    // an existing ledger row keyed by the client-supplied id. If found,
+    // hydrate the response from the original `market_bets` row + the
+    // CURRENT post-lock state. Documented compromise: `newPrices` /
+    // `newQ` reflect now, not the moment of the original trade — fine
+    // for idempotency semantics, which guarantee the client sees a
+    // coherent "trade already happened" response, not a frozen replay.
+    if (idempotencyKey) {
+      const replay = await replayPriorBuy(tx, userId, idempotencyKey, state, b, entryId);
+      if (replay) return replay;
+    }
 
     const quote = quoteBuy(state, entryId, creditBudget);
     if (quote.shares <= 0 || quote.chargeCredits < 1) {
@@ -213,7 +250,7 @@ export async function executeBuy(
       // existing reconciliation reports + admin filters can split
       // human flow from agent flow without joining `agent_configs`.
       source: agentId ? "agent_action" : "user_action",
-      idempotencyKey: `amm_buy_${insertedBet.id}`,
+      idempotencyKey: idempotencyKey ?? `amm_buy_${insertedBet.id}`,
       metadata: {
         marketId,
         entryId,
@@ -250,6 +287,91 @@ export async function executeBuy(
 }
 
 // ---------------------------------------------------------------------------
+// Buy retry replay
+// ---------------------------------------------------------------------------
+
+/**
+ * Look up an existing buy by `(userId, idempotencyKey)` and, if found,
+ * rebuild the response shape `executeBuy` would have returned. Returns
+ * `null` if no prior trade matches — caller proceeds normally.
+ *
+ * Runs inside the same transaction so the AMM state used to compute
+ * the (current) price vector matches the lock acquired by
+ * `loadAndLockTradeContext`. `userBalanceAfter` reflects the CURRENT
+ * balance (the original deduction has long since settled). This is
+ * the documented compromise — clients retrying get coherent live
+ * data, not a frozen snapshot.
+ */
+async function replayPriorBuy(
+  tx: DbOrTx,
+  userId: string,
+  idempotencyKey: string,
+  state: AmmStateSnapshot,
+  b: number,
+  expectedEntryId: string,
+): Promise<ExecuteBuyResult | null> {
+  const [prior] = await tx
+    .select({ metadata: creditLedger.metadata })
+    .from(creditLedger)
+    .where(
+      and(
+        eq(creditLedger.userId, userId),
+        eq(creditLedger.idempotencyKey, idempotencyKey),
+      ),
+    )
+    .limit(1);
+  if (!prior) return null;
+
+  const priorBetId = (prior.metadata as { betId?: string } | null)?.betId;
+  if (typeof priorBetId !== "string" || priorBetId.length === 0) {
+    return null;
+  }
+
+  const [bet] = await tx
+    .select({
+      id: marketBets.id,
+      entryId: marketBets.entryId,
+      shareCount: marketBets.shareCount,
+      stakeAmount: marketBets.stakeAmount,
+      pricePerShare: marketBets.pricePerShare,
+    })
+    .from(marketBets)
+    .where(eq(marketBets.id, priorBetId))
+    .limit(1);
+  if (!bet) return null;
+
+  // Hard guard: if the client reuses the same key against a DIFFERENT
+  // entryId (UI bug), don't return the wrong bet. Fail closed so the
+  // route layer surfaces a validation error rather than corrupting
+  // analytics with a mismatched response.
+  if (bet.entryId !== expectedEntryId) return null;
+
+  const [walletRow] = await tx
+    .select({ predictCredits: profiles.predictCredits })
+    .from(profiles)
+    .where(eq(profiles.id, userId))
+    .limit(1);
+
+  const newQArr = state.outcomeOrder.map((id) => state.shareQuantities[id] ?? 0);
+  const newPricesArr = pricesAll(newQArr, b);
+  const newPrices: Record<string, number> = {};
+  for (let i = 0; i < state.outcomeOrder.length; i++) {
+    newPrices[state.outcomeOrder[i]] = newPricesArr[i];
+  }
+
+  return {
+    betId: bet.id,
+    sharesPurchased: Number(bet.shareCount ?? 0),
+    chargeCredits: Number(bet.stakeAmount ?? 0),
+    pricePerShareAvg: Number(bet.pricePerShare ?? 0),
+    newPrices,
+    newQ: { ...state.shareQuantities },
+    newSharePrice: newPrices[expectedEntryId] ?? 0,
+    userBalanceAfter: walletRow ? walletRow.predictCredits : 0,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Public API — sell
 // ---------------------------------------------------------------------------
 
@@ -270,6 +392,12 @@ export interface ExecuteSellInput {
    *  reclaim idempotency check can find existing sell rows the same
    *  way it finds buy rows — see `executeAction` in actionWorker.ts. */
   betMetadata?: Record<string, unknown>;
+  /** Optional client-supplied idempotency key — see `ExecuteBuyInput.
+   *  clientRequestId` for the full contract. Ledger keys are scoped
+   *  to the operation: `amm_sell_client_${id}` for sells, so the same
+   *  string can be safely re-used by a client that intends buy+sell
+   *  flows tied to one modal session. */
+  clientRequestId?: string;
 }
 
 export interface ExecuteSellResult {
@@ -288,7 +416,16 @@ export async function executeSell(
   input: ExecuteSellInput,
   txOpt?: DbOrTx,
 ): Promise<ExecuteSellResult | TradeError> {
-  const { marketId, userId, entryId, shares, isAdmin = false, agentId, betMetadata } = input;
+  const {
+    marketId,
+    userId,
+    entryId,
+    shares,
+    isAdmin = false,
+    agentId,
+    betMetadata,
+    clientRequestId,
+  } = input;
 
   if (!Number.isFinite(shares) || shares <= 0) {
     return {
@@ -298,10 +435,20 @@ export async function executeSell(
     };
   }
 
+  const idempotencyKey = clientRequestId
+    ? `amm_sell_client_${clientRequestId}`
+    : null;
+
   const run = async (tx: DbOrTx): Promise<ExecuteSellResult | TradeError> => {
     const ctx = await loadAndLockTradeContext(tx, marketId, entryId, isAdmin);
     if ("error" in ctx) return ctx;
     const { state, b } = ctx;
+
+    // Idempotency short-circuit. See `executeBuy` for the contract.
+    if (idempotencyKey) {
+      const replay = await replayPriorSell(tx, userId, marketId, idempotencyKey, state, b, entryId);
+      if (replay) return replay;
+    }
 
     const positionRows = await tx
       .select({
@@ -411,7 +558,7 @@ export async function executeSell(
       // See `executeBuy` rationale: agent flows are tagged so audit
       // queries can split human vs agent volume without joining agents.
       source: agentId ? "agent_action" : "user_action",
-      idempotencyKey: `amm_sell_${insertedBet.id}`,
+      idempotencyKey: idempotencyKey ?? `amm_sell_${insertedBet.id}`,
       metadata: {
         marketId,
         entryId,
@@ -446,6 +593,111 @@ export async function executeSell(
 
   if (txOpt) return run(txOpt);
   return db.transaction(async (tx) => run(tx as DbOrTx));
+}
+
+// ---------------------------------------------------------------------------
+// Sell retry replay
+// ---------------------------------------------------------------------------
+
+/**
+ * Sell-side counterpart of `replayPriorBuy`. Same locking + freshness
+ * contract — see that function for the documented compromise on
+ * `newPrices` reflecting current state.
+ *
+ * `remainingShares` is recomputed from `market_bets` for this user
+ * rather than cached from the prior trade because the user may have
+ * traded again in the interim (e.g. closed out the rest of the
+ * position). Returning a stale `remainingShares` would mislead the
+ * client's "position closed" UX, so we always recompute.
+ */
+async function replayPriorSell(
+  tx: DbOrTx,
+  userId: string,
+  marketId: string,
+  idempotencyKey: string,
+  state: AmmStateSnapshot,
+  b: number,
+  expectedEntryId: string,
+): Promise<ExecuteSellResult | null> {
+  const [prior] = await tx
+    .select({ metadata: creditLedger.metadata })
+    .from(creditLedger)
+    .where(
+      and(
+        eq(creditLedger.userId, userId),
+        eq(creditLedger.idempotencyKey, idempotencyKey),
+      ),
+    )
+    .limit(1);
+  if (!prior) return null;
+
+  const priorBetId = (prior.metadata as { betId?: string } | null)?.betId;
+  if (typeof priorBetId !== "string" || priorBetId.length === 0) {
+    return null;
+  }
+
+  const [bet] = await tx
+    .select({
+      id: marketBets.id,
+      entryId: marketBets.entryId,
+      shareCount: marketBets.shareCount,
+      pricePerShare: marketBets.pricePerShare,
+      payoutAmount: marketBets.payoutAmount,
+    })
+    .from(marketBets)
+    .where(eq(marketBets.id, priorBetId))
+    .limit(1);
+  if (!bet) return null;
+  if (bet.entryId !== expectedEntryId) return null;
+
+  const [walletRow] = await tx
+    .select({ predictCredits: profiles.predictCredits })
+    .from(profiles)
+    .where(eq(profiles.id, userId))
+    .limit(1);
+
+  const positionRows = await tx
+    .select({
+      actionType: marketBets.actionType,
+      shareCount: marketBets.shareCount,
+    })
+    .from(marketBets)
+    .where(
+      and(
+        eq(marketBets.userId, userId),
+        eq(marketBets.marketId, marketId),
+        eq(marketBets.entryId, expectedEntryId),
+      ),
+    );
+  let netShares = 0;
+  for (const row of positionRows) {
+    if (row.actionType !== "buy" && row.actionType !== "sell") continue;
+    const sc = Number(row.shareCount ?? 0);
+    if (!Number.isFinite(sc)) continue;
+    netShares += row.actionType === "buy" ? sc : -sc;
+  }
+
+  const newQArr = state.outcomeOrder.map((id) => state.shareQuantities[id] ?? 0);
+  const newPricesArr = pricesAll(newQArr, b);
+  const newPrices: Record<string, number> = {};
+  for (let i = 0; i < state.outcomeOrder.length; i++) {
+    newPrices[state.outcomeOrder[i]] = newPricesArr[i];
+  }
+
+  const sharesSold = Number(bet.shareCount ?? 0);
+  const proceeds = Number(bet.payoutAmount ?? 0);
+
+  return {
+    betId: bet.id,
+    sharesSold,
+    proceeds,
+    pricePerShareAvg: Number(bet.pricePerShare ?? 0),
+    newPrices,
+    newQ: { ...state.shareQuantities },
+    newSharePrice: newPrices[expectedEntryId] ?? 0,
+    userBalanceAfter: walletRow ? walletRow.predictCredits : 0,
+    remainingShares: Math.max(0, netShares),
+  };
 }
 
 // ---------------------------------------------------------------------------

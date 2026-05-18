@@ -26,6 +26,7 @@ import { Input } from "@/components/ui/input";
 import { formatSignedPercent, formatSignedPoints } from "@/lib/predict-display";
 import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
 import { apiRequest, parseApiError } from "@/lib/queryClient";
+import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { goBack } from "@/lib/goBack";
 import { formatVolumeCredits } from "@/lib/formatNumber";
@@ -79,6 +80,11 @@ export default function CategoryRaceDetailPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [stakeModalOpen, setStakeModalOpen] = useState(false);
   const [pendingSelection, setPendingSelection] = useState<StakeSelection | null>(null);
+  // Idempotency key per modal intent. See `useIdempotencyKey.ts`.
+  const tradeIdempotencyKey = useIdempotencyKey(stakeModalOpen, [
+    pendingSelection?.entryId,
+    pendingSelection?.choice,
+  ]);
   /**
    * Sprint 5 / Phase 3.4: seeds which StakeModal tab opens. Buy-side
    * flows from the leaderboard or "Back another candidate" CTA set
@@ -324,10 +330,15 @@ export default function CategoryRaceDetailPage() {
 
   const betMutation = useMutation({
     mutationFn: async ({ entryId, stakeAmount }: { entryId: string; stakeAmount: number }) => {
-      const res = await apiRequest("POST", `/api/native-markets/${marketId}/bet`, {
-        entryId,
-        stakeAmount,
-      });
+      const res = await apiRequest(
+        "POST",
+        `/api/native-markets/${marketId}/bet`,
+        {
+          entryId,
+          stakeAmount,
+        },
+        { idempotencyKey: tradeIdempotencyKey },
+      );
       return res.json();
     },
     onSuccess: async (data) => {
@@ -419,11 +430,16 @@ export default function CategoryRaceDetailPage() {
    */
   const sellMutation = useMutation({
     mutationFn: async ({ entryId, shares }: { entryId: string; shares: number }) => {
-      const res = await apiRequest("POST", `/api/native-markets/${marketId}/bet`, {
-        entryId,
-        actionType: "sell",
-        shares,
-      });
+      const res = await apiRequest(
+        "POST",
+        `/api/native-markets/${marketId}/bet`,
+        {
+          entryId,
+          actionType: "sell",
+          shares,
+        },
+        { idempotencyKey: tradeIdempotencyKey },
+      );
       return res.json();
     },
     onSuccess: async (data: any) => {

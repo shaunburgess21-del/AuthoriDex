@@ -98,15 +98,34 @@ export async function getAuthHeaders(): Promise<Record<string, string>> {
   return {};
 }
 
+/**
+ * Optional extra controls for `apiRequest`.
+ *
+ * `idempotencyKey`: forwarded as the `Idempotency-Key` HTTP header so
+ * the server can short-circuit duplicate POSTs (per the IETF httpapi
+ * draft). Currently honoured by the AMM trade routes — see
+ * `server/services/amm-trades.ts`. Callers should generate the key
+ * once per user intent (e.g. when a trade modal opens) so a retry
+ * within the same intent reuses the key, while a fresh intent gets a
+ * new one.
+ */
+export interface ApiRequestOptions {
+  idempotencyKey?: string;
+}
+
 export async function apiRequest(
   method: string,
   url: string,
   data?: unknown | undefined,
+  options?: ApiRequestOptions,
 ): Promise<Response> {
   const authHeaders = await getAuthHeaders();
   const headers: Record<string, string> = {
     ...authHeaders,
     ...(data ? { "Content-Type": "application/json" } : {}),
+    ...(options?.idempotencyKey
+      ? { "Idempotency-Key": options.idempotencyKey }
+      : {}),
   };
 
   let res: Response;

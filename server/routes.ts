@@ -10129,12 +10129,18 @@ Only return the JSON object.`;
           message: `creditBudget must be an integer >= ${MIN_AMM_BUY_CREDITS}`,
         });
       }
+      const { parseIdempotencyKey } = await import("./services/idempotency-key");
+      const clientRequestId = parseIdempotencyKey({
+        header: req.header("Idempotency-Key"),
+        body: (req.body as { idempotencyKey?: unknown })?.idempotencyKey,
+      });
       const result = await executeBuy({
         marketId: id,
         userId: req.userId!,
         entryId,
         creditBudget,
         isAdmin,
+        clientRequestId: clientRequestId ?? undefined,
       });
 
       if ("error" in result) {
@@ -10193,12 +10199,18 @@ Only return the JSON object.`;
           message: `shares must be >= ${MIN_HUMAN_SELL_SHARES}`,
         });
       }
+      const { parseIdempotencyKey } = await import("./services/idempotency-key");
+      const clientRequestId = parseIdempotencyKey({
+        header: req.header("Idempotency-Key"),
+        body: (req.body as { idempotencyKey?: unknown })?.idempotencyKey,
+      });
       const result = await executeSell({
         marketId: id,
         userId: req.userId!,
         entryId,
         shares: sharesNum,
         isAdmin,
+        clientRequestId: clientRequestId ?? undefined,
       });
 
       if ("error" in result) {
@@ -18091,11 +18103,17 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       if (!Number.isInteger(budget) || budget <= 0) {
         return res.status(400).json({ error: "stakeAmount must be a positive integer" });
       }
+      const { parseIdempotencyKey } = await import("./services/idempotency-key");
+      const clientRequestId = parseIdempotencyKey({
+        header: req.header("Idempotency-Key"),
+        body: (req.body as { idempotencyKey?: unknown })?.idempotencyKey,
+      });
       const result = await executeBuy({
         marketId: market.id,
         userId: authReq.userId!,
         entryId,
         creditBudget: budget,
+        clientRequestId: clientRequestId ?? undefined,
       });
       if ("error" in result) {
         return res
@@ -18193,6 +18211,12 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         return res.status(400).json({ error: "Betting is closed for this market" });
       }
 
+      const { parseIdempotencyKey } = await import("./services/idempotency-key");
+      const clientRequestId = parseIdempotencyKey({
+        header: req.header("Idempotency-Key"),
+        body: (req.body as { idempotencyKey?: unknown })?.idempotencyKey,
+      });
+
       if (actionType === "sell") {
         const sharesNum = Number(shares);
         if (!Number.isFinite(sharesNum) || sharesNum <= 0) {
@@ -18203,6 +18227,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           userId: authReq.userId!,
           entryId,
           shares: sharesNum,
+          clientRequestId: clientRequestId ?? undefined,
         });
         if ("error" in sellResult) {
           return res.status(sellResult.status).json({ error: sellResult.message });
@@ -18231,6 +18256,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         userId: authReq.userId!,
         entryId,
         creditBudget: budget,
+        clientRequestId: clientRequestId ?? undefined,
       });
       if ("error" in buyResult) {
         return res.status(buyResult.status).json({ error: buyResult.message });
@@ -18344,6 +18370,12 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         return res.status(400).json({ error: "Betting is closed for this market" });
       }
 
+      const { parseIdempotencyKey } = await import("./services/idempotency-key");
+      const clientRequestId = parseIdempotencyKey({
+        header: req.header("Idempotency-Key"),
+        body: (req.body as { idempotencyKey?: unknown })?.idempotencyKey,
+      });
+
       if (actionType === "sell") {
         if (!shares || shares <= 0) {
           return res.status(400).json({ error: "shares must be a positive number for sell" });
@@ -18353,6 +18385,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           userId: authReq.userId!,
           entryId,
           shares,
+          clientRequestId: clientRequestId ?? undefined,
         });
         if ("error" in sellResult) {
           return res.status(sellResult.status).json({ error: sellResult.message });
@@ -18380,6 +18413,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         userId: authReq.userId!,
         entryId,
         creditBudget: stakeAmount,
+        clientRequestId: clientRequestId ?? undefined,
       });
       if ("error" in buyResult) {
         return res.status(buyResult.status).json({ error: buyResult.message });

@@ -19,6 +19,7 @@ import { useLocation, Link } from "wouter";
 import { navigateToLogin } from "@/lib/authReturn";
 import { toast } from "sonner";
 import { apiRequest, parseApiError } from "@/lib/queryClient";
+import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { getMarketBaselineScore } from "@/lib/predict-market-baseline";
 import { getCanonicalNativeCycle } from "@/lib/nativeMarketLifecycle";
@@ -528,6 +529,14 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
    * mode so it can settle on the right tab without flicker.
    */
   const [modalIntent, setModalIntent] = useState<"buy" | "sell">("buy");
+  // Idempotency key for the active trade-modal intent. See
+  // `client/src/lib/useIdempotencyKey.ts`. Mirrors PredictPage's
+  // dependency set.
+  const tradeIdempotencyKey = useIdempotencyKey(stakeModalOpen, [
+    pendingSelection?.marketId,
+    pendingSelection?.entryId,
+    modalIntent,
+  ]);
   const walletCredits = profile?.predictCredits ?? 0;
 
   const { data: userPredictionsData } = useQuery<any>({
@@ -626,7 +635,12 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
 
   const updownBetMutation = useMutation({
     mutationFn: async ({ marketId, entryId, stakeAmount }: { marketId: string; entryId: string; stakeAmount: number }) => {
-      const res = await apiRequest("POST", `/api/native-markets/updown/${marketId}/bet`, { entryId, stakeAmount });
+      const res = await apiRequest(
+        "POST",
+        `/api/native-markets/updown/${marketId}/bet`,
+        { entryId, stakeAmount },
+        { idempotencyKey: tradeIdempotencyKey },
+      );
       return res.json();
     },
     onSuccess: async (data: any, variables) => {
@@ -738,7 +752,12 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       marketType: string;
       toastMeta?: NativeBetToastMeta;
     }) => {
-      const res = await apiRequest("POST", `/api/native-markets/${marketId}/bet`, { entryId, stakeAmount });
+      const res = await apiRequest(
+        "POST",
+        `/api/native-markets/${marketId}/bet`,
+        { entryId, stakeAmount },
+        { idempotencyKey: tradeIdempotencyKey },
+      );
       return res.json();
     },
     onSuccess: async (data: any, variables) => {
@@ -988,11 +1007,16 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
    */
   const predictTabAmmSellMutation = useMutation({
     mutationFn: async ({ marketId, entryId, shares }: { marketId: string; entryId: string; shares: number; marketType: "updown" | "h2h" | "gainer" }) => {
-      const res = await apiRequest("POST", `/api/native-markets/${marketId}/bet`, {
-        entryId,
-        actionType: "sell",
-        shares,
-      });
+      const res = await apiRequest(
+        "POST",
+        `/api/native-markets/${marketId}/bet`,
+        {
+          entryId,
+          actionType: "sell",
+          shares,
+        },
+        { idempotencyKey: tradeIdempotencyKey },
+      );
       return res.json();
     },
     onSuccess: async (data: any, variables) => {

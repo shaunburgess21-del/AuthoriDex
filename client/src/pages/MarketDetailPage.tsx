@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { apiRequest, getAuthHeaders, parseApiError } from "@/lib/queryClient";
+import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
 import { navigateToLogin } from "@/lib/authReturn";
 import { formatTimeAgo, formatDate } from "@/lib/formatDate";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
@@ -600,6 +601,12 @@ export default function MarketDetailPage() {
   const [stakeModalOpen, setStakeModalOpen] = useState(false);
   const [pendingSelection, setPendingSelection] = useState<StakeSelection | null>(null);
   const [modalIntent, setModalIntent] = useState<"buy" | "sell">("buy");
+  // Idempotency key per trade-modal intent. See `useIdempotencyKey.ts`.
+  const tradeIdempotencyKey = useIdempotencyKey(stakeModalOpen, [
+    pendingSelection?.entryId,
+    pendingSelection?.direction,
+    modalIntent,
+  ]);
 
   // Refs for the "Add another entry / Increase stake" CTA on
   // MyPositionCard. Jackpot has a single always-rendered input we can
@@ -737,7 +744,12 @@ export default function MarketDetailPage() {
       }
 
       if (market.marketType === "community") {
-        const res = await apiRequest("POST", `/api/open-markets/${params.slug}/bet`, { entryId, stakeAmount: amount, direction });
+        const res = await apiRequest(
+          "POST",
+          `/api/open-markets/${params.slug}/bet`,
+          { entryId, stakeAmount: amount, direction },
+          { idempotencyKey: tradeIdempotencyKey },
+        );
         return res.json();
       }
 
@@ -745,10 +757,15 @@ export default function MarketDetailPage() {
         throw new Error("Use the jackpot entry form on this page.");
       }
 
-      const res = await apiRequest("POST", `/api/native-markets/${market.id}/bet`, {
-        entryId,
-        stakeAmount: amount,
-      });
+      const res = await apiRequest(
+        "POST",
+        `/api/native-markets/${market.id}/bet`,
+        {
+          entryId,
+          stakeAmount: amount,
+        },
+        { idempotencyKey: tradeIdempotencyKey },
+      );
       return res.json();
     },
     onSuccess: async (data: any) => {
@@ -1032,10 +1049,15 @@ export default function MarketDetailPage() {
   const ammSellMutation = useMutation({
     mutationFn: async ({ entryId, shares }: { entryId: string; shares: number }) => {
       if (!market) throw new Error("Market not loaded");
-      const res = await apiRequest("POST", `/api/markets/${market.id}/sell`, {
-        entryId,
-        shares,
-      });
+      const res = await apiRequest(
+        "POST",
+        `/api/markets/${market.id}/sell`,
+        {
+          entryId,
+          shares,
+        },
+        { idempotencyKey: tradeIdempotencyKey },
+      );
       return res.json();
     },
     onSuccess: async (data: any) => {
