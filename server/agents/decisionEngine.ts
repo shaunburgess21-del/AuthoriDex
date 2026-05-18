@@ -181,7 +181,7 @@ export function computePrediction(
   // making identical decisions but doesn't bury their edge in noise.
   const jitterRange = sharp ? 0.03 : 0.06;
   const jitter = (rng.nextFloat() * 2 - 1) * jitterRange;
-  const baseSignalBoost = computeSignalBoost(signals, agent);
+  const baseSignalBoost = computeSignalBoost(signals, agent, decisivelyDown);
   // Multi-window momentum bonus: only sharps get this. When 7d and 14d
   // disagree (e.g. 7d falling but 14d still strongly rising), the agent
   // assumes mean-reversion is in play and dampens the short-window signal.
@@ -446,17 +446,40 @@ export function computePrediction(
 
 function computeSignalBoost(
   signals: TrendSignals,
-  agent: AgentConfigData
+  agent: AgentConfigData,
+  decisivelyDown: boolean,
 ): number {
   let boost = 0;
 
-  // Wiki Pulse
-  if (signals.wikiPulse === "rising") boost += 0.1 * agent.recencyWeight;
-  if (signals.wikiPulse === "falling") boost -= 0.1 * agent.recencyWeight;
+  // Wiki Pulse — bullish leg gated behind `!decisivelyDown` and halved
+  // (was ±0.10) so it can no longer overwhelm `pctChangeVsOpen` at
+  // moderate moves.
+  //
+  // Why: a person being in the news already moved their `fame_index`,
+  // which already drove `pctChangeVsOpen`. Re-applying wiki / news as
+  // a directional boost on top double-counts attention — and worse,
+  // the bullish leg fights the score on celebrities whose activity is
+  // *what dragged them down* (controversies, scandals). The 2026-05-18
+  // misalignment (5 of 6 UpDown markets at -1% to -18% from open with
+  // agents leaning Up 60-75%) traced directly to this stack:
+  //   pctChangeVsOpen ≈ -0.10 → -0.096
+  //   wikiPulse rising         → +0.10
+  //   newsLevel red            → +0.07
+  //   net signalBoost          → +0.044 (favours Up despite -10% move)
+  //
+  // Symmetry isn't the goal here — correctness is. Negative wiki/news
+  // still apply normally (a person who is down AND falling on wiki/news
+  // SHOULD be even more obviously Down).
+  if (signals.wikiPulse === "rising" && !decisivelyDown) boost += 0.05 * agent.recencyWeight;
+  if (signals.wikiPulse === "falling") boost -= 0.05 * agent.recencyWeight;
 
-  // News level (red = high activity = net positive for attention)
-  if (signals.newsLevel === "red") boost += 0.07 * agent.recencyWeight;
-  if (signals.newsLevel === "green") boost -= 0.04 * agent.recencyWeight;
+  // News level — same gate, same reasoning. `newsLevel === "red"` is a
+  // volume signal not a direction signal: a controversy generates red
+  // news while tanking the score. Coefficients halved (red was +0.07,
+  // green was -0.04) for the same "vs-open should dominate at moderate
+  // moves" reason.
+  if (signals.newsLevel === "red" && !decisivelyDown) boost += 0.04 * agent.recencyWeight;
+  if (signals.newsLevel === "green") boost -= 0.02 * agent.recencyWeight;
 
   // Primary directional read for binary up/down markets: move since
   // THIS market opened (Monday → Friday for weekly cards). Saturates at

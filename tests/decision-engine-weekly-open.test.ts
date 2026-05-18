@@ -280,7 +280,7 @@ test("prestige bias still fires when pctChangeVsOpen is shallow (-0.02, above th
     fameIndex: 392_000,
     pctChangeVsOpen: -0.02, // shallower than -0.05 → guard not triggered
     scoreDelta7d: 5,        // tiny positive momentum so we don't sit on the abstain edge
-    newsLevel: "red",       // small UP-direction boost (+0.07 * recencyWeight)
+    newsLevel: "red",       // small UP-direction boost (+0.04 * recencyWeight after Fix B)
   });
 
   const decision = computePrediction(agent, market, signals, {}, createPRNG(PRNG_SEED));
@@ -290,6 +290,110 @@ test("prestige bias still fires when pctChangeVsOpen is shallow (-0.02, above th
     decision.entryId,
     "entry-up",
     "shallow drawdown should still let the prestige UP boost combine with the legacy signals",
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Wiki/news bullish-leg gate (decisivelyDown) + halved magnitudes
+// ---------------------------------------------------------------------------
+//
+// 2026-05-18 misalignment: 5 of 6 UpDown markets at -1% to -18% from open
+// showed agents leaning Up 60-75%. Root cause was that wiki/news additive
+// boosts (+0.10 rising + +0.07 red = +0.17 max) could overwhelm the
+// `pctChangeVsOpen` factor (only -0.09 at a -10% move, since it saturates
+// at ±20% with a 0.18 coefficient), producing a NET POSITIVE signalBoost
+// on a market that had moved decisively DOWN.
+//
+// Fix A: gate the bullish leg of wiki/news behind `!decisivelyDown` — a
+//         person already > 5% below open shouldn't get artificial Up
+//         pressure from headline noise that already moved their score.
+//         Negative wiki/news still apply normally.
+// Fix B: halve the wiki/news coefficients (rising 0.10 → 0.05, falling
+//         -0.10 → -0.05, red +0.07 → +0.04, green -0.04 → -0.02) so
+//         `pctChangeVsOpen` is the dominant directional input across
+//         the whole magnitude range, even on shallow moves where the
+//         gate hasn't tripped.
+
+test("wiki/news bullish leg suppressed when decisivelyDown — Beyoncé bug pin", () => {
+  // The exact arithmetic from the diagnosis: pctChangeVsOpen = -0.10,
+  // wikiPulse rising, newsLevel red, trendDirection DOWN (rung 1).
+  // Pre-fix:  signalBoost = +0.10 + 0.07 - 0.096 - 0.03 = +0.044  → Up
+  // Post-fix: bullish wiki+news suppressed by gate → boost = 0 - 0.096
+  //           - 0.03 = -0.126 → Down with ~0.62/0.38 split.
+  const market = makeBinaryUpDownMarket();
+  const agent = makeSharpAgent();
+  const signals = makeSignals({
+    pctChangeVsOpen: -0.10,
+    wikiPulse: "rising",
+    newsLevel: "red",
+    trendDirection: "DOWN",
+  });
+  const rng = createPRNG(PRNG_SEED);
+
+  const decision = computePrediction(agent, market, signals, {}, rng);
+
+  assert.equal(decision.abstain, false, `unexpected abstain: ${decision.abstainReason}`);
+  assert.equal(
+    decision.entryId,
+    "entry-down",
+    "agent should back DOWN despite rising wiki + red news on a decisively-down market (Fix A)",
+  );
+  assert.ok(
+    (decision.rawProbability ?? 0) >= 0.55,
+    `expected rawProbability >= 0.55, got ${decision.rawProbability}`,
+  );
+});
+
+test("wiki/news bullish leg STILL applies when not decisivelyDown — gate doesn't over-fire", () => {
+  // pctChangeVsOpen = -0.02 (above the -0.05 threshold → gate inactive).
+  // Halved coefficients: rising +0.05, red +0.04, vs-open -0.018,
+  // trendDirection FLAT (|0.02| > 0.02 is strictly false on rung 1).
+  // Net signalBoost = +0.05 + 0.04 - 0.018 = +0.072 → Up wins ~0.572 / 0.428.
+  // Locks in that Fix A's gate is one-sided — bullish wiki/news still
+  // contribute on shallow drawdowns, just at half the previous strength.
+  const market = makeBinaryUpDownMarket();
+  const agent = makeSharpAgent();
+  const signals = makeSignals({
+    pctChangeVsOpen: -0.02,
+    wikiPulse: "rising",
+    newsLevel: "red",
+    trendDirection: "FLAT",
+  });
+  const rng = createPRNG(PRNG_SEED);
+
+  const decision = computePrediction(agent, market, signals, {}, rng);
+
+  assert.equal(decision.abstain, false, `unexpected abstain: ${decision.abstainReason}`);
+  assert.equal(
+    decision.entryId,
+    "entry-up",
+    "shallow drawdown should still let bullish wiki/news tilt the read",
+  );
+});
+
+test("wiki/news bullish leg stacks normally on decisively-up markets", () => {
+  // pctChangeVsOpen = +0.10 → decisivelyDown = false → gate inactive.
+  // Halved coefficients: rising +0.05, red +0.04, vs-open +0.09,
+  // trendDirection UP +0.03. Net = +0.21 → Up at ~0.71 / 0.29.
+  // Verifies the gate is asymmetric: it suppresses bullish boosts only
+  // when reality has already moved the OTHER way, never on the up-side.
+  const market = makeBinaryUpDownMarket();
+  const agent = makeSharpAgent();
+  const signals = makeSignals({
+    pctChangeVsOpen: 0.10,
+    wikiPulse: "rising",
+    newsLevel: "red",
+    trendDirection: "UP",
+  });
+  const rng = createPRNG(PRNG_SEED);
+
+  const decision = computePrediction(agent, market, signals, {}, rng);
+
+  assert.equal(decision.abstain, false, `unexpected abstain: ${decision.abstainReason}`);
+  assert.equal(decision.entryId, "entry-up", "bullish boosts should stack on a decisively-up market");
+  assert.ok(
+    (decision.rawProbability ?? 0) > 0.65,
+    `expected rawProbability > 0.65, got ${decision.rawProbability}`,
   );
 });
 
