@@ -111,19 +111,42 @@ async function checkOrphanLedger(): Promise<CheckResult> {
   // that pre-date the snapshot) intentionally omit marketId. Run COUNT
   // first so rowCount reflects reality even when there are more than the
   // sample-size cap (10 rows here).
+  //
+  // Reconciled orphans (rows with a matching
+  // `amm_orphan_seed_reconciliation` ledger entry — written by
+  // `ops/reconcile-orphan-amm-seeds.ts`) are excluded from the failure
+  // count: the seed has been refunded to the house and the orphan is
+  // closed out, even though the original debit row stays on the ledger
+  // as an audit trail. The check still reports the reconciled count
+  // separately so operators can see history at a glance.
   const countResult = (await db.execute(sql`
-    SELECT COUNT(*)::int AS total
+    SELECT
+      COUNT(*) FILTER (
+        WHERE NOT EXISTS (
+          SELECT 1 FROM credit_ledger r
+          WHERE r.txn_type = 'amm_orphan_seed_reconciliation'
+            AND r.metadata->>'originalMarketId' = cl.metadata->>'marketId'
+        )
+      )::int AS unreconciled,
+      COUNT(*) FILTER (
+        WHERE EXISTS (
+          SELECT 1 FROM credit_ledger r
+          WHERE r.txn_type = 'amm_orphan_seed_reconciliation'
+            AND r.metadata->>'originalMarketId' = cl.metadata->>'marketId'
+        )
+      )::int AS reconciled
     FROM credit_ledger cl
     WHERE cl.metadata->>'marketId' IS NOT NULL
       AND NOT EXISTS (
         SELECT 1 FROM prediction_markets pm
         WHERE pm.id = cl.metadata->>'marketId'
       )
-  `)).rows as unknown as Array<{ total: number }>;
-  const count = countResult[0]?.total ?? 0;
+  `)).rows as unknown as Array<{ unreconciled: number; reconciled: number }>;
+  const unreconciled = countResult[0]?.unreconciled ?? 0;
+  const reconciled = countResult[0]?.reconciled ?? 0;
 
   const sampleRows =
-    count > 0
+    unreconciled > 0
       ? ((await db.execute(sql`
           SELECT cl.id,
                  cl.metadata->>'marketId' AS market_id,
@@ -135,6 +158,11 @@ async function checkOrphanLedger(): Promise<CheckResult> {
               SELECT 1 FROM prediction_markets pm
               WHERE pm.id = cl.metadata->>'marketId'
             )
+            AND NOT EXISTS (
+              SELECT 1 FROM credit_ledger r
+              WHERE r.txn_type = 'amm_orphan_seed_reconciliation'
+                AND r.metadata->>'originalMarketId' = cl.metadata->>'marketId'
+            )
           ORDER BY cl.created_at DESC
           LIMIT 10
         `)).rows as unknown as Array<{
@@ -145,14 +173,35 @@ async function checkOrphanLedger(): Promise<CheckResult> {
         }>)
       : [];
 
+  return buildOrphanLedgerCheckResult({ unreconciled, reconciled, sampleRows });
+}
+
+/**
+ * Pure result-builder for `checkOrphanLedger`. Split out so the
+ * status / message logic can be unit-tested without spinning up a DB.
+ *
+ * Reconciled orphans (those with a matching
+ * `amm_orphan_seed_reconciliation` ledger row) do NOT trip the check —
+ * the seed has been refunded and the orphan is closed out, even though
+ * the original debit row stays on the ledger as an audit trail.
+ */
+export function buildOrphanLedgerCheckResult(input: {
+  unreconciled: number;
+  reconciled: number;
+  sampleRows: unknown[];
+}): CheckResult {
+  const { unreconciled, reconciled, sampleRows } = input;
+  const reconciledSuffix =
+    reconciled > 0 ? ` (${reconciled} previously reconciled orphan${reconciled === 1 ? "" : "s"} ignored)` : "";
+
   return {
     name: "Orphan credit_ledger rows",
-    status: count === 0 ? "pass" : "fail",
-    rowCount: count,
+    status: unreconciled === 0 ? "pass" : "fail",
+    rowCount: unreconciled,
     details:
-      count === 0
-        ? "No credit_ledger rows reference deleted markets."
-        : `Found ${count} ledger row(s) whose metadata.marketId points to a deleted market. These imply a market was hard-deleted while keeping its ledger trail — usually a sunset/wipe script side effect, but worth verifying.`,
+      unreconciled === 0
+        ? `No unreconciled credit_ledger rows reference deleted markets${reconciledSuffix}.`
+        : `Found ${unreconciled} unreconciled ledger row(s) whose metadata.marketId points to a deleted market${reconciledSuffix}. These imply a market was hard-deleted while keeping its ledger trail — usually a sunset/wipe script side effect. If the orphans are amm_seed_debit rows, run \`npm run amm:reconcile-orphans\` to refund the house and clear the alarm.`,
     sample: sampleRows,
   };
 }

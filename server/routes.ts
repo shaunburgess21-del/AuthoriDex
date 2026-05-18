@@ -17479,6 +17479,40 @@ Target length: about 90-150 words.`;
         return res.status(404).json({ error: "World market not found" });
       }
 
+      // Hard-delete gate (added after the 2026-05-17 orphan-seed incident):
+      // refuse to delete a market whose AMM seed is still on the ledger.
+      // `market_amm_state` exists from create-time; the seed-return ledger
+      // row (`amm_settle_<marketId>`) is only written when the resolver runs.
+      // If state exists but no settle row → seed is still debited from the
+      // house. Hard-delete here would cascade away the state row and orphan
+      // the seed-debit ledger entry. Admin must Resolve/Void first.
+      const [ammState] = await db
+        .select({ marketId: marketAmmState.marketId })
+        .from(marketAmmState)
+        .where(eq(marketAmmState.marketId, id))
+        .limit(1);
+      if (ammState) {
+        const [settled] = await db
+          .select({ id: creditLedger.id })
+          .from(creditLedger)
+          .where(
+            and(
+              eq(creditLedger.userId, "00000000-0000-0000-0000-0000000000aa"),
+              eq(creditLedger.idempotencyKey, `amm_settle_${id}`),
+            ),
+          )
+          .limit(1);
+        if (!settled) {
+          return res.status(409).json({
+            error: "amm_seeded",
+            message:
+              "This market has an AMM seed on the ledger that hasn't been returned. " +
+              "Void or resolve it via Admin > AMM > Markets > Resolve/Void first so " +
+              "the house seed is credited back, then delete.",
+          });
+        }
+      }
+
       const { voidMarketBets } = await import("./jobs/market-resolver");
       if (market.status !== "VOID" && market.status !== "RESOLVED") {
         await voidMarketBets(id);
@@ -19903,6 +19937,43 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       const [existing] = await db.select().from(predictionMarkets).where(eq(predictionMarkets.id, id));
       if (!existing) {
         return res.status(404).json({ error: "Market not found" });
+      }
+
+      // Hard-delete gate (mirrors /api/admin/open-markets/:id). See that
+      // handler for the full rationale. Same incident, same fix.
+      const [ammState] = await db
+        .select({ marketId: marketAmmState.marketId })
+        .from(marketAmmState)
+        .where(eq(marketAmmState.marketId, id))
+        .limit(1);
+      if (ammState) {
+        const [settled] = await db
+          .select({ id: creditLedger.id })
+          .from(creditLedger)
+          .where(
+            and(
+              eq(creditLedger.userId, "00000000-0000-0000-0000-0000000000aa"),
+              eq(creditLedger.idempotencyKey, `amm_settle_${id}`),
+            ),
+          )
+          .limit(1);
+        if (!settled) {
+          return res.status(409).json({
+            error: "amm_seeded",
+            message:
+              "This market has an AMM seed on the ledger that hasn't been returned. " +
+              "Void or resolve it via Admin > AMM > Markets > Resolve/Void first so " +
+              "the house seed is credited back, then delete.",
+          });
+        }
+      }
+
+      // Refund any user bets before deletion (parity with the
+      // /api/admin/open-markets/:id path — previously this endpoint
+      // would silently strand user stakes on an in-flight market).
+      if (existing.status !== "VOID" && existing.status !== "RESOLVED") {
+        const { voidMarketBets } = await import("./jobs/market-resolver");
+        await voidMarketBets(id);
       }
 
       await db.delete(predictionMarkets).where(eq(predictionMarkets.id, id));
