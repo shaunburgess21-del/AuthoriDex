@@ -51,6 +51,35 @@ const DEFAULT_DESCRIPTION =
 const OG_WIDTH = 1200;
 const OG_HEIGHT = 630;
 
+/**
+ * Pre-rendered static default OG card. We bake a designed PNG into
+ * `public/og/og-default.png` and serve those bytes from this module
+ * instead of dynamically rasterising an SVG via sharp+librsvg — that
+ * pipeline drops the embedded @font-face on some Linux containers
+ * and produces an unbranded "empty rectangles on blue" preview on
+ * WhatsApp / iMessage / Facebook.
+ *
+ * Loaded lazily on first request and cached for the process lifetime.
+ * Resolved relative to `process.cwd()` so it works under both
+ * `tsx server/index.ts` (cwd = repo root) and the bundled
+ * `node dist/index.js` (cwd = repo root on Railway).
+ */
+let DEFAULT_OG_PNG_CACHE: Buffer | null = null;
+function loadDefaultOgPng(): Buffer | null {
+  if (DEFAULT_OG_PNG_CACHE) return DEFAULT_OG_PNG_CACHE;
+  try {
+    const p = path.resolve(process.cwd(), "public/og/og-default.png");
+    DEFAULT_OG_PNG_CACHE = fs.readFileSync(p);
+    return DEFAULT_OG_PNG_CACHE;
+  } catch (err) {
+    console.warn(
+      "[OG] Static default PNG not found at public/og/og-default.png — falling back to dynamic SVG render.",
+      err,
+    );
+    return null;
+  }
+}
+
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
@@ -897,11 +926,10 @@ export function registerOgRoutes(app: Express): void {
    * since the brand wordmark doesn't change. */
   app.get("/api/og/image/default.png", async (_req: Request, res: Response) => {
     try {
-      const png = await renderOgImage(
-        "Vox Populi",
-        "Track. Predict. Win.",
-        "VoxDex",
-      );
+      const staticPng = loadDefaultOgPng();
+      const png =
+        staticPng ??
+        (await renderOgImage("Vox Populi", "Track. Predict. Win.", "VoxDex"));
       res.setHeader("Content-Type", "image/png");
       res.setHeader("Cache-Control", "public, max-age=86400, immutable");
       res.send(png);
