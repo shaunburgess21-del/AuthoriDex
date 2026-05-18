@@ -200,6 +200,136 @@ test("aggregator output flows into computeSellDecision and produces a top-breach
   assert.equal(firstDecision!.livePrice, 0.65);
 });
 
+// ---------------------------------------------------------------------------
+// Multi-marketType coverage (Commit 2 — sell sweep expansion)
+//
+// `aggregateSellSweepPositions` is generic: it keys by (marketId,
+// entryId) and doesn't care what kind of AMM market the bets live on.
+// The runner's earlier UpDown-only filter masked that; with the filter
+// loosened to `engine='amm'`, these fixtures lock in the behaviour
+// for H2H (2 entries), Race (N entries), and Community-multi (also N
+// entries) so any future regression in the math gets caught here
+// instead of in production.
+// ---------------------------------------------------------------------------
+
+test("H2H: agent buys both sides, sells partial of one — per-entry anchor + netShares correct", () => {
+  // H2H market 'h2h1' with entries person1 / person2. Agent buys
+  // both sides, then trims person1. The two entries must produce
+  // independent positions: person1's anchor is unchanged by the
+  // partial sell, person2's position is untouched.
+  const positions = aggregate([
+    buy("h2h1", "person1", 80, 0.45),
+    buy("h2h1", "person2", 60, 0.55),
+    sell("h2h1", "person1", 30, 0.60),
+  ]);
+  assert.equal(positions.size, 2);
+
+  const p1 = positions.get("h2h1|person1")!;
+  assert.equal(p1.netShares, 50);
+  assert.equal(p1.buyShares, 80);
+  assert.ok(Math.abs(p1.buyCostNotional - 36) < 1e-9); // 80 * 0.45
+  assert.ok(Math.abs(p1.buyCostNotional / p1.buyShares - 0.45) < 1e-9);
+
+  const p2 = positions.get("h2h1|person2")!;
+  assert.equal(p2.netShares, 60);
+  assert.equal(p2.buyShares, 60);
+  assert.ok(Math.abs(p2.buyCostNotional - 33) < 1e-9); // 60 * 0.55
+});
+
+test("Race: agent buys two of four entries — both produce independent sell positions", () => {
+  // 4-entry race market 'race1'. Agent backs runner-a and runner-c
+  // only. The aggregator returns positions only for entries the
+  // agent actually traded — runner-b and runner-d are absent from
+  // the map (no bets, no row). Critical so the runner's downstream
+  // `for (pos of positions.values())` loop doesn't waste sell-decision
+  // calls on entries the agent doesn't hold.
+  const positions = aggregate([
+    buy("race1", "runner-a", 40, 0.20, 0.55),
+    buy("race1", "runner-c", 25, 0.32, 0.60),
+  ]);
+  assert.equal(positions.size, 2);
+  assert.ok(positions.has("race1|runner-a"));
+  assert.ok(positions.has("race1|runner-c"));
+  assert.ok(!positions.has("race1|runner-b"));
+  assert.ok(!positions.has("race1|runner-d"));
+
+  // Each entry should be independently evaluable by the sell engine
+  // — the runner now loops over ALL of them. Confirm anchors are the
+  // per-entry buy prices, not some cross-entry blend.
+  const a = positions.get("race1|runner-a")!;
+  assert.equal(a.buyCostNotional / a.buyShares, 0.20);
+  assert.equal(a.latestBuyConfidence, 0.55);
+  const c = positions.get("race1|runner-c")!;
+  assert.equal(c.buyCostNotional / c.buyShares, 0.32);
+  assert.equal(c.latestBuyConfidence, 0.60);
+});
+
+test("Race: stacking buys + a partial sell on one entry — anchor immune to the sell", () => {
+  // Same race, but the agent doubled down on runner-a and later
+  // trimmed half. Weighted anchor must average the two BUYS and
+  // ignore the sell entirely (matches the rule pinned by the
+  // 'sells reduce netShares but DO NOT dilute the anchor' test).
+  const positions = aggregate([
+    buy("race1", "runner-a", 40, 0.20),
+    buy("race1", "runner-a", 60, 0.28),
+    sell("race1", "runner-a", 30, 0.35),
+  ]);
+  const p = positions.get("race1|runner-a")!;
+  assert.equal(p.netShares, 70); // 40 + 60 − 30
+  assert.equal(p.buyShares, 100); // 40 + 60
+  // (40 * 0.20) + (60 * 0.28) = 8 + 16.8 = 24.8
+  assert.ok(Math.abs(p.buyCostNotional - 24.8) < 1e-9);
+  const anchor = p.buyCostNotional / p.buyShares;
+  assert.ok(Math.abs(anchor - 0.248) < 1e-9);
+});
+
+test("Community-multi: marketType='community' doesn't break the per-entry math", () => {
+  // The aggregator never inspects marketType — it just groups by
+  // (marketId, entryId). This test guards against any future
+  // refactor that might mistakenly add a marketType-aware branch
+  // (e.g. "if community, do something different"). Behaviour must
+  // remain identical to the Race case above.
+  const positions = aggregate([
+    buy("comm1", "candidate-x", 70, 0.18),
+    buy("comm1", "candidate-y", 30, 0.42),
+    buy("comm1", "candidate-x", 30, 0.22), // double-down on x
+    sell("comm1", "candidate-y", 10, 0.50), // trim y
+  ]);
+  assert.equal(positions.size, 2);
+
+  const x = positions.get("comm1|candidate-x")!;
+  assert.equal(x.netShares, 100);
+  assert.equal(x.buyShares, 100);
+  // (70 * 0.18) + (30 * 0.22) = 12.6 + 6.6 = 19.2 → anchor 0.192
+  assert.ok(Math.abs(x.buyCostNotional - 19.2) < 1e-9);
+
+  const y = positions.get("comm1|candidate-y")!;
+  assert.equal(y.netShares, 20);
+  assert.equal(y.buyShares, 30);
+  assert.equal(y.buyCostNotional, 30 * 0.42); // 12.6
+});
+
+test("multi-market mix: bets across H2H, Race, and Community-multi grouped independently", () => {
+  // Single agent has positions across all three market types in one
+  // pull. The aggregator must produce ONE entry per (marketId,
+  // entryId) pair regardless of which market it came from. Catches
+  // a bug class where cross-market bleed could occur if grouping
+  // ever degraded to entryId-only.
+  const positions = aggregate([
+    buy("h2h1", "person1", 50, 0.45),
+    buy("race1", "runner-a", 40, 0.20),
+    buy("comm1", "candidate-x", 30, 0.18),
+    // Same entryId string ('runner-a') in a DIFFERENT market —
+    // must NOT collide with the race position.
+    buy("h2h2", "runner-a", 25, 0.50),
+  ]);
+  assert.equal(positions.size, 4);
+  assert.equal(positions.get("h2h1|person1")!.netShares, 50);
+  assert.equal(positions.get("race1|runner-a")!.netShares, 40);
+  assert.equal(positions.get("comm1|candidate-x")!.netShares, 30);
+  assert.equal(positions.get("h2h2|runner-a")!.netShares, 25);
+});
+
 test("aggregator output with conviction add-on still uses original-buy weighted anchor", () => {
   // Initial buy + later conviction add-on at higher price. The anchor
   // is correctly diluted upward (weighted across both buys), and the

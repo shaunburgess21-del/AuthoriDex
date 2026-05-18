@@ -1252,14 +1252,26 @@ async function runSellSweep(
 ): Promise<number> {
   let sellsScheduled = 0;
 
-  // Same scope as the conviction sweep — AMM up/down only. Defensive
-  // engine='amm' filter mirrors that function's own guard.
-  const ammUpdown = allMarkets.filter((m) =>
-    m.personId &&
-    (m.marketType === "updown" || (m.marketType === "community" && m.openMarketType === "updown")) &&
-    m.engine === "amm",
+  // Sell sweep operates on every AMM market regardless of marketType.
+  // Per-entry weighted-avg cost basis in `aggregateSellSweepPositions`
+  // handles 2-entry (UpDown/H2H) and N-entry (Race, Community-multi)
+  // markets identically — the engine compares per-entry anchor vs
+  // live price. Jackpot is parimutuel (engine !== 'amm') so it's
+  // excluded automatically by the `engine === 'amm'` gate.
+  //
+  // `personId` filter retained because the Town Square log lines + the
+  // sell-engine telemetry use the person identity for context; the
+  // few admin-built generic races without a personId sit out the
+  // sweep until that wiring exists. Documented limitation, not a bug.
+  //
+  // Note on community markets: when `WORLD_MARKETS_LLM_ENABLED=false`
+  // we block community BUYS in actionWorker, but sells fire here
+  // regardless — agents holding positions when the kill switch flips
+  // off must still be able to manage their exits.
+  const ammMarkets = allMarkets.filter((m) =>
+    m.engine === "amm" && m.personId,
   );
-  if (!ammUpdown.length) return 0;
+  if (!ammMarkets.length) return 0;
 
   // Pre-load AMM state for every market once. Same pattern as the
   // conviction sweep — one batched query, reused across all agents.
@@ -1272,7 +1284,7 @@ async function runSellSweep(
       shareQuantities: marketAmmState.shareQuantities,
     })
     .from(marketAmmState)
-    .where(inArray(marketAmmState.marketId, ammUpdown.map((m) => m.id)));
+    .where(inArray(marketAmmState.marketId, ammMarkets.map((m) => m.id)));
   for (const row of stateRows) {
     const b = Number(row.liquidityB);
     if (!Number.isFinite(b) || b <= 0) continue;
@@ -1305,7 +1317,7 @@ async function runSellSweep(
       .where(
         and(
           eq(marketBets.agentId, agent.id),
-          inArray(marketBets.marketId, ammUpdown.map((m) => m.id)),
+          inArray(marketBets.marketId, ammMarkets.map((m) => m.id)),
         ),
       )
       .orderBy(marketBets.createdAt);
@@ -1335,7 +1347,7 @@ async function runSellSweep(
       .where(
         and(
           eq(scheduledAgentActions.agentId, agent.id),
-          inArray(scheduledAgentActions.marketId, ammUpdown.map((m) => m.id)),
+          inArray(scheduledAgentActions.marketId, ammMarkets.map((m) => m.id)),
           sql`${scheduledAgentActions.actionType} IN ('sell', 'conviction')`,
         ),
       );
@@ -1361,7 +1373,7 @@ async function runSellSweep(
       .where(
         and(
           eq(scheduledAgentActions.agentId, agent.id),
-          inArray(scheduledAgentActions.marketId, ammUpdown.map((m) => m.id)),
+          inArray(scheduledAgentActions.marketId, ammMarkets.map((m) => m.id)),
           sql`${scheduledAgentActions.actionType} IN ('predict', 'conviction')`,
           eq(scheduledAgentActions.status, "executed"),
         ),
@@ -1380,7 +1392,7 @@ async function runSellSweep(
     for (const pos of Array.from(positions.values())) {
       if (pos.netShares < MIN_NET_SHARES_FOR_SELL_EVAL) continue;
       if (pos.buyShares <= 0) continue;
-      const market = ammUpdown.find((m) => m.id === pos.marketId);
+      const market = ammMarkets.find((m) => m.id === pos.marketId);
       if (!market) continue;
       const state = ammStateByMarket.get(market.id);
       if (!state) continue;
