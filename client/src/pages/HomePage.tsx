@@ -1746,30 +1746,11 @@ export default function HomePage() {
     setSelectedInsightPerson(null);
   };
 
-  // Navigating away from the Hot Movers snapshot in the same tick that
-  // closes the Dialog/Drawer leaves the profile page anchored at the
-  // bottom: Radix's scroll-lock teardown re-applies the leaderboard's
-  // prior `scrollY` AFTER our ScrollToTop/mount effects on the new page
-  // have already snapped to 0. We defer the navigation by one frame via
-  // this pending-nav state so the modal can finish its scroll
-  // restoration before the route changes.
-  const [pendingProfileNav, setPendingProfileNav] = useState<string | null>(null);
-
   const handleViewInsightProfile = () => {
     if (!selectedInsightPerson) return;
-    setPendingProfileNav(selectedInsightPerson.id);
+    handleVisitProfile(selectedInsightPerson.id);
     setSelectedInsightPerson(null);
   };
-
-  useEffect(() => {
-    if (selectedInsightPerson || !pendingProfileNav) return;
-    const id = pendingProfileNav;
-    const raf = requestAnimationFrame(() => {
-      handleVisitProfile(id);
-      setPendingProfileNav(null);
-    });
-    return () => cancelAnimationFrame(raf);
-  }, [selectedInsightPerson, pendingProfileNav]);
 
   const handleClearFilters = () => {
     setSearchQuery("");

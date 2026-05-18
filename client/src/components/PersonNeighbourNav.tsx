@@ -71,13 +71,17 @@ export function PersonNeighbourNav({ personId }: PersonNeighbourNavProps) {
     if (!data?.people.length || data.focusIndex < 0) return;
     if (didScrollRef.current) return;
     const el = focusRef.current;
-    if (!el) return;
+    const scroller = el?.parentElement;
+    if (!el || !scroller) return;
     didScrollRef.current = true;
-    el.scrollIntoView({
-      inline: "center",
-      block: "nearest",
-      behavior: "smooth",
-    });
+    // Centre the focused card horizontally inside the strip WITHOUT
+    // touching page-level vertical scroll. scrollIntoView() with
+    // block:"nearest" still pulls the page down when the strip is below
+    // the fold (it lives near the bottom of the profile), which made
+    // fresh profile loads land near the bottom of the page instead of
+    // the top.
+    const target = el.offsetLeft - (scroller.clientWidth - el.clientWidth) / 2;
+    scroller.scrollTo({ left: Math.max(0, target), behavior: "auto" });
   }, [data?.people, data?.focusIndex]);
 
   useLayoutEffect(() => {
