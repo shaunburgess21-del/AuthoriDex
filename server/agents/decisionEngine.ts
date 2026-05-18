@@ -455,29 +455,53 @@ function computeSignalBoost(
   // (was ±0.10) so it can no longer overwhelm `pctChangeVsOpen` at
   // moderate moves.
   //
-  // Why: a person being in the news already moved their `fame_index`,
-  // which already drove `pctChangeVsOpen`. Re-applying wiki / news as
-  // a directional boost on top double-counts attention — and worse,
-  // the bullish leg fights the score on celebrities whose activity is
-  // *what dragged them down* (controversies, scandals). The 2026-05-18
-  // misalignment (5 of 6 UpDown markets at -1% to -18% from open with
-  // agents leaning Up 60-75%) traced directly to this stack:
-  //   pctChangeVsOpen ≈ -0.10 → -0.096
-  //   wikiPulse rising         → +0.10
-  //   newsLevel red            → +0.07
-  //   net signalBoost          → +0.044 (favours Up despite -10% move)
+  // Why this gate exists — the stock-vs-flow distinction:
+  //   `wikiPulse` and `newsLevel` are STOCK signals, derived in
+  //   `getTrendSignals` from 24h-vs-trailing-7d ratios:
+  //     wikiDelta > 0.15  → "rising"   (currently elevated vs last week)
+  //     newsDelta > 0.3   → "red"      (currently elevated vs last week)
+  //   These tell us where attention SITS right now, not where it's headed.
   //
-  // Symmetry isn't the goal here — correctness is. Negative wiki/news
-  // still apply normally (a person who is down AND falling on wiki/news
-  // SHOULD be even more obviously Down).
+  //   `pctChangeVsOpen` is a FLOW signal:
+  //     pctChangeVsOpen = (fameIndex_now − fameIndex_marketOpen) / fameIndex_marketOpen
+  //   This tells us how the score has MOVED since the market opened on
+  //   Monday — which is the question Up/Down markets actually resolve on.
+  //
+  //   Stock and flow can legitimately diverge. A person who peaks on the
+  //   Monday the market opens, then fades through the week, will still
+  //   register as `wikiPulse rising` and `newsLevel red` (they're still
+  //   above their trailing-7d baseline) while their `pctChangeVsOpen`
+  //   goes negative. The 2026-05-18 misalignment (5 of 6 UpDown markets
+  //   at -1% to -18% from open with agents leaning Up 60-75%) was
+  //   exactly this pattern — the trend score itself behaved correctly,
+  //   but the agent decision engine was reading "currently elevated"
+  //   (stock) as a predictor of "will rise further" (flow):
+  //     pctChangeVsOpen ≈ -0.10 → -0.096
+  //     wikiPulse rising         → +0.10
+  //     newsLevel red            → +0.07
+  //     net signalBoost          → +0.044 (favours Up despite -10% move)
+  //
+  //   Note: the trend score is attention-only (see scoring/trendScore.ts —
+  //   no sentiment input anywhere). So a controversy that goes viral
+  //   pushes the score UP, not down — which means the bug is NOT
+  //   "double-counting attention while it tanks the score". It's the
+  //   subtler "high stock doesn't predict positive flow when the market
+  //   opened at the peak".
+  //
+  // Symmetry isn't the goal here — correctness is. Bullish stock signals
+  // get gated only when the flow signal already disagrees decisively
+  // (`pctChangeVsOpen < -0.05`). Bearish stock signals (`falling` /
+  // `green`) still apply normally so a person who is BOTH flowing down
+  // AND showing fading attention reads as even more obviously Down.
   if (signals.wikiPulse === "rising" && !decisivelyDown) boost += 0.05 * agent.recencyWeight;
   if (signals.wikiPulse === "falling") boost -= 0.05 * agent.recencyWeight;
 
-  // News level — same gate, same reasoning. `newsLevel === "red"` is a
-  // volume signal not a direction signal: a controversy generates red
-  // news while tanking the score. Coefficients halved (red was +0.07,
-  // green was -0.04) for the same "vs-open should dominate at moderate
-  // moves" reason.
+  // News level — same gate, same reasoning. `newsLevel === "red"` means
+  // current 24h news count is >30% above the trailing-7d baseline; it
+  // doesn't tell us whether attention is still building or already
+  // fading from a Monday peak. Coefficients halved (red was +0.07,
+  // green was -0.04) so flow (`pctChangeVsOpen`, ±0.18 saturated) is
+  // the dominant directional input across the full magnitude range.
   if (signals.newsLevel === "red" && !decisivelyDown) boost += 0.04 * agent.recencyWeight;
   if (signals.newsLevel === "green") boost -= 0.02 * agent.recencyWeight;
 
