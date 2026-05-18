@@ -39,6 +39,10 @@ import {
 } from "@shared/lib/amm/positions";
 import { pricesAll } from "@shared/lib/amm/lmsr";
 import { db } from "../db";
+import {
+  buildBuyReplayResponse,
+  buildSellReplayResponse,
+} from "./amm-trades-replay";
 
 /**
  * Narrow tx-shape the helpers need. Both top-level `db` and the
@@ -340,41 +344,29 @@ async function replayPriorBuy(
     .limit(1);
   if (!bet) return null;
 
-  // Hard guard: if the client reuses the same key against a DIFFERENT
-  // entryId (UI bug — shouldn't happen because `useIdempotencyKey`
-  // includes entryId in its dep tuple), refuse to return the wrong
-  // bet. Returning null here doesn't short-circuit — the caller
-  // proceeds with the new request, which then trips the `(userId,
-  // idempotencyKey)` unique constraint at ledger-insert time and
-  // rolls the whole tx back. The user sees a 500, but no duplicate
-  // trade lands. Less elegant than a structured error response, but
-  // the path is purely defensive against a UI regression — we
-  // accept the trade-off to keep the happy path simple.
-  if (bet.entryId !== expectedEntryId) return null;
-
   const [walletRow] = await tx
     .select({ predictCredits: profiles.predictCredits })
     .from(profiles)
     .where(eq(profiles.id, userId))
     .limit(1);
 
-  const newQArr = state.outcomeOrder.map((id) => state.shareQuantities[id] ?? 0);
-  const newPricesArr = pricesAll(newQArr, b);
-  const newPrices: Record<string, number> = {};
-  for (let i = 0; i < state.outcomeOrder.length; i++) {
-    newPrices[state.outcomeOrder[i]] = newPricesArr[i];
-  }
-
-  return {
-    betId: bet.id,
-    sharesPurchased: Number(bet.shareCount ?? 0),
-    chargeCredits: Number(bet.stakeAmount ?? 0),
-    pricePerShareAvg: Number(bet.pricePerShare ?? 0),
-    newPrices,
-    newQ: { ...state.shareQuantities },
-    newSharePrice: newPrices[expectedEntryId] ?? 0,
-    userBalanceAfter: walletRow ? walletRow.predictCredits : 0,
-  };
+  // Defensive entryId mismatch handling lives in buildBuyReplayResponse:
+  // if the client reuses the same key against a DIFFERENT entryId (UI
+  // bug — shouldn't happen because `useIdempotencyKey` includes entryId
+  // in its dep tuple), the builder returns null. Returning null here
+  // doesn't short-circuit — the caller proceeds with the new request,
+  // which then trips the `(userId, idempotencyKey)` unique constraint
+  // at ledger-insert time and rolls the whole tx back. The user sees a
+  // 500, but no duplicate trade lands. Less elegant than a structured
+  // error response, but the path is purely defensive against a UI
+  // regression — we accept the trade-off to keep the happy path simple.
+  return buildBuyReplayResponse({
+    bet,
+    walletRow: walletRow ?? null,
+    state,
+    liquidityB: b,
+    expectedEntryId,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -654,7 +646,6 @@ async function replayPriorSell(
     .where(eq(marketBets.id, priorBetId))
     .limit(1);
   if (!bet) return null;
-  if (bet.entryId !== expectedEntryId) return null;
 
   const [walletRow] = await tx
     .select({ predictCredits: profiles.predictCredits })
@@ -675,35 +666,17 @@ async function replayPriorSell(
         eq(marketBets.entryId, expectedEntryId),
       ),
     );
-  let netShares = 0;
-  for (const row of positionRows) {
-    if (row.actionType !== "buy" && row.actionType !== "sell") continue;
-    const sc = Number(row.shareCount ?? 0);
-    if (!Number.isFinite(sc)) continue;
-    netShares += row.actionType === "buy" ? sc : -sc;
-  }
 
-  const newQArr = state.outcomeOrder.map((id) => state.shareQuantities[id] ?? 0);
-  const newPricesArr = pricesAll(newQArr, b);
-  const newPrices: Record<string, number> = {};
-  for (let i = 0; i < state.outcomeOrder.length; i++) {
-    newPrices[state.outcomeOrder[i]] = newPricesArr[i];
-  }
-
-  const sharesSold = Number(bet.shareCount ?? 0);
-  const proceeds = Number(bet.payoutAmount ?? 0);
-
-  return {
-    betId: bet.id,
-    sharesSold,
-    proceeds,
-    pricePerShareAvg: Number(bet.pricePerShare ?? 0),
-    newPrices,
-    newQ: { ...state.shareQuantities },
-    newSharePrice: newPrices[expectedEntryId] ?? 0,
-    userBalanceAfter: walletRow ? walletRow.predictCredits : 0,
-    remainingShares: Math.max(0, netShares),
-  };
+  // entryId-mismatch fall-through behaviour matches `replayPriorBuy`;
+  // see that function for the rationale.
+  return buildSellReplayResponse({
+    bet,
+    walletRow: walletRow ?? null,
+    positionRows,
+    state,
+    liquidityB: b,
+    expectedEntryId,
+  });
 }
 
 // ---------------------------------------------------------------------------
