@@ -35,6 +35,9 @@ export default defineConfig({
         skipWaiting: true,
         clientsClaim: true,
         globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
+        navigateFallback: "/index.html",
+        // Do not serve the SPA for /api/* navigations (e.g. opening OG JPG URLs in a tab).
+        navigateFallbackDenylist: [/^\/api\//, /^\/attached_assets\//],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,

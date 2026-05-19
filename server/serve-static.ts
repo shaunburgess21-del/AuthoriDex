@@ -27,7 +27,11 @@ export function serveStatic(app: Express) {
 
   // SPA fallback: always serve the latest index.html with no-cache so
   // browsers never use a stale entry point after a deploy.
-  app.use("*", (_req, res) => {
+  app.use("*", (req, res) => {
+    if (req.path.startsWith("/api")) {
+      res.status(404).type("text/plain").send("Not found");
+      return;
+    }
     res.set("Cache-Control", "no-cache, no-store, must-revalidate");
     res.sendFile(path.resolve(distPath, "index.html"));
   });

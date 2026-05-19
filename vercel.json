@@ -9,6 +9,18 @@
       "destination": "https://authoridex-production.up.railway.app/api/$1"
     },
     {
+      "source": "/api/og/vote/matchups/:slug.jpg",
+      "destination": "https://authoridex-production.up.railway.app/api/og/vote/matchups/:slug.jpg"
+    },
+    {
+      "source": "/api/og/vote/matchups/:slug.png",
+      "destination": "https://authoridex-production.up.railway.app/api/og/vote/matchups/:slug.png"
+    },
+    {
+      "source": "/api/og/matchups/:slug",
+      "destination": "https://authoridex-production.up.railway.app/api/og/matchups/:slug"
+    },
+    {
       "source": "/attached_assets/(.*)",
       "destination": "https://authoridex-production.up.railway.app/attached_assets/$1"
     },

@@ -866,6 +866,7 @@ async function serveMatchupOgImage(
         ? await renderMatchupOgImageJpeg(ctx)
         : await renderMatchupOgImage(ctx);
     res.setHeader("Content-Type", contentType);
+    res.setHeader("Content-Disposition", "inline");
     res.setHeader("Cache-Control", "public, max-age=86400");
     res.send(image);
   } catch (err: any) {
