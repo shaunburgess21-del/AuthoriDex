@@ -118,13 +118,11 @@ interface StakeModalProps {
    * keeps the modal open with the user's entry intact and never plays the
    * "you won" confetti on top of the parent's error toast.
    *
-   * Tier 1.2: the optional `meta.maxPricePerShare` is the slippage cap
-   * derived from the user's chosen tolerance (1% / 5% / 10%) and the
-   * modal's live quote. Parents should forward it into the trade route
-   * request body so the server-side guard in `executeBuy` can abort the
-   * trade with `slippage_exceeded` when the realised average fill price
-   * would breach this cap. Callers that don't forward it simply opt out
-   * of slippage protection — backward-compatible.
+   * The optional `meta.maxPricePerShare` is a 5% cap above the modal's
+   * live quote, applied automatically (not user-configurable). Parents
+   * should forward it into the trade route so `executeBuy` can abort
+   * with `slippage_exceeded` when the market moves before execution.
+   * Callers that don't forward it opt out of protection.
    */
   onConfirm: (
     amount: number,
@@ -139,10 +137,9 @@ interface StakeModalProps {
    * the user confirms in Sell mode. Parent should call
    * `/api/native-markets/:id/bet` with `actionType:'sell'`.
    *
-   * Tier 1.2: `meta.minPricePerShare` is the slippage floor mirror of
-   * the buy-side cap. Forward it to the server so it can abort the
-   * sell with `slippage_exceeded` when proceeds would slip below
-   * tolerance.
+   * `meta.minPricePerShare` is the 5% floor mirror of the buy-side cap,
+   * applied automatically. Forward it so the server can abort the sell
+   * with `slippage_exceeded` when the market moves before execution.
    */
   onConfirmAmmSell?: (
     shares: number,
@@ -178,6 +175,8 @@ interface StakeModalProps {
 }
 
 const MIN_STAKE = 5;
+/** Fixed quote-to-execution guard (not exposed in the UI). */
+const DEFAULT_SLIPPAGE_TOLERANCE = 0.05;
 
 export function StakeModal({
   open,
@@ -195,12 +194,6 @@ export function StakeModal({
   const [stakeAmount, setStakeAmount] = useState("");
   const [ammMode, setAmmMode] = useState<"buy" | "sell">(initialAmmMode ?? "buy");
   const [sellShares, setSellShares] = useState("");
-  // Tier 1.2: slippage tolerance picker. Stored as a fraction (0.05 = 5%).
-  // Default to 5% — generous enough for typical pre-launch liquidity while
-  // still meaningful protection against a whale moving the price between
-  // quote-view and submit. Default is a UX choice, not a safety boundary;
-  // the server treats undefined `maxPricePerShare` as "no cap".
-  const [slippagePct, setSlippagePct] = useState<number>(0.05);
   // Re-seed ammMode whenever the parent's intent changes (e.g. user
   // clicks the inline Sell button on the detail page after the modal
   // has already been opened once for a Buy). Without this the modal
@@ -365,20 +358,16 @@ export function StakeModal({
       };
     }
 
-    // Tier 1.2: derive the slippage cap (buy) or floor (sell) from
-    // the user-chosen tolerance and the live AMM price. We clamp the
-    // cap into the LMSR domain (0, 1] so a degenerate price * (1 +
-    // slippage) > 1 doesn't turn into a no-op when the server's
-    // parseSlippageBound rejects values > 1. Floor is clamped to a
-    // tiny epsilon above 0 for the same reason. Only sent when we
-    // have a live price — without one the bound is meaningless.
+    // Derive the quote-staleness cap (buy) or floor (sell) from the live
+    // AMM price and DEFAULT_SLIPPAGE_TOLERANCE. Clamp into the LMSR domain
+    // (0, 1] so price * (1 + tolerance) > 1 doesn't no-op on the server.
     const maxPricePerShare =
       ammEntryPrice != null
-        ? Math.min(1, ammEntryPrice * (1 + slippagePct))
+        ? Math.min(1, ammEntryPrice * (1 + DEFAULT_SLIPPAGE_TOLERANCE))
         : undefined;
     const minPricePerShare =
       ammEntryPrice != null
-        ? Math.max(1e-6, ammEntryPrice * (1 - slippagePct))
+        ? Math.max(1e-6, ammEntryPrice * (1 - DEFAULT_SLIPPAGE_TOLERANCE))
         : undefined;
 
     setSubmitting(true);
@@ -1004,49 +993,6 @@ export function StakeModal({
                 </Button>
               </div>
             </>
-          )}
-
-          {/* Tier 1.2: slippage tolerance picker. Renders for both buy
-              and sell AMM modes when we have a live price to anchor
-              the cap / floor against — otherwise the bound math
-              (price * (1 + slippage)) is meaningless. The chosen
-              tolerance is plumbed into the request body so
-              `executeBuy` / `executeSell` can abort with
-              `slippage_exceeded` if the realised average fill price
-              breaches it. */}
-          {ammEntryPrice != null && (
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
-                  Slippage tolerance
-                </label>
-                <span
-                  className="text-[10px] text-muted-foreground"
-                  title={
-                    ammMode === "buy"
-                      ? "We'll cancel the trade if the average fill price slips above your tolerance from the quoted price."
-                      : "We'll cancel the trade if the average sell price slips below your tolerance from the quoted price."
-                  }
-                >
-                  auto-cancel if exceeded
-                </span>
-              </div>
-              <div className="flex gap-2">
-                {[0.01, 0.05, 0.1].map((pct) => (
-                  <Button
-                    key={pct}
-                    type="button"
-                    variant={slippagePct === pct ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setSlippagePct(pct)}
-                    className="flex-1"
-                    data-testid={`button-slippage-${Math.round(pct * 100)}`}
-                  >
-                    {Math.round(pct * 100)}%
-                  </Button>
-                ))}
-              </div>
-            </div>
           )}
 
           {/* Polymarket pass: restyled AMM receipt. Big "Payout if win"

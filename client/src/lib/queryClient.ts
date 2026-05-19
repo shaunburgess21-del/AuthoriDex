@@ -56,9 +56,8 @@ export function parseApiError(
       const body = JSON.parse(m[2]);
       if (body && typeof body === "object" && body.error) {
         const rawCode = String(body.error);
-        // Slippage gets a richer description so the user knows what
-        // to do next ("try a smaller stake or relax tolerance"). The
-        // server already builds that copy in result.message.
+        // Slippage (and other coded errors) surface body.message as the
+        // toast description; title comes from humaniseErrorCode above.
         const description = body.message
           ? String(body.message)
           : body.detail

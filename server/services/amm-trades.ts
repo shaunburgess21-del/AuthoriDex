@@ -244,9 +244,7 @@ export async function executeBuy(
         error: "slippage_exceeded",
         status: 409,
         message:
-          `Average fill price ${slippage.avgPrice.toFixed(4)} exceeds your ` +
-          `slippage cap ${slippage.capOrFloor.toFixed(4)}. Try a smaller ` +
-          `stake or relax tolerance.`,
+          "The market shifted between your quote and execution. Try again for an updated quote. No credits were charged.",
         quotedAvgPrice: slippage.avgPrice,
         capOrFloor: slippage.capOrFloor,
       };
@@ -608,9 +606,7 @@ export async function executeSell(
         error: "slippage_exceeded",
         status: 409,
         message:
-          `Average proceeds price ${slippage.avgPrice.toFixed(4)} is below ` +
-          `your slippage floor ${slippage.capOrFloor.toFixed(4)}. Try a ` +
-          `smaller share count or relax tolerance.`,
+          "The market shifted between your quote and execution. Try again for an updated quote. Your shares were not sold.",
         quotedAvgPrice: slippage.avgPrice,
         capOrFloor: slippage.capOrFloor,
       };
