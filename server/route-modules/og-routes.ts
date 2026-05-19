@@ -21,7 +21,10 @@ import {
   matchupOgDescription,
   matchupOgPromptTitle,
 } from "../services/matchup-og-context";
-import { renderMatchupOgImage } from "../services/matchup-og-image";
+import {
+  renderMatchupOgImage,
+  renderMatchupOgImageJpeg,
+} from "../services/matchup-og-image";
 
 /* ─────────────────────────────────────────────────────────────────────────────
  * Open Graph + Twitter card endpoints + sitemap.xml
@@ -100,8 +103,10 @@ interface OgPagePayload {
   description: string;
   /** Absolute URL to the canonical SPA page humans should land on. */
   canonicalUrl: string;
-  /** Absolute URL to the OG image PNG. */
+  /** Absolute URL to the OG image. */
   imageUrl: string;
+  /** e.g. `image/jpeg` — emitted as og:image:type when set. */
+  imageType?: string;
   /** Optional Twitter creator handle, e.g. `@voxdex`. */
   twitterSite?: string;
 }
@@ -119,6 +124,13 @@ function renderOgHtml(p: OgPagePayload): string {
   const url = escapeHtml(p.canonicalUrl);
   const img = escapeHtml(p.imageUrl);
   const site = escapeHtml(p.twitterSite ?? "@voxdex");
+  const imageTypeMeta = p.imageType
+    ? `\n    <meta property="og:image:type" content="${escapeHtml(p.imageType)}" />`
+    : "";
+  const secureImageMeta =
+    p.imageUrl.startsWith("https://")
+      ? `\n    <meta property="og:image:secure_url" content="${img}" />`
+      : "";
   return `<!DOCTYPE html>
 <html lang="en">
   <head>
@@ -132,7 +144,7 @@ function renderOgHtml(p: OgPagePayload): string {
     <meta property="og:title" content="${t}" />
     <meta property="og:description" content="${d}" />
     <meta property="og:url" content="${url}" />
-    <meta property="og:image" content="${img}" />
+    <meta property="og:image" content="${img}" />${imageTypeMeta}${secureImageMeta}
     <meta property="og:image:width" content="${OG_WIDTH}" />
     <meta property="og:image:height" content="${OG_HEIGHT}" />
 
@@ -896,8 +908,51 @@ async function lookupOpinionPoll(slug: string) {
   return p ?? null;
 }
 
+/** Bump when the matchup OG visual or encoding changes (cache bust). */
+const MATCHUP_OG_IMAGE_VERSION = "2";
+
 function matchupOgImageUrl(slug: string): string {
-  return `${SITE_URL}/api/og/vote/matchups/${encodeURIComponent(slug)}.png`;
+  return `${SITE_URL}/api/og/vote/matchups/${encodeURIComponent(slug)}.jpg?v=${MATCHUP_OG_IMAGE_VERSION}`;
+}
+
+async function serveMatchupOgImage(
+  req: Request,
+  res: Response,
+  format: "png" | "jpeg",
+): Promise<void> {
+  const slug = req.params.slug;
+  const contentType = format === "jpeg" ? "image/jpeg" : "image/png";
+  try {
+    const ctx = await loadMatchupOgContext(slug);
+    if (!ctx) {
+      const fallback = loadDefaultOgPng();
+      if (fallback) {
+        res.setHeader("Content-Type", "image/png");
+        res.setHeader("Cache-Control", "public, max-age=300");
+        res.send(fallback);
+        return;
+      }
+      res.status(404).send("matchup not found");
+      return;
+    }
+    const image =
+      format === "jpeg"
+        ? await renderMatchupOgImageJpeg(ctx)
+        : await renderMatchupOgImage(ctx);
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    res.send(image);
+  } catch (err: any) {
+    console.error(`[OG] Matchup ${format.toUpperCase()} render failed:`, err?.message);
+    const fallback = loadDefaultOgPng();
+    if (fallback) {
+      res.setHeader("Content-Type", "image/png");
+      res.setHeader("Cache-Control", "public, max-age=300");
+      res.send(fallback);
+      return;
+    }
+    res.status(500).send("og render failed");
+  }
 }
 
 async function lookupPersonName(personId: string | null): Promise<string | null> {
@@ -1427,38 +1482,13 @@ export function registerOgRoutes(app: Express): void {
   );
 
   app.get(
+    "/api/og/vote/matchups/:slug.jpg",
+    (req, res) => serveMatchupOgImage(req, res, "jpeg"),
+  );
+
+  app.get(
     "/api/og/vote/matchups/:slug.png",
-    async (req: Request, res: Response) => {
-      const slug = req.params.slug;
-      try {
-        const ctx = await loadMatchupOgContext(slug);
-        if (!ctx) {
-          const fallback = loadDefaultOgPng();
-          if (fallback) {
-            res.setHeader("Content-Type", "image/png");
-            res.setHeader("Cache-Control", "public, max-age=300");
-            res.send(fallback);
-            return;
-          }
-          res.status(404).send("matchup not found");
-          return;
-        }
-        const png = await renderMatchupOgImage(ctx);
-        res.setHeader("Content-Type", "image/png");
-        res.setHeader("Cache-Control", "public, max-age=86400");
-        res.send(png);
-      } catch (err: any) {
-        console.error("[OG] Matchup PNG render failed:", err?.message);
-        const fallback = loadDefaultOgPng();
-        if (fallback) {
-          res.setHeader("Content-Type", "image/png");
-          res.setHeader("Cache-Control", "public, max-age=300");
-          res.send(fallback);
-          return;
-        }
-        res.status(500).send("og render failed");
-      }
-    },
+    (req, res) => serveMatchupOgImage(req, res, "png"),
   );
 
   app.get("/api/og/matchups/:slug", async (req: Request, res: Response) => {
@@ -1490,6 +1520,7 @@ export function registerOgRoutes(app: Express): void {
           description,
           canonicalUrl,
           imageUrl,
+          imageType: "image/jpeg",
         }),
       );
     } catch (err: any) {

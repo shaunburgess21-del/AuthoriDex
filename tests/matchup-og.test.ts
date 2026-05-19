@@ -5,7 +5,10 @@ import {
   matchupOgDescription,
   matchupOgPromptTitle,
 } from "../server/services/matchup-og-meta";
-import { renderMatchupOgImage } from "../server/services/matchup-og-image";
+import {
+  renderMatchupOgImage,
+  renderMatchupOgImageJpeg,
+} from "../server/services/matchup-og-image";
 import {
   resolveMatchupOptionDisplay,
   matchupBucketUrl,
@@ -65,21 +68,35 @@ test("matchupBucketUrl builds public Supabase path shape", () => {
   );
 });
 
+const PLACEHOLDER_CTX = {
+  slug: "football-goat",
+  title: "Football GOAT",
+  promptText: "Who is the GOAT?",
+  optionAText: "Cristiano Ronaldo",
+  optionBText: "Lionel Messi",
+  category: "Sports",
+  optionAImageUrl: null,
+  optionBImageUrl: null,
+};
+
 test("renderMatchupOgImage returns 1200x630 PNG without remote images", async () => {
-  const png = await renderMatchupOgImage({
-    slug: "football-goat",
-    title: "Football GOAT",
-    promptText: "Who is the GOAT?",
-    optionAText: "Cristiano Ronaldo",
-    optionBText: "Lionel Messi",
-    category: "Sports",
-    optionAImageUrl: null,
-    optionBImageUrl: null,
-  });
+  const png = await renderMatchupOgImage(PLACEHOLDER_CTX);
   assert.ok(png.length > 1000);
   const meta = await import("sharp").then((m) =>
     m.default(png).metadata(),
   );
   assert.equal(meta.width, 1200);
   assert.equal(meta.height, 630);
+});
+
+test("renderMatchupOgImageJpeg returns 1200x630 JPEG under 600KB", async () => {
+  const jpeg = await renderMatchupOgImageJpeg(PLACEHOLDER_CTX);
+  assert.ok(jpeg.length > 1000);
+  assert.ok(jpeg.length < 600_000, `expected <600KB, got ${jpeg.length}`);
+  const meta = await import("sharp").then((m) =>
+    m.default(jpeg).metadata(),
+  );
+  assert.equal(meta.width, 1200);
+  assert.equal(meta.height, 630);
+  assert.equal(meta.format, "jpeg");
 });

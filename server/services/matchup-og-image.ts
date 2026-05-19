@@ -12,6 +12,12 @@ const OG_WIDTH = 1200;
 const OG_HEIGHT = 630;
 const HALF_WIDTH = OG_WIDTH / 2;
 
+/** Target max bytes for social crawlers (WhatsApp, Facebook). */
+const JPEG_MAX_BYTES = 550_000;
+const JPEG_QUALITY_START = 82;
+const JPEG_QUALITY_MIN = 65;
+const PANEL_JPEG_QUALITY = 85;
+
 const FONT_FACE_STYLE = (() => {
   try {
     const requireFromHere = createRequire(import.meta.url);
@@ -83,7 +89,7 @@ async function fetchImageBuffer(url: string | null): Promise<Buffer | null> {
   }
 }
 
-async function coverPanel(
+async function coverPanelPng(
   imageBuf: Buffer | null,
   label: string,
   width: number,
@@ -116,6 +122,27 @@ async function coverPanel(
   <text x="${width / 2}" y="${height / 2 + 50}" text-anchor="middle" fill="#e2e8f0" font-size="28" font-weight="600" font-family="'Inter', sans-serif">${safeLabel}</text>
 </svg>`;
   return sharp(Buffer.from(svg, "utf8")).png().toBuffer();
+}
+
+/** Photo panel encoded as JPEG to keep compositing lean for social output. */
+async function coverPanelJpeg(
+  imageBuf: Buffer | null,
+  label: string,
+  width: number,
+  height: number,
+  accent: string,
+): Promise<Buffer> {
+  if (imageBuf) {
+    try {
+      return await sharp(imageBuf)
+        .resize(width, height, { fit: "cover", position: "centre" })
+        .jpeg({ quality: PANEL_JPEG_QUALITY, mozjpeg: true })
+        .toBuffer();
+    } catch {
+      /* fall through to placeholder */
+    }
+  }
+  return coverPanelPng(imageBuf, label, width, height, accent);
 }
 
 function buildOverlaySvg(ctx: MatchupOgContext): string {
@@ -157,26 +184,27 @@ function buildOverlaySvg(ctx: MatchupOgContext): string {
 </svg>`;
 }
 
-/**
- * Render a 1200×630 PNG for a matchup share preview.
- */
-export async function renderMatchupOgImage(
+async function buildOverlayPng(ctx: MatchupOgContext): Promise<Buffer> {
+  return sharp(Buffer.from(buildOverlaySvg(ctx), "utf8")).png().toBuffer();
+}
+
+async function compositeMatchupBase(
   ctx: MatchupOgContext,
-): Promise<Buffer> {
+  panelMode: "png" | "jpeg",
+): Promise<sharp.Sharp> {
   const [bufA, bufB] = await Promise.all([
     fetchImageBuffer(ctx.optionAImageUrl),
     fetchImageBuffer(ctx.optionBImageUrl),
   ]);
 
-  const [panelA, panelB] = await Promise.all([
-    coverPanel(bufA, ctx.optionAText, HALF_WIDTH, OG_HEIGHT, "#1e3a5f"),
-    coverPanel(bufB, ctx.optionBText, HALF_WIDTH, OG_HEIGHT, "#312e81"),
-  ]);
+  const cover =
+    panelMode === "jpeg" ? coverPanelJpeg : coverPanelPng;
 
-  const overlaySvg = buildOverlaySvg(ctx);
-  const overlayPng = await sharp(Buffer.from(overlaySvg, "utf8"))
-    .png()
-    .toBuffer();
+  const [panelA, panelB, overlayPng] = await Promise.all([
+    cover(bufA, ctx.optionAText, HALF_WIDTH, OG_HEIGHT, "#1e3a5f"),
+    cover(bufB, ctx.optionBText, HALF_WIDTH, OG_HEIGHT, "#312e81"),
+    buildOverlayPng(ctx),
+  ]);
 
   return sharp({
     create: {
@@ -185,12 +213,47 @@ export async function renderMatchupOgImage(
       channels: 4,
       background: { r: 15, g: 23, b: 42, alpha: 1 },
     },
-  })
-    .composite([
-      { input: panelA, left: 0, top: 0 },
-      { input: panelB, left: HALF_WIDTH, top: 0 },
-      { input: overlayPng, left: 0, top: 0 },
-    ])
-    .png()
+  }).composite([
+    { input: panelA, left: 0, top: 0 },
+    { input: panelB, left: HALF_WIDTH, top: 0 },
+    { input: overlayPng, left: 0, top: 0 },
+  ]);
+}
+
+async function encodeJpegUnderBudget(composite: sharp.Sharp): Promise<Buffer> {
+  let quality = JPEG_QUALITY_START;
+  let buf = await composite
+    .clone()
+    .jpeg({ quality, mozjpeg: true })
     .toBuffer();
+
+  while (buf.length > JPEG_MAX_BYTES && quality > JPEG_QUALITY_MIN) {
+    quality -= 5;
+    buf = await composite
+      .clone()
+      .jpeg({ quality, mozjpeg: true })
+      .toBuffer();
+  }
+
+  return buf;
+}
+
+/**
+ * Render a 1200×630 PNG for a matchup share preview (legacy / debugging).
+ */
+export async function renderMatchupOgImage(
+  ctx: MatchupOgContext,
+): Promise<Buffer> {
+  const composite = await compositeMatchupBase(ctx, "png");
+  return composite.png().toBuffer();
+}
+
+/**
+ * Render a 1200×630 JPEG optimised for WhatsApp / Facebook / X large cards.
+ */
+export async function renderMatchupOgImageJpeg(
+  ctx: MatchupOgContext,
+): Promise<Buffer> {
+  const composite = await compositeMatchupBase(ctx, "jpeg");
+  return encodeJpegUnderBudget(composite);
 }
