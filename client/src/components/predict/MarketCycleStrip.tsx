@@ -5,7 +5,13 @@ import { cn } from "@/lib/utils";
 export type MarketCycleStripVariant = "compact" | "full" | "modal";
 
 export interface MarketCycleStripProps {
-  /** Friday 23:59 UTC cutoff when entries lock. */
+  /**
+   * Trading / entries cutoff. AMM markets close trading ~Sunday 23:59 UTC
+   * (`endAt` minus an admin-tunable cooldown — see
+   * `server/native-markets/lifecycle.ts`). Parimutuel jackpot still
+   * locks at Friday 23:59 UTC. The component picks the right verb
+   * ("Trading closes" vs "Entries close") off the `engine` prop.
+   */
   bettingCutoff?: string | Date | null;
   /** Sunday 23:59 UTC resolution time when results are announced. */
   resolveAt?: string | Date | null;
@@ -52,12 +58,20 @@ export function MarketCycleStrip({
     resolutionDeadline: resolveAt ?? null,
   });
 
+  const isAmm = engine === "amm";
+
+  // Cutoff fallbacks are engine-aware. AMM cards trade until ~Sunday
+  // close, parimutuel jackpot still locks at Friday 23:59 UTC. The
+  // fallback only renders when `bettingCutoff` is missing — which is
+  // rare in production but happens in storybook / a few admin previews.
   const cutoffLabelFull =
-    formatCycleDate(bettingCutoff, { withDate: true }) ?? "Friday 23:59 UTC";
+    formatCycleDate(bettingCutoff, { withDate: true }) ??
+    (isAmm ? "Sunday 23:59 UTC" : "Friday 23:59 UTC");
   const resolveLabelFull =
     formatCycleDate(resolveAt, { withDate: true }) ?? "Sunday 23:59 UTC";
   const cutoffLabelShort =
-    formatCycleDate(bettingCutoff, { withDate: false }) ?? "Fri 23:59 UTC";
+    formatCycleDate(bettingCutoff, { withDate: false }) ??
+    (isAmm ? "Sun 23:59 UTC" : "Fri 23:59 UTC");
   const resolveLabelShort =
     formatCycleDate(resolveAt, { withDate: false }) ?? "Sun 23:59 UTC";
 
@@ -68,8 +82,6 @@ export function MarketCycleStrip({
       : cycle.urgencyLevel === "warning"
       ? "text-amber-600 dark:text-amber-400"
       : "text-foreground";
-
-  const isAmm = engine === "amm";
 
   if (variant === "compact") {
     return (
