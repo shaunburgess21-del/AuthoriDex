@@ -294,7 +294,7 @@ export const PREDICT_RULES_STEPS: Record<string, RulesStepConfig> = {
       {
         icon: <Trophy />,
         headline: "1 Credit Per Winning Share",
-        body: "Share prices move with the crowd as news drops. Each winning share pays 1 credit at close — sell early to lock in a profit before the buzzer.",
+        body: "Each winning share pays 1 credit at close. Cheaper shares pay bigger multiples if your side wins — sell anytime before close to lock in profits.",
       },
     ],
   },
@@ -315,7 +315,7 @@ export const PREDICT_RULES_STEPS: Record<string, RulesStepConfig> = {
       {
         icon: <Sparkles />,
         headline: "Spot the Underdog",
-        body: "Look for lower-ranked people with upward momentum. A small name with a big week beats a big name standing still.",
+        body: "Look for lower-ranked people with upward momentum. Their shares trade cheap, so a small name with a big week pays a multiple of what you put in.",
       },
     ],
   },

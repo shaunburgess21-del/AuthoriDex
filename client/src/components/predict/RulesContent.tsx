@@ -39,7 +39,7 @@ export const RULES_CONTENT: Record<string, RulesEntry> = {
     steps: [
       { icon: <Swords className="h-4 w-4 text-violet-500" />, title: "Pick The Higher Closer", description: "Buy shares of the person you think will have the higher Trend Score when the weekly market closes." },
       { icon: <Target className="h-4 w-4 text-violet-500" />, title: "Closing Score Decides", description: "This market settles on the final closing Trend Score at weekly close, not on who gained more points during the week. Ties refund." },
-      { icon: <Trophy className="h-4 w-4 text-violet-500" />, title: "Trade Anytime, Pay 1cr/Win", description: "Share prices move with the crowd as news drops. Each winning share pays 1 credit at close — and you can sell early to lock in a profit before the buzzer." },
+      { icon: <Trophy className="h-4 w-4 text-violet-500" />, title: "Trade Anytime, Pay 1cr/Win", description: "Share prices move with the crowd as news drops. Each winning share pays 1 credit at close, so cheaper shares pay bigger multiples — and you can sell early to lock in a profit before the buzzer." },
     ]
   },
   gainer: {
@@ -57,7 +57,7 @@ export const RULES_CONTENT: Record<string, RulesEntry> = {
     steps: [
       { icon: <Globe className="h-4 w-4 text-violet-500" />, title: "Verifiable Events", description: "Markets are based on real-world outcomes that can be publicly verified — elections, acquisitions, viral milestones, and more." },
       { icon: <Target className="h-4 w-4 text-violet-500" />, title: "Yes/No Shares", description: "Buy Yes shares if you think the event happens, No shares if you think it doesn't. Each winning share pays 1 credit on resolution." },
-      { icon: <Trophy className="h-4 w-4 text-violet-500" />, title: "Sell Anytime Before Close", description: "Share prices move as news breaks. Sell early to lock in a profit or cut losses — or hold to settlement for the full 1 credit per winning share." },
+      { icon: <Trophy className="h-4 w-4 text-violet-500" />, title: "Sell Anytime Before Close", description: "Share prices move as news breaks. Cheaper shares pay bigger multiples on a win — sell early to lock in a profit or cut losses, or hold to settlement for the full 1 credit per winning share." },
     ]
   },
   predictions: {

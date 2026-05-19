@@ -31,12 +31,12 @@ import {
  */
 const MISSION_HEADERS: Record<string, string> = {
   updown:
-    "Buy UP or DOWN shares. Each winning share pays 1 credit at close. Trade until 5 min before close.",
-  h2h: "Buy shares of your pick. Winning shares pay 1 credit each at close. Sell anytime before close.",
+    "Buy UP or DOWN shares. Each winning share pays 1 credit at close — cheaper shares pay bigger multiples. Trade until 5 min before close.",
+  h2h: "Buy shares of your pick. Winning shares pay 1 credit each at close — cheaper shares pay bigger multiples. Sell anytime before close.",
   gainer:
-    "Buy shares of the candidate you think will gain the most. Each winning share pays 1 credit at close.",
+    "Buy shares of the candidate you think will gain the most. Each winning share pays 1 credit at close — cheaper underdog shares pay bigger multiples.",
   community:
-    "Buy Yes or No shares. Each winning share pays 1 credit on resolution. Sell anytime before close.",
+    "Buy Yes or No shares. Each winning share pays 1 credit on resolution — cheaper shares pay bigger multiples. Sell anytime before close.",
 };
 
 export interface StakeSelection {

@@ -775,7 +775,7 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
             icon={MessageSquare}
             title="World Markets"
             subtitle="Predict outcomes of verifiable events."
-            help={{ title: "How World Markets Work", bullets: ["Bet on outcomes of real-world events using credits.", "Markets resolve based on verifiable results and trusted sources.", "Win credits proportional to the odds when you predicted."] }}
+            help={{ title: "How World Markets Work", bullets: ["Buy Yes or No shares on the outcome of real-world events.", "Markets resolve on verifiable results from trusted sources.", "Each winning share pays 1 credit — cheaper shares pay bigger multiples on a win."] }}
             onViewAll={onExplore}
           />
           {openMarkets.length > 0 ? (
@@ -805,7 +805,7 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
             icon={Trophy}
             title="Weekly Jackpot"
             subtitle="Closest prediction wins the pot."
-            help={{ title: "How Weekly Jackpot Works", bullets: ["Predict which celebrity will be the top gainer this week.", "The closest prediction to the actual result wins the jackpot.", "Entry costs credits; the pot grows as more players join."] }}
+            help={{ title: "How Weekly Jackpot Works", bullets: ["Predict the exact closing Trend Score for any leaderboard person on Sunday.", "The closest guess wins the entire prize pool.", "Entries cost 100 credits each and lock at Friday 23:59 UTC. The pool grows as more players join."] }}
             onViewAll={onExplore}
           />
           <WeeklyJackpotCard
@@ -830,7 +830,7 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
             icon={TrendingUp}
             title="Up/Down Predictions"
             subtitle="Will their Trend Score rise or fall?"
-            help={{ title: "How Up/Down Predictions Work", bullets: ["Predict whether a celebrity's Trend Score will go up or down.", "Higher multipliers mean bigger risk and bigger rewards.", "Markets resolve at the end of each weekly cycle."] }}
+            help={{ title: "How Up/Down Predictions Work", bullets: ["Buy UP or DOWN shares on whether a celebrity's Trend Score finishes above or below their weekly baseline.", "Each winning share pays 1 credit at close — cheaper shares pay bigger multiples on a win.", "Sell anytime before close to lock in profits. Markets resolve Sunday 23:59 UTC."] }}
             onViewAll={onExplore}
           />
           <CardDeckContainer
@@ -864,7 +864,7 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
             icon={Swords}
             title="Head-to-Head Battles"
             subtitle="Who gains more this week?"
-            help={{ title: "How Head-to-Head Works", bullets: ["Pick which celebrity will gain more fame this week.", "Two celebrities go head-to-head; choose your winner.", "Results resolve at the end of the weekly prediction cycle."] }}
+            help={{ title: "How Head-to-Head Works", bullets: ["Two celebrities go head-to-head — buy shares of whoever you think will close the week with the higher Trend Score.", "Each winning share pays 1 credit at close — cheaper underdog shares pay bigger multiples on a win.", "Sell anytime before close to lock in profits. Ties refund."] }}
             onViewAll={onExplore}
           />
           <CardDeckContainer
@@ -898,7 +898,7 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
             icon={TrendingUp}
             title="Category Races"
             subtitle="Pick the biggest mover in each category this week."
-            help={{ title: "How Category Races Work", bullets: ["Pick who you think will have the highest % gain in their Trend Score by Sunday close.", "It's not about who's ranked highest — it's about who moves the most.", "The biggest mover wins the pool. Underdogs can pay big."] }}
+            help={{ title: "How Category Races Work", bullets: ["Pick who you think will have the highest % gain in their Trend Score by Sunday close.", "It's not about who's ranked highest — it's about who moves the most.", "Each winning share pays 1 credit — cheaper underdog shares pay bigger multiples if they hit."] }}
             onViewAll={onExplore}
           />
           <CardDeckContainer

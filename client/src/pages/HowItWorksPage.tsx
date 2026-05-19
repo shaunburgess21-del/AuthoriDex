@@ -1147,11 +1147,23 @@ function PredictSection({
         <h3 className="font-semibold">How prediction markets work</h3>
         <ul className="space-y-2 text-sm text-muted-foreground">
           <li>
-            Markets come in two forms: pool markets where payouts are shared
-            among winners at settlement, and live-price markets where odds
-            shift in real time as predictions are placed. Both work the same
-            way — pick your outcome, stake your Credits, and wait for the
-            result.
+            Most markets are <strong className="text-foreground">live-price markets</strong>: you buy
+            shares of an outcome at the current price, and each winning share
+            pays{" "}
+            <strong className="text-foreground">1 Credit</strong> when the
+            market settles. Prices reflect the crowd's view of the odds — a
+            0.30 cr share implies a ~30% chance.
+          </li>
+          <li>
+            <strong className="text-foreground">Cheaper shares pay bigger multiples</strong>{" "}
+            if your side wins. A contrarian pick at 0.20 cr pays 5× per share;
+            the heavy favourite at 0.80 cr pays only 1.25×. Sell anytime
+            before close to lock in profits or cut losses.
+          </li>
+          <li>
+            The <strong className="text-foreground">Weekly Jackpot</strong> is
+            the exception — it's a single shared pool that goes to whoever
+            guesses the closing Trend Score closest at Sunday close.
           </li>
           <li>
             Your stake is debited from your Credits balance the moment you
