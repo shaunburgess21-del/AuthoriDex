@@ -682,15 +682,19 @@ export async function checkAndAwardProfileBadges(
       } catch (err) {
         console.warn(`[badges] xp ${key} failed`, err);
       }
-      try {
-        await gamificationService.adjustCredits(
-          userId,
-          key,
-          `credit_profile_${key}_${userId}`,
-          { metadata: { source: "profile_completion" } },
-        );
-      } catch (err) {
-        console.warn(`[badges] credit ${key} failed`, err);
+      // profile_avatar credits retired — onboarding auto-saves a
+      // generative avatar, so a credit grant stacked on signup.
+      if (key !== "profile_avatar") {
+        try {
+          await gamificationService.adjustCredits(
+            userId,
+            key,
+            `credit_profile_${key}_${userId}`,
+            { metadata: { source: "profile_completion" } },
+          );
+        } catch (err) {
+          console.warn(`[badges] credit ${key} failed`, err);
+        }
       }
     };
 

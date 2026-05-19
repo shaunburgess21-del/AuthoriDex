@@ -38,6 +38,7 @@ import { desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db";
 import { profiles } from "@shared/schema";
 import type { AuthRequest } from "../auth-middleware";
+import { expandStatedInterests } from "@shared/interest-groups";
 
 // ── Tunable constants ────────────────────────────────────────────────
 //
@@ -88,9 +89,10 @@ async function resolveInterestsState(req: AuthRequest): Promise<InterestsState> 
       .where(eq(profiles.id, userId))
       .limit(1);
 
-    const interests = Array.isArray(row?.statedInterests)
+    const rawInterests = Array.isArray(row?.statedInterests)
       ? (row!.statedInterests as string[])
       : [];
+    const interests = expandStatedInterests(rawInterests);
     const state: InterestsState = { authenticated: true, interests };
     bag.__interestsState = state;
     return state;

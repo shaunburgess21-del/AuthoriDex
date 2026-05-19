@@ -13,6 +13,7 @@ import {
 import { requireAuth, requireAdmin, type AuthRequest } from "../auth-middleware";
 import { createBroadcastFanout } from "../services/notifications";
 import { logger } from "../log";
+import { expandInterestId } from "@shared/interest-groups";
 
 /**
  * Admin notification tooling.
@@ -163,9 +164,13 @@ async function resolveAudience(
 
   if (kind === "category_subscribers") {
     if (!audience.category) return [];
-    // statedInterests is text[]; ANY() matches a single category.
-    // Drizzle doesn't have a first-class array-contains helper for
-    // text[] yet, so we drop to raw SQL with a parameterised value.
+    // statedInterests is text[]; overlap with expandInterestId so linked
+    // groups (e.g. gaming ↔ streaming) share the same audience.
+    const matchIds = expandInterestId(audience.category);
+    const matchArray = sql`ARRAY[${sql.join(
+      matchIds.map((id) => sql`${id}`),
+      sql`, `,
+    )}]::text[]`;
     const rows = await db
       .select({ id: profiles.id })
       .from(profiles)
@@ -173,7 +178,7 @@ async function resolveAudience(
         and(
           eq(profiles.isAgent, false),
           eq(profiles.isHouse, false),
-          sql`${audience.category} = ANY(${profiles.statedInterests})`,
+          sql`${profiles.statedInterests} && ${matchArray}`,
         ),
       );
     return rows.map((r) => r.id);

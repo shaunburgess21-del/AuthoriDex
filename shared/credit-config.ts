@@ -212,11 +212,11 @@ export const CREDIT_ACTIONS: readonly CreditActionConfig[] = [
   {
     key: "profile_avatar",
     label: "Add profile photo",
-    proposedCredits: 10,
+    proposedCredits: 0,
     dailyCap: null,
     category: "PROFILE",
-    notes: "One-time grant when avatar is first uploaded",
-    isActive: true,
+    notes: "Retired — avatars (incl. generated picks) no longer pay credits; XP/badge only",
+    isActive: false,
     requiresApproval: false,
   },
   {

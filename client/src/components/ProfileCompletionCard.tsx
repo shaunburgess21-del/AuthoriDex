@@ -20,7 +20,6 @@ const PROFILE_XP_KEYS: ReadonlyArray<{ key: string; xp: number }> = [
   { key: "profile_demographics", xp: 100 },
 ];
 const PROFILE_CREDIT_KEYS: ReadonlyArray<string> = [
-  "profile_avatar",
   "profile_bio",
   "profile_demographics",
 ];
@@ -28,7 +27,8 @@ const PROFILE_CREDIT_KEYS: ReadonlyArray<string> = [
 const TOTAL_PROFILE_XP = PROFILE_XP_KEYS.reduce((sum, a) => sum + a.xp, 0);
 const TOTAL_PROFILE_CREDITS = PROFILE_CREDIT_KEYS.reduce((sum, key) => {
   const action = CREDIT_ACTIONS.find((a) => a.key === key);
-  return sum + (action?.proposedCredits ?? 0);
+  if (!action?.isActive) return sum;
+  return sum + action.proposedCredits;
 }, 0);
 
 /**

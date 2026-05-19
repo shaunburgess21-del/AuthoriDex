@@ -32,6 +32,7 @@ import {
   decayFactor,
   statedWeightAtDays,
 } from "./rankingConfig";
+import { expandStatedInterests } from "@shared/interest-groups";
 
 // ── Blend state (per-request memoisation) ───────────────────────────
 
@@ -129,9 +130,10 @@ export async function computeBlendStateForUser(userId: string): Promise<BlendSta
         .where(eq(userCategoryEngagement.userId, userId)),
     ]);
 
-    const stated = Array.isArray(profileRow[0]?.statedInterests)
-      ? (profileRow[0]!.statedInterests as string[]).map((i) => i.toLowerCase())
+    const rawStated = Array.isArray(profileRow[0]?.statedInterests)
+      ? (profileRow[0]!.statedInterests as string[])
       : [];
+    const stated = expandStatedInterests(rawStated);
 
     const now = Date.now();
     const behavioural = new Map<string, CategoryBehaviouralScore>();

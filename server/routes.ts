@@ -7945,7 +7945,7 @@ Only return the JSON object.`;
       }
 
       // Profile-completion fan-out for the avatar surface (badge +
-      // profile_avatar XP/credit). Idempotent + non-blocking.
+      // profile_avatar XP only — credits retired). Idempotent + non-blocking.
       void checkAndAwardProfileBadges(userId);
 
       res.json({ profile: updated[0] });
