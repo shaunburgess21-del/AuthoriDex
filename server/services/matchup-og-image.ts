@@ -1,12 +1,10 @@
-import fs from "fs";
-import path from "path";
-import { createRequire } from "module";
 import sharp from "sharp";
 import type { MatchupOgContext } from "./matchup-og-context";
 import {
   matchupOgDescription,
   matchupOgPromptTitle,
 } from "./matchup-og-meta";
+import { getOgFontFaceStyle, OG_FONT_FAMILY } from "./og-fonts";
 
 const OG_WIDTH = 1200;
 const OG_HEIGHT = 630;
@@ -17,47 +15,6 @@ const JPEG_MAX_BYTES = 550_000;
 const JPEG_QUALITY_START = 82;
 const JPEG_QUALITY_MIN = 65;
 const PANEL_JPEG_QUALITY = 85;
-
-const FONT_FACE_STYLE = (() => {
-  try {
-    const requireFromHere = createRequire(import.meta.url);
-    const pkgJsonPath = requireFromHere.resolve(
-      "@fontsource/inter/package.json",
-    );
-    const filesDir = path.join(path.dirname(pkgJsonPath), "files");
-    const r400 = fs.readFileSync(
-      path.join(filesDir, "inter-latin-400-normal.woff2"),
-    );
-    const r700 = fs.readFileSync(
-      path.join(filesDir, "inter-latin-700-normal.woff2"),
-    );
-    const b64_400 = r400.toString("base64");
-    const b64_700 = r700.toString("base64");
-    return `<style>
-    @font-face {
-      font-family: 'Inter';
-      font-style: normal;
-      font-weight: 400;
-      src: url(data:font/woff2;base64,${b64_400}) format('woff2');
-    }
-    @font-face {
-      font-family: 'Inter';
-      font-style: normal;
-      font-weight: 600;
-      src: url(data:font/woff2;base64,${b64_400}) format('woff2');
-    }
-    @font-face {
-      font-family: 'Inter';
-      font-style: normal;
-      font-weight: 700;
-      src: url(data:font/woff2;base64,${b64_700}) format('woff2');
-    }
-  </style>`;
-  } catch (err) {
-    console.warn("[og] matchup image: Inter fonts unavailable", err);
-    return "";
-  }
-})();
 
 function escapeXml(value: string): string {
   return value
@@ -111,6 +68,7 @@ async function coverPanelPng(
   const safeLabel = escapeXml(truncate(label, 28));
   const svg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
+  ${getOgFontFaceStyle()}
   <defs>
     <linearGradient id="ph" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#0f172a"/>
@@ -118,8 +76,8 @@ async function coverPanelPng(
     </linearGradient>
   </defs>
   <rect width="${width}" height="${height}" fill="url(#ph)"/>
-  <text x="${width / 2}" y="${height / 2 - 10}" text-anchor="middle" fill="#ffffff" font-size="120" font-weight="700" font-family="'Inter', sans-serif" opacity="0.35">${initial}</text>
-  <text x="${width / 2}" y="${height / 2 + 50}" text-anchor="middle" fill="#e2e8f0" font-size="28" font-weight="600" font-family="'Inter', sans-serif">${safeLabel}</text>
+  <text x="${width / 2}" y="${height / 2 - 10}" text-anchor="middle" fill="#ffffff" font-size="120" font-weight="700" font-family="${OG_FONT_FAMILY}" opacity="0.35">${initial}</text>
+  <text x="${width / 2}" y="${height / 2 + 50}" text-anchor="middle" fill="#e2e8f0" font-size="28" font-weight="600" font-family="${OG_FONT_FAMILY}">${safeLabel}</text>
 </svg>`;
   return sharp(Buffer.from(svg, "utf8")).png().toBuffer();
 }
@@ -145,7 +103,8 @@ async function coverPanelJpeg(
   return coverPanelPng(imageBuf, label, width, height, accent);
 }
 
-function buildOverlaySvg(ctx: MatchupOgContext): string {
+/** Exported for tests — overlay SVG with embedded fonts. */
+export function buildMatchupOverlaySvg(ctx: MatchupOgContext): string {
   const prompt = escapeXml(truncate(matchupOgPromptTitle(ctx), 72));
   const vsLine = escapeXml(
     truncate(matchupOgDescription(ctx), 80),
@@ -155,7 +114,7 @@ function buildOverlaySvg(ctx: MatchupOgContext): string {
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${OG_WIDTH}" height="${OG_HEIGHT}" viewBox="0 0 ${OG_WIDTH} ${OG_HEIGHT}">
-  ${FONT_FACE_STYLE}
+  ${getOgFontFaceStyle()}
   <defs>
     <linearGradient id="topFade" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0%" stop-color="#0f172a" stop-opacity="0.82"/>
@@ -171,21 +130,21 @@ function buildOverlaySvg(ctx: MatchupOgContext): string {
   <rect width="${OG_WIDTH}" height="140" fill="url(#topFade)"/>
   <rect y="330" width="${OG_WIDTH}" height="300" fill="url(#bottomFade)"/>
 
-  <text x="48" y="58" fill="#ffffff" font-size="34" font-weight="700" font-family="'Inter', sans-serif">VoxDex</text>
+  <text x="48" y="58" fill="#ffffff" font-size="34" font-weight="700" font-family="${OG_FONT_FAMILY}">VoxDex</text>
   <rect x="920" y="32" width="232" height="40" rx="20" fill="#1e293b" fill-opacity="0.85" stroke="#38bdf8" stroke-opacity="0.45"/>
-  <text x="1036" y="60" text-anchor="middle" fill="#7dd3fc" font-size="18" font-weight="600" font-family="'Inter', sans-serif" letter-spacing="1">${category.toUpperCase()}</text>
+  <text x="1036" y="60" text-anchor="middle" fill="#7dd3fc" font-size="18" font-weight="600" font-family="${OG_FONT_FAMILY}" letter-spacing="1">${category.toUpperCase()}</text>
 
   <circle cx="${HALF_WIDTH}" cy="315" r="52" fill="#0f172a" fill-opacity="0.92" stroke="#38bdf8" stroke-width="4"/>
-  <text x="${HALF_WIDTH}" y="328" text-anchor="middle" fill="#ffffff" font-size="32" font-weight="700" font-family="'Inter', sans-serif" letter-spacing="2">VS</text>
+  <text x="${HALF_WIDTH}" y="328" text-anchor="middle" fill="#ffffff" font-size="32" font-weight="700" font-family="${OG_FONT_FAMILY}" letter-spacing="2">VS</text>
 
-  <text x="48" y="520" fill="#ffffff" font-size="46" font-weight="700" font-family="'Inter', sans-serif">${prompt}</text>
-  <text x="48" y="568" fill="#cbd5e1" font-size="26" font-weight="500" font-family="'Inter', sans-serif">${vsLine}</text>
-  <text x="48" y="608" fill="#22d3ee" font-size="22" font-weight="600" font-family="'Inter', sans-serif">${cta}</text>
+  <text x="48" y="520" fill="#ffffff" font-size="46" font-weight="700" font-family="${OG_FONT_FAMILY}">${prompt}</text>
+  <text x="48" y="568" fill="#cbd5e1" font-size="26" font-weight="500" font-family="${OG_FONT_FAMILY}">${vsLine}</text>
+  <text x="48" y="608" fill="#22d3ee" font-size="22" font-weight="600" font-family="${OG_FONT_FAMILY}">${cta}</text>
 </svg>`;
 }
 
 async function buildOverlayPng(ctx: MatchupOgContext): Promise<Buffer> {
-  return sharp(Buffer.from(buildOverlaySvg(ctx), "utf8")).png().toBuffer();
+  return sharp(Buffer.from(buildMatchupOverlaySvg(ctx), "utf8")).png().toBuffer();
 }
 
 async function compositeMatchupBase(

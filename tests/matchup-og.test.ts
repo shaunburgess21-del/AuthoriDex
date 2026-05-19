@@ -6,9 +6,15 @@ import {
   matchupOgPromptTitle,
 } from "../server/services/matchup-og-meta";
 import {
+  buildMatchupOverlaySvg,
   renderMatchupOgImage,
   renderMatchupOgImageJpeg,
 } from "../server/services/matchup-og-image";
+import {
+  assertOgFontsLoaded,
+  getOgFontFaceStyle,
+  OG_FONT_FAMILY,
+} from "../server/services/og-fonts";
 import {
   resolveMatchupOptionDisplay,
   matchupBucketUrl,
@@ -78,6 +84,21 @@ const PLACEHOLDER_CTX = {
   optionAImageUrl: null,
   optionBImageUrl: null,
 };
+
+test("getOgFontFaceStyle embeds Inter woff base64", () => {
+  assert.ok(assertOgFontsLoaded());
+  const style = getOgFontFaceStyle();
+  assert.match(style, /@font-face/);
+  assert.match(style, /base64,/);
+  assert.match(style, /format\('woff'\)/);
+});
+
+test("buildMatchupOverlaySvg uses shared font stack", () => {
+  const svg = buildMatchupOverlaySvg(PLACEHOLDER_CTX);
+  assert.ok(svg.includes(OG_FONT_FAMILY));
+  assert.ok(svg.includes("Who is the GOAT?"));
+  assert.ok(svg.includes("Vote on VoxDex"));
+});
 
 test("renderMatchupOgImage returns 1200x630 PNG without remote images", async () => {
   const png = await renderMatchupOgImage(PLACEHOLDER_CTX);
