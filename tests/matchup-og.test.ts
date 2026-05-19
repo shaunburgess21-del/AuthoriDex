@@ -8,16 +8,16 @@ import {
 } from "../server/services/matchup-og-meta";
 import {
   buildMatchupOverlaySvg,
+  getMatchupOverlayLabels,
   renderMatchupOgImage,
   renderMatchupOgImageJpeg,
 } from "../server/services/matchup-og-image";
 import {
   assertOgFontAssetsPresent,
-  assertOgFontsLoaded,
   FONT_SEARCH_PATHS,
   getOgFontFaceStyle,
-  OG_FONT_FAMILY,
 } from "../server/services/og-fonts";
+import { assertOgPathFontsLoaded } from "../server/services/og-svg-text-paths";
 import {
   resolveMatchupOptionDisplay,
   matchupBucketUrl,
@@ -88,22 +88,30 @@ const PLACEHOLDER_CTX = {
   optionBImageUrl: null,
 };
 
-test("getOgFontFaceStyle is empty (system-font mode for librsvg)", () => {
-  assert.equal(getOgFontFaceStyle(), "");
-  assert.ok(assertOgFontsLoaded());
-});
-
-test("bundled OG font assets exist for dist copy / nixpacks fallback", () => {
+test("opentype path fonts load from bundled TTF", () => {
+  assert.ok(assertOgPathFontsLoaded());
   assert.ok(assertOgFontAssetsPresent());
   assert.ok(FONT_SEARCH_PATHS.some((dir) => fs.existsSync(dir)));
 });
 
-test("buildMatchupOverlaySvg uses shared font stack", () => {
+test("buildMatchupOverlaySvg uses path outlines only (no librsvg text)", () => {
   const svg = buildMatchupOverlaySvg(PLACEHOLDER_CTX);
-  assert.ok(svg.includes(OG_FONT_FAMILY));
-  assert.ok(svg.includes("Who is the GOAT?"));
-  assert.ok(svg.includes("Vote on VoxDex"));
+  const labels = getMatchupOverlayLabels(PLACEHOLDER_CTX);
+
+  assert.ok(!svg.includes("<text"));
+  assert.ok(!svg.includes("font-family"));
   assert.ok(!svg.includes("@font-face"));
+
+  const pathCount = (svg.match(/<path/g) ?? []).length;
+  assert.ok(pathCount >= 6, `expected >=6 path elements, got ${pathCount}`);
+
+  assert.equal(labels.prompt, "Who is the GOAT?");
+  assert.equal(labels.cta, "Vote on VoxDex");
+  assert.equal(labels.brand, "VoxDex");
+});
+
+test("getOgFontFaceStyle remains empty (matchup uses paths)", () => {
+  assert.equal(getOgFontFaceStyle(), "");
 });
 
 test("renderMatchupOgImage returns 1200x630 PNG without remote images", async () => {
@@ -128,38 +136,43 @@ test("renderMatchupOgImageJpeg returns 1200x630 JPEG under 600KB", async () => {
   assert.equal(meta.format, "jpeg");
 });
 
-/** Bottom overlay band should have pixel variance when text renders (not flat tofu). */
-test("renderMatchupOgImageJpeg text band has non-trivial pixel variance", async () => {
+/**
+ * Tofu boxes in the VoxDex region are many uniform near-white rectangles;
+ * path-outlined glyphs have more mid-tone edge pixels (lower near-white fraction).
+ */
+test("renderMatchupOgImageJpeg brand region is not tofu-like", async () => {
   const jpeg = await renderMatchupOgImageJpeg(PLACEHOLDER_CTX);
   const sharp = (await import("sharp")).default;
   const { data, info } = await sharp(jpeg)
-    .extract({
-      left: 0,
-      top: Math.floor(630 * 0.55),
-      width: 1200,
-      height: Math.floor(630 * 0.45),
-    })
+    .extract({ left: 40, top: 20, width: 180, height: 60 })
     .raw()
     .toBuffer({ resolveWithObject: true });
 
-  assert.equal(info.width, 1200);
   const channels = info.channels ?? 3;
-  const samples = Math.min(5000, Math.floor(data.length / channels));
-  let sum = 0;
-  let sumSq = 0;
-  for (let i = 0; i < samples; i++) {
+  const pixels = info.width * info.height;
+  let nearWhite = 0;
+  let midTone = 0;
+
+  for (let i = 0; i < pixels; i++) {
     const idx = i * channels;
-    const lum =
-      channels >= 3
-        ? 0.299 * data[idx]! + 0.587 * data[idx + 1]! + 0.114 * data[idx + 2]!
-        : data[idx]!;
-    sum += lum;
-    sumSq += lum * lum;
+    const r = data[idx]!;
+    const g = data[idx + 1] ?? r;
+    const b = data[idx + 2] ?? r;
+    if (r > 235 && g > 235 && b > 235) nearWhite++;
+    if (r > 120 && r < 220 && g > 120 && g < 220 && b > 120 && b < 220) {
+      midTone++;
+    }
   }
-  const mean = sum / samples;
-  const variance = sumSq / samples - mean * mean;
+
+  const nearWhiteFrac = nearWhite / pixels;
+  const midToneFrac = midTone / pixels;
+
   assert.ok(
-    variance > 50,
-    `expected text band luminance variance >50, got ${variance.toFixed(1)} (tofu/flat?)`,
+    nearWhiteFrac < 0.28,
+    `near-white fraction ${nearWhiteFrac.toFixed(3)} too high (tofu?)`,
+  );
+  assert.ok(
+    midToneFrac > 0.02,
+    `mid-tone edge fraction ${midToneFrac.toFixed(3)} too low (missing glyphs?)`,
   );
 });

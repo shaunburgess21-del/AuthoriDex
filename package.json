@@ -96,6 +96,7 @@
     "multer": "^2.0.2",
     "next-themes": "^0.4.6",
     "openai": "^6.32.0",
+    "opentype.js": "^2.0.0",
     "p-limit": "^7.2.0",
     "p-retry": "^7.1.1",
     "pg": "^8.16.3",

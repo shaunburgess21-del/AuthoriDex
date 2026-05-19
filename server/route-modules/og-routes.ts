@@ -839,7 +839,7 @@ async function lookupOpinionPoll(slug: string) {
 }
 
 /** Bump when the matchup OG visual or encoding changes (cache bust). */
-const MATCHUP_OG_IMAGE_VERSION = "4";
+const MATCHUP_OG_IMAGE_VERSION = "5";
 
 function matchupOgImageUrl(slug: string): string {
   return `${SITE_URL}/api/og/vote/matchups/${encodeURIComponent(slug)}.jpg?v=${MATCHUP_OG_IMAGE_VERSION}`;

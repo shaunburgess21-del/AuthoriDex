@@ -200,7 +200,7 @@ export default function MatchupDetailPage() {
     description: matchupVsDescription,
     image:
       matchup?.slug
-        ? `/api/og/vote/matchups/${encodeURIComponent(matchup.slug)}.jpg?v=4`
+        ? `/api/og/vote/matchups/${encodeURIComponent(matchup.slug)}.jpg?v=5`
         : null,
     url: canonicalShareUrl ?? null,
   });
