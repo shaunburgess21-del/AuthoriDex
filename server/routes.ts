@@ -17,6 +17,7 @@ import { createHash, randomUUID } from "crypto";
 import multer, { MulterError } from "multer";
 import path from "path";
 import { gamificationService } from "./services/gamification";
+import { resolveMatchupOptionDisplay } from "./services/matchup-option-images";
 import {
   awardVoteCredits,
   awardCommentCredits,
@@ -6453,48 +6454,6 @@ Only return the JSON object.`;
   });
 
   // ==================== Matchups API ====================
-
-  const MATCHUP_BUCKET_BASE = process.env.SUPABASE_URL
-    ? `${process.env.SUPABASE_URL}/storage/v1/object/public/matchups`
-    : null;
-
-  function slugifyMatchupName(s: string): string {
-    return s.toLowerCase().replace(/[''`]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-  }
-
-  function matchupBucketUrl(optionAText: string, optionBText: string, optionText: string): string | null {
-    if (!MATCHUP_BUCKET_BASE) return null;
-    const folder = `${slugifyMatchupName(optionAText)}-vs-${slugifyMatchupName(optionBText)}`;
-    return `${MATCHUP_BUCKET_BASE}/${folder}/${slugifyMatchupName(optionText)}.webp`;
-  }
-
-  /** Primary image: explicit DB URL > linked celebrity avatar > convention bucket URL. Fallback: next distinct candidate for img onError. */
-  function resolveMatchupOptionDisplay(
-    dbUrl: string | null,
-    personId: string | null,
-    optionLabelText: string,
-    optionAText: string,
-    optionBText: string,
-    avatarById: Record<string, string | null>,
-    avatarByName: Record<string, string | null>,
-  ): { resolved: string | null; fallback: string | null } {
-    const bucket = matchupBucketUrl(optionAText, optionBText, optionLabelText);
-    const linkedAvatar = personId ? avatarById[personId] ?? null : null;
-    const nameAvatar = avatarByName[optionLabelText.toLowerCase()] ?? null;
-
-    const resolved =
-      dbUrl ||
-      linkedAvatar ||
-      bucket ||
-      null;
-
-    for (const cand of [linkedAvatar, nameAvatar, bucket]) {
-      if (cand && cand !== resolved) {
-        return { resolved, fallback: cand };
-      }
-    }
-    return { resolved, fallback: null };
-  }
 
   // Get all matchups with vote counts (with dynamic avatar lookup from tracked_people)
   app.get("/api/matchups", optionalAuth, async (req: AuthRequest, res) => {

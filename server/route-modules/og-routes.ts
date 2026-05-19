@@ -16,6 +16,12 @@ import {
   profiles,
   ammPriceSnapshots,
 } from "@shared/schema";
+import {
+  loadMatchupOgContext,
+  matchupOgDescription,
+  matchupOgPromptTitle,
+} from "../services/matchup-og-context";
+import { renderMatchupOgImage } from "../services/matchup-og-image";
 
 /* ─────────────────────────────────────────────────────────────────────────────
  * Open Graph + Twitter card endpoints + sitemap.xml
@@ -890,23 +896,8 @@ async function lookupOpinionPoll(slug: string) {
   return p ?? null;
 }
 
-async function lookupMatchup(slug: string) {
-  const [m] = await db
-    .select({
-      id: matchups.id,
-      title: matchups.title,
-      description: matchups.description,
-      optionAText: matchups.optionAText,
-      optionBText: matchups.optionBText,
-      optionAImage: matchups.optionAImage,
-      optionBImage: matchups.optionBImage,
-      category: matchups.category,
-      slug: matchups.slug,
-    })
-    .from(matchups)
-    .where(eq(matchups.slug, slug))
-    .limit(1);
-  return m ?? null;
+function matchupOgImageUrl(slug: string): string {
+  return `${SITE_URL}/api/og/vote/matchups/${encodeURIComponent(slug)}.png`;
 }
 
 async function lookupPersonName(personId: string | null): Promise<string | null> {
@@ -1435,12 +1426,47 @@ export function registerOgRoutes(app: Express): void {
     },
   );
 
+  app.get(
+    "/api/og/vote/matchups/:slug.png",
+    async (req: Request, res: Response) => {
+      const slug = req.params.slug;
+      try {
+        const ctx = await loadMatchupOgContext(slug);
+        if (!ctx) {
+          const fallback = loadDefaultOgPng();
+          if (fallback) {
+            res.setHeader("Content-Type", "image/png");
+            res.setHeader("Cache-Control", "public, max-age=300");
+            res.send(fallback);
+            return;
+          }
+          res.status(404).send("matchup not found");
+          return;
+        }
+        const png = await renderMatchupOgImage(ctx);
+        res.setHeader("Content-Type", "image/png");
+        res.setHeader("Cache-Control", "public, max-age=86400");
+        res.send(png);
+      } catch (err: any) {
+        console.error("[OG] Matchup PNG render failed:", err?.message);
+        const fallback = loadDefaultOgPng();
+        if (fallback) {
+          res.setHeader("Content-Type", "image/png");
+          res.setHeader("Cache-Control", "public, max-age=300");
+          res.send(fallback);
+          return;
+        }
+        res.status(500).send("og render failed");
+      }
+    },
+  );
+
   app.get("/api/og/matchups/:slug", async (req: Request, res: Response) => {
     const slug = req.params.slug;
     const canonicalUrl = `${SITE_URL}/vote/matchups/${encodeURIComponent(slug)}`;
     try {
-      const m = await lookupMatchup(slug);
-      if (!m) {
+      const ctx = await loadMatchupOgContext(slug);
+      if (!ctx) {
         res.setHeader("Content-Type", "text/html; charset=utf-8");
         res.setHeader("Cache-Control", "public, max-age=300");
         res.send(
@@ -1453,16 +1479,14 @@ export function registerOgRoutes(app: Express): void {
         );
         return;
       }
-      const subtitle = `${m.optionAText} vs ${m.optionBText}`;
-      const description =
-        m.description ??
-        `Pick a side: ${m.optionAText} or ${m.optionBText}. Vote on VoxDex.`;
-      const imageUrl = `${SITE_URL}/api/og/image/market.png?title=${encodeURIComponent(m.title)}&subtitle=${encodeURIComponent(subtitle)}&badge=${encodeURIComponent("Matchup")}`;
+      const prompt = matchupOgPromptTitle(ctx);
+      const description = matchupOgDescription(ctx);
+      const imageUrl = matchupOgImageUrl(ctx.slug);
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       res.setHeader("Cache-Control", "public, max-age=600");
       res.send(
         renderOgHtml({
-          title: `${m.title} • VoxDex`,
+          title: prompt,
           description,
           canonicalUrl,
           imageUrl,

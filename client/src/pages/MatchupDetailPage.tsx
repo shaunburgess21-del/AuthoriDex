@@ -175,22 +175,34 @@ export default function MatchupDetailPage() {
     removeVoteMutation.mutate(matchupId);
   };
 
+  const matchupPrompt = matchup
+    ? (matchup.promptText?.trim() || matchup.title)
+    : null;
+  const matchupVsDescription = matchup
+    ? `${matchup.optionAText} vs ${matchup.optionBText}`
+    : null;
+  const canonicalShareUrl =
+    matchup?.slug && typeof window !== "undefined"
+      ? `${window.location.origin}/vote/matchups/${encodeURIComponent(matchup.slug)}`
+      : undefined;
+
   const handleShare = () => {
-    sharePage(matchup ? `${matchup.title} on VoxDex` : "VoxDex", { sharerUserId: user?.id, surface: "matchup" });
+    sharePage(matchupPrompt ? `${matchupPrompt} on VoxDex` : "VoxDex", {
+      sharerUserId: user?.id,
+      surface: "matchup",
+      url: canonicalShareUrl,
+    });
   };
 
-  // Dynamic <title> + OG/Twitter meta. The "A vs B" framing is the
-  // most legible subtitle for previews — it answers "what am I picking
-  // between?" before the user has to click through.
+  // Dynamic <title> + OG/Twitter meta (mirrors server /api/og/matchups/:slug).
   useDocumentMeta({
-    title: matchup ? `${matchup.title} • VoxDex` : "Matchup • VoxDex",
-    description: matchup
-      ? matchup.description ??
-        `Pick a side: ${matchup.optionAText} or ${matchup.optionBText}. Vote on VoxDex.`
-      : null,
-    image: matchup
-      ? `/api/og/image/market.png?title=${encodeURIComponent(matchup.title)}&subtitle=${encodeURIComponent(`${matchup.optionAText} vs ${matchup.optionBText}`)}&badge=${encodeURIComponent("Matchup")}`
-      : null,
+    title: matchupPrompt ?? "Matchup",
+    description: matchupVsDescription,
+    image:
+      matchup?.slug
+        ? `/api/og/vote/matchups/${encodeURIComponent(matchup.slug)}.png`
+        : null,
+    url: canonicalShareUrl ?? null,
   });
 
   if (isLoading) {
