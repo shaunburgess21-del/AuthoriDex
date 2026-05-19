@@ -1,7 +1,12 @@
+---
+description: 
+alwaysApply: true
+---
+
 # VoxDex — Cursor Agent Rules
 
 ## Project Overview
-VoxDex is a live influence index and prediction platform. It ranks 100 public figures by influence score, updated hourly via external APIs. Users vote, predict outcomes, and track momentum in real time.
+VoxDex is a live influence index and prediction platform. It ranks over 150 public figures by influence score, updated frequently via external APIs. Users vote, predict outcomes, and track momentum in real time.
 
 ## Stack
 - Frontend: React 18, Vite, TailwindCSS, shadcn/ui, Wouter (routing), TanStack Query (data fetching)
@@ -21,7 +26,7 @@ VoxDex is a live influence index and prediction platform. It ranks 100 public fi
 ## Critical Rules — Read Before Every Change
 
 ### Never Do This
-- NEVER push directly to `main` branch
+- NEVER push directly to `main` branch without asking first
 - NEVER modify `server/db.ts` without understanding Drizzle + Supabase pooler setup
 - NEVER expose `SUPABASE_SERVICE_ROLE_KEY` to the frontend
 - NEVER modify the score engine (`server/trending/`) without being explicitly asked
@@ -30,7 +35,6 @@ VoxDex is a live influence index and prediction platform. It ranks 100 public fi
 - NEVER commit `.env` files to git
 
 ### Always Do This
-- ALWAYS create a feature branch before making changes: `git checkout -b feature/name`
 - ALWAYS check `shared/` folder when changing types — changes affect both frontend and backend
 - ALWAYS use TanStack Query for frontend data fetching (not raw fetch/axios)
 - ALWAYS use Wouter for client-side navigation (not React Router)
@@ -87,8 +91,5 @@ VoxDex is a live influence index and prediction platform. It ranks 100 public fi
 - `docs:` for documentation
 - `chore:` for maintenance tasks
 
-## Two-Agent Workflow
-- Primary agent (Codex/GPT): Day-to-day feature building, component work, API routes
-- Backup agent (Claude Opus): Architecture decisions, complex refactors, debugging hard problems
-- When stuck after 2 attempts — switch to backup agent and explain what was tried
+## Agent Workflow
 Never modify or remove cross-env, --env-file=.env, or NODE_ENV from the dev or start scripts in package.json. These are required for Windows compatibility.
