@@ -15,7 +15,7 @@ interface BadgeToastProps {
 /**
  * Toast variant of the badge tile. Mirrors the StreakToast layout
  * (340px wide, rarity-tinted left border, icon on the left, headline
- * + chip + description on the right) so the celebration moments feel
+ * + description on the right) so the celebration moments feel
  * like one family. Styled vs. the default Sonner so badge unlocks
  * read as a moment rather than a routine info ping.
  */
@@ -68,17 +68,8 @@ export function BadgeToast({
             <Sparkles className="h-3 w-3" /> Badge Unlocked
           </p>
           <p className="text-[15px] font-semibold leading-tight">{badgeName}</p>
-          <span
-            className={cn(
-              "inline-block uppercase tracking-wide rounded-full border bg-background/40 font-semibold text-[10px] px-2 py-0.5 mt-0.5",
-              rarityStyle.chipBorder,
-              rarityStyle.accent,
-            )}
-          >
-            {rarityStyle.label}
-          </span>
           {description && (
-            <p className="text-xs text-muted-foreground pt-1.5 leading-snug">
+            <p className="text-xs text-muted-foreground leading-snug">
               {description}
             </p>
           )}
