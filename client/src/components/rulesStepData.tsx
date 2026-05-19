@@ -226,7 +226,7 @@ export const PREDICT_RULES_STEPS: Record<string, RulesStepConfig> = {
       {
         icon: <Scale />,
         headline: "Public Resolution",
-        body: "Markets settle based on definitive public information. Winners split the pool proportionally.",
+        body: "Markets settle on definitive public information. Each winning share pays 1 credit — cheaper shares pay multiples, and you can sell anytime before close.",
       },
     ],
   },
@@ -272,8 +272,8 @@ export const PREDICT_RULES_STEPS: Record<string, RulesStepConfig> = {
       },
       {
         icon: <Users />,
-        headline: "Go Against the Crowd",
-        body: "All stakes go into one pool. If you bet with the crowd, you share the win. Go contrarian and win? Much bigger payout.",
+        headline: "Trade In and Out",
+        body: "Each winning share pays 1 credit at close. Cheaper shares pay multiples if your side wins — sell anytime before close to lock in profits or cut losses.",
       },
     ],
   },
@@ -293,8 +293,8 @@ export const PREDICT_RULES_STEPS: Record<string, RulesStepConfig> = {
       },
       {
         icon: <Trophy />,
-        headline: "Winner Takes the Pool",
-        body: "Back the right pick and split the winnings with everyone else who got it right.",
+        headline: "1 Credit Per Winning Share",
+        body: "Share prices move with the crowd as news drops. Each winning share pays 1 credit at close — sell early to lock in a profit before the buzzer.",
       },
     ],
   },

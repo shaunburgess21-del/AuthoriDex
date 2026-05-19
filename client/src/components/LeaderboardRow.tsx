@@ -170,9 +170,8 @@ export function LeaderboardRow({
   const closedPredictMessage = predictionsClosedMessage || {
     title: "Predictions are currently closed",
     lines: [
-      "This market is in settlement mode right now, so new predictions are temporarily disabled.",
-      "Entries close Friday 23:59 UTC and resolve Sunday 23:59 UTC.",
-      "Please check back Monday to place your next prediction.",
+      "This market is in settlement mode right now, so new trades are temporarily disabled.",
+      "Trading reopens with the next weekly cycle on Monday.",
     ],
   };
   useEffect(() => {

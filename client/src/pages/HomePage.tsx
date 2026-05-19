@@ -153,13 +153,13 @@ function LeaderboardUpDownSnapshot() {
       </div>
       <p className="text-xs leading-relaxed text-muted-foreground">
         Each Monday we snapshot every celebrity's Trend Score — that's their{" "}
-        <span className="font-medium text-foreground">baseline</span> for the week. Pick{" "}
-        <span className="font-medium text-foreground">Up</span> if you think their score will close higher by Sunday,{" "}
-        <span className="font-medium text-foreground">Down</span> if lower. Exact tie refunds everyone.
+        <span className="font-medium text-foreground">baseline</span> for the week. Buy{" "}
+        <span className="font-medium text-foreground">UP</span> shares if you think their score will close higher by Sunday,{" "}
+        <span className="font-medium text-foreground">DOWN</span> shares if lower. Exact tie refunds everyone.
       </p>
       <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-        Entries close Friday 23:59 UTC. Results pay out Sunday from one shared pool — going against the crowd pays more
-        per credit.
+        Each winning share pays{" "}
+        <span className="font-medium text-foreground">1 credit</span> at close. Cheaper shares pay multiples if your side wins — and you can sell anytime before close to lock in profits.
       </p>
     </div>
   );

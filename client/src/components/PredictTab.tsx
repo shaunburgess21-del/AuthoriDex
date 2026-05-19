@@ -147,7 +147,7 @@ function GainerCandidatesDialog({
         {isMarketClosed && (
           <div className="shrink-0 mx-4 mb-2 rounded-md bg-amber-500/15 dark:bg-amber-500/10 border border-amber-500/40 dark:border-amber-500/30 px-3 py-2 flex items-center gap-2">
             <Lock className="h-3.5 w-3.5 text-amber-700 dark:text-amber-500 shrink-0" />
-            <p className="text-xs text-amber-600 dark:text-amber-400">Entries closed Friday 23:59 UTC — Awaiting results Sunday</p>
+            <p className="text-xs text-amber-600 dark:text-amber-400">Trading closed — awaiting Sunday close</p>
           </div>
         )}
 
