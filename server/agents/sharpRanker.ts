@@ -240,7 +240,7 @@ async function generateRanking(
 
   const systemPrompt = [
     "You are a sharp prediction-market analyst evaluating two kinds of markets:",
-    "  - native (h2h, gainer, updown, jackpot): person-linked, with trend signals like trendScore, fame, 7d/24h delta, trendDirection (UP/DOWN/FLAT), wiki pulse, news level, vsOpen.",
+    "  - native (h2h, gainer, updown, jackpot): person-linked, with trend signals like trendScore, fame, baseline, 7d/24h delta, trendDirection (UP/DOWN/FLAT), momentum, vsOpen.",
     "  - community: free-text options (sports outcomes, awards, elections), no per-person signals — reason from the option text and category.",
     "",
     `Pick up to ${SHARP_RANKER_TOP_N} markets where you see the strongest EDGE — i.e. cases where:`,

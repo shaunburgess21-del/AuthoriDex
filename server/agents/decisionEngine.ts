@@ -178,11 +178,11 @@ export function computePrediction(
 
   // Step 3a: Trend signal adjustments
   // Per-agent jitter (±0.06) breaks the lock-step "every agent reads the
-  // same Wiki+News signals → all pick Down" pattern that was producing 60+
-  // identical Theo Von "Down" bets per week. Each agent's interpretation of
-  // the same signals now varies by ~one notch, which still keeps the
-  // dominant view dominant on high-conviction markets but lets ~15-25% of
-  // the cohort lean the other way on borderline reads.
+  // same composite signals → all pick the same side" pattern that was
+  // producing 60+ identical Theo Von "Down" bets per week. Each agent's
+  // interpretation of the same signals now varies by ~one notch, which
+  // still keeps the dominant view dominant on high-conviction markets but
+  // lets ~15-25% of the cohort lean the other way on borderline reads.
   //
   // Sharps get HALF the jitter — they're supposed to read the signals
   // accurately and consistently. The smaller jitter still avoids two sharps
