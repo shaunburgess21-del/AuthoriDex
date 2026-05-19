@@ -76,7 +76,10 @@ export function evaluatePositionMove(
 }
 
 export interface PositionMoveNotificationInput {
-  subjectLabel: string;
+  /** Market title shown in the notification body. */
+  marketTitle: string;
+  /** Person name or entry side (e.g. UP) when it adds context beyond marketTitle. */
+  contextLabel?: string | null;
   evaluation: PositionMoveEvaluationOutput;
 }
 
@@ -85,27 +88,37 @@ export interface PositionMoveNotificationOutput {
   body: string;
 }
 
+/** Body lead: market title plus optional side/candidate when not redundant. */
+function formatMarketLead(marketTitle: string, contextLabel?: string | null): string {
+  const title = marketTitle.trim() || "Your market";
+  const ctx = contextLabel?.trim();
+  if (!ctx) return title;
+  if (title.toLowerCase().includes(ctx.toLowerCase())) return title;
+  return `${title} · ${ctx}`;
+}
+
 /**
- * `subjectLabel` is whichever name reads best on the chip — the
- * tracked person's name when the market is about a person, otherwise
- * the market title. Caller decides; this helper just renders the
- * agreed label.
+ * User-facing copy for an open-position move alert. Titles lead with
+ * "Your position" so users read P&L first, not a celebrity name
+ * (which would be confused with trend-score alerts). Body names the
+ * market and stake → current sell value with an unrealized hint.
  */
 export function buildPositionMoveNotification(
   input: PositionMoveNotificationInput,
 ): PositionMoveNotificationOutput {
-  const { subjectLabel, evaluation } = input;
+  const { marketTitle, contextLabel, evaluation } = input;
   const { direction, pctMove, netCreditsIn, currentValue } = evaluation;
-  const signed = `${pctMove >= 0 ? "+" : ""}${pctMove.toFixed(1)}`;
 
+  const absPct = Math.abs(pctMove).toFixed(1);
   const title =
     direction === "up"
-      ? `${subjectLabel} is up ${signed}% on your position`
-      : `${subjectLabel} is down ${signed}% on your position`;
+      ? `Your position is up +${absPct}%`
+      : `Your position is down ${absPct}%`;
 
+  const marketLead = formatMarketLead(marketTitle, contextLabel);
   const body =
-    `Bought for ${netCreditsIn.toLocaleString("en-US")} cr, ` +
-    `worth ${currentValue.toLocaleString("en-US")} cr now. Tap to review.`;
+    `${marketLead} · Staked ${netCreditsIn.toLocaleString("en-US")} cr, ` +
+    `worth ${currentValue.toLocaleString("en-US")} cr now (unrealized). Tap to review.`;
 
   return { title, body };
 }

@@ -13,6 +13,18 @@ import {
 } from "@/hooks/useNotifications";
 import { getRecentActivityMarketPath } from "@/lib/predict-display";
 
+const DIRECTION_AWARE_KINDS = new Set(["favorite_hot_mover", "position_move_alert"]);
+
+function getNotificationDirection(
+  kind: string,
+  metadata: NotificationRow["metadata"],
+): "up" | "down" | null {
+  if (!DIRECTION_AWARE_KINDS.has(kind)) return null;
+  if (!metadata || typeof metadata !== "object" || !("direction" in metadata)) return null;
+  const raw = metadata.direction;
+  return raw === "up" || raw === "down" ? raw : null;
+}
+
 function resolveNotificationHref(notification: NotificationRow): string | null {
   if (!notification.href) return null;
   const marketType =
@@ -53,14 +65,7 @@ export function NotificationItem({ notification, onNavigate }: NotificationItemP
   const [isExiting, setIsExiting] = useState(false);
 
   const meta = getKindMeta(notification.kind);
-  const rawDirection =
-    notification.kind === "favorite_hot_mover" &&
-    notification.metadata &&
-    typeof notification.metadata === "object" &&
-    "direction" in notification.metadata
-      ? notification.metadata.direction
-      : null;
-  const direction = rawDirection === "up" || rawDirection === "down" ? rawDirection : null;
+  const direction = getNotificationDirection(notification.kind, notification.metadata);
   const Icon = direction === "up" ? TrendingUp : direction === "down" ? TrendingDown : meta.icon;
   const iconBgAccent =
     direction === "up"

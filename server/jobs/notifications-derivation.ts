@@ -828,13 +828,15 @@ async function derivePositionMoveAlerts(): Promise<number> {
         .limit(1);
       if (recent) continue;
 
-      const subjectLabel = pos.personName ?? pos.marketTitle ?? "Your position";
+      const contextLabel = pos.personName ?? pos.entryLabel ?? null;
       const { title, body } = buildPositionMoveNotification({
-        subjectLabel,
+        marketTitle: pos.marketTitle ?? "Your market",
+        contextLabel,
         evaluation,
       });
 
       const href = pos.marketSlug ? `/markets/${pos.marketSlug}` : `/me/predictions`;
+      const unrealisedPnl = evaluation.currentValue - evaluation.netCreditsIn;
 
       const id = await createNotification({
         userId,
@@ -848,10 +850,13 @@ async function derivePositionMoveAlerts(): Promise<number> {
         metadata: {
           marketId: pos.marketId,
           entryId: pos.entryId,
+          marketTitle: pos.marketTitle,
+          entryLabel: pos.entryLabel,
           direction: evaluation.direction,
           pctMove: evaluation.pctMove,
           netCreditsIn: evaluation.netCreditsIn,
           currentValue: evaluation.currentValue,
+          unrealisedPnl,
         },
         // groupKey collapses prior alerts on the same position so the
         // panel shows one row per (user, market, entry) rather than a

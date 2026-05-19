@@ -73,7 +73,7 @@ export const NOTIFICATION_REGISTRY: Record<NotificationKind, KindMeta> = {
     priority: 1,
   },
   position_move_alert: {
-    icon: TrendingUp,
+    icon: Wallet,
     accent: PREDICTIONS_ACCENT,
     bgAccent: PREDICTIONS_BG,
     category: "predictions",

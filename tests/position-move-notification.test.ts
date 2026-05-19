@@ -76,33 +76,55 @@ test("default constants match the deriver's documented thresholds", () => {
   assert.equal(POSITION_MOVE_MIN_NOTIONAL_DEFAULT, 100);
 });
 
-test("notification: up wording includes signed pct, person name, and 'Tap to review' CTA", () => {
+test("notification: up title leads with Your position and signed pct", () => {
   const ev = evaluatePositionMove({ netCreditsIn: 500, currentValue: 593 })!;
   const { title, body } = buildPositionMoveNotification({
-    subjectLabel: "Conor McGregor",
+    marketTitle: "Conor McGregor: Up or Down?",
+    contextLabel: "Conor McGregor",
     evaluation: ev,
   });
-  assert.equal(title, "Conor McGregor is up +18.6% on your position");
-  assert.equal(body, "Bought for 500 cr, worth 593 cr now. Tap to review.");
+  assert.equal(title, "Your position is up +18.6%");
+  assert.equal(
+    body,
+    "Conor McGregor: Up or Down? · Staked 500 cr, worth 593 cr now (unrealized). Tap to review.",
+  );
 });
 
-test("notification: down wording uses negative sign without double-minus", () => {
+test("notification: down title uses abs pct without double minus", () => {
   const ev = evaluatePositionMove({ netCreditsIn: 500, currentValue: 390 })!;
   const { title, body } = buildPositionMoveNotification({
-    subjectLabel: "Mark Cuban",
+    marketTitle: "Mark Cuban: Up or Down?",
+    contextLabel: "Mark Cuban",
     evaluation: ev,
   });
-  // The %.toFixed(1) call already includes the minus, so we should
-  // see exactly one minus sign (not "--").
-  assert.equal(title, "Mark Cuban is down -22.0% on your position");
-  assert.equal(body, "Bought for 500 cr, worth 390 cr now. Tap to review.");
+  assert.equal(title, "Your position is down 22.0%");
+  assert.equal(
+    body,
+    "Mark Cuban: Up or Down? · Staked 500 cr, worth 390 cr now (unrealized). Tap to review.",
+  );
+});
+
+test("notification: context label appended when not redundant with market title", () => {
+  const ev = evaluatePositionMove({ netCreditsIn: 500, currentValue: 390 })!;
+  const { body } = buildPositionMoveNotification({
+    marketTitle: "Who wins the fight?",
+    contextLabel: "UP",
+    evaluation: ev,
+  });
+  assert.equal(
+    body,
+    "Who wins the fight? · UP · Staked 500 cr, worth 390 cr now (unrealized). Tap to review.",
+  );
 });
 
 test("notification: large credit values use en-US thousands separator in body", () => {
   const ev = evaluatePositionMove({ netCreditsIn: 5_000, currentValue: 7_345 })!;
   const { body } = buildPositionMoveNotification({
-    subjectLabel: "Jake Paul vs KSI",
+    marketTitle: "Jake Paul vs KSI",
     evaluation: ev,
   });
-  assert.equal(body, "Bought for 5,000 cr, worth 7,345 cr now. Tap to review.");
+  assert.equal(
+    body,
+    "Jake Paul vs KSI · Staked 5,000 cr, worth 7,345 cr now (unrealized). Tap to review.",
+  );
 });
