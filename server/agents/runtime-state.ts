@@ -24,9 +24,20 @@
 import { eq } from "drizzle-orm";
 import { db } from "../db";
 import { agentRuntimeState } from "@shared/schema";
+import { retryWithBackoff } from "./retry";
 
 const SINGLETON_ID = "global";
 const CACHE_TTL_MS = 10_000;
+
+// Retry budget for the singleton-row fetch. A fresh process's first
+// `isAgentsPaused()` call sometimes coincides with the pooler still
+// warming up (single TCP refused, single transient pooler timeout).
+// Without retries that one error tips us into the fail-open branch in
+// `isAgentsPaused()` and a paused cohort gets to claim a batch on the
+// first action-worker tick. 3 attempts inside ~300ms swallows the boot
+// hiccup without meaningfully delaying real outages.
+const LOAD_RETRY_ATTEMPTS = 3;
+const LOAD_RETRY_BASE_DELAY_MS = 100;
 
 interface CachedState {
   paused: boolean;
@@ -63,6 +74,17 @@ async function loadFromDb(): Promise<CachedState> {
   return state;
 }
 
+async function loadFromDbWithRetry(): Promise<CachedState> {
+  return retryWithBackoff(loadFromDb, {
+    attempts: LOAD_RETRY_ATTEMPTS,
+    // Linear backoff: 100ms, 200ms before the 2nd and 3rd attempts.
+    // Total wall-clock budget on the worst path is ~300ms — short
+    // enough that an action-worker tick still completes within its
+    // 2-min cadence even on a fully-failed fetch.
+    delayMs: (attempt) => LOAD_RETRY_BASE_DELAY_MS * (attempt + 1),
+  });
+}
+
 async function getState(): Promise<CachedState> {
   const now = Date.now();
   if (cache && now - cache.fetchedAt < CACHE_TTL_MS) {
@@ -71,7 +93,7 @@ async function getState(): Promise<CachedState> {
   // De-duplicate concurrent fetches so a worker burst doesn't fan out
   // dozens of identical SELECTs the moment the cache expires.
   if (inflight) return inflight;
-  inflight = loadFromDb().finally(() => {
+  inflight = loadFromDbWithRetry().finally(() => {
     inflight = null;
   });
   return inflight;
@@ -80,6 +102,11 @@ async function getState(): Promise<CachedState> {
 /**
  * Fast check used by every worker. Resolves to `true` when ALL agent
  * activity should be paused. Cached for ~10 seconds.
+ *
+ * The DB read is retried up to `LOAD_RETRY_ATTEMPTS` times with linear
+ * backoff before this falls into the fail-open branch — a single boot-
+ * time pooler hiccup no longer leaks a batch through. Only a sustained
+ * outage (every retry failed inside ~300ms) trips the catch.
  */
 export async function isAgentsPaused(): Promise<boolean> {
   try {
