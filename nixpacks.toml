@@ -1,3 +1,11 @@
-# System fonts for sharp/librsvg OG SVG fallbacks on Railway.
+# System fonts for sharp/librsvg OG SVG text (fontconfig). Inter via fonts-inter.
 [phases.setup]
-aptPkgs = ["fontconfig", "fonts-dejavu-core"]
+aptPkgs = ["fontconfig", "fonts-dejavu-core", "fonts-inter"]
+
+[phases.build]
+cmds = [
+  "fc-cache -f",
+  "mkdir -p /usr/share/fonts/truetype/voxdex-og",
+  "cp dist/og-fonts/*.ttf /usr/share/fonts/truetype/voxdex-og/ 2>/dev/null || true",
+  "fc-cache -f",
+]

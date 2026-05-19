@@ -1,144 +1,107 @@
 /**
- * Shared Inter @font-face blocks for sharp/librsvg OG SVG rendering.
+ * OG SVG fonts for sharp/librsvg.
  *
- * Bundled copies live in server/assets/fonts/ (copied from @fontsource/inter).
- * Prefer .woff over .woff2 — librsvg on minimal Linux containers is more reliable
- * with woff/truetype data-URIs.
+ * librsvg on Linux ignores @font-face data-URI embeds (WOFF/WOFF2/TTF base64).
+ * Text must use system-installed fonts via fontconfig — install `fonts-inter`
+ * on Railway (see nixpacks.toml). Bundled files under server/assets/fonts/
+ * are copied to dist/og-fonts/ at build as a TTF fallback for fc-cache.
  */
 import fs from "fs";
 import path from "path";
-import { createRequire } from "module";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-/** SVG font-family stack with Linux-friendly fallbacks after Inter. */
+/**
+ * Quoted families for SVG font-family. Inter first (fonts-inter on Linux),
+ * then common Linux fallbacks.
+ */
 export const OG_FONT_FAMILY =
-  "'Inter', 'DejaVu Sans', 'Liberation Sans', system-ui, -apple-system, 'Segoe UI', sans-serif";
+  "Inter, DejaVu Sans, Liberation Sans, sans-serif";
 
-const BUNDLED_FONTS_DIR = path.resolve(__dirname, "../assets/fonts");
+export const FONT_SEARCH_PATHS = [
+  path.join(process.cwd(), "server", "assets", "fonts"),
+  path.join(process.cwd(), "dist", "og-fonts"),
+  path.resolve(__dirname, "../assets/fonts"),
+];
 
-const FONT_FILES = {
-  regular: "inter-latin-400-normal.woff",
-  bold: "inter-latin-700-normal.woff",
-} as const;
-
-let cachedStyle: string | null = null;
-let loadAttempted = false;
-
-function readFontFile(
-  fileName: string,
-): { buf: Buffer; format: "woff" | "woff2" } | null {
-  const tryPath = (p: string): { buf: Buffer; format: "woff" | "woff2" } | null => {
-    if (!fs.existsSync(p)) return null;
-    const format = p.endsWith(".woff2") ? "woff2" : "woff";
-    return { buf: fs.readFileSync(p), format };
-  };
-
-  const bundled = path.join(BUNDLED_FONTS_DIR, fileName);
-  const fromBundled = tryPath(bundled);
-  if (fromBundled) return fromBundled;
-
-  for (const filesDir of resolveFontsourceFilesDirs()) {
-    const fromWoff = tryPath(path.join(filesDir, fileName));
-    if (fromWoff) return fromWoff;
-    const fromWoff2 = tryPath(
-      path.join(filesDir, fileName.replace(/\.woff$/, ".woff2")),
-    );
-    if (fromWoff2) return fromWoff2;
-  }
-
-  return null;
-}
-
-function resolveFontsourceFilesDirs(): string[] {
-  const dirs: string[] = [];
-  try {
-    const requireFromHere = createRequire(import.meta.url);
-    const pkgJsonPath = requireFromHere.resolve(
-      "@fontsource/inter/package.json",
-    );
-    dirs.push(path.join(path.dirname(pkgJsonPath), "files"));
-  } catch {
-    /* ignore */
-  }
-
-  dirs.push(
-    path.join(process.cwd(), "node_modules/@fontsource/inter/files"),
-    path.join(process.cwd(), "dist/node_modules/@fontsource/inter/files"),
-  );
-
-  return dirs;
-}
-
-function buildFontFaceStyle(
-  regular: { buf: Buffer; format: "woff" | "woff2" },
-  bold: { buf: Buffer; format: "woff" | "woff2" },
-): string {
-  const regularFormat = regular.format;
-  const boldFormat = bold.format;
-  const b64_400 = regular.buf.toString("base64");
-  const b64_700 = bold.buf.toString("base64");
-
-  return `<style>
-    @font-face {
-      font-family: 'Inter';
-      font-style: normal;
-      font-weight: 400;
-      src: url(data:font/${regularFormat};base64,${b64_400}) format('${regularFormat}');
-    }
-    @font-face {
-      font-family: 'Inter';
-      font-style: normal;
-      font-weight: 500;
-      src: url(data:font/${regularFormat};base64,${b64_400}) format('${regularFormat}');
-    }
-    @font-face {
-      font-family: 'Inter';
-      font-style: normal;
-      font-weight: 600;
-      src: url(data:font/${boldFormat};base64,${b64_700}) format('${boldFormat}');
-    }
-    @font-face {
-      font-family: 'Inter';
-      font-style: normal;
-      font-weight: 700;
-      src: url(data:font/${boldFormat};base64,${b64_700}) format('${boldFormat}');
-    }
-  </style>`;
-}
+let startupLogged = false;
 
 /**
- * Inline @font-face rules for OG SVGs. Cached after first successful load.
+ * librsvg does not use embedded @font-face; return empty so SVG relies on
+ * fontconfig + system fonts (Inter from fonts-inter apt package on Railway).
  */
 export function getOgFontFaceStyle(): string {
-  if (cachedStyle !== null) return cachedStyle;
-  if (loadAttempted) return "";
+  return "";
+}
 
-  loadAttempted = true;
-  try {
-    const regular = readFontFile(FONT_FILES.regular);
-    const bold = readFontFile(FONT_FILES.bold);
-    if (!regular || !bold) {
-      console.error(
-        "[og] CRITICAL: Inter font files missing — OG SVG text may render as boxes. Checked:",
-        BUNDLED_FONTS_DIR,
-        resolveFontsourceFilesDirs().join(", "),
-      );
-      cachedStyle = "";
-      return cachedStyle;
-    }
-    cachedStyle = buildFontFaceStyle(regular, bold);
-    return cachedStyle;
-  } catch (err) {
-    console.error("[og] CRITICAL: failed to load Inter fonts for OG SVG", err);
-    cachedStyle = "";
-    return cachedStyle;
+/** Log once at startup how OG SVG text will be rendered. */
+export function logOgFontStartup(): void {
+  if (startupLogged) return;
+  startupLogged = true;
+
+  const bundled = FONT_SEARCH_PATHS.some((dir) => fs.existsSync(dir));
+  const interOnSystem = detectInterOnSystem();
+
+  if (interOnSystem) {
+    console.log(
+      `[og] SVG text uses system fonts (Inter via fontconfig). Stack: ${OG_FONT_FAMILY}`,
+    );
+  } else {
+    console.warn(
+      `[og] Inter not detected in system font paths — OG SVG text may use DejaVu/Liberation fallback. Install fonts-inter on the image. Bundled font dirs found: ${bundled}`,
+    );
   }
 }
 
-/** For tests — true when @font-face block was built successfully. */
+function detectInterOnSystem(): boolean {
+  const roots = [
+    "/usr/share/fonts",
+    "/usr/local/share/fonts",
+    "/nix/store",
+  ];
+  const needle = /inter/i;
+
+  for (const root of roots) {
+    if (!fs.existsSync(root)) continue;
+    try {
+      if (walkForInterFont(root, needle, 0)) return true;
+    } catch {
+      /* ignore permission errors on deep walks */
+    }
+  }
+  return false;
+}
+
+function walkForInterFont(
+  dir: string,
+  needle: RegExp,
+  depth: number,
+): boolean {
+  if (depth > 6) return false;
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return false;
+  }
+  for (const ent of entries) {
+    const full = path.join(dir, ent.name);
+    if (ent.isDirectory()) {
+      if (walkForInterFont(full, needle, depth + 1)) return true;
+    } else if (ent.isFile() && /\.(ttf|otf|ttc)$/i.test(ent.name)) {
+      if (needle.test(ent.name)) return true;
+    }
+  }
+  return false;
+}
+
+/** True when bundled font directory exists (for build/nixpacks fallback). */
+export function assertOgFontAssetsPresent(): boolean {
+  return FONT_SEARCH_PATHS.some((dir) => fs.existsSync(dir));
+}
+
+/** @deprecated System-font mode — always empty @font-face for librsvg. */
 export function assertOgFontsLoaded(): boolean {
-  const style = getOgFontFaceStyle();
-  return style.includes("@font-face") && style.includes("base64");
+  return getOgFontFaceStyle() === "";
 }

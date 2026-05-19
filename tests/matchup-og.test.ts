@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import test from "node:test";
 import assert from "node:assert/strict";
 
@@ -11,7 +12,9 @@ import {
   renderMatchupOgImageJpeg,
 } from "../server/services/matchup-og-image";
 import {
+  assertOgFontAssetsPresent,
   assertOgFontsLoaded,
+  FONT_SEARCH_PATHS,
   getOgFontFaceStyle,
   OG_FONT_FAMILY,
 } from "../server/services/og-fonts";
@@ -85,12 +88,14 @@ const PLACEHOLDER_CTX = {
   optionBImageUrl: null,
 };
 
-test("getOgFontFaceStyle embeds Inter woff base64", () => {
+test("getOgFontFaceStyle is empty (system-font mode for librsvg)", () => {
+  assert.equal(getOgFontFaceStyle(), "");
   assert.ok(assertOgFontsLoaded());
-  const style = getOgFontFaceStyle();
-  assert.match(style, /@font-face/);
-  assert.match(style, /base64,/);
-  assert.match(style, /format\('woff'\)/);
+});
+
+test("bundled OG font assets exist for dist copy / nixpacks fallback", () => {
+  assert.ok(assertOgFontAssetsPresent());
+  assert.ok(FONT_SEARCH_PATHS.some((dir) => fs.existsSync(dir)));
 });
 
 test("buildMatchupOverlaySvg uses shared font stack", () => {
@@ -98,6 +103,7 @@ test("buildMatchupOverlaySvg uses shared font stack", () => {
   assert.ok(svg.includes(OG_FONT_FAMILY));
   assert.ok(svg.includes("Who is the GOAT?"));
   assert.ok(svg.includes("Vote on VoxDex"));
+  assert.ok(!svg.includes("@font-face"));
 });
 
 test("renderMatchupOgImage returns 1200x630 PNG without remote images", async () => {
@@ -120,4 +126,40 @@ test("renderMatchupOgImageJpeg returns 1200x630 JPEG under 600KB", async () => {
   assert.equal(meta.width, 1200);
   assert.equal(meta.height, 630);
   assert.equal(meta.format, "jpeg");
+});
+
+/** Bottom overlay band should have pixel variance when text renders (not flat tofu). */
+test("renderMatchupOgImageJpeg text band has non-trivial pixel variance", async () => {
+  const jpeg = await renderMatchupOgImageJpeg(PLACEHOLDER_CTX);
+  const sharp = (await import("sharp")).default;
+  const { data, info } = await sharp(jpeg)
+    .extract({
+      left: 0,
+      top: Math.floor(630 * 0.55),
+      width: 1200,
+      height: Math.floor(630 * 0.45),
+    })
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  assert.equal(info.width, 1200);
+  const channels = info.channels ?? 3;
+  const samples = Math.min(5000, Math.floor(data.length / channels));
+  let sum = 0;
+  let sumSq = 0;
+  for (let i = 0; i < samples; i++) {
+    const idx = i * channels;
+    const lum =
+      channels >= 3
+        ? 0.299 * data[idx]! + 0.587 * data[idx + 1]! + 0.114 * data[idx + 2]!
+        : data[idx]!;
+    sum += lum;
+    sumSq += lum * lum;
+  }
+  const mean = sum / samples;
+  const variance = sumSq / samples - mean * mean;
+  assert.ok(
+    variance > 50,
+    `expected text band luminance variance >50, got ${variance.toFixed(1)} (tofu/flat?)`,
+  );
 });

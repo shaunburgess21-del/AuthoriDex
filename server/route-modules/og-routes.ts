@@ -24,7 +24,11 @@ import {
   renderMatchupOgImage,
   renderMatchupOgImageJpeg,
 } from "../services/matchup-og-image";
-import { getOgFontFaceStyle, OG_FONT_FAMILY } from "../services/og-fonts";
+import {
+  getOgFontFaceStyle,
+  logOgFontStartup,
+  OG_FONT_FAMILY,
+} from "../services/og-fonts";
 
 /* ─────────────────────────────────────────────────────────────────────────────
  * Open Graph + Twitter card endpoints + sitemap.xml
@@ -835,7 +839,7 @@ async function lookupOpinionPoll(slug: string) {
 }
 
 /** Bump when the matchup OG visual or encoding changes (cache bust). */
-const MATCHUP_OG_IMAGE_VERSION = "3";
+const MATCHUP_OG_IMAGE_VERSION = "4";
 
 function matchupOgImageUrl(slug: string): string {
   return `${SITE_URL}/api/og/vote/matchups/${encodeURIComponent(slug)}.jpg?v=${MATCHUP_OG_IMAGE_VERSION}`;
@@ -895,6 +899,8 @@ async function lookupPersonName(personId: string | null): Promise<string | null>
 /* ───────────────────────────────────────────────────── route registration */
 
 export function registerOgRoutes(app: Express): void {
+  logOgFontStartup();
+
   /* Default site OG image — used by the home page meta. Cached aggressively
    * since the brand wordmark doesn't change. */
   app.get("/api/og/image/default.png", async (_req: Request, res: Response) => {
