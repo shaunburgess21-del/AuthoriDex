@@ -341,7 +341,7 @@ function formatMarketForRanker(item: RankableMarket): string {
 
   if (signals) {
     lines.push(
-      `signals: trendScore=${Math.round(signals.trendScore)}, fame=${Math.round(signals.fameIndex)}, baseline=${Math.round(signals.scoreBaseline)}, 7d=${signals.scoreDelta7d.toFixed(1)}, 24h=${signals.change24h.toFixed(1)}, dir=${signals.trendDirection}, mom=${signals.momentum}, wiki=${signals.wikiPulse}, news=${signals.newsLevel}${signals.pctChangeVsOpen != null ? `, vsOpen=${(signals.pctChangeVsOpen * 100).toFixed(1)}%` : ""}`,
+      `signals: trendScore=${Math.round(signals.trendScore)}, fame=${Math.round(signals.fameIndex)}, baseline=${Math.round(signals.scoreBaseline)}, 7d=${signals.scoreDelta7d.toFixed(1)}, 24h=${signals.change24h.toFixed(1)}, dir=${signals.trendDirection}, mom=${signals.momentum}${signals.pctChangeVsOpen != null ? `, vsOpen=${(signals.pctChangeVsOpen * 100).toFixed(1)}%` : ""}`,
     );
   }
 
@@ -357,7 +357,7 @@ function formatMarketForRanker(item: RankableMarket): string {
       // (|edgeProb - crowdPrice| >= 0.05) would be unreliable.
       const crowdPrice = computeEntryCrowdPrice(e, market.entries);
       const entrySig = sig
-        ? ` [fame=${Math.round(sig.fameIndex)}, 7d=${sig.scoreDelta7d.toFixed(1)}, dir=${sig.trendDirection}, wiki=${sig.wikiPulse}, news=${sig.newsLevel}${sig.pctChangeVsOpen != null ? `, vsOpen=${(sig.pctChangeVsOpen * 100).toFixed(1)}%` : ""}]`
+        ? ` [fame=${Math.round(sig.fameIndex)}, 7d=${sig.scoreDelta7d.toFixed(1)}, dir=${sig.trendDirection}${sig.pctChangeVsOpen != null ? `, vsOpen=${(sig.pctChangeVsOpen * 100).toFixed(1)}%` : ""}]`
         : "";
       return `  - ${e.label ?? "(unnamed)"} → crowdPrice=${crowdPrice.toFixed(2)} stake=${e.totalStake}${e.noStake != null ? `/no=${e.noStake}` : ""}${entrySig}`;
     })

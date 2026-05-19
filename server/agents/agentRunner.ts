@@ -1609,8 +1609,6 @@ async function getTrendSignals(
       change24h: 0,
       momentum: "Unknown",
       trendDirection: "FLAT",
-      wikiPulse: "stable",
-      newsLevel: "amber",
     };
   }
 
@@ -1625,13 +1623,14 @@ async function getTrendSignals(
     .where(eq(trendingPeople.id, personId))
     .limit(1);
 
-  // Get latest snapshot for wiki/news signals AND the stored momentum
-  // label. Momentum is free-text in the schema; we narrow it via
-  // `normaliseMomentum` to the five buckets the scoring job emits.
+  // Latest snapshot supplies the stored momentum label only. Momentum is
+  // free-text in the schema; `normaliseMomentum` narrows it to the five
+  // buckets the scoring job emits. Plan D (this commit) removed the
+  // wikiPulse / newsLevel derivation here — the leaderboard score
+  // already integrates wiki+news activity, so the deterministic decision
+  // engine doesn't need to read raw wiki/news deltas separately.
   const [snap] = await db
     .select({
-      wikiDelta: trendSnapshots.wikiDelta,
-      newsDelta: trendSnapshots.newsDelta,
       fameIndex: trendSnapshots.fameIndex,
       trendScore: trendSnapshots.trendScore,
       momentum: trendSnapshots.momentum,
@@ -1647,17 +1646,6 @@ async function getTrendSignals(
   const change7d = person?.change7d ?? 0;
   const change24h = person?.change24h ?? 0;
   const momentum = normaliseMomentum(snap?.momentum);
-
-  const wikiDelta = snap?.wikiDelta ?? 0;
-  const newsDelta = snap?.newsDelta ?? 0;
-
-  let wikiPulse: TrendSignals["wikiPulse"] = "stable";
-  if (wikiDelta > 0.15) wikiPulse = "rising";
-  else if (wikiDelta < -0.15) wikiPulse = "falling";
-
-  let newsLevel: TrendSignals["newsLevel"] = "amber";
-  if (newsDelta > 0.3) newsLevel = "red";
-  else if (newsDelta < -0.1) newsLevel = "green";
 
   // Weekly-open delta — only meaningful when the caller passed an
   // `openingScore`. Guard against a zero/missing baseline so we never
@@ -1689,8 +1677,6 @@ async function getTrendSignals(
     change24h,
     momentum,
     trendDirection,
-    wikiPulse,
-    newsLevel,
   };
 
   if (pctChangeVsOpen !== undefined) {

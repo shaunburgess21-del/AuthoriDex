@@ -122,8 +122,6 @@ export interface TrendSignals {
    * (saturates at ±0.20 with a stronger coefficient than the 7d fallback).
    */
   pctChangeVsOpen?: number;
-  wikiPulse: "rising" | "falling" | "stable";
-  newsLevel: "red" | "amber" | "green";
 }
 
 export interface CrowdSplit {

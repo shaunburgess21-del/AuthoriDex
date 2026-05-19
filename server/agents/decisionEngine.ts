@@ -120,32 +120,27 @@ export function computePrediction(
     if (sA && sB) {
       const fA = Math.max(sA.fameIndex ?? 0, 1);
       const fB = Math.max(sB.fameIndex ?? 0, 1);
-      // Multiplicative bonus that combines three signals on each side:
-      //   - momentum: 7d delta + wiki pulse (max ±5%, gated bullish-side)
-      //   - vs-open baseline: pctChangeVsOpen, saturating at ±20% (max ±10%)
-      //   - explicit trendDirection: small constant tilt (max ±4%)
+      // Multiplicative bonus that combines three composite signals on
+      // each side:
+      //   - 7d delta tiers      (max ±2.5% on tier 1, ±5% on tier 2)
+      //   - vs-open baseline    (saturating at ±20%, max ±10%)
+      //   - trendDirection tilt (max ±4%)
+      //
+      // Plan D — composite-only agents (this commit). Wiki/news reads
+      // were removed here because the leaderboard score already
+      // integrates them; the 7d delta tier (`scoreDelta7d`) already
+      // reflects whatever wiki/news activity moved the score. The
+      // bigger 1.05 tier (`delta > 8`) used to require `wikiPulse rising`
+      // as a co-trigger; now it just requires the stronger 7d momentum.
       //
       // The vs-open factor is the magnitude-aware completion of Phase 1b:
-      // we now resolve a per-entry baseline from `trend_snapshots` at-or-
+      // we resolve a per-entry baseline from `trend_snapshots` at-or-
       // before market.createdAt, so a person who has tanked 30% from open
       // SHOULD lose meaningful fame weight in an H2H, not just the 4%
       // direction-tilt nudge. Saturates at ±20% with a 0.10 coefficient
       // — half of `computeSignalBoost`'s 0.18, because H2H is a mutual
       // comparison (both sides get the factor) so net effect on the
       // probability split roughly doubles.
-      //
-      // Stock-vs-flow gate (Plan C, mirrors `computeSignalBoost`): the
-      // `wikiPulse rising && delta > 8` and `delta > 3` branches are
-      // bullish STOCK signals — they describe a side's current attention
-      // level, not the direction the score is heading. When this side has
-      // already flowed decisively below its market-open baseline
-      // (`pctChangeVsOpen < -0.05`), bullish stock shouldn't be allowed to
-      // tilt the H2H seeding back up. The bullish moves are also halved
-      // (1.10 → 1.05, 1.05 → 1.025) and the bearish move halved
-      // symmetrically (0.95 → 0.975) so the vs-open factor (max ±0.10)
-      // is the dominant directional input on each side. Direction tilt
-      // (1.04 / 0.96) is unchanged — it's the consensus signal that
-      // already incorporates pctChangeVsOpen as rung 1.
       //
       // Why direction tilt stays ON TOP of the vs-open factor: when
       // pctChangeVsOpen is small/zero but `change24h` and `change7d`
@@ -154,14 +149,10 @@ export function computePrediction(
       // wouldn't catch.
       const momBonus = (s: TrendSignals): number => {
         const delta = s.scoreDelta7d ?? 0;
-        const sideDecisivelyDown =
-          s.pctChangeVsOpen != null &&
-          Number.isFinite(s.pctChangeVsOpen) &&
-          s.pctChangeVsOpen < -0.05;
         let bonus = 1.0;
-        if (s.wikiPulse === "rising" && delta > 8 && !sideDecisivelyDown) bonus = 1.05;
-        else if (delta > 3 && !sideDecisivelyDown) bonus = 1.025;
-        else if (s.wikiPulse === "falling" || delta < -3) bonus = 0.975;
+        if (delta > 8) bonus = 1.05;
+        else if (delta > 3) bonus = 1.025;
+        else if (delta < -3) bonus = 0.975;
         if (
           s.pctChangeVsOpen != null &&
           Number.isFinite(s.pctChangeVsOpen)
@@ -198,7 +189,7 @@ export function computePrediction(
   // making identical decisions but doesn't bury their edge in noise.
   const jitterRange = sharp ? 0.03 : 0.06;
   const jitter = (rng.nextFloat() * 2 - 1) * jitterRange;
-  const baseSignalBoost = computeSignalBoost(signals, agent, decisivelyDown);
+  const baseSignalBoost = computeSignalBoost(signals, agent);
   // Multi-window momentum bonus: only sharps get this. When 7d and 14d
   // disagree (e.g. 7d falling but 14d still strongly rising), the agent
   // assumes mean-reversion is in play and dampens the short-window signal.
@@ -224,34 +215,19 @@ export function computePrediction(
   if (!isH2H && entrySignals && entrySignals.size > 0) {
     for (const [entryId, entrySig] of Array.from(entrySignals)) {
       const momentum = entrySig.scoreDelta7d / 15;
-      // Stock-vs-flow gate (Plan C, mirrors `computeSignalBoost`):
-      // bullish stock signals (wiki rising, news red) shouldn't get to
-      // tilt a race entry UP when its `pctChangeVsOpen` has already
-      // flowed below -0.05 vs market open. Coefficients halved so the
-      // vs-open flow (max ±0.10) dominates across the magnitude range,
-      // even on shallow moves where the gate hasn't tripped. Bearish
-      // legs (`falling` / `green`) still apply normally so an entry
-      // that's flowing down AND showing fading attention reads as more
-      // obviously fading.
-      const entryDecisivelyDown =
-        entrySig.pctChangeVsOpen != null &&
-        Number.isFinite(entrySig.pctChangeVsOpen) &&
-        entrySig.pctChangeVsOpen < -0.05;
-      const wikiBoost =
-        entrySig.wikiPulse === "rising" && !entryDecisivelyDown ? 0.04
-        : entrySig.wikiPulse === "falling" ? -0.04
-        : 0;
-      const newsBoost =
-        entrySig.newsLevel === "red" && !entryDecisivelyDown ? 0.025
-        : entrySig.newsLevel === "green" ? -0.015
-        : 0;
-      // Vs-open baseline: the magnitude-aware completion of Phase 1b for
-      // race markets. Saturates at ±20% with a 0.10 coefficient — smaller
-      // than computeSignalBoost's 0.18 because race entries dilute (all
-      // entries' boosts get re-normalised at Step 3c), but big enough to
-      // visibly fade an entry that has tanked materially since the
-      // market opened. Skipped silently when no baseline could be resolved
-      // (no snapshot pre-dating market.createdAt for this person).
+      // Plan D — composite-only agents (this commit). Wiki/news entry
+      // boosts were removed because the leaderboard score already
+      // integrates them; an entry's `pctChangeVsOpen` and `scoreDelta7d`
+      // already reflect whatever wiki/news activity moved its score.
+      // Race entry seeding is now: 7d momentum + vs-open flow + direction
+      // tilt — every input a derivative of the composite.
+      //
+      // Vs-open baseline: saturates at ±20% with a 0.10 coefficient —
+      // smaller than computeSignalBoost's 0.18 because race entries
+      // dilute (all entries' boosts get re-normalised at Step 3c), but
+      // big enough to visibly fade an entry that has tanked materially
+      // since the market opened. Skipped silently when no baseline could
+      // be resolved (no snapshot pre-dating market.createdAt).
       const vsOpenBoost =
         entrySig.pctChangeVsOpen != null && Number.isFinite(entrySig.pctChangeVsOpen)
           ? Math.max(-1, Math.min(1, entrySig.pctChangeVsOpen / 0.20)) * 0.10
@@ -263,7 +239,7 @@ export function computePrediction(
         entrySig.trendDirection === "UP" ? 0.03
         : entrySig.trendDirection === "DOWN" ? -0.03
         : 0;
-      const entryBoost = (momentum * 0.12 + wikiBoost + newsBoost + vsOpenBoost + dirBoost) * agent.recencyWeight;
+      const entryBoost = (momentum * 0.12 + vsOpenBoost + dirBoost) * agent.recencyWeight;
       scores[entryId] = Math.max(0.05, (scores[entryId] ?? (1 / n)) + entryBoost);
     }
   }
@@ -483,63 +459,18 @@ export function computePrediction(
 function computeSignalBoost(
   signals: TrendSignals,
   agent: AgentConfigData,
-  decisivelyDown: boolean,
 ): number {
   let boost = 0;
 
-  // Wiki Pulse — bullish leg gated behind `!decisivelyDown` and halved
-  // (was ±0.10) so it can no longer overwhelm `pctChangeVsOpen` at
-  // moderate moves.
-  //
-  // Why this gate exists — the stock-vs-flow distinction:
-  //   `wikiPulse` and `newsLevel` are STOCK signals, derived in
-  //   `getTrendSignals` from 24h-vs-trailing-7d ratios:
-  //     wikiDelta > 0.15  → "rising"   (currently elevated vs last week)
-  //     newsDelta > 0.3   → "red"      (currently elevated vs last week)
-  //   These tell us where attention SITS right now, not where it's headed.
-  //
-  //   `pctChangeVsOpen` is a FLOW signal:
-  //     pctChangeVsOpen = (fameIndex_now − fameIndex_marketOpen) / fameIndex_marketOpen
-  //   This tells us how the score has MOVED since the market opened on
-  //   Monday — which is the question Up/Down markets actually resolve on.
-  //
-  //   Stock and flow can legitimately diverge. A person who peaks on the
-  //   Monday the market opens, then fades through the week, will still
-  //   register as `wikiPulse rising` and `newsLevel red` (they're still
-  //   above their trailing-7d baseline) while their `pctChangeVsOpen`
-  //   goes negative. The 2026-05-18 misalignment (5 of 6 UpDown markets
-  //   at -1% to -18% from open with agents leaning Up 60-75%) was
-  //   exactly this pattern — the trend score itself behaved correctly,
-  //   but the agent decision engine was reading "currently elevated"
-  //   (stock) as a predictor of "will rise further" (flow):
-  //     pctChangeVsOpen ≈ -0.10 → -0.096
-  //     wikiPulse rising         → +0.10
-  //     newsLevel red            → +0.07
-  //     net signalBoost          → +0.044 (favours Up despite -10% move)
-  //
-  //   Note: the trend score is attention-only (see scoring/trendScore.ts —
-  //   no sentiment input anywhere). So a controversy that goes viral
-  //   pushes the score UP, not down — which means the bug is NOT
-  //   "double-counting attention while it tanks the score". It's the
-  //   subtler "high stock doesn't predict positive flow when the market
-  //   opened at the peak".
-  //
-  // Symmetry isn't the goal here — correctness is. Bullish stock signals
-  // get gated only when the flow signal already disagrees decisively
-  // (`pctChangeVsOpen < -0.05`). Bearish stock signals (`falling` /
-  // `green`) still apply normally so a person who is BOTH flowing down
-  // AND showing fading attention reads as even more obviously Down.
-  if (signals.wikiPulse === "rising" && !decisivelyDown) boost += 0.05 * agent.recencyWeight;
-  if (signals.wikiPulse === "falling") boost -= 0.05 * agent.recencyWeight;
-
-  // News level — same gate, same reasoning. `newsLevel === "red"` means
-  // current 24h news count is >30% above the trailing-7d baseline; it
-  // doesn't tell us whether attention is still building or already
-  // fading from a Monday peak. Coefficients halved (red was +0.07,
-  // green was -0.04) so flow (`pctChangeVsOpen`, ±0.18 saturated) is
-  // the dominant directional input across the full magnitude range.
-  if (signals.newsLevel === "red" && !decisivelyDown) boost += 0.04 * agent.recencyWeight;
-  if (signals.newsLevel === "green") boost -= 0.02 * agent.recencyWeight;
+  // Plan D — composite-only agents. Wiki/news component reads were
+  // dropped here in commit (this commit) because the trend score
+  // already integrates wiki + news + Google Trends + IG/YT followers
+  // (see scoring/trendScore.ts). Reading them again on top in the
+  // decision engine was double-counting attention. Agent decisions
+  // now derive purely from composite-derived signals: `pctChangeVsOpen`
+  // (flow) with `scoreDelta7d` legacy fallback, and the `trendDirection`
+  // consensus tilt. By construction agents can only move in directions
+  // the leaderboard score itself moves.
 
   // Primary directional read for binary up/down markets: move since
   // THIS market opened (Monday → Friday for weekly cards). Saturates at
@@ -695,10 +626,15 @@ export function computeJackpotPrediction(
       break;
     }
     case "news_reactive": {
-      const newsBoost = signals.newsLevel === "red" ? 80 : signals.newsLevel === "green" ? -40 : 10;
-      const wikiBoost = signals.wikiPulse === "rising" ? 50 : signals.wikiPulse === "falling" ? -30 : 0;
-      prediction += (newsBoost + wikiBoost) * agent.recencyWeight;
-      reasoning = `Weighted news=${signals.newsLevel}, wiki=${signals.wikiPulse}`;
+      // Plan D — composite-only agents. Was wiki+news coefficients
+      // (max ~±130). Replaced with a 24h-score-reaction signal: same
+      // "reacts to short news cycles" identity, expressed via the
+      // composite signal that already integrates news flow into the
+      // score. Coefficient 30 picked to roughly preserve the original
+      // archetype's max swing on typical 24h moves.
+      const reaction = signals.change24h * agent.recencyWeight * 30;
+      prediction += reaction;
+      reasoning = `Reactive to 24h score move (${signals.change24h.toFixed(1)}%)`;
       break;
     }
     case "long_horizon": {
@@ -723,10 +659,18 @@ export function computeJackpotPrediction(
       break;
     }
     case "culture_tracker": {
-      const socialBoost = signals.wikiPulse === "rising" ? 60 : signals.wikiPulse === "falling" ? -40 : 0;
+      // Plan D — composite-only agents. Was wikiPulse-driven. Replaced
+      // with `trendDirection` consensus (which already collapses
+      // wiki + news + momentum into UP/DOWN/FLAT inside getTrendSignals).
+      // Same "tracks cultural narrative direction" identity via the
+      // composite signal.
+      const directionBoost =
+        signals.trendDirection === "UP" ? 60 :
+        signals.trendDirection === "DOWN" ? -40 :
+        0;
       const momentum = signals.scoreDelta7d * agent.recencyWeight;
-      prediction += socialBoost + momentum;
-      reasoning = `Social/cultural signals: wiki=${signals.wikiPulse}, momentum=${signals.scoreDelta7d.toFixed(1)}`;
+      prediction += directionBoost + momentum;
+      reasoning = `Cultural direction: ${signals.trendDirection}, momentum=${signals.scoreDelta7d.toFixed(1)}`;
       break;
     }
     case "high_conviction": {
