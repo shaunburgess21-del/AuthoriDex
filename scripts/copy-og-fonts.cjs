@@ -1,5 +1,5 @@
 /**
- * Copy OG font assets into dist/og-fonts for Railway (fc-cache fallback).
+ * Copy Inter TTF assets into dist/og-fonts for opentype.js path outlines at runtime.
  * Run as part of npm run build.
  */
 const fs = require("fs");
@@ -16,8 +16,8 @@ if (!fs.existsSync(srcDir)) {
 fs.mkdirSync(destDir, { recursive: true });
 let count = 0;
 for (const name of fs.readdirSync(srcDir)) {
-  if (!/\.(woff2?|ttf|otf)$/i.test(name)) continue;
+  if (!/\.ttf$/i.test(name)) continue;
   fs.copyFileSync(path.join(srcDir, name), path.join(destDir, name));
   count++;
 }
-console.log(`[copy-og-fonts] Copied ${count} file(s) to ${destDir}`);
+console.log(`[copy-og-fonts] Copied ${count} TTF file(s) to ${destDir}`);

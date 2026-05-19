@@ -8,7 +8,7 @@ import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-/** Used by legacy dynamic OG SVG in og-routes (not matchup overlays). */
+/** Used by dynamic market/share OG SVG in og-routes (not matchup path overlays). */
 export const OG_FONT_FAMILY =
   "Inter, DejaVu Sans, Liberation Sans, sans-serif";
 
@@ -20,7 +20,7 @@ export const FONT_SEARCH_PATHS = [
 
 let startupLogged = false;
 
-/** Legacy — matchup overlays use path outlines, not @font-face. */
+/** No-op for market OG SVG; matchup overlays use path outlines instead. */
 export function getOgFontFaceStyle(): string {
   return "";
 }

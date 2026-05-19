@@ -23,6 +23,7 @@ import { checkVoteGate } from "@/lib/voteGate";
 import { isBudgetExhaustedVoteError } from "@/lib/voteErrors";
 import { CardComments, useCommentCount } from "@/components/comments/CardComments";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
+import { matchupOgImagePath } from "@shared/matchup-og";
 import {
   ArrowLeft,
   Clock,
@@ -198,10 +199,7 @@ export default function MatchupDetailPage() {
   useDocumentMeta({
     title: matchupPrompt ?? "Matchup",
     description: matchupVsDescription,
-    image:
-      matchup?.slug
-        ? `/api/og/vote/matchups/${encodeURIComponent(matchup.slug)}.jpg?v=5`
-        : null,
+    image: matchup?.slug ? matchupOgImagePath(matchup.slug) : null,
     url: canonicalShareUrl ?? null,
   });
 

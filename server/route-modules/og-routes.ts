@@ -24,6 +24,7 @@ import {
   renderMatchupOgImage,
   renderMatchupOgImageJpeg,
 } from "../services/matchup-og-image";
+import { matchupOgImagePath } from "@shared/matchup-og";
 import {
   getOgFontFaceStyle,
   logOgFontStartup,
@@ -169,17 +170,12 @@ function renderOgHtml(p: OgPagePayload): string {
 
 /* ───────────────────────────────────────────────────── OG image generation
  *
- * Sharp can't render TTF text directly, but it DOES rasterize SVG, and
- * SVG `<text>` is faithfully rendered through the bundled fontconfig.
- * That's how we composite a brand-coloured 1200x630 PNG with the title
- * + subtitle overlaid for any market.
+ * Market/share cards still rasterize SVG via sharp/librsvg with `<text>`.
+ * Matchup OG overlay labels use SVG paths from opentype.js + bundled Inter
+ * TTF (see matchup-og-image.ts) — not librsvg fonts or fontconfig.
  *
- * We avoid loading external fonts (no asset path baked in to the docker
- * image is reliable across Railway + Vercel). The default fontconfig
- * sans-serif on Railway's Debian base is fine for our brand wordmark.
- *
- * Output is buffered, cached for 24h via Cache-Control, and tiny
- * (~30–60kb) since it's solid colours + text.
+ * Default site OG uses a pre-rendered PNG; dynamic market SVG may still be
+ * font-sensitive on Linux. Output is cached 24h via Cache-Control.
  */
 /**
  * Sprint 3: live LMSR price chip rendered into the market OG. We render
@@ -838,11 +834,8 @@ async function lookupOpinionPoll(slug: string) {
   return p ?? null;
 }
 
-/** Bump when the matchup OG visual or encoding changes (cache bust). */
-const MATCHUP_OG_IMAGE_VERSION = "5";
-
 function matchupOgImageUrl(slug: string): string {
-  return `${SITE_URL}/api/og/vote/matchups/${encodeURIComponent(slug)}.jpg?v=${MATCHUP_OG_IMAGE_VERSION}`;
+  return `${SITE_URL}${matchupOgImagePath(slug)}`;
 }
 
 async function serveMatchupOgImage(

@@ -3,6 +3,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  MATCHUP_OG_IMAGE_VERSION,
+  matchupOgImagePath,
+} from "@shared/matchup-og";
+import {
   matchupOgDescription,
   matchupOgPromptTitle,
 } from "../server/services/matchup-og-meta";
@@ -12,11 +16,7 @@ import {
   renderMatchupOgImage,
   renderMatchupOgImageJpeg,
 } from "../server/services/matchup-og-image";
-import {
-  assertOgFontAssetsPresent,
-  FONT_SEARCH_PATHS,
-  getOgFontFaceStyle,
-} from "../server/services/og-fonts";
+import { assertOgFontAssetsPresent, FONT_SEARCH_PATHS } from "../server/services/og-fonts";
 import { assertOgPathFontsLoaded } from "../server/services/og-svg-text-paths";
 import {
   resolveMatchupOptionDisplay,
@@ -77,6 +77,14 @@ test("matchupBucketUrl builds public Supabase path shape", () => {
   );
 });
 
+test("matchupOgImagePath uses shared cache version v5", () => {
+  assert.equal(MATCHUP_OG_IMAGE_VERSION, "5");
+  assert.equal(
+    matchupOgImagePath("football-goat"),
+    "/api/og/vote/matchups/football-goat.jpg?v=5",
+  );
+});
+
 const PLACEHOLDER_CTX = {
   slug: "football-goat",
   title: "Football GOAT",
@@ -108,10 +116,6 @@ test("buildMatchupOverlaySvg uses path outlines only (no librsvg text)", () => {
   assert.equal(labels.prompt, "Who is the GOAT?");
   assert.equal(labels.cta, "Vote on VoxDex");
   assert.equal(labels.brand, "VoxDex");
-});
-
-test("getOgFontFaceStyle remains empty (matchup uses paths)", () => {
-  assert.equal(getOgFontFaceStyle(), "");
 });
 
 test("renderMatchupOgImage returns 1200x630 PNG without remote images", async () => {
