@@ -133,8 +133,134 @@ test("retryWithBackoff: rejects attempts < 1", async () => {
       attempts: 0,
       delayMs: () => 0,
     }),
-    /attempts must be >= 1/,
+    /attempts must be a positive integer/,
   );
+});
+
+test("retryWithBackoff: rejects non-finite attempts (NaN, Infinity)", async () => {
+  for (const bad of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+    await assert.rejects(
+      retryWithBackoff(async () => "x", {
+        attempts: bad,
+        delayMs: () => 0,
+      }),
+      /attempts must be a positive integer/,
+      `expected ${bad} to be rejected`,
+    );
+  }
+});
+
+test("retryWithBackoff: floors fractional attempts down to integer count", async () => {
+  // attempts: 2.9 → 2 attempts. Fail twice → throw the second error.
+  const { sleep } = makeFakeSleep();
+  let invocations = 0;
+  const fn = async () => {
+    invocations += 1;
+    throw new Error(`fail-${invocations}`);
+  };
+
+  await assert.rejects(
+    retryWithBackoff(fn, {
+      attempts: 2.9,
+      delayMs: () => 1,
+      sleep,
+    }),
+    /fail-2/,
+  );
+  assert.equal(invocations, 2, "fractional attempts should floor, not ceil");
+});
+
+test("retryWithBackoff: onRetry fires for each retried attempt with the right error", async () => {
+  const { sleep } = makeFakeSleep();
+  const seen: Array<{ attempt: number; msg: string }> = [];
+  let invocations = 0;
+  const fn = async () => {
+    invocations += 1;
+    if (invocations < 3) throw new Error(`transient-${invocations}`);
+    return "ok";
+  };
+
+  const result = await retryWithBackoff(fn, {
+    attempts: 3,
+    delayMs: () => 50,
+    sleep,
+    onRetry: (attempt, err) => {
+      seen.push({
+        attempt,
+        msg: err instanceof Error ? err.message : String(err),
+      });
+    },
+  });
+
+  assert.equal(result, "ok");
+  assert.deepEqual(seen, [
+    { attempt: 0, msg: "transient-1" },
+    { attempt: 1, msg: "transient-2" },
+  ]);
+});
+
+test("retryWithBackoff: onRetry does NOT fire for the final-attempt failure", async () => {
+  // Documented contract: the final-attempt error bubbles up through
+  // throw lastErr; the caller's catch is the single source of truth
+  // for "we gave up". onRetry must stay quiet on that branch.
+  const { sleep } = makeFakeSleep();
+  const seen: number[] = [];
+  let invocations = 0;
+  const fn = async () => {
+    invocations += 1;
+    throw new Error("fail");
+  };
+
+  await assert.rejects(
+    retryWithBackoff(fn, {
+      attempts: 2,
+      delayMs: () => 1,
+      sleep,
+      onRetry: (attempt) => {
+        seen.push(attempt);
+      },
+    }),
+    /fail/,
+  );
+  assert.equal(invocations, 2);
+  assert.deepEqual(
+    seen,
+    [0],
+    "onRetry should fire for attempt 0 (which retries) but NOT for attempt 1 (final, throws)",
+  );
+});
+
+test("retryWithBackoff: onRetry exception does NOT derail recovery", async () => {
+  // Defensive contract: a noisy onRetry hook (e.g. a misconfigured
+  // logger) must not eat the retry budget. The hook throw is caught
+  // and console.error'd; the retry loop continues normally.
+  const { sleep } = makeFakeSleep();
+  let invocations = 0;
+  const fn = async () => {
+    invocations += 1;
+    if (invocations === 1) throw new Error("transient");
+    return "ok";
+  };
+
+  // Silence the hook-error console.error so test output stays clean.
+  // We still verify the recovery succeeded, which is the property we
+  // actually care about.
+  const originalConsoleError = console.error;
+  console.error = () => {};
+  try {
+    const result = await retryWithBackoff(fn, {
+      attempts: 3,
+      delayMs: () => 1,
+      sleep,
+      onRetry: () => {
+        throw new Error("hook blew up");
+      },
+    });
+    assert.equal(result, "ok");
+    assert.equal(invocations, 2, "second attempt should still fire despite hook throw");
+  } finally {
+    console.error = originalConsoleError;
+  }
 });
 
 test("retryWithBackoff: respects a fixed-delay schedule", async () => {

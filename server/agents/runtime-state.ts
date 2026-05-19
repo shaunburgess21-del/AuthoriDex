@@ -82,6 +82,16 @@ async function loadFromDbWithRetry(): Promise<CachedState> {
     // enough that an action-worker tick still completes within its
     // 2-min cadence even on a fully-failed fetch.
     delayMs: (attempt) => LOAD_RETRY_BASE_DELAY_MS * (attempt + 1),
+    // Surface swallowed transient errors so on-call can see whether
+    // the boot-hiccup hypothesis is happening in the wild. Only fires
+    // for attempts that DID retry; the final-attempt failure bubbles
+    // through `isAgentsPaused()`'s catch as a `console.error` already.
+    onRetry: (attempt, err) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(
+        `[AgentRuntimeState] Retrying pause-flag read after attempt ${attempt + 1}/${LOAD_RETRY_ATTEMPTS} failed: ${msg}`,
+      );
+    },
   });
 }
 
@@ -91,7 +101,12 @@ async function getState(): Promise<CachedState> {
     return cache;
   }
   // De-duplicate concurrent fetches so a worker burst doesn't fan out
-  // dozens of identical SELECTs the moment the cache expires.
+  // dozens of identical SELECTs the moment the cache expires. If the
+  // retry wrapper exhausts its budget the inflight promise rejects;
+  // every awaiter sees the same rejection and each independently
+  // falls into `isAgentsPaused()`'s catch (fail-open). That keeps the
+  // de-dup correct on the unhappy path: a single DB outage never
+  // starts N concurrent retry storms across worker calls.
   if (inflight) return inflight;
   inflight = loadFromDbWithRetry().finally(() => {
     inflight = null;
