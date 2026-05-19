@@ -72,6 +72,7 @@ import { AdminInductionQueue } from "@/components/admin/AdminInductionQueue";
 import { AdminSettlementCenter } from "@/components/admin/AdminSettlementCenter";
 import { AdminAmmSection } from "@/components/admin/AdminAmmSection";
 import { AdminUserCreditHistory } from "@/components/admin/AdminUserCreditHistory";
+import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 import { AdminGamificationSection } from "@/components/admin/AdminGamificationSection";
 import { AdminLeaderboardDiff } from "@/components/admin/AdminLeaderboardDiff";
 import { AdminCategoriesSection } from "@/components/admin/AdminCategoriesSection";
@@ -6232,9 +6233,12 @@ export default function AdminDashboard() {
                         data-testid={`user-row-${user.id}`}
                       >
                         <div className="flex items-center gap-3 min-w-0">
-                          <div className="h-10 w-10 shrink-0 rounded-full bg-muted flex items-center justify-center">
-                            <Users className="h-5 w-5 text-muted-foreground" />
-                          </div>
+                          <UserProfileAvatar
+                            displayName={user.username}
+                            avatarUrl={user.avatarUrl}
+                            size="md"
+                            testId={`user-avatar-${user.id}`}
+                          />
                           <div className="min-w-0 flex-1">
                             <p className="font-medium truncate">
                               {user.username || "Unknown"}

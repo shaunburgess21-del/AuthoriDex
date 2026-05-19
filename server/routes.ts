@@ -12335,6 +12335,7 @@ Only return the JSON object.`;
       res.json(users.map(u => ({
         id: u.id,
         username: u.username,
+        avatarUrl: u.avatarUrl ?? null,
         role: u.role,
         rank: u.rank,
         xpPoints: u.xpPoints,
@@ -21629,6 +21630,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         SELECT
           p.id,
           p.username,
+          p.avatar_url      AS avatar_url,
           p.role,
           p.xp_points       AS xp_points,
           p.predict_credits AS wallet,
@@ -21644,6 +21646,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       `)).rows as unknown as Array<{
         id: string;
         username: string | null;
+        avatar_url: string | null;
         role: string;
         xp_points: number;
         wallet: number;
@@ -21655,6 +21658,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         users: rows.map((r) => ({
           id: r.id,
           username: r.username,
+          avatarUrl: r.avatar_url ?? null,
           role: r.role,
           xpPoints: Number(r.xp_points),
           predictCredits: Number(r.wallet),
