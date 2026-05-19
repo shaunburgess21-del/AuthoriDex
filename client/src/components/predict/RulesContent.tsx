@@ -39,7 +39,7 @@ export const RULES_CONTENT: Record<string, RulesEntry> = {
     steps: [
       { icon: <Swords className="h-4 w-4 text-violet-500" />, title: "Pick The Higher Closer", description: "Buy shares of the person you think will have the higher Trend Score when the weekly market closes." },
       { icon: <Target className="h-4 w-4 text-violet-500" />, title: "Closing Score Decides", description: "This market settles on the final closing Trend Score at weekly close, not on who gained more points during the week. Ties refund." },
-      { icon: <Trophy className="h-4 w-4 text-violet-500" />, title: "Trade Anytime, Pay 1cr/Win", description: "Share prices move with the crowd as news drops. Each winning share pays 1 credit at close, so cheaper shares pay bigger multiples — and you can sell early to lock in a profit before the buzzer." },
+      { icon: <Trophy className="h-4 w-4 text-violet-500" />, title: "1 Credit Per Winning Share", description: "Share prices move in real time. Each winning share pays 1 credit at close, so cheaper shares pay bigger multiples — sell anytime before close to lock in profits or cut losses." },
     ]
   },
   gainer: {
