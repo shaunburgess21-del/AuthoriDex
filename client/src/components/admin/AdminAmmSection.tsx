@@ -61,6 +61,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { AmmResolutionDialog, type ResolvableMarket } from "./AmmResolutionDialog";
 import { AmmOperationsTab } from "./AmmOperationsTab";
 import { PersonaPnlTile } from "./PersonaPnlTile";
+import { WorldMarketBudgetTile } from "./WorldMarketBudgetTile";
 
 // ---------------------------------------------------------------------------
 // API response shapes (mirroring server/routes.ts)
@@ -519,6 +520,8 @@ function OverviewTab() {
       </Card>
 
       <PersonaPnlTile />
+
+      <WorldMarketBudgetTile />
     </div>
   );
 }

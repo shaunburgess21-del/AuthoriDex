@@ -171,6 +171,44 @@ export const WORLD_MARKET_ASSESSMENT_TTL_MAX_MS = WORLD_MARKET_ASSESSMENT_TTL_LO
 /** @deprecated Kept for backwards compatibility with admin status JSON. */
 export const WORLD_MARKET_ASSESSMENT_TTL_MS = WORLD_MARKET_ASSESSMENT_TTL_NEAR_MS;
 
+/**
+ * Hard daily budget cap (USD) on world-market LLM spend, applied
+ * per-process by `server/agents/worldMarketBudget.ts`. When today's
+ * estimated spend would exceed this value, agents abstain from
+ * world markets for the rest of the UTC day. Cached assessments
+ * continue to serve normally — the cap only gates NEW LLM calls.
+ * Reset at UTC midnight.
+ *
+ * Set conservatively. The point is to bound worst-case overnight
+ * spend, not to optimise average cost. Raise via Railway env
+ * `WORLD_MARKETS_DAILY_BUDGET_USD` once you've observed steady-state
+ * production cost on the OpenAI billing dashboard for a week.
+ *
+ * NOTE: the live value at runtime is read by `worldMarketBudget.ts`
+ * directly from `process.env`. This exported constant is a snapshot
+ * at module load for display / docs / IDE discoverability. To change
+ * the live cap, set the env var and redeploy — don't edit this file.
+ */
+export const WORLD_MARKETS_DAILY_BUDGET_USD = (() => {
+  const raw = Number(process.env.WORLD_MARKETS_DAILY_BUDGET_USD);
+  return Number.isFinite(raw) && raw > 0 ? raw : 5.0;
+})();
+
+/**
+ * Per-call cost ESTIMATE used by the budget module to reserve budget
+ * BEFORE the LLM call fires. Deliberately on the conservative side —
+ * better to refuse one borderline call than to overrun the cap. Real
+ * cost varies with web_search activity and output token count; ops
+ * should reconcile against the actual OpenAI billing dashboard
+ * weekly. Override via Railway env
+ * `WORLD_MARKETS_PER_CALL_ESTIMATE_USD` if observation shows the
+ * estimate is way off in either direction.
+ */
+export const WORLD_MARKETS_PER_CALL_ESTIMATE_USD = (() => {
+  const raw = Number(process.env.WORLD_MARKETS_PER_CALL_ESTIMATE_USD);
+  return Number.isFinite(raw) && raw > 0 ? raw : 0.4;
+})();
+
 // Conviction re-bets: an agent already holding a position gets to bet
 // AGAIN if the Trend Score moves >5% in their favour from the original
 // buy's baseline. 5% is roughly one standard-deviation weekly move on

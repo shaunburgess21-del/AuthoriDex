@@ -24421,6 +24421,42 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
   });
 
   // ============================================================================
+  // WORLD-MARKET LLM BUDGET ENDPOINT
+  // ----------------------------------------------------------------------------
+  // Read-only view over the in-process world-market LLM budget counter
+  // (see server/agents/worldMarketBudget.ts). Surfaces today's spend, the
+  // cap, calls reserved/released/blocked, and whether the cap is currently
+  // exhausted. Powers the Operations-tab tile that lets the operator see
+  // the safety rail in action (or confirm it never fires).
+  //
+  //   GET /api/admin/amm/world-market-budget
+  //
+  // The counter is PER-PROCESS in memory — on a single-instance Railway
+  // deployment this is fine. Multi-instance scaling would mean the
+  // response shows whichever instance happens to serve the request; not
+  // a problem for current scale but document the assumption when scaling.
+  // ============================================================================
+
+  app.get("/api/admin/amm/world-market-budget", requireAuth, requireAdmin, async (_req: AuthRequest, res) => {
+    try {
+      const { getBudgetSnapshot } = await import("./agents/worldMarketBudget");
+      const { WORLD_MARKETS_LLM_ENABLED, WORLD_MARKETS_PER_CALL_ESTIMATE_USD } = await import("./agents/constants");
+      const snapshot = getBudgetSnapshot();
+      res.json({
+        ...snapshot,
+        // Surface the flag + per-call estimate so the tile can render
+        // "flag is off — budget moot" copy when applicable, and show the
+        // estimate next to the spend counter for context.
+        flagEnabled: WORLD_MARKETS_LLM_ENABLED,
+        perCallEstimateUsd: WORLD_MARKETS_PER_CALL_ESTIMATE_USD,
+      });
+    } catch (err: any) {
+      console.error("[AmmAdmin] world-market-budget fetch failed:", err);
+      res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
+    }
+  });
+
+  // ============================================================================
   // AMM PERSONA-BAND P&L ENDPOINT
   // ----------------------------------------------------------------------------
   // Per-band rollup of agent prediction performance (Brier + win rate) AND

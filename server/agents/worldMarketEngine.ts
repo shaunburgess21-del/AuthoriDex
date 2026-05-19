@@ -26,6 +26,7 @@ import {
   WORLD_MARKET_ASSESSMENT_TTL_LONG_MS,
 } from "./constants";
 import { getAiModel } from "../config/ai-models";
+import { tryReserveLlmCall } from "./worldMarketBudget";
 
 // Lazy-init the OpenAI client so importing this module from a context
 // without `OPENAI_API_KEY` set (CI test workers, scripts that exercise
@@ -263,6 +264,22 @@ async function callWorldMarketLlm(
   market: MarketWithEntries,
   entries: MarketEntryData[],
 ): Promise<PredictionAssessment | null> {
+  // Daily LLM budget gate — see server/agents/worldMarketBudget.ts.
+  // Pessimistically reserves the call's estimated cost BEFORE we touch
+  // OpenAI. If the cap would be breached, we abstain via the same null
+  // return path the existing error branches use (caller treats it as
+  // `api_error` and the agent abstains). Successful responses commit
+  // the reservation; failures release it so failed calls don't burn
+  // budget.
+  const reservation = tryReserveLlmCall();
+  if (!reservation.allowed) {
+    log(
+      `[WorldEngine] Budget cap reached for market=${market.id.slice(0, 8)}; ` +
+        `agent=${agent.displayName} abstaining (spend=$${reservation.snapshot.spendUsd.toFixed(2)} of $${reservation.snapshot.capUsd.toFixed(2)}).`,
+    );
+    return null;
+  }
+
   const systemPrompt = buildSystemPrompt(agent);
   const userPrompt = buildUserPrompt(market, entries);
 
@@ -291,6 +308,11 @@ async function callWorldMarketLlm(
       log(
         `[WorldEngine] Empty response for market=${market.id.slice(0, 8)} (seed agent=${agent.displayName}) — output items: [${outputTypes}]`,
       );
+      // Empty response — OpenAI may or may not bill, but from our side
+      // we got no usable output. Release to be conservative; we'd rather
+      // slightly understate spend than refuse a future borderline call
+      // because we burned budget on a 0-output response.
+      reservation.release();
       return null;
     }
 
@@ -306,6 +328,10 @@ async function callWorldMarketLlm(
       log(
         `[WorldEngine] JSON parse failed for market=${market.id.slice(0, 8)} (seed agent=${agent.displayName}) — raw: ${jsonText.slice(0, 200)}`,
       );
+      // OpenAI billed for the call but we couldn't parse the JSON.
+      // Commit anyway — the spend really happened — and let ops chase
+      // the parse failure separately.
+      reservation.commit();
       return null;
     }
 
@@ -319,15 +345,21 @@ async function callWorldMarketLlm(
       log(
         `[WorldEngine] Invalid schema for market=${market.id.slice(0, 8)} — keys: ${Object.keys(parsed).join(", ")}`,
       );
+      // Same as parse failure: API call was billable, schema was wrong.
+      reservation.commit();
       return null;
     }
 
+    reservation.commit();
     return parsed as PredictionAssessment;
   } catch (err: any) {
     const msg = err instanceof Error ? err.message : String(err);
     log(
       `[WorldEngine] API error for market=${market.id.slice(0, 8)} (seed agent=${agent.displayName}): ${msg}`,
     );
+    // Network / timeout / abort — no LLM response, refund the
+    // reservation so transient errors don't deplete the daily budget.
+    reservation.release();
     return null;
   }
 }

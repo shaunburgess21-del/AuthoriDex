@@ -823,6 +823,19 @@ this section with the flip date + observed-stable-for window.
    `envFlag()` in Railway — values `TRUE`, `1`, `yes`, `on` all work;
    strict `"true"` only is no longer required (see
    `server/agents/constants.ts` `envFlag` for the lenient parser).
+7. **Daily budget cap is set.** `WORLD_MARKETS_DAILY_BUDGET_USD`
+   defaults to `5.00` USD per process — a safety rail, NOT an
+   accounting boundary. If a buggy TTL or short-horizon spike tries to
+   blow past it, agents stop calling OpenAI for the rest of the UTC
+   day; cached assessments continue to serve. Raise via Railway env
+   once you've observed steady-state spend on the OpenAI billing
+   dashboard for a week. Log filter to watch:
+   `[WorldEngineBudget] cap exhausted` (fires at most once per day per
+   process). The companion `[WorldEngineBudget] Day rolled over`
+   line at UTC midnight reports yesterday's totals as a heartbeat.
+   Per-call cost estimate is tunable separately via
+   `WORLD_MARKETS_PER_CALL_ESTIMATE_USD` (default `0.40`) if billing
+   reconciliation shows the estimate is materially off.
 
 Calibration reports are archived at
 `ops/world-market-calibration-YYYY-MM-DD.md` for every run; keep the
