@@ -11,6 +11,7 @@ import {
 } from "../native-markets/lifecycle";
 import { getWeekContext as getUtcWeekContext } from "../native-markets/week-context";
 import { seedAmmMarket } from "../services/amm-house";
+import { applyWarmStartPrior } from "../services/amm-warmstart";
 import { log } from "../log";
 
 const MARKET_GENERATOR_LOCK_KEY = 5_204;
@@ -217,6 +218,19 @@ export async function generateWeeklyUpDown(): Promise<number> {
               { marketId: market.id, marketType: "updown", entryIdsInOrder },
               tx,
             );
+            // Warm-start prior — closes the 50/50 cold-start gap when the
+            // person's 7-day trend is clearly directional. Idempotent on
+            // marketId, no-op when WARM_START_PRIORS_ENABLED is false.
+            // Runs inside the same tx as seeding so the open state is
+            // atomic: either (seeded + warmed) or (neither).
+            await applyWarmStartPrior(
+              {
+                marketId: market.id,
+                outcomeOrder: [entryIdsInOrder[0], entryIdsInOrder[1]],
+                personId: person.id,
+              },
+              tx,
+            );
           }
         });
         created++;
@@ -323,6 +337,17 @@ export async function ensureUpDownMarketForInductee(person: {
             .map((e) => e.id);
           await seedAmmMarket(
             { marketId: market.id, marketType: "updown", entryIdsInOrder },
+            tx,
+          );
+          // Warm-start prior — see weekly-generator path above for full
+          // rationale. Idempotent on marketId so a retried inductee
+          // ensure call won't double-warm.
+          await applyWarmStartPrior(
+            {
+              marketId: market.id,
+              outcomeOrder: [entryIdsInOrder[0], entryIdsInOrder[1]],
+              personId: person.id,
+            },
             tx,
           );
         }

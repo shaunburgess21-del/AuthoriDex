@@ -28,12 +28,13 @@
  * never auto-resumes; a human must investigate the loss source first.
  */
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db";
 import { creditLedger, profiles, adminAuditLog } from "@shared/schema";
 import { log } from "../log";
 import { captureBackgroundError } from "../sentry";
 import { HOUSE_PROFILE_ID } from "../services/amm-house";
+import { HOUSE_PNL_TXN_TYPES } from "../services/amm-ledger-types";
 import {
   getAgentRuntimeState,
   setAgentsPaused,
@@ -52,17 +53,10 @@ export type {
 
 const WINDOW_MS = 24 * 60 * 60 * 1000;
 
-/** AMM-related ledger txn types that affect house P&L. All four are
- *  POSITIVE values from the house wallet's perspective when credited
- *  (e.g. `amm_settle_credit` = winning the seed back), NEGATIVE when
- *  debited (e.g. `amm_payout` = paying a winner). `SUM(amount)` over
- *  these rows for the house user gives the net delta directly. */
-const HOUSE_PNL_TXN_TYPES = [
-  "amm_seed_debit",
-  "amm_payout",
-  "amm_void_refund",
-  "amm_settle_credit",
-] as const;
+// `HOUSE_PNL_TXN_TYPES` lives in `server/services/amm-ledger-types.ts`
+// so the drain breaker, `/api/admin/amm/house`, and any future audit
+// consumer share one source of truth. The consistency test in
+// `tests/amm-house-pnl-consistency.test.ts` guards the contract.
 
 /** Default absolute threshold: 50k credits of 24h loss trips the
  *  breaker regardless of house balance. Override via env. */
@@ -151,7 +145,10 @@ export async function checkAndTripDrainBreaker(): Promise<DrainBreakerCheckResul
     .where(
       and(
         eq(creditLedger.userId, HOUSE_PROFILE_ID),
-        sql`${creditLedger.txnType} IN ('amm_seed_debit','amm_payout','amm_void_refund','amm_settle_credit')`,
+        // Consume the shared constant via `inArray` so adding a new AMM
+        // txn type in `amm-ledger-types.ts` automatically flows through
+        // here — see `tests/amm-house-pnl-consistency.test.ts`.
+        inArray(creditLedger.txnType, HOUSE_PNL_TXN_TYPES as readonly string[]),
         sql`${creditLedger.createdAt} >= ${cutoff}`,
       ),
     );

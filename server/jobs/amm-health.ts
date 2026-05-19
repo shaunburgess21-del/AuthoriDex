@@ -18,6 +18,8 @@
  *   4. Negative credits — any profile with predict_credits < 0.
  *   5. Duplicate idempotency keys in credit_ledger in the last 24h.
  *   6. Agent pause state — warn (not fail) if paused.
+ *   7. Tie-void rate — per-type rate of `amm_auto_tie` voids in the
+ *      lookback window. Warns at 5%, fails at 10%.
  *
  * Failure semantics: any check returning status="fail" makes the overall
  * result `ok=false`. "warn" rows do NOT flip ok — operators should still
@@ -85,6 +87,7 @@ export async function runAmmHealthCheck(
   checks.push(await checkNegativeCredits());
   checks.push(await checkDuplicateIdemKeys());
   checks.push(await checkAgentPause());
+  checks.push(await checkTieVoidRate(lookbackDays));
 
   const passed = checks.filter((c) => c.status === "pass").length;
   const warned = checks.filter((c) => c.status === "warn").length;
@@ -209,22 +212,42 @@ export function buildOrphanLedgerCheckResult(input: {
 // ---------------------------------------------------------------------------
 // Check 2: AMM seed-return drift
 // ---------------------------------------------------------------------------
+//
+// Expected balance per resolved market:
+//
+//   creditedToHouse = houseSeed + warmStartCost + totalUserCreditsIn − payoutLiability
+//
+// `warmStartCost` is the sum of `amm_warmstart_debit` ledger entries
+// for this market (positive number — debits stored negative). Zero on
+// markets that didn't trigger a warm-start, AND zero on every market
+// resolved before the warm-start feature shipped (the `LEFT JOIN ...
+// COALESCE(...) = 0` form below handles both cases identically).
 async function checkSeedReturnDrift(lookbackDays: number): Promise<CheckResult> {
   const cutoff = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000);
   // Require BOTH `creditedToHouse` and `payoutLiability` keys before
   // computing drift — a row missing one would arithmetic-cast to NULL
   // and silently get filtered out, hiding a real issue.
   const rows = (await db.execute(sql`
-    WITH resolved AS (
+    WITH warmstart AS (
+      SELECT
+        cl.metadata->>'marketId' AS market_id,
+        COALESCE(SUM(-cl.amount), 0)::numeric AS warm_start_cost
+      FROM credit_ledger cl
+      WHERE cl.txn_type = 'amm_warmstart_debit'
+      GROUP BY cl.metadata->>'marketId'
+    ),
+    resolved AS (
       SELECT
         pm.id,
         pm.title,
         (pm.resolution_notes::jsonb->>'creditedToHouse')::numeric  AS credited_to_house,
         (pm.resolution_notes::jsonb->>'payoutLiability')::numeric  AS payout_liability,
         mas.house_seed_amount,
-        mas.total_user_credits_in
+        mas.total_user_credits_in,
+        COALESCE(ws.warm_start_cost, 0)::numeric AS warm_start_cost
       FROM prediction_markets pm
       LEFT JOIN market_amm_state mas ON mas.market_id = pm.id
+      LEFT JOIN warmstart ws ON ws.market_id = pm.id
       WHERE pm.status = 'RESOLVED'
         AND pm.engine = 'amm'
         AND pm.resolved_at > ${cutoff}
@@ -243,15 +266,16 @@ async function checkSeedReturnDrift(lookbackDays: number): Promise<CheckResult> 
       title,
       credited_to_house,
       house_seed_amount,
+      warm_start_cost,
       total_user_credits_in,
       payout_liability,
-      (credited_to_house - house_seed_amount - total_user_credits_in + payout_liability) AS drift
+      (credited_to_house - house_seed_amount - warm_start_cost - total_user_credits_in + payout_liability) AS drift
     FROM resolved
     WHERE ABS(
-      credited_to_house - house_seed_amount - total_user_credits_in + payout_liability
+      credited_to_house - house_seed_amount - warm_start_cost - total_user_credits_in + payout_liability
     ) > 1
     ORDER BY ABS(
-      credited_to_house - house_seed_amount - total_user_credits_in + payout_liability
+      credited_to_house - house_seed_amount - warm_start_cost - total_user_credits_in + payout_liability
     ) DESC
     LIMIT 50
   `)).rows as unknown as Array<{
@@ -260,6 +284,7 @@ async function checkSeedReturnDrift(lookbackDays: number): Promise<CheckResult> 
     drift: number;
     credited_to_house: number;
     house_seed_amount: number;
+    warm_start_cost: number;
     total_user_credits_in: number;
     payout_liability: number;
   }>;
@@ -270,8 +295,8 @@ async function checkSeedReturnDrift(lookbackDays: number): Promise<CheckResult> 
     rowCount: rows.length,
     details:
       rows.length === 0
-        ? `All RESOLVED AMM markets in the last ${lookbackDays} days have seed-return arithmetic within 1 credit.`
-        : `Found ${rows.length} market(s) with > 1 credit drift between creditedToHouse and (houseSeed + totalUserCreditsIn − payoutLiability). Investigate before further deploys.`,
+        ? `All RESOLVED AMM markets in the last ${lookbackDays} days have seed-return arithmetic within 1 credit (warm-start cost included where applicable).`
+        : `Found ${rows.length} market(s) with > 1 credit drift between creditedToHouse and (houseSeed + warmStartCost + totalUserCreditsIn − payoutLiability). Investigate before further deploys.`,
     sample: rows.slice(0, 3),
   };
 }
@@ -415,6 +440,131 @@ async function checkAgentPause(): Promise<CheckResult> {
     name: "Agent runtime state",
     status: "warn",
     details: `Agents are PAUSED ${since}. Reason: ${reason}. If this was intentional, ignore. Otherwise resume via Supabase.`,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Check 7: tie-void rate per market type
+// ---------------------------------------------------------------------------
+
+/**
+ * Rate (0-1) above which `checkTieVoidRate` flips a market type to
+ * `warn`. 5% on a per-type basis is the operational floor where users
+ * start noticing the "I picked the winner and the market voided" feel
+ * — set conservatively because gainer/race markets are inherently
+ * close-call (3-10 contestants with similar weekly momentum) and a
+ * sustained void rate above this band is worth surfacing.
+ */
+export const TIE_VOID_RATE_WARN_PCT = 0.05;
+
+/**
+ * Rate (0-1) above which `checkTieVoidRate` flips a market type to
+ * `fail`. 10% is roughly "one in ten resolutions voids on a tie" —
+ * past this point either the tie threshold (`GAINER_TIE_EPSILON_PCT`)
+ * is too aggressive OR the market type's design needs a tiebreaker
+ * rule. Either way, sustained `fail` here should trigger a follow-up
+ * plan to add a tiebreaker (e.g. higher absolute score wins).
+ */
+export const TIE_VOID_RATE_FAIL_PCT = 0.10;
+
+/**
+ * Minimum sample size before tie-void rate is reported as anything
+ * other than `pass`. With only 1-2 resolved markets in the window a
+ * single tied resolution would read as 50-100%, which isn't an actual
+ * signal — it's small-sample noise. 10 markets per type is the floor
+ * at which a 5% rate represents a real pattern.
+ */
+const TIE_VOID_RATE_MIN_SAMPLE = 10;
+
+async function checkTieVoidRate(lookbackDays: number): Promise<CheckResult> {
+  const cutoff = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000);
+
+  // Tied-resolution voids are identified by
+  // `resolution_notes::jsonb->>'outcome' = 'void_tie'`. The `void_reason`
+  // column ALSO carries 'amm_auto_tie' briefly inside the AMM resolver,
+  // but the cron resolver (server/jobs/market-resolver.ts) immediately
+  // overwrites it with a humanized string ('Tie — score unchanged',
+  // 'Tie — identical scores', 'Tie — identical top gain percentage') so
+  // querying `void_reason` would miss every real tie. The
+  // `resolution_notes` JSON outcome field is set by the same outer call
+  // and is the reliable signal across updown / h2h / gainer.
+  //
+  // The `~ '^\s*\{'` cast guard mirrors checkSeedReturnDrift — some
+  // legacy / admin rows carry plain-text resolution_notes which would
+  // crash the jsonb cast.
+  const rows = (await db.execute(sql`
+    SELECT
+      market_type,
+      COUNT(*) FILTER (WHERE status IN ('RESOLVED','VOID'))::int AS settled,
+      COUNT(*) FILTER (
+        WHERE status = 'VOID'
+          AND resolution_notes ~ '^\\s*\\{'
+          AND resolution_notes::jsonb->>'outcome' = 'void_tie'
+      )::int AS tie_voids
+    FROM prediction_markets
+    WHERE engine = 'amm'
+      AND market_type IN ('updown','h2h','gainer')
+      AND resolved_at > ${cutoff}
+    GROUP BY market_type
+    ORDER BY market_type
+  `)).rows as unknown as Array<{
+    market_type: string;
+    settled: number;
+    tie_voids: number;
+  }>;
+
+  type Breakdown = {
+    market_type: string;
+    settled: number;
+    tie_voids: number;
+    rate: number;
+    flag: "pass" | "warn" | "fail" | "low_sample";
+  };
+
+  const breakdown: Breakdown[] = rows.map((r) => {
+    const rate = r.settled > 0 ? r.tie_voids / r.settled : 0;
+    const flag: Breakdown["flag"] =
+      r.settled < TIE_VOID_RATE_MIN_SAMPLE
+        ? "low_sample"
+        : rate >= TIE_VOID_RATE_FAIL_PCT
+        ? "fail"
+        : rate >= TIE_VOID_RATE_WARN_PCT
+        ? "warn"
+        : "pass";
+    return { market_type: r.market_type, settled: r.settled, tie_voids: r.tie_voids, rate, flag };
+  });
+
+  const worst = breakdown.reduce<Breakdown["flag"]>(
+    (acc, b) => (b.flag === "fail" ? "fail" : b.flag === "warn" && acc !== "fail" ? "warn" : acc),
+    "pass",
+  );
+
+  const status: CheckStatus = worst === "fail" ? "fail" : worst === "warn" ? "warn" : "pass";
+
+  const detailLines = breakdown.length === 0
+    ? [`No RESOLVED/VOID AMM native markets in the last ${lookbackDays}d.`]
+    : breakdown.map((b) => {
+        const pct = (b.rate * 100).toFixed(1);
+        const tag =
+          b.flag === "low_sample"
+            ? "sample<10, ignoring"
+            : b.flag === "fail"
+            ? `>=${(TIE_VOID_RATE_FAIL_PCT * 100).toFixed(0)}% FAIL`
+            : b.flag === "warn"
+            ? `>=${(TIE_VOID_RATE_WARN_PCT * 100).toFixed(0)}% warn`
+            : "ok";
+        return `${b.market_type}: ${b.tie_voids}/${b.settled} (${pct}%, ${tag})`;
+      });
+
+  return {
+    name: `Tie-void rate per market type (last ${lookbackDays}d)`,
+    status,
+    rowCount: breakdown.reduce((s, b) => s + b.tie_voids, 0),
+    details:
+      status === "pass"
+        ? `Tie-void rate within bounds. ${detailLines.join("; ")}`
+        : `Tie-void rate elevated. ${detailLines.join("; ")}. If a market type sustains >${(TIE_VOID_RATE_WARN_PCT * 100).toFixed(0)}% across multiple weeks, consider adding a tiebreaker rule (e.g. higher absolute score wins) instead of voiding.`,
+    sample: breakdown,
   };
 }
 

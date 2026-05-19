@@ -35,7 +35,7 @@ import {
 } from "@shared/schema";
 import { db } from "../db";
 import { log } from "../log";
-import { returnAmmSeedAtSettlement } from "./amm-house";
+import { HOUSE_PROFILE_ID, returnAmmSeedAtSettlement } from "./amm-house";
 import { createNotification } from "./notifications";
 import {
   buildAmmResolutionNotification,
@@ -85,6 +85,58 @@ export type ResolveAmmMarketError =
   | { error: "invalid_state"; message: string }
   | { error: "winner_invalid"; message: string }
   | { error: "missing_amm_state"; message: string };
+
+/**
+ * Pure helper — picks the credit_ledger shape for a winning-share
+ * payout based on who the recipient is.
+ *
+ * Today, the only user that holds shares without having paid for them
+ * via `executeBuy` is the house, and only via the warm-start prior
+ * mechanism (see `server/services/amm-warmstart.ts`). Splitting the
+ * payout into a distinct `amm_warmstart_payout` txn type lets the
+ * admin house dashboard and drain breaker correctly attribute the
+ * offsetting inflow when the warmed side wins — without this split
+ * the warm-buy debit shows up but the recovery payout looks like a
+ * regular user payout, biasing the dashboard against warm-start.
+ *
+ * Exported so `tests/amm-resolver-house-warmstart-payout.test.ts`
+ * can pin the contract without spinning up the full DB transaction.
+ *
+ * Forward-looking note: if we ever add OTHER paths where the house
+ * holds shares (e.g. liquidity provision, market making), the split
+ * logic should consult `market_bets.bet_metadata->>'source'` instead
+ * of identifying the house by `userId` alone. Today the assumption
+ * "house holds shares iff warm-start" is exact.
+ */
+export interface PayoutLedgerShape {
+  /** `'amm_payout'` for non-house users; `'amm_warmstart_payout'` for
+   *  the house (today the house only holds shares via warm-start). */
+  txnType: "amm_payout" | "amm_warmstart_payout";
+  /** Unique idempotency key. House path uses a market-scoped key so
+   *  the warm-start payout converges idempotently on a single row per
+   *  market regardless of retry storms. */
+  idempotencyKey: string;
+  /** Optional `source` tag stamped into ledger metadata. Set for the
+   *  house path so analysts can filter without joining `market_bets`. */
+  source?: "house_warm_start";
+}
+
+export function selectPayoutLedgerShape(
+  userId: string,
+  marketId: string,
+): PayoutLedgerShape {
+  if (userId === HOUSE_PROFILE_ID) {
+    return {
+      txnType: "amm_warmstart_payout",
+      idempotencyKey: `amm_warmstart_payout_${marketId}`,
+      source: "house_warm_start",
+    };
+  }
+  return {
+    txnType: "amm_payout",
+    idempotencyKey: `amm_payout_${marketId}_${userId}`,
+  };
+}
 
 /**
  * Settle an AMM market. Idempotent — re-running on an already-resolved
@@ -558,12 +610,17 @@ async function runWinnerPath(
     const payout = Math.floor(netShares);
 
     if (payout > 0) {
-      const idempotencyKey = `amm_payout_${marketId}_${userId}`;
+      // `selectPayoutLedgerShape` returns the right txn type + idempotency
+      // key + optional source tag based on who the recipient is. House
+      // recipients (warm-start payouts) get `amm_warmstart_payout` so
+      // the dashboard and drain breaker can attribute the offsetting
+      // inflow correctly.
+      const shape = selectPayoutLedgerShape(userId, marketId);
       const existing = await tx
         .select({ id: creditLedger.id })
         .from(creditLedger)
         .where(
-          sql`${creditLedger.userId} = ${userId} AND ${creditLedger.idempotencyKey} = ${idempotencyKey}`,
+          sql`${creditLedger.userId} = ${userId} AND ${creditLedger.idempotencyKey} = ${shape.idempotencyKey}`,
         )
         .limit(1);
 
@@ -577,18 +634,19 @@ async function runWinnerPath(
         if (updated) {
           await tx.insert(creditLedger).values({
             userId,
-            txnType: "amm_payout",
+            txnType: shape.txnType,
             amount: payout,
             walletType: "VIRTUAL",
             balanceAfter: updated.predictCredits,
             source: "amm_settle",
-            idempotencyKey,
+            idempotencyKey: shape.idempotencyKey,
             metadata: {
               marketId,
               winnerEntryId,
               netShares,
               totalBuyShares: slot.totalBuyShares,
               sellShares,
+              ...(shape.source ? { source: shape.source } : {}),
             },
           });
           settledUserCount++;

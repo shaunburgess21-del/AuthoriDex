@@ -30,3 +30,7 @@ dry-run-*-output.json
 
 # phantom-diff diagnostic captures
 phantom-capture-*.log
+
+# World-market LLM calibration cache (re-runnable; the dated report
+# is committed instead — see ops/world-market-calibration-*.md)
+ops/.world-market-calibration-cache.json

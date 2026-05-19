@@ -23762,10 +23762,13 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         .where(eq(profiles.id, HOUSE_PROFILE_ID))
         .limit(1);
 
-      // Aggregate ledger by AMM txn type. amm_seed_debit / amm_payout /
-      // amm_void_refund are negative on the house side (debits); other
-      // amm_* rows credit the house. A single grouped query keeps this
-      // O(1) regardless of trade volume.
+      // Aggregate ledger by AMM txn type. Source-of-truth set lives in
+      // `server/services/amm-ledger-types.ts` so this and the drain
+      // breaker can't drift — see `tests/amm-house-pnl-consistency.test.ts`.
+      // `amm_warmstart_debit` / `amm_warmstart_payout` only carry
+      // non-zero volume once WARM_START_PRIORS_ENABLED flips on; the
+      // shared set keeps both visible from day one of enablement.
+      const { HOUSE_LEDGER_DISPLAY_TXN_TYPES } = await import("./services/amm-ledger-types");
       const ledgerAgg = await db
         .select({
           txnType: creditLedger.txnType,
@@ -23776,7 +23779,10 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         .where(
           and(
             eq(creditLedger.userId, HOUSE_PROFILE_ID),
-            sql`${creditLedger.txnType} IN ('amm_seed_debit','amm_payout','amm_void_refund','amm_settle_credit','initial_grant')`,
+            inArray(
+              creditLedger.txnType,
+              HOUSE_LEDGER_DISPLAY_TXN_TYPES as readonly string[],
+            ),
           ),
         )
         .groupBy(creditLedger.txnType);
@@ -23786,6 +23792,8 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         byType[r.txnType] = { total: Number(r.total), count: Number(r.count) };
       }
       const seeded = -(byType.amm_seed_debit?.total ?? 0); // debits are negative
+      const warmStartCost = -(byType.amm_warmstart_debit?.total ?? 0);
+      const warmStartPayout = byType.amm_warmstart_payout?.total ?? 0;
       const settledCredits = byType.amm_settle_credit?.total ?? 0;
       const paidOut = -(byType.amm_payout?.total ?? 0);
       const refunded = -(byType.amm_void_refund?.total ?? 0);
@@ -23813,9 +23821,12 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       const openCreditsIn = Number(openExposureRows[0]?.totalCreditsIn ?? 0);
       const openMarketCount = Number(openExposureRows[0]?.marketCount ?? 0);
 
-      // Realised P&L = settle credits returned to the house minus the
-      // seed debits for those same (now closed) markets. Equivalent to
-      // SUM(creditedToHouse - houseSeedAmount) over RESOLVED+VOID rows.
+      // Realised P&L = (settle credits + warm-start payouts received by the
+      // house) − (seed debits + warm-start debits) over RESOLVED+VOID
+      // markets. Pre-warmstart era: warmStartPayout = 0 AND resolvedWarmstart
+      // = 0, so the formula collapses to (settledCredits − resolvedSeed),
+      // i.e. identical to the original. Post-flip: the offsetting flows
+      // correctly net out so the dashboard isn't biased against warm-start.
       const resolvedAgg = await db
         .select({
           seedSum: sql<string>`COALESCE(SUM(${marketAmmState.houseSeedAmount}), 0)`,
@@ -23831,7 +23842,26 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         );
       const resolvedSeed = Number(resolvedAgg[0]?.seedSum ?? 0);
       const resolvedMarketCount = Number(resolvedAgg[0]?.marketCount ?? 0);
-      const realisedPnl = settledCredits - resolvedSeed;
+
+      // Warm-start cost across RESOLVED/VOID markets only. Joins the
+      // ledger metadata.marketId back to prediction_markets so we only
+      // pick up debits whose market has actually closed (excluding the
+      // open exposure, which is still in flight). Zero rows pre-flip
+      // returns 0 — the COALESCE handles it.
+      const resolvedWarmstartRows = (await db.execute(sql`
+        SELECT COALESCE(SUM(-cl.amount), 0)::numeric AS warmstart_cost
+        FROM credit_ledger cl
+        INNER JOIN prediction_markets pm
+          ON pm.id = (cl.metadata->>'marketId')
+        WHERE cl.txn_type = 'amm_warmstart_debit'
+          AND cl.user_id = ${HOUSE_PROFILE_ID}
+          AND pm.engine = 'amm'
+          AND pm.status IN ('RESOLVED', 'VOID')
+      `)).rows as unknown as Array<{ warmstart_cost: number }>;
+      const resolvedWarmstart = Number(resolvedWarmstartRows[0]?.warmstart_cost ?? 0);
+
+      const realisedPnl =
+        settledCredits + warmStartPayout - resolvedSeed - resolvedWarmstart;
 
       // Ledger reconciliation: profile.predict_credits should equal
       // SUM(credit_ledger.amount) for the house user. Drift here is
@@ -23853,6 +23883,17 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         aggregates: {
           initialGrant,
           totalSeeded: seeded,
+          // Lifetime warm-start outflow (will read 0 until
+          // WARM_START_PRIORS_ENABLED is flipped on). Mirrors the
+          // existing `totalSeeded` shape so the admin tile can
+          // surface both with the same formatting.
+          totalWarmStartCost: warmStartCost,
+          // Lifetime warm-start payout INFLOW — house's warm-bought
+          // shares that won at resolution. Pairs with totalWarmStartCost
+          // so a future tile can show net warm-start P&L. Reads 0 until
+          // the first warm-started market resolves with the warmed
+          // side as the winner.
+          totalWarmStartPayout: warmStartPayout,
           totalSettledCredits: settledCredits,
           totalPaidOut: paidOut,
           totalRefunded: refunded,
@@ -24375,6 +24416,166 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       });
     } catch (err: any) {
       console.error("[AmmAdmin] health audit failed:", err);
+      res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
+    }
+  });
+
+  // ============================================================================
+  // AMM PERSONA-BAND P&L ENDPOINT
+  // ----------------------------------------------------------------------------
+  // Per-band rollup of agent prediction performance (Brier + win rate) AND
+  // realised credit P&L from trading. Surfaces in the admin AMM "Overview"
+  // tile so we can see whether the agent ecosystem is calibrated — sharps
+  // should out-earn over a multi-week window; if non-sharp bands are
+  // systematically winning, that's a pricing-engine bug to investigate.
+  //
+  //   GET /api/admin/amm/persona-pnl?days=30
+  //
+  // Brier and win rate are computed from settled `market_bets` (status
+  // 'won'/'lost') in the window. Credit P&L is the net of AMM and jackpot
+  // ledger txns ONLY — `agent_topup` is excluded so house refills don't
+  // inflate trading performance.
+  // ============================================================================
+
+  app.get("/api/admin/amm/persona-pnl", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { agentConfigs } = await import("@shared/schema");
+
+      const daysRaw = Number(req.query.days);
+      const days =
+        Number.isFinite(daysRaw) && daysRaw > 0 && daysRaw <= 3650
+          ? Math.floor(daysRaw)
+          : 30;
+      // `lifetime` shorthand: callers can pass days=0 OR days=3650 to mean
+      // "no lower bound on time". 3650 is the same window the weekly
+      // lifetime-drift cron uses, so we keep the conventions aligned.
+      const isLifetime = req.query.days === "0" || days >= 3650;
+      const cutoff = isLifetime
+        ? new Date(0)
+        : new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+      const labelDays = isLifetime ? "lifetime" : `${days}d`;
+
+      // ---- Brier + win rate per persona band, from market_bets only.
+      //
+      // We read confidence + winner directly from the bet rows instead of
+      // `agent_performance` because the latter is bucketed per-week and
+      // doesn't support arbitrary windows. `confidence` is a numeric(4,3)
+      // text column in market_bets; we COALESCE to 0.5 to match the
+      // `scoreResolvedMarket` fallback so the Brier math agrees.
+      //
+      // The CASE on `winner_entry_id IS NULL` keeps void markets out of
+      // the won/lost denominator — a voided market is neither a win nor
+      // a loss; the bet is refunded and contributes 0 to Brier scoring.
+      const brierRows = (await db.execute(sql`
+        SELECT
+          COALESCE(ac.simulation_profile->>'personaBand', 'unknown') AS persona_band,
+          COUNT(DISTINCT ac.id)::int AS agent_count,
+          COUNT(*) FILTER (WHERE mb.status IN ('won','lost'))::int AS settled_bets,
+          COUNT(*) FILTER (WHERE mb.status = 'won')::int AS wins,
+          AVG(
+            CASE
+              WHEN mb.status = 'won' THEN
+                POWER(COALESCE(mb.confidence::numeric, 0.5) - 1.0, 2)
+              WHEN mb.status = 'lost' THEN
+                POWER(COALESCE(mb.confidence::numeric, 0.5) - 0.0, 2)
+              ELSE NULL
+            END
+          ) AS avg_brier
+        FROM agent_configs ac
+        LEFT JOIN market_bets mb ON mb.agent_id = ac.id
+          AND mb.status IN ('won','lost')
+          AND mb.settled_at > ${cutoff}
+        GROUP BY persona_band
+        ORDER BY persona_band
+      `)).rows as unknown as Array<{
+        persona_band: string;
+        agent_count: number;
+        settled_bets: number;
+        wins: number;
+        avg_brier: number | null;
+      }>;
+
+      // ---- Realised credit P&L per persona band, from credit_ledger.
+      //
+      // Sum AMM + jackpot ledger entries ONLY. Excludes agent_topup
+      // (house refills) and signup_bonus / profile_avatar (one-offs).
+      // Buys + stakes are stored negative; sells + payouts + refunds are
+      // positive. The net for each agent = their realised trading P&L.
+      // Aggregated up via persona band.
+      const pnlRows = (await db.execute(sql`
+        SELECT
+          COALESCE(ac.simulation_profile->>'personaBand', 'unknown') AS persona_band,
+          COALESCE(SUM(cl.amount), 0)::numeric AS credit_pnl,
+          COUNT(*)::int AS trade_count
+        FROM agent_configs ac
+        LEFT JOIN credit_ledger cl ON cl.user_id = ac.user_id
+          AND cl.txn_type IN (
+            'amm_buy',
+            'amm_sell',
+            'amm_payout',
+            'amm_void_refund',
+            'prediction_stake',
+            'prediction_payout',
+            'prediction_refund'
+          )
+          AND cl.created_at > ${cutoff}
+        GROUP BY persona_band
+        ORDER BY persona_band
+      `)).rows as unknown as Array<{
+        persona_band: string;
+        credit_pnl: number;
+        trade_count: number;
+      }>;
+
+      const pnlByBand = new Map(pnlRows.map((r) => [r.persona_band, r]));
+
+      // Join the two queries by band. `unknown` band exists if any agent
+      // was seeded before simulation_profile was populated — keep it in
+      // the output for visibility rather than silently filtering.
+      const bands = brierRows.map((b) => {
+        const pnl = pnlByBand.get(b.persona_band);
+        const settled = b.settled_bets ?? 0;
+        const winRate = settled > 0 ? (b.wins ?? 0) / settled : null;
+        const brier = b.avg_brier != null ? Number(b.avg_brier) : null;
+        const creditPnl = pnl ? Number(pnl.credit_pnl) : 0;
+        const tradeCount = pnl ? pnl.trade_count : 0;
+        // Divergence flag: Brier is "good" (<0.20) but credit P&L is
+        // negative. Means the agent is calibrated on probabilities but
+        // is sizing/timing badly against the LMSR curve. The other
+        // direction (high Brier + positive P&L) is less interesting —
+        // they're just lucky or trading expensive sides cheap.
+        const divergence =
+          brier != null && brier < 0.20 && creditPnl < 0;
+        return {
+          band: b.persona_band,
+          agentCount: b.agent_count,
+          settledBets: settled,
+          wins: b.wins,
+          brierAvg: brier,
+          winRate,
+          creditPnl,
+          tradeCount,
+          divergence,
+        };
+      });
+
+      // Drop the synthetic 'unknown' band from the response unless it
+      // contains real signal — most catalogs use the standard five bands
+      // and showing 'unknown' with zero settled bets is just noise.
+      const cleanedBands = bands.filter(
+        (b) =>
+          b.band !== "unknown" ||
+          (b.settledBets > 0 || b.tradeCount > 0 || b.agentCount > 0),
+      );
+
+      res.json({
+        windowLabel: labelDays,
+        windowDays: isLifetime ? null : days,
+        bands: cleanedBands,
+        generatedAt: new Date().toISOString(),
+      });
+    } catch (err: any) {
+      console.error("[AmmAdmin] persona-pnl failed:", err);
       res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
     }
   });

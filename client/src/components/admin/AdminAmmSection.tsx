@@ -60,6 +60,7 @@ import { toast } from "sonner";
 import { apiRequest } from "@/lib/queryClient";
 import { AmmResolutionDialog, type ResolvableMarket } from "./AmmResolutionDialog";
 import { AmmOperationsTab } from "./AmmOperationsTab";
+import { PersonaPnlTile } from "./PersonaPnlTile";
 
 // ---------------------------------------------------------------------------
 // API response shapes (mirroring server/routes.ts)
@@ -73,6 +74,15 @@ interface HouseSnapshot {
   aggregates: {
     initialGrant: number;
     totalSeeded: number;
+    /** Lifetime warm-start outflow (0 until WARM_START_PRIORS_ENABLED flips on). */
+    totalWarmStartCost: number;
+    /**
+     * Lifetime warm-start INFLOW — house's warm-bought shares that won
+     * at resolution. Pairs with `totalWarmStartCost` so a future tile
+     * can show net warm-start P&L. Reads 0 until the first warm-started
+     * market resolves with the warmed side as the winner.
+     */
+    totalWarmStartPayout: number;
     totalSettledCredits: number;
     totalPaidOut: number;
     totalRefunded: number;
@@ -507,6 +517,8 @@ function OverviewTab() {
           )}
         </CardContent>
       </Card>
+
+      <PersonaPnlTile />
     </div>
   );
 }

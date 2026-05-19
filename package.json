@@ -33,7 +33,8 @@
     "amm:health": "tsx scripts/amm-health-check.ts",
     "amm:create-open": "tsx scripts/amm-create-open-market.ts",
     "amm:void": "tsx scripts/amm-void-market.ts",
-    "amm:reconcile-orphans": "tsx ops/reconcile-orphan-amm-seeds.ts"
+    "amm:reconcile-orphans": "tsx ops/reconcile-orphan-amm-seeds.ts",
+    "world:calibrate": "tsx scripts/world-market-calibration.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

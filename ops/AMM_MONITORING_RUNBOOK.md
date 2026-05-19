@@ -88,18 +88,33 @@ wired by the new helpers):
 Every resolved market's house P&L should equal:
 
 ```
-creditedToHouse = houseSeedAmount + totalUserCreditsIn - payoutLiability
+creditedToHouse = houseSeedAmount + warmStartCost + totalUserCreditsIn - payoutLiability
 ```
+
+Where `warmStartCost` is the sum of any `amm_warmstart_debit` ledger
+entries for the market (zero on markets that didn't trigger a
+warm-start prior, AND zero on every market resolved before the
+warm-start feature shipped).
 
 A drift > 1 credit (rounding tolerance) means somewhere a credit was
 created or destroyed. Most likely cause: a bet row written outside the
-`executeBuy`/`executeSell` path, or a `prediction_payout` / `prediction_refund`
-ledger row not idempotent on the bet id.
+`executeBuy`/`executeSell` path, a `prediction_payout` / `prediction_refund`
+ledger row not idempotent on the bet id, OR (post-warmstart launch) a
+warm-start ledger row that the audit query failed to attribute to a
+market via `metadata->>'marketId'`.
 
 ### SQL — flag drift on RESOLVED markets in the last 7 days
 
 ```sql
-WITH resolved AS (
+WITH warmstart AS (
+  SELECT
+    metadata->>'marketId' AS market_id,
+    COALESCE(SUM(-amount), 0) AS warm_start_cost
+  FROM credit_ledger
+  WHERE txn_type = 'amm_warmstart_debit'
+  GROUP BY metadata->>'marketId'
+),
+resolved AS (
   SELECT
     pm.id,
     pm.title,
@@ -107,9 +122,11 @@ WITH resolved AS (
     (pm.resolution_notes::jsonb->>'creditedToHouse')::numeric  AS credited_to_house,
     (pm.resolution_notes::jsonb->>'payoutLiability')::numeric  AS payout_liability,
     mas.house_seed_amount,
-    mas.total_user_credits_in
+    mas.total_user_credits_in,
+    COALESCE(ws.warm_start_cost, 0)::numeric AS warm_start_cost
   FROM prediction_markets pm
   LEFT JOIN market_amm_state mas ON mas.market_id = pm.id
+  LEFT JOIN warmstart ws ON ws.market_id = pm.id
   WHERE pm.status = 'RESOLVED'
     AND pm.engine = 'amm'
     AND pm.resolved_at > now() - interval '7 days'
@@ -124,22 +141,26 @@ SELECT
   title,
   credited_to_house,
   house_seed_amount,
+  warm_start_cost,
   total_user_credits_in,
   payout_liability,
   credited_to_house
     - house_seed_amount
+    - warm_start_cost
     - total_user_credits_in
     + payout_liability AS drift
 FROM resolved
 WHERE ABS(
   credited_to_house
     - house_seed_amount
+    - warm_start_cost
     - total_user_credits_in
     + payout_liability
 ) > 1
 ORDER BY ABS(
   credited_to_house
     - house_seed_amount
+    - warm_start_cost
     - total_user_credits_in
     + payout_liability
 ) DESC;
@@ -375,6 +396,38 @@ In the Railway dashboard:
 4. Variables: `CRON_SECRET` is shared with the main service; reference
    it via `${{ shared.CRON_SECRET }}` in the cron service settings.
 
+### Companion cron — weekly lifetime drift sweep
+
+The 15-min cron only audits the last 30 days. A drift introduced 45
+days ago would never surface. To cover that long-tail integrity gap,
+add a SECOND Railway cron that runs the same endpoint with a 10-year
+lookback once a week, just after weekly resolution completes.
+
+In the Railway dashboard:
+
+1. Create a new **Cron** service alongside the 15-min one (do NOT
+   modify the existing 15-min cron — the two run independently).
+2. **Schedule:** `0 4 * * 0` (Sundays 04:00 UTC, ~4h after the
+   Sunday-night weekly resolution wraps).
+3. **Command:**
+   ```bash
+   curl -fsS -X POST \
+     -H "Authorization: Bearer $CRON_SECRET" \
+     "$RAILWAY_PUBLIC_DOMAIN/api/cron/amm-health-check?days=3650"
+   ```
+   (`days=3650` is ~10 years, effectively "all RESOLVED markets ever".
+   No code change required — the endpoint already accepts a `days`
+   query param.)
+4. Variables: same `${{ shared.CRON_SECRET }}` as the 15-min cron.
+
+The endpoint emits the same `[Cron][amm-health-check] PASS/FAIL` log
+line for both crons, so a single Railway saved-search alert covers
+both schedules. Expected behaviour: PASS every Sunday. Any FAIL on
+the weekly sweep that wasn't already FAILing on the 15-min cron means
+a pre-30-day-old drift has been discovered — open an incident
+immediately, as the source bug may already be fixed but the bad data
+is still in production.
+
 ### Alerting
 
 Two complementary paths, pick whichever fits your stack:
@@ -501,3 +554,322 @@ Health re-queries every market's invariants from scratch on click.
 - `scripts/amm-smoke.ts` — lifecycle smoke (Phase A/B/C)
 - `scripts/amm-loadgen.ts` — concurrent buy stress test
 - `scripts/amm-health-check.ts` — read-only audits CLI wrapper
+- `server/agents/drainBreaker.ts` — auto drain-breaker (see section 12)
+
+---
+
+## 12. Drain breaker triage
+
+The drain breaker (`server/agents/drainBreaker.ts`) auto-pauses every
+agent when the house's 24h AMM P&L exceeds `min(absoluteCap, pctCap × houseBalance)`.
+Defaults: `DRAIN_BREAKER_LOSS_CAP_CREDITS=50000`, `DRAIN_BREAKER_LOSS_CAP_PCT=0.2`.
+**The breaker never auto-resumes — a human must investigate first.**
+
+When it trips you'll see one of:
+
+- Log line: `[DrainBreaker] TRIPPED — auto_drawdown_breaker: 24h house P&L = -XXXXX credits ...`
+- Sentry event: `DrainBreaker tripped` with `{houseDelta24h, houseBalance, thresholdApplied}` tags
+- Admin "Operations" tab: agent runtime state tile flips red with the reason text
+- `adminAuditLog` row with `action_type='agents_auto_drain_breaker_trip'`
+
+### First 3 things to check
+
+The right answer is rarely "raise the cap and resume." It's usually
+"find the bug that caused the bleed, fix it, then resume." Work
+through these three in order before touching the cap.
+
+#### Check 1 — Which markets ate the loss?
+
+If <3 markets are responsible for >50% of the 24h loss, the cause is
+almost always a single resolution mis-call OR a single mispriced market
+the agents piled into. If the loss is evenly distributed across 20+
+markets, the cause is systemic (signal-engine bug, sizing regression).
+
+```sql
+-- Top 20 markets by house loss in the last 24h.
+-- Resolved markets read from resolution_notes; open markets are skipped
+-- here (you can't attribute realised loss to an open market). Warm-start
+-- cost is subtracted from the realised P&L so a warm-started market
+-- whose prior was wrong sorts to the top of the loss list correctly.
+WITH warmstart AS (
+  SELECT
+    metadata->>'marketId' AS market_id,
+    COALESCE(SUM(-amount), 0) AS warm_start_cost
+  FROM credit_ledger
+  WHERE txn_type = 'amm_warmstart_debit'
+  GROUP BY metadata->>'marketId'
+)
+SELECT
+  pm.id,
+  pm.title,
+  pm.market_type,
+  pm.resolved_at,
+  (pm.resolution_notes::jsonb->>'creditedToHouse')::numeric  AS credited_to_house,
+  (pm.resolution_notes::jsonb->>'payoutLiability')::numeric  AS payout_liability,
+  COALESCE(ws.warm_start_cost, 0)                            AS warm_start_cost,
+  (pm.resolution_notes::jsonb->>'creditedToHouse')::numeric
+    - mas.house_seed_amount
+    - COALESCE(ws.warm_start_cost, 0)
+    AS house_pnl
+FROM prediction_markets pm
+LEFT JOIN market_amm_state mas ON mas.market_id = pm.id
+LEFT JOIN warmstart ws ON ws.market_id = pm.id
+WHERE pm.engine = 'amm'
+  AND pm.resolved_at > now() - interval '24 hours'
+  AND pm.resolution_notes ~ '^\s*\{'
+  AND pm.resolution_notes::jsonb ? 'creditedToHouse'
+ORDER BY house_pnl ASC
+LIMIT 20;
+```
+
+If you see one or two markets with house_pnl < -3000, open them in the
+admin AMM tab and inspect the trade history — usually one persona band
+piled in on the cheap side and got paid out at 1.0.
+
+#### Check 2 — Which persona band is over-represented in winners?
+
+Healthy state: sharps win more than they lose; noisy/casual roughly
+break even; whales swing with variance. If a non-sharp band is
+systematically winning, it's almost certainly a pricing bug (e.g. the
+agents collectively read a signal wrong and the AMM mispriced, so
+whoever fired first got cheap shares).
+
+```sql
+-- Winner shares per persona band over the last 24h.
+SELECT
+  ac.simulation_profile->>'personaBand' AS persona_band,
+  COUNT(*) FILTER (WHERE mb.status = 'won')  AS wins,
+  COUNT(*) FILTER (WHERE mb.status = 'lost') AS losses,
+  ROUND(
+    100.0 * COUNT(*) FILTER (WHERE mb.status = 'won')
+      / NULLIF(COUNT(*) FILTER (WHERE mb.status IN ('won','lost')), 0),
+    1
+  ) AS win_rate_pct,
+  COUNT(*) FILTER (WHERE mb.status IN ('won','lost')) AS settled_trades
+FROM market_bets mb
+JOIN agent_configs ac ON ac.id = mb.agent_id
+WHERE mb.agent_id IS NOT NULL
+  AND mb.settled_at > now() - interval '24 hours'
+  AND mb.status IN ('won','lost')
+GROUP BY ac.simulation_profile->>'personaBand'
+ORDER BY win_rate_pct DESC;
+```
+
+Read: if `noisy` is sitting at 65% win rate and `sharp` at 40%, the
+agents collectively bet the wrong direction and noisy got there by
+coin-flip. That's a signal-engine bug, not a noise-agent bug.
+
+#### Check 3 — Recent decision-engine changes
+
+Most drain-breaker trips have been caused by a code change in the last
+week or two — Plan D (May 18) is the canonical example. Before raising
+the cap, eyeball recent commits to the agent decision path:
+
+```bash
+git log --since='7 days' --oneline -- server/agents/ server/agents/decisionEngine.ts server/agents/sharpRanker.ts server/agents/sizing.ts
+```
+
+If you see a recent change to signal weighting, gating, or sizing,
+that's your prime suspect. Revert it on a branch, run the unit tests,
+and check whether the bleed reproduces in a smoke environment before
+re-deploying to prod.
+
+### Decision tree
+
+```
+                  Drain breaker tripped
+                          │
+            ┌─────────────┴─────────────┐
+            ▼                           ▼
+   Loss concentrated in           Loss spread across
+   1-3 markets?                   10+ markets?
+   (Check 1)                      (Check 1)
+            │                           │
+            ▼                           ▼
+   ─ Likely a single                ─ Likely a systemic bug
+     resolution mis-call              (signal weighting,
+     OR a hot market the              sizing curve, ranker)
+     agents piled into.            ─ DO NOT raise the cap.
+   ─ Inspect the markets.          ─ Run check 2 + check 3.
+   ─ If the resolution was         ─ Find the offending commit
+     wrong: void manually,           on the agent path.
+     refund users, resume           ─ Revert / fix on a branch,
+     agents.                         deploy, then resume.
+   ─ If the resolution was
+     correct: this is normal
+     variance — raise the abs
+     cap to a level that
+     absorbs N similar weeks,
+     then resume.
+```
+
+### When to raise the cap vs leave paused
+
+| Situation | Action |
+|---|---|
+| One bad resolution call, agents otherwise fine | Void the bad market, resume agents, leave cap as-is |
+| Healthy weekly resolution swing larger than the cap | Raise `DRAIN_BREAKER_LOSS_CAP_CREDITS` to ~3× the observed weekly P&L variance, resume |
+| Signal/sizing regression in the last 7 days | Revert or fix the commit BEFORE resuming; leave cap as-is |
+| Persistent multi-week drain with no obvious cause | Leave paused. Open an incident. Run the persona-band P&L tile on 30-day window. Page another engineer. |
+
+### Resuming after triage
+
+After you've identified and resolved the root cause:
+
+1. Document the cause in an `adminAuditLog` row (via Admin → Agents
+   → "Add audit note") so the incident has a permanent trail.
+2. Unpause via Admin → Agents → "Resume agents" (or the SQL in
+   section 6 of this runbook).
+3. Watch the next 15-min health-check tick — confirm the runtime tile
+   stays green.
+4. If you raised `DRAIN_BREAKER_LOSS_CAP_CREDITS`, redeploy Railway
+   so the new value takes effect, and update this runbook with the
+   reason for the bump.
+
+### Worked example — 2026-05-18 trip
+
+**Symptom:** Breaker tripped at 15:33 UTC with `houseDelta24h ≈ -168,013`
+against the default `50,000` absolute cap. Drake's Trend Score had
+climbed but his AMM price still favoured DOWN, indicating agents had
+been paused for ~24h before anyone noticed.
+
+**Triage:**
+
+- Check 1 — loss was spread across 20+ markets, no single outlier > 10%
+  of total. *Conclusion: systemic, not a single-market mis-call.*
+- Check 2 — noisy/casual cohort was over-represented in wins,
+  sharps were losing. *Conclusion: agents collectively bet wrong direction.*
+- Check 3 — recent commits showed wikiPulse and newsLevel had been
+  added to the signal-boost path and were stacking with `pctChangeVsOpen`.
+  *Conclusion: signal-engine bug ("Plan D" issue).*
+
+**Resolution:** Removed `wikiPulse` and `newsLevel` from the
+deterministic decision path (composite-only signals). Raised
+`DRAIN_BREAKER_LOSS_CAP_CREDITS` to `2,000,000` so a future bug-free
+weekly resolution swing of 100-500k doesn't trip on the same conservative
+floor. Hardened the pause-flag DB read with a retry+fail-open wrapper
+so a single transient DB error couldn't leak a worker tick of bets.
+
+Total wall-clock from symptom-spotted → root-caused → fix-deployed:
+~3 hours. With the triage section above, a future repeat should land
+closer to 30-45 min.
+
+---
+
+## 13. Known fragilities
+
+Small inconsistencies in the codebase that can't easily be fixed but
+will mislead the next operator if not flagged. When you hit one, add
+to this list with the workaround.
+
+### `prediction_markets.void_reason` has two writers
+
+The AMM resolver (`server/services/amm-resolver.ts`) sets a stable
+machine-readable code (`amm_auto_tie`, `amm_admin_void`, etc.), then
+the cron's outer update (`server/jobs/market-resolver.ts`) immediately
+overwrites it with humanized display text (e.g. "Tie — score unchanged",
+"Tie — identical scores", "Tie — identical top gain percentage").
+
+**Workaround:** when writing SQL that needs to programmatically
+identify void causes, query `resolution_notes::jsonb->>'outcome'`
+instead — it's set by the same outer code path and never overwritten.
+For tied resolutions specifically, look for `'void_tie'`.
+
+The dual-writer is a known fragility flagged for eventual consolidation
+(target: dedicated `void_cause` column for machine codes, humanized
+text moves to `void_reason_display` or similar). **Don't add new
+readers that depend on `void_reason`'s machine-readable form.**
+
+Affected check: `checkTieVoidRate` in `server/jobs/amm-health.ts`
+correctly queries `resolution_notes::jsonb->>'outcome' = 'void_tie'`
+(see commit history for the bug that caught this).
+
+### `HOUSE_PNL_TXN_TYPES` must stay in sync across every reader
+
+Every call site that sums house P&L from `credit_ledger` consumes the
+shared `HOUSE_PNL_TXN_TYPES` constant in
+`server/services/amm-ledger-types.ts`. The drain breaker
+(`server/agents/drainBreaker.ts`) and the admin
+`/api/admin/amm/house` endpoint (`server/routes.ts`) both pull from
+this set; adding a new AMM ledger txn type means updating exactly
+THIS one place.
+
+The consistency test
+`tests/amm-house-pnl-consistency.test.ts` guards the contract — it
+fails CI if the set is missing seed/warmstart/payout coverage. **Do
+not add a parallel hardcoded IN-list anywhere else in the codebase**;
+take the constant via import or extend it in the shared module.
+
+---
+
+## 14. Flag-flip preconditions
+
+Two feature flags ship in their OFF state and need explicit
+preconditions before flipping ON in production. Operator must work
+through the relevant checklist before enabling each flag, then update
+this section with the flip date + observed-stable-for window.
+
+### Before flipping `WORLD_MARKETS_LLM_ENABLED=true`
+
+1. **Run the calibration audit:** `npm run world:calibrate`
+2. **Sanity floor tranche** accuracy >= 90% (the model can find facts).
+3. **Past-but-obscured tranche** absolute calibration error < 0.15
+   across every band with sample size >= 5.
+4. The script's stdout VERDICT line reads "Calibration looks
+   acceptable; flag flip is justified." (Exit code 0.)
+5. Top up the OpenAI billing balance — at full agent cohort, expect
+   ~$6/day amortised across the world-market cache TTL tiers.
+6. Confirm `WORLD_MARKETS_LLM_ENABLED` parses correctly under
+   `envFlag()` in Railway — values `TRUE`, `1`, `yes`, `on` all work;
+   strict `"true"` only is no longer required (see
+   `server/agents/constants.ts` `envFlag` for the lenient parser).
+
+Calibration reports are archived at
+`ops/world-market-calibration-YYYY-MM-DD.md` for every run; keep the
+report from the most recent flip-decision call so the rationale is
+recoverable later.
+
+### Before flipping `WARM_START_PRIORS_ENABLED=true`
+
+1. **Persona-band P&L tile** in Admin → AMM → Overview has 30+ days
+   of data and shows the cold-start gap (non-sharp bands earning
+   credit P&L on Up/Down markets, suggesting the 50/50 prior is
+   leaking value to sharps and noisy alike).
+2. **`realisedPnl` formula in `/api/admin/amm/house`** accounts for
+   `amm_warmstart_payout` — confirm by running the smoke flow with
+   warm-start enabled on a single test market, settling it, and
+   checking the dashboard doesn't show a phantom drift.
+3. **`HOUSE_PNL_TXN_TYPES` includes `amm_warmstart_payout`** — drain
+   breaker won't undercount the offsetting inflows. The consistency
+   test (`tests/amm-house-pnl-consistency.test.ts`) catches this if
+   the set drifts.
+4. House balance can absorb the expected warm-start outflow without
+   the breaker tripping. Warm-start only fires when
+   `|scoreDelta7d| >= 2pp` (see `WARM_START_MIN_DELTA_PCT` in
+   `server/services/amm-warmstart.ts`), so the count is "up to N
+   markets" where N is the weekly Up/Down catalogue size. Cost per
+   fire ranges ~600 (55/45) to ~1600 (60/40) credits. Rule of thumb
+   upper bound: if every market triggered, ~150 markets × 1500 credits
+   = ~225k credits/week of additional house exposure. In practice the
+   share is lower — typically ~30-70% of markets clear the 2pp floor.
+5. After flipping the flag, watch the next Sunday market generation.
+   Expected ledger filter: `WHERE idempotency_key LIKE 'amm_warmstart_%'`
+   should show new debit rows for the subset of markets whose
+   `trending_people.change_7d` magnitude clears the 2pp threshold.
+   Zero rows in the first week means either the threshold filtered
+   everything (the score-change distribution is quieter than expected)
+   or the flag didn't actually flip (re-check Railway env var parsing
+   under `envFlag`).
+
+### Rollback procedure (either flag)
+
+Both flags are read at process start via `envFlag()` and re-evaluated
+each agent runner / world-market sweep. To roll back:
+
+1. Set the env var to `false` in Railway.
+2. Redeploy the affected service (main app, agents worker).
+3. New activity stops within one worker tick (~30s for agents,
+   ~30min for the world-market re-eval cron).
+4. EXISTING positions / warm-start shares from before the rollback
+   continue through resolution normally — both flags only gate NEW
+   activity creation, never existing settlements.

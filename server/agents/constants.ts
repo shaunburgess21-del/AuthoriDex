@@ -1,11 +1,36 @@
 export const POSITIVE_HINTS = ["up", "rise", "higher", "yes", "win", "grow", "more", "increase"];
 export const NEGATIVE_HINTS = ["down", "fall", "lower", "no", "lose", "decline", "less", "decrease"];
 
+// Crowd-skew threshold (0-1) above which a contrarian agent will fade
+// the consensus instead of joining it. 0.65 means "if 65%+ of stake is
+// on one side, contrarians look at the other side first." Below this
+// they behave like normal agents — keeps contrarian behaviour focused
+// on actually crowded markets rather than firing on any minor lean.
 export const CONTRARIAN_TRIGGER_THRESHOLD = 0.65;
+
+// Minimum agent confidence (0-1) required before we generate an LLM
+// rationale. Anything below 0.65 is treated as a low-conviction trade
+// and gets a templated reason instead — saves both LLM cost and the
+// post-trade "why" feed being clogged with weakly-justified picks.
 export const RATIONALE_CONFIDENCE_THRESHOLD = 0.65;
+
+// Per-agent memory cap. The decision engine reads the N most recent
+// memories (recent_outcome / strength / weakness / self_note) when
+// composing rationale and tuning persona behaviour. 20 covers ~3-4
+// weeks of resolved markets per agent — long enough to detect recent
+// trend without bloating the rationale prompt token count.
 export const MEMORY_CAP = 20;
+
+// Action worker claim batch size. Each 2-min worker tick claims up to
+// 20 pending scheduled_agent_actions (FOR UPDATE SKIP LOCKED). 20
+// gives a comfortable throughput for the ~600 agents × N markets/day
+// volume while keeping the inner per-action transaction small enough
+// to finish well under the next 2-min tick deadline.
 export const ACTION_WORKER_BATCH_SIZE = 20;
-export const ACTION_WORKER_INTERVAL_MS = 2 * 60 * 1000; // 2 minutes
+// Cadence for the worker loop. 2 minutes balances "responsive enough
+// that scheduled actions execute close to their executeAfter target"
+// against "infrequent enough that idle ticks don't hammer the DB."
+export const ACTION_WORKER_INTERVAL_MS = 2 * 60 * 1000;
 
 // Quiet hours in SAST (UTC+2): no agent writes between 22:30 and 06:30
 export const QUIET_HOUR_START_SAST = 22.5;
@@ -41,15 +66,30 @@ export const WORLD_MARKET_DELAY_RANGES: Record<string, [number, number]> = {
   prestige_maximiser: [21_600,  86_400],  //  6–24 hrs
 };
 
-// Default stake amounts by agent risk appetite
+// Default stake floors / caps by agent risk appetite. 100 is the
+// reference position size — a 1% notional on the 10,000-credit human
+// baseline so agent activity feels comparable to a real user. 300 caps
+// the most aggressive sizings; without a ceiling the conviction × edge
+// curve can run away on high-confidence sharp trades and concentrate
+// risk on a single market.
 export const BASE_STAKE_AMOUNT = 100;
 export const MAX_AGENT_STAKE = 300;
 
-// Credit refresh: top up agents that fall below threshold
+// Credit refresh thresholds. Once an agent's predict_credits drops
+// below LOW_THRESHOLD they get topped up to TOPUP_TARGET. 10k floor
+// keeps positions sized realistically (an agent below 10k credits
+// would be sizing in dust); 50k refill is generous enough that a
+// single resolved market doesn't immediately push them back into
+// top-up territory.
 export const AGENT_CREDIT_LOW_THRESHOLD = 10_000;
 export const AGENT_CREDIT_TOPUP_TARGET = 50_000;
 
-// Agent runner sweep interval (checks for new markets every 30 min)
+// Agent runner sweep cadence. 30 minutes means every market is
+// re-evaluated 48 times/day across the cohort — frequent enough that
+// price discovery keeps pace with intraday Trend Score moves, sparse
+// enough that the LLM ranker and per-market evaluation costs stay
+// bounded. 3-min startup delay lets the rest of the server (DB
+// connections, OpenAI client) warm up before the first sweep fires.
 export const AGENT_RUNNER_INTERVAL_MS = 30 * 60 * 1000;
 export const AGENT_RUNNER_STARTUP_DELAY_MS = 3 * 60 * 1000;
 
@@ -131,9 +171,15 @@ export const WORLD_MARKET_ASSESSMENT_TTL_MAX_MS = WORLD_MARKET_ASSESSMENT_TTL_LO
 /** @deprecated Kept for backwards compatibility with admin status JSON. */
 export const WORLD_MARKET_ASSESSMENT_TTL_MS = WORLD_MARKET_ASSESSMENT_TTL_NEAR_MS;
 
-// Conviction re-bets: allow agents to bet again on markets with significant score movement
-export const CONVICTION_SCORE_THRESHOLD_PCT = 0.05; // 5% move from baseline
-export const CONVICTION_MAX_PER_MARKET = 1; // max 1 conviction bet per agent per market
+// Conviction re-bets: an agent already holding a position gets to bet
+// AGAIN if the Trend Score moves >5% in their favour from the original
+// buy's baseline. 5% is roughly one standard-deviation weekly move on
+// the highest-volume celebrities — large enough to be a real signal,
+// small enough to fire 2-3 times per week on a hot market. Capped at
+// 1 conviction re-bet per agent per market so a runaway score doesn't
+// turn into a stack of compounding positions.
+export const CONVICTION_SCORE_THRESHOLD_PCT = 0.05;
+export const CONVICTION_MAX_PER_MARKET = 1;
 
 // ---------------------------------------------------------------------------
 // Agent sells (Phase 1 — AMM up/down only)
@@ -159,8 +205,18 @@ export const CONVICTION_MAX_PER_MARKET = 1; // max 1 conviction bet per agent pe
 //   - noisy     : impulsive, takes early profits, inconsistent on losses
 //   - liquidity : passive market-makers; rarely exit, hold to resolution
 //   - whale     : selective, big positions, careful but decisive when they act
+// Per-agent sell caps. 2 sells per market per agent permits one partial
+// take-profit + one full exit (or two partials), but rules out the
+// thrashing pattern of sell-rebuy-sell on the same position.
 export const MAX_SELLS_PER_MARKET_PER_AGENT = 2;
+// Minimum fractional shares an agent will sell. Anything below 0.1
+// rounds to <1 credit of proceeds and isn't worth the trade cost +
+// log noise.
 export const MIN_SHARES_TO_SELL = 0.1;
+// Minimum net position an agent must hold before sell evaluation
+// fires. 0.5 shares skips dust positions left over from rounding /
+// partial sells — no point spending CPU on a position that pays <1
+// credit even on a 100% win.
 export const MIN_NET_SHARES_FOR_SELL_EVAL = 0.5;
 
 export interface SellPersonaTuning {
@@ -254,13 +310,25 @@ export const SELL_PERSONA_TUNING: Record<
  */
 export const SELL_DEFAULT_CONVICTION = 0.5;
 
-// World Market re-evaluation timing
+// World Market re-evaluation cadence. World markets are long-horizon
+// (weeks-to-months), so an agent re-evaluating every 7 days picks up
+// material news without burning LLM cost on noise. Conviction re-bets
+// (deeper position add on a still-held thesis) are rarer at 30-day
+// intervals, fire on a 30% probability roll, and require the position
+// to have been open at least 14 days — so we don't compound an agent
+// into a market they just entered.
 export const WORLD_REEVAL_INTERVAL_DAYS = 7;
 export const WORLD_CONVICTION_INTERVAL_DAYS = 30;
 export const WORLD_CONVICTION_CHANCE = 0.30;
 export const WORLD_CONVICTION_MIN_DAYS_OPEN = 14;
 
-// Jackpot agent betting
+// Jackpot agent betting. Agents skip jackpots within 6h of close so a
+// late-week burst of agent activity doesn't crowd out the very signal
+// the jackpot is testing (closing-score prediction precision). 50 is
+// the +/- offset window the action worker searches when an agent's
+// chosen integer is already taken — a wider range would dilute the
+// "closest guess" precision; narrower would skip too many actions on
+// crowded jackpots.
 export const JACKPOT_AGENT_MIN_BUFFER_HOURS = 6;
 export const JACKPOT_AGENT_COLLISION_RANGE = 50;
 
