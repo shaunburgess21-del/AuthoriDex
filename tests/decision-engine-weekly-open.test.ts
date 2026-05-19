@@ -548,10 +548,19 @@ test("H2H: vs-open factor stacks with momentum (decisive down vs decisive up)", 
   // Putin DOWN -30% with negative 7d delta + falling wiki vs Macron UP
   // +30% with positive 7d delta + rising wiki. Every signal points the
   // same way; the seed weight should be heavily skewed toward Macron.
-  // Putin: bonus=0.95 (delta<-3 AND wiki=falling => 0.95), * 0.9 (vs-open
-  // saturated -10%), * 0.96 (DOWN) ≈ 0.821. Macron: 1.10 (delta>8 AND
-  // wiki=rising) * 1.10 (vs-open +10%) * 1.04 (UP) ≈ 1.258. Macron
-  // probability ≈ 1.258 / (0.821 + 1.258) ≈ 0.605.
+  //
+  // Post-Plan-C arithmetic (halved bullish/bearish moves):
+  //   Putin: bonus=0.975 (wiki=falling halved from 0.95)
+  //          * 0.90 (vs-open saturated -1, factor 0.90)
+  //          * 0.96 (DOWN tilt) ≈ 0.842
+  //   Macron: bonus=1.05 (wiki=rising && delta>8 halved from 1.10,
+  //           gate inactive since pctChangeVsOpen > 0)
+  //          * 1.10 (vs-open saturated +1, factor 1.10)
+  //          * 1.04 (UP tilt) ≈ 1.201
+  //   Macron seed weight ≈ 1.201 / (0.842 + 1.201) ≈ 0.5878.
+  //
+  // Pre-Plan-C the same mix produced ≈ 0.605 — the lean is now tighter
+  // because the multiplicative bullish moves were halved.
   const market = makeH2HMarket();
   const agent = makeSharpAgent({ specialties: ["politics"] });
   const entrySignals = new Map<string, TrendSignals>([
@@ -600,6 +609,100 @@ test("H2H: equal pctChangeVsOpen on both sides leaves seeding fame-driven", () =
   assert.ok(
     aProb > 0.65 && aProb < 0.68,
     `fame should still dominate when vs-open is symmetric; got entry-a probability ${aProb}`,
+  );
+});
+
+test("H2H: bullish stock signals on a decisively-down side are gated (Plan C — momBonus)", () => {
+  // Putin is -20% from market open (decisively down) but has positive
+  // 7d delta and rising wiki — a Monday-peak person fading from the
+  // spike. Pre-Plan-C the rising-wiki + delta>8 branch fired on his
+  // side at 1.10 (a "bullish stock" boost):
+  //   Putin pre  : 1.10 * 0.90 (vs-open sat) * 0.96 (DOWN) ≈ 0.9504
+  //   Macron pre : 1.0
+  //   Macron seed weight ≈ 1.0 / (0.9504 + 1.0) ≈ 0.5127  ← Putin
+  //                                                          near 50/50
+  //                                                          despite
+  //                                                          -20% drawdown.
+  //
+  // Post-Plan-C the gate suppresses both bullish branches on his side
+  // (sideDecisivelyDown=true). Bonus stays 1.0:
+  //   Putin post : 1.0 * 0.90 * 0.96 = 0.864
+  //   Macron post: 1.0
+  //   Macron seed weight ≈ 1.0 / (0.864 + 1.0) ≈ 0.5365
+  //
+  // Asserting Macron > 0.53 catches the gate working — pre-Plan-C
+  // produces 0.5127 which fails the threshold.
+  const market = makeH2HMarket();
+  const agent = makeSharpAgent({ specialties: ["politics"] });
+  const entrySignals = new Map<string, TrendSignals>([
+    ["entry-a", makeSignals({
+      fameIndex: 6000,
+      pctChangeVsOpen: -0.20,
+      scoreDelta7d: 10,
+      wikiPulse: "rising",
+      trendDirection: "DOWN",
+    })],
+    ["entry-b", makeSignals({
+      fameIndex: 6000,
+      pctChangeVsOpen: 0,
+      scoreDelta7d: 0,
+      wikiPulse: "stable",
+      trendDirection: "FLAT",
+    })],
+  ]);
+
+  const decision = firstNonAbstain(agent, market, makeSignals(), {}, entrySignals);
+  const macronProb =
+    decision.entryId === "entry-b" ? decision.rawProbability! : 1 - decision.rawProbability!;
+  assert.ok(
+    macronProb > 0.53,
+    `expected gate to fade Putin's bullish stock; Macron seed ${macronProb} (pre-Plan-C ≈ 0.5127)`,
+  );
+});
+
+test("H2H: bullish stock still applies on a mildly-down side — Plan C gate is one-sided", () => {
+  // Putin at -2% from open (NOT decisively down — gate inactive). With
+  // positive 7d delta + rising wiki + UP direction the bullish branches
+  // SHOULD still fire on his side, just at halved magnitudes. Macron is
+  // a bearish foil (delta=-10, falling wiki, DOWN direction) so the H2H
+  // abstain gate (topScore >= 0.52) is cleared by either side; what
+  // we're pinning is Putin's seed weight after the halving.
+  //
+  // Post-Plan-C arithmetic:
+  //   Putin  : 1.05 (rising && delta>8, halved) * 0.99 (vs-open -0.1)
+  //            * 1.04 (UP) ≈ 1.0813
+  //   Macron : 0.975 (falling, halved) * 0.975 (vs-open -0.025)
+  //            * 0.96 (DOWN) ≈ 0.9126
+  //   Putin seed weight ≈ 1.0813 / (1.0813 + 0.9126) ≈ 0.5424
+  //
+  // Pre-Plan-C the same mix produced ≈ 0.5602 (1.10 * 0.95 bullish leg
+  // un-halved). Band (0.535, 0.555) locks in the gate staying inactive
+  // (Putin still ahead) AND symmetric halving (lean smaller than pre).
+  const market = makeH2HMarket();
+  const agent = makeSharpAgent({ specialties: ["politics"] });
+  const entrySignals = new Map<string, TrendSignals>([
+    ["entry-a", makeSignals({
+      fameIndex: 6000,
+      pctChangeVsOpen: -0.02,
+      scoreDelta7d: 10,
+      wikiPulse: "rising",
+      trendDirection: "UP",
+    })],
+    ["entry-b", makeSignals({
+      fameIndex: 6000,
+      pctChangeVsOpen: -0.05,
+      scoreDelta7d: -10,
+      wikiPulse: "falling",
+      trendDirection: "DOWN",
+    })],
+  ]);
+
+  const decision = firstNonAbstain(agent, market, makeSignals(), {}, entrySignals);
+  const putinProb =
+    decision.entryId === "entry-a" ? decision.rawProbability! : 1 - decision.rawProbability!;
+  assert.ok(
+    putinProb > 0.535 && putinProb < 0.555,
+    `Putin lean band (0.535, 0.555) pins gate-inactive + halved magnitudes; got ${putinProb}`,
   );
 });
 
@@ -695,6 +798,96 @@ test("Race: missing pctChangeVsOpen on entries falls back gracefully (no crash, 
 
   assert.equal(decision.abstain, false, `unexpected abstain: ${decision.abstainReason}`);
   assert.equal(decision.entryId, "racer-1", "legacy 7d momentum path should still pick the strong mover");
+});
+
+test("Race: bullish stock signals on a decisively-down entry are gated (Plan C — per-entry pass)", () => {
+  // Alice is -10% from market open (decisively down) but has rising wiki
+  // and red news — the same Beyoncé-style Monday-peak pattern that the
+  // Up/Down test pinned in `computeSignalBoost`. Pre-Plan-C, those
+  // bullish stock boosts (+0.08 wiki + 0.05 news = +0.13) outweighed
+  // the -0.05 vs-open + -0.03 direction tilt:
+  //   Alice pre  : 1/n + (0 + 0.08 + 0.05 - 0.05 - 0.03) = 0.25 + 0.05 = 0.30
+  //   peers      : 0.25
+  //   normalised : Alice 0.286, others 0.238 — Alice top pick.
+  //
+  // Post-Plan-C the gate suppresses the bullish wiki/news on her entry
+  // (entryDecisivelyDown=true) so only the bearish vs-open + direction
+  // boosts apply:
+  //   Alice post : 0.25 + (0 + 0 + 0 - 0.05 - 0.03) = 0.17
+  //   peers      : 0.25
+  //   normalised : Alice 0.185, others 0.272 — Alice fades to last.
+  //
+  // We use riskAppetite 0.2 so the n=4 sharp edge gate (0.0125) is
+  // cleared by the post-Plan-C top score (0.272 > 0.25 + 0.0125), and
+  // assert that Alice is NOT the top pick. Pre-Plan-C she would be.
+  const market = makeRaceMarket();
+  const agent = makeSharpAgent({ specialties: ["politics"], riskAppetite: 0.2 });
+  const flat = makeSignals({ pctChangeVsOpen: 0, trendDirection: "FLAT" });
+  const entrySignals = new Map<string, TrendSignals>([
+    ["racer-1", makeSignals({
+      pctChangeVsOpen: -0.10,
+      scoreDelta7d: 0,
+      wikiPulse: "rising",
+      newsLevel: "red",
+      trendDirection: "DOWN",
+    })],
+    ["racer-2", flat],
+    ["racer-3", flat],
+    ["racer-4", flat],
+  ]);
+  const rng = createPRNG(PRNG_SEED);
+
+  const decision = computePrediction(agent, market, makeSignals(), {}, rng, entrySignals);
+
+  assert.equal(decision.abstain, false, `unexpected abstain: ${decision.abstainReason}`);
+  assert.notEqual(
+    decision.entryId,
+    "racer-1",
+    "decisively-down entry should not get pulled to the top by bullish stock signals",
+  );
+});
+
+test("Race: bullish stock still applies on a mildly-down entry — Plan C gate is one-sided", () => {
+  // Alice at -2% from open (NOT decisively down — gate inactive). With
+  // rising wiki + red news the halved bullish stock boosts SHOULD
+  // still tilt her to the top:
+  //   Alice post : 0.25 + (0 + 0.04 + 0.025 - 0.01 + 0) = 0.305
+  //   peers      : 0.25
+  //   Alice norm : 0.305 / (0.305 + 0.25*3) = 0.305 / 1.055 ≈ 0.289
+  //
+  // Pre-Plan-C: 0.25 + (0.08 + 0.05 - 0.01 + 0) = 0.37 → 0.330 normalised.
+  // Asserting 0.27 < Alice < 0.31 locks in the gate staying inactive
+  // (Alice still tops the field) AND the halving (her lean is smaller
+  // than the pre-Plan-C value of 0.330).
+  const market = makeRaceMarket();
+  const agent = makeSharpAgent({ specialties: ["politics"], riskAppetite: 0.2 });
+  const flat = makeSignals({ pctChangeVsOpen: 0, trendDirection: "FLAT" });
+  const entrySignals = new Map<string, TrendSignals>([
+    ["racer-1", makeSignals({
+      pctChangeVsOpen: -0.02,
+      scoreDelta7d: 0,
+      wikiPulse: "rising",
+      newsLevel: "red",
+      trendDirection: "FLAT",
+    })],
+    ["racer-2", flat],
+    ["racer-3", flat],
+    ["racer-4", flat],
+  ]);
+  const rng = createPRNG(PRNG_SEED);
+
+  const decision = computePrediction(agent, market, makeSignals(), {}, rng, entrySignals);
+
+  assert.equal(decision.abstain, false, `unexpected abstain: ${decision.abstainReason}`);
+  assert.equal(
+    decision.entryId,
+    "racer-1",
+    "shallow drawdown should still let bullish wiki/news lift Alice to the top",
+  );
+  assert.ok(
+    (decision.rawProbability ?? 1) > 0.27 && (decision.rawProbability ?? 0) < 0.31,
+    `expected Alice probability in (0.27, 0.31) to pin Plan C halving; got ${decision.rawProbability}`,
+  );
 });
 
 // ---------------------------------------------------------------------------

@@ -121,9 +121,9 @@ export function computePrediction(
       const fA = Math.max(sA.fameIndex ?? 0, 1);
       const fB = Math.max(sB.fameIndex ?? 0, 1);
       // Multiplicative bonus that combines three signals on each side:
-      //   - momentum: 7d delta + wiki pulse  (max ±10%)
-      //   - vs-open baseline: pctChangeVsOpen, saturating at ±20%  (max ±10%)
-      //   - explicit trendDirection: small constant tilt  (max ±4%)
+      //   - momentum: 7d delta + wiki pulse (max ±5%, gated bullish-side)
+      //   - vs-open baseline: pctChangeVsOpen, saturating at ±20% (max ±10%)
+      //   - explicit trendDirection: small constant tilt (max ±4%)
       //
       // The vs-open factor is the magnitude-aware completion of Phase 1b:
       // we now resolve a per-entry baseline from `trend_snapshots` at-or-
@@ -134,6 +134,19 @@ export function computePrediction(
       // comparison (both sides get the factor) so net effect on the
       // probability split roughly doubles.
       //
+      // Stock-vs-flow gate (Plan C, mirrors `computeSignalBoost`): the
+      // `wikiPulse rising && delta > 8` and `delta > 3` branches are
+      // bullish STOCK signals — they describe a side's current attention
+      // level, not the direction the score is heading. When this side has
+      // already flowed decisively below its market-open baseline
+      // (`pctChangeVsOpen < -0.05`), bullish stock shouldn't be allowed to
+      // tilt the H2H seeding back up. The bullish moves are also halved
+      // (1.10 → 1.05, 1.05 → 1.025) and the bearish move halved
+      // symmetrically (0.95 → 0.975) so the vs-open factor (max ±0.10)
+      // is the dominant directional input on each side. Direction tilt
+      // (1.04 / 0.96) is unchanged — it's the consensus signal that
+      // already incorporates pctChangeVsOpen as rung 1.
+      //
       // Why direction tilt stays ON TOP of the vs-open factor: when
       // pctChangeVsOpen is small/zero but `change24h` and `change7d`
       // agree (rung 2 of the priority ladder), direction is still UP/DOWN
@@ -141,10 +154,14 @@ export function computePrediction(
       // wouldn't catch.
       const momBonus = (s: TrendSignals): number => {
         const delta = s.scoreDelta7d ?? 0;
+        const sideDecisivelyDown =
+          s.pctChangeVsOpen != null &&
+          Number.isFinite(s.pctChangeVsOpen) &&
+          s.pctChangeVsOpen < -0.05;
         let bonus = 1.0;
-        if (s.wikiPulse === "rising" && delta > 8) bonus = 1.10;
-        else if (delta > 3) bonus = 1.05;
-        else if (s.wikiPulse === "falling" || delta < -3) bonus = 0.95;
+        if (s.wikiPulse === "rising" && delta > 8 && !sideDecisivelyDown) bonus = 1.05;
+        else if (delta > 3 && !sideDecisivelyDown) bonus = 1.025;
+        else if (s.wikiPulse === "falling" || delta < -3) bonus = 0.975;
         if (
           s.pctChangeVsOpen != null &&
           Number.isFinite(s.pctChangeVsOpen)
@@ -207,8 +224,27 @@ export function computePrediction(
   if (!isH2H && entrySignals && entrySignals.size > 0) {
     for (const [entryId, entrySig] of Array.from(entrySignals)) {
       const momentum = entrySig.scoreDelta7d / 15;
-      const wikiBoost = entrySig.wikiPulse === "rising" ? 0.08 : entrySig.wikiPulse === "falling" ? -0.08 : 0;
-      const newsBoost = entrySig.newsLevel === "red" ? 0.05 : entrySig.newsLevel === "green" ? -0.03 : 0;
+      // Stock-vs-flow gate (Plan C, mirrors `computeSignalBoost`):
+      // bullish stock signals (wiki rising, news red) shouldn't get to
+      // tilt a race entry UP when its `pctChangeVsOpen` has already
+      // flowed below -0.05 vs market open. Coefficients halved so the
+      // vs-open flow (max ±0.10) dominates across the magnitude range,
+      // even on shallow moves where the gate hasn't tripped. Bearish
+      // legs (`falling` / `green`) still apply normally so an entry
+      // that's flowing down AND showing fading attention reads as more
+      // obviously fading.
+      const entryDecisivelyDown =
+        entrySig.pctChangeVsOpen != null &&
+        Number.isFinite(entrySig.pctChangeVsOpen) &&
+        entrySig.pctChangeVsOpen < -0.05;
+      const wikiBoost =
+        entrySig.wikiPulse === "rising" && !entryDecisivelyDown ? 0.04
+        : entrySig.wikiPulse === "falling" ? -0.04
+        : 0;
+      const newsBoost =
+        entrySig.newsLevel === "red" && !entryDecisivelyDown ? 0.025
+        : entrySig.newsLevel === "green" ? -0.015
+        : 0;
       // Vs-open baseline: the magnitude-aware completion of Phase 1b for
       // race markets. Saturates at ±20% with a 0.10 coefficient — smaller
       // than computeSignalBoost's 0.18 because race entries dilute (all
