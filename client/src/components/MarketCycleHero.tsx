@@ -5,6 +5,8 @@ interface MarketCycleHeroProps {
   marketState: MarketCycleState;
   /** When true, do not break out to full viewport width (e.g. match profile page container width) */
   constrainedWidth?: boolean;
+  /** When false, bar renders in-flow without sticking (e.g. community-only predict filter) */
+  sticky?: boolean;
 }
 
 function padZero(num: number): string {
@@ -27,7 +29,7 @@ function TimerSegment({ value, label, testId }: { value: string; label: string; 
   );
 }
 
-export function MarketCycleHero({ marketState, constrainedWidth = false }: MarketCycleHeroProps) {
+export function MarketCycleHero({ marketState, constrainedWidth = false, sticky = true }: MarketCycleHeroProps) {
   const { status, timeRemaining, urgencyLevel } = marketState;
   
   const getStatusBadge = () => {
@@ -105,8 +107,9 @@ export function MarketCycleHero({ marketState, constrainedWidth = false }: Marke
   return (
     <div 
       style={constrainedWidth ? undefined : { marginLeft: 'calc(-50vw + 50%)', marginRight: 'calc(-50vw + 50%)', paddingLeft: 'calc(50vw - 50%)', paddingRight: 'calc(50vw - 50%)' }}
-      className="sticky top-16 z-[41] relative mb-6 min-h-16 border-y border-white/10 bg-background backdrop-blur-sm"
+      className={`${sticky ? "sticky top-16" : ""} z-[41] relative mb-6 min-h-16 border-y border-white/10 bg-background backdrop-blur-sm`}
       data-testid="market-cycle-hero"
+      {...(sticky ? { "data-sticky-predict-bar": true } : {})}
     >
       <div className="relative z-10 px-2 py-3 md:px-6 md:py-4">
         <div className="flex min-w-0 flex-row flex-nowrap items-center justify-center gap-3 md:justify-between md:gap-4">

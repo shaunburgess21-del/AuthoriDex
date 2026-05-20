@@ -132,6 +132,7 @@ import {
 } from "@/components/predict/TopGainerCard";
 import { WeeklyJackpotHero } from "@/components/predict/WeeklyJackpotHero";
 import { OpenMarketCard } from "@/components/predict/OpenMarketCard";
+import { WorldMarketsStickyHeader } from "@/components/predict/WorldMarketsStickyHeader";
 import { VoteSnapScrollView, type SnapItem, type SnapSectionType } from "@/components/snap-scroll/VoteSnapScrollView";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useScrollToHash } from "@/hooks/useScrollToHash";
@@ -247,11 +248,11 @@ type MarketType = "JACKPOT_EXACT" | "BINARY_TREND" | "VERSUS" | "COMMUNITY" | "G
 
 const PREDICTION_TYPES: { id: PredictionType; label: string; mobileLabel: string; icon: React.ReactNode }[] = [
   { id: "all", label: "All Markets", mobileLabel: "All", icon: <Sparkles className="h-4 w-4" /> },
-  { id: "community", label: "World", mobileLabel: "Markets", icon: <Scale className="h-4 w-4" /> },
   { id: "jackpot", label: "Weekly Jackpot", mobileLabel: "Jackpot", icon: <Crown className="h-4 w-4" /> },
   { id: "updown", label: "Up/Down", mobileLabel: "Up/Down", icon: <TrendingUp className="h-4 w-4" /> },
   { id: "h2h", label: "Head-to-Head", mobileLabel: "H2H", icon: <Swords className="h-4 w-4" /> },
   { id: "gainer", label: "Category Races", mobileLabel: "Races", icon: <BarChart3 className="h-4 w-4" /> },
+  { id: "community", label: "World", mobileLabel: "Markets", icon: <Scale className="h-4 w-4" /> },
 ];
 
 function HorizontalScroll({ children, className = "" }: { children: React.ReactNode; className?: string }) {
@@ -2841,6 +2842,12 @@ export default function PredictPage() {
   }, [communityOverlayCategoryFilter, communityCategoryFilters]);
 
   const showSection = (type: PredictionType) => selectedType === "all" || selectedType === type;
+  const showNativePredictScope =
+    selectedType === "all" ||
+    selectedType === "jackpot" ||
+    selectedType === "updown" ||
+    selectedType === "h2h" ||
+    selectedType === "gainer";
 
   const worldMarketSnapItems: SnapItem[] = useMemo(
     () =>
@@ -2970,7 +2977,11 @@ export default function PredictPage() {
           </div>
         </div>
       </header>
-      <div className="sticky top-16 z-40 bg-background/80 backdrop-blur-xl border-b">
+      <div data-testid="pre-timer-sticky-scope">
+      <div
+        className="sticky top-16 z-40 bg-background/80 backdrop-blur-xl border-b"
+        data-testid="predict-section-filter-bar"
+      >
         <div className="container mx-auto px-2 sm:px-4 py-3 max-w-7xl flex items-center gap-3">
           <HorizontalScroll className="pb-1 flex-1 min-w-0">
             {user && !userBetsError && (
@@ -3219,7 +3230,7 @@ export default function PredictPage() {
 
             {/* Town Square - Daily Movers style, anchored after World Markets */}
             {recentActivityError ? (
-              <div className="mt-8 mb-8">
+              <div className="mb-8 mt-[5px]">
                 <Card className="p-6 text-center">
                   <p className="text-destructive mb-2">Couldn&apos;t load Town Square</p>
                   <p className="text-muted-foreground text-sm mb-4">Please try again in a moment.</p>
@@ -3228,8 +3239,8 @@ export default function PredictPage() {
                   </Button>
                 </Card>
               </div>
-            ) : recentActivity.length > 0 && (
-              <div className="mt-8 mb-8 min-w-0 shrink-0 rounded-xl pulse-card-blue transition-all duration-200" data-testid="town-square-card">
+            ) : recentActivity.length > 0 ? (
+              <div className="mb-8 mt-[5px] min-w-0 shrink-0 rounded-xl pulse-card-blue transition-all duration-200" data-testid="town-square-card">
                 <div className={`px-3 sm:px-4 ${townSquareCollapsed ? 'py-4' : 'pt-5 pb-4'}`}>
                   <div
                     className="flex items-center gap-3 cursor-pointer select-none group"
@@ -3366,11 +3377,15 @@ export default function PredictPage() {
                   )}
                 </div>
               </div>
-            )}
+            ) : null}
           </section>
         )}
+      </div>
+      </div>
 
-        <div>
+      <div className="container mx-auto px-2 sm:px-4 py-8 max-w-7xl pt-[5px] pb-[5px]">
+        {showNativePredictScope && (
+        <div data-testid="native-predict-sticky-scope">
         <MarketCycleHero marketState={marketCycle} />
 
         {showSection("jackpot") && (
@@ -3725,6 +3740,136 @@ export default function PredictPage() {
           </section>
         )}
         </div>
+        )}
+
+        {showSection("community") && (
+          <div data-testid="world-markets-sticky-scope">
+            <WorldMarketsStickyHeader liveMarketCount={filteredCommunity.length} />
+            <section id="community" data-hash-anchor className="mb-12 mt-[5px]">
+              <UnifiedSectionHeader
+                title="World Markets"
+                subtitle="Predict the outcome of global events"
+                icon={<Scale className="h-5 w-5 text-violet-600 dark:text-violet-400" />}
+                accent="violet"
+                testId="section-header-world-markets"
+                actions={
+                  <>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          onClick={() => setRulesModalOpen("community")}
+                          className="text-violet-600 dark:text-violet-400 hover:text-violet-500 dark:hover:text-violet-300"
+                          aria-label="How it works"
+                          data-testid="button-rules-real-world-markets"
+                        >
+                          <HelpCircle className="h-5 w-5" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent className="bg-popover dark:bg-slate-900/95 border-border dark:border-slate-700 text-popover-foreground dark:text-slate-200 text-xs">How it works</TooltipContent>
+                    </Tooltip>
+                    <Button 
+                      onClick={() => openSuggestModal(() => setCreateModalOpen(true))}
+                      className="rounded-full bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/40 dark:border-violet-500/30 text-violet-600 dark:text-violet-400 hover:bg-violet-500/25 dark:hover:bg-violet-500/20 hidden md:flex"
+                      data-testid="button-start-prediction"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Suggest
+                    </Button>
+                    <button
+                      type="button"
+                      onClick={() => openSnapScroll("world-markets", filteredCommunity[0]?.id ? String(filteredCommunity[0].id) : undefined, "header-icon")}
+                      className="md:hidden inline-flex shrink-0 items-center justify-center rounded-md p-1 text-violet-600 dark:text-violet-400 transition-colors hover:text-violet-500 dark:hover:text-violet-300 hover:bg-muted/40 active:opacity-80"
+                      aria-label="Open immersive browse"
+                      data-testid="button-snap-world-markets"
+                    >
+                      <Maximize2 className="h-5 w-5" aria-hidden />
+                    </button>
+                  </>
+                }
+              >
+                <SectionFilterBar
+                  categoryFilter={communityCategory}
+                  onCategoryChange={setCommunityCategory}
+                  searchQuery={communitySearch}
+                  onSearchChange={setCommunitySearch}
+                  searchPlaceholder="Search predictions..."
+                  testIdPrefix="community"
+                  user={user}
+                  onAuthRequired={() => navigateToLogin(setLocation, { mode: "signup", reason: "predict_signup" })}
+                  filters={communityCategoryFilters}
+                />
+              </UnifiedSectionHeader>
+              {openMarketsError ? (
+                <Card className="p-8 text-center">
+                  <p className="text-destructive mb-2">Couldn&apos;t load World Markets</p>
+                  <p className="text-muted-foreground text-sm mb-4">Please try again in a moment.</p>
+                  <Button onClick={() => refetchOpenMarkets()} data-testid="button-retry-open-markets">
+                    Retry
+                  </Button>
+                </Card>
+              ) : isLoadingOpenMarkets ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <Card key={i} className="p-4 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <Skeleton className="h-5 w-16 rounded-md" />
+                        <Skeleton className="h-5 w-20 rounded-md" />
+                      </div>
+                      <Skeleton className="h-5 w-full" />
+                      <Skeleton className="h-4 w-3/4" />
+                      <div className="flex items-center justify-between pt-2">
+                        <Skeleton className="h-8 w-24 rounded-md" />
+                        <Skeleton className="h-8 w-24 rounded-md" />
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              ) : filteredCommunity.length > 0 ? (
+                <CardSection ref={communitySectionRef} desktopLimit={9} gap="gap-4" testIdPrefix="section-community" dotActiveColor="bg-violet-500" mobileSlideMinHeight="min-h-[420px]">
+                  {filteredCommunity.map((market: any) => (
+                    <div
+                      key={market.id}
+                      data-testid={`card-community-${market.id}`}
+                      onClick={(e) => handleCardEmptyTap(e, "world-markets", String(market.id))}
+                    >
+                      <OpenMarketCard
+                        market={market}
+                        onNavigate={(slug, pick, direction) => setLocation(`/markets/${slug}${pick ? `?pick=${pick}${direction ? `&direction=${direction}` : ''}` : ''}`)}
+                        onPickEntry={handleCommunityPickEntry}
+                        isMarketClosed={market.status !== 'OPEN'}
+                        userBetResult={userBetsByMarket.get(String(market.id))}
+                        userBetsPerEntry={userBetsPerEntry.get(String(market.id))}
+                        onFilterCategory={handleCategoryPillFilter}
+                        categoryRaceMap={raceMap}
+                        leaderboardCategories={leaderboardCats}
+                        onBrowseFullScreen={isMobile ? () => openSnapScroll("world-markets", String(market.id), "browse-button") : undefined}
+                        unrealisedPnl={ammPositionByMarket.get(String(market.id))?.unrealisedPnl ?? null}
+                      />
+                    </div>
+                  ))}
+                </CardSection>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  No markets available yet
+                </div>
+              )}
+              <div className="text-center mt-2 md:mt-6">
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="text-violet-700 dark:text-violet-500 hover:text-violet-600 dark:hover:text-violet-400 text-[14px]"
+                  onClick={() => openPredictOverlay("community")}
+                  data-testid="button-view-all-real-world"
+                >
+                  View All Markets
+                  <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+              </div>
+            </section>
+          </div>
+        )}
 
         <div className="text-center pb-8">
           <button 

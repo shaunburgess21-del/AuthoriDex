@@ -59,18 +59,30 @@ export function scrollToPredictAnchor(testId: string, maxMs = 2500): void {
     if (el) {
       const header = document.querySelector("header");
       const headerH = header ? header.getBoundingClientRect().height : 0;
-      // The secondary filter row on /predict is `sticky top-16` — pick up
-      // any element whose class string contains both "sticky" and "top-16"
-      // so we account for its height too.
-      const stickyBars = Array.from(
-        document.querySelectorAll<HTMLElement>(
-          "[class*='sticky'][class*='top-16']",
-        ),
+      // At most one secondary bar below the main nav: filter pills, weekly timer,
+      // or world-markets splitter (pre-timer scope releases filters before timer).
+      const stickyOffset = 64; // top-16
+      const isStuckAtOffset = (node: HTMLElement) => {
+        const top = node.getBoundingClientRect().top;
+        return top >= stickyOffset - 2 && top <= stickyOffset + 2;
+      };
+      const filterBar = document.querySelector<HTMLElement>(
+        '[data-testid="predict-section-filter-bar"]',
       );
-      const stickyH = stickyBars.reduce(
-        (sum, b) => sum + b.getBoundingClientRect().height,
-        0,
+      const filterBarH =
+        filterBar && isStuckAtOffset(filterBar)
+          ? filterBar.getBoundingClientRect().height
+          : 0;
+      const predictBars = Array.from(
+        document.querySelectorAll<HTMLElement>("[data-sticky-predict-bar]"),
       );
+      const predictBarH = predictBars.reduce((sum, b) => {
+        if (isStuckAtOffset(b)) {
+          return sum + b.getBoundingClientRect().height;
+        }
+        return sum;
+      }, 0);
+      const stickyH = filterBarH + predictBarH;
       const top =
         el.getBoundingClientRect().top + window.scrollY - headerH - stickyH - 8;
       window.scrollTo({ top: Math.max(0, top), behavior: "auto" });
