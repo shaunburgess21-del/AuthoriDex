@@ -27,7 +27,7 @@ import { apiCache } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import {
   computeTrendsWindowMeans,
-  type TrendsTimeseriesPoint as TrendsWindowPoint,
+  type TrendsTimeseriesPoint,
 } from "./trends-window";
 
 export type { TrendsTimeseriesPoint } from "./trends-window";
@@ -280,7 +280,7 @@ export async function fetchGoogleTrendsBatch(
         values: Array<{ query: string; value: string; extracted_value: number }>;
       }>;
 
-      const series: TrendsWindowPoint[] = [];
+      const series: TrendsTimeseriesPoint[] = [];
       for (const point of timeline) {
         const ts = new Date(parseInt(point.timestamp, 10) * 1000).toISOString();
         // Only one query per call now, so just take the first value entry.
