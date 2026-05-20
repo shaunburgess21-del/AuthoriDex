@@ -3,25 +3,10 @@ description:
 alwaysApply: true
 ---
 
----
-description: 
-alwaysApply: true
----
-
----
-description: 
-alwaysApply: true
----
-
----
-description: 
-alwaysApply: true
----
-
 # VoxDex — Cursor Agent Rules
 
 ## Project Overview
-VoxDex is a live influence index and prediction platform. It ranks over 150 public figures by influence score, updated frequently via external APIs. Users vote, predict outcomes, and track momentum in real time. VoxDex is a virtual credit system and no real money is used. Multiple agents predict on markets in real-time to simulate human activity and provide activity/liquidity. VoxDex hasn't launched to the public yet (pre-launch phase). Andrew and his brother, Shaun and building and testing.
+VoxDex is a live influence index and prediction platform. It ranks over 150 public figures by influence score, updated frequently via external APIs. Users vote, predict outcomes, and track momentum in real time. VoxDex is a virtual credit system and no real money is used. Multiple agents predict on markets in real-time to simulate human activity and provide activity/liquidity. VoxDex hasn't launched to the public yet (pre-launch phase). Andrew and his brother Shaun are building and testing.
 
 ## Stack
 - Frontend: React 18, Vite, TailwindCSS, shadcn/ui, Wouter (routing), TanStack Query (data fetching)
