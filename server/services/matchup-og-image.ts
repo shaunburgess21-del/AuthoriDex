@@ -37,21 +37,22 @@ const VS_TOP_Y = VS_CY - VS_RADIUS;
 const PROMPT_FONT_SIZE = 46;
 /** Baseline so prompt visual center sits midway between image top and VS circle top. */
 const PROMPT_BASELINE_Y = VS_TOP_Y / 2 + PROMPT_FONT_SIZE * 0.35;
-const FLANK_GAP = 12;
 const FLANK_FONT_SIZE = 28;
 const FLANK_WEIGHT = 600;
 const FLANK_PAD_X = 16;
 const FLANK_PAD_Y = 8;
 const FLANK_TEXT_Y = 320;
 
-/** Semi-transparent pill + path text flanking the VS badge. */
+const PANEL_CENTER_X = {
+  left: HALF_WIDTH / 2,
+  right: HALF_WIDTH + HALF_WIDTH / 2,
+} as const;
+
+/** Semi-transparent pill + path text centered in each photo half (VS row). */
 function flankVsNamePill(text: string, side: "left" | "right"): string {
   if (!text) return "";
 
-  const anchorX =
-    side === "left"
-      ? HALF_WIDTH - VS_RADIUS - FLANK_GAP
-      : HALF_WIDTH + VS_RADIUS + FLANK_GAP;
+  const centerX = PANEL_CENTER_X[side];
   const textWidth = measureOutlinedTextWidth(
     text,
     FLANK_FONT_SIZE,
@@ -60,18 +61,17 @@ function flankVsNamePill(text: string, side: "left" | "right"): string {
   const pillW = textWidth + FLANK_PAD_X * 2;
   const pillH = FLANK_FONT_SIZE + FLANK_PAD_Y * 2;
   const pillY = FLANK_TEXT_Y - FLANK_FONT_SIZE - FLANK_PAD_Y + 6;
-  const pillX =
-    side === "left" ? anchorX - textWidth - FLANK_PAD_X : anchorX - FLANK_PAD_X;
+  const pillX = centerX - pillW / 2;
 
   return `<rect x="${pillX}" y="${pillY}" width="${pillW}" height="${pillH}" rx="12" fill="#0f172a" fill-opacity="0.75"/>
   ${textPath({
     text,
-    x: anchorX,
+    x: centerX,
     y: FLANK_TEXT_Y,
     fontSize: FLANK_FONT_SIZE,
     weight: FLANK_WEIGHT,
     fill: "#ffffff",
-    anchor: side === "left" ? "end" : "start",
+    anchor: "middle",
   })}`;
 }
 

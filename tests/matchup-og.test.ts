@@ -77,11 +77,11 @@ test("matchupBucketUrl builds public Supabase path shape", () => {
   );
 });
 
-test("matchupOgImagePath uses shared cache version v8", () => {
-  assert.equal(MATCHUP_OG_IMAGE_VERSION, "8");
+test("matchupOgImagePath uses shared cache version v9", () => {
+  assert.equal(MATCHUP_OG_IMAGE_VERSION, "9");
   assert.equal(
     matchupOgImagePath("football-goat"),
-    "/api/og/vote/matchups/football-goat.jpg?v=8",
+    "/api/og/vote/matchups/football-goat.jpg?v=9",
   );
 });
 
@@ -212,15 +212,15 @@ async function midToneFraction(
 test("renderMatchupOgImageJpeg flank name bands have visible text", async () => {
   const jpeg = await renderMatchupOgImageJpeg(PLACEHOLDER_CTX);
   const leftFrac = await midToneFraction(jpeg, {
-    left: 180,
+    left: 100,
     top: 275,
-    width: 380,
+    width: 400,
     height: 90,
   });
   const rightFrac = await midToneFraction(jpeg, {
-    left: 620,
+    left: 700,
     top: 275,
-    width: 380,
+    width: 400,
     height: 90,
   });
   assert.ok(
