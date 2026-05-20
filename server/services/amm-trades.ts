@@ -21,6 +21,7 @@
  */
 
 import { and, eq, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import {
   ammPriceSnapshots,
   creditLedger,
@@ -29,6 +30,8 @@ import {
   marketEntries,
   predictionMarkets,
   profiles,
+  trackedPeople,
+  trendingPeople,
 } from "@shared/schema";
 import {
   type AmmStateSnapshot,
@@ -48,7 +51,13 @@ import {
   checkSellSlippage,
 } from "./amm-slippage";
 import { notifyPriceChange } from "./amm-price-broadcaster";
+import {
+  formatMarketLead,
+  resolvePickContextLabel,
+} from "../jobs/notification-market-labels";
 import { createNotification } from "./notifications";
+
+const entryPerson = alias(trackedPeople, "amm_trade_entry_person");
 
 /**
  * Narrow tx-shape the helpers need. Both top-level `db` and the
@@ -755,25 +764,39 @@ export async function executeSell(
       // Two parallel reads — keep the join semantics honest. `slug` is
       // the URL-facing identifier; the resolver follows the same
       // pattern (see emitResolutionSideEffects → marketMeta.slug).
-      const [marketRow, entryRow] = await Promise.all([
-        db
-          .select({
-            title: predictionMarkets.title,
-            slug: predictionMarkets.slug,
-          })
-          .from(predictionMarkets)
-          .where(eq(predictionMarkets.id, marketId))
-          .limit(1),
-        db
-          .select({ label: marketEntries.label })
-          .from(marketEntries)
-          .where(eq(marketEntries.id, entryId))
-          .limit(1),
-      ]);
-      const marketTitle = marketRow[0]?.title ?? "Your market";
-      const marketSlug = marketRow[0]?.slug ?? null;
-      const entryLabel = entryRow[0]?.label ?? "position";
+      const [entryRow] = await db
+        .select({
+          entryLabel: marketEntries.label,
+          candidateName: entryPerson.name,
+          personName: trendingPeople.name,
+          marketTitle: predictionMarkets.title,
+          marketSlug: predictionMarkets.slug,
+          marketType: predictionMarkets.marketType,
+        })
+        .from(marketEntries)
+        .innerJoin(
+          predictionMarkets,
+          eq(marketEntries.marketId, predictionMarkets.id),
+        )
+        .leftJoin(entryPerson, eq(marketEntries.personId, entryPerson.id))
+        .leftJoin(
+          trendingPeople,
+          eq(predictionMarkets.personId, trendingPeople.id),
+        )
+        .where(eq(marketEntries.id, entryId))
+        .limit(1);
+
+      const marketTitle = entryRow?.marketTitle ?? "Your market";
+      const marketSlug = entryRow?.marketSlug ?? null;
+      const entryLabel = entryRow?.entryLabel ?? "position";
+      const contextLabel = resolvePickContextLabel({
+        marketType: entryRow?.marketType ?? "binary",
+        candidateName: entryRow?.candidateName ?? null,
+        entryLabel,
+        personName: entryRow?.personName ?? null,
+      });
       const href = marketSlug ? `/markets/${marketSlug}` : `/me/predictions`;
+      const marketLead = formatMarketLead(marketTitle, contextLabel);
 
       const sharesText =
         result.sharesSold >= 1
@@ -784,7 +807,7 @@ export async function executeSell(
         userId,
         kind: "trade_executed",
         title: `Position closed — ${result.proceeds.toLocaleString("en-US")} credits`,
-        body: `${marketTitle} (${entryLabel}) — sold ${sharesText} shares.`,
+        body: `${marketLead} — sold ${sharesText} shares.`,
         href,
         entityType: "market",
         entityId: marketId,
@@ -794,6 +817,8 @@ export async function executeSell(
           betId: result.betId,
           proceeds: result.proceeds,
           sharesSold: result.sharesSold,
+          entryLabel,
+          candidateName: entryRow?.candidateName ?? null,
         },
         idempotencyKey: `trade_executed:${result.betId}`,
       });

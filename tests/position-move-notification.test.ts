@@ -6,6 +6,7 @@ import {
   evaluatePositionMove,
   POSITION_MOVE_MIN_NOTIONAL_DEFAULT,
   POSITION_MOVE_PCT_THRESHOLD_DEFAULT,
+  resolvePositionMoveContextLabel,
 } from "../server/jobs/position-move-notification";
 
 // Pure helpers — no DB. These tests pin the threshold + dust gates
@@ -104,7 +105,7 @@ test("notification: down title uses abs pct without double minus", () => {
   );
 });
 
-test("notification: context label appended when not redundant with market title", () => {
+test("notification: context label leads when not redundant with market title", () => {
   const ev = evaluatePositionMove({ netCreditsIn: 500, currentValue: 390 })!;
   const { body } = buildPositionMoveNotification({
     marketTitle: "Who wins the fight?",
@@ -113,7 +114,52 @@ test("notification: context label appended when not redundant with market title"
   });
   assert.equal(
     body,
-    "Who wins the fight? · UP · Staked 500 cr, worth 390 cr now (unrealized). Tap to review.",
+    "UP · Who wins the fight? · Staked 500 cr, worth 390 cr now (unrealized). Tap to review.",
+  );
+});
+
+test("notification: category race body leads with candidate pick", () => {
+  const ev = evaluatePositionMove({ netCreditsIn: 100, currentValue: 81 })!;
+  const contextLabel = resolvePositionMoveContextLabel({
+    marketType: "gainer",
+    candidateName: "Clavicular",
+    entryLabel: "Clavicular",
+    personName: null,
+  });
+  assert.equal(contextLabel, "Clavicular");
+  const { title, body } = buildPositionMoveNotification({
+    marketTitle: "Category Race: Streaming",
+    contextLabel,
+    evaluation: ev,
+  });
+  assert.equal(title, "Your position is down 19.0%");
+  assert.equal(
+    body,
+    "Clavicular · Category Race: Streaming · Staked 100 cr, worth 81 cr now (unrealized). Tap to review.",
+  );
+});
+
+test("resolvePositionMoveContextLabel: gainer prefers candidateName over market person", () => {
+  assert.equal(
+    resolvePositionMoveContextLabel({
+      marketType: "gainer",
+      candidateName: "Clavicular",
+      entryLabel: "Clavicular",
+      personName: null,
+    }),
+    "Clavicular",
+  );
+});
+
+test("resolvePositionMoveContextLabel: updown prefers market person", () => {
+  assert.equal(
+    resolvePositionMoveContextLabel({
+      marketType: "updown",
+      candidateName: null,
+      entryLabel: "UP",
+      personName: "Andrew Tate",
+    }),
+    "Andrew Tate",
   );
 });
 

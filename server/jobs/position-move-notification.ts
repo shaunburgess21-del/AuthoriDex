@@ -1,3 +1,8 @@
+import { formatMarketLead, resolvePickContextLabel } from "./notification-market-labels";
+
+/** @deprecated Use resolvePickContextLabel from notification-market-labels. */
+export { resolvePickContextLabel as resolvePositionMoveContextLabel };
+
 /**
  * Pure helpers for the `position_move_alert` deriver.
  *
@@ -86,15 +91,6 @@ export interface PositionMoveNotificationInput {
 export interface PositionMoveNotificationOutput {
   title: string;
   body: string;
-}
-
-/** Body lead: market title plus optional side/candidate when not redundant. */
-function formatMarketLead(marketTitle: string, contextLabel?: string | null): string {
-  const title = marketTitle.trim() || "Your market";
-  const ctx = contextLabel?.trim();
-  if (!ctx) return title;
-  if (title.toLowerCase().includes(ctx.toLowerCase())) return title;
-  return `${title} · ${ctx}`;
 }
 
 /**

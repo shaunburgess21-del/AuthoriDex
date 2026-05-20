@@ -35,8 +35,12 @@
  * 1 credit, so `payout >= stake` for any winner-side row.
  */
 
+import { formatMarketLead } from "../jobs/notification-market-labels";
+
 export interface AmmResolutionNotificationInput {
   marketTitle: string;
+  /** Person name or entry side when it adds context beyond marketTitle. */
+  contextLabel?: string | null;
   won: boolean;
   stake: number;
   payout: number;
@@ -60,7 +64,8 @@ export interface AmmResolutionNotificationOutput {
 export function buildAmmResolutionNotification(
   input: AmmResolutionNotificationInput,
 ): AmmResolutionNotificationOutput | null {
-  const { marketTitle, won, stake, payout, preResolveSellProceeds } = input;
+  const { marketTitle, contextLabel, won, stake, payout, preResolveSellProceeds } = input;
+  const lead = formatMarketLead(marketTitle, contextLabel);
 
   if (won && payout === 0) {
     const proceeds = preResolveSellProceeds ?? 0;
@@ -69,7 +74,7 @@ export function buildAmmResolutionNotification(
     const signedNet = `${netRealised >= 0 ? "+" : ""}${netRealised.toLocaleString("en-US")}`;
     return {
       title: `Your market resolved — you'd sold beforehand`,
-      body: `${marketTitle} resolved on your side. You'd already sold those shares for ${proceeds.toLocaleString("en-US")} credits (net ${signedNet}).`,
+      body: `${lead} resolved on your side. You'd already sold those shares for ${proceeds.toLocaleString("en-US")} credits (net ${signedNet}).`,
     };
   }
 
@@ -79,20 +84,20 @@ export function buildAmmResolutionNotification(
   if (won && profit > 0) {
     return {
       title: `Your prediction won — ${signedProfit} credits`,
-      body: `${marketTitle} resolved. Payout ${payout.toLocaleString("en-US")} credits (net ${signedProfit}).`,
+      body: `${lead} resolved. Payout ${payout.toLocaleString("en-US")} credits (net ${signedProfit}).`,
     };
   }
 
   if (won) {
     return {
       title: `Stake returned — ${payout.toLocaleString("en-US")} credits`,
-      body: `${marketTitle} resolved. Payout matched your stake (net ${signedProfit}).`,
+      body: `${lead} resolved. Payout matched your stake (net ${signedProfit}).`,
     };
   }
 
   return {
     title: `Your prediction didn't land`,
-    body: `${marketTitle} resolved. Lost ${stake.toLocaleString("en-US")} credits — better luck next round.`,
+    body: `${lead} resolved. Lost ${stake.toLocaleString("en-US")} credits — better luck next round.`,
   };
 }
 

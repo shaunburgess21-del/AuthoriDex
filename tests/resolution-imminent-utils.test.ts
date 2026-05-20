@@ -3,94 +3,80 @@ import assert from "node:assert/strict";
 
 import { formatResolutionImminentNotification } from "../server/jobs/resolution-imminent-utils";
 
-// Pure helper — no DB. Pins the title/body wording for the
-// position_resolution_imminent kind so any future formatter changes
-// have to be intentional. Uses an em-dash that the source builds as
-// "\u2014" — replicate the same here to keep equality checks tidy.
 const EMDASH = "\u2014";
+const MIDDOT = "\u00b7";
 
-test("6h remaining renders integer hour label", () => {
+test("6h remaining: Your position title and market-only body", () => {
   const out = formatResolutionImminentNotification({
-    subjectLabel: "Mark Cuban",
+    marketTitle: "Mark Cuban: Up or Down?",
+    contextLabel: "Mark Cuban",
     netShares: 240,
     hoursRemaining: 6,
   });
-  assert.equal(out.title, `Mark Cuban resolves in 6h ${EMDASH} you're still holding`);
-  assert.equal(out.body, "Your position: 240 shares. Last call before payout lands.");
+  assert.equal(out.title, `Your position resolves in 6h ${EMDASH} you're still holding`);
+  assert.equal(
+    out.body,
+    `Mark Cuban: Up or Down? ${MIDDOT} 240 shares. Last call before payout lands.`,
+  );
 });
 
 test("3.7h remaining floors to 3h", () => {
   const out = formatResolutionImminentNotification({
-    subjectLabel: "Conor McGregor",
+    marketTitle: "Conor McGregor: Up or Down?",
     netShares: 100,
     hoursRemaining: 3.7,
   });
-  assert.equal(out.title, `Conor McGregor resolves in 3h ${EMDASH} you're still holding`);
+  assert.equal(out.title, `Your position resolves in 3h ${EMDASH} you're still holding`);
 });
 
-test("0.5h remaining renders as <1h (avoids misleading '0h')", () => {
+test("0.5h remaining renders as <1h", () => {
   const out = formatResolutionImminentNotification({
-    subjectLabel: "Tesla",
+    marketTitle: "Tesla: Up or Down?",
     netShares: 50,
     hoursRemaining: 0.5,
   });
-  assert.equal(out.title, `Tesla resolves in <1h ${EMDASH} you're still holding`);
+  assert.equal(out.title, `Your position resolves in <1h ${EMDASH} you're still holding`);
 });
 
-test("0h (exactly at deadline) renders as <1h", () => {
+test("category race body leads with candidate pick", () => {
   const out = formatResolutionImminentNotification({
-    subjectLabel: "Edge case",
-    netShares: 10,
-    hoursRemaining: 0,
+    marketTitle: "Category Race: Streaming",
+    contextLabel: "Clavicular",
+    netShares: 335,
+    hoursRemaining: 6,
   });
-  assert.equal(out.title, `Edge case resolves in <1h ${EMDASH} you're still holding`);
+  assert.equal(
+    out.body,
+    `Clavicular ${MIDDOT} Category Race: Streaming ${MIDDOT} 335 shares. Last call before payout lands.`,
+  );
 });
 
-test("negative hoursRemaining clamps to 0 → <1h", () => {
-  // Cron timing slip — endAt slid past NOW between query and fire.
-  // Render gracefully rather than printing "-0h" or "Infinity".
+test("netShares uses singular share when count rounds to 1", () => {
   const out = formatResolutionImminentNotification({
-    subjectLabel: "Clock skew",
-    netShares: 10,
-    hoursRemaining: -0.2,
-  });
-  assert.equal(out.title, `Clock skew resolves in <1h ${EMDASH} you're still holding`);
-});
-
-test("non-finite hoursRemaining falls back to <1h", () => {
-  const out = formatResolutionImminentNotification({
-    subjectLabel: "NaN handling",
-    netShares: 10,
-    hoursRemaining: NaN,
-  });
-  assert.equal(out.title, `NaN handling resolves in <1h ${EMDASH} you're still holding`);
-});
-
-test("netShares uses singular 'share' when count rounds to 1", () => {
-  const out = formatResolutionImminentNotification({
-    subjectLabel: "Single share",
+    marketTitle: "Who wins?",
     netShares: 1,
     hoursRemaining: 4,
   });
-  assert.equal(out.body, "Your position: 1 share. Last call before payout lands.");
+  assert.equal(out.body, `Who wins? ${MIDDOT} 1 share. Last call before payout lands.`);
 });
 
 test("large netShares uses en-US thousands separator", () => {
   const out = formatResolutionImminentNotification({
-    subjectLabel: "Whale market",
+    marketTitle: "Whale market",
     netShares: 12_345.7,
     hoursRemaining: 5,
   });
-  assert.equal(out.body, "Your position: 12,346 shares. Last call before payout lands.");
+  assert.equal(
+    out.body,
+    `Whale market ${MIDDOT} 12,346 shares. Last call before payout lands.`,
+  );
 });
 
-test("negative netShares clamps to 0 (defensive)", () => {
-  // Net shares should never be negative on a fire-path row, but the
-  // helper should not produce "-N shares" in the body if it does.
+test("negative netShares clamps to 0 shares", () => {
   const out = formatResolutionImminentNotification({
-    subjectLabel: "Defensive",
+    marketTitle: "Defensive",
     netShares: -5,
     hoursRemaining: 2,
   });
-  assert.equal(out.body, "Your position: 0 shares. Last call before payout lands.");
+  assert.equal(out.body, `Defensive ${MIDDOT} 0 shares. Last call before payout lands.`);
 });

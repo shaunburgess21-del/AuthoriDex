@@ -44,14 +44,19 @@
  */
 
 import { and, eq, sql, type SQL } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { db } from "../db";
 import {
   marketAmmState,
   marketBets,
   marketEntries,
   predictionMarkets,
+  trackedPeople,
   trendingPeople,
 } from "@shared/schema";
+
+/** Entry-scoped person join (Category Race / H2H candidates). */
+const entryPerson = alias(trackedPeople, "entry_person");
 import {
   currentPrices,
   quoteSell,
@@ -71,6 +76,9 @@ export interface AmmOpenPosition {
   entryId: string;
   entryLabel: string;
   entryResolutionStatus: string | null;
+  /** Linked person on the entry row (gainer / H2H / multi candidates). */
+  candidateName: string | null;
+  /** Market-level person (up/down markets). */
   personName: string | null;
   personAvatar: string | null;
   netShares: number;
@@ -447,6 +455,7 @@ export async function loadAmmPositionsFor(
       marketEndAt: predictionMarkets.endAt,
       entryLabel: marketEntries.label,
       entryResolutionStatus: marketEntries.resolutionStatus,
+      candidateName: entryPerson.name,
       personName: trendingPeople.name,
       personAvatar: trendingPeople.avatar,
     })
@@ -456,6 +465,7 @@ export async function loadAmmPositionsFor(
       eq(marketBets.marketId, predictionMarkets.id),
     )
     .innerJoin(marketEntries, eq(marketBets.entryId, marketEntries.id))
+    .leftJoin(entryPerson, eq(marketEntries.personId, entryPerson.id))
     .leftJoin(
       trendingPeople,
       eq(predictionMarkets.personId, trendingPeople.id),
@@ -581,6 +591,7 @@ export async function loadAmmPositionsFor(
       entryId: slot.sample.entryId,
       entryLabel: slot.sample.entryLabel,
       entryResolutionStatus: slot.sample.entryResolutionStatus,
+      candidateName: slot.sample.candidateName,
       personName: slot.sample.personName,
       personAvatar: slot.sample.personAvatar,
       netShares,

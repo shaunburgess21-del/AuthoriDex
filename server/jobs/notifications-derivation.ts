@@ -1,6 +1,7 @@
 import { db, withDbAdvisoryLock } from "../db";
 import {
   marketBets,
+  marketEntries,
   notificationMarketMutes,
   notifications,
   predictionMarkets,
@@ -11,9 +12,11 @@ import {
   userFavourites,
 } from "@shared/schema";
 import { and, desc, eq, gte, inArray, isNull, lte, lt, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { log } from "../log";
 import { createNotification } from "../services/notifications";
 import { loadAmmPositionsFor } from "../services/amm-positions";
+import { resolvePickContextLabel } from "./notification-market-labels";
 import {
   buildPositionMoveNotification,
   evaluatePositionMove,
@@ -28,6 +31,8 @@ import {
   type WeeklyDigestStats,
 } from "./weekly-digest-utils";
 import { formatResolutionImminentNotification } from "./resolution-imminent-utils";
+
+const entryPerson = alias(trackedPeople, "entry_person_for_notif");
 import { STREAK_MILESTONES } from "@shared/streak-config";
 
 /**
@@ -220,7 +225,12 @@ async function deriveFavoriteRankCrossings(): Promise<number> {
       href: `/person/${fav.personId}`,
       entityType: "person",
       entityId: fav.personId,
-      metadata: { crossing, previousRank: prior, currentRank: current },
+      metadata: {
+        crossing,
+        direction: crossing === "out_top100" ? "down" : "up",
+        previousRank: prior,
+        currentRank: current,
+      },
       // Audit: idempotencyKey already includes the UTC hour bucket so
       // we cannot exceed one row per (user, person, crossing) per hour.
       // groupKey here collapses any yo-yo crossings client-side — e.g.
@@ -828,7 +838,12 @@ async function derivePositionMoveAlerts(): Promise<number> {
         .limit(1);
       if (recent) continue;
 
-      const contextLabel = pos.personName ?? pos.entryLabel ?? null;
+      const contextLabel = resolvePickContextLabel({
+        marketType: pos.marketType,
+        candidateName: pos.candidateName,
+        entryLabel: pos.entryLabel,
+        personName: pos.personName,
+      });
       const { title, body } = buildPositionMoveNotification({
         marketTitle: pos.marketTitle ?? "Your market",
         contextLabel,
@@ -850,8 +865,10 @@ async function derivePositionMoveAlerts(): Promise<number> {
         metadata: {
           marketId: pos.marketId,
           entryId: pos.entryId,
+          marketType: pos.marketType,
           marketTitle: pos.marketTitle,
           entryLabel: pos.entryLabel,
+          candidateName: pos.candidateName,
           direction: evaluation.direction,
           pctMove: evaluation.pctMove,
           netCreditsIn: evaluation.netCreditsIn,
@@ -932,10 +949,15 @@ async function deriveWeeklyDigest(): Promise<number> {
         payoutAmount: marketBets.payoutAmount,
         status: marketBets.status,
         marketTitle: predictionMarkets.title,
+        marketType: predictionMarkets.marketType,
+        entryLabel: marketEntries.label,
+        candidateName: entryPerson.name,
         personName: trackedPeople.name,
       })
       .from(marketBets)
       .innerJoin(predictionMarkets, eq(marketBets.marketId, predictionMarkets.id))
+      .innerJoin(marketEntries, eq(marketBets.entryId, marketEntries.id))
+      .leftJoin(entryPerson, eq(marketEntries.personId, entryPerson.id))
       .leftJoin(trackedPeople, eq(predictionMarkets.personId, trackedPeople.id))
       .where(
         and(
@@ -976,8 +998,14 @@ async function deriveWeeklyDigest(): Promise<number> {
         // guard the body would render "Best: <market> (-50)" which
         // reads worse than no best-pick line at all.
         if (profit > 0 && (!bestPick || profit > bestPick.profit)) {
+          const pickLabel = resolvePickContextLabel({
+            marketType: bet.marketType,
+            candidateName: bet.candidateName,
+            entryLabel: bet.entryLabel,
+            personName: bet.personName,
+          });
           bestPick = {
-            label: bet.personName ?? bet.marketTitle ?? "Top pick",
+            label: pickLabel ?? bet.marketTitle ?? "Top pick",
             profit,
           };
         }
@@ -1056,6 +1084,7 @@ async function derivePositionResolutionImminent(): Promise<number> {
       title: predictionMarkets.title,
       slug: predictionMarkets.slug,
       endAt: predictionMarkets.endAt,
+      marketType: predictionMarkets.marketType,
       personName: trackedPeople.name,
     })
     .from(predictionMarkets)
@@ -1075,22 +1104,20 @@ async function derivePositionResolutionImminent(): Promise<number> {
   for (const market of imminentMarkets) {
     if (!market.endAt) continue;
 
-    // Per-user net shares on this market, aggregated in SQL so a
-    // weekly market with 1000+ bets doesn't ship every row to the
-    // app. We don't need per-entry breakdown for the heads-up
-    // (users can see that on the market page).
-    //
-    // `shareCount` is a numeric column and Drizzle returns SUM as a
-    // string — Number() at read time keeps the type plumbing simple.
-    // HAVING filters to only users with a real net position so we
-    // don't hand zero/negative rows back to the JS loop at all.
+    // Per-(user, entry) net shares so Category Race holders see their
+    // pick (e.g. Clavicular), not just the market category title.
     const netRows = await db
       .select({
         userId: marketBets.userId,
+        entryId: marketBets.entryId,
+        entryLabel: marketEntries.label,
+        candidateName: entryPerson.name,
         netShares: sql<string>`SUM(CASE WHEN ${marketBets.actionType} = 'buy' THEN ${marketBets.shareCount}::numeric ELSE -${marketBets.shareCount}::numeric END)`,
       })
       .from(marketBets)
       .innerJoin(profiles, eq(profiles.id, marketBets.userId))
+      .innerJoin(marketEntries, eq(marketBets.entryId, marketEntries.id))
+      .leftJoin(entryPerson, eq(marketEntries.personId, entryPerson.id))
       .where(
         and(
           eq(marketBets.marketId, market.id),
@@ -1098,7 +1125,12 @@ async function derivePositionResolutionImminent(): Promise<number> {
           inArray(marketBets.actionType, ["buy", "sell"]),
         ),
       )
-      .groupBy(marketBets.userId)
+      .groupBy(
+        marketBets.userId,
+        marketBets.entryId,
+        marketEntries.label,
+        entryPerson.name,
+      )
       .having(
         sql`SUM(CASE WHEN ${marketBets.actionType} = 'buy' THEN ${marketBets.shareCount}::numeric ELSE -${marketBets.shareCount}::numeric END) > 0.5`,
       );
@@ -1107,21 +1139,29 @@ async function derivePositionResolutionImminent(): Promise<number> {
 
     const hoursRemaining =
       (market.endAt.getTime() - Date.now()) / (60 * 60 * 1000);
-    const subjectLabel = market.personName ?? market.title ?? "Your position";
+    const marketTitle = market.title ?? "Your market";
     const href = market.slug ? `/markets/${market.slug}` : `/me/predictions`;
 
-    for (const { userId, netShares: netSharesRaw } of netRows) {
-      const netShares = Number(netSharesRaw ?? 0);
+    for (const row of netRows) {
+      const netShares = Number(row.netShares ?? 0);
       if (!Number.isFinite(netShares) || netShares <= 0.5) continue;
 
+      const contextLabel = resolvePickContextLabel({
+        marketType: market.marketType,
+        candidateName: row.candidateName,
+        entryLabel: row.entryLabel,
+        personName: market.personName,
+      });
+
       const { title, body } = formatResolutionImminentNotification({
-        subjectLabel,
+        marketTitle,
+        contextLabel,
         netShares,
         hoursRemaining,
       });
 
       const id = await createNotification({
-        userId,
+        userId: row.userId,
         kind: "position_resolution_imminent",
         title,
         body,
@@ -1131,10 +1171,11 @@ async function derivePositionResolutionImminent(): Promise<number> {
         marketId: market.id,
         metadata: {
           marketId: market.id,
+          entryId: row.entryId,
           netShares: Math.round(netShares),
           hoursRemaining: Math.max(0, Math.floor(hoursRemaining)),
         },
-        idempotencyKey: `position_resolution_imminent:${userId}:${market.id}`,
+        idempotencyKey: `position_resolution_imminent:${row.userId}:${market.id}:${row.entryId}`,
       });
       if (id) inserted += 1;
     }

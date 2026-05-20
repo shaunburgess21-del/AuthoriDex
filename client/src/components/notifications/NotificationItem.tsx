@@ -13,7 +13,11 @@ import {
 } from "@/hooks/useNotifications";
 import { getRecentActivityMarketPath } from "@/lib/predict-display";
 
-const DIRECTION_AWARE_KINDS = new Set(["favorite_hot_mover", "position_move_alert"]);
+const DIRECTION_AWARE_KINDS = new Set([
+  "favorite_hot_mover",
+  "favorite_rank_cross",
+  "position_move_alert",
+]);
 
 function getNotificationDirection(
   kind: string,

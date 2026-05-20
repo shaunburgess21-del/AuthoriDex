@@ -56,6 +56,22 @@ test("lost → 'Your prediction didn't land' with stake amount", () => {
   );
 });
 
+test("gainer win with contextLabel leads body with candidate pick", () => {
+  const built = buildAmmResolutionNotification({
+    marketTitle: "Category Race: Streaming",
+    contextLabel: "Clavicular",
+    won: true,
+    stake: 100,
+    payout: 200,
+  });
+  assert.ok(built);
+  assert.equal(built!.title, "Your prediction won — +100 credits");
+  assert.equal(
+    built!.body,
+    "Clavicular · Category Race: Streaming resolved. Payout 200 credits (net +100).",
+  );
+});
+
 test("won-but-fully-sold without pre-close proceeds (back-compat) → suppressed (null)", () => {
   // Buy row marked status='won' but payoutAmount=0 because the user
   // sold all their winner-side shares before resolution. When the

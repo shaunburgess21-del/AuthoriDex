@@ -25,6 +25,7 @@
  */
 
 import { and, eq, inArray, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import {
   creditLedger,
   marketAmmState,
@@ -32,15 +33,20 @@ import {
   marketEntries,
   predictionMarkets,
   profiles,
+  trackedPeople,
+  trendingPeople,
 } from "@shared/schema";
 import { db } from "../db";
 import { log } from "../log";
+import { resolvePickContextLabel } from "../jobs/notification-market-labels";
 import { HOUSE_PROFILE_ID, returnAmmSeedAtSettlement } from "./amm-house";
 import { createNotification } from "./notifications";
 import {
   buildAmmResolutionNotification,
   buildAmmVoidNotification,
 } from "./amm-resolver-notifications";
+
+const entryPerson = alias(trackedPeople, "amm_resolver_entry_person");
 import { gamificationService } from "./gamification";
 import { checkAndAwardPredictionWinBadges } from "./badges";
 import { scoreResolvedMarket } from "../agents/performanceUpdater";
@@ -372,8 +378,21 @@ async function emitResolutionSideEffects(result: ResolveAmmMarketResult): Promis
         status: marketBets.status,
         stakeAmount: marketBets.stakeAmount,
         payoutAmount: marketBets.payoutAmount,
+        entryLabel: marketEntries.label,
+        candidateName: entryPerson.name,
+        personName: trendingPeople.name,
       })
       .from(marketBets)
+      .innerJoin(marketEntries, eq(marketBets.entryId, marketEntries.id))
+      .leftJoin(entryPerson, eq(marketEntries.personId, entryPerson.id))
+      .leftJoin(
+        predictionMarkets,
+        eq(marketBets.marketId, predictionMarkets.id),
+      )
+      .leftJoin(
+        trendingPeople,
+        eq(predictionMarkets.personId, trendingPeople.id),
+      )
       .where(
         and(
           eq(marketBets.marketId, marketId),
@@ -427,8 +446,16 @@ async function emitResolutionSideEffects(result: ResolveAmmMarketResult): Promis
         preResolveSellProceeds = proceedsByUser.get(bet.userId) ?? 0;
       }
 
+      const contextLabel = resolvePickContextLabel({
+        marketType: marketMeta?.marketType ?? "binary",
+        candidateName: bet.candidateName,
+        entryLabel: bet.entryLabel,
+        personName: bet.personName,
+      });
+
       const built = buildAmmResolutionNotification({
         marketTitle,
+        contextLabel,
         won,
         stake,
         payout,
