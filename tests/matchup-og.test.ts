@@ -77,11 +77,11 @@ test("matchupBucketUrl builds public Supabase path shape", () => {
   );
 });
 
-test("matchupOgImagePath uses shared cache version v5", () => {
-  assert.equal(MATCHUP_OG_IMAGE_VERSION, "5");
+test("matchupOgImagePath uses shared cache version v6", () => {
+  assert.equal(MATCHUP_OG_IMAGE_VERSION, "6");
   assert.equal(
     matchupOgImagePath("football-goat"),
-    "/api/og/vote/matchups/football-goat.jpg?v=5",
+    "/api/og/vote/matchups/football-goat.jpg?v=6",
   );
 });
 
@@ -114,6 +114,7 @@ test("buildMatchupOverlaySvg uses path outlines only (no librsvg text)", () => {
   assert.ok(pathCount >= 6, `expected >=6 path elements, got ${pathCount}`);
 
   assert.equal(labels.prompt, "Who is the GOAT?");
+  assert.equal(labels.vsLine, "Cristiano Ronaldo vs Lionel Messi");
   assert.equal(labels.cta, "Vote on VoxDex");
   assert.equal(labels.brand, "VoxDex");
 });
@@ -178,5 +179,35 @@ test("renderMatchupOgImageJpeg brand region is not tofu-like", async () => {
   assert.ok(
     midToneFrac > 0.02,
     `mid-tone edge fraction ${midToneFrac.toFixed(3)} too low (missing glyphs?)`,
+  );
+});
+
+/** Top-center vsLine band should have subtitle glyphs (safe from X/FB bottom overlay). */
+test("renderMatchupOgImageJpeg top-center vsLine band has visible text", async () => {
+  const jpeg = await renderMatchupOgImageJpeg(PLACEHOLDER_CTX);
+  const sharp = (await import("sharp")).default;
+  const { data, info } = await sharp(jpeg)
+    .extract({ left: 400, top: 20, width: 400, height: 60 })
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  const channels = info.channels ?? 3;
+  const pixels = info.width * info.height;
+  let midTone = 0;
+
+  for (let i = 0; i < pixels; i++) {
+    const idx = i * channels;
+    const r = data[idx]!;
+    const g = data[idx + 1] ?? r;
+    const b = data[idx + 2] ?? r;
+    if (r > 120 && r < 220 && g > 120 && g < 220 && b > 120 && b < 220) {
+      midTone++;
+    }
+  }
+
+  const midToneFrac = midTone / pixels;
+  assert.ok(
+    midToneFrac > 0.015,
+    `top-center mid-tone fraction ${midToneFrac.toFixed(3)} too low (vsLine missing?)`,
   );
 });

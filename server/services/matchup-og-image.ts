@@ -28,7 +28,7 @@ export function getMatchupOverlayLabels(ctx: MatchupOgContext) {
     category: truncate(ctx.category || "Matchup", 24).toUpperCase(),
     vs: "VS",
     prompt: truncate(matchupOgPromptTitle(ctx), 72),
-    vsLine: truncate(matchupOgDescription(ctx), 80),
+    vsLine: truncate(matchupOgDescription(ctx), 56),
     cta: "Vote on VoxDex",
   };
 }
@@ -172,6 +172,15 @@ export function buildMatchupOverlaySvg(ctx: MatchupOgContext): string {
     anchor: "middle",
     letterSpacing: 1,
   })}
+  ${textPath({
+    text: labels.vsLine,
+    x: HALF_WIDTH,
+    y: 58,
+    fontSize: 24,
+    weight: 500,
+    fill: "#cbd5e1",
+    anchor: "middle",
+  })}
 
   <circle cx="${HALF_WIDTH}" cy="315" r="52" fill="#0f172a" fill-opacity="0.92" stroke="#38bdf8" stroke-width="4"/>
   ${textPath({
@@ -192,14 +201,6 @@ export function buildMatchupOverlaySvg(ctx: MatchupOgContext): string {
     fontSize: 46,
     weight: 700,
     fill: "#ffffff",
-  })}
-  ${textPath({
-    text: labels.vsLine,
-    x: 48,
-    y: 568,
-    fontSize: 26,
-    weight: 500,
-    fill: "#cbd5e1",
   })}
   ${textPath({
     text: labels.cta,
