@@ -97,7 +97,7 @@ export interface PositionMoveNotificationOutput {
  * User-facing copy for an open-position move alert. Titles lead with
  * "Your position" so users read P&L first, not a celebrity name
  * (which would be confused with trend-score alerts). Body names the
- * market and stake → current sell value with an unrealized hint.
+ * market and stake → current sell value.
  */
 export function buildPositionMoveNotification(
   input: PositionMoveNotificationInput,
@@ -114,7 +114,7 @@ export function buildPositionMoveNotification(
   const marketLead = formatMarketLead(marketTitle, contextLabel);
   const body =
     `${marketLead} · Staked ${netCreditsIn.toLocaleString("en-US")} cr, ` +
-    `worth ${currentValue.toLocaleString("en-US")} cr now (unrealized). Tap to review.`;
+    `worth ${currentValue.toLocaleString("en-US")} cr now. Tap to review.`;
 
   return { title, body };
 }

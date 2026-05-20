@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
@@ -47,7 +47,17 @@ export function NotificationBell({ size = "default", className }: NotificationBe
   const { isLoggedIn } = useAuth();
   const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const counts = useNotificationCounts();
+
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    // Radix returns focus to the trigger on dismiss; after a click-outside
+    // close that leaves a persistent focus-visible ring until another click.
+    if (!next) {
+      requestAnimationFrame(() => triggerRef.current?.blur());
+    }
+  };
   const markSeen = useMarkNotificationsSeen();
 
   // Whenever the panel opens AND there are unseen items, mark seen.
@@ -85,7 +95,7 @@ export function NotificationBell({ size = "default", className }: NotificationBe
           className={className}
           onClick={() => setOpen(true)}
         />
-        <Sheet open={open} onOpenChange={setOpen}>
+        <Sheet open={open} onOpenChange={handleOpenChange}>
           <SheetContent side="right" className="w-[360px] max-w-[100vw] p-0">
             <SheetHeader className="sr-only">
               <SheetTitle>Notifications</SheetTitle>
@@ -107,9 +117,10 @@ export function NotificationBell({ size = "default", className }: NotificationBe
   // !true → open=false in the same React batch, so the panel never
   // appears to open).
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
+    <DropdownMenu open={open} onOpenChange={handleOpenChange}>
       <DropdownMenuTrigger asChild>
         <NotificationBellTrigger
+          ref={triggerRef}
           unreadCount={unread}
           hasNew={hasNew}
           cap={cap}
