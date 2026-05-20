@@ -2746,6 +2746,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const staleFlags: Record<string, boolean> = {};
       if (dataDelayed) staleFlags.dataDelayed = true;
+      if (fresh.trendsCarriedForward === true) staleFlags.trendsCarriedForward = true;
       // `*Held` covers both the single-tick EMA-hold and the trailing-24h
       // decay-floor — semantically both mean "the displayed value is not the
       // raw fetch, it's been anchored to recent history".
@@ -3202,6 +3203,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         : 0;
       const trendsDeltaPct = Math.abs(rawTrendsDeltaPct) <= DELTA_DEAD_ZONE_PCT ? 0 : rawTrendsDeltaPct;
 
+      const trendsFetchedAtRaw = trendsDiag?.raw?.trendsFetchedAt;
+      let trendsFetchedAgeHours: number | null = null;
+      if (typeof trendsFetchedAtRaw === "string" && trendsFetchedAtRaw) {
+        const fetchedMs = Date.parse(trendsFetchedAtRaw);
+        if (Number.isFinite(fetchedMs)) {
+          trendsFetchedAgeHours = Math.round((Date.now() - fetchedMs) / (1000 * 60 * 60) * 10) / 10;
+        }
+      }
+      if ((trendsInterest ?? 0) > 0) activeSources.push("trends");
+
       res.json({
         asOf: latest.timestamp.toISOString(),
         ageMinutes,
@@ -3298,7 +3309,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Google Trends — activity card + dormant momentum (not in velocityScore).
           // avg7d: same-window 24h series mean (not calendar 7-day) until Option 3.
           // deltaPct: latest ~4h vs oldest ~4h on one `now 1-d` graph (activity %).
-          trends: {
+          trends: trendsInterest > 0 ? {
             interest: Math.round(trendsInterest * 10) / 10,
             avg7d: Math.round(trendsAvg7dVal * 10) / 10,
             avg90d: Math.round(trendsAvg90dVal * 10) / 10,
@@ -3306,7 +3317,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             momentumLevel: trendsMomentumLevel,
             deltaPct: trendsDeltaPct,
             topicId: person.googleTrendsTopicId ?? null,
-          },
+            ...(fresh.trendsCarriedForward === true ? { carriedForward: true } : {}),
+            ...(trendsFetchedAgeHours != null ? { fetchedAgeHours: trendsFetchedAgeHours } : {}),
+          } : undefined,
           drivers: {
             status: driversStatus,
             breakdown: driverBreakdown,

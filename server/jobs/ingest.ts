@@ -959,16 +959,27 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     // first snapshot seen in the 7d window, which made change7d nondeterministic
     // (depended on DB row order) and systematically biased toward the older end.
     const snapshot7dMap = new Map<string, { trendScore: number; fameIndex: number | null; timestamp?: Date; basisHours?: number }>();
-    
+    // Newest snapshot per person that still has Google Trends diagnostics
+    // (hourly ticks between 12h SerpApi fetches omit trends unless we carry forward).
+    const latestTrendsDiagMap = new Map<string, {
+      trendsInterest: number;
+      trendsPrevDayInterest: number;
+      trendsAvg7d: number;
+      trendsMomentumRatio: number;
+      trendsMomentumLevel: string;
+      trendsUsedFallbackName: boolean;
+      trendsFetchedAt: string;
+    }>();
+
     for (const snap of historicalSnapshots) {
       const snapTime = new Date(snap.timestamp).getTime();
       const diff24h = Math.abs(snapTime - time24hAgo.getTime());
       const diff7d = Math.abs(snapTime - time7dAgo.getTime());
-      
+      const diag = snap.diagnostics as Record<string, any> | null;
+
       // Track most recent snapshot per person (for EMA smoothing continuity + fallback data)
       const existingRecent = mostRecentMap.get(snap.personId);
       if (!existingRecent || new Date(snap.timestamp) > existingRecent.timestamp) {
-        const diag = snap.diagnostics as Record<string, any> | null;
         const ev = diag?.evidence ?? {};
         mostRecentMap.set(snap.personId, { 
           trendScore: snap.trendScore, 
@@ -982,6 +993,27 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           prevNewsProvider: ev.newsProvider ?? null,
           prevTopStories: Array.isArray(ev.topStories) ? ev.topStories : [],
         });
+      }
+
+      const raw = diag?.raw;
+      const carriedInterest = raw?.trendsInterest;
+      if (carriedInterest != null && carriedInterest !== "null" && Number(carriedInterest) > 0) {
+        const snapAt = new Date(snap.timestamp);
+        const existingTrends = latestTrendsDiagMap.get(snap.personId);
+        if (!existingTrends || snapAt.getTime() > new Date(existingTrends.trendsFetchedAt).getTime()) {
+          latestTrendsDiagMap.set(snap.personId, {
+            trendsInterest: Number(carriedInterest),
+            trendsPrevDayInterest: Number(raw?.trendsPrevDayInterest ?? 0),
+            trendsAvg7d: Number(raw?.trendsAvg7d ?? 0),
+            trendsMomentumRatio: Number(raw?.trendsMomentumRatio ?? 0),
+            trendsMomentumLevel: String(raw?.trendsMomentumLevel ?? "none"),
+            trendsUsedFallbackName: !!raw?.trendsUsedFallbackName,
+            trendsFetchedAt:
+              typeof raw?.trendsFetchedAt === "string" && raw.trendsFetchedAt
+                ? raw.trendsFetchedAt
+                : snapAt.toISOString(),
+          });
+        }
       }
 
       // Track last non-zero news snapshot (for bootstrap recovery from zero-propagation)
@@ -2009,12 +2041,21 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           wikiPageviews: wiki?.pageviews24h || 0,
           wikiPageviews7dAvg: wiki?.averageDaily7d || 0, // 7-day average for stable mass baseline
           wikiAverageDaily7d: wikiAvg7dExcludingToday,
-          trendsInterest: trends?.latestInterest ?? 0,
-          // Same-window 24h mean when fetched; history fallback on skip cycles.
-          trendsAvg7d:
-            trends && trends.avg24hInterest > 0
-              ? trends.avg24hInterest
-              : computeTrendsAvg7d(person.id, trends?.latestInterest ?? 0),
+          trendsInterest: (() => {
+            const carried = latestTrendsDiagMap.get(person.id);
+            if (trends && (trends.latestInterest > 0 || trends.timeseries.length > 0)) {
+              return trends.latestInterest;
+            }
+            if (carried && carried.trendsInterest > 0) return carried.trendsInterest;
+            return 0;
+          })(),
+          // Same-window 24h mean when fetched; carry-forward or history on skip.
+          trendsAvg7d: (() => {
+            const carriedFwd = latestTrendsDiagMap.get(person.id);
+            if (trends && trends.avg24hInterest > 0) return trends.avg24hInterest;
+            if (carriedFwd != null && carriedFwd.trendsAvg7d > 0) return carriedFwd.trendsAvg7d;
+            return computeTrendsAvg7d(person.id, trends?.latestInterest ?? 0);
+          })(),
           wikiDelta: wiki?.delta || 0,
           newsDelta: newsDelta,
           searchDelta: searchDelta,
@@ -2126,24 +2167,42 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
         const wikiMomentumLevel = computeMomentumLevel(wikiMomentumRatio);
 
         // Google Trends diagnostics (May 2026 — activity + dormant momentum)
-        // Activity card: trendsInterest (last ~4h) vs trendsPrevDayInterest
-        // (first ~4h of same `now 1-d` graph). Momentum (display-only):
-        // trendsAvg7d = full-series mean on that graph when fetched; history
-        // fallback via computeTrendsAvg7d when this cycle skipped the API.
-        const trendsInterestLatest = trends?.latestInterest ?? 0;
-        const trendsAvg7d =
+        const trendsCarried = latestTrendsDiagMap.get(person.id);
+        const hasFreshTrendsFetch = !!trends && (trends.latestInterest > 0 || trends.timeseries.length > 0);
+        const trendsCarriedForward = !hasFreshTrendsFetch && (trendsCarried?.trendsInterest ?? 0) > 0;
+        const trendsFetchedAtIso = hasFreshTrendsFetch
+          ? now.toISOString()
+          : trendsCarriedForward
+            ? trendsCarried!.trendsFetchedAt
+            : null;
+
+        let trendsInterestLatest = trends?.latestInterest ?? 0;
+        let trendsAvg7d =
           trends && trends.avg24hInterest > 0
             ? trends.avg24hInterest
             : computeTrendsAvg7d(person.id, trendsInterestLatest);
-        const trendsPrevDayInterest =
+        let trendsPrevDayInterest =
           trends && trends.prevWindowInterest > 0
             ? trends.prevWindowInterest
             : (trendsPrevDayMap.get(person.id) ?? 0);
+        let trendsMomentumRatio = 0;
+        let trendsMomentumLevel: ReturnType<typeof computeMomentumLevel> = "none";
+
+        if (trendsCarriedForward && trendsCarried) {
+          trendsInterestLatest = trendsCarried.trendsInterest;
+          trendsAvg7d = trendsCarried.trendsAvg7d > 0 ? trendsCarried.trendsAvg7d : trendsInterestLatest;
+          trendsPrevDayInterest = trendsCarried.trendsPrevDayInterest;
+          trendsMomentumRatio = trendsCarried.trendsMomentumRatio;
+          trendsMomentumLevel = computeMomentumLevel(trendsMomentumRatio);
+        } else if (hasFreshTrendsFetch) {
+          trendsMomentumRatio = trendsAvg7d > 0 && trendsInterestLatest > 0
+            ? Math.min(trendsInterestLatest / Math.max(trendsAvg7d, 1), MOMENTUM_RATIO_CAP)
+            : 0;
+          trendsMomentumLevel = computeMomentumLevel(trendsMomentumRatio);
+        }
+
         const trendsAvg90d = 0;
-        const trendsMomentumRatio = trendsAvg7d > 0 && trendsInterestLatest > 0
-          ? Math.min(trendsInterestLatest / Math.max(trendsAvg7d, 1), MOMENTUM_RATIO_CAP)
-          : 0;
-        const trendsMomentumLevel = computeMomentumLevel(trendsMomentumRatio);
+        const hasTrendsDiagnostics = hasFreshTrendsFetch || trendsCarriedForward;
 
         const diagnosticsData = {
           v: SNAPSHOT_DIAGNOSTICS_VERSION,
@@ -2161,7 +2220,7 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
             wikiMomentumAvg7d: wikiAvg7dExcludingToday,
             wikiMomentumRatio,
             wikiMomentumLevel,
-            ...(trends ? {
+            ...(hasTrendsDiagnostics ? {
               trendsInterest: trendsInterestLatest,
               trendsPrevDayInterest,
               trendsAvg7d,
@@ -2169,7 +2228,10 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
               trendsMomentumRatio,
               trendsMomentumLevel,
               trendsTopicId: person.googleTrendsTopicId ?? null,
-              trendsUsedFallbackName: !person.googleTrendsTopicId,
+              trendsUsedFallbackName: hasFreshTrendsFetch
+                ? !person.googleTrendsTopicId
+                : (trendsCarried?.trendsUsedFallbackName ?? !person.googleTrendsTopicId),
+              ...(trendsFetchedAtIso ? { trendsFetchedAt: trendsFetchedAtIso } : {}),
             } : {}),
             news: news?.articleCount24h ?? 0,
             // News 7d daily average — denominator for momentum velocity
@@ -2200,6 +2262,8 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
             // the raw signal is actually fine.
             news: !newsUsedFallback && !newsEmaHeld && (news?.articleCount24h ?? 0) > 0,
             search: !searchUsedFallback && !searchEmaHeld && (serper?.searchVolume ?? 0) > 0,
+            trends: hasFreshTrendsFetch,
+            trendsCarriedForward,
             newsSource: hasPerPersonFallback ? "serper_news" : newsSource,
             newsIsRefresh: (newsSource === "mediastack" || newsSource === "union")
               ? (mediastackCadence?.shouldRefresh ?? true)

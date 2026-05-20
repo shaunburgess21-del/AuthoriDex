@@ -78,12 +78,14 @@ interface MomentumData {
      *  Trends Momentum (acceleration) deferred until 7+ days of data. */
     trends?: {
       interest: number;           // 0..100 Google Trends interest score
-      avg7d: number;              // 7-day average interest
+      avg7d: number;              // same-window 24h mean (field name legacy)
       avg90d: number;             // 90-day average interest (mass)
       momentumRatio: number;      // interest / max(avg7d, 1), capped at 10×
       momentumLevel: MomentumLevel;
       deltaPct: number;
       topicId: string | null;
+      carriedForward?: boolean;
+      fetchedAgeHours?: number;
     };
     drivers: {
       status: "active" | "stable";
@@ -494,13 +496,30 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
   // the Momentum cards). Only show the warm-up notice when we have no data
   // yet. The 7-day baseline is still computed and persisted server-side
   // for the future Trends Momentum card.
+  const trendsFetchedAgeHours = signals.trends?.fetchedAgeHours;
+  const trendsCarriedForward =
+    signals.trends?.carriedForward === true || staleFlags.trendsCarriedForward === true;
+  const trendsRefreshAgeLabel =
+    trendsFetchedAgeHours != null && Number.isFinite(trendsFetchedAgeHours)
+      ? trendsFetchedAgeHours < 1
+        ? "less than 1h"
+        : trendsFetchedAgeHours < 2
+          ? "~1h"
+          : `~${Math.round(trendsFetchedAgeHours)}h`
+      : null;
   const trendsFooter = !hasTrendsData
     ? (
         <p className="text-[10px] text-muted-foreground/60 pt-0.5" data-testid="text-trends-warmup">
           Awaiting first Google Trends data
         </p>
       )
-    : null;
+    : trendsCarriedForward && trendsRefreshAgeLabel
+      ? (
+          <p className="text-[10px] text-muted-foreground/60 pt-0.5" data-testid="text-trends-carried-forward">
+            Google data last refreshed {trendsRefreshAgeLabel} ago · updates about every 12h
+          </p>
+        )
+      : null;
 
   return (
     <div id="momentum-signals" className="mt-8 space-y-5" data-testid="section-momentum-signals">
