@@ -495,7 +495,7 @@ function MultiMarketEntryRow({
   );
 }
 
-const MULTI_MARKET_PREVIEW_COUNT = 4;
+const MULTI_MARKET_PREVIEW_COUNT = 3;
 
 function MultiMarketCard({ market, entries, participants, timeLabel, onNavigate, onPickEntry, isMarketClosed, isInactive = false, inactiveMessage, userBetResult, userBetsPerEntry, onFilterCategory, categoryRaceMap, leaderboardCategories, onBrowseFullScreen, unrealisedPnl }: { market: any; entries: any[]; participants: number; timeLabel: string; onNavigate: (slug: string, pick?: string, direction?: string) => void; onPickEntry?: (market: any, entry: any, direction: "yes" | "no") => void; isMarketClosed: boolean; isInactive?: boolean; inactiveMessage?: string; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number }; userBetsPerEntry?: Map<string, { yesStake: number; noStake: number }>; onFilterCategory?: (cat: string) => void; categoryRaceMap?: Map<string, string>; leaderboardCategories?: Set<string>; onBrowseFullScreen?: () => void; /** AMM unrealised P&L for the user's top position on this market. */ unrealisedPnl?: number | null }) {
   const [, setLocation] = useLocation();
@@ -555,8 +555,13 @@ function MultiMarketCard({ market, entries, participants, timeLabel, onNavigate,
   const visibleEntries = rankedEntries.slice(0, MULTI_MARKET_PREVIEW_COUNT);
   const remainingCount = Math.max(0, rankedEntries.length - MULTI_MARKET_PREVIEW_COUNT);
 
+  const openOptionsDrawer = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setOptionsDrawerOpen(true);
+  };
+
   return (
-    <PredictCard testId={`card-market-${market.slug}`} className={`${isMarketClosed && !isInactive ? 'opacity-75' : ''}`} inactive={isInactive} inactiveMessage={inactiveMessage}>
+    <PredictCard autoSize testId={`card-market-${market.slug}`} className={`${isMarketClosed && !isInactive ? 'opacity-75' : ''}`} inactive={isInactive} inactiveMessage={inactiveMessage}>
       <div className="flex items-center justify-between mb-3 flex-wrap gap-1">
         <div className="flex items-center gap-1.5">
           <Badge variant="outline" className="text-xs">
@@ -588,15 +593,9 @@ function MultiMarketCard({ market, entries, participants, timeLabel, onNavigate,
           titleClassName={`!font-semibold ${isInactive ? "" : "hover:!text-violet-600 dark:hover:!text-violet-400"}`}
         />
       </a>
-      {market.teaser && (
-        <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); if (!isInactive) navigateWithAnchor(market.slug); }} className={isInactive ? "cursor-default" : "cursor-pointer"}>
-          <p className={`text-sm text-muted-foreground mb-3 line-clamp-2 leading-[1.4] ${!isInactive ? 'hover:text-violet-600 dark:hover:text-violet-400' : ''} transition-colors`}>{market.teaser}</p>
-        </a>
-      )}
 
-      <div className="mb-3 flex items-center gap-2">
+      <div className="mb-2">
         <ParticipantAvatarStack participants={market.recentParticipants} totalCount={participants} />
-        <Badge variant="outline" className="text-[10px] ml-auto">{entries.length} options</Badge>
       </div>
 
       {/* AMM unrealised P&L banner for community markets where the
@@ -635,18 +634,55 @@ function MultiMarketCard({ market, entries, participants, timeLabel, onNavigate,
             />
           );
         })}
-        {remainingCount > 0 && (
+      </div>
+
+      {/* Three-column footer: +N more (left), View details (center), options pill (right).
+          `autoSize` on PredictCard drops the 390px mobile min-height so the footer
+          sits directly under the option rows without a dead gap. */}
+      <div className="mt-2.5 grid grid-cols-3 items-center gap-1 max-md:gap-0.5 md:gap-2">
+        <div className="min-w-0">
+          {remainingCount > 0 && (
+            <button
+              type="button"
+              onClick={openOptionsDrawer}
+              className="text-left w-full min-h-10 md:min-h-0 flex items-center max-md:-ml-1 max-md:pl-1"
+              data-testid={`link-more-options-${market.slug}`}
+              aria-label={`Show ${remainingCount} more options`}
+            >
+              <span className="text-xs text-violet-600 dark:text-violet-400 hover:underline truncate">
+                +{remainingCount} more
+              </span>
+            </button>
+          )}
+        </div>
+        <div className="min-w-0 text-center">
           <button
             type="button"
-            onClick={() => setOptionsDrawerOpen(true)}
-            className="w-full"
-            data-testid={`link-more-options-${market.slug}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!isInactive) navigateWithAnchor(market.slug);
+            }}
+            disabled={isInactive}
+            className={`inline-flex items-center justify-center w-full min-h-10 md:min-h-0 px-0.5 text-xs md:text-sm font-semibold transition-colors whitespace-nowrap ${isInactive ? "text-muted-foreground cursor-default" : "text-violet-600 dark:text-violet-400 hover:text-violet-500 dark:hover:text-violet-300 cursor-pointer"}`}
+            data-testid={`link-view-details-${market.slug}`}
+            aria-label="View market details"
           >
-            <p className="text-xs text-violet-600 dark:text-violet-400 text-center cursor-pointer hover:underline mt-2.5">
-              +{remainingCount} more options
-            </p>
+            View details →
           </button>
-        )}
+        </div>
+        <div className="min-w-0 flex justify-end">
+          <button
+            type="button"
+            onClick={openOptionsDrawer}
+            className="min-h-10 md:min-h-0 flex items-center justify-end rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            data-testid={`button-options-count-${market.slug}`}
+            aria-label={`Show all ${entries.length} options`}
+          >
+            <Badge variant="outline" className="text-[10px] shrink-0 max-w-full truncate pointer-events-none">
+              {entries.length} options
+            </Badge>
+          </button>
+        </div>
       </div>
 
       <UserBetResult betResult={userBetResult} isMarketClosed={isMarketClosed} />

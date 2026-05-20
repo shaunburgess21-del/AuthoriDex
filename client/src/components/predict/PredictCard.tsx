@@ -23,14 +23,15 @@ export function PredictCard({
   inactiveMessage?: string;
   autoSize?: boolean;
 }) {
+  const heightClass = autoSize ? "max-md:h-auto md:h-full" : "h-full";
   const cardContent = (
     <div
-      className={`relative group h-full overflow-visible ${onClick && !inactive ? "cursor-pointer" : ""} ${inactive ? "cursor-default" : ""}`}
+      className={`relative group overflow-visible ${heightClass} ${onClick && !inactive ? "cursor-pointer" : ""} ${inactive ? "cursor-default" : ""}`}
       onClick={inactive ? undefined : onClick}
       data-testid={testId}
     >
       <Card
-        className={`relative px-3 sm:px-4 py-4 bg-card/95 backdrop-blur-sm transition-all h-full flex flex-col rounded-[12px] md:rounded-xl ${autoSize ? "" : "min-h-[390px]"} md:min-h-0 border-0 md:border md:border-transparent shadow-none md:shadow-sm ${
+        className={`relative px-3 sm:px-4 py-4 bg-card/95 backdrop-blur-sm transition-all flex flex-col rounded-[12px] md:rounded-xl ${heightClass} ${autoSize ? "" : "min-h-[390px]"} md:min-h-0 border-0 md:border md:border-transparent shadow-none md:shadow-sm ${
           inactive
             ? "opacity-50 grayscale-[40%]"
             : `md:ring-inset md:ring-1 md:ring-transparent md:transition-[box-shadow,ring-color] md:group-hover:ring-[#EFEFEF]/50 md:group-hover:shadow-lg md:group-hover:shadow-[0_8px_32px_rgba(239,239,239,0.1)] ${selected ? "md:ring-[#EFEFEF]/50 shadow-lg shadow-[0_8px_32px_rgba(239,239,239,0.14)]" : ""}`
@@ -47,7 +48,7 @@ export function PredictCard({
             </Badge>
           </div>
         )}
-        <div className="flex flex-col flex-1">{children}</div>
+        <div className={autoSize ? "flex flex-col max-md:flex-none md:flex-1" : "flex flex-col flex-1"}>{children}</div>
       </Card>
     </div>
   );

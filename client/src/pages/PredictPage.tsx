@@ -3179,6 +3179,7 @@ export default function PredictPage() {
                   // already do this at the PredictCard level.
                   <div
                     key={market.id}
+                    className="max-md:h-auto max-md:self-start w-full"
                     data-testid={`card-community-${market.id}`}
                     onClick={(e) => handleCardEmptyTap(e, "world-markets", String(market.id))}
                   >
