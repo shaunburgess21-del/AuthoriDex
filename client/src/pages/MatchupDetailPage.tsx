@@ -22,6 +22,7 @@ import { useAnonBudget, applyBudgetFromVoteResponse } from "@/hooks/useAnonBudge
 import { checkVoteGate } from "@/lib/voteGate";
 import { isBudgetExhaustedVoteError } from "@/lib/voteErrors";
 import { CardComments, useCommentCount } from "@/components/comments/CardComments";
+import { RelatedVoteItems } from "@/components/vote/RelatedVoteItems";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { matchupOgImagePath } from "@shared/matchup-og";
 import {
@@ -624,6 +625,15 @@ export default function MatchupDetailPage() {
             onShare={handleShare}
           />
         </div>
+
+        {slug && (
+          <RelatedVoteItems
+            type="matchup"
+            currentSlug={slug}
+            category={matchup.category}
+            className="mt-8"
+          />
+        )}
       </div>
       </SwipeNavigator>
     </div>

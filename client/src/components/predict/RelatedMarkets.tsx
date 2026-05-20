@@ -1,11 +1,11 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "wouter";
-import { Clock, Sparkles, ChevronRight } from "lucide-react";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
-import { PersonAvatar } from "@/components/PersonAvatar";
+import type { ThumbParticipant } from "@/components/predict/MarketThumbCollage";
+import {
+  RelatedItemsCarousel,
+  type RelatedCarouselItem,
+} from "@/components/shared/RelatedItemsCarousel";
+import { getTopRaceEntries } from "@/lib/nativeRaceLeaders";
 
 /**
  * Detail-page "more like this" carousel.
@@ -15,18 +15,6 @@ import { PersonAvatar } from "@/components/PersonAvatar";
  * the Predict page — so adding this carousel costs zero extra requests
  * on every page except community (which still has to hit the standard
  * `/api/open-markets` endpoint, which is small and cached).
- *
- * Layout decisions:
- *   - Section sits at the very bottom of the detail page, after
- *     resolution info / comments. Goal is "you finished reading,
- *     here's the next thing" not "this is in your way".
- *   - Horizontal snap-scroll on mobile keeps the cards out of the
- *     primary tap-flow but discoverable.
- *   - Each card is a single tappable Link (no nested CTAs) so the
- *     whole tile is the affordance.
- *   - We hide the section entirely when there are zero candidates
- *     after filtering self-out — better than rendering an empty
- *     "Related markets" header.
  */
 
 type RelatedMarketsType = "updown" | "h2h" | "race" | "community";
@@ -34,30 +22,10 @@ type RelatedMarketsType = "updown" | "h2h" | "race" | "community";
 interface RelatedMarketsProps {
   type: RelatedMarketsType;
   currentMarketId: string;
-  /**
-   * Optional category to bias same-category markets to the front of
-   * the list. Helps the carousel feel more like "more in this
-   * category" than a random sampling.
-   */
   category?: string | null;
-  /** Hard cap on cards shown; 6 fits one and a half screens on mobile. */
   limit?: number;
-  /** When true, show every candidate after filtering (e.g. Up/Down detail). */
   showAllMarkets?: boolean;
   className?: string;
-}
-
-interface NormalizedMarket {
-  id: string;
-  href: string;
-  title: string;
-  subtitle?: string | null;
-  avatarUrl?: string | null;
-  avatarName?: string | null;
-  category?: string | null;
-  endAt?: string | null;
-  totalPool?: number | null;
-  typePill: string;
 }
 
 const TYPE_ENDPOINT: Record<RelatedMarketsType, string> = {
@@ -74,95 +42,118 @@ const TYPE_PILL: Record<RelatedMarketsType, string> = {
   community: "Open market",
 };
 
-function formatTimeLeft(endAt: string | null | undefined): string | null {
-  if (!endAt) return null;
-  const ms = new Date(endAt).getTime() - Date.now();
-  if (!Number.isFinite(ms) || ms <= 0) return "Closing now";
-  const minutes = Math.floor(ms / 60_000);
-  const hours = Math.floor(minutes / 60);
-  const days = Math.floor(hours / 24);
-  if (days >= 1) return `${days}d left`;
-  if (hours >= 1) return `${hours}h left`;
-  if (minutes >= 1) return `${minutes}m left`;
-  return "Closing now";
+const CARD_WIDTH: Record<RelatedMarketsType, string> = {
+  h2h: "w-[21rem] max-w-[85vw]",
+  race: "w-[19rem] max-w-[82vw]",
+  updown: "w-[18rem] max-w-[80vw]",
+  community: "w-[19rem] max-w-[82vw]",
+};
+
+function h2hEntryParticipant(entry: any): ThumbParticipant {
+  const person = entry?.person;
+  return {
+    name: person?.name ?? entry?.label ?? "?",
+    avatar: person?.avatar?.trim() ? person.avatar : null,
+  };
 }
 
-function normalizeUpdown(m: any): NormalizedMarket {
+function normalizeUpdown(m: any, cardWidthClass: string): RelatedCarouselItem {
   const personName: string = m.person?.name ?? m.personName ?? "Unknown";
   return {
     id: m.id,
     href: `/predict/updown/${m.id}`,
     title: personName,
     subtitle: "Up or down this week?",
-    avatarUrl: m.person?.avatar ?? null,
-    avatarName: personName,
+    thumbVariant: "single",
+    thumbParticipants: [
+      {
+        name: personName,
+        avatar: m.person?.avatar?.trim() ? m.person.avatar : null,
+      },
+    ],
     category: m.category ?? null,
     endAt: m.endAt ?? null,
-    totalPool: typeof m.totalPool === "number" ? m.totalPool : null,
+    creditPool: typeof m.totalPool === "number" ? m.totalPool : null,
     typePill: TYPE_PILL.updown,
+    cardWidthClass,
   };
 }
 
-function normalizeH2h(m: any): NormalizedMarket {
-  const p1: string = m.person1?.name ?? m.entries?.[0]?.label ?? "Side A";
-  const p2: string = m.person2?.name ?? m.entries?.[1]?.label ?? "Side B";
+function normalizeH2h(m: any, cardWidthClass: string): RelatedCarouselItem {
+  const entries = m.entries || [];
+  const p1 = h2hEntryParticipant(entries[0]);
+  const p2 = h2hEntryParticipant(entries[1]);
   return {
     id: m.id,
     href: `/predict/h2h/${m.id}`,
-    title: m.title || `${p1} vs ${p2}`,
-    subtitle: `${p1} vs ${p2}`,
-    avatarUrl: m.person1?.avatar ?? m.entries?.[0]?.coverImageUrl ?? null,
-    avatarName: p1,
+    title: m.title || `${p1.name} vs ${p2.name}`,
+    subtitle: null,
+    thumbVariant: "split",
+    thumbParticipants: [p1, p2],
     category: m.category ?? null,
     endAt: m.endAt ?? null,
-    totalPool: typeof m.totalPool === "number" ? m.totalPool : null,
+    creditPool: typeof m.totalPool === "number" ? m.totalPool : null,
     typePill: TYPE_PILL.h2h,
+    cardWidthClass,
   };
 }
 
-function normalizeRace(m: any): NormalizedMarket {
+function normalizeRace(m: any, cardWidthClass: string): RelatedCarouselItem {
   const categoryLabel: string = m.categoryLabel ?? m.category ?? "Race";
-  const leader = m.entries?.[0];
+  const topEntries = getTopRaceEntries(m.entries, m.metadata, 4);
+  const leaderName = topEntries[0]?.name;
   return {
     id: m.id,
     href: `/predict/race/${m.id}`,
     title: m.title || `Category Race: ${categoryLabel}`,
-    subtitle: leader?.label ? `Leading: ${leader.label}` : "Pick a candidate",
-    avatarUrl: leader?.coverImageUrl ?? null,
-    avatarName: leader?.label ?? categoryLabel,
+    subtitle: leaderName ? `Leading: ${leaderName}` : "Pick a candidate",
+    thumbVariant: topEntries.length > 1 ? "grid" : "single",
+    thumbParticipants:
+      topEntries.length > 0
+        ? topEntries
+        : [{ name: categoryLabel, avatar: null }],
     category: m.category ?? null,
     endAt: m.endAt ?? null,
-    totalPool: typeof m.totalPool === "number" ? m.totalPool : null,
+    creditPool: typeof m.totalPool === "number" ? m.totalPool : null,
     typePill: TYPE_PILL.race,
+    cardWidthClass,
   };
 }
 
-function normalizeCommunity(m: any): NormalizedMarket {
+function normalizeCommunity(m: any, cardWidthClass: string): RelatedCarouselItem {
   const title: string = m.title ?? "Untitled market";
+  const avatar = m.coverImageUrl ?? m.linkedPersonAvatar ?? null;
   return {
     id: m.id,
     href: `/markets/${m.slug ?? m.id}`,
     title,
     subtitle: m.teaser ?? m.summary ?? null,
-    avatarUrl: m.coverImageUrl ?? m.linkedPersonAvatar ?? null,
-    avatarName: title,
+    thumbVariant: "single",
+    thumbParticipants: [
+      {
+        name: title,
+        avatar: avatar?.trim() ? avatar : null,
+      },
+    ],
     category: m.category ?? null,
     endAt: m.closeAt ?? m.endAt ?? null,
-    totalPool: null,
+    creditPool: null,
     typePill: TYPE_PILL.community,
+    cardWidthClass,
   };
 }
 
-function normalize(type: RelatedMarketsType, m: any): NormalizedMarket {
+function normalize(type: RelatedMarketsType, m: any): RelatedCarouselItem {
+  const cardWidthClass = CARD_WIDTH[type];
   switch (type) {
     case "updown":
-      return normalizeUpdown(m);
+      return normalizeUpdown(m, cardWidthClass);
     case "h2h":
-      return normalizeH2h(m);
+      return normalizeH2h(m, cardWidthClass);
     case "race":
-      return normalizeRace(m);
+      return normalizeRace(m, cardWidthClass);
     case "community":
-      return normalizeCommunity(m);
+      return normalizeCommunity(m, cardWidthClass);
   }
 }
 
@@ -181,14 +172,11 @@ export function RelatedMarkets({
     staleTime: 30_000,
   });
 
-  const items = useMemo<NormalizedMarket[]>(() => {
+  const items = useMemo<RelatedCarouselItem[]>(() => {
     const list = Array.isArray(data) ? data : [];
     const others = list.filter((m: any) => m && m.id && m.id !== currentMarketId);
     const normalized = others.map((m) => normalize(type, m));
 
-    // Bias same-category markets to the top so a sports race surfaces
-    // other sports races first; ties are broken by soonest endAt so the
-    // carousel feels "fresh" rather than alphabetical.
     const sameCategory = category
       ? normalized.filter((m) => m.category && m.category === category)
       : [];
@@ -196,7 +184,7 @@ export function RelatedMarkets({
       ? normalized.filter((m) => !m.category || m.category !== category)
       : normalized;
 
-    const byEndSoonest = (a: NormalizedMarket, b: NormalizedMarket) => {
+    const byEndSoonest = (a: RelatedCarouselItem, b: RelatedCarouselItem) => {
       const aMs = a.endAt ? new Date(a.endAt).getTime() : Number.POSITIVE_INFINITY;
       const bMs = b.endAt ? new Date(b.endAt).getTime() : Number.POSITIVE_INFINITY;
       return aMs - bMs;
@@ -209,103 +197,15 @@ export function RelatedMarkets({
     return showAllMarkets ? merged : merged.slice(0, limit);
   }, [data, currentMarketId, category, type, limit, showAllMarkets]);
 
-  if (isLoading) {
-    return (
-      <section className={className} aria-label="Related markets" data-testid="related-markets-loading">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold flex items-center gap-1.5">
-            <Sparkles className="h-3.5 w-3.5 text-violet-500" />
-            More like this
-          </h3>
-        </div>
-        <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-2 snap-x snap-mandatory scrollbar-thin">
-          {[0, 1, 2].map((i) => (
-            <Skeleton key={i} className="h-32 w-64 shrink-0 rounded-xl" />
-          ))}
-        </div>
-      </section>
-    );
-  }
-
-  if (items.length === 0) return null;
-
   return (
-    <section className={className} aria-label="Related markets" data-testid="related-markets">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold flex items-center gap-1.5">
-          <Sparkles className="h-3.5 w-3.5 text-violet-500" />
-          More like this
-        </h3>
-        <span className="text-[11px] text-muted-foreground">
-          {items.length} more market{items.length === 1 ? "" : "s"}
-        </span>
-      </div>
-
-      {/*
-        Negative horizontal margin lets the carousel bleed to the screen
-        edge on mobile (so the first / last cards visually peek), while
-        the inner padding keeps the cards inside the gutter on desktop.
-        `snap-x snap-mandatory` makes swipes settle on a card.
-      */}
-      <div
-        className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-2 snap-x snap-mandatory scrollbar-thin"
-        data-testid="related-markets-scroller"
-      >
-        {items.map((m) => {
-          const timeLeft = formatTimeLeft(m.endAt);
-          return (
-            <Link key={m.id} href={m.href} data-testid={`related-market-${m.id}`}>
-              <Card className="group w-64 shrink-0 snap-start cursor-pointer hover-elevate overflow-hidden transition-colors">
-                <div className="p-3 flex flex-col gap-2 h-full">
-                  <div className="flex items-start gap-2.5">
-                    {m.avatarUrl ? (
-                      <PersonAvatar
-                        name={m.avatarName ?? m.title}
-                        avatar={m.avatarUrl}
-                        className="h-10 w-10 shrink-0"
-                      />
-                    ) : (
-                      <div className="h-10 w-10 shrink-0 rounded-full bg-muted/50 flex items-center justify-center text-xs font-semibold text-muted-foreground">
-                        {(m.avatarName ?? m.title).slice(0, 1).toUpperCase()}
-                      </div>
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <Badge
-                        variant="secondary"
-                        className="text-[9px] uppercase tracking-wider px-1.5 py-0 mb-1"
-                      >
-                        {m.typePill}
-                      </Badge>
-                      <p className="text-sm font-semibold leading-tight line-clamp-2">{m.title}</p>
-                    </div>
-                  </div>
-
-                  {m.subtitle && (
-                    <p className="text-[11px] text-muted-foreground line-clamp-2">{m.subtitle}</p>
-                  )}
-
-                  <div className="mt-auto flex items-center justify-between text-[11px] text-muted-foreground gap-2">
-                    {timeLeft ? (
-                      <span className="flex items-center gap-1 truncate">
-                        <Clock className="h-3 w-3" />
-                        {timeLeft}
-                      </span>
-                    ) : (
-                      <span className="truncate">{m.category ?? ""}</span>
-                    )}
-                    {typeof m.totalPool === "number" && m.totalPool > 0 && (
-                      <span className="font-mono shrink-0">
-                        {m.totalPool.toLocaleString()} credits
-                      </span>
-                    )}
-                    <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60 group-hover:text-foreground transition-colors" />
-                  </div>
-                </div>
-              </Card>
-            </Link>
-          );
-        })}
-      </div>
-    </section>
+    <RelatedItemsCarousel
+      items={items}
+      isLoading={isLoading}
+      countNoun="market"
+      skeletonWidthClass={CARD_WIDTH[type]}
+      testIdPrefix="related-markets"
+      ariaLabel="Related markets"
+      className={className}
+    />
   );
 }

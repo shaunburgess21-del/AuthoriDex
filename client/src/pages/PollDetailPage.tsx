@@ -29,6 +29,7 @@ import {
 } from "@/lib/sentimentPollVoteDisplay";
 import { goBack } from "@/lib/goBack";
 import { CardComments, useCommentCount } from "@/components/comments/CardComments";
+import { RelatedVoteItems } from "@/components/vote/RelatedVoteItems";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import {
   ArrowLeft,
@@ -570,6 +571,15 @@ export default function PollDetailPage() {
             onShare={handleShare}
           />
         </div>
+
+        {slug && (
+          <RelatedVoteItems
+            type="sentiment"
+            currentSlug={slug}
+            category={poll.category}
+            className="mt-8"
+          />
+        )}
       </div>
       </SwipeNavigator>
 

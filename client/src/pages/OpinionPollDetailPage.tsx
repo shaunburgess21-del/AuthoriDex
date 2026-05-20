@@ -20,6 +20,7 @@ import {
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { CardComments, useCommentCount } from "@/components/comments/CardComments";
+import { RelatedVoteItems } from "@/components/vote/RelatedVoteItems";
 import { apiRequest } from "@/lib/queryClient";
 import { optimisticVotePatch } from "@/hooks/useOpinionPollVoteMutation";
 import { isUnauthorizedApiError, signInToVoteToastOptions, signInToVoteTitle } from "@/lib/signInToVoteToast";
@@ -692,6 +693,15 @@ export default function OpinionPollDetailPage() {
             onShare={handleShare}
           />
         </div>
+
+        {slug && poll && (
+          <RelatedVoteItems
+            type="opinion"
+            currentSlug={slug}
+            category={poll.category}
+            className="mt-8"
+          />
+        )}
       </div>
       </SwipeNavigator>
 
