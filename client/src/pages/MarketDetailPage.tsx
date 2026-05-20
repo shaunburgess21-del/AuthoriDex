@@ -1710,7 +1710,7 @@ export default function MarketDetailPage() {
                         </div>
                         <span className="font-mono font-bold text-sm w-12 text-right tabular-nums">{entry.percentage}%</span>
                         <span className="font-mono text-[10px] text-muted-foreground w-14 text-right tabular-nums hidden sm:block">
-                          {livePrice.toFixed(3)} cr
+                          {livePrice.toFixed(2)} cr
                         </span>
                         <Button
                           size="sm"
@@ -1751,7 +1751,7 @@ export default function MarketDetailPage() {
                       >
                         <p className="text-[10px] text-muted-foreground uppercase tracking-wider truncate">{entry.label}</p>
                         <p className={`text-2xl font-bold font-mono ${priceColor}`}>{entry.percentage}%</p>
-                        <p className="text-[10px] text-muted-foreground tabular-nums">{livePrice.toFixed(3)} cr / share</p>
+                        <p className="text-[10px] text-muted-foreground tabular-nums">{livePrice.toFixed(2)} cr / share</p>
                         <Button
                           size="sm"
                           variant="outline"

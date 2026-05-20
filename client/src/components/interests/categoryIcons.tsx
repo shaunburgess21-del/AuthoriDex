@@ -2,13 +2,12 @@
  * Canonical category → Lucide icon registry.
  *
  * Used by the onboarding / re-prompt InterestsPicker to render an icon
- * grid in the spirit of Reddit's interest selector. The mapping mirrors
- * the inline icon ladder in
- * [client/src/components/home/VoteDeckView.tsx](client/src/components/home/VoteDeckView.tsx)
- * so the same glyph represents the same category everywhere — Creator
- * is a video recorder, Film & TV is a clapperboard, etc. Misc inherits
- * Creator's icon (the canonical set never gave Misc its own glyph and
- * the video icon reads as a sensible "miscellaneous content" cue).
+ * grid in the spirit of Reddit's interest selector. The mapping is the
+ * canonical source of truth for category → glyph everywhere in the app
+ * — Creator is a video recorder, Film & TV is a clapperboard, etc.
+ * Misc inherits Creator's icon (the canonical set never gave Misc its
+ * own glyph and the video icon reads as a sensible "miscellaneous
+ * content" cue).
  *
  * Dynamic admin-added categories (Media & Podcast, Streaming, Science)
  * each get their own icon so they don't all collapse onto the fallback.

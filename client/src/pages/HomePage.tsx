@@ -10,8 +10,6 @@ import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { FilterDropdown } from "@/components/FilterDropdown";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { CategoryPill, getCategoryTextColor, getCategoryStyle } from "@/components/CategoryPill";
-import { VoteDeckView } from "@/components/home/VoteDeckView";
-import { PredictDeckView } from "@/components/home/PredictDeckView";
 import { TrendingNowFeed, type HotMover } from "@/components/TrendingNowFeed";
 import { TrendScoreInfoContent } from "@/components/TrendScoreInfo";
 import { ApprovalRatingInfoContent } from "@/components/ApprovalRatingInfo";
@@ -2433,23 +2431,6 @@ export default function HomePage() {
                   )}
                 </CardContent>
               </Card>
-          {/* PRESERVED: Vote and Predict toggle sections - commented out for future re-enable
-          {activeView === "predict" && (
-            <>
-              <PredictDeckView 
-                trendingPeople={allPeople} 
-                isLoading={isLoading}
-                onExplore={() => setLocation("/predict")} 
-              />
-            </>
-          )}
-
-          {activeView === "vote" && (
-            <VoteDeckView 
-              onExplore={() => setLocation("/vote")} 
-            />
-          )}
-          */}
       </div>
       <footer className="border-t mt-24 py-12">
         <div className="container mx-auto px-4 text-center space-y-3">

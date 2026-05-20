@@ -284,18 +284,36 @@ function BinaryMarketCard({ market, entries, participants, timeLabel, onNavigate
           ) : (
             <div className="grid grid-cols-2 gap-2">
               <Button
-                className="!min-h-0 px-4 py-3.5 md:py-2.5 bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20"
-                onClick={() => navigateWithAnchor(market.slug, 'yes')}
+                className="!min-h-0 h-auto px-4 py-3 md:py-2.5 bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20 flex flex-col items-center justify-center gap-0.5"
+                onClick={() => {
+                  if (onPickEntry && yesEntry) {
+                    onPickEntry(market, yesEntry, "yes");
+                  } else {
+                    navigateWithAnchor(market.slug, "yes");
+                  }
+                }}
                 data-testid={`button-yes-${market.slug}`}
               >
-                Yes {yesPercent}%
+                <span className="leading-none">Yes {yesPercent}%</span>
+                <span className="text-[10px] font-mono opacity-80 leading-none">
+                  {ammYesPrice.toFixed(2)} cr/share
+                </span>
               </Button>
               <Button
-                className="!min-h-0 px-4 py-3.5 md:py-2.5 bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20"
-                onClick={() => navigateWithAnchor(market.slug, 'no')}
+                className="!min-h-0 h-auto px-4 py-3 md:py-2.5 bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20 flex flex-col items-center justify-center gap-0.5"
+                onClick={() => {
+                  if (onPickEntry && noEntry) {
+                    onPickEntry(market, noEntry, "yes");
+                  } else {
+                    navigateWithAnchor(market.slug, "no");
+                  }
+                }}
                 data-testid={`button-no-${market.slug}`}
               >
-                No {noPercent}%
+                <span className="leading-none">No {noPercent}%</span>
+                <span className="text-[10px] font-mono opacity-80 leading-none">
+                  {ammNoPrice.toFixed(2)} cr/share
+                </span>
               </Button>
             </div>
           )}
@@ -315,7 +333,6 @@ function MultiMarketEntryRow({
   hasPendingBet,
   isMarketClosed,
   showEntryPool = false,
-  compact = false,
   onNavigate,
   onPickEntry,
   onBeforeNavigate,
@@ -333,11 +350,6 @@ function MultiMarketEntryRow({
   isMarketClosed: boolean;
   /** Show raw entry pool credits below the row (drawer only). */
   showEntryPool?: boolean;
-  /** Polymarket-style compact mode for the card preview: drop the per-side
-   *  multipliers from the Yes/No buttons (just "Yes" / "No"). The drawer +
-   *  URL detail page show "Yes 1.0x" / "No 1.9x" so users have the full
-   *  picture once they're committed enough to scroll a list of options. */
-  compact?: boolean;
   onNavigate: (slug: string, pick?: string, direction?: string) => void;
   /** Preferred handler. When provided, Yes/No clicks open an in-page stake
    *  modal instead of routing to the URL detail page. The card keeps the
@@ -391,12 +403,14 @@ function MultiMarketEntryRow({
   // a single letter (e.g. "S." for Shai Gilgeous-Alexander), which read worse
   // than just the name. The card hero image already sets the visual context.
 
-  // Fixed-width Yes/No buttons keep the right-hand column aligned across all
-  // rows. Without this, an outlier multiplier like "9.5x" pushes its row's
-  // No button further right than its neighbours, breaking the grid feel.
-  // 64px / 56px fits "Yes 9.9x" (worst case 4 chars + label) without wrap.
+  // Fixed-width Yes button keeps the right-hand column aligned across all
+  // rows. Two-line label ("Yes pct%" on top, "X.XX cr/share" below) and
+  // colour (#00C853 brand green) match the binary + Up/Down card Yes
+  // buttons exactly so the three card variants are visually consistent.
+  // Width is sized to fit the worst-case mono "1.00 cr/share" string +
+  // padding on both desktop and mobile.
   const buttonClass =
-    "shrink-0 text-center w-[60px] md:w-[64px] px-1 md:px-1.5 py-1.5 md:py-2 text-[11px] md:text-xs font-semibold rounded-md transition-colors tabular-nums";
+    "shrink-0 text-center w-[92px] md:w-[104px] px-1 md:px-1.5 py-1.5 md:py-2 rounded-md transition-colors tabular-nums flex flex-col items-center justify-center gap-0.5";
 
   return (
     <div className="flex items-center gap-2">
@@ -408,7 +422,6 @@ function MultiMarketEntryRow({
           </div>
         )}
       </div>
-      <span className="text-[12px] md:text-[14px] font-mono font-semibold text-muted-foreground tabular-nums shrink-0 w-9 text-right">{entry.pct}%</span>
       {hasPendingBet && userBet && userDirection ? (
         // Pin doubles as the top-up trigger. When onPickEntry is wired
         // (PredictPage / PredictTab) we open the StakeModal directly with
@@ -416,45 +429,63 @@ function MultiMarketEntryRow({
         // — matches the native pattern (e.g. WeeklyUpDownYourPositionPanel).
         // Falls back to the detail-page link when no callback is wired
         // (e.g. SSR or list views that haven't been migrated yet).
-        onPickEntry && !isMarketClosed ? (
-          <button
-            type="button"
-            onClick={(e) => handlePick(e, userDirection)}
-            className="flex items-center gap-1.5 shrink-0 rounded-md border px-2 py-1.5 transition-colors hover:brightness-110"
-            style={{ backgroundColor: `${betAccent}10`, borderColor: `${betAccent}80` }}
-            data-testid={`pending-entry-${entry.id}`}
-            aria-label={`Top up your ${userDirection.toUpperCase()} pick`}
-          >
-            <Check className="h-3 w-3" style={{ color: betAccent }} />
-            <span className="text-[10px] font-semibold" style={{ color: betAccent }}>Your pick</span>
-            <span className="text-[10px] text-muted-foreground tabular-nums">{userStake.toLocaleString("en-US")}</span>
-          </button>
-        ) : (
-          <Link
-            href={`/markets/${market.slug}`}
-            onClick={() => rememberCommunityCardAnchor(market?.id)}
-            className="flex items-center gap-1.5 shrink-0 rounded-md border px-2 py-1.5 transition-colors"
-            style={{ backgroundColor: `${betAccent}10`, borderColor: `${betAccent}80` }}
-            data-testid={`pending-entry-${entry.id}`}
-          >
-            <Check className="h-3 w-3" style={{ color: betAccent }} />
-            <span className="text-[10px] font-semibold" style={{ color: betAccent }}>Your pick</span>
-            <span className="text-[10px] text-muted-foreground tabular-nums">{userStake.toLocaleString("en-US")}</span>
-          </Link>
-        )
+        // The leading pct span keeps current market price visible even
+        // when the row's button is replaced by the pin — multi cards
+        // don't have a per-row progress bar like binary cards do, and the
+        // market-level P&L banner only shows the user's TOP position, so
+        // without this span users with multiple open picks lose all per-
+        // outcome price visibility.
+        <>
+          <span className="text-[11px] md:text-[12px] font-mono font-semibold text-muted-foreground tabular-nums shrink-0">
+            {entry.pct}%
+          </span>
+          {onPickEntry && !isMarketClosed ? (
+            <button
+              type="button"
+              onClick={(e) => handlePick(e, userDirection)}
+              className="flex items-center gap-1.5 shrink-0 rounded-md border px-2 py-1.5 transition-colors hover:brightness-110"
+              style={{ backgroundColor: `${betAccent}10`, borderColor: `${betAccent}80` }}
+              data-testid={`pending-entry-${entry.id}`}
+              aria-label={`Top up your ${userDirection.toUpperCase()} pick`}
+            >
+              <Check className="h-3 w-3" style={{ color: betAccent }} />
+              <span className="text-[10px] font-semibold" style={{ color: betAccent }}>Your pick</span>
+              <span className="text-[10px] text-muted-foreground tabular-nums">{userStake.toLocaleString("en-US")}</span>
+            </button>
+          ) : (
+            <Link
+              href={`/markets/${market.slug}`}
+              onClick={() => rememberCommunityCardAnchor(market?.id)}
+              className="flex items-center gap-1.5 shrink-0 rounded-md border px-2 py-1.5 transition-colors"
+              style={{ backgroundColor: `${betAccent}10`, borderColor: `${betAccent}80` }}
+              data-testid={`pending-entry-${entry.id}`}
+            >
+              <Check className="h-3 w-3" style={{ color: betAccent }} />
+              <span className="text-[10px] font-semibold" style={{ color: betAccent }}>Your pick</span>
+              <span className="text-[10px] text-muted-foreground tabular-nums">{userStake.toLocaleString("en-US")}</span>
+            </Link>
+          )}
+        </>
       ) : !isMarketClosed ? (
         // Parimutuel sunset: every community market is AMM. Each
         // outcome is its own share class, so the row gets a single
-        // "Buy" button instead of the Yes/No pair. The label shows
-        // price/share (cr) on the drawer view and just "Buy" in the
-        // compact card preview.
+        // YES-only Buy button (Buy NO on multi is deferred pending an
+        // engine extension — LMSR has no native NO shares). Wording +
+        // colour intentionally mirror the binary Yes button so the
+        // three card variants read consistently: "Yes {pct}%" on top,
+        // "{X.XX} cr/share" below, identical in both the card preview
+        // and the drawer view so users see the same information
+        // regardless of surface.
         <div className="flex shrink-0">
           <button
-            className={`${buttonClass} w-[72px] md:w-[80px] bg-emerald-500/10 border border-emerald-500/50 text-emerald-600 hover:border-emerald-500/80 hover:bg-emerald-500/20`}
+            className={`${buttonClass} bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20`}
             onClick={(e) => handlePick(e, "yes")}
             data-testid={`button-buy-${entry.id}`}
           >
-            {compact ? "Buy" : `${Number(entry.ammPrice ?? 0).toFixed(2)} cr`}
+            <span className="text-[11px] md:text-xs font-semibold leading-none">Yes {entry.pct}%</span>
+            <span className="text-[9px] md:text-[10px] font-mono opacity-80 leading-none">
+              {Number(entry.ammPrice ?? 0).toFixed(2)} cr/share
+            </span>
           </button>
         </div>
       ) : (
@@ -599,7 +630,6 @@ function MultiMarketCard({ market, entries, participants, timeLabel, onNavigate,
               userBet={entryBet}
               hasPendingBet={!!entryBet && hasPendingResult}
               isMarketClosed={isMarketClosed}
-              compact
               onNavigate={navigateWithAnchor}
               onPickEntry={onPickEntry}
             />
@@ -686,7 +716,7 @@ function MultiMarketCard({ market, entries, participants, timeLabel, onNavigate,
   );
 }
 
-function UpDownMarketCard({ market, entries, participants, timeLabel, onNavigate, isMarketClosed, isInactive = false, inactiveMessage, userBetResult, onFilterCategory, categoryRaceMap, leaderboardCategories, onBrowseFullScreen, unrealisedPnl }: { market: any; entries: any[]; participants: number; timeLabel: string; onNavigate: (slug: string, pick?: string, direction?: string) => void; isMarketClosed: boolean; isInactive?: boolean; inactiveMessage?: string; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number }; onFilterCategory?: (cat: string) => void; categoryRaceMap?: Map<string, string>; leaderboardCategories?: Set<string>; onBrowseFullScreen?: () => void; /** AMM unrealised P&L for the user's position on this market. */ unrealisedPnl?: number | null }) {
+function UpDownMarketCard({ market, entries, participants, timeLabel, onNavigate, onPickEntry, isMarketClosed, isInactive = false, inactiveMessage, userBetResult, onFilterCategory, categoryRaceMap, leaderboardCategories, onBrowseFullScreen, unrealisedPnl }: { market: any; entries: any[]; participants: number; timeLabel: string; onNavigate: (slug: string, pick?: string, direction?: string) => void; /** When provided, Above/Below clicks open the StakeModal in-place via PredictPage's handleCommunityPickEntry. Falls back to onNavigate (full route push to /markets/:slug) when not wired. Mirrors the binary/multi pattern. */ onPickEntry?: (market: any, entry: any, direction: "yes" | "no") => void; isMarketClosed: boolean; isInactive?: boolean; inactiveMessage?: string; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number }; onFilterCategory?: (cat: string) => void; categoryRaceMap?: Map<string, string>; leaderboardCategories?: Set<string>; onBrowseFullScreen?: () => void; /** AMM unrealised P&L for the user's position on this market. */ unrealisedPnl?: number | null }) {
   const rememberAnchor = () => rememberCommunityCardAnchor(market?.id);
   const navigateWithAnchor = (slug: string, pick?: string, direction?: string) => {
     rememberAnchor();
@@ -802,18 +832,36 @@ function UpDownMarketCard({ market, entries, participants, timeLabel, onNavigate
         ) : (
           <div className="grid grid-cols-2 gap-2">
             <Button
-              className="!min-h-0 px-4 py-3.5 md:py-2.5 bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20"
-              onClick={() => navigateWithAnchor(market.slug, 'above')}
+              className="!min-h-0 h-auto px-4 py-3 md:py-2.5 bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20 flex flex-col items-center justify-center gap-0.5"
+              onClick={() => {
+                if (onPickEntry && aboveEntry) {
+                  onPickEntry(market, aboveEntry, "yes");
+                } else {
+                  navigateWithAnchor(market.slug, "above");
+                }
+              }}
               data-testid={`button-above-${market.slug}`}
             >
-              Above {abovePercent}%
+              <span className="leading-none">Above {abovePercent}%</span>
+              <span className="text-[10px] font-mono opacity-80 leading-none">
+                {abovePrice.toFixed(2)} cr/share
+              </span>
             </Button>
             <Button
-              className="!min-h-0 px-4 py-3.5 md:py-2.5 bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20"
-              onClick={() => navigateWithAnchor(market.slug, 'below')}
+              className="!min-h-0 h-auto px-4 py-3 md:py-2.5 bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20 flex flex-col items-center justify-center gap-0.5"
+              onClick={() => {
+                if (onPickEntry && belowEntry) {
+                  onPickEntry(market, belowEntry, "yes");
+                } else {
+                  navigateWithAnchor(market.slug, "below");
+                }
+              }}
               data-testid={`button-below-${market.slug}`}
             >
-              Below {belowPercent}%
+              <span className="leading-none">Below {belowPercent}%</span>
+              <span className="text-[10px] font-mono opacity-80 leading-none">
+                {belowPrice.toFixed(2)} cr/share
+              </span>
             </Button>
           </div>
         )}
@@ -823,7 +871,7 @@ function UpDownMarketCard({ market, entries, participants, timeLabel, onNavigate
   );
 }
 
-export function OpenMarketCard({ market, onNavigate, onPickEntry, isMarketClosed = false, userBetResult, userBetsPerEntry, onFilterCategory, categoryRaceMap, leaderboardCategories, onBrowseFullScreen, unrealisedPnl }: { market: any; onNavigate: (slug: string, pick?: string, direction?: string) => void; /** When provided, multi-option Yes/No clicks open an in-page stake modal instead of navigating to /markets/:slug. Falls through to onNavigate for binary/up-down cards. */ onPickEntry?: (market: any, entry: any, direction: "yes" | "no") => void; isMarketClosed?: boolean; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number }; userBetsPerEntry?: Map<string, { yesStake: number; noStake: number }>; onFilterCategory?: (cat: string) => void; categoryRaceMap?: Map<string, string>; leaderboardCategories?: Set<string>; onBrowseFullScreen?: () => void; /** AMM unrealised P&L for the user's top position. Threaded through to Binary + Multi + UpDown sub-cards. */ unrealisedPnl?: number | null }) {
+export function OpenMarketCard({ market, onNavigate, onPickEntry, isMarketClosed = false, userBetResult, userBetsPerEntry, onFilterCategory, categoryRaceMap, leaderboardCategories, onBrowseFullScreen, unrealisedPnl }: { market: any; onNavigate: (slug: string, pick?: string, direction?: string) => void; /** When provided, Buy clicks on any card variant (binary / multi / up-down) open the StakeModal in-place via PredictPage's handleCommunityPickEntry instead of routing to /markets/:slug. Each sub-card falls back to onNavigate when onPickEntry isn't wired so SSR / list views without the modal still work. */ onPickEntry?: (market: any, entry: any, direction: "yes" | "no") => void; isMarketClosed?: boolean; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number }; userBetsPerEntry?: Map<string, { yesStake: number; noStake: number }>; onFilterCategory?: (cat: string) => void; categoryRaceMap?: Map<string, string>; leaderboardCategories?: Set<string>; onBrowseFullScreen?: () => void; /** AMM unrealised P&L for the user's top position. Threaded through to Binary + Multi + UpDown sub-cards. */ unrealisedPnl?: number | null }) {
   const entries = market.entries || [];
   const participants = market.activeParticipantCount || market.betCount || 0;
   const isInactive = market.visibility === "inactive";
@@ -834,7 +882,7 @@ export function OpenMarketCard({ market, onNavigate, onPickEntry, isMarketClosed
   const timeLabel = daysLeft > 1 ? `${daysLeft}d left` : daysLeft === 1 ? "1d left" : "Closing soon";
 
   if (market.openMarketType === "updown") {
-    return <UpDownMarketCard market={market} entries={entries} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} isMarketClosed={isMarketClosed || isInactive} isInactive={isInactive} inactiveMessage={market.inactiveMessage} userBetResult={userBetResult} onFilterCategory={onFilterCategory} categoryRaceMap={categoryRaceMap} leaderboardCategories={leaderboardCategories} onBrowseFullScreen={onBrowseFullScreen} unrealisedPnl={unrealisedPnl} />;
+    return <UpDownMarketCard market={market} entries={entries} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} onPickEntry={onPickEntry} isMarketClosed={isMarketClosed || isInactive} isInactive={isInactive} inactiveMessage={market.inactiveMessage} userBetResult={userBetResult} onFilterCategory={onFilterCategory} categoryRaceMap={categoryRaceMap} leaderboardCategories={leaderboardCategories} onBrowseFullScreen={onBrowseFullScreen} unrealisedPnl={unrealisedPnl} />;
   }
   if (market.openMarketType === "multi") {
     return <MultiMarketCard market={market} entries={entries} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} onPickEntry={onPickEntry} isMarketClosed={isMarketClosed || isInactive} isInactive={isInactive} inactiveMessage={market.inactiveMessage} userBetResult={userBetResult} userBetsPerEntry={userBetsPerEntry} onFilterCategory={onFilterCategory} categoryRaceMap={categoryRaceMap} leaderboardCategories={leaderboardCategories} onBrowseFullScreen={onBrowseFullScreen} unrealisedPnl={unrealisedPnl} />;
