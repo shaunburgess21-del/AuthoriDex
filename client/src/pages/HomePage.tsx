@@ -147,10 +147,6 @@ function LeaderboardDrawerNavLink({
 function LeaderboardUpDownSnapshot() {
   return (
     <div>
-      <div className="mb-2 flex items-center gap-2">
-        <HelpCircle className="h-5 w-5 shrink-0 text-violet-500" aria-hidden />
-        <h3 className="text-sm font-semibold">How Up/Down Works</h3>
-      </div>
       <p className="text-xs leading-relaxed text-muted-foreground">
         Each Monday we snapshot every celebrity's Trend Score — that's their{" "}
         <span className="font-medium text-foreground">baseline</span> for the week. Buy{" "}
@@ -2531,10 +2527,10 @@ export default function HomePage() {
         <Drawer open={predictLeaderboardInfoOpen} onOpenChange={setPredictLeaderboardInfoOpen}>
           <DrawerContent className="max-h-[85vh]">
             <DrawerHeader className="space-y-1.5 text-left">
-              <DrawerTitle>Predict from the leaderboard</DrawerTitle>
-              <DrawerDescription className="text-sm text-muted-foreground">
-                How Up/Down works here, plus jump to a section on Predict.
-              </DrawerDescription>
+              <div className="flex items-center gap-2">
+                <HelpCircle className="h-5 w-5 shrink-0 text-violet-500" aria-hidden />
+                <DrawerTitle>How Up/Down Works</DrawerTitle>
+              </div>
             </DrawerHeader>
             <div className="overflow-y-auto px-4 pb-6 pt-0">
               <LeaderboardPredictInfoBody onNavigateLink={() => setPredictLeaderboardInfoOpen(false)} />
@@ -2545,10 +2541,10 @@ export default function HomePage() {
         <Dialog open={predictLeaderboardInfoOpen} onOpenChange={setPredictLeaderboardInfoOpen}>
           <DialogContent className="flex max-h-[85vh] flex-col gap-0 overflow-hidden sm:max-w-md">
             <DialogHeader className="shrink-0 space-y-1.5 text-left">
-              <DialogTitle>Predict from the leaderboard</DialogTitle>
-              <DialogDescription className="text-sm text-muted-foreground">
-                How Up/Down works here, plus jump to a section on Predict.
-              </DialogDescription>
+              <div className="flex items-center gap-2">
+                <HelpCircle className="h-5 w-5 shrink-0 text-violet-500" aria-hidden />
+                <DialogTitle>How Up/Down Works</DialogTitle>
+              </div>
             </DialogHeader>
             <div className="min-h-0 overflow-y-auto px-4 pb-4 pt-2">
               <LeaderboardPredictInfoBody onNavigateLink={() => setPredictLeaderboardInfoOpen(false)} />
