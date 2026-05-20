@@ -84,8 +84,6 @@ interface MomentumData {
       momentumLevel: MomentumLevel;
       deltaPct: number;
       topicId: string | null;
-      carriedForward?: boolean;
-      fetchedAgeHours?: number;
     };
     drivers: {
       status: "active" | "stable";
@@ -496,30 +494,13 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
   // the Momentum cards). Only show the warm-up notice when we have no data
   // yet. The 7-day baseline is still computed and persisted server-side
   // for the future Trends Momentum card.
-  const trendsFetchedAgeHours = signals.trends?.fetchedAgeHours;
-  const trendsCarriedForward =
-    signals.trends?.carriedForward === true || staleFlags.trendsCarriedForward === true;
-  const trendsRefreshAgeLabel =
-    trendsFetchedAgeHours != null && Number.isFinite(trendsFetchedAgeHours)
-      ? trendsFetchedAgeHours < 1
-        ? "less than 1h"
-        : trendsFetchedAgeHours < 2
-          ? "~1h"
-          : `~${Math.round(trendsFetchedAgeHours)}h`
-      : null;
   const trendsFooter = !hasTrendsData
     ? (
         <p className="text-[10px] text-muted-foreground/60 pt-0.5" data-testid="text-trends-warmup">
           Awaiting first Google Trends data
         </p>
       )
-    : trendsCarriedForward && trendsRefreshAgeLabel
-      ? (
-          <p className="text-[10px] text-muted-foreground/60 pt-0.5" data-testid="text-trends-carried-forward">
-            Google data last refreshed {trendsRefreshAgeLabel} ago · updates about every 12h
-          </p>
-        )
-      : null;
+    : null;
 
   return (
     <div id="momentum-signals" className="mt-8 space-y-5" data-testid="section-momentum-signals">
