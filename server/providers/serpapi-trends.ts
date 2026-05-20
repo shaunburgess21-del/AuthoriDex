@@ -31,7 +31,12 @@ import {
 } from "./trends-window";
 
 export type { TrendsTimeseriesPoint } from "./trends-window";
-export { computeTrendsWindowMeans, trendsWindowSize } from "./trends-window";
+export {
+  computeTrendsWindowMeans,
+  trendsWindowSize,
+  shouldFetchGoogleTrends,
+  TRENDS_FETCH_INTERVAL_MS,
+} from "./trends-window";
 
 const SERPAPI_API_KEY = process.env.SERPAPI_API_KEY;
 const SERPAPI_BASE_URL = "https://serpapi.com/search.json";

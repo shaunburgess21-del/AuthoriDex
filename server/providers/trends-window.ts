@@ -38,3 +38,25 @@ export function computeTrendsWindowMeans(series: TrendsTimeseriesPoint[]): {
   const avg24hInterest = series.reduce((s, x) => s + x.interest, 0) / series.length;
   return { latestInterest, prevWindowInterest, avg24hInterest };
 }
+
+// ---------------------------------------------------------------------------
+// Ingest cadence gate (12h SerpApi fetch interval)
+// ---------------------------------------------------------------------------
+
+/** Must match ingest gate and stay below serpapi_trends api_cache TTL (6h). */
+export const TRENDS_FETCH_INTERVAL_MS = 12 * 60 * 60 * 1000;
+
+/**
+ * Whether ingest should call SerpApi for Google Trends this cycle.
+ * `lastFetchAt` is the latest real fetch time (not carry-forward snapshot time).
+ */
+export function shouldFetchGoogleTrends(
+  lastFetchAt: Date | null,
+  nowMs = Date.now(),
+  intervalMs = TRENDS_FETCH_INTERVAL_MS,
+): boolean {
+  if (lastFetchAt == null) return true;
+  const lastMs = lastFetchAt.getTime();
+  if (!Number.isFinite(lastMs)) return true;
+  return nowMs - lastMs >= intervalMs;
+}

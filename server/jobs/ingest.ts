@@ -34,6 +34,7 @@ import {
   isSerpApiTrendsConfigured,
   getSerpApiTrendsRunStats,
   resetSerpApiTrendsRunStats,
+  shouldFetchGoogleTrends,
   type TrendsBatchResult,
 } from "../providers/serpapi-trends";
 
@@ -1559,33 +1560,53 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     // ══════════════════════════════════════════════════════════════════════════
     // GOOGLE TRENDS — 12h cadence gate + per-person fetch (May 2026)
     // ══════════════════════════════════════════════════════════════════════════
-    // We gate behind a 12h check: if any tracked person's most recent snapshot
-    // already has `diagnostics.raw.trendsInterest` within that window, skip the
-    // API calls.
+    // Gate on last *SerpApi* fetch (`raw.trendsFetchedAt`), not snapshot
+    // `timestamp`. Carry-forward hourly ticks persist `trendsInterest` but must
+    // not reset the 12h clock — see `shouldFetchGoogleTrends`.
     //
     // Per-person (un-batched) fetch — see `serpapi-trends.ts` header for why.
     // Budget math at ~160 people: 160 calls × 2 cycles/day × 30 days ≈ 9.6k
     // calls/month, well within the 15k SerpApi budget and leaves headroom for
     // autocomplete lookups and roster growth.
-    const TRENDS_FETCH_INTERVAL_MS = 12 * 60 * 60 * 1000;
     const trendsDataMap = new Map<string, TrendsBatchResult>();
 
     if (isSerpApiTrendsConfigured() && !isBackfill) {
       let shouldFetchTrends = true;
+      let lastSerpApiFetchAt: Date | null = null;
       try {
         const lastTrendsRow = await db.execute(
-          sql`SELECT MAX(timestamp) as last_ts FROM trend_snapshots
-              WHERE snapshot_origin = 'ingest'
-              AND diagnostics::jsonb->'raw'->'trendsInterest' IS NOT NULL
-              AND diagnostics::jsonb->'raw'->>'trendsInterest' != 'null'`
+          sql`SELECT GREATEST(
+                COALESCE(
+                  MAX((diagnostics::jsonb->'raw'->>'trendsFetchedAt')::timestamptz)
+                    FILTER (
+                      WHERE diagnostics::jsonb->'raw'->>'trendsFetchedAt' IS NOT NULL
+                        AND diagnostics::jsonb->'raw'->>'trendsFetchedAt' <> ''
+                    ),
+                  '-infinity'::timestamptz
+                ),
+                COALESCE(
+                  MAX(timestamp) FILTER (
+                    WHERE diagnostics::jsonb->'fresh'->>'trends' = 'true'
+                  ),
+                  '-infinity'::timestamptz
+                )
+              ) AS last_fetch_ts
+              FROM trend_snapshots
+              WHERE snapshot_origin = 'ingest'`,
         );
-        const lastTs = (lastTrendsRow.rows[0] as any)?.last_ts;
-        if (lastTs) {
-          const elapsed = Date.now() - new Date(lastTs).getTime();
-          if (elapsed < TRENDS_FETCH_INTERVAL_MS) {
-            shouldFetchTrends = false;
-            console.log(`[Ingest] Google Trends: skipping — last fetch ${Math.round(elapsed / 60000)}min ago (gate: 12h)`);
+        const lastFetchRaw = (lastTrendsRow.rows[0] as { last_fetch_ts?: string | Date })?.last_fetch_ts;
+        if (lastFetchRaw) {
+          const parsed = new Date(lastFetchRaw);
+          if (Number.isFinite(parsed.getTime()) && parsed.getTime() > 0) {
+            lastSerpApiFetchAt = parsed;
           }
+        }
+        shouldFetchTrends = shouldFetchGoogleTrends(lastSerpApiFetchAt);
+        if (!shouldFetchTrends && lastSerpApiFetchAt) {
+          const elapsedMin = Math.round((Date.now() - lastSerpApiFetchAt.getTime()) / 60000);
+          console.log(
+            `[Ingest] Google Trends: skipping — last SerpApi fetch ${elapsedMin}min ago (gate: 12h)`,
+          );
         }
       } catch (e) {
         console.warn("[Ingest] Google Trends gate check failed, will fetch:", (e as Error).message);
