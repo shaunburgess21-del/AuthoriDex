@@ -3058,6 +3058,158 @@ export default function PredictPage() {
           )}
         </div>
       </div>
+      {selectedType === "all" && (
+        <div className="container mx-auto px-2 sm:px-4 max-w-7xl pt-[5px] pb-[5px]">
+          {/* Town Square - below section filters, above weekly timer */}
+          {recentActivityError ? (
+            <div className="mb-8 mt-[5px]">
+              <Card className="p-6 text-center">
+                <p className="text-destructive mb-2">Couldn&apos;t load Town Square</p>
+                <p className="text-muted-foreground text-sm mb-4">Please try again in a moment.</p>
+                <Button onClick={() => refetchRecentActivity()} size="sm">
+                  Retry
+                </Button>
+              </Card>
+            </div>
+          ) : recentActivity.length > 0 ? (
+            <div className="mb-8 mt-[5px] min-w-0 shrink-0 rounded-xl pulse-card-blue transition-all duration-200" data-testid="town-square-card">
+              <div className={`px-3 sm:px-4 ${townSquareCollapsed ? 'py-4' : 'pt-5 pb-4'}`}>
+                <div
+                  className="flex items-center gap-3 cursor-pointer select-none group"
+                  onClick={() => setTownSquareCollapsed(!townSquareCollapsed)}
+                  data-testid="town-square-header"
+                >
+                  <div className="h-9 w-9 rounded-lg flex items-center justify-center pulse-icon-blue shrink-0">
+                    <MessageSquare className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-sm font-semibold text-foreground dark:text-slate-100">Town Square</h3>
+                    <p className="text-[10px] text-muted-foreground dark:text-slate-500 uppercase tracking-wider">Recent prediction activity across live markets</p>
+                  </div>
+                  <div className={`h-6 w-6 rounded-md flex items-center justify-center bg-muted/50 dark:bg-slate-700/30 transition-transform duration-200 shrink-0 ${townSquareCollapsed ? '' : 'rotate-180'}`}>
+                    <ChevronDown className="h-4 w-4 text-muted-foreground dark:text-slate-400 group-hover:text-foreground dark:group-hover:text-slate-200 transition-colors" />
+                  </div>
+                </div>
+                {!townSquareCollapsed && (
+                  <div className="mt-4">
+                    <Card className="border-border/50 dark:border-slate-700/50 bg-muted/30 dark:bg-slate-800/30">
+                      <div className="divide-y divide-border/50">
+                        {recentActivity.slice(0, 8).map((item) => {
+                          const actionType = item.actionType ?? "parimutuel";
+                          const isAmmBuy = actionType === "buy";
+                          const isAmmSell = actionType === "sell";
+                          const pricePct =
+                            item.pricePerShare != null
+                              ? `${Math.round(item.pricePerShare * 100)}%`
+                              : null;
+                          const shareCountLabel =
+                            item.shareCount != null
+                              ? Math.round(item.shareCount).toLocaleString()
+                              : null;
+                          const dotColor = isAmmBuy
+                            ? "bg-emerald-500"
+                            : isAmmSell
+                              ? "bg-amber-500"
+                              : "bg-muted-foreground/50";
+                          const proceeds =
+                            isAmmSell && item.payoutAmount != null
+                              ? Math.round(item.payoutAmount).toLocaleString("en-US")
+                              : null;
+                          return (
+                            <div
+                              key={item.id}
+                              className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/30 cursor-pointer focus-within:bg-muted/30"
+                              data-testid={`recent-activity-${item.id}`}
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => {
+                                setLocation(getRecentActivityMarketPath(item.marketSlug, item.marketType, item.marketId));
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  setLocation(getRecentActivityMarketPath(item.marketSlug, item.marketType, item.marketId));
+                                }
+                              }}
+                            >
+                              <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+                                <UserSocialAvatar
+                                  displayName={item.displayName}
+                                  avatarUrl={item.avatarUrl}
+                                  isAgent={item.isAgent}
+                                  className="h-9 w-9 shrink-0"
+                                  onClick={item.username && item.isPublic ? () => setLocation(`/u/${item.username}`) : undefined}
+                                />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="mb-1 flex items-center gap-2 flex-wrap">
+                                  <span className={`h-2 w-2 rounded-full ${dotColor}`} aria-hidden="true" />
+                                  <button
+                                    className={`text-sm font-medium ${item.username && item.isPublic ? "hover:underline cursor-pointer" : "cursor-default"}`}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      item.username && item.isPublic && setLocation(`/u/${item.username}`);
+                                    }}
+                                    aria-disabled={!(item.username && item.isPublic)}
+                                  >
+                                    {item.displayName}
+                                  </button>
+                                  <span className="text-[11px] text-muted-foreground">{formatActivityAge(item.createdAt)}</span>
+                                </div>
+                                <p className="text-sm text-foreground line-clamp-1 hover:underline">
+                                  {isAmmBuy && shareCountLabel ? (
+                                    <>
+                                      bought <span className="font-semibold">{shareCountLabel} shares</span> of{" "}
+                                      <span className="font-semibold">{item.choiceLabel}</span>
+                                      {pricePct ? <> @ {pricePct}</> : null} on {item.marketTitle}
+                                    </>
+                                  ) : isAmmSell && shareCountLabel ? (
+                                    <>
+                                      sold <span className="font-semibold">{shareCountLabel} shares</span> of{" "}
+                                      <span className="font-semibold">{item.choiceLabel}</span>
+                                      {pricePct ? <> @ {pricePct}</> : null} on {item.marketTitle}
+                                    </>
+                                  ) : (
+                                    <>
+                                      backed <span className="font-semibold">{item.choiceLabel}</span> on {item.marketTitle}
+                                    </>
+                                  )}
+                                </p>
+                                <p className="mt-0.5 text-xs text-muted-foreground">
+                                  {isAmmSell && proceeds
+                                    ? `${proceeds} credits in`
+                                    : `${item.stakeAmount.toLocaleString("en-US")} credits`}
+                                  {!item.isAgent && item.confidence != null ? ` • ${(item.confidence * 100).toFixed(0)}% confidence` : ""}
+                                </p>
+                                {item.rationale && (
+                                  <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
+                                    "{item.rationale}"
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="border-t border-border/50 px-4 py-2.5 text-center">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setLocation("/predict/activity");
+                          }}
+                          className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 transition-colors"
+                        >
+                          Show more activity →
+                        </button>
+                      </div>
+                    </Card>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      )}
       <div className="container mx-auto px-2 sm:px-4 py-8 max-w-7xl pt-[5px] pb-[5px]">
         {showPredictMultiFailureBanner && (
           <div
@@ -3092,293 +3244,6 @@ export default function PredictPage() {
               Retry all
             </Button>
           </div>
-        )}
-        {/* World Markets Section - First */}
-        {showSection("community") && (
-          <section id="community" data-hash-anchor className="mb-12 mt-[5px]">
-            <UnifiedSectionHeader
-              title="World Markets"
-              subtitle="Predict the outcome of global events"
-              icon={<Scale className="h-5 w-5 text-violet-600 dark:text-violet-400" />}
-              accent="violet"
-              testId="section-header-world-markets"
-              actions={
-                <>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        onClick={() => setRulesModalOpen("community")}
-                        className="text-violet-600 dark:text-violet-400 hover:text-violet-500 dark:hover:text-violet-300"
-                        aria-label="How it works"
-                        data-testid="button-rules-real-world-markets"
-                      >
-                        <HelpCircle className="h-5 w-5" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent className="bg-popover dark:bg-slate-900/95 border-border dark:border-slate-700 text-popover-foreground dark:text-slate-200 text-xs">How it works</TooltipContent>
-                  </Tooltip>
-                  <Button 
-                    onClick={() => openSuggestModal(() => setCreateModalOpen(true))}
-                    className="rounded-full bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/40 dark:border-violet-500/30 text-violet-600 dark:text-violet-400 hover:bg-violet-500/25 dark:hover:bg-violet-500/20 hidden md:flex"
-                    data-testid="button-start-prediction"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Suggest
-                  </Button>
-                  <button
-                    type="button"
-                    onClick={() => openSnapScroll("world-markets", filteredCommunity[0]?.id ? String(filteredCommunity[0].id) : undefined, "header-icon")}
-                    className="md:hidden inline-flex shrink-0 items-center justify-center rounded-md p-1 text-violet-600 dark:text-violet-400 transition-colors hover:text-violet-500 dark:hover:text-violet-300 hover:bg-muted/40 active:opacity-80"
-                    aria-label="Open immersive browse"
-                    data-testid="button-snap-world-markets"
-                  >
-                    <Maximize2 className="h-5 w-5" aria-hidden />
-                  </button>
-                </>
-              }
-            >
-              <SectionFilterBar
-                categoryFilter={communityCategory}
-                onCategoryChange={setCommunityCategory}
-                searchQuery={communitySearch}
-                onSearchChange={setCommunitySearch}
-                searchPlaceholder="Search predictions..."
-                testIdPrefix="community"
-                user={user}
-                onAuthRequired={() => navigateToLogin(setLocation, { mode: "signup", reason: "predict_signup" })}
-                filters={communityCategoryFilters}
-              />
-            </UnifiedSectionHeader>
-            {openMarketsError ? (
-              <Card className="p-8 text-center">
-                <p className="text-destructive mb-2">Couldn&apos;t load World Markets</p>
-                <p className="text-muted-foreground text-sm mb-4">Please try again in a moment.</p>
-                <Button onClick={() => refetchOpenMarkets()} data-testid="button-retry-open-markets">
-                  Retry
-                </Button>
-              </Card>
-            ) : isLoadingOpenMarkets ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <Card key={i} className="p-4 space-y-3">
-                    <div className="flex items-center gap-2">
-                      <Skeleton className="h-5 w-16 rounded-md" />
-                      <Skeleton className="h-5 w-20 rounded-md" />
-                    </div>
-                    <Skeleton className="h-5 w-full" />
-                    <Skeleton className="h-4 w-3/4" />
-                    <div className="flex items-center justify-between pt-2">
-                      <Skeleton className="h-8 w-24 rounded-md" />
-                      <Skeleton className="h-8 w-24 rounded-md" />
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            ) : filteredCommunity.length > 0 ? (
-              <CardSection ref={communitySectionRef} desktopLimit={9} gap="gap-4" testIdPrefix="section-community" dotActiveColor="bg-violet-500" mobileSlideMinHeight="min-h-[420px]">
-                {filteredCommunity.map((market: any) => (
-                  // Sprint 5 / Phase 0 fix: `OpenMarketCard` itself
-                  // testIds by slug (`card-market-${slug}`), but the
-                  // predict-return anchor is keyed by marketId
-                  // (`card-community-${marketId}`) so the regex parser
-                  // in the back-restore effect can identify the section.
-                  // We tag the wrapper div with the marketId testId so
-                  // `scrollToPredictAnchor` can resolve it on Back —
-                  // mirrors how native (weekly/h2h/gainer) cards
-                  // already do this at the PredictCard level.
-                  <div
-                    key={market.id}
-                    className="max-md:h-auto max-md:self-start w-full"
-                    data-testid={`card-community-${market.id}`}
-                    onClick={(e) => handleCardEmptyTap(e, "world-markets", String(market.id))}
-                  >
-                    <OpenMarketCard
-                      market={market}
-                      onNavigate={(slug, pick, direction) => setLocation(`/markets/${slug}${pick ? `?pick=${pick}${direction ? `&direction=${direction}` : ''}` : ''}`)}
-                      onPickEntry={handleCommunityPickEntry}
-                      isMarketClosed={market.status !== 'OPEN'}
-                      userBetResult={userBetsByMarket.get(String(market.id))}
-                      userBetsPerEntry={userBetsPerEntry.get(String(market.id))}
-                      onFilterCategory={handleCategoryPillFilter}
-                      categoryRaceMap={raceMap}
-                      leaderboardCategories={leaderboardCats}
-                      onBrowseFullScreen={isMobile ? () => openSnapScroll("world-markets", String(market.id), "browse-button") : undefined}
-                      unrealisedPnl={ammPositionByMarket.get(String(market.id))?.unrealisedPnl ?? null}
-                    />
-                  </div>
-                ))}
-              </CardSection>
-            ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                No markets available yet
-              </div>
-            )}
-            <div className="text-center mt-2 md:mt-6">
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                className="text-violet-700 dark:text-violet-500 hover:text-violet-600 dark:hover:text-violet-400 text-[14px]"
-                onClick={() => openPredictOverlay("community")}
-                data-testid="button-view-all-real-world"
-              >
-                View All Markets
-                <ChevronRight className="h-4 w-4 ml-1" />
-              </Button>
-            </div>
-
-            {/* Town Square - Daily Movers style, anchored after World Markets */}
-            {recentActivityError ? (
-              <div className="mb-8 mt-[5px]">
-                <Card className="p-6 text-center">
-                  <p className="text-destructive mb-2">Couldn&apos;t load Town Square</p>
-                  <p className="text-muted-foreground text-sm mb-4">Please try again in a moment.</p>
-                  <Button onClick={() => refetchRecentActivity()} size="sm">
-                    Retry
-                  </Button>
-                </Card>
-              </div>
-            ) : recentActivity.length > 0 ? (
-              <div className="mb-8 mt-[5px] min-w-0 shrink-0 rounded-xl pulse-card-blue transition-all duration-200" data-testid="town-square-card">
-                <div className={`px-3 sm:px-4 ${townSquareCollapsed ? 'py-4' : 'pt-5 pb-4'}`}>
-                  <div
-                    className="flex items-center gap-3 cursor-pointer select-none group"
-                    onClick={() => setTownSquareCollapsed(!townSquareCollapsed)}
-                    data-testid="town-square-header"
-                  >
-                    <div className="h-9 w-9 rounded-lg flex items-center justify-center pulse-icon-blue shrink-0">
-                      <MessageSquare className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="text-sm font-semibold text-foreground dark:text-slate-100">Town Square</h3>
-                      <p className="text-[10px] text-muted-foreground dark:text-slate-500 uppercase tracking-wider">Recent prediction activity across live markets</p>
-                    </div>
-                    <div className={`h-6 w-6 rounded-md flex items-center justify-center bg-muted/50 dark:bg-slate-700/30 transition-transform duration-200 shrink-0 ${townSquareCollapsed ? '' : 'rotate-180'}`}>
-                      <ChevronDown className="h-4 w-4 text-muted-foreground dark:text-slate-400 group-hover:text-foreground dark:group-hover:text-slate-200 transition-colors" />
-                    </div>
-                  </div>
-                  {!townSquareCollapsed && (
-                    <div className="mt-4">
-                      <Card className="border-border/50 dark:border-slate-700/50 bg-muted/30 dark:bg-slate-800/30">
-                        <div className="divide-y divide-border/50">
-                          {recentActivity.slice(0, 8).map((item) => {
-                            const actionType = item.actionType ?? "parimutuel";
-                            const isAmmBuy = actionType === "buy";
-                            const isAmmSell = actionType === "sell";
-                            const pricePct =
-                              item.pricePerShare != null
-                                ? `${Math.round(item.pricePerShare * 100)}%`
-                                : null;
-                            const shareCountLabel =
-                              item.shareCount != null
-                                ? Math.round(item.shareCount).toLocaleString()
-                                : null;
-                            // Coloured dot mirrors the Town Square page so users
-                            // can pick out buys vs sells at a glance.
-                            const dotColor = isAmmBuy
-                              ? "bg-emerald-500"
-                              : isAmmSell
-                                ? "bg-amber-500"
-                                : "bg-muted-foreground/50";
-                            const proceeds =
-                              isAmmSell && item.payoutAmount != null
-                                ? Math.round(item.payoutAmount).toLocaleString("en-US")
-                                : null;
-                            return (
-                              <div
-                                key={item.id}
-                                className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/30 cursor-pointer focus-within:bg-muted/30"
-                                data-testid={`recent-activity-${item.id}`}
-                                role="button"
-                                tabIndex={0}
-                                onClick={() => {
-                                  setLocation(getRecentActivityMarketPath(item.marketSlug, item.marketType, item.marketId));
-                                }}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter" || e.key === " ") {
-                                    e.preventDefault();
-                                    setLocation(getRecentActivityMarketPath(item.marketSlug, item.marketType, item.marketId));
-                                  }
-                                }}
-                              >
-                                <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
-                                  <UserSocialAvatar
-                                    displayName={item.displayName}
-                                    avatarUrl={item.avatarUrl}
-                                    isAgent={item.isAgent}
-                                    className="h-9 w-9 shrink-0"
-                                    onClick={item.username && item.isPublic ? () => setLocation(`/u/${item.username}`) : undefined}
-                                  />
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                  <div className="mb-1 flex items-center gap-2 flex-wrap">
-                                    <span className={`h-2 w-2 rounded-full ${dotColor}`} aria-hidden="true" />
-                                    <button
-                                      className={`text-sm font-medium ${item.username && item.isPublic ? "hover:underline cursor-pointer" : "cursor-default"}`}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        item.username && item.isPublic && setLocation(`/u/${item.username}`);
-                                      }}
-                                      aria-disabled={!(item.username && item.isPublic)}
-                                    >
-                                      {item.displayName}
-                                    </button>
-                                    <span className="text-[11px] text-muted-foreground">{formatActivityAge(item.createdAt)}</span>
-                                  </div>
-                                  <p className="text-sm text-foreground line-clamp-1 hover:underline">
-                                    {isAmmBuy && shareCountLabel ? (
-                                      <>
-                                        bought <span className="font-semibold">{shareCountLabel} shares</span> of{" "}
-                                        <span className="font-semibold">{item.choiceLabel}</span>
-                                        {pricePct ? <> @ {pricePct}</> : null} on {item.marketTitle}
-                                      </>
-                                    ) : isAmmSell && shareCountLabel ? (
-                                      <>
-                                        sold <span className="font-semibold">{shareCountLabel} shares</span> of{" "}
-                                        <span className="font-semibold">{item.choiceLabel}</span>
-                                        {pricePct ? <> @ {pricePct}</> : null} on {item.marketTitle}
-                                      </>
-                                    ) : (
-                                      <>
-                                        backed <span className="font-semibold">{item.choiceLabel}</span> on {item.marketTitle}
-                                      </>
-                                    )}
-                                  </p>
-                                  <p className="mt-0.5 text-xs text-muted-foreground">
-                                    {isAmmSell && proceeds
-                                      ? `${proceeds} credits in`
-                                      : `${item.stakeAmount.toLocaleString("en-US")} credits`}
-                                    {!item.isAgent && item.confidence != null ? ` • ${(item.confidence * 100).toFixed(0)}% confidence` : ""}
-                                  </p>
-                                  {item.rationale && (
-                                    <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
-                                      "{item.rationale}"
-                                    </p>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                        <div className="border-t border-border/50 px-4 py-2.5 text-center">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setLocation("/predict/activity");
-                            }}
-                            className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 transition-colors"
-                          >
-                            Show more activity →
-                          </button>
-                        </div>
-                      </Card>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ) : null}
-          </section>
         )}
       </div>
       </div>
@@ -3831,6 +3696,7 @@ export default function PredictPage() {
                   {filteredCommunity.map((market: any) => (
                     <div
                       key={market.id}
+                      className="max-md:h-auto max-md:self-start w-full"
                       data-testid={`card-community-${market.id}`}
                       onClick={(e) => handleCardEmptyTap(e, "world-markets", String(market.id))}
                     >
