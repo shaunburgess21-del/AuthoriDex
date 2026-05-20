@@ -67,13 +67,13 @@ export function FilterDropdown({
               value={sortDirection}
               onValueChange={(v) => onSortDirectionChange?.(v as SortDirection)}
             >
-              <DropdownMenuRadioItem value="desc" data-testid="sort-desc">
-                <ArrowDown className="h-3.5 w-3.5 mr-2" />
-                Descending
+              <DropdownMenuRadioItem value="desc" indicator="none" data-testid="sort-desc">
+                <ArrowDown className="h-3.5 w-3.5 shrink-0" />
+                High to low
               </DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="asc" data-testid="sort-asc">
-                <ArrowUp className="h-3.5 w-3.5 mr-2" />
-                Ascending
+              <DropdownMenuRadioItem value="asc" indicator="none" data-testid="sort-asc">
+                <ArrowUp className="h-3.5 w-3.5 shrink-0" />
+                Low to high
               </DropdownMenuRadioItem>
             </DropdownMenuRadioGroup>
             <DropdownMenuSeparator />
@@ -83,9 +83,10 @@ export function FilterDropdown({
         <DropdownMenuSeparator />
         <DropdownMenuRadioGroup value={value} onValueChange={onChange}>
           {categories.map((category) => (
-            <DropdownMenuRadioItem 
-              key={category.value} 
+            <DropdownMenuRadioItem
+              key={category.value}
               value={category.value}
+              indicator="none"
               data-testid={`filter-${category.value}`}
             >
               {category.label}
