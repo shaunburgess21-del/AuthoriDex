@@ -1599,12 +1599,14 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     }
 
     // ══════════════════════════════════════════════════════════════════════════
-    // GOOGLE TRENDS HISTORY — rolling 7-day baseline + 24h-prior comparator
+    // GOOGLE TRENDS HISTORY — snapshot fallback when fetch is skipped
     // ══════════════════════════════════════════════════════════════════════════
-    // Reconstruct what the SerpApi response used to give us for free on the
-    // `now 7-d` window. Now that we query `now 1-d` (so the score matches
-    // the Google Trends UI "Past 24h" scale), the rolling weekly average
-    // and the 24h-prior interest must come from our own snapshot history.
+    // Fresh fetches supply momentum baseline from the same `now 1-d` series
+    // (`avg24hInterest` → persisted as trendsAvg7d). This block remains for
+    // skip cycles and legacy fallbacks only.
+    //
+    // Option 3 (future): daily `now 7-d` SerpApi gate for a true weekly
+    // Trends Momentum card (~161 extra calls/day, fits 15k/mo budget).
     //
     // Filtered to `timestamp >= TRENDS_DAILY_SCALE_CUTOVER` so legacy
     // 7-day-normalised values from before the rollout don't poison the
@@ -2008,12 +2010,11 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           wikiPageviews7dAvg: wiki?.averageDaily7d || 0, // 7-day average for stable mass baseline
           wikiAverageDaily7d: wikiAvg7dExcludingToday,
           trendsInterest: trends?.latestInterest ?? 0,
-          // History-augmented rolling 7d average (see computeTrendsAvg7d
-          // above): mean of post-cutover history plus the current reading.
-          // Falls back to the current reading on day 0 so the dormant
-          // trends-momentum scoring slot doesn't divide by zero before
-          // the bootstrap window fills in.
-          trendsAvg7d: computeTrendsAvg7d(person.id, trends?.latestInterest ?? 0),
+          // Same-window 24h mean when fetched; history fallback on skip cycles.
+          trendsAvg7d:
+            trends && trends.avg24hInterest > 0
+              ? trends.avg24hInterest
+              : computeTrendsAvg7d(person.id, trends?.latestInterest ?? 0),
           wikiDelta: wiki?.delta || 0,
           newsDelta: newsDelta,
           searchDelta: searchDelta,
@@ -2124,22 +2125,20 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           : 0;
         const wikiMomentumLevel = computeMomentumLevel(wikiMomentumRatio);
 
-        // Google Trends momentum diagnostics (May 2026 — daily-scale rollout)
-        // `trendsInterest` is the latest "% of today's peak hour" reading
-        // from the `now 1-d` SerpApi response. The 7-day baseline and the
-        // 24h-prior comparator can't be derived from a 24h window, so they
-        // come from `trendsHistoryMap` / `trendsPrevDayMap` — both
-        // populated above from our own post-cutover snapshot history.
-        // Fallback semantics:
-        //   - trendsAvg7d: when no history yet, computeTrendsAvg7d returns
-        //     the current latest, so momentum ratio ≈ 1.0 ("medium / steady")
-        //     rather than divide-by-zero into "no signal".
-        //   - trendsPrevDayInterest: 0 when we don't have a snapshot
-        //     within ±6h of (now-24h). routes.ts treats 0 as "no delta"
-        //     and renders an em-dash, same as cold-start celebs today.
+        // Google Trends diagnostics (May 2026 — activity + dormant momentum)
+        // Activity card: trendsInterest (last ~4h) vs trendsPrevDayInterest
+        // (first ~4h of same `now 1-d` graph). Momentum (display-only):
+        // trendsAvg7d = full-series mean on that graph when fetched; history
+        // fallback via computeTrendsAvg7d when this cycle skipped the API.
         const trendsInterestLatest = trends?.latestInterest ?? 0;
-        const trendsAvg7d = computeTrendsAvg7d(person.id, trendsInterestLatest);
-        const trendsPrevDayInterest = trendsPrevDayMap.get(person.id) ?? 0;
+        const trendsAvg7d =
+          trends && trends.avg24hInterest > 0
+            ? trends.avg24hInterest
+            : computeTrendsAvg7d(person.id, trendsInterestLatest);
+        const trendsPrevDayInterest =
+          trends && trends.prevWindowInterest > 0
+            ? trends.prevWindowInterest
+            : (trendsPrevDayMap.get(person.id) ?? 0);
         const trendsAvg90d = 0;
         const trendsMomentumRatio = trendsAvg7d > 0 && trendsInterestLatest > 0
           ? Math.min(trendsInterestLatest / Math.max(trendsAvg7d, 1), MOMENTUM_RATIO_CAP)

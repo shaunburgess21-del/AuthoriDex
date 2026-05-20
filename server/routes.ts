@@ -3163,10 +3163,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         : persistedWikiMomentumScore;
       const wikiMomentumLevel = computeMomentumLevel(wikiMomentumRatio);
 
-      // ── Google Trends Momentum (May 2026 — display-only, dormant) ───────
-      // Trends data is only ingested once per 24h. When the gate is closed,
-      // subsequent hourly snapshots won't carry trends fields. Fall back to
-      // the most recent snapshot that *does* have trends data.
+      // ── Google Trends (May 2026 — activity card + dormant momentum fields) ─
+      // Fetched on a 12h cadence. When the gate is closed, fall back to the
+      // most recent snapshot that has trends diagnostics.
       let trendsDiag = diag;
       if (trendsDiag?.raw?.trendsInterest == null) {
         const [trendsSnap] = await db
@@ -3191,17 +3190,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const trendsMomentumRatio = Number(trendsDiag?.raw?.trendsMomentumRatio ?? 0);
       const trendsMomentumLevel = computeMomentumLevel(trendsMomentumRatio);
 
-      // Day-over-day delta for the Google Trends Activity pill — sourced
-      // from the SerpApi 7-day hourly window (latest 4h mean vs 24-28h-ago
-      // 4h mean), both captured into `diagnostics.raw` at ingest time so
-      // the delta is computable from a single snapshot. This replaces the
-      // previous velocity-component-based delta which was wired to the
-      // dormant `trendsMomentum` score (weight 0 in the engine) and was
-      // therefore always 0 — leaving the Trends pill em-dashed and the
-      // Google Trends chip absent from the leaderboard popup's Growth /
-      // Cooling lists. Mirrors the Wiki Pulse fix: pull both ends of the
-      // comparison from the same provider response so we don't depend on
-      // a 24h-ago snapshot that may carry a stale carried-forward value.
+      // Day-over-day delta for the Google Trends Activity pill — latest
+      // ~4h mean vs oldest ~4h mean from the SAME `now 1-d` SerpApi
+      // response (both % of that window's single peak). Persisted at ingest
+      // as `trendsInterest` / `trendsPrevDayInterest`. Cross-snapshot
+      // comparison was retired May 2026: each fetch rebases 100 to that
+      // day's peak, so yesterday's snapshot is not comparable to today's.
       const trendsPrevDayInterest = Number(trendsDiag?.raw?.trendsPrevDayInterest ?? 0);
       const rawTrendsDeltaPct = trendsPrevDayInterest > 0 && trendsInterest > 0
         ? Math.round(((trendsInterest - trendsPrevDayInterest) / trendsPrevDayInterest) * 100)
@@ -3301,8 +3295,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             deltaPct: wikiMomentumDeltaPct,
             level: wikiMomentumLevel,
           },
-          // Google Trends — display-only, dormant in score (May 2026 PR1).
-          // Populated once Trends data starts flowing via the 24h ingest gate.
+          // Google Trends — activity card + dormant momentum (not in velocityScore).
+          // avg7d: same-window 24h series mean (not calendar 7-day) until Option 3.
+          // deltaPct: latest ~4h vs oldest ~4h on one `now 1-d` graph (activity %).
           trends: {
             interest: Math.round(trendsInterest * 10) / 10,
             avg7d: Math.round(trendsAvg7dVal * 10) / 10,
