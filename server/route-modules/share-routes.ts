@@ -1,7 +1,7 @@
 import type { Express, Request } from "express";
 import crypto from "crypto";
 import { and, eq, gte, isNotNull, isNull, sql } from "drizzle-orm";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { db } from "../db";
 import { profiles, shareClicks, creditLedger } from "@shared/schema";
 import { gamificationService } from "../services/gamification";
@@ -75,6 +75,13 @@ function clientIp(req: Request): string {
   return req.ip ?? "unknown";
 }
 
+/** IPv6-safe client key shared by rate limiter and dedup ipHash. */
+function clientIdentityKey(req: Request): string {
+  const ip = clientIp(req);
+  if (ip === "unknown") return "unknown";
+  return ipKeyGenerator(ip);
+}
+
 function utcDateString(d: Date = new Date()): string {
   return d.toISOString().split("T")[0];
 }
@@ -90,16 +97,7 @@ const trackClickLimiter = rateLimit({
   limit: 60,
   standardHeaders: "draft-7",
   legacyHeaders: false,
-  // Match the same client-IP extraction used inside the handler so
-  // a single forwarded peer is rate-limited consistently regardless
-  // of where the limiter sits in the middleware stack.
-  keyGenerator: (req) => {
-    const xff = req.headers["x-forwarded-for"];
-    if (typeof xff === "string" && xff.length > 0) {
-      return xff.split(",")[0]!.trim();
-    }
-    return req.ip ?? "unknown";
-  },
+  keyGenerator: clientIdentityKey,
 });
 
 // Length caps. The DB columns are unbounded text; without these
@@ -181,7 +179,7 @@ export function registerShareRoutes(app: Express): void {
       // refreshing the link doesn't farm credits. Dedup-hit still
       // exits early because we already have an analytics row for
       // this (sharer, ip, day) — no value in inserting another.
-      const ipHash = hashIp(clientIp(req));
+      const ipHash = hashIp(clientIdentityKey(req));
       const utcToday = utcDateString();
       const utcStart = new Date(`${utcToday}T00:00:00.000Z`);
 
