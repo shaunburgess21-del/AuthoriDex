@@ -1,12 +1,12 @@
 import { useState, useMemo } from "react";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, Wallet, TrendingUp, TrendingDown, Settings2 } from "lucide-react";
+import { ArrowLeft, Wallet, TrendingUp, TrendingDown, Settings2, CreditCard } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCreditHistory } from "@/hooks/useGamification";
-import { labelForTxnType, bucketForTxnType, type LedgerBucket } from "@shared/credit-config";
+import { bucketForTxnType, labelForTxnType, type LedgerBucket } from "@shared/credit-config";
 
 /**
  * Per-user credit history. Mirrors the data shown by the admin
@@ -32,6 +32,9 @@ interface CreditLedgerRow {
   amount: number;
   balanceAfter: number;
   createdAt: string;
+  displayTitle?: string;
+  displaySubtitle?: string;
+  href?: string;
 }
 
 export default function CreditHistoryPage() {
@@ -39,9 +42,6 @@ export default function CreditHistoryPage() {
   const { profile, isLoggedIn } = useAuth();
   const [filter, setFilter] = useState<FilterId>("all");
 
-  // Pull the most recent 100 rows. The ledger endpoint default is
-  // 20; we override here because this page is the user's
-  // canonical history view and a single screenful (20) feels thin.
   const { data, isLoading } = useCreditHistory(100, isLoggedIn);
 
   const rows: CreditLedgerRow[] = Array.isArray(data) ? data : [];
@@ -90,6 +90,14 @@ export default function CreditHistoryPage() {
             commenting, posting insights, hitting streak milestones,
             and through admin-approved suggestions.
           </p>
+          <Button
+            className="mt-4 w-full sm:w-auto bg-gradient-to-r from-violet-600 to-violet-500 hover:from-violet-700 hover:to-violet-600"
+            onClick={() => setLocation("/pricing")}
+            data-testid="button-buy-credits-history"
+          >
+            <CreditCard className="h-4 w-4 mr-2" />
+            Buy Credits
+          </Button>
         </Card>
 
         <div className="flex flex-wrap gap-2">
@@ -142,7 +150,6 @@ export default function CreditHistoryPage() {
 
 function CreditLedgerRowItem({ row }: { row: CreditLedgerRow }) {
   const bucket = bucketForTxnType(row.txnType, row.amount);
-  const label = labelForTxnType(row.txnType);
   const date = new Date(row.createdAt);
   const dateLabel = date.toLocaleDateString(undefined, {
     month: "short",
@@ -169,18 +176,21 @@ function CreditLedgerRowItem({ row }: { row: CreditLedgerRow }) {
         ? TrendingDown
         : Settings2;
 
-  return (
-    <li
-      className="flex items-center justify-between gap-3 px-4 py-3"
-      data-testid={`credit-row-${row.id}`}
-    >
+  const title = row.displayTitle ?? labelForTxnType(row.txnType);
+  const subtitle = row.displaySubtitle;
+
+  const inner = (
+    <>
       <div className="flex items-start gap-3 min-w-0">
         <div className={`mt-0.5 ${tone}`}>
           <Icon className="h-4 w-4" />
         </div>
         <div className="min-w-0">
-          <p className="text-sm font-medium truncate">{label}</p>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-sm font-medium line-clamp-2">{title}</p>
+          {subtitle ? (
+            <p className="text-xs text-muted-foreground line-clamp-1">{subtitle}</p>
+          ) : null}
+          <p className="text-xs text-muted-foreground mt-0.5">
             {dateLabel} · {timeLabel}
           </p>
         </div>
@@ -190,11 +200,36 @@ function CreditLedgerRowItem({ row }: { row: CreditLedgerRow }) {
           {sign}
           {row.amount.toLocaleString("en-US")}
         </p>
-        <p className="text-[11px] text-muted-foreground font-mono">
+        <p className="text-[11px] text-muted-foreground font-mono hidden sm:block">
           balance {row.balanceAfter.toLocaleString("en-US")}
         </p>
       </div>
+    </>
+  );
+
+  const rowClass =
+    "flex items-center justify-between gap-3 px-4 py-3 w-full text-left";
+
+  if (row.href) {
+    return (
+      <li data-testid={`credit-row-${row.id}`}>
+        <Link
+          href={row.href}
+          aria-label={`${title}, ${sign}${row.amount} credits`}
+          className={`${rowClass} hover:bg-muted/40 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset`}
+        >
+          {inner}
+        </Link>
+      </li>
+    );
+  }
+
+  return (
+    <li
+      className={rowClass}
+      data-testid={`credit-row-${row.id}`}
+    >
+      {inner}
     </li>
   );
 }
-

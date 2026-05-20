@@ -119,13 +119,18 @@ export default function MePage() {
                   <p className="text-2xl font-bold text-green-600 dark:text-green-400">{profile?.winRate || 0}%</p>
                   <p className="text-xs text-muted-foreground">Win Rate</p>
                 </div>
-                <div className="p-3 rounded-lg bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/30 dark:border-violet-500/20">
+                <button
+                  type="button"
+                  className="p-3 rounded-lg bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/30 dark:border-violet-500/20 hover:bg-violet-500/20 dark:hover:bg-violet-500/15 transition-colors w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  onClick={() => setLocation("/me/credits")}
+                  data-testid="link-me-credits-stat"
+                >
                   <div className="flex items-center justify-center gap-1">
                     <Wallet className="h-4 w-4 text-violet-600 dark:text-violet-400" />
                     <p className="text-2xl font-bold text-violet-600 dark:text-violet-400 font-mono">{(profile?.predictCredits || 0).toLocaleString('en-US')}</p>
                   </div>
                   <p className="text-xs text-muted-foreground">Credits</p>
-                </div>
+                </button>
                 <div className="p-3 rounded-lg bg-orange-500/15 dark:bg-orange-500/10 border border-orange-500/30 dark:border-orange-500/20">
                   <div className="flex items-center justify-center gap-1">
                     <Flame className="h-4 w-4 text-orange-600 dark:text-orange-400" />
@@ -220,7 +225,12 @@ export default function MePage() {
                     long number (e.g. "1,234,567") falls back to an
                     ellipsis with a hover tooltip instead of being
                     silently clipped at the pill edge. */}
-                <div className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/40 dark:border-violet-500/30 overflow-hidden">
+                <button
+                  type="button"
+                  className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/40 dark:border-violet-500/30 overflow-hidden w-full hover:bg-violet-500/20 dark:hover:bg-violet-500/15 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  onClick={() => setLocation("/me/credits")}
+                  data-testid="link-me-credits-balance"
+                >
                   <div className="flex items-center gap-2 min-w-0 flex-1">
                     <Wallet className="h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400" />
                     <span className="text-sm text-muted-foreground truncate">Balance</span>
@@ -231,7 +241,7 @@ export default function MePage() {
                   >
                     {(profile?.predictCredits || 0).toLocaleString('en-US')}
                   </span>
-                </div>
+                </button>
                 <div className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg bg-orange-500/15 dark:bg-orange-500/10 border border-orange-500/40 dark:border-orange-500/30 overflow-hidden">
                   <div className="flex items-center gap-2 min-w-0 flex-1">
                     <Flame className="h-4 w-4 shrink-0 text-orange-600 dark:text-orange-400" />

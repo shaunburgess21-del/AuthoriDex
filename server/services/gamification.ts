@@ -18,6 +18,10 @@ import { createNotification } from "./notifications";
 import { ALL_CAPABILITIES } from "@shared/rank-config";
 import { CREDIT_ACTIONS, type CreditActionConfig } from "@shared/credit-config";
 import { awardRankTierBadges } from "./badges";
+import {
+  enrichCreditHistoryRows,
+  type EnrichedCreditLedgerRow,
+} from "./credit-history-display";
 
 interface AwardXpResult {
   success: boolean;
@@ -697,14 +701,14 @@ class GamificationService {
     return entries;
   }
 
-  async getCreditHistory(userId: string, limit: number = 20): Promise<typeof creditLedger.$inferSelect[]> {
+  async getCreditHistory(userId: string, limit: number = 20): Promise<EnrichedCreditLedgerRow[]> {
     const entries = await db.select()
       .from(creditLedger)
       .where(eq(creditLedger.userId, userId))
       .orderBy(desc(creditLedger.createdAt))
       .limit(limit);
 
-    return entries;
+    return enrichCreditHistoryRows(entries);
   }
 
   async getRanks(): Promise<Rank[]> {

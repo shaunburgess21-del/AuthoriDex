@@ -2950,18 +2950,17 @@ export default function PredictPage() {
                 <Button variant="ghost" size="sm" className="text-violet-700 dark:text-violet-500 md:text-sm">Predict</Button>
               </Link>
             </div>
-            {/* TODO(phase1-revenue): wire both mobile and desktop Credits pills to
-                navigate to /me/credits (or similar) for credits insights + purchase
-                flow via Paystack. Plan in NOTES.md. */}
             <div className="flex items-center gap-1.5 md:hidden">
               {user && (
-                <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-md bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/40 dark:border-violet-500/30">
-                  {/* Hide the Wallet glyph on the very narrowest viewports
-                      (<360px) so the credit number itself doesn't wrap. The
-                      pill background already telegraphs "wallet" on its own. */}
+                <button
+                  type="button"
+                  className="flex items-center gap-1.5 px-2 py-1.5 rounded-md bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/40 dark:border-violet-500/30 hover:bg-violet-500/20 dark:hover:bg-violet-500/15 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={() => setLocation("/me/credits")}
+                  data-testid="predict-mobile-credits-pill"
+                >
                   <Wallet className="hidden [@media(min-width:360px)]:inline-block h-[14px] w-[14px] text-violet-700 dark:text-violet-500" />
                   <span className="font-mono font-bold text-sm">{walletCredits.toLocaleString('en-US')}</span>
-                </div>
+                </button>
               )}
               <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setRulesModalOpen("predictions")} aria-label="View predictions rules">
                 <ScrollText className="h-4 w-4 text-muted-foreground" />
@@ -3024,13 +3023,15 @@ export default function PredictPage() {
               <TooltipContent>Predictions rules</TooltipContent>
             </Tooltip>
             {user && (
-              <div
-                className="flex items-center gap-1.5 px-3 min-h-8 rounded-md bg-violet-500/20 dark:bg-violet-500/15 border border-violet-500/40 dark:border-violet-500/30"
+              <button
+                type="button"
+                className="flex items-center gap-1.5 px-3 min-h-8 rounded-md bg-violet-500/20 dark:bg-violet-500/15 border border-violet-500/40 dark:border-violet-500/30 hover:bg-violet-500/25 dark:hover:bg-violet-500/20 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                onClick={() => setLocation("/me/credits")}
                 data-testid="predict-desktop-credits-pill"
               >
                 <Wallet className="h-[14px] w-[14px] text-violet-700 dark:text-violet-500" />
                 <span className="font-mono font-bold text-xs text-violet-700 dark:text-violet-500">{walletCredits.toLocaleString('en-US')}</span>
-              </div>
+              </button>
             )}
           </div>
           {user && userBetsError && (

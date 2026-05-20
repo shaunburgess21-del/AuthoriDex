@@ -262,7 +262,13 @@ function UserMenuContent({
       </div>
 
       <div className="px-4 pb-3 space-y-2">
-        <div className="flex items-center justify-between p-2.5 rounded-lg bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/40 dark:border-violet-500/30">
+        <button
+          type="button"
+          className="w-full flex items-center justify-between p-2.5 rounded-lg bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/40 dark:border-violet-500/30 hover:bg-violet-500/20 dark:hover:bg-violet-500/15 transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          onClick={() => handleNavClick("/me/credits")}
+          aria-label={`My Credits, ${(profile?.predictCredits || 0).toLocaleString("en-US")} balance`}
+          data-testid="link-my-credits-menu"
+        >
           <div className="flex items-center gap-2">
             <Wallet className="h-4 w-4 text-violet-600 dark:text-violet-400" />
             <span className="text-sm text-muted-foreground">Credits</span>
@@ -270,8 +276,9 @@ function UserMenuContent({
           <div className="flex items-center gap-2">
             <span className="font-mono font-bold text-sm">{(profile?.predictCredits || 0).toLocaleString('en-US')}</span>
             <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-violet-500/40 dark:border-violet-500/30 text-violet-600 dark:text-violet-400">VIRTUAL</Badge>
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
           </div>
-        </div>
+        </button>
         <div className="flex items-center justify-between p-2.5 rounded-lg bg-amber-500/15 dark:bg-amber-500/10 border border-amber-500/40 dark:border-amber-500/30">
           <div className="flex items-center gap-2">
             <Zap className="h-4 w-4 text-amber-600 dark:text-amber-400" />
@@ -322,6 +329,15 @@ function UserMenuContent({
           <Vote className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
           <span className="flex-1 text-sm">My Votes</span>
           <span className="text-xs text-muted-foreground">{profile?.totalVotes ?? 0}</span>
+          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+        </button>
+        <button
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          onClick={() => handleNavClick("/me/credits")}
+          data-testid="link-my-credits-activity"
+        >
+          <Wallet className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+          <span className="flex-1 text-sm">My Credits</span>
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
         </button>
         <button

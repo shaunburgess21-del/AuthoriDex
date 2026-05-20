@@ -68,7 +68,7 @@ export const CREDIT_ACTIONS: readonly CreditActionConfig[] = [
   // are the "earn a few credits for being active" actions.
   {
     key: "vote_any",
-    label: "Vote (any type)",
+    label: "Vote",
     proposedCredits: 2,
     dailyCap: 10,
     category: "ENGAGEMENT",
@@ -287,6 +287,8 @@ const LEGACY_TXN_LABELS: Record<string, string> = {
   prediction_stake: "Prediction stake",
   prediction_payout: "Prediction win",
   prediction_refund: "Prediction refund",
+  amm_buy: "Prediction purchase",
+  amm_sell: "Prediction sale",
   jackpot_payout: "Jackpot win",
   agent_topup: "Agent top-up",
   bonus: "Bonus",
