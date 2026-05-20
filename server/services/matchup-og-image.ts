@@ -1,10 +1,7 @@
 import sharp from "sharp";
 import type { MatchupOgContext } from "./matchup-og-context";
-import {
-  matchupOgDescription,
-  matchupOgPromptTitle,
-} from "./matchup-og-meta";
-import { textPath } from "./og-svg-text-paths";
+import { matchupOgPromptTitle } from "./matchup-og-meta";
+import { measureOutlinedTextWidth, textPath } from "./og-svg-text-paths";
 
 const OG_WIDTH = 1200;
 const OG_HEIGHT = 630;
@@ -27,10 +24,51 @@ export function getMatchupOverlayLabels(ctx: MatchupOgContext) {
     brand: "VoxDex",
     category: truncate(ctx.category || "Matchup", 24).toUpperCase(),
     vs: "VS",
+    optionA: truncate(ctx.optionAText, 32),
+    optionB: truncate(ctx.optionBText, 32),
     prompt: truncate(matchupOgPromptTitle(ctx), 72),
-    vsLine: truncate(matchupOgDescription(ctx), 56),
     cta: "Vote on VoxDex",
   };
+}
+
+const VS_CY = 315;
+const VS_RADIUS = 52;
+const FLANK_GAP = 12;
+const FLANK_FONT_SIZE = 28;
+const FLANK_WEIGHT = 600;
+const FLANK_PAD_X = 16;
+const FLANK_PAD_Y = 8;
+const FLANK_TEXT_Y = 320;
+
+/** Semi-transparent pill + path text flanking the VS badge. */
+function flankVsNamePill(text: string, side: "left" | "right"): string {
+  if (!text) return "";
+
+  const anchorX =
+    side === "left"
+      ? HALF_WIDTH - VS_RADIUS - FLANK_GAP
+      : HALF_WIDTH + VS_RADIUS + FLANK_GAP;
+  const textWidth = measureOutlinedTextWidth(
+    text,
+    FLANK_FONT_SIZE,
+    FLANK_WEIGHT,
+  );
+  const pillW = textWidth + FLANK_PAD_X * 2;
+  const pillH = FLANK_FONT_SIZE + FLANK_PAD_Y * 2;
+  const pillY = FLANK_TEXT_Y - FLANK_FONT_SIZE - FLANK_PAD_Y + 6;
+  const pillX =
+    side === "left" ? anchorX - textWidth - FLANK_PAD_X : anchorX - FLANK_PAD_X;
+
+  return `<rect x="${pillX}" y="${pillY}" width="${pillW}" height="${pillH}" rx="12" fill="#0f172a" fill-opacity="0.75"/>
+  ${textPath({
+    text,
+    x: anchorX,
+    y: FLANK_TEXT_Y,
+    fontSize: FLANK_FONT_SIZE,
+    weight: FLANK_WEIGHT,
+    fill: "#ffffff",
+    anchor: side === "left" ? "end" : "start",
+  })}`;
 }
 
 async function fetchImageBuffer(url: string | null): Promise<Buffer | null> {
@@ -172,17 +210,10 @@ export function buildMatchupOverlaySvg(ctx: MatchupOgContext): string {
     anchor: "middle",
     letterSpacing: 1,
   })}
-  ${textPath({
-    text: labels.vsLine,
-    x: HALF_WIDTH,
-    y: 58,
-    fontSize: 24,
-    weight: 500,
-    fill: "#cbd5e1",
-    anchor: "middle",
-  })}
+  ${flankVsNamePill(labels.optionA, "left")}
+  ${flankVsNamePill(labels.optionB, "right")}
 
-  <circle cx="${HALF_WIDTH}" cy="315" r="52" fill="#0f172a" fill-opacity="0.92" stroke="#38bdf8" stroke-width="4"/>
+  <circle cx="${HALF_WIDTH}" cy="${VS_CY}" r="${VS_RADIUS}" fill="#0f172a" fill-opacity="0.92" stroke="#38bdf8" stroke-width="4"/>
   ${textPath({
     text: labels.vs,
     x: HALF_WIDTH,

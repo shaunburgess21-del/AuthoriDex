@@ -77,11 +77,11 @@ test("matchupBucketUrl builds public Supabase path shape", () => {
   );
 });
 
-test("matchupOgImagePath uses shared cache version v6", () => {
-  assert.equal(MATCHUP_OG_IMAGE_VERSION, "6");
+test("matchupOgImagePath uses shared cache version v7", () => {
+  assert.equal(MATCHUP_OG_IMAGE_VERSION, "7");
   assert.equal(
     matchupOgImagePath("football-goat"),
-    "/api/og/vote/matchups/football-goat.jpg?v=6",
+    "/api/og/vote/matchups/football-goat.jpg?v=7",
   );
 });
 
@@ -114,9 +114,11 @@ test("buildMatchupOverlaySvg uses path outlines only (no librsvg text)", () => {
   assert.ok(pathCount >= 6, `expected >=6 path elements, got ${pathCount}`);
 
   assert.equal(labels.prompt, "Who is the GOAT?");
-  assert.equal(labels.vsLine, "Cristiano Ronaldo vs Lionel Messi");
+  assert.equal(labels.optionA, "Cristiano Ronaldo");
+  assert.equal(labels.optionB, "Lionel Messi");
   assert.equal(labels.cta, "Vote on VoxDex");
   assert.equal(labels.brand, "VoxDex");
+  assert.ok(svg.includes('fill-opacity="0.75"'));
 });
 
 test("renderMatchupOgImage returns 1200x630 PNG without remote images", async () => {
@@ -182,19 +184,18 @@ test("renderMatchupOgImageJpeg brand region is not tofu-like", async () => {
   );
 });
 
-/** Top-center vsLine band should have subtitle glyphs (safe from X/FB bottom overlay). */
-test("renderMatchupOgImageJpeg top-center vsLine band has visible text", async () => {
-  const jpeg = await renderMatchupOgImageJpeg(PLACEHOLDER_CTX);
+async function midToneFraction(
+  jpeg: Buffer,
+  region: { left: number; top: number; width: number; height: number },
+): Promise<number> {
   const sharp = (await import("sharp")).default;
   const { data, info } = await sharp(jpeg)
-    .extract({ left: 400, top: 20, width: 400, height: 60 })
+    .extract(region)
     .raw()
     .toBuffer({ resolveWithObject: true });
-
   const channels = info.channels ?? 3;
   const pixels = info.width * info.height;
   let midTone = 0;
-
   for (let i = 0; i < pixels; i++) {
     const idx = i * channels;
     const r = data[idx]!;
@@ -204,10 +205,30 @@ test("renderMatchupOgImageJpeg top-center vsLine band has visible text", async (
       midTone++;
     }
   }
+  return midTone / pixels;
+}
 
-  const midToneFrac = midTone / pixels;
+/** Option names beside VS should render in left/right flank bands. */
+test("renderMatchupOgImageJpeg flank name bands have visible text", async () => {
+  const jpeg = await renderMatchupOgImageJpeg(PLACEHOLDER_CTX);
+  const leftFrac = await midToneFraction(jpeg, {
+    left: 180,
+    top: 275,
+    width: 380,
+    height: 90,
+  });
+  const rightFrac = await midToneFraction(jpeg, {
+    left: 620,
+    top: 275,
+    width: 380,
+    height: 90,
+  });
   assert.ok(
-    midToneFrac > 0.015,
-    `top-center mid-tone fraction ${midToneFrac.toFixed(3)} too low (vsLine missing?)`,
+    leftFrac > 0.01,
+    `left flank mid-tone ${leftFrac.toFixed(3)} too low`,
+  );
+  assert.ok(
+    rightFrac > 0.01,
+    `right flank mid-tone ${rightFrac.toFixed(3)} too low`,
   );
 });

@@ -52,7 +52,7 @@ export type TextPathOptions = {
   fontSize: number;
   weight?: number;
   fill: string;
-  anchor?: "start" | "middle";
+  anchor?: "start" | "middle" | "end";
   letterSpacing?: number;
   opacity?: number;
 };
@@ -117,10 +117,12 @@ export function textPath(opts: TextPathOptions): string {
   if (!text) return "";
 
   const font = pickFont(weight);
+  const w = measureTextWidth(font, text, fontSize, letterSpacing);
   let xStart = x;
   if (anchor === "middle") {
-    const w = measureTextWidth(font, text, fontSize, letterSpacing);
     xStart = x - w / 2;
+  } else if (anchor === "end") {
+    xStart = x - w;
   }
 
   const d = pathDataForText(font, text, xStart, y, fontSize, letterSpacing);
@@ -129,6 +131,18 @@ export function textPath(opts: TextPathOptions): string {
   const opacityAttr =
     opacity !== undefined ? ` opacity="${opacity}"` : "";
   return `<path fill="${fill}"${opacityAttr} d="${d}"/>`;
+}
+
+/** Pixel width for path-outlined text (pill sizing, layout). */
+export function measureOutlinedTextWidth(
+  text: string,
+  fontSize: number,
+  weight = 400,
+  letterSpacing = 0,
+): number {
+  if (!text) return 0;
+  const font = pickFont(weight);
+  return measureTextWidth(font, text, fontSize, letterSpacing);
 }
 
 /** For startup logging / tests. */
