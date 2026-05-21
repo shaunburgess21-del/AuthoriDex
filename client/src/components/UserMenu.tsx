@@ -444,7 +444,7 @@ export function UserMenu() {
 
   const triggerButton = (
     <button
-      className="h-9 w-9 rounded-full ring-2 ring-blue-500/30 hover:ring-blue-500/60 transition-all overflow-hidden flex items-center justify-center bg-muted"
+      className="h-9 w-9 rounded-full ring-2 ring-blue-500/30 hover:ring-blue-500/60 transition-all overflow-hidden flex items-center justify-center bg-muted focus-visible:outline-none"
       data-testid="button-user-menu"
     >
       {isLoggedIn && profile ? (
@@ -464,7 +464,7 @@ export function UserMenu() {
       <>
         <button
           onClick={() => setSheetOpen(true)}
-          className="h-9 w-9 rounded-full ring-2 ring-blue-500/30 hover:ring-blue-500/60 transition-all overflow-hidden flex items-center justify-center bg-muted"
+          className="h-9 w-9 rounded-full ring-2 ring-blue-500/30 hover:ring-blue-500/60 transition-all overflow-hidden flex items-center justify-center bg-muted focus-visible:outline-none"
           data-testid="button-user-menu"
         >
           {isLoggedIn && profile ? (
@@ -478,7 +478,11 @@ export function UserMenu() {
           )}
         </button>
         <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-          <SheetContent side="right" className="w-[320px] p-0 overflow-y-auto">
+          <SheetContent
+            side="right"
+            className="w-[320px] p-0 overflow-y-auto"
+            onCloseAutoFocus={(e) => e.preventDefault()}
+          >
             <SheetHeader className="sr-only">
               <SheetTitle>User Menu</SheetTitle>
               <SheetDescription>Account settings and navigation</SheetDescription>
@@ -505,7 +509,11 @@ export function UserMenu() {
       <DropdownMenuTrigger asChild>
         {triggerButton}
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-[300px] p-0">
+      <DropdownMenuContent
+        align="end"
+        className="w-[300px] p-0"
+        onCloseAutoFocus={(e) => e.preventDefault()}
+      >
         <UserMenuContent
           profile={profile}
           isLoggedIn={isLoggedIn}
