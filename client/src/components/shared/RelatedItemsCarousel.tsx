@@ -54,6 +54,8 @@ function formatVoteCount(count: number): string {
   return `${count.toLocaleString()} vote${count === 1 ? "" : "s"}`;
 }
 
+const DEFAULT_SPARKLES_CLASS = "text-violet-500";
+
 export interface RelatedItemsCarouselProps {
   items: RelatedCarouselItem[];
   isLoading: boolean;
@@ -63,6 +65,8 @@ export interface RelatedItemsCarouselProps {
   testIdPrefix: string;
   ariaLabel?: string;
   className?: string;
+  /** Sparkles icon color — vote pages use cyan; predict keeps violet default. */
+  sparklesClassName?: string;
 }
 
 export function RelatedItemsCarousel({
@@ -73,6 +77,7 @@ export function RelatedItemsCarousel({
   testIdPrefix,
   ariaLabel = "Related items",
   className,
+  sparklesClassName = DEFAULT_SPARKLES_CLASS,
 }: RelatedItemsCarouselProps) {
   const countLabel =
     countNoun === "market"
@@ -90,7 +95,7 @@ export function RelatedItemsCarousel({
       >
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold flex items-center gap-1.5">
-            <Sparkles className="h-3.5 w-3.5 text-violet-500" />
+            <Sparkles className={cn("h-3.5 w-3.5", sparklesClassName)} />
             More like this
           </h3>
         </div>
@@ -112,7 +117,7 @@ export function RelatedItemsCarousel({
     <section className={className} aria-label={ariaLabel} data-testid={testIdPrefix}>
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold flex items-center gap-1.5">
-          <Sparkles className="h-3.5 w-3.5 text-violet-500" />
+          <Sparkles className={cn("h-3.5 w-3.5", sparklesClassName)} />
           More like this
         </h3>
         <span className="text-[11px] text-muted-foreground">
@@ -149,8 +154,8 @@ export function RelatedItemsCarousel({
                   />
 
                   <div className="flex min-w-0 flex-1 flex-col h-full min-h-0">
-                    <div className="flex flex-1 items-center min-h-0 py-0.5">
-                      <div className="min-w-0 w-full space-y-1.5">
+                    <div className="flex flex-1 flex-col min-h-0 py-0.5">
+                      <div className="min-w-0 w-full space-y-1">
                         <Badge
                           variant="secondary"
                           className="text-[10px] uppercase tracking-wider px-2 py-0"
@@ -161,14 +166,14 @@ export function RelatedItemsCarousel({
                           {m.title}
                         </p>
                         {showSubtitle && (
-                          <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+                          <p className="text-xs text-muted-foreground line-clamp-2 leading-snug">
                             {m.subtitle}
                           </p>
                         )}
                       </div>
                     </div>
 
-                    <div className="flex shrink-0 items-center justify-between gap-2 pt-1 text-xs text-muted-foreground">
+                    <div className="mt-auto flex shrink-0 items-center justify-between gap-2 pt-1.5 text-xs text-muted-foreground">
                       {timeLeft ? (
                         <span className="flex items-center gap-1 truncate">
                           <Clock className="h-3.5 w-3.5 shrink-0" />

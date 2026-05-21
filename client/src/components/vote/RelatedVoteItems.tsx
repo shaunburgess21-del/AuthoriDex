@@ -6,6 +6,7 @@ import {
   type RelatedCarouselItem,
 } from "@/components/shared/RelatedItemsCarousel";
 import { coalesceHttpImage } from "@/lib/displayImageUrl";
+import { useSupabaseUrl } from "@/lib/imageResolver";
 import {
   getTopOpinionOptionThumbs,
   hasMultipleOptionImages,
@@ -54,9 +55,7 @@ function normalizeMatchup(m: any, cardWidthClass: string): RelatedCarouselItem |
   const slug = m.slug?.trim();
   if (!slug) return null;
 
-  const title =
-    (m.promptText?.trim() || m.title?.trim()) ||
-    `${m.optionAText ?? "A"} vs ${m.optionBText ?? "B"}`;
+  const title = `${m.optionAText ?? "A"} vs ${m.optionBText ?? "B"}`;
 
   return {
     id: m.id,
@@ -83,7 +82,19 @@ function normalizeMatchup(m: any, cardWidthClass: string): RelatedCarouselItem |
   };
 }
 
-function normalizeSentiment(m: any, cardWidthClass: string): RelatedCarouselItem | null {
+function sentimentPollConventionUrl(
+  slug: string,
+  supabaseUrl: string | null,
+): string | null {
+  if (!supabaseUrl?.trim() || !slug.trim()) return null;
+  return `${supabaseUrl.trim()}/storage/v1/object/public/sentiment-polls/${slug}/1.webp`;
+}
+
+function normalizeSentiment(
+  m: any,
+  cardWidthClass: string,
+  supabaseUrl: string | null,
+): RelatedCarouselItem | null {
   const slug = m.slug?.trim();
   if (!slug) return null;
 
@@ -107,7 +118,11 @@ function normalizeSentiment(m: any, cardWidthClass: string): RelatedCarouselItem
     thumbParticipants: [
       {
         name: m.personName ?? headline,
-        avatar: coalesceHttpImage(m.imageUrl, m.personAvatar),
+        avatar: coalesceHttpImage(m.personAvatar),
+        avatarFallback: coalesceHttpImage(
+          m.imageUrl,
+          sentimentPollConventionUrl(slug, supabaseUrl),
+        ),
       },
     ],
     category: m.category ?? null,
@@ -163,13 +178,17 @@ function normalizeOpinion(m: any, cardWidthClass: string): RelatedCarouselItem |
   };
 }
 
-function normalize(type: RelatedVoteType, m: any): RelatedCarouselItem | null {
+function normalize(
+  type: RelatedVoteType,
+  m: any,
+  supabaseUrl: string | null,
+): RelatedCarouselItem | null {
   const cardWidthClass = CARD_WIDTH[type];
   switch (type) {
     case "matchup":
       return normalizeMatchup(m, cardWidthClass);
     case "sentiment":
-      return normalizeSentiment(m, cardWidthClass);
+      return normalizeSentiment(m, cardWidthClass, supabaseUrl);
     case "opinion":
       return normalizeOpinion(m, cardWidthClass);
   }
@@ -188,6 +207,7 @@ export function RelatedVoteItems({
 }: RelatedVoteItemsProps) {
   const endpoint = TYPE_ENDPOINT[type];
   const normalizedCurrentSlug = currentSlug.trim().toLowerCase();
+  const supabaseUrl = useSupabaseUrl();
 
   const { data, isLoading } = useQuery<any[]>({
     queryKey: [endpoint],
@@ -201,7 +221,7 @@ export function RelatedVoteItems({
     );
 
     const normalized = others
-      .map((m) => normalize(type, m))
+      .map((m) => normalize(type, m, supabaseUrl))
       .filter((item): item is RelatedCarouselItem => item !== null);
 
     const sameCategory = category
@@ -219,7 +239,7 @@ export function RelatedVoteItems({
       ...otherCategory.sort(byVotes),
     ];
     return merged.slice(0, limit);
-  }, [data, normalizedCurrentSlug, category, type, limit]);
+  }, [data, normalizedCurrentSlug, category, type, limit, supabaseUrl]);
 
   return (
     <RelatedItemsCarousel
@@ -230,6 +250,7 @@ export function RelatedVoteItems({
       testIdPrefix={`related-vote-${type}`}
       ariaLabel={`Related ${type === "matchup" ? "matchups" : "polls"}`}
       className={className}
+      sparklesClassName="text-cyan-700 dark:text-cyan-500"
     />
   );
 }
