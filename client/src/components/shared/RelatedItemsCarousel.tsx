@@ -23,6 +23,8 @@ export type RelatedCarouselItem = {
   endAt?: string | null;
   voteCount?: number | null;
   creditPool?: number | null;
+  /** Opinion polls: subtitle in footer, no category/vote count, title vertically centered with thumb. */
+  subtitleInFooter?: boolean;
 };
 
 export type RelatedCountNoun = "market" | "matchup" | "poll";
@@ -133,6 +135,8 @@ export function RelatedItemsCarousel({
         {items.map((m) => {
           const timeLeft = formatTimeLeft(m.endAt);
           const showSubtitle = subtitleShows(m.title, m.subtitle);
+          const opinionLayout = m.subtitleInFooter === true;
+
           return (
             <Link
               key={m.id}
@@ -155,48 +159,77 @@ export function RelatedItemsCarousel({
                   />
 
                   <div className="flex min-w-0 flex-1 flex-col h-full min-h-0">
-                    <div className="flex flex-1 flex-col min-h-0 py-0.5">
-                      <div className="min-w-0 w-full space-y-1">
+                    {opinionLayout ? (
+                      <>
                         <Badge
                           variant="secondary"
-                          className="text-[10px] uppercase tracking-wider px-2 py-0"
+                          className="text-[10px] uppercase tracking-wider px-2 py-0 shrink-0 w-fit"
                         >
                           {m.typePill}
                         </Badge>
-                        <p className="text-[15px] font-semibold leading-snug line-clamp-3">
-                          {m.title}
-                        </p>
-                        {showSubtitle && (
-                          <p className="text-xs text-muted-foreground line-clamp-2 leading-snug">
-                            {m.subtitle}
+                        <div className="flex flex-1 min-h-0 items-center py-0.5">
+                          <p className="text-[15px] font-semibold leading-snug line-clamp-3 min-w-0">
+                            {m.title}
                           </p>
-                        )}
-                      </div>
-                    </div>
+                        </div>
+                        <div
+                          className={cn(
+                            "mt-auto flex shrink-0 items-center gap-2 pt-1.5 text-xs text-muted-foreground",
+                            showSubtitle ? "justify-between" : "justify-end",
+                          )}
+                        >
+                          {showSubtitle && (
+                            <span className="truncate leading-snug min-w-0">{m.subtitle}</span>
+                          )}
+                          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/50 group-hover:text-foreground transition-colors" />
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex flex-1 flex-col min-h-0 py-0.5">
+                          <div className="min-w-0 w-full space-y-1">
+                            <Badge
+                              variant="secondary"
+                              className="text-[10px] uppercase tracking-wider px-2 py-0"
+                            >
+                              {m.typePill}
+                            </Badge>
+                            <p className="text-[15px] font-semibold leading-snug line-clamp-3">
+                              {m.title}
+                            </p>
+                            {showSubtitle && (
+                              <p className="text-xs text-muted-foreground line-clamp-2 leading-snug">
+                                {m.subtitle}
+                              </p>
+                            )}
+                          </div>
+                        </div>
 
-                    <div className="mt-auto flex shrink-0 items-center justify-between gap-2 pt-1.5 text-xs text-muted-foreground">
-                      {timeLeft ? (
-                        <span className="flex items-center gap-1 truncate">
-                          <Clock className="h-3.5 w-3.5 shrink-0" />
-                          {timeLeft}
-                        </span>
-                      ) : (
-                        <span className="truncate">{m.category ?? ""}</span>
-                      )}
-                      {typeof m.creditPool === "number" && m.creditPool > 0 && (
-                        <span className="font-mono shrink-0 tabular-nums">
-                          {formatVox(m.creditPool)}
-                        </span>
-                      )}
-                      {typeof m.voteCount === "number" &&
-                        m.voteCount > 0 &&
-                        !(typeof m.creditPool === "number" && m.creditPool > 0) && (
-                          <span className="shrink-0 tabular-nums">
-                            {formatVoteCount(m.voteCount)}
-                          </span>
-                        )}
-                      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/50 group-hover:text-foreground transition-colors" />
-                    </div>
+                        <div className="mt-auto flex shrink-0 items-center justify-between gap-2 pt-1.5 text-xs text-muted-foreground">
+                          {timeLeft ? (
+                            <span className="flex items-center gap-1 truncate">
+                              <Clock className="h-3.5 w-3.5 shrink-0" />
+                              {timeLeft}
+                            </span>
+                          ) : (
+                            <span className="truncate">{m.category ?? ""}</span>
+                          )}
+                          {typeof m.creditPool === "number" && m.creditPool > 0 && (
+                            <span className="font-mono shrink-0 tabular-nums">
+                              {formatVox(m.creditPool)}
+                            </span>
+                          )}
+                          {typeof m.voteCount === "number" &&
+                            m.voteCount > 0 &&
+                            !(typeof m.creditPool === "number" && m.creditPool > 0) && (
+                              <span className="shrink-0 tabular-nums">
+                                {formatVoteCount(m.voteCount)}
+                              </span>
+                            )}
+                          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/50 group-hover:text-foreground transition-colors" />
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               </Card>

@@ -15036,6 +15036,24 @@ Target length: about 90-150 words.`;
     return `${process.env.SUPABASE_URL}/storage/v1/object/public/sentiment-polls/${slug}/1.webp`;
   }
 
+  function resolveSentimentPollImageUrl(
+    stored: string | null,
+    effectiveSlug: string,
+  ): string | null {
+    const derived = sentimentPollImageUrl(effectiveSlug);
+    if (!stored) return derived;
+    if (isConventionImageUrl(stored)) {
+      try {
+        if (!new URL(stored).pathname.includes(`/sentiment-polls/${effectiveSlug}/`)) {
+          return derived;
+        }
+      } catch {
+        /* keep stored */
+      }
+    }
+    return stored;
+  }
+
   app.get("/api/trending-polls", optionalAuth, async (req, res) => {
     try {
       const userId = (req as AuthRequest).userId || null;
@@ -15087,7 +15105,7 @@ Target length: about 90-150 words.`;
       const result = polls.map(p => {
         const total = (p.seedSupportCount || 0) + (p.seedNeutralCount || 0) + (p.seedOpposeCount || 0);
         const effectiveSlug = p.slug || slugifyHeadline(p.headline);
-        let imageUrl = p.imageUrl || sentimentPollImageUrl(effectiveSlug);
+        const imageUrl = resolveSentimentPollImageUrl(p.imageUrl, effectiveSlug);
         return {
           id: p.id,
           headline: p.headline,
@@ -15192,7 +15210,7 @@ Target length: about 90-150 words.`;
       }
 
       const effectiveSlug = poll.slug || slugifyHeadline(poll.headline);
-      const imageUrl = poll.imageUrl || sentimentPollImageUrl(effectiveSlug);
+      const imageUrl = resolveSentimentPollImageUrl(poll.imageUrl, effectiveSlug);
 
       res.json({
         ...poll,
@@ -15946,6 +15964,60 @@ Target length: about 90-150 words.`;
     return `${OPINION_POLL_BUCKET_BASE}/${pollSlug}/${slugifyOptionName(optionName)}.webp`;
   }
 
+  function isOpinionPollConventionImageUrl(url: string | null): boolean {
+    return url != null && url.includes('/opinion-polls/') && url.endsWith('/1.webp');
+  }
+
+  function resolveOpinionPollImageUrl(
+    stored: string | null,
+    pollSlug: string | null | undefined,
+  ): string | null {
+    const derived = opinionPollImageUrl(pollSlug);
+    if (!stored) return derived;
+    if (!pollSlug) return stored;
+    if (isOpinionPollConventionImageUrl(stored)) {
+      try {
+        if (!new URL(stored).pathname.includes(`/opinion-polls/${pollSlug}/`)) {
+          return derived;
+        }
+      } catch {
+        /* keep stored */
+      }
+    }
+    return stored;
+  }
+
+  function resolveOpinionOptionImageUrl(
+    stored: string | null,
+    pollSlug: string | null | undefined,
+    optionName: string,
+  ): string | null {
+    const derived = opinionOptionImageUrl(pollSlug, optionName);
+    if (!stored) return derived;
+    if (!pollSlug) return stored;
+    if (stored.includes('/opinion-polls/')) {
+      try {
+        const path = new URL(stored).pathname;
+        const optionSlug = slugifyOptionName(optionName);
+        if (!path.includes(`/opinion-polls/${pollSlug}/`)) return derived;
+        if (stored.endsWith('/1.webp')) return derived;
+        if (!path.endsWith(`/${optionSlug}.webp`)) return derived;
+      } catch {
+        /* keep stored */
+      }
+    }
+    return stored;
+  }
+
+  function resolveOpinionOptionDisplayImageUrl(
+    personAvatar: string | null | undefined,
+    stored: string | null,
+    pollSlug: string | null | undefined,
+    optionName: string,
+  ): string | null {
+    return personAvatar || resolveOpinionOptionImageUrl(stored, pollSlug, optionName);
+  }
+
   // Returns a single poll in the same shape as GET /api/opinion-polls (list shape):
   // options[].votes/percent, totalOptions, totalVotes, userVote, relatedPeople.
   // Intentionally NOT the detail shape (no realVotes/seedVotes/orderIndex/commentCount)
@@ -16002,7 +16074,7 @@ Target length: about 90-150 words.`;
     });
     const totalDisplayVotes = optionsWithVotes.reduce((sum, o) => sum + o.displayVotes, 0);
     const userVote = userVoteRows[0]?.optionId ?? null;
-    const pollImage = poll.imageUrl || opinionPollImageUrl(poll.slug);
+    const pollImage = resolveOpinionPollImageUrl(poll.imageUrl, poll.slug);
 
     return {
       ...poll,
@@ -16010,7 +16082,7 @@ Target length: about 90-150 words.`;
       options: optionsWithVotes.map(o => ({
         id: o.id,
         name: o.name,
-        imageUrl: o.personAvatar || o.imageUrl || opinionOptionImageUrl(poll.slug, o.name),
+        imageUrl: resolveOpinionOptionDisplayImageUrl(o.personAvatar, o.imageUrl, poll.slug, o.name),
         personId: o.personId,
         personName: o.personName || null,
         votes: o.displayVotes,
@@ -16111,7 +16183,7 @@ Target length: about 90-150 words.`;
         const totalDisplayVotes = optionsWithVotes.reduce((sum, o) => sum + o.displayVotes, 0);
         const userVote = userVoteByPollId.get(poll.id) || null;
 
-        const pollImage = poll.imageUrl || opinionPollImageUrl(poll.slug);
+        const pollImage = resolveOpinionPollImageUrl(poll.imageUrl, poll.slug);
 
         return {
           ...poll,
@@ -16119,7 +16191,7 @@ Target length: about 90-150 words.`;
           options: optionsWithVotes.map(o => ({
             id: o.id,
             name: o.name,
-            imageUrl: o.personAvatar || o.imageUrl || opinionOptionImageUrl(poll.slug, o.name),
+            imageUrl: resolveOpinionOptionDisplayImageUrl(o.personAvatar, o.imageUrl, poll.slug, o.name),
             personId: o.personId,
             personName: o.personName || null,
             votes: o.displayVotes,
@@ -16210,7 +16282,7 @@ Target length: about 90-150 words.`;
           eq(unifiedComments.parentId, poll.id),
         ));
 
-      const pollImage = poll.imageUrl || opinionPollImageUrl(poll.slug);
+      const pollImage = resolveOpinionPollImageUrl(poll.imageUrl, poll.slug);
 
       res.json({
         ...poll,
@@ -16218,7 +16290,7 @@ Target length: about 90-150 words.`;
         options: optionsWithVotes.map(o => ({
           id: o.id,
           name: o.name,
-          imageUrl: o.personAvatar || o.imageUrl || opinionOptionImageUrl(poll.slug, o.name),
+          imageUrl: resolveOpinionOptionDisplayImageUrl(o.personAvatar, o.imageUrl, poll.slug, o.name),
           personId: o.personId,
           personName: o.personName || null,
           orderIndex: o.orderIndex,

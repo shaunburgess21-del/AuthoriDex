@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useLocation, Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
@@ -34,6 +34,7 @@ import { VoteDetailNavCluster } from "@/components/vote/VoteDetailNavCluster";
 import { SwipeNavigator } from "@/components/vote/SwipeNavigator";
 import { useDetailNavigation } from "@/hooks/useDetailNavigation";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
+import { useSupabaseUrl, handleImageError } from "@/lib/imageResolver";
 import {
   ArrowLeft,
   Clock,
@@ -45,6 +46,7 @@ import {
   BarChart3,
   Info,
   X,
+  ListChecks,
 } from "lucide-react";
 
 function parseOpinionPollVoteError(err: unknown): string {
@@ -81,8 +83,14 @@ export default function OpinionPollDetailPage() {
   const { showNav, historyDepth, goPrev, goNext, prevSlug, nextSlug } = useDetailNavigation(slug || undefined, "opinion");
   const [changeDialogOpen, setChangeDialogOpen] = useState(false);
   const [pendingOption, setPendingOption] = useState<{ id: string; name: string } | null>(null);
-  const [headerImgError, setHeaderImgError] = useState(false);
+  const [imgIdx, setImgIdx] = useState(0);
   const [expandedImage, setExpandedImage] = useState<{ url: string; alt: string } | null>(null);
+  const supabaseUrl = useSupabaseUrl();
+
+  const conventionPollImageUrl = useMemo(() => {
+    if (!supabaseUrl?.trim() || !slug.trim()) return null;
+    return `${supabaseUrl.trim()}/storage/v1/object/public/opinion-polls/${slug}/1.webp`;
+  }, [supabaseUrl, slug]);
 
   const { data: poll, isLoading } = useQuery<any>({
     queryKey: ["/api/opinion-polls", slug],
@@ -98,6 +106,31 @@ export default function OpinionPollDetailPage() {
     },
     enabled: !!slug,
   });
+
+  const firstOptionImageUrl = useMemo(() => {
+    const opts = poll?.options;
+    if (!Array.isArray(opts)) return null;
+    for (const o of opts) {
+      const url = o?.imageUrl?.trim();
+      if (url && /^https?:\/\//i.test(url)) return url;
+    }
+    return null;
+  }, [poll?.options]);
+
+  const imgSources = useMemo(() => {
+    if (!poll) return [] as string[];
+    return [poll.imageUrl, firstOptionImageUrl, conventionPollImageUrl].filter(Boolean) as string[];
+  }, [poll, firstOptionImageUrl, conventionPollImageUrl]);
+
+  useEffect(() => {
+    setImgIdx(0);
+  }, [slug, poll?.id, poll?.imageUrl, firstOptionImageUrl, conventionPollImageUrl]);
+
+  const currentImgSrc = imgSources[imgIdx] ?? null;
+
+  const handleHeaderImgError = useCallback(() => {
+    setImgIdx((prev) => (prev + 1 < imgSources.length ? prev + 1 : imgSources.length));
+  }, [imgSources.length]);
 
   const budget = useAnonBudget();
 
@@ -316,17 +349,21 @@ export default function OpinionPollDetailPage() {
 
           <div className="mb-4">
             <div className="flex items-start gap-4">
-              {!headerImgError && poll.imageUrl && (
+              {currentImgSrc ? (
                 <div
                   className="w-20 h-20 rounded-lg overflow-hidden shrink-0 bg-slate-800 cursor-pointer"
-                  onClick={() => setExpandedImage({ url: poll.imageUrl, alt: poll.title })}
+                  onClick={() => setExpandedImage({ url: currentImgSrc, alt: poll.title })}
                 >
                   <img
-                    src={poll.imageUrl}
+                    src={currentImgSrc}
                     alt={poll.title}
                     className="w-full h-full object-cover"
-                    onError={() => setHeaderImgError(true)}
+                    onError={handleHeaderImgError}
                   />
+                </div>
+              ) : (
+                <div className="w-20 h-20 rounded-lg bg-gradient-to-br from-slate-700/50 to-slate-800/50 flex items-center justify-center shrink-0">
+                  <ListChecks className="h-5 w-5 text-slate-400" />
                 </div>
               )}
               <div className="flex-1 min-w-0">
@@ -395,7 +432,12 @@ export default function OpinionPollDetailPage() {
                       onClick={() => setExpandedImage({ url: option.imageUrl, alt: option.name })}
                       className="relative shrink-0 w-14 self-stretch min-h-[2.75rem] cursor-zoom-in border-0 p-0 disabled:cursor-not-allowed"
                     >
-                      <img src={option.imageUrl} alt={option.name} className="absolute inset-0 h-full w-full object-cover" />
+                      <img
+                        src={option.imageUrl}
+                        alt={option.name}
+                        className="absolute inset-0 h-full w-full object-cover"
+                        onError={(e) => handleImageError(e)}
+                      />
                     </button>
                   ) : (
                     <div className="relative flex shrink-0 w-14 items-center justify-center self-stretch min-h-[2.75rem] bg-cyan-500/15 dark:bg-cyan-500/10">
@@ -469,7 +511,12 @@ export default function OpinionPollDetailPage() {
                     onClick={() => setExpandedImage({ url: option.imageUrl, alt: option.name })}
                     className="relative shrink-0 w-14 self-stretch min-h-[2.75rem] cursor-zoom-in border-0 p-0 disabled:cursor-not-allowed"
                   >
-                    <img src={option.imageUrl} alt={option.name} className="absolute inset-0 h-full w-full object-cover" />
+                    <img
+                      src={option.imageUrl}
+                      alt={option.name}
+                      className="absolute inset-0 h-full w-full object-cover"
+                      onError={(e) => handleImageError(e)}
+                    />
                   </button>
                 ) : (
                   <div className="relative flex shrink-0 w-14 items-center justify-center self-stretch min-h-[2.75rem] bg-cyan-500/15 dark:bg-cyan-500/10">

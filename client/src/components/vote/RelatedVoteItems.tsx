@@ -99,21 +99,12 @@ function normalizeSentiment(
   if (!slug) return null;
 
   const headline = m.headline?.trim() || "Untitled poll";
-  const subject = m.subjectText?.trim();
-  const description = m.description?.trim();
-  // Teaser only — full subjectText in tiny text under a padded title box looked off.
-  const teaser =
-    subject && subject.toLowerCase() !== headline.toLowerCase()
-      ? subject
-      : description && description.toLowerCase() !== headline.toLowerCase()
-        ? description
-        : null;
 
   return {
     id: m.id,
     href: `/polls/${encodeURIComponent(slug)}`,
     title: headline,
-    subtitle: teaser,
+    subtitle: null,
     thumbVariant: "single",
     thumbParticipants: [
       {
@@ -175,6 +166,7 @@ function normalizeOpinion(m: any, cardWidthClass: string): RelatedCarouselItem |
     voteCount: typeof m.totalVotes === "number" ? m.totalVotes : null,
     typePill: TYPE_PILL.opinion,
     cardWidthClass,
+    subtitleInFooter: true,
   };
 }
 

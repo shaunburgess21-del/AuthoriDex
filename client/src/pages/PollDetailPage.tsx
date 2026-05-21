@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useLocation, Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
@@ -31,6 +31,7 @@ import { goBack } from "@/lib/goBack";
 import { CardComments, useCommentCount } from "@/components/comments/CardComments";
 import { RelatedVoteItems } from "@/components/vote/RelatedVoteItems";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
+import { useSupabaseUrl } from "@/lib/imageResolver";
 import {
   ArrowLeft,
   Clock,
@@ -96,7 +97,13 @@ export default function PollDetailPage() {
   const { showNav, historyDepth, goPrev, goNext, prevSlug, nextSlug } = useDetailNavigation(slug || undefined, "sentiment");
   const [showVoteChange, setShowVoteChange] = useState(false);
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
-  const [headerImgError, setHeaderImgError] = useState(false);
+  const [imgIdx, setImgIdx] = useState(0);
+  const supabaseUrl = useSupabaseUrl();
+
+  const conventionImageUrl = useMemo(() => {
+    if (!supabaseUrl?.trim() || !slug.trim()) return null;
+    return `${supabaseUrl.trim()}/storage/v1/object/public/sentiment-polls/${slug}/1.webp`;
+  }, [supabaseUrl, slug]);
 
   const { data: poll, isLoading: pollLoading, error: pollError } = useQuery<PollData>({
     queryKey: ["/api/polls", slug],
@@ -112,6 +119,21 @@ export default function PollDetailPage() {
     },
     enabled: !!slug,
   });
+
+  const imgSources = useMemo(() => {
+    if (!poll) return [] as string[];
+    return [poll.personAvatar, poll.imageUrl, conventionImageUrl].filter(Boolean) as string[];
+  }, [poll, conventionImageUrl]);
+
+  useEffect(() => {
+    setImgIdx(0);
+  }, [slug, poll?.id, poll?.imageUrl, poll?.personAvatar, conventionImageUrl]);
+
+  const currentImgSrc = imgSources[imgIdx] ?? null;
+
+  const handleImgError = useCallback(() => {
+    setImgIdx((prev) => (prev + 1 < imgSources.length ? prev + 1 : imgSources.length));
+  }, [imgSources.length]);
 
   const budget = useAnonBudget();
 
@@ -264,17 +286,21 @@ export default function PollDetailPage() {
 
           <div className="mb-4">
             <div className="flex items-start gap-4">
-              {!headerImgError && (poll.imageUrl || poll.personAvatar) && (
+              {currentImgSrc ? (
                 <div
                   className="w-20 h-20 rounded-lg overflow-hidden shrink-0 bg-slate-800 cursor-pointer"
-                  onClick={() => setExpandedImage((poll.imageUrl || poll.personAvatar)!)}
+                  onClick={() => setExpandedImage(currentImgSrc)}
                 >
                   <img
-                    src={(poll.imageUrl || poll.personAvatar)!}
+                    src={currentImgSrc}
                     alt={poll.headline}
                     className="w-full h-full object-cover"
-                    onError={() => setHeaderImgError(true)}
+                    onError={handleImgError}
                   />
+                </div>
+              ) : (
+                <div className="w-20 h-20 rounded-lg bg-gradient-to-br from-slate-700/50 to-slate-800/50 flex items-center justify-center shrink-0">
+                  <MessageSquare className="h-5 w-5 text-slate-400" />
                 </div>
               )}
               <div className="flex-1 min-w-0">
