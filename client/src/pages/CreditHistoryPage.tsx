@@ -6,7 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowLeft, Wallet, TrendingUp, TrendingDown, Settings2, CreditCard } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCreditHistory } from "@/hooks/useGamification";
-import { bucketForTxnType, labelForTxnType, type LedgerBucket } from "@shared/credit-config";
+import { bucketForTxnType, labelForTxnType } from "@shared/credit-config";
 
 /**
  * Per-user credit history. Mirrors the data shown by the admin
@@ -17,13 +17,12 @@ import { bucketForTxnType, labelForTxnType, type LedgerBucket } from "@shared/cr
  * first added.
  */
 
-type FilterId = "all" | LedgerBucket;
+type FilterId = "all" | "earned" | "spent";
 
 const FILTERS: { id: FilterId; label: string }[] = [
   { id: "all", label: "All" },
   { id: "earned", label: "Earned" },
   { id: "spent", label: "Spent" },
-  { id: "adjustment", label: "Adjustments" },
 ];
 
 interface CreditLedgerRow {
