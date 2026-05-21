@@ -21427,7 +21427,8 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
 
   app.get("/api/admin/credit-reconciliation", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const allProfiles = await db.select({ id: profiles.id, predictCredits: profiles.predictCredits }).from(profiles).where(eq(profiles.isAgent, false));
+      // Humans only — the AMM house wallet (is_house) is reconciled via ops scripts, not here.
+      const allProfiles = await db.select({ id: profiles.id, predictCredits: profiles.predictCredits }).from(profiles).where(and(eq(profiles.isAgent, false), eq(profiles.isHouse, false)));
 
       const ledgerSums = await db
         .select({
@@ -21546,7 +21547,8 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         ? Math.floor((Date.now() - resolverLastRunAt.getTime()) / (1000 * 60))
         : null;
 
-      const allProfiles = await db.select({ id: profiles.id, predictCredits: profiles.predictCredits }).from(profiles).where(eq(profiles.isAgent, false));
+      // Match /api/admin/credit-drift-users: humans only, not the AMM house wallet.
+      const allProfiles = await db.select({ id: profiles.id, predictCredits: profiles.predictCredits }).from(profiles).where(and(eq(profiles.isAgent, false), eq(profiles.isHouse, false)));
       const ledgerSums = await db
         .select({
           userId: creditLedger.userId,

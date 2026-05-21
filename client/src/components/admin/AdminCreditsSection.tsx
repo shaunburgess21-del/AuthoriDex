@@ -60,8 +60,8 @@ interface ReconciliationResponse {
  *      call without a redeploy.
  *
  *   2. Reconciliation: drift report from /api/admin/credit-reconciliation.
- *      Surfaces any users where profiles.predict_credits != ledger sum,
- *      which previously had no client consumer.
+ *      Surfaces human users (not agents or the AMM house wallet) where
+ *      profiles.predict_credits != ledger sum.
  */
 export function AdminCreditsSection() {
   return (
