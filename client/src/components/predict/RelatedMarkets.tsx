@@ -6,6 +6,7 @@ import {
   type RelatedCarouselItem,
 } from "@/components/shared/RelatedItemsCarousel";
 import { getTopRaceEntries } from "@/lib/nativeRaceLeaders";
+import { buildH2hSplitBar, buildUpDownSplitBar } from "@/lib/nativeMarketCarouselPercents";
 
 /**
  * Detail-page "more like this" carousel.
@@ -63,7 +64,7 @@ function normalizeUpdown(m: any, cardWidthClass: string): RelatedCarouselItem {
     id: m.id,
     href: `/predict/updown/${m.id}`,
     title: personName,
-    subtitle: "Up or down this week?",
+    subtitle: null,
     thumbVariant: "single",
     thumbParticipants: [
       {
@@ -76,6 +77,9 @@ function normalizeUpdown(m: any, cardWidthClass: string): RelatedCarouselItem {
     creditPool: typeof m.totalPool === "number" ? m.totalPool : null,
     typePill: TYPE_PILL.updown,
     cardWidthClass,
+    centerTitle: true,
+    hideTimeInFooter: true,
+    splitBar: buildUpDownSplitBar(m),
   };
 }
 
@@ -95,6 +99,9 @@ function normalizeH2h(m: any, cardWidthClass: string): RelatedCarouselItem {
     creditPool: typeof m.totalPool === "number" ? m.totalPool : null,
     typePill: TYPE_PILL.h2h,
     cardWidthClass,
+    centerTitle: true,
+    hideTimeInFooter: true,
+    splitBar: buildH2hSplitBar(m),
   };
 }
 
@@ -117,6 +124,9 @@ function normalizeRace(m: any, cardWidthClass: string): RelatedCarouselItem {
     creditPool: typeof m.totalPool === "number" ? m.totalPool : null,
     typePill: TYPE_PILL.race,
     cardWidthClass,
+    centerTitle: true,
+    hideTimeInFooter: true,
+    subtitleInFooter: true,
   };
 }
 
@@ -140,6 +150,7 @@ function normalizeCommunity(m: any, cardWidthClass: string): RelatedCarouselItem
     creditPool: null,
     typePill: TYPE_PILL.community,
     cardWidthClass,
+    centerTitle: true,
   };
 }
 
