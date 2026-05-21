@@ -133,12 +133,22 @@ export function textPath(opts: TextPathOptions): string {
   return `<path fill="${fill}"${opacityAttr} d="${d}"/>`;
 }
 
+function fontVerticalMetrics(font: opentype.Font) {
+  const unitsPerEm = font.tables.head?.unitsPerEm ?? 1000;
+  const ascender =
+    font.tables.hhea?.ascender ?? font.tables.os2?.sTypoAscender ?? 0;
+  const descender =
+    font.tables.hhea?.descender ?? font.tables.os2?.sTypoDescender ?? 0;
+  return { unitsPerEm, ascender, descender };
+}
+
 function scaledMetric(
   font: opentype.Font,
   units: number,
   fontSize: number,
 ): number {
-  return (units / font.unitsPerEm) * fontSize;
+  const { unitsPerEm } = fontVerticalMetrics(font);
+  return (units / unitsPerEm) * fontSize;
 }
 
 /** Baseline Y for a line stacked above another (fixed visual gap in px). */
@@ -160,11 +170,14 @@ export function baselineForStackAbove(opts: {
   } = opts;
   const targetFont = pickFont(targetWeight);
   const upperFont = pickFont(upperWeight);
+  const targetMetrics = fontVerticalMetrics(targetFont);
+  const upperMetrics = fontVerticalMetrics(upperFont);
   const targetTop =
-    targetBaseline - scaledMetric(targetFont, targetFont.ascender, targetFontSize);
+    targetBaseline -
+    scaledMetric(targetFont, targetMetrics.ascender, targetFontSize);
   const upperDescent = scaledMetric(
     upperFont,
-    Math.abs(upperFont.descender),
+    Math.abs(upperMetrics.descender),
     upperFontSize,
   );
   return targetTop - gap - upperDescent;
