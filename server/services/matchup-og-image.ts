@@ -1,7 +1,11 @@
 import sharp from "sharp";
 import type { MatchupOgContext } from "./matchup-og-context";
 import { matchupOgPromptTitle } from "./matchup-og-meta";
-import { measureOutlinedTextWidth, textPath } from "./og-svg-text-paths";
+import {
+  baselineForStackAbove,
+  measureOutlinedTextWidth,
+  textPath,
+} from "./og-svg-text-paths";
 
 const OG_WIDTH = 1200;
 const OG_HEIGHT = 630;
@@ -34,9 +38,19 @@ export function getMatchupOverlayLabels(ctx: MatchupOgContext) {
 const VS_CY = 315;
 const VS_RADIUS = 52;
 const PROMPT_FONT_SIZE = 46;
+const PROMPT_CTA_GAP = 5;
+const CTA_FONT_SIZE = 22;
+const CTA_WEIGHT = 600;
 const CTA_BASELINE_Y = 608;
-/** Main heading stacked above bottom-left CTA. */
-const PROMPT_BASELINE_Y = 520;
+/** Main heading ~5px above CTA (font-metric stack). */
+const PROMPT_BASELINE_Y = baselineForStackAbove({
+  targetBaseline: CTA_BASELINE_Y,
+  targetFontSize: CTA_FONT_SIZE,
+  targetWeight: CTA_WEIGHT,
+  upperFontSize: PROMPT_FONT_SIZE,
+  upperWeight: 700,
+  gap: PROMPT_CTA_GAP,
+});
 const FLANK_FONT_SIZE = 28;
 const FLANK_WEIGHT = 600;
 const FLANK_PAD_X = 16;
@@ -241,8 +255,8 @@ export function buildMatchupOverlaySvg(ctx: MatchupOgContext): string {
     text: labels.cta,
     x: 48,
     y: CTA_BASELINE_Y,
-    fontSize: 22,
-    weight: 600,
+    fontSize: CTA_FONT_SIZE,
+    weight: CTA_WEIGHT,
     fill: "#22d3ee",
   })}
 </svg>`;

@@ -77,11 +77,11 @@ test("matchupBucketUrl builds public Supabase path shape", () => {
   );
 });
 
-test("matchupOgImagePath uses shared cache version v10", () => {
-  assert.equal(MATCHUP_OG_IMAGE_VERSION, "10");
+test("matchupOgImagePath uses shared cache version v11", () => {
+  assert.equal(MATCHUP_OG_IMAGE_VERSION, "11");
   assert.equal(
     matchupOgImagePath("football-goat"),
-    "/api/og/vote/matchups/football-goat.jpg?v=10",
+    "/api/og/vote/matchups/football-goat.jpg?v=11",
   );
 });
 

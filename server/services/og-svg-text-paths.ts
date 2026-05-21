@@ -133,6 +133,43 @@ export function textPath(opts: TextPathOptions): string {
   return `<path fill="${fill}"${opacityAttr} d="${d}"/>`;
 }
 
+function scaledMetric(
+  font: opentype.Font,
+  units: number,
+  fontSize: number,
+): number {
+  return (units / font.unitsPerEm) * fontSize;
+}
+
+/** Baseline Y for a line stacked above another (fixed visual gap in px). */
+export function baselineForStackAbove(opts: {
+  targetBaseline: number;
+  targetFontSize: number;
+  targetWeight: number;
+  upperFontSize: number;
+  upperWeight: number;
+  gap: number;
+}): number {
+  const {
+    targetBaseline,
+    targetFontSize,
+    targetWeight,
+    upperFontSize,
+    upperWeight,
+    gap,
+  } = opts;
+  const targetFont = pickFont(targetWeight);
+  const upperFont = pickFont(upperWeight);
+  const targetTop =
+    targetBaseline - scaledMetric(targetFont, targetFont.ascender, targetFontSize);
+  const upperDescent = scaledMetric(
+    upperFont,
+    Math.abs(upperFont.descender),
+    upperFontSize,
+  );
+  return targetTop - gap - upperDescent;
+}
+
 /** Pixel width for path-outlined text (pill sizing, layout). */
 export function measureOutlinedTextWidth(
   text: string,
