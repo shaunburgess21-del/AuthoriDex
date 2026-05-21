@@ -22,9 +22,10 @@ import assert from "node:assert/strict";
 process.env.DATABASE_URL =
   process.env.DATABASE_URL ?? "postgres://test:test@127.0.0.1:5432/test";
 
-const { _aggregateSellSweepPositionsForTesting: aggregate } = await import(
-  "../server/agents/agentRunner"
-);
+const {
+  _aggregateSellSweepPositionsForTesting: aggregate,
+  _pickLargestPositionsByMarketForTesting: pickLargest,
+} = await import("../server/agents/agentRunner");
 import { computeSellDecision } from "../server/agents/sellEngine";
 import { createPRNG } from "../server/agents/prng";
 
@@ -364,4 +365,45 @@ test("aggregator output with conviction add-on still uses original-buy weighted 
     assert.notEqual(decision.reason, "take_profit");
     assert.notEqual(decision.reason, "cut_loss");
   }
+});
+
+// ---------------------------------------------------------------------------
+// Largest-position-per-market selection (used by repredict sweep)
+// ---------------------------------------------------------------------------
+
+test("pickLargestPositionsByMarket returns the larger side when agent holds both", () => {
+  // Agent bought 80 UP early week, then flipped to DOWN via a conviction
+  // buy of 200 shares. Their NET position is 200 DOWN (larger) — the
+  // repredict sweep must NOT treat them as still "on UP" or it will
+  // schedule a wrong-way flip.
+  const positions = aggregate([
+    buy("m1", "up", 80, 0.45),
+    buy("m1", "down", 200, 0.55),
+  ]);
+  const largest = pickLargest(positions);
+  assert.equal(largest.size, 1);
+  assert.equal(largest.get("m1")!.entryId, "down");
+  assert.equal(largest.get("m1")!.netShares, 200);
+});
+
+test("pickLargestPositionsByMarket skips dust positions below the eval floor", () => {
+  // A 0.1-share dust position from rounding shouldn't qualify the
+  // market for repredict consideration. The threshold matches
+  // MIN_NET_SHARES_FOR_SELL_EVAL (currently 0.5).
+  const positions = aggregate([
+    buy("dust", "up", 0.1, 0.45),
+  ]);
+  const largest = pickLargest(positions);
+  assert.equal(largest.size, 0);
+});
+
+test("pickLargestPositionsByMarket handles markets with single-side positions", () => {
+  const positions = aggregate([
+    buy("m1", "up", 50, 0.45),
+    buy("m2", "down", 80, 0.55),
+  ]);
+  const largest = pickLargest(positions);
+  assert.equal(largest.size, 2);
+  assert.equal(largest.get("m1")!.entryId, "up");
+  assert.equal(largest.get("m2")!.entryId, "down");
 });

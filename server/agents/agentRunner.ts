@@ -40,6 +40,7 @@ import type {
 import { getSimulationProfile } from "./simulationProfile";
 import { getSharpRanking } from "./sharpRanker";
 import { computeSellDecision } from "./sellEngine";
+import { computeConvictionFollowUp } from "./convictionEngine";
 import {
   ARCHETYPE_DELAY_RANGES,
   WORLD_MARKET_DELAY_RANGES,
@@ -54,8 +55,14 @@ import {
   MARKETS_PER_SWEEP,
   WORLD_MARKET_RESERVE_PER_SWEEP,
   NATIVE_ROTATION_MEMORY,
-  CONVICTION_SCORE_THRESHOLD_PCT,
   CONVICTION_MAX_PER_MARKET,
+  DECISIVE_WEEKLY_MOVE_PCT,
+  REPREDICT_PCT_THRESHOLD,
+  REPREDICT_MAX_PER_MARKET,
+  MISPRICED_PRIORITY_SLICE,
+  MISPRICED_SCORE_PCT,
+  MISPRICED_UP_PRICE_HIGH,
+  MISPRICED_UP_PRICE_LOW,
   AGENT_STAKE_OVERRIDES,
   WORLD_REEVAL_INTERVAL_DAYS,
   WORLD_CONVICTION_INTERVAL_DAYS,
@@ -72,6 +79,53 @@ import { isAgentsPaused } from "./runtime-state";
 import { sizeAmmBudget } from "./sizing";
 
 const AGENT_RUNNER_LOCK_KEY = 5_201;
+
+type WeeklyOpenMetadata = {
+  decisiveLatched?: boolean;
+  peakAbsPctChangeVsOpen?: number;
+};
+
+function readWeeklyOpen(meta: Record<string, unknown> | null | undefined): WeeklyOpenMetadata {
+  const weeklyOpen = meta?.weeklyOpen;
+  if (!weeklyOpen || typeof weeklyOpen !== "object") return {};
+  return weeklyOpen as WeeklyOpenMetadata;
+}
+
+function resolveDecisiveLatched(
+  meta: Record<string, unknown> | null | undefined,
+  pctChangeVsOpen: number | undefined,
+): boolean {
+  const weekly = readWeeklyOpen(meta);
+  if (weekly.decisiveLatched === true) return true;
+  const peak = weekly.peakAbsPctChangeVsOpen ?? 0;
+  if (peak >= DECISIVE_WEEKLY_MOVE_PCT) return true;
+  if (
+    pctChangeVsOpen != null &&
+    Number.isFinite(pctChangeVsOpen) &&
+    Math.abs(pctChangeVsOpen) >= DECISIVE_WEEKLY_MOVE_PCT
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function openingScoreFromMeta(
+  meta: Record<string, unknown> | null | undefined,
+): number | null {
+  const score = (meta?.openingScore as { score?: unknown } | undefined)?.score;
+  return typeof score === "number" && Number.isFinite(score) && score > 0
+    ? score
+    : null;
+}
+
+function upDownEntryIds(
+  entries: { id: string; label: string | null }[],
+): { upEntryId: string; downEntryId: string } | null {
+  const up = entries.find((e) => (e.label ?? "").toLowerCase() === "up");
+  const down = entries.find((e) => (e.label ?? "").toLowerCase() === "down");
+  if (!up?.id || !down?.id) return null;
+  return { upEntryId: up.id, downEntryId: down.id };
+}
 
 // Process-local rotation memory for native market sampling. Insertion order
 // is preserved by Set, so we can drop the oldest entries when the buffer
@@ -278,7 +332,28 @@ async function runAgentBatchOnce(): Promise<{
   }
 
   const worldSlice = worldMarkets.slice(0, WORLD_MARKET_RESERVE_PER_SWEEP);
-  const nativeSlice = nativeMarkets.slice(0, MARKETS_PER_SWEEP - worldSlice.length);
+  const nativePool = nativeMarkets.slice(0, MARKETS_PER_SWEEP - worldSlice.length);
+
+  // Build the shared up/down sweep context ONCE per batch — every
+  // score-aware sub-sweep below (mispriced slice, conviction,
+  // repredict, sell, weekly-open latch) reuses the same map of
+  // {entries, pctChangeVsOpen} keyed by marketId plus the per-person
+  // TrendSignals cache. Previously each helper rebuilt this from
+  // scratch which meant 4-5 full entries queries + duplicate trend
+  // lookups per sweep.
+  const ammUpdownNative = filterAmmPerPersonUpdown(nativeMarkets);
+  const updownSweepCtx = await buildUpdownSweepContext(ammUpdownNative);
+
+  const priorityIds = await pickMispricedUpdownMarketIds(
+    nativeMarkets,
+    MISPRICED_PRIORITY_SLICE,
+    updownSweepCtx.marketContext,
+  );
+  const prioritySet = new Set(priorityIds);
+  const nativeSlice = [
+    ...nativeMarkets.filter((m) => prioritySet.has(m.id)),
+    ...nativePool.filter((m) => !prioritySet.has(m.id)),
+  ].slice(0, MARKETS_PER_SWEEP - worldSlice.length);
   const sweepMarkets = [...worldSlice, ...nativeSlice];
 
   // Update rotation memory with this sweep's native picks. Delete-then-add
@@ -712,8 +787,15 @@ async function runAgentBatchOnce(): Promise<{
         // reliably engages with the LLM's picks (model gates still apply).
         const priority: "high" | "normal" =
           sharpFetch && sharpPickedMarketIds.has(market.id) ? "high" : "normal";
+        const decisiveLatched = resolveDecisiveLatched(
+          meta,
+          signals.pctChangeVsOpen,
+        );
 
-        decision = computePrediction(agentData, marketData, signals, crowd, undefined, entrySignals, { priority });
+        decision = computePrediction(agentData, marketData, signals, crowd, undefined, entrySignals, {
+          priority,
+          decisiveLatched,
+        });
       }
 
       decision = applySimulationDecisionLayer(agentData, marketData, decision);
@@ -892,9 +974,32 @@ async function runAgentBatchOnce(): Promise<{
   // second "conviction" bet (up to CONVICTION_MAX_PER_MARKET per agent per market).
   let convictionScheduled = 0;
   try {
-    convictionScheduled = await runConvictionSweep(agents, markets, now);
+    convictionScheduled = await runConvictionSweep(
+      agents,
+      markets,
+      now,
+      updownSweepCtx.marketContext,
+    );
   } catch (convErr) {
     log(`[AgentRunner] Conviction sweep error: ${convErr instanceof Error ? convErr.message : convErr}`);
+  }
+
+  let repredictScheduled = 0;
+  try {
+    repredictScheduled = await runRepredictSweep(
+      agents,
+      markets,
+      now,
+      updownSweepCtx,
+    );
+  } catch (repredictErr) {
+    log(`[AgentRunner] Repredict sweep error: ${repredictErr instanceof Error ? repredictErr.message : repredictErr}`);
+  }
+
+  try {
+    await touchWeeklyOpenMetadataLatch(markets, updownSweepCtx.marketContext);
+  } catch (latchErr) {
+    log(`[AgentRunner] weeklyOpen latch error: ${latchErr instanceof Error ? latchErr.message : latchErr}`);
   }
 
   // Sell sweep — Agent v3 phase 1. Independent of conviction sweep on
@@ -903,12 +1008,25 @@ async function runAgentBatchOnce(): Promise<{
   // makes them mutually exclusive at the per-(agent, market) level).
   let sellsScheduled = 0;
   try {
-    sellsScheduled = await runSellSweep(agents, markets);
+    sellsScheduled = await runSellSweep(
+      agents,
+      markets,
+      updownSweepCtx.marketContext,
+    );
   } catch (sellErr) {
     log(`[AgentRunner] Sell sweep error: ${sellErr instanceof Error ? sellErr.message : sellErr}`);
   }
 
-  const exitStats = { scheduled, abstained, skipped, skippedNoEntries, skippedNoEntryId, convictionScheduled, sellsScheduled };
+  const exitStats = {
+    scheduled,
+    abstained,
+    skipped,
+    skippedNoEntries,
+    skippedNoEntryId,
+    convictionScheduled,
+    repredictScheduled,
+    sellsScheduled,
+  };
   log(`[AgentRunner] Batch complete: ${JSON.stringify(exitStats)}`);
   return { ...exitStats, diagnostics: diag };
 }
@@ -967,26 +1085,218 @@ export async function runAgentBatch(): Promise<{
  * conviction bet respects the same per-trade price-move cap as a fresh
  * bet.
  */
+type UpdownMarketRow = {
+  id: string;
+  personId: string | null;
+  marketType: string | null;
+  openMarketType?: string | null;
+  title: string | null;
+  engine?: string | null;
+  metadata?: unknown;
+  endAt?: Date | null;
+};
+
+function filterAmmPerPersonUpdown(
+  allMarkets: UpdownMarketRow[],
+): UpdownMarketRow[] {
+  return allMarkets.filter(
+    (m) => m.personId && m.marketType === "updown" && m.engine === "amm",
+  );
+}
+
+/**
+ * Per-sweep cache of the data every score-aware sub-sweep needs:
+ *   - `marketContext` — UP/DOWN entry IDs + `pctChangeVsOpen` per market
+ *   - `signalsByPerson` — full `TrendSignals` keyed by personId (reused by
+ *     `runRepredictSweep` when it calls `computePrediction`)
+ *
+ * Built once at the top of `runAgentBatchOnce` and threaded through the
+ * sub-sweeps to avoid 4-5 duplicate `buildUpdownMarketContext` calls per
+ * batch, each of which would re-query market entries and re-hit
+ * `getTrendSignals` for every person in the catalogue.
+ */
+export interface UpdownSweepContext {
+  marketContext: Map<
+    string,
+    { upEntryId: string; downEntryId: string; pctChangeVsOpen: number }
+  >;
+  signalsByPerson: Map<string, TrendSignals>;
+}
+
+async function buildUpdownSweepContext(
+  ammUpdown: UpdownMarketRow[],
+): Promise<UpdownSweepContext> {
+  const marketContext = new Map<
+    string,
+    { upEntryId: string; downEntryId: string; pctChangeVsOpen: number }
+  >();
+  const signalsByPerson = new Map<string, TrendSignals>();
+  if (!ammUpdown.length) return { marketContext, signalsByPerson };
+
+  const entryRows = await db
+    .select({
+      marketId: marketEntries.marketId,
+      id: marketEntries.id,
+      label: marketEntries.label,
+    })
+    .from(marketEntries)
+    .where(inArray(marketEntries.marketId, ammUpdown.map((m) => m.id)));
+
+  const entriesByMarket = new Map<string, { id: string; label: string | null }[]>();
+  for (const row of entryRows) {
+    const list = entriesByMarket.get(row.marketId) ?? [];
+    list.push({ id: row.id, label: row.label });
+    entriesByMarket.set(row.marketId, list);
+  }
+
+  for (const market of ammUpdown) {
+    const entries = entriesByMarket.get(market.id) ?? [];
+    const ids = upDownEntryIds(entries);
+    if (!ids || !market.personId) continue;
+
+    const openingScore = openingScoreFromMeta(
+      market.metadata as Record<string, unknown> | null,
+    );
+    if (openingScore == null) continue;
+
+    let signals = signalsByPerson.get(market.personId);
+    if (!signals) {
+      signals = await getTrendSignals(market.personId, { openingScore });
+      signalsByPerson.set(market.personId, signals);
+    }
+    if (signals.pctChangeVsOpen == null) continue;
+
+    marketContext.set(market.id, {
+      ...ids,
+      pctChangeVsOpen: signals.pctChangeVsOpen,
+    });
+  }
+
+  return { marketContext, signalsByPerson };
+}
+
+/** Back-compat shim — returns only the `marketContext` map. */
+async function buildUpdownMarketContext(
+  ammUpdown: UpdownMarketRow[],
+): Promise<UpdownSweepContext["marketContext"]> {
+  const ctx = await buildUpdownSweepContext(ammUpdown);
+  return ctx.marketContext;
+}
+
+async function pickMispricedUpdownMarketIds(
+  nativeMarkets: UpdownMarketRow[],
+  limit: number,
+  preBuiltCtx?: UpdownSweepContext["marketContext"],
+): Promise<string[]> {
+  const candidates = nativeMarkets.filter(
+    (m) => m.personId && m.marketType === "updown" && m.engine === "amm",
+  );
+  if (!candidates.length || limit <= 0) return [];
+
+  const ctx = preBuiltCtx ?? (await buildUpdownMarketContext(candidates));
+  const stateRows = await db
+    .select({
+      marketId: marketAmmState.marketId,
+      liquidityB: marketAmmState.liquidityB,
+      outcomeOrder: marketAmmState.outcomeOrder,
+      shareQuantities: marketAmmState.shareQuantities,
+    })
+    .from(marketAmmState)
+    .where(inArray(marketAmmState.marketId, candidates.map((m) => m.id)));
+
+  const scored: { id: string; gap: number }[] = [];
+  for (const row of stateRows) {
+    const b = Number(row.liquidityB);
+    if (!Number.isFinite(b) || b <= 0) continue;
+    const snap: AmmStateSnapshot = {
+      liquidityB: b,
+      outcomeOrder: row.outcomeOrder as string[],
+      shareQuantities: row.shareQuantities as Record<string, number>,
+    };
+    const marketCtx = ctx.get(row.marketId);
+    if (!marketCtx) continue;
+    const prices = ammCurrentPrices(snap);
+    const upPrice = prices[marketCtx.upEntryId] ?? 0.5;
+    const pct = marketCtx.pctChangeVsOpen;
+    let gap = 0;
+    if (pct < -MISPRICED_SCORE_PCT && upPrice > MISPRICED_UP_PRICE_HIGH) {
+      gap = upPrice - 0.5 + Math.abs(pct);
+    } else if (pct > MISPRICED_SCORE_PCT && upPrice < MISPRICED_UP_PRICE_LOW) {
+      gap = 0.5 - upPrice + Math.abs(pct);
+    }
+    if (gap > 0) scored.push({ id: row.marketId, gap });
+  }
+
+  scored.sort((a, b) => b.gap - a.gap);
+  return scored.slice(0, limit).map((s) => s.id);
+}
+
+async function touchWeeklyOpenMetadataLatch(
+  allMarkets: UpdownMarketRow[],
+  preBuiltCtx?: UpdownSweepContext["marketContext"],
+): Promise<void> {
+  const ammUpdown = filterAmmPerPersonUpdown(allMarkets);
+  if (!ammUpdown.length) return;
+
+  const ctx = preBuiltCtx ?? (await buildUpdownMarketContext(ammUpdown));
+  const now = new Date();
+
+  // Batch the per-market UPDATE writes. Each row needs its own metadata
+  // payload (peak + decisive flag merged into existing meta), so we
+  // can't do a single UPDATE — but we can fire them in parallel so the
+  // sweep doesn't stall on serial round-trips.
+  const updates: Promise<unknown>[] = [];
+  for (const market of ammUpdown) {
+    const pct = ctx.get(market.id)?.pctChangeVsOpen;
+    if (pct == null || Math.abs(pct) < DECISIVE_WEEKLY_MOVE_PCT) continue;
+
+    const meta = (market.metadata ?? {}) as Record<string, unknown>;
+    const weekly = readWeeklyOpen(meta);
+    const nextPeak = Math.max(
+      weekly.peakAbsPctChangeVsOpen ?? 0,
+      Math.abs(pct),
+    );
+    // Idempotency: skip the write if nothing actually changed. Most
+    // markets that latched yesterday will trip this guard today.
+    if (weekly.decisiveLatched === true && nextPeak === weekly.peakAbsPctChangeVsOpen) {
+      continue;
+    }
+    const nextMeta = {
+      ...meta,
+      weeklyOpen: {
+        ...weekly,
+        decisiveLatched: true,
+        peakAbsPctChangeVsOpen: nextPeak,
+      },
+    };
+
+    updates.push(
+      db
+        .update(predictionMarkets)
+        .set({ metadata: nextMeta, updatedAt: now })
+        .where(eq(predictionMarkets.id, market.id)),
+    );
+  }
+
+  if (updates.length > 0) {
+    await Promise.all(updates);
+  }
+}
+
 async function runConvictionSweep(
   agents: (typeof agentConfigs.$inferSelect)[],
-  allMarkets: { id: string; personId: string | null; marketType: string | null; openMarketType?: string | null; title: string | null; engine?: string | null }[],
-  _now: Date
+  allMarkets: UpdownMarketRow[],
+  _now: Date,
+  preBuiltCtx?: UpdownSweepContext["marketContext"],
 ): Promise<number> {
   let convictionScheduled = 0;
 
-  // AMM-only after the parimutuel sunset. The `m.engine === "amm"`
-  // filter is defensive — Phase 1.5 set the schema default to AMM and
-  // the wipe script removed any in-flight parimutuel updown markets,
-  // but cron may race ahead of a deploy, so we still gate explicitly.
-  const ammUpdown = allMarkets.filter((m) =>
-    m.personId &&
-    (m.marketType === "updown" || (m.marketType === "community" && m.openMarketType === "updown")) &&
-    m.engine === "amm",
-  );
+  const ammUpdown = filterAmmPerPersonUpdown(allMarkets);
   if (!ammUpdown.length) return 0;
 
-  // Pre-load AMM state for every market in the sweep — single batched
-  // query, used by every agent below.
+  const marketContext =
+    preBuiltCtx ?? (await buildUpdownMarketContext(ammUpdown));
+
   const ammStateByMarket = new Map<string, AmmStateSnapshot>();
   const stateRows = await db
     .select({
@@ -1043,60 +1353,66 @@ async function runConvictionSweep(
       anchorByMarket.set(bet.marketId, { entryId: bet.entryId, pricePerShare: ps });
     }
 
+    // One-shot existence query for this agent across every in-scope
+    // updown market. Replaces the N-queries-per-agent pattern that
+    // the sell sweep already optimised away (~2,800 round-trips on
+    // a 56-agent / 50-market sweep before this change).
+    const existingConvictionRows = await db
+      .select({
+        marketId: scheduledAgentActions.marketId,
+      })
+      .from(scheduledAgentActions)
+      .where(
+        and(
+          eq(scheduledAgentActions.agentId, agent.id),
+          inArray(scheduledAgentActions.marketId, ammUpdown.map((m) => m.id)),
+          eq(scheduledAgentActions.actionType, "conviction"),
+          sql`${scheduledAgentActions.status} IN ('pending', 'in_progress', 'executed')`,
+        ),
+      );
+    const convictionCountByMarket = new Map<string, number>();
+    for (const row of existingConvictionRows) {
+      convictionCountByMarket.set(
+        row.marketId,
+        (convictionCountByMarket.get(row.marketId) ?? 0) + 1,
+      );
+    }
+
     for (const market of ammUpdown) {
       const state = ammStateByMarket.get(market.id);
       if (!state) continue;
       const anchor = anchorByMarket.get(market.id);
       if (!anchor) continue;
 
-      // Skip if a conviction bet for this agent+market already exists.
-      const convictionExists = await db
-        .select({ id: scheduledAgentActions.id })
-        .from(scheduledAgentActions)
-        .where(
-          and(
-            eq(scheduledAgentActions.agentId, agent.id),
-            eq(scheduledAgentActions.marketId, market.id),
-            eq(scheduledAgentActions.actionType, "conviction"),
-            sql`${scheduledAgentActions.status} IN ('pending', 'in_progress', 'executed')`,
-          ),
-        )
-        .limit(1);
-
-      if (convictionExists.length >= CONVICTION_MAX_PER_MARKET) continue;
-
-      const livePrice = ammCurrentPrices(state)[anchor.entryId] ?? 0;
-      if (livePrice <= 0) continue;
-
-      const delta = (livePrice - anchor.pricePerShare) / anchor.pricePerShare;
-      if (Math.abs(delta) < CONVICTION_SCORE_THRESHOLD_PCT) continue;
-
-      // Score moved in agent's favour iff price went UP on the entry
-      // they hold. The anchor entry and the alternative entry on a
-      // binary AMM market are symmetrical (price[A] + price[B] = 1).
-      const movedInFavour = delta > 0;
-
-      let chosenEntryId = anchor.entryId;
-      if (!movedInFavour) {
-        const flipChance =
-          0.30 + (agent.contrarianism ? parseFloat(String(agent.contrarianism)) * 0.15 : 0);
-        if (Math.random() < flipChance) {
-          const otherEntryId = state.outcomeOrder.find((id) => id !== anchor.entryId);
-          if (otherEntryId) chosenEntryId = otherEntryId;
-        }
+      if (
+        (convictionCountByMarket.get(market.id) ?? 0) >=
+        CONVICTION_MAX_PER_MARKET
+      ) {
+        continue;
       }
 
-      const confidence = Math.min(0.95, 0.6 + Math.abs(delta));
+      const mctx = marketContext.get(market.id);
+      if (!mctx) continue;
 
-      // Re-use the same target-price sizer the worker uses. We feed
-      // it the live state so the budget reflects what the actual
-      // executor will charge. If sizer says no-edge here we abstain
-      // entirely (the worker would just skip it on the other end).
+      const followUp = computeConvictionFollowUp({
+        anchorEntryId: anchor.entryId,
+        upEntryId: mctx.upEntryId,
+        downEntryId: mctx.downEntryId,
+        pctChangeVsOpen: mctx.pctChangeVsOpen,
+        contrarianism: parseFloat(String(agent.contrarianism ?? 0)),
+      });
+      if (!followUp) continue;
+
+      const livePrice = ammCurrentPrices(state)[followUp.chosenEntryId] ?? 0;
+
       const sizing = sizeAmmBudget({
         state,
-        entryId: chosenEntryId,
-        confidence,
-        maxBudget: Math.min(MAX_AGENT_STAKE, computeStakeAmount(confidence)),
+        entryId: followUp.chosenEntryId,
+        confidence: followUp.confidence,
+        maxBudget: Math.min(
+          MAX_AGENT_STAKE,
+          computeStakeAmount(followUp.confidence),
+        ),
       });
       if (sizing.creditBudget === 0) continue;
 
@@ -1105,32 +1421,29 @@ async function runConvictionSweep(
       await db.insert(scheduledAgentActions).values({
         agentId: agent.id,
         marketId: market.id,
-        entryId: chosenEntryId,
+        entryId: followUp.chosenEntryId,
         actionType: "conviction",
         decisionPayload: {
           abstain: false,
-          entryId: chosenEntryId,
-          confidence: parseFloat(confidence.toFixed(3)),
-          convictionDelta: parseFloat(delta.toFixed(4)),
+          entryId: followUp.chosenEntryId,
+          confidence: followUp.confidence,
+          scorePctChangeVsOpen: parseFloat(mctx.pctChangeVsOpen.toFixed(4)),
+          scoreAgreesWithHold: followUp.scoreAgreesWithHold,
+          flipApplied: followUp.flipApplied,
           originalEntryId: anchor.entryId,
-          doubled: chosenEntryId === anchor.entryId,
+          doubled: followUp.doubled,
           ammAnchorPrice: anchor.pricePerShare,
           ammLivePrice: livePrice,
         },
-        // We persist the SIZED budget so the worker can use it as the
-        // maxBudget cap on its second sizing pass. The worker re-sizes
-        // against the latest state at execution time, which prevents
-        // overcommitting if price has moved further between now and
-        // execute_after.
         stakeAmount: sizing.creditBudget,
         executeAfter,
         status: "pending",
       });
 
       convictionScheduled++;
-      const action = chosenEntryId === anchor.entryId ? "doubled down" : "flipped";
+      const action = followUp.doubled ? "doubled down" : "flipped";
       log(
-        `[AgentRunner] AMM Conviction: ${agent.displayName} ${action} on ${market.title?.slice(0, 30)} (anchor=${anchor.pricePerShare.toFixed(3)} live=${livePrice.toFixed(3)} delta=${(delta * 100).toFixed(1)}%, sized=${sizing.creditBudget})`,
+        `[AgentRunner] Score Conviction: ${agent.displayName} ${action} on ${market.title?.slice(0, 30)} (vsOpen=${(mctx.pctChangeVsOpen * 100).toFixed(1)}% agrees=${followUp.scoreAgreesWithHold} sized=${sizing.creditBudget})`,
       );
     }
   }
@@ -1140,6 +1453,235 @@ async function runConvictionSweep(
   }
 
   return convictionScheduled;
+}
+
+/**
+ * One score-driven "change mind" per agent per AMM up/down market when
+ * the weekly-open move crosses REPREDICT_PCT_THRESHOLD and the agent's
+ * net position is on the wrong side.
+ */
+async function runRepredictSweep(
+  agents: (typeof agentConfigs.$inferSelect)[],
+  allMarkets: UpdownMarketRow[],
+  now: Date,
+  preBuiltCtx?: UpdownSweepContext,
+): Promise<number> {
+  let repredictScheduled = 0;
+  const ammUpdown = filterAmmPerPersonUpdown(allMarkets);
+  if (!ammUpdown.length) return 0;
+
+  const sweepCtx = preBuiltCtx ?? (await buildUpdownSweepContext(ammUpdown));
+  const marketContext = sweepCtx.marketContext;
+  const signalsByPerson = sweepCtx.signalsByPerson;
+  const ammStateByMarket = new Map<string, AmmStateSnapshot>();
+  const stateRows = await db
+    .select({
+      marketId: marketAmmState.marketId,
+      liquidityB: marketAmmState.liquidityB,
+      outcomeOrder: marketAmmState.outcomeOrder,
+      shareQuantities: marketAmmState.shareQuantities,
+    })
+    .from(marketAmmState)
+    .where(inArray(marketAmmState.marketId, ammUpdown.map((m) => m.id)));
+  for (const row of stateRows) {
+    const b = Number(row.liquidityB);
+    if (!Number.isFinite(b) || b <= 0) continue;
+    ammStateByMarket.set(row.marketId, {
+      liquidityB: b,
+      outcomeOrder: row.outcomeOrder as string[],
+      shareQuantities: row.shareQuantities as Record<string, number>,
+    });
+  }
+
+  const entryRows = await db
+    .select({
+      id: marketEntries.id,
+      marketId: marketEntries.marketId,
+      label: marketEntries.label,
+      totalStake: marketEntries.totalStake,
+      noStake: marketEntries.noStake,
+      personId: marketEntries.personId,
+    })
+    .from(marketEntries)
+    .where(inArray(marketEntries.marketId, ammUpdown.map((m) => m.id)));
+
+  const entriesByMarket = new Map<string, MarketWithEntries["entries"]>();
+  for (const market of ammUpdown) {
+    const entries = entryRows
+      .filter((e) => e.marketId === market.id)
+      .map((e) => ({
+        id: e.id,
+        label: e.label,
+        totalStake: e.totalStake,
+        noStake: e.noStake,
+        personId: e.personId,
+      }));
+    entriesByMarket.set(market.id, entries);
+  }
+
+  for (const agent of agents) {
+    const agentData = toAgentData(agent);
+
+    const ammBets = await db
+      .select({
+        marketId: marketBets.marketId,
+        entryId: marketBets.entryId,
+        actionType: marketBets.actionType,
+        shareCount: marketBets.shareCount,
+        pricePerShare: marketBets.pricePerShare,
+        confidence: marketBets.confidence,
+        createdAt: marketBets.createdAt,
+      })
+      .from(marketBets)
+      .where(
+        and(
+          eq(marketBets.agentId, agent.id),
+          inArray(marketBets.marketId, ammUpdown.map((m) => m.id)),
+        ),
+      )
+      .orderBy(marketBets.createdAt);
+
+    if (!ammBets.length) continue;
+
+    const positions = aggregateSellSweepPositions(ammBets);
+    const largestPositionByMarket = pickLargestPositionsByMarket(positions);
+    if (largestPositionByMarket.size === 0) continue;
+
+    // Batch the "is there already a repredict?" gate into one query
+    // per agent instead of one per (agent, market) — same pattern as
+    // the conviction sweep optimisation just above.
+    const existingRepredictRows = await db
+      .select({ marketId: scheduledAgentActions.marketId })
+      .from(scheduledAgentActions)
+      .where(
+        and(
+          eq(scheduledAgentActions.agentId, agent.id),
+          inArray(scheduledAgentActions.marketId, ammUpdown.map((m) => m.id)),
+          eq(scheduledAgentActions.actionType, "repredict"),
+          sql`${scheduledAgentActions.status} IN ('pending', 'in_progress', 'executed')`,
+        ),
+      );
+    const repredictCountByMarket = new Map<string, number>();
+    for (const row of existingRepredictRows) {
+      repredictCountByMarket.set(
+        row.marketId,
+        (repredictCountByMarket.get(row.marketId) ?? 0) + 1,
+      );
+    }
+
+    for (const market of ammUpdown) {
+      const mctx = marketContext.get(market.id);
+      if (!mctx) continue;
+      if (Math.abs(mctx.pctChangeVsOpen) < REPREDICT_PCT_THRESHOLD) continue;
+
+      const entries = entriesByMarket.get(market.id) ?? [];
+      const ids = upDownEntryIds(entries);
+      if (!ids) continue;
+
+      const held = largestPositionByMarket.get(market.id);
+      if (!held) continue;
+      const heldEntryId = held.entryId;
+
+      // Use REPREDICT_PCT_THRESHOLD for the scoreFavours check so the
+      // two thresholds stay aligned: we already gated on |pct| >= that
+      // value just above, so a heldIsUp position with pct <= -threshold
+      // is unambiguously "wrong side".
+      const heldIsUp = heldEntryId === ids.upEntryId;
+      const wrongSide =
+        (heldIsUp && mctx.pctChangeVsOpen <= -REPREDICT_PCT_THRESHOLD) ||
+        (!heldIsUp && mctx.pctChangeVsOpen >= REPREDICT_PCT_THRESHOLD);
+      if (!wrongSide) continue;
+
+      if (market.endAt) {
+        const cutoff = getMarketBettingCutoff(market.endAt, "amm");
+        const bufferMs = JACKPOT_AGENT_MIN_BUFFER_HOURS * 60 * 60 * 1000;
+        if (now.getTime() >= cutoff.getTime() - bufferMs) continue;
+      }
+
+      if (
+        (repredictCountByMarket.get(market.id) ?? 0) >=
+        REPREDICT_MAX_PER_MARKET
+      ) {
+        continue;
+      }
+
+      const meta = market.metadata as Record<string, unknown> | null;
+      // Re-use the TrendSignals already loaded by buildUpdownSweepContext
+      // for this person. Falls back to a fresh fetch only if the cache
+      // missed (e.g. market entered scope after the context was built).
+      let signals = market.personId
+        ? signalsByPerson.get(market.personId)
+        : undefined;
+      if (!signals) {
+        const openingScore = openingScoreFromMeta(meta);
+        signals = await getTrendSignals(market.personId!, { openingScore });
+        if (market.personId) signalsByPerson.set(market.personId, signals);
+      }
+      const decisiveLatched = resolveDecisiveLatched(meta, signals.pctChangeVsOpen);
+      const marketData: MarketWithEntries = {
+        id: market.id,
+        marketType: "updown",
+        status: "OPEN",
+        title: market.title ?? "",
+        category: null,
+        personId: market.personId,
+        endAt: market.endAt ?? null,
+        entries,
+      };
+
+      let decision = computePrediction(
+        agentData,
+        marketData,
+        signals,
+        computeCrowdSplit(entries),
+        undefined,
+        undefined,
+        { decisiveLatched },
+      );
+      decision = applySimulationDecisionLayer(agentData, marketData, decision);
+      if (decision.abstain || !decision.entryId) continue;
+      if (decision.entryId === heldEntryId) continue;
+
+      const state = ammStateByMarket.get(market.id);
+      const conf = decision.confidence ?? 0.5;
+      if (state && decision.entryId) {
+        const cur = ammCurrentPrices(state)[decision.entryId] ?? 0;
+        if (conf <= cur + 0.02) continue;
+      }
+
+      const executeAfter = computeExecuteAfter(agent.archetype);
+      const stakeAmount = computeAgentStakeAmount(agentData, decision, null);
+
+      await db.insert(scheduledAgentActions).values({
+        agentId: agent.id,
+        marketId: market.id,
+        entryId: decision.entryId,
+        actionType: "repredict",
+        decisionPayload: {
+          ...decision,
+          repredictFromEntryId: heldEntryId,
+          scorePctChangeVsOpen: mctx.pctChangeVsOpen,
+        },
+        stakeAmount: Math.max(
+          BASE_STAKE_AMOUNT,
+          Math.min(MAX_AGENT_STAKE * 3, stakeAmount),
+        ),
+        executeAfter,
+        status: "pending",
+      });
+
+      repredictScheduled++;
+      log(
+        `[AgentRunner] Repredict: ${agent.displayName} on ${market.title?.slice(0, 30)} (${heldIsUp ? "UP" : "DOWN"} -> ${decision.entryId === ids.upEntryId ? "UP" : "DOWN"}, vsOpen=${(mctx.pctChangeVsOpen * 100).toFixed(1)}%)`,
+      );
+    }
+  }
+
+  if (repredictScheduled > 0) {
+    log(`[AgentRunner] Repredict sweep scheduled ${repredictScheduled} actions`);
+  }
+
+  return repredictScheduled;
 }
 
 /**
@@ -1246,9 +1788,34 @@ function aggregateSellSweepPositions(
   return positions;
 }
 
+/**
+ * Group aggregated positions by market and return the LARGEST net-share
+ * position per market. Used by `runRepredictSweep` to decide which side
+ * an agent is "on" when they hold positions on both sides of an updown
+ * market (e.g. an UP buy followed by a conviction flip to DOWN). Picking
+ * the wrong side here causes spurious repredict thrashing — see the
+ * multi-position regression case covered in tests.
+ *
+ * Pure helper; exported via `_pickLargestPositionsByMarketForTesting`.
+ */
+function pickLargestPositionsByMarket(
+  positions: Map<string, SellSweepPositionAgg>,
+): Map<string, { entryId: string; netShares: number }> {
+  const out = new Map<string, { entryId: string; netShares: number }>();
+  for (const pos of positions.values()) {
+    if (pos.netShares < MIN_NET_SHARES_FOR_SELL_EVAL) continue;
+    const cur = out.get(pos.marketId);
+    if (!cur || pos.netShares > cur.netShares) {
+      out.set(pos.marketId, { entryId: pos.entryId, netShares: pos.netShares });
+    }
+  }
+  return out;
+}
+
 async function runSellSweep(
   agents: (typeof agentConfigs.$inferSelect)[],
   allMarkets: { id: string; personId: string | null; marketType: string | null; openMarketType?: string | null; title: string | null; engine?: string | null; status?: string | null }[],
+  preBuiltUpdownCtx?: UpdownSweepContext["marketContext"],
 ): Promise<number> {
   let sellsScheduled = 0;
 
@@ -1272,6 +1839,53 @@ async function runSellSweep(
     m.engine === "amm" && m.personId,
   );
   if (!ammMarkets.length) return 0;
+
+  const updownContext =
+    preBuiltUpdownCtx ??
+    (await buildUpdownMarketContext(
+      ammMarkets.filter((m) => m.marketType === "updown"),
+    ));
+  const updownEntryRows =
+    updownContext.size > 0
+      ? await db
+          .select({
+            marketId: marketEntries.marketId,
+            id: marketEntries.id,
+            label: marketEntries.label,
+          })
+          .from(marketEntries)
+          .where(
+            inArray(
+              marketEntries.marketId,
+              Array.from(updownContext.keys()),
+            ),
+          )
+      : [];
+
+  // Pre-collapse updownEntryRows into a marketId -> {upEntryId,downEntryId}
+  // map ONCE here so the per-position loop below is O(1) instead of
+  // re-filtering the full entries list for every (agent, position).
+  // On a 50-market sweep × 56 agents × 2 entries/position that saves
+  // ~280k Array.filter passes per batch.
+  const updownIdsByMarket = new Map<
+    string,
+    { upEntryId: string; downEntryId: string }
+  >();
+  {
+    const rowsByMarket = new Map<
+      string,
+      { id: string; label: string | null }[]
+    >();
+    for (const row of updownEntryRows) {
+      const list = rowsByMarket.get(row.marketId) ?? [];
+      list.push({ id: row.id, label: row.label });
+      rowsByMarket.set(row.marketId, list);
+    }
+    for (const [marketId, entries] of rowsByMarket) {
+      const ids = upDownEntryIds(entries);
+      if (ids) updownIdsByMarket.set(marketId, ids);
+    }
+  }
 
   // Pre-load AMM state for every market once. Same pattern as the
   // conviction sweep — one batched query, reused across all agents.
@@ -1348,7 +1962,12 @@ async function runSellSweep(
         and(
           eq(scheduledAgentActions.agentId, agent.id),
           inArray(scheduledAgentActions.marketId, ammMarkets.map((m) => m.id)),
-          sql`${scheduledAgentActions.actionType} IN ('sell', 'conviction')`,
+          // 'repredict' is included so a pending flip-buy doesn't race a
+          // sell on the same (agent, market): if the repredict will swap
+          // the agent's net position to the opposite side, scheduling a
+          // sell of the old side in the same sweep would either double-
+          // execute or cancel itself out via the position aggregator.
+          sql`${scheduledAgentActions.actionType} IN ('sell', 'conviction', 'repredict')`,
         ),
       );
     const blockersByMarket = new Map<string, typeof blockerRows>();
@@ -1459,12 +2078,25 @@ async function runSellSweep(
       }
       if (conviction == null) conviction = SELL_DEFAULT_CONVICTION;
 
+      let scoreContext: { pctChangeVsOpen: number; heldEntryIsUp: boolean } | undefined;
+      if (market.marketType === "updown") {
+        const uctx = updownContext.get(market.id);
+        const ids = updownIdsByMarket.get(market.id);
+        if (uctx && ids) {
+          scoreContext = {
+            pctChangeVsOpen: uctx.pctChangeVsOpen,
+            heldEntryIsUp: pos.entryId === ids.upEntryId,
+          };
+        }
+      }
+
       const decision = computeSellDecision({
         personaBand,
         anchor,
         livePrice,
         conviction,
         netShares: pos.netShares,
+        scoreContext,
       });
       if (!decision) continue;
 
@@ -1552,6 +2184,7 @@ function toAgentData(row: typeof agentConfigs.$inferSelect): AgentConfigData {
  * Conservative by design — see comment on `TrendDirection` in types.ts.
  */
 export const _aggregateSellSweepPositionsForTesting = aggregateSellSweepPositions;
+export const _pickLargestPositionsByMarketForTesting = pickLargestPositionsByMarket;
 
 export function _deriveTrendDirectionForTesting(input: {
   pctChangeVsOpen?: number;

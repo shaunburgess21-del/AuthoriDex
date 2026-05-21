@@ -17,7 +17,8 @@
  *      the UP-direction boost fight reality. The guard kills the boost
  *      only on decisive drawdown; flat-or-up markets keep the heuristic.
  *
- *   3. Contrarian fade is gated off when `|pctChangeVsOpen| >= 0.15`.
+ *   3. Contrarian fade is gated off when `|pctChangeVsOpen| >= 0.10` or
+ *      `decisiveLatched` is set on the weekly market metadata.
  *      Contrarianism is meant to balance borderline cohort reads; on a
  *      decisively-trending market it just pushes prices back toward
  *      50/50 against reality.
@@ -305,10 +306,33 @@ test("prestige bias still fires when pctChangeVsOpen is shallow (-0.02, above th
 });
 
 // ---------------------------------------------------------------------------
-// Contrarian fade guard — decisiveWeeklyMove (|pct| >= 0.15) disarms it
+// Contrarian fade guard — decisiveWeeklyMove (|pct| >= 0.10) disarms it
 // ---------------------------------------------------------------------------
 
-test("contrarianism is disarmed on decisive weekly moves (|pctChangeVsOpen| >= 0.15)", () => {
+test("decisiveLatched forces deterministic read at -12% even after bounce", () => {
+  const market = makeBinaryUpDownMarket();
+  const agent = makeSharpAgent({
+    simulationProfile: {
+      schemaVersion: 2,
+      cohortId: SIMULATION_V2_COHORT_ID,
+      personaBand: "casual",
+    },
+  });
+  const signals = makeSignals({ pctChangeVsOpen: -0.12 });
+  const decision = computePrediction(
+    agent,
+    market,
+    signals,
+    { "entry-down": 0.9, "entry-up": 0.1 },
+    createPRNG(PRNG_SEED),
+    undefined,
+    { decisiveLatched: true },
+  );
+  assert.equal(decision.abstain, false, decision.abstainReason);
+  assert.equal(decision.entryId, "entry-down");
+});
+
+test("contrarianism is disarmed on decisive weekly moves (|pctChangeVsOpen| >= 0.10)", () => {
   // Crowd is heavily on DOWN. The trend signal also points DOWN. With
   // contrarianism active, the agent would fade DOWN and bid UP — which
   // on a -30% market is exactly the bug we want to prevent. The guard
@@ -600,9 +624,9 @@ test("Race: missing pctChangeVsOpen on entries falls back gracefully (no crash, 
 // Original test resumes here
 // ---------------------------------------------------------------------------
 
-test("contrarianism fires normally on borderline moves (|pctChangeVsOpen| < 0.15)", () => {
-  // 10% drawdown is decisivelyDown (< -0.05) so prestige stays gated,
-  // but is NOT a decisive weekly move (< 0.15) so contrarianism is
+test("contrarianism fires normally on borderline moves (|pctChangeVsOpen| < 0.10)", () => {
+  // 8% drawdown is decisivelyDown (< -0.05) so prestige stays gated,
+  // but is NOT a decisive weekly move (< 0.10) so contrarianism is
   // still allowed to operate. With a heavy DOWN crowd, a strong
   // contrarian SHOULD fade and pick UP. This documents the guard's
   // intentional asymmetry — two different thresholds for two
@@ -616,7 +640,7 @@ test("contrarianism fires normally on borderline moves (|pctChangeVsOpen| < 0.15
       personaBand: "casual",
     },
   });
-  const signals = makeSignals({ pctChangeVsOpen: -0.10 });
+  const signals = makeSignals({ pctChangeVsOpen: -0.08 });
   const crowd = { "entry-down": 0.95, "entry-up": 0.05 };
 
   // Loop a few seeds until we land in Step 3 — the test just needs to

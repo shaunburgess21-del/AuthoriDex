@@ -19,7 +19,11 @@
  * engine unit-testable with seeded RNGs and easy to hold in your head.
  */
 
-import { SELL_PERSONA_TUNING, SELL_DEFAULT_CONVICTION } from "./constants";
+import {
+  SELL_PERSONA_TUNING,
+  SELL_DEFAULT_CONVICTION,
+  SCORE_REVERSAL_SELL_PCT,
+} from "./constants";
 import type { SimulationPersonaBand } from "./simulationProfile";
 import type { SellDecision } from "./types";
 import { productionRNG, type RNG } from "./prng";
@@ -44,7 +48,29 @@ export interface SellEngineInput {
   conviction?: number;
   /** Net shares held — used only for the de-minimis sanity check below. */
   netShares: number;
+  /** Weekly-open score vs held side — enables score-reversal exits. */
+  scoreContext?: {
+    pctChangeVsOpen: number;
+    heldEntryIsUp: boolean;
+  };
 }
+
+/** UP held while score is decisively below open, or DOWN held while above. */
+export function isScoreReversal(input: SellEngineInput): boolean {
+  const ctx = input.scoreContext;
+  if (!ctx || !Number.isFinite(ctx.pctChangeVsOpen)) return false;
+  const pct = ctx.pctChangeVsOpen;
+  if (ctx.heldEntryIsUp && pct <= -SCORE_REVERSAL_SELL_PCT) return true;
+  if (!ctx.heldEntryIsUp && pct >= SCORE_REVERSAL_SELL_PCT) return true;
+  return false;
+}
+
+const SCORE_REVERSAL_FORGET_SKIP: Partial<
+  Record<SimulationPersonaBand, number>
+> = {
+  casual: 0.15,
+  liquidity: 0.15,
+};
 
 /**
  * Compute the conviction band edges for a position. Band widths are
@@ -111,10 +137,13 @@ export function computeSellDecision(
   const tuning = SELL_PERSONA_TUNING[input.personaBand];
   if (!tuning) return null;
 
-  // Forgot-to-look gate: most common outcome. Per-band rates are
-  // deliberately high (20-60%) — this is where most of the "agents
-  // don't all act in lockstep" realism comes from.
-  if (rng.nextFloat() < tuning.forgetSkipPct) return null;
+  const scoreReversal = isScoreReversal(input);
+  const forgetSkip =
+    scoreReversal && SCORE_REVERSAL_FORGET_SKIP[input.personaBand] != null
+      ? SCORE_REVERSAL_FORGET_SKIP[input.personaBand]!
+      : tuning.forgetSkipPct;
+
+  if (rng.nextFloat() < forgetSkip) return null;
 
   const conviction = input.conviction ?? SELL_DEFAULT_CONVICTION;
   const { topRadius, bottomRadius } = computeBandRadii(
@@ -139,6 +168,16 @@ export function computeSellDecision(
     conviction,
     personaBand: input.personaBand,
   });
+
+  // Score vs weekly open reversed against the held side — exit even when
+  // AMM price still looks fine (UP shares in profit while score crashed).
+  if (scoreReversal) {
+    const elevatedPSell = Math.min(0.85, tuning.pSellBottom + 0.35);
+    // Score already broke the thesis — skip the hope-for-reversal gate
+    // that normally blocks loss-zone exits.
+    if (rng.nextFloat() >= elevatedPSell) return null;
+    return buildDecision("score_reversal", tuning.bottomFractionRange);
+  }
 
   // Top of band (profit zone): edge has played out, take it off.
   if (livePrice >= bandTop) {
@@ -176,3 +215,4 @@ export function computeSellDecision(
 // Test-only exports — keep these out of any non-test path.
 export const _computeBandRadiiForTesting = computeBandRadii;
 export const _pickInRangeForTesting = pickInRange;
+export const _isScoreReversalForTesting = isScoreReversal;

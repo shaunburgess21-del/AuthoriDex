@@ -22,7 +22,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { computeSellDecision, computeBandRadii } from "../server/agents/sellEngine";
+import {
+  computeSellDecision,
+  computeBandRadii,
+  isScoreReversal,
+} from "../server/agents/sellEngine";
 import { SELL_PERSONA_TUNING } from "../server/agents/constants";
 import { createPRNG } from "../server/agents/prng";
 
@@ -281,4 +285,43 @@ test("decision payload carries all telemetry fields populated", () => {
   assert.ok(decision!.bandTop > decision!.anchor);
   assert.ok(decision!.bandBottom < decision!.anchor);
   assert.ok(decision!.sellFraction > 0 && decision!.sellFraction <= 1);
+});
+
+test("isScoreReversal detects UP held while score below open", () => {
+  assert.equal(
+    isScoreReversal({
+      personaBand: "casual",
+      anchor: 0.55,
+      livePrice: 0.58,
+      netShares: 50,
+      scoreContext: { pctChangeVsOpen: -0.08, heldEntryIsUp: true },
+    }),
+    true,
+  );
+  assert.equal(
+    isScoreReversal({
+      personaBand: "casual",
+      anchor: 0.55,
+      livePrice: 0.58,
+      netShares: 50,
+      scoreContext: { pctChangeVsOpen: -0.03, heldEntryIsUp: true },
+    }),
+    false,
+  );
+});
+
+test("score_reversal exit fires for casual UP holder in drawdown", () => {
+  const decision = computeSellDecision(
+    {
+      personaBand: "casual",
+      anchor: 0.50,
+      livePrice: 0.56,
+      netShares: 100,
+      scoreContext: { pctChangeVsOpen: -0.13, heldEntryIsUp: true },
+    },
+    // forgetSkip 0.15 on score reversal — need roll >= 0.15 to evaluate
+    scriptedRNG([0.2, 0.01, 0.5]),
+  );
+  assert.ok(decision != null);
+  assert.equal(decision!.reason, "score_reversal");
 });

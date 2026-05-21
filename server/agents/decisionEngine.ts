@@ -17,6 +17,7 @@ import {
   CONTRARIAN_TRIGGER_THRESHOLD,
   WORLD_MARKET_BOOST_ENABLED,
   JACKPOT_AGENT_COLLISION_RANGE,
+  DECISIVE_WEEKLY_MOVE_PCT,
 } from "./constants";
 import { JACKPOT_MAX_PREDICTED_SCORE } from "../config/constants";
 import { productionRNG, type RNG } from "./prng";
@@ -40,7 +41,7 @@ export function computePrediction(
   crowd: CrowdSplit,
   rng: RNG = productionRNG,
   entrySignals?: Map<string, TrendSignals>,
-  options: { priority?: "high" | "normal" } = {},
+  options: { priority?: "high" | "normal"; decisiveLatched?: boolean } = {},
 ): PredictionDecision {
   const abstain = (
     reason: PredictionDecision["abstainReason"]
@@ -66,16 +67,18 @@ export function computePrediction(
   //                       heuristic from helpful to actively wrong.
   //   decisiveWeeklyMove — used in both directions to skip the cohort
   //                       splitting / contrarianism mechanics that exist
-  //                       to inject variance on borderline reads. ±15%
-  //                       is well inside the 20% saturation of the new
-  //                       computeSignalBoost so the deterministic top
-  //                       pick is already obviously right by then.
+  //                       to inject variance on borderline reads. ±10%
+  //                       (or latched for the week — see agentRunner
+  //                       metadata.weeklyOpen) so a bounce off −18% to
+  //                       −12% does not re-enable randomized UP picks.
   const pctVsOpen =
     signals.pctChangeVsOpen != null && Number.isFinite(signals.pctChangeVsOpen)
       ? signals.pctChangeVsOpen
       : null;
   const decisivelyDown = pctVsOpen != null && pctVsOpen < -0.05;
-  const decisiveWeeklyMove = pctVsOpen != null && Math.abs(pctVsOpen) >= 0.15;
+  const decisiveWeeklyMove =
+    options.decisiveLatched === true ||
+    (pctVsOpen != null && Math.abs(pctVsOpen) >= DECISIVE_WEEKLY_MOVE_PCT);
 
   // Step 1: Domain filter
   const marketCategory = market.category?.toLowerCase() ?? "";

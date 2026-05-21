@@ -158,7 +158,7 @@ export interface ScheduledActionData {
   agentId: string;
   marketId: string;
   entryId: string;
-  actionType: "predict" | "jackpot_bet" | "conviction" | "sell";
+  actionType: "predict" | "jackpot_bet" | "conviction" | "repredict" | "sell";
   decisionPayload: PredictionDecision | SellDecision;
   stakeAmount: number;
   executeAfter: Date;
@@ -174,7 +174,11 @@ export interface ScheduledActionData {
  * The persona cascade in `sellEngine.computeSellDecision` decides which (if
  * any) of these fires per agent×market×sweep.
  */
-export type SellReason = "take_profit" | "cut_loss" | "early_profit";
+export type SellReason =
+  | "take_profit"
+  | "cut_loss"
+  | "early_profit"
+  | "score_reversal";
 
 /**
  * Output of `computeSellDecision` — null means "agent does NOT sell this

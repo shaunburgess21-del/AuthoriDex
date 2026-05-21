@@ -219,6 +219,20 @@ export const WORLD_MARKETS_PER_CALL_ESTIMATE_USD = (() => {
 export const CONVICTION_SCORE_THRESHOLD_PCT = 0.05;
 export const CONVICTION_MAX_PER_MARKET = 1;
 
+// Score-aligned follow-up tunables (Up/Down AMM — May 2026).
+// Conviction and re-predict read pctChangeVsOpen vs weekly open, not AMM price delta.
+export const DECISIVE_WEEKLY_MOVE_PCT = 0.10;
+export const REPREDICT_PCT_THRESHOLD = 0.10;
+export const REPREDICT_MAX_PER_MARKET = 1;
+export const CONVICTION_SCORE_AGREE_FLIP = 0.12;
+export const CONVICTION_SCORE_DISAGREE_FLIP_BASE = 0.55;
+export const CONVICTION_SCORE_DISAGREE_FLIP_CONTRARIAN = 0.10;
+export const SCORE_REVERSAL_SELL_PCT = 0.05;
+export const MISPRICED_PRIORITY_SLICE = 5;
+export const MISPRICED_SCORE_PCT = 0.08;
+export const MISPRICED_UP_PRICE_HIGH = 0.52;
+export const MISPRICED_UP_PRICE_LOW = 0.48;
+
 // ---------------------------------------------------------------------------
 // Agent sells (Phase 1 — AMM up/down only)
 // ---------------------------------------------------------------------------
