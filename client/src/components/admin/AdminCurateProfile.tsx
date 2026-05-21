@@ -100,12 +100,15 @@ export function AdminCurateProfile() {
     },
   });
 
+  const invalidateCurateList = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['/api/admin/vote/curate-profile', profileSource] });
+  }, [profileSource]);
+
   const deleteImageMutation = useMutation({
     mutationFn: (imageId: string) =>
       apiRequest('DELETE', `/api/admin/vote/curate-profile/images/${imageId}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/vote/curate-profile', editingCard?.id, 'images'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/vote/curate-profile'] });
       toast("Image deleted");
     },
     onError: () => {
@@ -135,7 +138,6 @@ export function AdminCurateProfile() {
         throw new Error(err.error || "Upload failed");
       }
       queryClient.invalidateQueries({ queryKey: ['/api/admin/vote/curate-profile', editingCard.id, 'images'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/vote/curate-profile'] });
       toast("Image uploaded");
     } catch (err: any) {
       toast.error("Upload failed", { description: err.message });
@@ -316,6 +318,7 @@ export function AdminCurateProfile() {
           onClick={() => {
             setLightboxImage(null);
             setEditingCard(null);
+            invalidateCurateList();
           }}
         >
           <div
@@ -342,6 +345,7 @@ export function AdminCurateProfile() {
                 onClick={() => {
                   setLightboxImage(null);
                   setEditingCard(null);
+                  invalidateCurateList();
                 }}
                 data-testid="button-close-curate-modal"
               >

@@ -5,6 +5,10 @@ import { storage } from "./storage";
 import { getBaselineDiagnostics } from "./utils/baseline";
 import { db } from "./db";
 import { syncWinningAvatarForPerson } from "./lib/curateAvatar";
+import {
+  removeCelebrityImageFromStorage,
+  syncInductionGalleryForPerson,
+} from "./lib/inductionGalleryStorage";
 import { anonVoteBudget, trendSnapshots, trackedPeople, communityInsights, insightVotes, comments as unifiedComments, commentVotes, matchups, votes, voteActions, xpActions, xpLedger, ranks as schemaRanks, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, creditActions, badges as badgesTable, userBadges, adminAuditLog, predictionMarkets, marketEntries, marketBets, marketAmmState, ammPriceSnapshots, ammHealthCheckRuns, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, contentCategories, userCategoryEngagement, emailUnsubscribeState, insertCommunityInsightSchema, insertInsightVoteSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
 import { validateSuggestionPayload, SUGGESTION_TYPES } from "@shared/suggestionSchemas";
 import { normaliseSocialHandles, SOCIAL_HANDLE_KEYS } from "@shared/handleNormalise";
@@ -1095,64 +1099,6 @@ function buildCelebrityLargePublicUrl(supabaseUrl: string, slug: string, filenam
 
 function buildLeadersLargePublicUrl(supabaseUrl: string, slug: string, filename: string): string {
   return `${supabaseUrl}/storage/v1/object/public/leaders-large/${encodeURIComponent(slug)}/${filename}`;
-}
-
-/**
- * Materialize files under `celebrity-large/{slug}/` (or legacy `leaders-large/{slug}/`) into
- * `celebrity_images` so Curate Profile admin counts and editing match Induction Queue storage.
- */
-async function syncInductionGalleryFromStorageToCelebrityImages(personId: string, slug: string): Promise<void> {
-  const trimmed = (slug || "").trim();
-  if (!trimmed) return;
-  const supabaseUrl = process.env.SUPABASE_URL;
-  if (!supabaseUrl) return;
-
-  const slotFileRe = /^([1-5])\.(webp|jpg|jpeg|png)$/i;
-
-  type SlotFile = { slot: number; name: string; publicUrl: string };
-  const collectFromBucket = async (bucket: "celebrity-large" | "leaders-large"): Promise<SlotFile[]> => {
-    const { data: listed, error } = await supabaseServer.storage.from(bucket).list(trimmed);
-    if (error || !listed?.length) return [];
-    const acc: SlotFile[] = [];
-    for (const file of listed) {
-      const m = slotFileRe.exec(file.name);
-      if (!m) continue;
-      const slot = parseInt(m[1], 10);
-      const publicUrl =
-        bucket === "celebrity-large"
-          ? buildCelebrityLargePublicUrl(supabaseUrl, trimmed, file.name)
-          : buildLeadersLargePublicUrl(supabaseUrl, trimmed, file.name);
-      acc.push({ slot, name: file.name, publicUrl });
-    }
-    return acc.sort((a, b) => a.slot - b.slot);
-  };
-
-  let files = await collectFromBucket("celebrity-large");
-  if (files.length === 0) {
-    files = await collectFromBucket("leaders-large");
-  }
-  if (files.length === 0) return;
-
-  const existingRows = await db
-    .select({ imageUrl: celebrityImages.imageUrl })
-    .from(celebrityImages)
-    .where(eq(celebrityImages.personId, personId));
-  const existingUrls = new Set(existingRows.map((r) => r.imageUrl));
-
-  for (const f of files) {
-    if (existingUrls.has(f.publicUrl)) continue;
-    await db.insert(celebrityImages).values({
-      personId,
-      imageUrl: f.publicUrl,
-      source: "induction_storage_sync",
-      isPrimary: false,
-      votesUp: 0,
-      votesDown: 0,
-    });
-    existingUrls.add(f.publicUrl);
-  }
-
-  await syncWinningAvatarForPerson(personId);
 }
 
 function occupiedInductionGallerySlots(files: { name: string }[] | null | undefined): Set<number> {
@@ -22545,16 +22491,6 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           : [];
         const metricMap = new Map(metricRows.map((row) => [row.celebrityId, row.curateVisibility]));
 
-        for (const candidate of candidates) {
-          const key = candidate.name.trim().toLowerCase();
-          const tracked = trackedByName.get(key);
-          if (!tracked || tracked.status !== "induction") continue;
-          const slugForSync = (candidate.imageSlug?.trim() || generateImageSlug(candidate.name.trim())) || "";
-          if (slugForSync) {
-            await syncInductionGalleryFromStorageToCelebrityImages(tracked.id, slugForSync);
-          }
-        }
-
         const inductionIds = Array.from(trackedByName.values())
           .filter((t) => t.status === "induction")
           .map((t) => t.id);
@@ -22638,6 +22574,17 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
   app.get("/api/admin/vote/curate-profile/:id/images", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
+      const [tp] = await db
+        .select({ status: trackedPeople.status, imageSlug: trackedPeople.imageSlug })
+        .from(trackedPeople)
+        .where(eq(trackedPeople.id, id))
+        .limit(1);
+      if (tp?.status === "induction") {
+        const slug = (tp.imageSlug || "").trim();
+        if (slug) {
+          await syncInductionGalleryForPerson(id, slug);
+        }
+      }
       const images = await db
         .select()
         .from(celebrityImages)
@@ -22781,25 +22728,20 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       const [image] = await db.select().from(celebrityImages).where(eq(celebrityImages.id, imageId)).limit(1);
       if (!image) return res.status(404).json({ error: "Image not found" });
 
-      if (image.imageUrl.includes('supabase')) {
-        try {
-          const publicPrefix = '/storage/v1/object/public/';
-          const idx = image.imageUrl.indexOf(publicPrefix);
-          if (idx !== -1) {
-            const afterPrefix = image.imageUrl.substring(idx + publicPrefix.length);
-            const slashIdx = afterPrefix.indexOf('/');
-            if (slashIdx !== -1) {
-              const bucketName = afterPrefix.substring(0, slashIdx);
-              const objectPath = afterPrefix.substring(slashIdx + 1);
-              await supabaseServer.storage.from(bucketName).remove([objectPath]);
-            }
-          }
-        } catch (e) {
-          console.warn("Failed to delete from Supabase storage:", e);
-        }
+      const [tp] = await db
+        .select({ imageSlug: trackedPeople.imageSlug })
+        .from(trackedPeople)
+        .where(eq(trackedPeople.id, image.personId))
+        .limit(1);
+
+      try {
+        await removeCelebrityImageFromStorage(image.imageUrl, tp?.imageSlug);
+      } catch (e) {
+        console.warn("Failed to delete from Supabase storage:", e);
       }
 
       await db.delete(celebrityImages).where(eq(celebrityImages.id, imageId));
+      await syncWinningAvatarForPerson(image.personId);
       res.json({ success: true });
     } catch (error: any) {
       console.error("Error deleting celebrity image:", error);

@@ -13,6 +13,7 @@ import {
   ensureUpDownMarketForInductee,
 } from "../jobs/market-generator";
 import { supabaseServer } from "../supabase";
+import { syncWinningAvatarForPerson } from "../lib/curateAvatar";
 
 const BASELINE_RUN_ID = "induction-onboard";
 const BUCKET = "celebrity-large";
@@ -47,15 +48,18 @@ export async function runPostInductionOnboarding(args: {
       return;
     }
 
-    // --- Sync all gallery images from Supabase storage ---
     const slug = (imageSlug || tp.imageSlug || "").trim();
     let primaryUrl: string | null = null;
 
-    if (slug) {
-      const existingImages = await db
-        .select({ imageUrl: celebrityImages.imageUrl })
-        .from(celebrityImages)
-        .where(eq(celebrityImages.personId, personId));
+    const existingImages = await db
+      .select({ imageUrl: celebrityImages.imageUrl, source: celebrityImages.source })
+      .from(celebrityImages)
+      .where(eq(celebrityImages.personId, personId));
+
+    if (existingImages.length > 0) {
+      // CMS already curated celebrity_images; do not re-import staging slots from storage.
+      await syncWinningAvatarForPerson(personId);
+    } else if (slug) {
       const existingFilenames = new Set(
         existingImages
           .map((r) => {
@@ -78,7 +82,7 @@ export async function runPostInductionOnboarding(args: {
         const publicUrl = buildPublicUrl(slug, file.name);
         if (!publicUrl) continue;
 
-        const isFirst = insertedCount === 0 && existingImages.length === 0;
+        const isFirst = insertedCount === 0;
         await db.insert(celebrityImages).values({
           personId,
           imageUrl: publicUrl,
@@ -89,8 +93,7 @@ export async function runPostInductionOnboarding(args: {
         insertedCount++;
       }
 
-      // If no files found in storage, fall back to the conventional 1.webp URL
-      if (insertedCount === 0 && existingImages.length === 0) {
+      if (insertedCount === 0) {
         const fallbackUrl = buildPublicUrl(slug, "1.webp");
         if (fallbackUrl) {
           await db.insert(celebrityImages).values({
