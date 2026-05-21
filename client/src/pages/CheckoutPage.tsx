@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { getCreditPackage, formatUSD } from "@/lib/pricing";
+import { voxWord } from "@/lib/currency";
 
 /**
  * Temporary placeholder for the credit-purchase flow.
@@ -72,7 +73,7 @@ export default function CheckoutPage() {
                 <span className="font-semibold">
                   {pkg.name}
                   <span className="ml-2 text-xs font-normal text-muted-foreground">
-                    {pkg.credits.toLocaleString("en-US")} credits
+                    {voxWord(pkg.credits)}
                   </span>
                 </span>
                 <span className="font-mono font-semibold">

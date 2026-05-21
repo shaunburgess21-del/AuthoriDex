@@ -12,7 +12,7 @@ import { Check, ChevronRight, Clock, Lock, Trophy, XCircle, RotateCcw, X, Extern
 import { resolveMarketHeadlineImageUrl } from "@/lib/predictMarketImage";
 import { pricesFor, snapshotFromApi, type ApiAmmStateBlock } from "@/lib/ammClient";
 import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
-import { formatVolumeCredits } from "@/lib/formatNumber";
+import { formatVox, formatVoxCompact, formatVoxDelta, formatVoxPrice, voxWord } from "@/lib/currency";
 
 /**
  * Sprint 5 / Phase 0: build the predict-page return anchor key for a
@@ -59,7 +59,7 @@ function UserBetResult({ betResult, isMarketClosed = false }: { betResult?: { re
     );
   }
   // Parimutuel sunset: resolved community markets are AMM, so the
-  // payout on `marketBets` already encodes the final credits and the
+  // payout on `marketBets` already encodes the final Vox and the
   // "Total pool / Winner pool" breakdown no longer applies. We just
   // surface the badge and the user's pick.
   return (
@@ -71,9 +71,9 @@ function UserBetResult({ betResult, isMarketClosed = false }: { betResult?: { re
       {betResult.result === 'won' && <Trophy className="h-3.5 w-3.5" />}
       {betResult.result === 'lost' && <XCircle className="h-3.5 w-3.5" />}
       {betResult.result === 'refunded' && <RotateCcw className="h-3.5 w-3.5" />}
-      {betResult.result === 'won' ? `Won +${betResult.payout} credits` :
-       betResult.result === 'refunded' ? `Refunded ${betResult.stakeAmount} credits` :
-       `Lost ${betResult.stakeAmount} credits`}
+      {betResult.result === 'won' ? `Won +${voxWord(betResult.payout)}` :
+       betResult.result === 'refunded' ? `Refunded ${voxWord(betResult.stakeAmount)}` :
+       `Lost ${voxWord(betResult.stakeAmount)}`}
       <span className="text-muted-foreground font-normal ml-auto">Picked: {betResult.entryLabel}</span>
     </div>
   );
@@ -98,11 +98,7 @@ function PendingBetLinkRow({ entryLabel, stakeAmount, href, onTopUp, onLinkClick
     : pnlValue >= 0
       ? "text-green-700 dark:text-green-500"
       : "text-red-700 dark:text-red-500";
-  const pnlText = !hasPnl
-    ? null
-    : pnlIsZero
-      ? "0.00 cr"
-      : `${pnlValue >= 0 ? "+" : ""}${pnlValue.toFixed(2)} cr`;
+  const pnlText = !hasPnl ? null : formatVoxDelta(pnlValue);
 
   const inner = (
     <div
@@ -135,7 +131,7 @@ function PendingBetLinkRow({ entryLabel, stakeAmount, href, onTopUp, onLinkClick
         )}
         <div className="flex items-baseline gap-1 tabular-nums">
           <span className="text-[10px] text-muted-foreground">Stake</span>
-          <span className="text-xs font-semibold text-foreground">{stakeAmount.toLocaleString("en-US")}</span>
+          <span className="text-xs font-semibold text-foreground">{formatVox(stakeAmount)}</span>
         </div>
         <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden />
       </div>
@@ -177,7 +173,7 @@ function BinaryMarketCard({ market, entries, participants, timeLabel, onNavigate
   // mirrors H2H / Race using `market.volume` (projected by the
   // /api/open-markets feed from `ammState.totalUserCreditsIn`).
   const volumeRaw = Number((market as any)?.volume ?? 0);
-  const volumeLabel = volumeRaw > 0 ? formatVolumeCredits(volumeRaw) : null;
+  const volumeLabel = volumeRaw > 0 ? formatVoxCompact(volumeRaw) : null;
   const ammSnap = snapshotFromApi((market.ammState as ApiAmmStateBlock | null | undefined) ?? null);
   const ammPrices = ammSnap ? pricesFor(ammSnap) : null;
   const yesEntry = entries.find((e: any) => e.label === "Yes") || entries[0];
@@ -296,7 +292,7 @@ function BinaryMarketCard({ market, entries, participants, timeLabel, onNavigate
               >
                 <span className="leading-none">Yes {yesPercent}%</span>
                 <span className="text-[10px] font-mono opacity-80 leading-none">
-                  {ammYesPrice.toFixed(2)} cr/share
+                  {formatVoxPrice(ammYesPrice)}/share
                 </span>
               </Button>
               <Button
@@ -312,7 +308,7 @@ function BinaryMarketCard({ market, entries, participants, timeLabel, onNavigate
               >
                 <span className="leading-none">No {noPercent}%</span>
                 <span className="text-[10px] font-mono opacity-80 leading-none">
-                  {ammNoPrice.toFixed(2)} cr/share
+                  {formatVoxPrice(ammNoPrice)}/share
                 </span>
               </Button>
             </div>
@@ -348,7 +344,7 @@ function MultiMarketEntryRow({
   userBet?: { yesStake: number; noStake: number };
   hasPendingBet: boolean;
   isMarketClosed: boolean;
-  /** Show raw entry pool credits below the row (drawer only). */
+  /** Show raw entry pool Vox below the row (drawer only). */
   showEntryPool?: boolean;
   onNavigate: (slug: string, pick?: string, direction?: string) => void;
   /** Preferred handler. When provided, Yes/No clicks open an in-page stake
@@ -404,10 +400,10 @@ function MultiMarketEntryRow({
   // than just the name. The card hero image already sets the visual context.
 
   // Fixed-width Yes button keeps the right-hand column aligned across all
-  // rows. Two-line label ("Yes pct%" on top, "X.XX cr/share" below) and
+  // rows. Two-line label ("Yes pct%" on top, "Ꝟ0.XX/share" below) and
   // colour (#00C853 brand green) match the binary + Up/Down card Yes
   // buttons exactly so the three card variants are visually consistent.
-  // Width is sized to fit the worst-case mono "1.00 cr/share" string +
+  // Width is sized to fit the worst-case mono "Ꝟ1.00/share" string +
   // padding on both desktop and mobile.
   const buttonClass =
     "shrink-0 text-center w-[92px] md:w-[104px] px-1 md:px-1.5 py-1.5 md:py-2 rounded-md transition-colors tabular-nums flex flex-col items-center justify-center gap-0.5";
@@ -418,7 +414,7 @@ function MultiMarketEntryRow({
         <div className="truncate text-[13px] md:text-[14px] font-medium">{entry.label}</div>
         {showEntryPool && (
           <div className="text-[10px] text-muted-foreground mt-0.5 tabular-nums">
-            {entryPool.toLocaleString("en-US")} credits in pool
+            {voxWord(entryPool)} in pool
           </div>
         )}
       </div>
@@ -450,7 +446,7 @@ function MultiMarketEntryRow({
             >
               <Check className="h-3 w-3" style={{ color: betAccent }} />
               <span className="text-[10px] font-semibold" style={{ color: betAccent }}>Your pick</span>
-              <span className="text-[10px] text-muted-foreground tabular-nums">{userStake.toLocaleString("en-US")}</span>
+              <span className="text-[10px] text-muted-foreground tabular-nums">{formatVox(userStake)}</span>
             </button>
           ) : (
             <Link
@@ -462,7 +458,7 @@ function MultiMarketEntryRow({
             >
               <Check className="h-3 w-3" style={{ color: betAccent }} />
               <span className="text-[10px] font-semibold" style={{ color: betAccent }}>Your pick</span>
-              <span className="text-[10px] text-muted-foreground tabular-nums">{userStake.toLocaleString("en-US")}</span>
+              <span className="text-[10px] text-muted-foreground tabular-nums">{formatVox(userStake)}</span>
             </Link>
           )}
         </>
@@ -473,7 +469,7 @@ function MultiMarketEntryRow({
         // engine extension — LMSR has no native NO shares). Wording +
         // colour intentionally mirror the binary Yes button so the
         // three card variants read consistently: "Yes {pct}%" on top,
-        // "{X.XX} cr/share" below, identical in both the card preview
+        // "Ꝟ{X.XX}/share" below, identical in both the card preview
         // and the drawer view so users see the same information
         // regardless of surface.
         <div className="flex shrink-0">
@@ -484,7 +480,7 @@ function MultiMarketEntryRow({
           >
             <span className="text-[11px] md:text-xs font-semibold leading-none">Yes {entry.pct}%</span>
             <span className="text-[9px] md:text-[10px] font-mono opacity-80 leading-none">
-              {Number(entry.ammPrice ?? 0).toFixed(2)} cr/share
+              {formatVoxPrice(Number(entry.ammPrice ?? 0))}/share
             </span>
           </button>
         </div>
@@ -509,7 +505,7 @@ function MultiMarketCard({ market, entries, participants, timeLabel, onNavigate,
   // Parimutuel sunset: every community market is AMM. Volume chip
   // mirrors H2H / Race using `market.volume`.
   const volumeRaw = Number((market as any)?.volume ?? 0);
-  const volumeLabel = volumeRaw > 0 ? formatVolumeCredits(volumeRaw) : null;
+  const volumeLabel = volumeRaw > 0 ? formatVoxCompact(volumeRaw) : null;
   const hasPnl = typeof unrealisedPnl === "number" && Number.isFinite(unrealisedPnl);
   const pnlValue = hasPnl ? (unrealisedPnl as number) : 0;
   const pnlIsZero = Math.abs(pnlValue) < 0.005;
@@ -518,11 +514,7 @@ function MultiMarketCard({ market, entries, participants, timeLabel, onNavigate,
     : pnlValue >= 0
       ? "text-green-700 dark:text-green-500"
       : "text-red-700 dark:text-red-500";
-  const pnlText = !hasPnl
-    ? null
-    : pnlIsZero
-      ? "0.00 cr"
-      : `${pnlValue >= 0 ? "+" : ""}${pnlValue.toFixed(2)} cr`;
+  const pnlText = !hasPnl ? null : formatVoxDelta(pnlValue);
   const ammSnap = snapshotFromApi((market.ammState as ApiAmmStateBlock | null | undefined) ?? null);
   const ammPrices = ammSnap ? pricesFor(ammSnap) : null;
 
@@ -569,8 +561,8 @@ function MultiMarketCard({ market, entries, participants, timeLabel, onNavigate,
             {timeLabel}
           </Badge>
           {/* Volume chip mirrors H2H + Race + Up/Down.
-              `formatVolumeCredits` already returns "N cr" so we only
-              suffix " vol" (avoiding a duplicate "cr cr"). */}
+              `formatVoxCompact` returns the Ꝟ-prefixed value, so the
+              suffix is just " vol" — no duplicate currency token. */}
           {volumeLabel && (
             <Badge
               variant="outline"
@@ -770,7 +762,7 @@ function UpDownMarketCard({ market, entries, participants, timeLabel, onNavigate
   const abovePercent = Math.max(0, Math.min(100, Math.round(abovePrice * 100)));
   const belowPercent = Math.max(0, Math.min(100, Math.round(belowPrice * 100)));
   const volumeRaw = Number((market as any)?.volume ?? 0);
-  const volumeLabel = volumeRaw > 0 ? formatVolumeCredits(volumeRaw) : null;
+  const volumeLabel = volumeRaw > 0 ? formatVoxCompact(volumeRaw) : null;
   const hasPnl = typeof unrealisedPnl === "number" && Number.isFinite(unrealisedPnl);
   const pnlValue = hasPnl ? (unrealisedPnl as number) : 0;
   const pnlIsZero = Math.abs(pnlValue) < 0.005;
@@ -779,11 +771,7 @@ function UpDownMarketCard({ market, entries, participants, timeLabel, onNavigate
     : pnlValue >= 0
       ? "text-green-700 dark:text-green-500"
       : "text-red-700 dark:text-red-500";
-  const pnlText = !hasPnl
-    ? null
-    : pnlIsZero
-      ? "0.00 cr"
-      : `${pnlValue >= 0 ? "+" : ""}${pnlValue.toFixed(2)} cr`;
+  const pnlText = !hasPnl ? null : formatVoxDelta(pnlValue);
 
   return (
     <PredictCard testId={`card-market-${market.slug}`} className={`${isMarketClosed && !isInactive ? 'opacity-75' : ''}`} inactive={isInactive} inactiveMessage={inactiveMessage}>
@@ -880,7 +868,7 @@ function UpDownMarketCard({ market, entries, participants, timeLabel, onNavigate
             >
               <span className="leading-none">Above {abovePercent}%</span>
               <span className="text-[10px] font-mono opacity-80 leading-none">
-                {abovePrice.toFixed(2)} cr/share
+                {formatVoxPrice(abovePrice)}/share
               </span>
             </Button>
             <Button
@@ -896,7 +884,7 @@ function UpDownMarketCard({ market, entries, participants, timeLabel, onNavigate
             >
               <span className="leading-none">Below {belowPercent}%</span>
               <span className="text-[10px] font-mono opacity-80 leading-none">
-                {belowPrice.toFixed(2)} cr/share
+                {formatVoxPrice(belowPrice)}/share
               </span>
             </Button>
           </div>

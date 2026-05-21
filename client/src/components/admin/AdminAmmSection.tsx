@@ -942,7 +942,7 @@ function TradesTab() {
                   <TableHead>Entry</TableHead>
                   <TableHead>Side</TableHead>
                   <TableHead className="text-right">Shares</TableHead>
-                  <TableHead className="text-right">Credits</TableHead>
+                  <TableHead className="text-right">Vox</TableHead>
                   <TableHead className="text-right">Price</TableHead>
                 </TableRow>
               </TableHeader>

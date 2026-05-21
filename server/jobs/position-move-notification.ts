@@ -1,4 +1,5 @@
 import { formatMarketLead, resolvePickContextLabel } from "./notification-market-labels";
+import { formatVox } from "@shared/currency";
 
 /** @deprecated Use resolvePickContextLabel from notification-market-labels. */
 export { resolvePickContextLabel as resolvePositionMoveContextLabel };
@@ -113,8 +114,8 @@ export function buildPositionMoveNotification(
 
   const marketLead = formatMarketLead(marketTitle, contextLabel);
   const body =
-    `${marketLead} · Staked ${netCreditsIn.toLocaleString("en-US")} cr, ` +
-    `worth ${currentValue.toLocaleString("en-US")} cr now. Tap to review.`;
+    `${marketLead} · Staked ${formatVox(netCreditsIn)}, ` +
+    `worth ${formatVox(currentValue)} now. Tap to review.`;
 
   return { title, body };
 }

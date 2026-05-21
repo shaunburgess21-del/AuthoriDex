@@ -11,6 +11,7 @@ import {
   Clock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { CURRENCY, formatVox } from "@/lib/currency";
 
 /**
  * Aspect presets used by the share pipeline. Sizes are the target PNG output
@@ -73,7 +74,7 @@ export interface ShareCardTradeData {
   shares: number;
   /** Average fill price for the trade, 0..1. */
   pricePerShare: number;
-  /** Buy: credits charged. Sell: credits proceeds. Always positive. */
+  /** Buy: Vox charged. Sell: Vox proceeds. Always positive. */
   stakeAmount: number;
   /** Buy only — floor(shares). Used to render "pays X if win". */
   potentialPayout?: number;
@@ -105,7 +106,7 @@ export interface ShareCardPositionData {
   currentPrice: number;
   costBasis: number;
   /** Realizable sell-quote proceeds for `netShares` (floored integer
-   *  credits — same value the per-market detail page and the open-
+   *  Vox — same value the per-market detail page and the open-
    *  positions endpoint report). */
   currentValue: number;
   /** floor(netShares) — payout if entry wins. */
@@ -372,7 +373,7 @@ function WinLayout({
                 lineHeight: 1,
               }}
             >
-              +{pnl.toLocaleString()}
+              +{CURRENCY.symbol}{pnl.toLocaleString()}
             </p>
             <p
               className={cn(
@@ -380,7 +381,7 @@ function WinLayout({
                 isLandscape ? "text-[18px]" : "text-[22px]",
               )}
             >
-              credits on a {data.stakeAmount.toLocaleString()} stake
+              on a {formatVox(data.stakeAmount)} stake
             </p>
           </div>
 
@@ -446,8 +447,8 @@ function PortfolioLayout({
       icon: Trophy,
     },
     {
-      label: "Net Credits",
-      value: `${netPositive ? "+" : ""}${data.netCredits.toLocaleString()}`,
+      label: "Net Vox",
+      value: `${netPositive ? "+" : data.netCredits < 0 ? "\u2212" : ""}${CURRENCY.symbol}${Math.abs(data.netCredits).toLocaleString()}`,
       accent: netColor,
       icon: TrendingUp,
     },
@@ -646,8 +647,8 @@ function TradeLayout({
   const sharesRounded = Math.max(0, Math.round(data.shares));
   const pricePct = formatPricePct(data.pricePerShare);
   const stakeLine = isBuy
-    ? `${data.stakeAmount.toLocaleString()} cr in @ ${pricePct}`
-    : `${data.stakeAmount.toLocaleString()} cr out @ ${pricePct}`;
+    ? `${formatVox(data.stakeAmount)} in @ ${pricePct}`
+    : `${formatVox(data.stakeAmount)} out @ ${pricePct}`;
 
   return (
     <div
@@ -777,9 +778,9 @@ function TradeLayout({
                     className="font-bold text-white"
                     style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}
                   >
-                    {data.potentialPayout.toLocaleString()}
+                    {CURRENCY.symbol}{data.potentialPayout.toLocaleString()}
                   </span>{" "}
-                  cr if {payoutWinCopy(data.direction, data.entryLabel)}
+                  if {payoutWinCopy(data.direction, data.entryLabel)}
                 </span>
               </div>
             )}
@@ -824,7 +825,7 @@ function PositionLayout({
   const unrealisedColor = unrealisedPositive ? "#34D399" : "#F87171";
   // Display cost = avg entry × remaining shares (the notional value
   // of the still-held inventory). Using `data.costBasis` (netCreditsIn)
-  // here would produce a "cost X cr @ Y% avg" line where X / shares
+  // here would produce a "cost ꝞX @ Y% avg" line where X / shares
   // doesn't equal Y for partial-sell users.
   const displayedCost = Math.max(0, Math.round(data.avgEntryPrice * data.netShares));
   const sharesRounded = Math.max(0, Math.round(data.netShares));
@@ -954,7 +955,7 @@ function PositionLayout({
                 isLandscape ? "text-[18px]" : "text-[22px]",
               )}
             >
-              shares · cost {displayedCost.toLocaleString()} cr @ {avgPct} avg
+              shares · cost {formatVox(displayedCost)} @ {avgPct} avg
             </p>
 
             {/* Live MTM row — cost basis, current value, unrealised delta */}
@@ -975,7 +976,7 @@ function PositionLayout({
                   className="font-bold text-white"
                   style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}
                 >
-                  {Math.round(data.currentValue).toLocaleString()} cr
+                  {formatVox(Math.round(data.currentValue))}
                 </span>
               </div>
               <div className="flex flex-col gap-1">
@@ -1038,9 +1039,9 @@ function PositionLayout({
                     className="font-bold text-white"
                     style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}
                   >
-                    {data.potentialPayout.toLocaleString()}
+                    {CURRENCY.symbol}{data.potentialPayout.toLocaleString()}
                   </span>{" "}
-                  cr if {payoutWinCopy(data.direction, data.entryLabel)}
+                  if {payoutWinCopy(data.direction, data.entryLabel)}
                 </span>
               </div>
             )}

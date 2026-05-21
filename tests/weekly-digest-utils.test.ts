@@ -80,17 +80,17 @@ test("formatWeeklyDigestBody: positive net with best pick", () => {
   });
   assert.equal(
     body,
-    "This week: +1,247 credits (8 wins, 3 losses). Best: Jake Paul vs KSI (+470).",
+    "This week: +Ꝟ1,247 (8 wins, 3 losses). Best: Jake Paul vs KSI (+Ꝟ470).",
   );
 });
 
-test("formatWeeklyDigestBody: negative net without best pick", () => {
+test("formatWeeklyDigestBody: negative net without best pick uses Unicode minus", () => {
   const body = formatWeeklyDigestBody({
     wins: 2,
     losses: 4,
     netCredits: -250,
   });
-  assert.equal(body, "This week: -250 credits (2 wins, 4 losses).");
+  assert.equal(body, "This week: \u2212Ꝟ250 (2 wins, 4 losses).");
 });
 
 test("formatWeeklyDigestBody: zero net uses no sign prefix", () => {
@@ -99,7 +99,7 @@ test("formatWeeklyDigestBody: zero net uses no sign prefix", () => {
     losses: 1,
     netCredits: 0,
   });
-  assert.equal(body, "This week: 0 credits (1 win, 1 loss).");
+  assert.equal(body, "This week: Ꝟ0 (1 win, 1 loss).");
 });
 
 test("formatWeeklyDigestBody: singular win/loss labels when count === 1", () => {
@@ -111,7 +111,7 @@ test("formatWeeklyDigestBody: singular win/loss labels when count === 1", () => 
   });
   assert.equal(
     body,
-    "This week: +50 credits (1 win, 1 loss). Best: Conor McGregor (+100).",
+    "This week: +Ꝟ50 (1 win, 1 loss). Best: Conor McGregor (+Ꝟ100).",
   );
 });
 
@@ -123,13 +123,13 @@ test("formatWeeklyDigestBody: best pick with profit=0 is suppressed", () => {
     netCredits: 0,
     bestPick: { label: "Edge case", profit: 0 },
   });
-  assert.equal(body, "This week: 0 credits (1 win, 0 losses).");
+  assert.equal(body, "This week: Ꝟ0 (1 win, 0 losses).");
 });
 
 test("formatWeeklyDigestBody: best pick with negative profit is suppressed (jackpot edge case)", () => {
   // Defensive double-gate: the deriver itself filters bestPick to
   // profit > 0 now (after the post-ship review), but the formatter
-  // must also refuse to render a "Best: <market> (-N)" body if a
+  // must also refuse to render a "Best: <market> (−ꝞN)" body if a
   // future call-site passes one in. Prevents a regression from
   // sneaking back through the formatter layer.
   const body = formatWeeklyDigestBody({
@@ -138,7 +138,7 @@ test("formatWeeklyDigestBody: best pick with negative profit is suppressed (jack
     netCredits: -50,
     bestPick: { label: "Jackpot underpay", profit: -50 },
   });
-  assert.equal(body, "This week: -50 credits (1 win, 0 losses).");
+  assert.equal(body, "This week: \u2212Ꝟ50 (1 win, 0 losses).");
 });
 
 test("title is the documented constant", () => {

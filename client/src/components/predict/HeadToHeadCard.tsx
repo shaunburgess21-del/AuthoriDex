@@ -13,7 +13,7 @@ import { type ApiAmmStateBlock, pricesFor, snapshotFromApi } from "@/lib/ammClie
 import { Activity, Check, ChevronRight } from "lucide-react";
 import { Link } from "wouter";
 import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
-import { formatVolumeCredits } from "@/lib/formatNumber";
+import { formatVox, formatVoxCompact, formatVoxDelta, formatVoxPrice } from "@/lib/currency";
 
 type CategoryFilter = "all" | "favorites" | "trending" | "tech" | "politics" | "business" | "music" | "sports" | "film-tv" | "gaming" | "creator" | "food-drink" | "lifestyle" | "misc";
 
@@ -48,8 +48,8 @@ export interface HeadToHeadMarket {
   /** Live AMM state snapshot from the list endpoint. */
   ammState?: ApiAmmStateBlock | null;
   /**
-   * Total AMM credits in for the market. Drives a Polymarket-style
-   * "1.2K cr vol" chip on the card.
+   * Total AMM Vox in for the market. Drives a Polymarket-style
+   * "Ꝟ1.2K vol" chip on the card.
    */
   volume?: number;
 }
@@ -108,7 +108,7 @@ export function HeadToHeadCard({
   /** Aggregated stake for this market when the user has a pick (optional). */
   userStake?: number;
   /**
-   * Live unrealised P&L (credits) for the user's open AMM position on
+   * Live unrealised P&L (Vox) for the user's open AMM position on
    * this market. Replaces the legacy "Winning / Behind" pill which
    * was anchored to the trend score crossing the baseline — that
    * signal can disagree with the AMM odds (the score dipped but the
@@ -124,13 +124,14 @@ export function HeadToHeadCard({
 }) {
   const hasPicked = userPick === 1 || userPick === 2;
   const pickedName = userPick === 1 ? market.person1.name : userPick === 2 ? market.person2.name : "";
-  const volumeLabel = formatVolumeCredits(market.volume ?? 0);
+  const volumeLabel = formatVoxCompact(market.volume ?? 0);
 
   /**
-   * AMM P&L delta + sub-cent zero clamp. `-0.0001 cr` rounds to
-   * "-0.00 cr" via `.toFixed(2)`, which reads as a bug; we clamp
-   * anything inside half a cent of zero to a neutral "0.00 cr" with
-   * no sign prefix. Mirrors the WeeklyUpDownYourPositionPanel banner.
+   * AMM P&L delta + sub-cent zero clamp. `-0.0001` rounds to a
+   * misleading "−Ꝟ0.00"; `formatVoxDelta` clamps anything inside half
+   * a cent of zero to a neutral "Ꝟ0.00" with no sign prefix. The
+   * tint still needs the raw value so we compute the colour class
+   * locally rather than from the formatted string.
    */
   const hasPnl = unrealisedPnl != null && Number.isFinite(unrealisedPnl);
   const pnlValue = hasPnl ? (unrealisedPnl as number) : 0;
@@ -140,11 +141,7 @@ export function HeadToHeadCard({
     : pnlValue >= 0
       ? "text-green-700 dark:text-green-400"
       : "text-red-700 dark:text-red-400";
-  const pnlText = !hasPnl
-    ? null
-    : pnlIsZero
-      ? "0.00 cr"
-      : `${pnlValue >= 0 ? "+" : ""}${pnlValue.toFixed(2)} cr`;
+  const pnlText = !hasPnl ? null : formatVoxDelta(pnlValue);
 
   const pickAccentShell =
     userPick === 1
@@ -347,7 +344,7 @@ export function HeadToHeadCard({
           // primary, with a small sparkline of the person-1 series so
           // users get a 7-day price feel at a glance.
           <div className="flex items-center justify-between px-2 text-[10px] mb-2 text-muted-foreground">
-            <span>{ammP1Price.toFixed(3)} cr/share</span>
+            <span>{formatVoxPrice(ammP1Price, 3)}/share</span>
             {market.person1EntryId && (
               <AmmPriceSparkline
                 marketId={market.id}
@@ -358,7 +355,7 @@ export function HeadToHeadCard({
                 className="stroke-blue-500 dark:stroke-blue-400"
               />
             )}
-            <span>{ammP2Price.toFixed(3)} cr/share</span>
+            <span>{formatVoxPrice(ammP2Price, 3)}/share</span>
           </div>
         )}
 
@@ -396,7 +393,7 @@ export function HeadToHeadCard({
                       <div className="flex shrink-0 flex-col items-end tabular-nums">
                         <span className="text-[10px] leading-none text-muted-foreground">Stake</span>
                         <span className="text-xs font-semibold leading-tight text-foreground">
-                          {userStake.toLocaleString("en-US")}
+                          {formatVox(userStake)}
                         </span>
                       </div>
                     )}
@@ -430,7 +427,7 @@ export function HeadToHeadCard({
                       <div className="flex shrink-0 flex-col items-end tabular-nums">
                         <span className="text-[10px] leading-none text-muted-foreground">Stake</span>
                         <span className="text-xs font-semibold leading-tight text-foreground">
-                          {userStake.toLocaleString("en-US")}
+                          {formatVox(userStake)}
                         </span>
                       </div>
                     )}

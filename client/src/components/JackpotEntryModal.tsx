@@ -9,7 +9,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getSupabase } from "@/lib/supabase";
-import { Crown, Check, X, Loader2, Lock, TicketCheck, HelpCircle, CreditCard } from "lucide-react";
+import { Crown, Check, X, Loader2, Lock, TicketCheck, HelpCircle, Wallet } from "lucide-react";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { RULES_CONTENT, RulesExplainer } from "@/components/predict/RulesContent";
 import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
@@ -18,6 +18,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useXpBurst } from "@/components/XpBurstProvider";
 import { ChevronDown } from "lucide-react";
 import type { TrendingPerson } from "@shared/schema";
+import { formatVox } from "@/lib/currency";
 
 interface JackpotEntry {
   betId: string;
@@ -175,9 +176,10 @@ export function JackpotEntryModal({
       setSuggestions([]);
       queryClient.invalidateQueries({ queryKey: ["/api/native-markets", marketId, "jackpot-taken-numbers"] });
       queryClient.invalidateQueries({ queryKey: ["/api/native-markets", marketId, "jackpot-entries"] });
-      // Profile/credits live in AuthContext, not in a React Query cache — the
-      // previous `["/api/user/profile"]` invalidation did nothing. Pull a fresh
-      // profile so the user's credit balance reflects the ticket cost.
+      // Profile/Vox balance lives in AuthContext, not in a React Query
+      // cache — the previous `["/api/user/profile"]` invalidation did
+      // nothing. Pull a fresh profile so the user's balance reflects
+      // the ticket cost.
       refreshProfile().catch((err) => console.warn("[JackpotEntryModal] refreshProfile failed", err));
       if (data?.xp?.xpAwarded) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
@@ -351,7 +353,7 @@ export function JackpotEntryModal({
                   <>
                     Pool:{" "}
                     <span className="font-mono font-medium text-foreground">
-                      {formatNumber(userEntries.totalPool)} credits
+                      {formatVox(userEntries.totalPool)}
                     </span>
                   </>
                 )}
@@ -463,25 +465,25 @@ export function JackpotEntryModal({
             <div className="space-y-2 p-3 rounded-lg bg-muted/30 border">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">Entry cost</span>
-                <span className="font-semibold">{JACKPOT_TICKET_COST} credits</span>
+                <span className="font-semibold">{formatVox(JACKPOT_TICKET_COST)}</span>
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">Your balance</span>
                 <span className={`font-semibold ${userCredits < JACKPOT_TICKET_COST ? "text-red-600 dark:text-red-400" : ""}`}>
-                  {formatNumber(userCredits)} credits
+                  {formatVox(userCredits)}
                 </span>
               </div>
             </div>
 
             {/* Mirror StakeModal: only nudge to /pricing once the user is
                 authenticated. Logged-out viewers shouldn't see a "Buy
-                credits" affordance — they need the Sign In path first,
+                Vox" affordance — they need the Sign In path first,
                 and /checkout is a no-op for them anyway. */}
             {isLoggedIn && userCredits < JACKPOT_TICKET_COST && (
               <div className="rounded-lg border border-violet-500/40 bg-violet-500/10 dark:border-violet-500/30 dark:bg-violet-500/8 p-3 flex items-center gap-3">
-                <CreditCard className="h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400" />
+                <Wallet className="h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400" />
                 <p className="text-xs text-muted-foreground flex-1">
-                  Need at least {JACKPOT_TICKET_COST} credits to enter.
+                  Need at least {formatVox(JACKPOT_TICKET_COST)} to enter.
                 </p>
                 <Button
                   size="sm"
@@ -493,7 +495,7 @@ export function JackpotEntryModal({
                   }}
                   data-testid="button-buy-credits-jackpot"
                 >
-                  Buy credits
+                  Buy Vox
                 </Button>
               </div>
             )}
@@ -510,7 +512,7 @@ export function JackpotEntryModal({
               ) : (
                 <Crown className="h-4 w-4 mr-2" />
               )}
-              Enter Jackpot — 100 Credits
+              Enter Jackpot — Ꝟ100
             </Button>
           </div>
         )}

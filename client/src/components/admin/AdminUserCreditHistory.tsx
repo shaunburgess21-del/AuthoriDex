@@ -166,7 +166,7 @@ export function AdminUserCreditHistory({
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
                 <div className="p-3 rounded-md bg-muted/50">
-                  <p className="text-muted-foreground text-xs">Credits</p>
+                  <p className="text-muted-foreground text-xs">Vox</p>
                   <p className="text-lg font-bold flex items-center gap-1" data-testid="text-user-credits">
                     <Coins className="h-4 w-4 text-amber-500" />
                     {data.profile.predictCredits}

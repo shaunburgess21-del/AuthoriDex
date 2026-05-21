@@ -267,7 +267,7 @@ export function OutcomePathChart({
         : "#a855f7";
     // Entry-odds reference-line position on the *UP* axis. The chart's
     // right Y-axis (`yAxisId="prob"`) plots UP-side probability, so a
-    // DOWN bet at e.g. 0.45 cr/share shows on the chart at UP = 0.55.
+    // DOWN bet at e.g. Ꝟ0.45/share shows on the chart at UP = 0.55.
     // The visible label stays in the user's own currency though — they
     // bought at "45% DOWN" mentally, not "55% UP" — so `entryProbDisplayPct`
     // keeps that perspective.

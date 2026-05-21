@@ -26,6 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { h2hUserPickFromBet } from "@/components/predict/HeadToHeadCard";
+import { formatVox, formatVoxDelta, formatVoxPrice, voxWord } from "@/lib/currency";
 import { normalizeMarketCategory } from "@shared/constants";
 import { apiRequest, parseApiError } from "@/lib/queryClient";
 import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
@@ -384,7 +385,7 @@ export default function H2HDetailPage() {
           : `${origin}${pathname}`;
         const fallbackText = `I just backed ${picked.name} on "${hydrated.title}" on VoxDex!\n${shareUrl}`;
         toast("Prediction placed!", {
-          description: `${Math.round(shares).toLocaleString()} ${picked.name} shares · ${chargeCredits.toLocaleString()} cr`,
+          description: `${Math.round(shares).toLocaleString()} ${picked.name} shares · ${formatVox(chargeCredits)}`,
           action: {
             label: "Share",
             onClick: () =>
@@ -464,9 +465,9 @@ export default function H2HDetailPage() {
         const shareUrl = data?.betId
           ? `${origin}/share/bet/${data.betId}`
           : `${origin}${pathname}`;
-        const fallbackText = `Just took ${proceeds} credits off the table on "${hydrated.title}" on VoxDex!\n${shareUrl}`;
+        const fallbackText = `Just took ${voxWord(proceeds)} off the table on "${hydrated.title}" on VoxDex!\n${shareUrl}`;
         toast("Position sold", {
-          description: `Sold ${Math.round(shares).toLocaleString()} ${picked.name} shares · +${proceeds.toLocaleString()} cr`,
+          description: `Sold ${Math.round(shares).toLocaleString()} ${picked.name} shares · +${formatVox(proceeds)}`,
           action: {
             label: "Share",
             onClick: () =>
@@ -775,7 +776,7 @@ export default function H2HDetailPage() {
                       {priceToPercent(p1Price, 0)}
                     </p>
                     <p className="text-[10px] text-muted-foreground">
-                      {p1Price.toFixed(3)} cr / share
+                      {formatVoxPrice(p1Price, 3)} / share
                     </p>
                   </div>
                   <div className="rounded-lg border border-purple-500/30 bg-purple-500/5 p-3">
@@ -784,7 +785,7 @@ export default function H2HDetailPage() {
                       {priceToPercent(p2Price, 0)}
                     </p>
                     <p className="text-[10px] text-muted-foreground">
-                      {p2Price.toFixed(3)} cr / share
+                      {formatVoxPrice(p2Price, 3)} / share
                     </p>
                   </div>
                 </div>
@@ -798,7 +799,7 @@ export default function H2HDetailPage() {
                     ].map(({ person, pos, side }) => {
                       if (!pos || pos.netShares <= 1e-6) return null;
                       // Unrealised PnL = current mark-to-market value minus
-                      // net credits paid in. Buy = positive netCreditsIn.
+                      // net Vox paid in. Buy = positive netCreditsIn.
                       // We label both gain/loss explicitly so the user
                       // doesn't have to do the arithmetic in their head.
                       const unrealisedPnl = pos.currentValue - pos.netCreditsIn;
@@ -812,23 +813,23 @@ export default function H2HDetailPage() {
                           <div className="min-w-0 flex-1">
                             <p className="text-sm font-semibold truncate">{smartName(person.name)}</p>
                             <p className="text-[11px] text-muted-foreground">
-                              {pos.netShares.toFixed(2)} shares · avg {pos.avgEntryPrice.toFixed(3)} cr · cost {pos.netCreditsIn.toFixed(0)} cr
+                              {pos.netShares.toFixed(2)} shares · avg {formatVoxPrice(pos.avgEntryPrice, 3)} · cost {formatVoxPrice(pos.netCreditsIn, 0)}
                             </p>
                             {/* Sprint 5 / Phase 2.4: conversational position copy.
-                                Replaces the dense "≈ X cr now · -Y cr" style
+                                Replaces the dense "≈ Ꝟ X now · −Ꝟ Y" style
                                 with two plain-English lines that read like the
                                 Up/Down detail page: what you'd get if you sold
                                 now, and what the position pays if it wins. */}
                             <p className="text-[11px] text-muted-foreground">
-                              Sell now: ~{pos.currentValue.toFixed(2)} cr{" "}
+                              Sell now: ~{formatVoxPrice(pos.currentValue)}{" "}
                               <span className={`font-mono font-medium ${pnlColor}`}>
-                                ({unrealisedPnl >= 0 ? "+" : ""}{unrealisedPnl.toFixed(2)} cr)
+                                ({formatVoxDelta(unrealisedPnl)})
                               </span>
                             </p>
                             <p className="text-[11px] text-muted-foreground">
-                              If {smartName(person.name)} wins: {pos.netShares.toFixed(2)} cr{" "}
+                              If {smartName(person.name)} wins: {formatVoxPrice(pos.netShares)}{" "}
                               <span className="font-mono font-medium text-green-700 dark:text-green-500">
-                                ({maxProfitIfWin >= 0 ? "+" : ""}{maxProfitIfWin.toFixed(2)} cr)
+                                ({formatVoxDelta(maxProfitIfWin)})
                               </span>
                             </p>
                           </div>

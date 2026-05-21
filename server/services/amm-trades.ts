@@ -234,7 +234,7 @@ export async function executeBuy(
       return {
         error: "trade_too_small",
         status: 400,
-        message: "Trade size below 1 credit at current price; raise budget.",
+        message: "Trade size below Ꝟ1 at current price; raise budget.",
       };
     }
     const { shares, chargeCredits, pricePerShareAvg } = quote;

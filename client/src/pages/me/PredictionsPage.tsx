@@ -28,6 +28,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { PLChart } from "@/components/predict/PLChart";
 import { ProfileTabs, type ProfileTab } from "@/components/ProfileTabs";
+import { CURRENCY, formatVox, formatVoxPrice } from "@/lib/currency";
 import { MyPredictionCard, type MyPredictionCardData } from "@/components/me/MyPredictionCard";
 import { DoughnutChart, type DoughnutSegment } from "@/components/charts/DoughnutChart";
 import { useItemVisibility } from "@/hooks/useItemVisibility";
@@ -335,7 +336,7 @@ export default function PredictionsPage() {
     const direction = inferPredictionDirection(p.entryLabel);
     const mappedDirection: "up" | "down" | "other" =
       direction === "up" ? "up" : direction === "down" ? "down" : "other";
-    const fallbackText = `I won +${pnl.toLocaleString()} credits on "${p.marketTitle}" on VoxDex!\n${window.location.origin}/markets/${p.marketSlug}`;
+    const fallbackText = `I won +${formatVox(pnl)} on "${p.marketTitle}" on VoxDex!\n${window.location.origin}/markets/${p.marketSlug}`;
     openShareCard({
       data: {
         variant: "win",
@@ -407,8 +408,8 @@ export default function PredictionsPage() {
 
   const handleSharePortfolio = (stats: PredictionStats) => {
     const fallbackText = `My VoxDex predictions: ${stats.winRate}% win rate | ${
-      stats.netCredits >= 0 ? "+" : ""
-    }${stats.netCredits.toLocaleString()} net credits | ${stats.total} predictions\n${
+      stats.netCredits >= 0 ? "+" : "\u2212"
+    }${formatVox(Math.abs(stats.netCredits))} net | ${stats.total} predictions\n${
       window.location.origin
     }/predict`;
     openShareCard({
@@ -555,16 +556,22 @@ function PredictionHeadlineHero({
 }) {
   // Lead with the most brag-worthy stat. Once a user has enough resolved bets
   // to have a meaningful win rate, put it front and centre. Otherwise highlight
-  // Net Credits, which is a more personal "you've put skin in the game" metric.
+  // Net Vox, which is a more personal "you've put skin in the game" metric.
   const resolved = stats.won + stats.lost;
   const leadWithWinRate = resolved >= 3;
+  const formatNetVox = (n: number) =>
+    n > 0
+      ? `+${CURRENCY.symbol}${n.toLocaleString()}`
+      : n < 0
+        ? `\u2212${CURRENCY.symbol}${Math.abs(n).toLocaleString()}`
+        : `${CURRENCY.symbol}0`;
   const leadValue = leadWithWinRate
     ? `${stats.winRate}%`
-    : `${stats.netCredits >= 0 ? "+" : ""}${stats.netCredits.toLocaleString()}`;
-  const leadLabel = leadWithWinRate ? "Win Rate" : "Net Credits";
-  const secondaryLabel = leadWithWinRate ? "Net Credits" : "Open positions";
+    : formatNetVox(stats.netCredits);
+  const leadLabel = leadWithWinRate ? "Win Rate" : "Net Vox";
+  const secondaryLabel = leadWithWinRate ? "Net Vox" : "Open positions";
   const secondaryValue = leadWithWinRate
-    ? `${stats.netCredits >= 0 ? "+" : ""}${stats.netCredits.toLocaleString()}`
+    ? formatNetVox(stats.netCredits)
     : `${stats.pending}`;
   const leadClass = cn(
     "font-mono text-4xl font-bold tabular-nums leading-none",
@@ -776,11 +783,14 @@ function OverviewTab({
               stats.netCredits < 0 && "text-red-600 dark:text-red-400",
             )}
           >
-            {stats.netCredits >= 0 ? "+" : ""}
-            {stats.netCredits.toLocaleString()}
+            {stats.netCredits > 0
+              ? `+${CURRENCY.symbol}${stats.netCredits.toLocaleString()}`
+              : stats.netCredits < 0
+                ? `\u2212${CURRENCY.symbol}${Math.abs(stats.netCredits).toLocaleString()}`
+                : `${CURRENCY.symbol}0`}
           </p>
           <p className="text-[10px] uppercase tracking-wide text-muted-foreground leading-tight">
-            Net Credits
+            Net Vox
           </p>
         </Card>
         <Card className="p-3 text-center space-y-1 border-white/5 bg-card/60 backdrop-blur-sm">
@@ -820,7 +830,7 @@ function OverviewTab({
           <div className="flex items-center justify-between mb-2">
             <div>
               <h3 className="font-semibold text-sm">Category mix</h3>
-              <p className="text-xs text-muted-foreground">Where you put your credits</p>
+              <p className="text-xs text-muted-foreground">Where you put your Vox</p>
             </div>
           </div>
           <DoughnutChart
@@ -1104,10 +1114,10 @@ function PredictionsJourneyTimeline({
       },
       {
         id: "credits_100",
-        label: "+100 credits",
+        label: `+${CURRENCY.symbol}100`,
         earned: credits100,
         progress: stats.netCredits > 0 ? Math.min(1, stats.netCredits / 100) : 0,
-        hint: stats.netCredits >= 100 ? `+${stats.netCredits}` : stats.netCredits > 0 ? `+${stats.netCredits}/100` : `0/100`,
+        hint: stats.netCredits >= 100 ? `+${CURRENCY.symbol}${stats.netCredits}` : stats.netCredits > 0 ? `+${CURRENCY.symbol}${stats.netCredits}/${CURRENCY.symbol}100` : `${CURRENCY.symbol}0/${CURRENCY.symbol}100`,
       },
       {
         id: "first_underdog",
@@ -1503,16 +1513,16 @@ function AmmOpenPositionCard({
         <div className="grid grid-cols-3 gap-2 text-xs">
           <div>
             <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Cost basis</p>
-            <p className="font-mono font-semibold">{position.netCreditsIn.toFixed(2)} cr</p>
+            <p className="font-mono font-semibold">{formatVoxPrice(position.netCreditsIn)}</p>
           </div>
           <div>
             <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Now ≈</p>
-            <p className="font-mono font-semibold">{position.currentValue.toFixed(2)} cr</p>
+            <p className="font-mono font-semibold">{formatVoxPrice(position.currentValue)}</p>
           </div>
           <div>
             <p className="text-[10px] uppercase tracking-wide text-muted-foreground">If win</p>
             <p className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">
-              {position.netShares.toFixed(2)} cr
+              {formatVoxPrice(position.netShares)}
             </p>
           </div>
         </div>
@@ -1661,16 +1671,16 @@ function OpenTabPanel({
         <Card className="p-3 text-center space-y-1 border-white/5 bg-card/60 backdrop-blur-sm">
           <Coins className="h-4 w-4 mx-auto text-amber-500" />
           <p className="text-2xl font-mono font-bold tabular-nums">
-            {totalStake.toLocaleString()}
+            {formatVox(totalStake)}
           </p>
           <p className="text-[10px] uppercase tracking-wide text-muted-foreground leading-tight">
-            Credits at stake
+            Vox at stake
           </p>
         </Card>
         <Card className="p-3 text-center space-y-1 border-white/5 bg-card/60 backdrop-blur-sm">
           <TrendingUp className="h-4 w-4 mx-auto text-emerald-500" />
           <p className="text-2xl font-mono font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
-            +{(projectedPayout - totalStake).toLocaleString()}
+            +{formatVox(projectedPayout - totalStake)}
           </p>
           <p className="text-[10px] uppercase tracking-wide text-muted-foreground leading-tight">
             If all win

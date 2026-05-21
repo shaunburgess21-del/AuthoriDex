@@ -23,6 +23,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { db } from "../db";
 import { profiles } from "@shared/schema";
 import { createNotification } from "./notifications";
+import { formatVox } from "@shared/currency";
 import { gamificationService } from "./gamification";
 import { checkAndAwardReferralBadges } from "./badges";
 
@@ -321,7 +322,7 @@ export async function maybeFireReferralCredit(userId: string): Promise<void> {
         userId: profile.referredBy,
         kind: "credits_granted",
         title: "Referral paid out",
-        body: `Your friend made their first move. ${result.amount.toLocaleString("en-US")} credits added to your balance.`,
+        body: `Your friend made their first move. ${formatVox(result.amount)} added to your balance.`,
         href: "/me/credits",
         idempotencyKey: `referral_completed_notify:${userId}`,
         metadata: {

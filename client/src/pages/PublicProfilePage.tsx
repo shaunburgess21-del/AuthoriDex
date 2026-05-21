@@ -28,6 +28,7 @@ import { cn } from "@/lib/utils";
 import { CountryFlag } from "@/components/ui/CountryFlag";
 import { getCountryName } from "@shared/countries";
 import { getEthnicityLabel } from "@shared/ethnicity";
+import { CURRENCY, formatVox } from "@/lib/currency";
 
 type RankRow = { tier: number; name: string; minXp: number; maxXp: number | null };
 
@@ -1077,7 +1078,7 @@ function ProfileIdentityCard({
         <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/8 dark:bg-emerald-500/5 border border-emerald-500/15">
           <Target className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
           <span className="text-sm text-emerald-600 dark:text-emerald-400 font-medium">
-            Biggest Win: +{(profile.biggestWin ?? 0).toLocaleString()} credits
+            Biggest Win: +{formatVox(profile.biggestWin ?? 0)}
           </span>
         </div>
       )}
@@ -1086,7 +1087,7 @@ function ProfileIdentityCard({
         <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-500/8 dark:bg-blue-500/5 border border-blue-500/15">
           <BarChart3 className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
           <span className="text-sm text-blue-600 dark:text-blue-400 font-medium">
-            Open positions: {profile.openPositionsCount} ({Math.round(profile.openPositionsValue ?? 0).toLocaleString()} cr live value)
+            Open positions: {profile.openPositionsCount} ({formatVox(Math.round(profile.openPositionsValue ?? 0))} live value)
           </span>
           {profile.unrealisedPnl != null && Math.abs(profile.unrealisedPnl) >= 1 && (
             <span
@@ -1096,8 +1097,8 @@ function ProfileIdentityCard({
                   : "text-red-600 dark:text-red-400"
               }`}
             >
-              {profile.unrealisedPnl > 0 ? "+" : ""}
-              {Math.round(profile.unrealisedPnl).toLocaleString()} cr
+              {profile.unrealisedPnl > 0 ? "+" : "\u2212"}{CURRENCY.symbol}
+              {Math.round(Math.abs(profile.unrealisedPnl)).toLocaleString()}
             </span>
           )}
         </div>

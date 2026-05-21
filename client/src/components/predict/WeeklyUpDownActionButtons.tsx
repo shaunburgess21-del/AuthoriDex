@@ -4,6 +4,7 @@ import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { ClosedMarketActionTrigger } from "./ClosedMarketActionTrigger";
 import { WeeklyUpDownYourPositionPanel } from "./WeeklyUpDownYourPositionPanel";
 import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
+import { formatVoxPrice } from "@/lib/currency";
 
 export function WeeklyUpDownActionButtons({
   marketId,
@@ -26,11 +27,11 @@ export function WeeklyUpDownActionButtons({
   closedMessage: Pick<ClosedMarketMessage, "title" | "lines">;
   onSelect?: (choice: "up" | "down") => void;
   pendingPosition?: { pick: "up" | "down" | null; stakeAmount: number } | null;
-  /** AMM markets price via LMSR; each button surfaces live cr/share. */
+  /** AMM markets price via LMSR; each button surfaces live Ꝟ/share. */
   upPrice?: number | null;
   downPrice?: number | null;
   /** Live unrealised P&L threaded into the position banner so users can
-   *  see "+13.41 cr" next to their Stake. Null when the position
+   *  see "+Ꝟ13.41" next to their Stake. Null when the position
    *  summary hasn't loaded yet. */
   unrealisedPnl?: number | null;
 }) {
@@ -67,7 +68,7 @@ export function WeeklyUpDownActionButtons({
             </span>
             {showAmmPrices && (
               <span className="text-[10px] font-mono opacity-80 leading-none">
-                {upPrice.toFixed(2)} cr/share
+                {formatVoxPrice(upPrice)}/share
               </span>
             )}
           </Button>
@@ -84,7 +85,7 @@ export function WeeklyUpDownActionButtons({
             </span>
             {showAmmPrices && (
               <span className="text-[10px] font-mono opacity-80 leading-none">
-                {downPrice.toFixed(2)} cr/share
+                {formatVoxPrice(downPrice)}/share
               </span>
             )}
           </Button>

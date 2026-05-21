@@ -4,6 +4,7 @@ import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { getSupabase } from "@/lib/supabase";
 import { useVisualViewportOffset } from "@/hooks/useVisualViewportOffset";
+import { formatVox } from "@/lib/currency";
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts";
 import { 
   LayoutDashboard, 
@@ -2046,7 +2047,7 @@ export default function AdminDashboard() {
       return res.json();
     },
     onSuccess: () => {
-      toast("Credits Adjusted", { description: `Successfully adjusted credits for user` });
+      toast("Vox Adjusted", { description: `Successfully adjusted Vox for user` });
       setShowCreditModal(false);
       setSelectedUser(null);
       setCreditAdjustment({ amount: 0, reason: "" });
@@ -2109,7 +2110,7 @@ export default function AdminDashboard() {
         });
       } else if (!data.noop) {
         toast.success("Drift reconciled", {
-          description: `Wrote a ${data.delta >= 0 ? "+" : ""}${data.delta.toLocaleString()} cr ledger row. Ledger now matches wallet (${data.wallet.toLocaleString()} cr).`,
+          description: `Wrote a ${data.delta >= 0 ? "+" : ""}${formatVox(data.delta)} ledger row. Ledger now matches wallet (${formatVox(data.wallet)}).`,
         });
       }
       setReconcileDriftTarget(null);
@@ -6248,14 +6249,14 @@ export default function AdminDashboard() {
                                 {user.role}
                               </Badge>
                               <span className="whitespace-nowrap">{user.xpPoints} XP</span>
-                              <span className="whitespace-nowrap">{user.predictCredits} credits</span>
+                              <span className="whitespace-nowrap">{formatVox(user.predictCredits)}</span>
                               {typeof user.drift === "number" && user.drift !== 0 && (
                                 <Badge
                                   variant="outline"
                                   className={`text-xs whitespace-nowrap ${user.drift < 0 ? "border-red-500/50 text-red-600 dark:text-red-400" : "border-amber-500/50 text-amber-600 dark:text-amber-400"}`}
                                   data-testid={`badge-drift-${user.id}`}
                                 >
-                                  Drift: {user.drift > 0 ? "+" : ""}{user.drift.toLocaleString()} cr
+                                  Drift: {user.drift > 0 ? "+" : ""}{formatVox(user.drift)}
                                 </Badge>
                               )}
                             </div>
@@ -6283,7 +6284,7 @@ export default function AdminDashboard() {
                             data-testid={`button-adjust-credits-${user.id}`}
                           >
                             <Coins className="h-4 w-4 mr-1" />
-                            Credits
+                            Vox
                           </Button>
                           {typeof user.drift === "number" && user.drift !== 0 && (
                             <Button
@@ -8130,11 +8131,11 @@ export default function AdminDashboard() {
       <Dialog open={showCreditModal} onOpenChange={setShowCreditModal}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Adjust Credits</DialogTitle>
+            <DialogTitle>Adjust Vox</DialogTitle>
             <DialogDescription>
-              Modify credits for {selectedUser?.username || "user"}
+              Modify Vox for {selectedUser?.username || "user"}
               <br />
-              Current balance: {selectedUser?.predictCredits || 0} credits
+              Current balance: {formatVox(selectedUser?.predictCredits || 0)}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -8158,7 +8159,7 @@ export default function AdminDashboard() {
                 onChange={(e) =>
                   setCreditAdjustment({ ...creditAdjustment, reason: e.target.value })
                 }
-                placeholder="Explain why you're adjusting this user's credits..."
+                placeholder="Explain why you're adjusting this user's Vox..."
                 data-testid="input-credit-reason"
               />
             </div>
@@ -8224,13 +8225,13 @@ export default function AdminDashboard() {
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Wallet (authoritative)</span>
-                <span className="font-medium">{reconcileDriftTarget.predictCredits.toLocaleString()} cr</span>
+                <span className="font-medium">{formatVox(reconcileDriftTarget.predictCredits)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Ledger sum (current)</span>
                 <span className="font-medium">
                   {typeof reconcileDriftTarget.ledgerSum === "number"
-                    ? `${reconcileDriftTarget.ledgerSum.toLocaleString()} cr`
+                    ? formatVox(reconcileDriftTarget.ledgerSum)
                     : "—"}
                 </span>
               </div>
@@ -8241,7 +8242,7 @@ export default function AdminDashboard() {
                   data-testid="text-drift-reconcile-delta"
                 >
                   {(reconcileDriftTarget.drift ?? 0) > 0 ? "+" : ""}
-                  {(reconcileDriftTarget.drift ?? 0).toLocaleString()} cr
+                  {formatVox(reconcileDriftTarget.drift ?? 0)}
                 </span>
               </div>
             </div>

@@ -24,6 +24,7 @@ import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { getMarketBaselineScore } from "@/lib/predict-market-baseline";
 import { getCanonicalNativeCycle } from "@/lib/nativeMarketLifecycle";
 import { fireAmmTradeToast } from "@/lib/share-data";
+import { formatVox } from "@/lib/currency";
 import { useShareCard } from "@/contexts/ShareCardContext";
 import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { PredictCard } from "@/components/predict/PredictCard";
@@ -1031,7 +1032,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       toast("Position sold", {
         description:
           proceeds > 0
-            ? `Proceeds credited: +${proceeds.toLocaleString("en-US")} cr`
+            ? `Proceeds credited: +${formatVox(proceeds)}`
             : "Proceeds have been credited to your wallet.",
       });
       setStakeModalOpen(false);

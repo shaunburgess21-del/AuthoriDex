@@ -9,6 +9,7 @@ import { UserSocialAvatar } from "@/components/UserSocialAvatar";
 import { ArrowLeft, MessageSquare } from "lucide-react";
 import { formatActivityAge } from "@/lib/formatDate";
 import { getRecentActivityMarketPath } from "@/lib/predict-display";
+import { voxWord } from "@/lib/currency";
 
 interface ActivityItem {
   id: string;
@@ -159,7 +160,7 @@ export default function TownSquarePage() {
                     : "bg-muted-foreground/50";
                 const proceeds =
                   isAmmSell && item.payoutAmount != null
-                    ? Math.round(item.payoutAmount).toLocaleString("en-US")
+                    ? Math.round(item.payoutAmount)
                     : null;
                 return (
                   <div
@@ -219,9 +220,9 @@ export default function TownSquarePage() {
                         )}
                       </p>
                       <p className="mt-0.5 text-xs text-muted-foreground">
-                        {isAmmSell && proceeds
-                          ? `${proceeds} credits in`
-                          : `${item.stakeAmount.toLocaleString("en-US")} credits`}
+                        {isAmmSell && proceeds != null
+                          ? `${voxWord(proceeds)} in`
+                          : voxWord(item.stakeAmount)}
                         {!item.isAgent && item.confidence != null ? ` • ${(item.confidence * 100).toFixed(0)}% confidence` : ""}
                       </p>
                       {item.rationale && (

@@ -11,7 +11,7 @@ import {
 // don't regress. See `amm-resolver-notifications.ts` for the full
 // rationale on each branch.
 
-test("won + positive payout → 'Your prediction won — +N credits' with thousands separator", () => {
+test("won + positive payout → 'Your prediction won — +ꝞN' with thousands separator", () => {
   const built = buildAmmResolutionNotification({
     marketTitle: "Vladimir Putin: Up or Down?",
     won: true,
@@ -19,10 +19,10 @@ test("won + positive payout → 'Your prediction won — +N credits' with thousa
     payout: 207,
   });
   assert.ok(built, "expected a notification, got null");
-  assert.equal(built!.title, "Your prediction won — +107 credits");
+  assert.equal(built!.title, "Your prediction won — +Ꝟ107");
   assert.equal(
     built!.body,
-    "Vladimir Putin: Up or Down? resolved. Payout 207 credits (net +107).",
+    "Vladimir Putin: Up or Down? resolved. Payout Ꝟ207 (net +Ꝟ107).",
   );
 });
 
@@ -34,10 +34,10 @@ test("won + positive payout with large numbers uses en-US thousands separator", 
     payout: 12_345,
   });
   assert.ok(built);
-  assert.equal(built!.title, "Your prediction won — +7,345 credits");
+  assert.equal(built!.title, "Your prediction won — +Ꝟ7,345");
   assert.equal(
     built!.body,
-    "Jake Paul vs KSI resolved. Payout 12,345 credits (net +7,345).",
+    "Jake Paul vs KSI resolved. Payout Ꝟ12,345 (net +Ꝟ7,345).",
   );
 });
 
@@ -52,7 +52,7 @@ test("lost → 'Your prediction didn't land' with stake amount", () => {
   assert.equal(built!.title, "Your prediction didn't land");
   assert.equal(
     built!.body,
-    "Chamath Palihapitiya: Up or Down? resolved. Lost 100 credits — better luck next round.",
+    "Chamath Palihapitiya: Up or Down? resolved. Lost Ꝟ100 — better luck next round.",
   );
 });
 
@@ -65,10 +65,10 @@ test("gainer win with contextLabel leads body with candidate pick", () => {
     payout: 200,
   });
   assert.ok(built);
-  assert.equal(built!.title, "Your prediction won — +100 credits");
+  assert.equal(built!.title, "Your prediction won — +Ꝟ100");
   assert.equal(
     built!.body,
-    "Clavicular · Category Race: Streaming resolved. Payout 200 credits (net +100).",
+    "Clavicular · Category Race: Streaming resolved. Payout Ꝟ200 (net +Ꝟ100).",
   );
 });
 
@@ -78,7 +78,7 @@ test("won-but-fully-sold without pre-close proceeds (back-compat) → suppressed
   // caller hasn't aggregated pre-close sells (preResolveSellProceeds
   // omitted) the builder degrades to the legacy suppression, so older
   // call sites don't regress into the self-contradictory
-  // "Stake returned — 0 credits (net -500)" message.
+  // "Stake returned — Ꝟ0 (net −Ꝟ500)" message.
   const built = buildAmmResolutionNotification({
     marketTitle: "Mark Cuban: Up or Down?",
     won: true,
@@ -89,9 +89,9 @@ test("won-but-fully-sold without pre-close proceeds (back-compat) → suppressed
 });
 
 test("won-but-fully-sold with profitable pre-close proceeds → 'sold beforehand' with positive net", () => {
-  // Tier 1.7: user bought 500 cr of the winning side, sold for 720 cr
+  // Tier 1.7: user bought Ꝟ500 of the winning side, sold for Ꝟ720
   // before resolution. Settlement row shows payout=0 (no shares left
-  // to pay out) but they DID realise +220 cr. Resolution ping should
+  // to pay out) but they DID realise +Ꝟ220. Resolution ping should
   // reflect that, not stay silent.
   const built = buildAmmResolutionNotification({
     marketTitle: "Mark Cuban: Up or Down?",
@@ -104,14 +104,15 @@ test("won-but-fully-sold with profitable pre-close proceeds → 'sold beforehand
   assert.equal(built!.title, "Your market resolved — you'd sold beforehand");
   assert.equal(
     built!.body,
-    "Mark Cuban: Up or Down? resolved on your side. You'd already sold those shares for 720 credits (net +220).",
+    "Mark Cuban: Up or Down? resolved on your side. You'd already sold those shares for Ꝟ720 (net +Ꝟ220).",
   );
 });
 
 test("won-but-fully-sold with pre-close proceeds below stake → signed-negative net is rendered", () => {
   // User sold winner-side shares early at a loss (e.g. bought at a
   // high price then panic-sold on a swing). They still get closure
-  // with the realised loss spelled out.
+  // with the realised loss spelled out. The negative net uses the
+  // Unicode minus (U+2212) to keep glyph spacing aligned with `+`.
   const built = buildAmmResolutionNotification({
     marketTitle: "Some Market",
     won: true,
@@ -123,7 +124,7 @@ test("won-but-fully-sold with pre-close proceeds below stake → signed-negative
   assert.equal(built!.title, "Your market resolved — you'd sold beforehand");
   assert.equal(
     built!.body,
-    "Some Market resolved on your side. You'd already sold those shares for 750 credits (net -250).",
+    "Some Market resolved on your side. You'd already sold those shares for Ꝟ750 (net \u2212Ꝟ250).",
   );
 });
 
@@ -165,7 +166,7 @@ test("preResolveSellProceeds is ignored on non-zero payout branches", () => {
     preResolveSellProceeds: 999,
   });
   assert.ok(built);
-  assert.equal(built!.title, "Your prediction won — +107 credits");
+  assert.equal(built!.title, "Your prediction won — +Ꝟ107");
 });
 
 test("won + payout === stake (profit=0, parity buy) → 'Stake returned' wording is accurate now that payout=0 is suppressed upstream", () => {
@@ -181,10 +182,10 @@ test("won + payout === stake (profit=0, parity buy) → 'Stake returned' wording
     payout: 200,
   });
   assert.ok(built, "expected a notification, got null");
-  assert.equal(built!.title, "Stake returned — 200 credits");
+  assert.equal(built!.title, "Stake returned — Ꝟ200");
   assert.equal(
     built!.body,
-    "Parity buy market resolved. Payout matched your stake (net +0).",
+    "Parity buy market resolved. Payout matched your stake (net Ꝟ0).",
   );
 });
 
@@ -207,9 +208,9 @@ test("void notification matches parimutuel template with thousands separator", (
     marketTitle: "Some Voided Market",
     refund: 2_500,
   });
-  assert.equal(built.title, "Market voided — 2,500 credits refunded");
+  assert.equal(built.title, "Market voided — Ꝟ2,500 refunded");
   assert.equal(
     built.body,
-    "Some Voided Market was voided. 2,500 credits returned.",
+    "Some Voided Market was voided. Ꝟ2,500 returned.",
   );
 });

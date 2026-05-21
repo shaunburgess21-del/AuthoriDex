@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest } from "@/lib/queryClient";
 import { redirectAfterLogin, hasPendingAuthReturnSnapshot } from "@/lib/authReturn";
+import { formatVox } from "@/lib/currency";
 
 interface BadgeRow {
   key: string;
@@ -119,8 +120,8 @@ export function CompletionStep({ onMounted }: CompletionStepProps) {
       <div className="mt-8 grid gap-3" data-testid="completion-rewards">
         <RewardRow
           icon={<Coins className="h-5 w-5" />}
-          label="Starting credits"
-          value={credits.toLocaleString()}
+          label="Starting Vox"
+          value={formatVox(credits)}
           delay={0.15}
         />
         <RewardRow

@@ -9,6 +9,7 @@ import {
   ReferenceLine,
   CartesianGrid,
 } from "recharts";
+import { CURRENCY, voxWord } from "@/lib/currency";
 
 interface PLPrediction {
   createdAt: string;
@@ -38,7 +39,7 @@ function PLTooltip({ active, payload }: any) {
     <div className="bg-card border border-border rounded-lg p-2 shadow-xl text-xs">
       <p className="text-muted-foreground">{formatAxisDate(pt.date)}</p>
       <p className={`font-mono font-bold text-sm ${val >= 0 ? "text-green-500" : "text-red-500"}`}>
-        {val >= 0 ? "+" : ""}{val.toLocaleString("en-US")} credits
+        {val >= 0 ? "+" : "\u2212"}{voxWord(Math.abs(val))}
       </p>
       <p className="text-muted-foreground">{pt.label}</p>
     </div>
@@ -91,7 +92,7 @@ export function PLChart({ predictions, height = 240 }: PLChartProps) {
       <div className="flex items-center justify-between px-1">
         <p className="text-xs font-medium text-foreground">Cumulative P/L</p>
         <p className={`text-sm font-mono font-bold ${latestValue >= 0 ? "text-green-500" : "text-red-500"}`}>
-          {latestValue >= 0 ? "+" : ""}{latestValue.toLocaleString("en-US")}
+          {latestValue >= 0 ? "+" : "\u2212"}{CURRENCY.symbol}{Math.abs(latestValue).toLocaleString("en-US")}
         </p>
       </div>
       <div style={{ height }}>

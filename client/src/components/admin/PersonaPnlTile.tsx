@@ -107,7 +107,7 @@ function bandLabel(band: string): string {
 /**
  * Tone the credit-P&L cell.
  *
- *   strongPositive: +5000 credits or more across the window — sharps
+ *   strongPositive: +Ꝟ5000 or more across the window — sharps
  *                   land here when calibrated correctly.
  *   positive:       any positive sum.
  *   neutral:        near zero (|pnl| < 100) — typical for liquidity.
@@ -217,7 +217,7 @@ export function PersonaPnlTile() {
                   {divergentBands.map((b) => bandLabel(b.band)).join(", ")}{" "}
                   {divergentBands.length === 1 ? "has" : "have"} good Brier
                   scores (probability calls are reliable) but{" "}
-                  {divergentBands.length === 1 ? "is" : "are"} losing credits
+                  {divergentBands.length === 1 ? "is" : "are"} losing Vox
                   on trades. Either position sizing or trade timing is fighting
                   the LMSR price function. Check `sizing.ts` and the
                   conviction-band logic for that persona band.

@@ -87,7 +87,7 @@ test("notification: up title leads with Your position and signed pct", () => {
   assert.equal(title, "Your position is up +18.6%");
   assert.equal(
     body,
-    "Conor McGregor: Up or Down? · Staked 500 cr, worth 593 cr now. Tap to review.",
+    "Conor McGregor: Up or Down? · Staked Ꝟ500, worth Ꝟ593 now. Tap to review.",
   );
 });
 
@@ -101,7 +101,7 @@ test("notification: down title uses abs pct without double minus", () => {
   assert.equal(title, "Your position is down 22.0%");
   assert.equal(
     body,
-    "Mark Cuban: Up or Down? · Staked 500 cr, worth 390 cr now. Tap to review.",
+    "Mark Cuban: Up or Down? · Staked Ꝟ500, worth Ꝟ390 now. Tap to review.",
   );
 });
 
@@ -114,7 +114,7 @@ test("notification: context label leads when not redundant with market title", (
   });
   assert.equal(
     body,
-    "UP · Who wins the fight? · Staked 500 cr, worth 390 cr now. Tap to review.",
+    "UP · Who wins the fight? · Staked Ꝟ500, worth Ꝟ390 now. Tap to review.",
   );
 });
 
@@ -135,7 +135,7 @@ test("notification: category race body leads with candidate pick", () => {
   assert.equal(title, "Your position is down 19.0%");
   assert.equal(
     body,
-    "Clavicular · Category Race: Streaming · Staked 100 cr, worth 81 cr now. Tap to review.",
+    "Clavicular · Category Race: Streaming · Staked Ꝟ100, worth Ꝟ81 now. Tap to review.",
   );
 });
 
@@ -163,7 +163,7 @@ test("resolvePositionMoveContextLabel: updown prefers market person", () => {
   );
 });
 
-test("notification: large credit values use en-US thousands separator in body", () => {
+test("notification: large Vox values use en-US thousands separator in body", () => {
   const ev = evaluatePositionMove({ netCreditsIn: 5_000, currentValue: 7_345 })!;
   const { body } = buildPositionMoveNotification({
     marketTitle: "Jake Paul vs KSI",
@@ -171,6 +171,6 @@ test("notification: large credit values use en-US thousands separator in body", 
   });
   assert.equal(
     body,
-    "Jake Paul vs KSI · Staked 5,000 cr, worth 7,345 cr now. Tap to review.",
+    "Jake Paul vs KSI · Staked Ꝟ5,000, worth Ꝟ7,345 now. Tap to review.",
   );
 });

@@ -5,6 +5,7 @@ import type {
   ShareCardPositionData,
 } from "@/components/share/ShareCard";
 import { appendShareAttribution } from "@/lib/share";
+import { formatVox, voxWord } from "@/lib/currency";
 
 /**
  * Helpers that map page-local state into the `ShareCardTradeData` /
@@ -48,8 +49,8 @@ export interface BuildTradeShareArgs {
    */
   pricePerShare: number;
   /**
-   * Buy: `chargeCredits` (credits debited).
-   * Sell: `payoutAmount` or `proceeds` (credits credited).
+   * Buy: `chargeCredits` (Vox debited).
+   * Sell: `payoutAmount` or `proceeds` (Vox credited).
    */
   stakeAmount: number;
 }
@@ -75,7 +76,7 @@ export function buildTradeShareData(
     stakeAmount: Number.isFinite(args.stakeAmount)
       ? Math.max(0, Math.round(args.stakeAmount))
       : 0,
-    // Only meaningful for buys — share = 1 cr at settlement, so the floor
+    // Only meaningful for buys — share = Ꝟ1 at settlement, so the floor
     // of shares is the payout-if-win headline. For sells we omit it.
     potentialPayout:
       args.actionType === "buy" ? Math.max(0, Math.floor(shares)) : undefined,
@@ -244,12 +245,12 @@ export function fireAmmTradeToast(args: FireAmmTradeToastArgs): void {
   });
 
   const description = isBuy
-    ? `${Math.round(shares).toLocaleString()} ${args.entryLabel} shares · ${credits.toLocaleString()} cr`
-    : `Sold ${Math.round(shares).toLocaleString()} ${args.entryLabel} shares · +${credits.toLocaleString()} cr`;
+    ? `${Math.round(shares).toLocaleString()} ${args.entryLabel} shares · ${formatVox(credits)}`
+    : `Sold ${Math.round(shares).toLocaleString()} ${args.entryLabel} shares · +${formatVox(credits)}`;
 
   const fallbackText = isBuy
     ? `I just backed ${args.entryLabel} on "${args.marketTitle}" on VoxDex!\n${shareUrl}`
-    : `Just took ${credits} credits off the table on "${args.marketTitle}" on VoxDex!\n${shareUrl}`;
+    : `Just took ${voxWord(credits)} off the table on "${args.marketTitle}" on VoxDex!\n${shareUrl}`;
 
   const title = isBuy ? "Prediction placed!" : "Position sold";
 

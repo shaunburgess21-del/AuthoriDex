@@ -21,18 +21,21 @@
  *                   https://voxdex.com for prod-safe defaults;
  *                   caller should pass the per-env URL when actually
  *                   sending.
- *   creditAmount  — actual starting credits granted to this user.
- *                   Defaults to DEFAULT_CREDIT_AMOUNT for previews;
- *                   senders MUST pass the real value so the email
- *                   matches the user's on-screen balance. Keeping
- *                   this dynamic also future-proofs the template
- *                   against grant-amount changes (no template edit
- *                   needed if we bump the grant later).
+ *   creditAmount  — actual starting Vox grant for this user. Defaults
+ *                   to DEFAULT_CREDIT_AMOUNT for previews; senders MUST
+ *                   pass the real value so the email matches the user's
+ *                   on-screen balance. Keeping this dynamic also future-
+ *                   proofs the template against grant-amount changes
+ *                   (no template edit needed if we bump the grant
+ *                   later). Internal `credit*` naming kept on the prop
+ *                   to avoid a churn rename of every caller; user-
+ *                   facing copy renders as "Vox".
  */
 
 import * as React from "react";
 import { Heading, Section, Text } from "react-email";
 import { Layout } from "../components/Layout";
+import { CURRENCY } from "@shared/currency";
 import { colors, radius, spacing, typography } from "../theme";
 
 interface WelcomeEmailProps {
@@ -44,14 +47,14 @@ interface WelcomeEmailProps {
 const DEFAULT_BASE_URL = "https://voxdex.com";
 
 // Used only as a fallback in previews / dev. Real sends pass the
-// user's actual `predictCredits` from the DB.
+// user's actual `predictCredits` (Vox) balance from the DB.
 const DEFAULT_CREDIT_AMOUNT = 10000;
 
 const formatCredits = (n: number) => n.toLocaleString("en-US");
 
 /**
  * Build the subject line. Currently a fixed string — we used to
- * include the credit amount ("...you've got 10,000 credits") but
+ * include the Vox amount ("...you've got 10,000 Vox") but
  * Gmail's tab classifier read the dollar-style number + reward
  * framing as marketing and routed first-touch sends to Promotions.
  * Stripping the number to plain "Welcome to VoxDex" is the first
@@ -72,7 +75,12 @@ export function WelcomeEmail({
   creditAmount = DEFAULT_CREDIT_AMOUNT,
   unsubscribeUrl,
 }: WelcomeEmailProps) {
-  const creditsLabel = `${formatCredits(creditAmount)} credits`;
+  // Word form ("10,000 Vox") in the callout — reads better than
+  // "Ꝟ10,000" in a sentence-shaped headline and avoids any glyph-
+  // rendering risk in clients that haven't been QA'd yet. The
+  // symbol still appears in supporting body copy below for brand
+  // reinforcement.
+  const voxLabel = `${formatCredits(creditAmount)} ${CURRENCY.name}`;
 
   return (
     <Layout
@@ -89,14 +97,16 @@ export function WelcomeEmail({
         prediction markets.
       </Text>
 
-      {/* Credits callout — mirrors the VerifyEmail codeBox pattern
-          so users get a visual anchor on the credit balance. */}
+      {/* Vox callout — mirrors the VerifyEmail codeBox pattern so
+          users get a visual anchor on the balance. Word form here;
+          the supporting line below introduces the Ꝟ symbol so the
+          glyph gets a first appearance with context. */}
       <Section style={creditsBoxStyle}>
         <Text style={creditsLabelStyle}>Your starting balance</Text>
-        <Text style={creditsAmountStyle}>{creditsLabel}</Text>
+        <Text style={creditsAmountStyle}>{voxLabel}</Text>
         <Text style={{ ...typography.small, margin: 0 }}>
-          Use them to make predictions, enter weekly markets, and
-          build your track record.
+          That's {CURRENCY.symbol}{formatCredits(creditAmount)} to spend on
+          predictions, weekly markets, and building your track record.
         </Text>
       </Section>
 

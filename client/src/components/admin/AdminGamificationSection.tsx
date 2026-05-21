@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { CURRENCY } from "@/lib/currency";
 import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -217,7 +218,7 @@ export function AdminGamificationSection({
       <div>
         <h2 className="text-2xl font-bold">Gamification CMS</h2>
         <p className="text-muted-foreground">
-          Configure XP, Ranks, Credits, Badges, and Streak rewards.
+          Configure XP, Ranks, Vox, Badges, and Streak rewards.
         </p>
       </div>
 
@@ -241,7 +242,7 @@ export function AdminGamificationSection({
               <Flame className="h-4 w-4 mr-2" /> Streaks
             </TabsTrigger>
             <TabsTrigger value="credits" data-testid="tab-gamification-credits">
-              <Trophy className="h-4 w-4 mr-2" /> Credits
+              <Trophy className="h-4 w-4 mr-2" /> Vox
             </TabsTrigger>
             <TabsTrigger value="badges" data-testid="tab-gamification-badges">
               <Award className="h-4 w-4 mr-2" /> Badges
@@ -1126,7 +1127,7 @@ function StreaksPanel() {
                     +{m.xp.toLocaleString()} XP
                   </td>
                   <td className="px-2 py-1 text-right tabular-nums">
-                    +{m.credits.toLocaleString()} cr
+                    +{CURRENCY.symbol}{m.credits.toLocaleString()}
                   </td>
                   <td className="px-2 py-1">
                     {m.badgeKey ? (
@@ -1363,7 +1364,7 @@ function UserGamificationView({
             <div className="mt-2 grid grid-cols-2 sm:grid-cols-5 gap-3 text-sm">
               <Stat label="XP" value={data.profile.xpPoints ?? 0} />
               <Stat
-                label="Credits"
+                label="Vox"
                 value={data.profile.predictCredits ?? 0}
               />
               <Stat
@@ -1394,7 +1395,7 @@ function UserGamificationView({
       >
         <TabsList>
           <TabsTrigger value="xp">XP History</TabsTrigger>
-          <TabsTrigger value="credits">Credits</TabsTrigger>
+          <TabsTrigger value="credits">Vox</TabsTrigger>
           <TabsTrigger value="badges">Badges</TabsTrigger>
           <TabsTrigger value="streak">Streak</TabsTrigger>
         </TabsList>

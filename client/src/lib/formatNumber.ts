@@ -1,3 +1,5 @@
+import { formatVoxCompact } from "./currency";
+
 /**
  * Format a number with thousands separators (commas)
  * @param value - The number to format
@@ -30,16 +32,18 @@ export function compactVotes(count: number | null | undefined): string {
 }
 
 /**
- * Format an AMM market's user-credit volume into a compact Polymarket-style
- * chip — e.g. `850 cr`, `1.2K cr`, `12K cr`, `1.5M cr`. Returns `null` when
+ * Format an AMM market's Vox volume into a compact Polymarket-style
+ * chip — e.g. `Ꝟ850`, `Ꝟ1.2K`, `Ꝟ12K`, `Ꝟ1.5M`. Returns `null` when
  * the value isn't finite or is non-positive, so callers can decide whether
  * to render the chip at all (fresh AMM markets with no trades yet, etc.).
+ *
+ * Thin wrapper around `formatVoxCompact` — kept as a separate export
+ * so the dozens of `formatVolumeCredits(...)` call sites don't need
+ * to be renamed in lockstep with the Credits→Vox display rename.
+ * New code should call `formatVoxCompact` directly.
  */
 export function formatVolumeCredits(value: number | null | undefined): string | null {
-  if (value == null || !Number.isFinite(value) || value <= 0) return null;
-  if (value < 1_000) return `${Math.round(value)} cr`;
-  if (value < 1_000_000) return `${(value / 1_000).toFixed(1).replace(/\.0$/, '')}K cr`;
-  return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, '')}M cr`;
+  return formatVoxCompact(value);
 }
 
 const APPROVAL_SEGMENT_COLORS = ['#FF0000', '#FF9100', '#FFC400', '#76FF03', '#00C853'];

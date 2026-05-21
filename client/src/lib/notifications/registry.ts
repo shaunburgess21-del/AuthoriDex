@@ -2,7 +2,6 @@ import type { LucideIcon } from "lucide-react";
 import {
   Award,
   Bell,
-  CreditCard,
   Flame,
   Megaphone,
   MessageSquare,

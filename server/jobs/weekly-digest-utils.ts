@@ -11,9 +11,11 @@
  *     (10-min cadence), all collapsed by the ISO-week idempotency
  *     key into a single row per user.
  *   - `formatWeeklyDigestBody`: tight ~140-char body string for the
- *     panel UI. Encodes the win/loss tally, net credits, and the
+ *     panel UI. Encodes the win/loss tally, net Vox, and the
  *     "Best:" call-out when there's a stand-out winning pick.
  */
+
+import { CURRENCY } from "@shared/currency";
 
 /**
  * ISO-8601 week-of-year, formatted "YYYY-W##" with two-digit week.
@@ -55,7 +57,8 @@ export interface WeeklyDigestStats {
   wins: number;
   /** Count of resolved buy rows where the user's side lost (status='lost'). */
   losses: number;
-  /** Net credits delta over the week (signed). */
+  /** Net Vox delta over the week (signed). Field name kept as
+   *  `netCredits` to match the internal DB / ledger naming. */
   netCredits: number;
   /** Best winning pick, if any won by enough to be worth a call-out. */
   bestPick?: {
@@ -70,21 +73,25 @@ export interface WeeklyDigestStats {
  * Format the digest body — tight enough to render cleanly in the
  * notifications panel. Example outputs:
  *
- *   "This week: +1,247 credits (8 wins, 3 losses). Best: Jake Paul vs KSI (+470)."
- *   "This week: -250 credits (2 wins, 4 losses)."
- *   "This week: 0 credits (1 win, 1 loss)."
+ *   "This week: +Ꝟ1,247 (8 wins, 3 losses). Best: Jake Paul vs KSI (+Ꝟ470)."
+ *   "This week: −Ꝟ250 (2 wins, 4 losses)."
+ *   "This week: Ꝟ0 (1 win, 1 loss)."
  *
  * Inputs are not validated here — the deriver constructs them from a
  * fresh DB roll-up and there's no untrusted data path.
  */
 export function formatWeeklyDigestBody(stats: WeeklyDigestStats): string {
   const { wins, losses, netCredits, bestPick } = stats;
-  const signedNet = `${netCredits > 0 ? "+" : ""}${netCredits.toLocaleString("en-US")}`;
+  // Whole-number Vox, with a sign prefix that uses a real Unicode
+  // minus for the negative case so spacing matches the "+" on wins.
+  const absNet = Math.abs(netCredits).toLocaleString("en-US");
+  const sign = netCredits > 0 ? "+" : netCredits < 0 ? "\u2212" : "";
+  const signedNet = `${sign}${CURRENCY.symbol}${absNet}`;
   const winsLabel = wins === 1 ? "1 win" : `${wins} wins`;
   const lossesLabel = losses === 1 ? "1 loss" : `${losses} losses`;
-  let body = `This week: ${signedNet} credits (${winsLabel}, ${lossesLabel}).`;
+  let body = `This week: ${signedNet} (${winsLabel}, ${lossesLabel}).`;
   if (bestPick && bestPick.profit > 0) {
-    const signed = `+${bestPick.profit.toLocaleString("en-US")}`;
+    const signed = `+${CURRENCY.symbol}${bestPick.profit.toLocaleString("en-US")}`;
     body += ` Best: ${bestPick.label} (${signed}).`;
   }
   return body;

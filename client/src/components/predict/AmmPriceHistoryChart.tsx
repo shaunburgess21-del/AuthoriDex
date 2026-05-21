@@ -28,6 +28,7 @@ import {
 } from "recharts";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePriceHistory } from "@/lib/ammClient";
+import { formatVoxPrice } from "@/lib/currency";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -81,7 +82,7 @@ function ChartTooltip({ active, payload, series }: any) {
             <span style={{ color: s.color }}>● </span>
             {s.label}{" "}
             <span className="font-semibold">{(p * 100).toFixed(1)}%</span>
-            <span className="text-muted-foreground/70"> · {p.toFixed(3)} cr</span>
+            <span className="text-muted-foreground/70"> · {formatVoxPrice(p, 3)}</span>
           </p>
         );
       })}

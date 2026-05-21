@@ -41,8 +41,8 @@ export const KNOWLEDGE_TABS: KnowledgeTab[] = [
   // Theme blue — same as the Trending leaderboard + VoxPulse widget.
   { id: "ranks", label: "Ranks", icon: Crown, accent: "#3C83F6" },
   // Amber/gold — currency feel; mirrors the "Impact" accent on /me/votes.
-  { id: "credits", label: "Credits", icon: Coins, accent: "#F59E0B" },
-  // Emerald — fresh achievement tone, distinct from amber Credits / gold ranks.
+  { id: "credits", label: "Vox", icon: Coins, accent: "#F59E0B" },
+  // Emerald — fresh achievement tone, distinct from amber Vox / gold ranks.
   { id: "badges", label: "Badges", icon: ShieldCheck, accent: "#10B981" },
   // Cyan — site-wide Vote accent.
   { id: "vote", label: "Vote", icon: Vote, accent: "#22D3EE" },
@@ -192,10 +192,10 @@ export interface PredictSurfaceRow {
 }
 
 export const PREDICT_SURFACES: PredictSurfaceRow[] = [
-  { surface: "Place a prediction (any market)", where: "/predict and per-market detail pages", xpActionKey: "place_prediction", notes: "Costs Credits to stake" },
+  { surface: "Place a prediction (any market)", where: "/predict and per-market detail pages", xpActionKey: "place_prediction", notes: "Costs Vox to stake" },
   { surface: "Prediction settles in your favour", where: "Awarded automatically by the market resolver", xpActionKey: "prediction_win", notes: "Winning stake + share of pool returned to balance" },
   { surface: "Suggest a world / open market", where: "/predict → suggest, then admin review", xpActionKey: "submit_suggestion", notes: "Admin-reviewed before publish" },
-  { surface: "Your market suggestion is approved", where: "Bonus when admins publish your suggested market", xpActionKey: "market_suggestion_approved", notes: "+100 Credits paid alongside" },
+  { surface: "Your market suggestion is approved", where: "Bonus when admins publish your suggested market", xpActionKey: "market_suggestion_approved", notes: "+Ꝟ100 paid alongside" },
 ];
 
 /**

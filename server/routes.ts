@@ -36,6 +36,7 @@ import {
   checkAndAwardUpvoteReceivedBadges,
 } from "./services/badges";
 import { SIGNUP_CREDIT_GRANT } from "@shared/credit-config";
+import { formatVox } from "@shared/currency";
 import { generateUniqueReferralCode } from "./utils/referral-code";
 import { createNotification, createNotificationsBulk } from "./services/notifications";
 import { dispatchApproval, markSuggestionApproved, markSuggestionRejected } from "./services/suggestionApproval";
@@ -7324,7 +7325,7 @@ Only return the JSON object.`;
         userId,
         kind: "credits_granted",
         title: "Welcome to VoxDex",
-        body: "You've received 10,000 credits. Make your first prediction.",
+        body: `You've received ${formatVox(SIGNUP_CREDIT_GRANT)}. Make your first prediction.`,
         href: "/predict",
         idempotencyKey: `signup_welcome:${userId}`,
         metadata: {
@@ -7351,7 +7352,7 @@ Only return the JSON object.`;
               userId,
               kind: "credits_granted",
               title: "Referral bonus",
-              body: `Welcome bonus of ${bonusResult.amount.toLocaleString("en-US")} extra credits for joining via a friend's link.`,
+              body: `Welcome bonus of ${formatVox(bonusResult.amount)} for joining via a friend's link.`,
               href: "/me/credits",
               idempotencyKey: `referral_bonus_notify:${userId}`,
               metadata: {
@@ -12376,8 +12377,8 @@ Only return the JSON object.`;
           await createNotification({
             userId,
             kind: "credits_granted",
-            title: `+${appliedAmount.toLocaleString("en-US")} credits granted`,
-            body: reason ? `Reason: ${reason}` : "An admin added credits to your wallet.",
+            title: `+${formatVox(appliedAmount)} granted`,
+            body: reason ? `Reason: ${reason}` : "An admin added Vox to your wallet.",
             href: "/me",
             entityType: "credit_ledger",
             entityId: idempotencyKey,
@@ -19201,7 +19202,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       });
     } catch (error: any) {
       if (error?.message === "Insufficient credits") {
-        return res.status(400).json({ error: "Insufficient credits. You need 100 credits to enter." });
+        return res.status(400).json({ error: "Insufficient Vox. You need Ꝟ100 to enter." });
       }
       console.error("[Jackpot] Bet error:", error);
       res.status(500).json({ error: "Failed to place jackpot entry" });

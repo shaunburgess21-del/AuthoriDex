@@ -31,6 +31,7 @@ import {
 } from "@shared/credit-config";
 import { BADGES, type BadgeCategory } from "@shared/badge-config";
 import { cn } from "@/lib/utils";
+import { CURRENCY, formatVox } from "@/lib/currency";
 
 /**
  * Local tab bar mirroring ProfileTabs visually (muted track, raised active
@@ -592,14 +593,14 @@ function CreditsSection() {
     <section className="space-y-6">
       <SectionHeading
         id="credits"
-        title="Credits — The Prediction Currency"
+        title="Vox — The Prediction Currency"
         subtitle="Virtual currency you spend to place predictions. Easier to spend than to earn — that's by design."
       />
 
       <div className="grid gap-3 sm:grid-cols-3">
         <StatPill
           label="Signup grant"
-          value={SIGNUP_CREDIT_GRANT.toLocaleString("en-US")}
+          value={formatVox(SIGNUP_CREDIT_GRANT)}
           accent={accent}
         />
         <StatPill label="Spend on" value="Predictions" accent={accent} />
@@ -607,18 +608,18 @@ function CreditsSection() {
       </div>
 
       <Card className="space-y-3 p-4">
-        <h3 className="font-semibold">Where Credits come from</h3>
+        <h3 className="font-semibold">Where Vox comes from</h3>
         <ul className="space-y-2 text-sm text-muted-foreground">
           <li>
             <strong className="text-foreground">Signup grant.</strong> Every
             new account starts with{" "}
-            {SIGNUP_CREDIT_GRANT.toLocaleString("en-US")} Credits so you can
-            place predictions immediately.
+            {formatVox(SIGNUP_CREDIT_GRANT)} so you can place predictions
+            immediately.
           </li>
           <li>
             <strong className="text-foreground">Prediction payouts.</strong>{" "}
-            Winning predictions return Credits to your balance when the
-            market settles, plus your share of the pool.
+            Winning predictions return Vox to your balance when the market
+            settles, plus your share of the pool.
           </li>
           <li>
             <strong className="text-foreground">Engagement earn loop.</strong>{" "}
@@ -642,10 +643,10 @@ function CreditsSection() {
       </Card>
 
       <Card className="space-y-3 p-4">
-        <h3 className="font-semibold">Where Credits go</h3>
+        <h3 className="font-semibold">Where Vox goes</h3>
         <p className="text-sm text-muted-foreground">
-          Every prediction deducts Credits from your balance the moment you
-          place it. Your stake size is your call — if you win, Credits return
+          Every prediction deducts Vox from your balance the moment you
+          place it. Your stake size is your call — if you win, Vox returns
           to your balance plus your share of the pool.
         </p>
       </Card>
@@ -669,6 +670,8 @@ const CREDIT_CATEGORY_LABELS: Record<CreditCategory, string> = {
  * SPECIAL category (signup grant, admin adjustment) is intentionally
  * omitted from the user-facing table — those rows are bookkeeping
  * for the admin Credit Actions screen, not actions a user can earn.
+ * (Internal "credit" naming is kept on the file/type; the user-facing
+ * label is "Vox".)
  */
 function CreditEarnTable({ accent }: { accent: string }) {
   const grouped = (() => {
@@ -691,7 +694,7 @@ function CreditEarnTable({ accent }: { accent: string }) {
         backgroundColor: `${accent}0F`,
       }}
     >
-      <h3 className="font-semibold">Earn Credits by participating</h3>
+      <h3 className="font-semibold">Earn Vox by participating</h3>
       <p className="text-sm text-muted-foreground">
         Engagement actions earn small daily-capped top-ups. Approved
         suggestions and streak milestones pay out larger one-offs. Values
@@ -714,7 +717,7 @@ function CreditEarnTable({ accent }: { accent: string }) {
               <thead>
                 <tr className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
                   <th className="px-3 py-2 font-medium">Action</th>
-                  <th className="px-3 py-2 font-medium text-right">Credits</th>
+                  <th className="px-3 py-2 font-medium text-right">Vox</th>
                   <th className="px-3 py-2 font-medium text-right">Daily cap</th>
                   <th className="hidden px-3 py-2 font-medium md:table-cell">
                     Notes
@@ -767,14 +770,13 @@ function CreditEarnTable({ accent }: { accent: string }) {
           CREDIT_ACTIONS.find((a) => a.key === "referral_signup_bonus")
             ?.proposedCredits ?? 0;
         const headStart = SIGNUP_CREDIT_GRANT + referralBonus;
-        const f = (n: number) => n.toLocaleString("en-US");
         return (
           <p className="text-xs text-muted-foreground">
-            Share any VoxDex card or page to earn Credits when someone
-            follows your link. Refer a friend and earn {f(referralReward)}{" "}
-            Credits when they make their first move — they get{" "}
-            {f(headStart)} Credits to start ({f(SIGNUP_CREDIT_GRANT)} signup
-            grant + {f(referralBonus)} bonus).
+            Share any VoxDex card or page to earn Vox when someone follows
+            your link. Refer a friend and earn {formatVox(referralReward)}{" "}
+            when they make their first move — they get{" "}
+            {formatVox(headStart)} to start ({formatVox(SIGNUP_CREDIT_GRANT)}{" "}
+            signup grant + {formatVox(referralBonus)} bonus).
           </p>
         );
       })()}
@@ -949,7 +951,7 @@ function VoteSection({
       />
 
       <p className="text-xs text-muted-foreground -mt-3">
-        Every vote earns XP and Credits — see the{" "}
+        Every vote earns XP and Vox — see the{" "}
         <button
           type="button"
           onClick={() => onJumpToTab("xp")}
@@ -963,7 +965,7 @@ function VoteSection({
           onClick={() => onJumpToTab("credits")}
           className="underline-offset-2 hover:underline text-foreground/80"
         >
-          Credits tab
+          Vox tab
         </button>{" "}
         for full earn rates and daily limits.
       </p>
@@ -978,7 +980,7 @@ function VoteSection({
                 <th className="px-3 py-2 font-medium">Where</th>
                 <th className="px-3 py-2 font-medium text-right">XP</th>
                 <th className="px-3 py-2 font-medium text-right">Cap</th>
-                <th className="px-3 py-2 font-medium text-right">Credits</th>
+                <th className="px-3 py-2 font-medium text-right">Vox</th>
               </tr>
             </thead>
             <tbody>
@@ -1003,7 +1005,7 @@ function VoteSection({
                     </td>
                     <td className="px-3 py-2 text-right">
                       <span className="font-mono font-semibold text-violet-500 dark:text-violet-300">
-                        +{voteCreditAction?.proposedCredits ?? 2} cr
+                        +{CURRENCY.symbol}{voteCreditAction?.proposedCredits ?? 2}
                       </span>
                     </td>
                   </tr>
@@ -1013,8 +1015,8 @@ function VoteSection({
           </table>
         </div>
         <p className="text-xs text-muted-foreground">
-          Credit cap is shared across all vote types — max{" "}
-          {voteCreditAction?.dailyCap ?? 10} votes earn Credits per day.
+          Vox cap is shared across all vote types — max{" "}
+          {voteCreditAction?.dailyCap ?? 10} votes earn Vox per day.
         </p>
       </Card>
 
@@ -1052,7 +1054,7 @@ function VoteSection({
           Approval-gating protects against suggestion spam — only quality
           submissions earn the bonus. Approved vote suggestions also earn{" "}
           <span className="font-mono text-violet-500 dark:text-violet-300">
-            +{suggestionApprovedCredits?.proposedCredits ?? 50} Credits
+            +{CURRENCY.symbol}{suggestionApprovedCredits?.proposedCredits ?? 50}
           </span>{" "}
           with no daily cap.
         </p>
@@ -1090,20 +1092,20 @@ function PredictSection({
   const predictionWinXp = XP_ACTIONS.find(
     (a) => a.actionKey === "prediction_win",
   );
-  // Credit reads for the surface-level Credits column. We hardcode
-  // the row→action mapping (not data-driven from PREDICT_SURFACES)
-  // because place_prediction has no credit row by design — it costs
-  // credits, doesn't earn them.
+  // Vox reads for the surface-level Vox column. We hardcode the
+  // row→action mapping (not data-driven from PREDICT_SURFACES) because
+  // place_prediction has no credit row by design — it costs Vox,
+  // doesn't earn it.
   const marketSuggestionCredits = CREDIT_ACTIONS.find(
     (a) => a.key === "market_suggestion_approved",
   );
 
-  /** Per-row credit cell. Returns either an earn pill, a "—" with
-   *  helper text, or a payout label depending on the row. */
+  /** Per-row Vox cell. Returns either an earn pill, a "—" with helper
+   *  text, or a payout label depending on the row. */
   const creditCellFor = (xpActionKey: string): JSX.Element => {
     if (xpActionKey === "place_prediction") {
       return (
-        <span className="text-xs text-muted-foreground">Costs Credits to stake</span>
+        <span className="text-xs text-muted-foreground">Costs Vox to stake</span>
       );
     }
     if (xpActionKey === "prediction_win") {
@@ -1116,7 +1118,7 @@ function PredictSection({
     if (xpActionKey === "market_suggestion_approved") {
       return (
         <span className="font-mono font-semibold text-violet-500 dark:text-violet-300">
-          +{marketSuggestionCredits?.proposedCredits ?? 100} cr
+          +{CURRENCY.symbol}{marketSuggestionCredits?.proposedCredits ?? 100}
         </span>
       );
     }
@@ -1128,17 +1130,17 @@ function PredictSection({
       <SectionHeading
         id="predict"
         title="Predict — Stake Your Take"
-        subtitle="Spend Credits to predict outcomes. Win Credits + bonus XP when you're right."
+        subtitle="Spend Vox to predict outcomes. Win Vox + bonus XP when you're right."
       />
 
       <p className="text-xs text-muted-foreground -mt-3">
-        Credits power every prediction — see the{" "}
+        Vox powers every prediction — see the{" "}
         <button
           type="button"
           onClick={() => onJumpToTab("credits")}
           className="underline-offset-2 hover:underline text-foreground/80"
         >
-          Credits tab
+          Vox tab
         </button>{" "}
         for earn rates, signup grants, and purchase options.
       </p>
@@ -1150,14 +1152,14 @@ function PredictSection({
             Most markets are <strong className="text-foreground">live-price markets</strong>: you buy
             shares of an outcome at the current price, and each winning share
             pays{" "}
-            <strong className="text-foreground">1 Credit</strong> when the
-            market settles. Prices reflect the crowd's view of the odds — a
-            0.30 cr share implies a ~30% chance.
+            <strong className="text-foreground">Ꝟ1</strong> when the market
+            settles. Prices reflect the crowd's view of the odds — a Ꝟ0.30
+            share implies a ~30% chance.
           </li>
           <li>
             <strong className="text-foreground">Cheaper shares pay bigger multiples</strong>{" "}
-            if your side wins. A contrarian pick at 0.20 cr pays 5× per share;
-            the heavy favourite at 0.80 cr pays only 1.25×. Sell anytime
+            if your side wins. A contrarian pick at Ꝟ0.20 pays 5× per share;
+            the heavy favourite at Ꝟ0.80 pays only 1.25×. Sell anytime
             before close to lock in profits or cut losses.
           </li>
           <li>
@@ -1166,12 +1168,12 @@ function PredictSection({
             guesses the closing Trend Score closest at Sunday close.
           </li>
           <li>
-            Your stake is debited from your Credits balance the moment you
-            place the prediction.
+            Your stake is debited from your Vox balance the moment you place
+            the prediction.
           </li>
           <li>
             When the market resolves, the resolver settles winning positions —
-            payout returns Credits to your balance and awards{" "}
+            payout returns Vox to your balance and awards{" "}
             <span className="font-mono" style={{ color: accent }}>
               +{predictionWinXp?.xpValue ?? 100} XP
             </span>{" "}
@@ -1190,7 +1192,7 @@ function PredictSection({
                 <th className="px-3 py-2 font-medium">Where</th>
                 <th className="px-3 py-2 font-medium text-right">XP</th>
                 <th className="px-3 py-2 font-medium text-right">Cap</th>
-                <th className="px-3 py-2 font-medium text-right">Credits</th>
+                <th className="px-3 py-2 font-medium text-right">Vox</th>
               </tr>
             </thead>
             <tbody>
@@ -1241,7 +1243,7 @@ function PredictSection({
           </span>{" "}
           and{" "}
           <span className="font-mono text-violet-500 dark:text-violet-300">
-            +{marketSuggestionCredits?.proposedCredits ?? 100} Credits
+            +{CURRENCY.symbol}{marketSuggestionCredits?.proposedCredits ?? 100}
           </span>{" "}
           when your market goes live. World markets carry the most editorial
           weight on VoxDex — only the best suggestions make it through.
@@ -1359,7 +1361,7 @@ export default function HowItWorksPage() {
           <BookOpen className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
           <p className="text-sm text-muted-foreground">
             This page is the canonical reference for how VoxDex rewards
-            participation. Pick a tab above to dig into XP, Ranks, Credits,
+            participation. Pick a tab above to dig into XP, Ranks, Vox,
             Badges, Voting, or Predictions. Numbers shown here mirror the
             server-side configuration.
           </p>

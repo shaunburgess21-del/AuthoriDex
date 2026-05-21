@@ -2,6 +2,60 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ------------------------------------------------------------------
+ * Vox glyph shim
+ *
+ * The Vox brand mark Ꝟ (U+A75E, Latin Extended-D) is not included in
+ * Inter, JetBrains Mono, or Space Grotesk — the three webfonts we
+ * load in index.html. Without a shim, the browser falls back to a
+ * system font for that single glyph, picking whatever it can find
+ * first; the substitute usually has a smaller cap-height and
+ * narrower stem than the digits next to it, so "Ꝟ11,011" reads as
+ * the glyph being shrunken and dropped a few px.
+ *
+ * The fix is a synthetic font-face that scopes a curated local()
+ * fallback chain to just U+A75E (and U+A75F, the lowercase variant,
+ * to future-proof if we ever use it). Adding 'VoxGlyph' at the head
+ * of every font stack makes the browser consult this face FIRST for
+ * the Vox character only and fall through to the regular webfont
+ * for everything else — so digits, body copy, etc. are unaffected.
+ *
+ * No network request is made: this is `local()`-only. The fallback
+ * order targets each major platform's best-coverage system font:
+ *   - Segoe UI Symbol / Segoe UI: Windows (ships U+A75E since Vista)
+ *   - SF Pro Text / system-ui: macOS, iOS
+ *   - Noto Sans / Roboto: Android, ChromeOS, Linux distros
+ *   - sans-serif: ultimate generic fallback
+ * ------------------------------------------------------------------ */
+@font-face {
+  font-family: 'VoxGlyph';
+  src: local('Segoe UI Symbol'),
+       local('Segoe UI'),
+       local('SF Pro Text'),
+       local('-apple-system'),
+       local('Helvetica Neue'),
+       local('Noto Sans'),
+       local('Roboto'),
+       local('Arial');
+  unicode-range: U+A75E, U+A75F;
+  font-display: swap;
+  /* `size-adjust` scales the metrics of this synthetic face only —
+     it does NOT affect the layout/advance-width of surrounding
+     glyphs because the unicode-range scopes this @font-face to a
+     single character. The fallback system fonts (Segoe UI Symbol
+     etc.) render Ꝟ at their own cap-height, which is noticeably
+     shorter than JetBrains Mono's tall numerals; bumping by ~18%
+     brings the glyph up to match the digits visually in mono
+     contexts (the place the gap shows most). It also reads fine
+     in sans contexts — slightly larger but in line with brand
+     emphasis on the symbol.
+     Supported in all evergreen browsers (Chrome 92+, Firefox 92+,
+     Safari 17+, Edge 92+). Older browsers ignore the descriptor
+     and fall back to the un-scaled glyph, which is the same state
+     we were in before this rule existed — no regression risk. */
+  size-adjust: 118%;
+}
+
 /* LIGHT MODE */
 :root {
   --button-outline: rgba(0,0,0, .10);
@@ -76,9 +130,14 @@
   --chart-4: 35 91% 50%;
   --chart-5: 0 72% 51%;
 
-  --font-sans: 'Inter', system-ui, sans-serif;
-  --font-serif: 'Space Grotesk', sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
+  /* 'VoxGlyph' is prepended so the Ꝟ brand mark (U+A75E) picks up a
+     system font that actually ships the glyph — see the @font-face
+     block at the top of this file. It only kicks in for U+A75E /
+     U+A75F via unicode-range, so everything else still renders in
+     Inter / Space Grotesk / JetBrains Mono. */
+  --font-sans: 'VoxGlyph', 'Inter', system-ui, sans-serif;
+  --font-serif: 'VoxGlyph', 'Space Grotesk', sans-serif;
+  --font-mono: 'VoxGlyph', 'JetBrains Mono', monospace;
   --radius: .5rem; /* 8px */
   --shadow-2xs: 0px 1px 2px 0px hsl(220 20% 10% / 0.05);
   --shadow-xs: 0px 1px 3px 0px hsl(220 20% 10% / 0.08);

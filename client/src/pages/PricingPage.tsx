@@ -89,10 +89,10 @@ function PricingHeader() {
         className="mb-3 font-serif text-4xl font-bold tracking-tight md:text-5xl"
         data-testid="text-pricing-title"
       >
-        Buy Credits
+        Buy Vox
       </h1>
       <p className="text-base text-muted-foreground md:text-lg">
-        Top up to keep predicting. Credits never expire.
+        Top up to keep predicting. Vox never expires.
       </p>
     </section>
   );
@@ -113,7 +113,7 @@ function FirstTimeBonusCallout() {
         </p>
         <p className="text-sm text-muted-foreground">
           Get an extra <strong className="text-foreground">{FIRST_TIME_BONUS_PCT}%</strong>{" "}
-          on your first credit purchase — automatically applied at checkout.
+          on your first Vox purchase — automatically applied at checkout.
         </p>
       </div>
     </section>
@@ -137,7 +137,7 @@ function PricingCard({ pkg }: { pkg: CreditPackage }) {
   const isMostPopular = pkg.badge === "Most popular";
   const isBestValue = pkg.badge === "Best value";
 
-  const ariaLabel = `Buy ${pkg.credits.toLocaleString("en-US")} credits for ${formatUSD(pkg.priceUSD)}`;
+  const ariaLabel = `Buy ${pkg.credits.toLocaleString("en-US")} Vox for ${formatUSD(pkg.priceUSD)}`;
 
   return (
     <article
@@ -182,7 +182,7 @@ function PricingCard({ pkg }: { pkg: CreditPackage }) {
         <p className="mb-1 text-2xl font-bold tabular-nums">
           {pkg.credits.toLocaleString("en-US")}
           <span className="ml-1.5 text-sm font-normal text-muted-foreground">
-            credits
+            Vox
           </span>
         </p>
         <div className="flex items-baseline gap-2">
@@ -200,7 +200,7 @@ function PricingCard({ pkg }: { pkg: CreditPackage }) {
           )}
         </div>
         <p className="mt-1 text-xs text-muted-foreground">
-          {formatPerCreditCents(pkg.perCreditUSD)} per credit
+          {formatPerCreditCents(pkg.perCreditUSD)} per Vox
         </p>
       </div>
 
@@ -236,7 +236,7 @@ function ComparisonTable() {
         Compare packages
       </h2>
       <p className="mb-6 text-center text-sm text-muted-foreground">
-        Per-credit value improves at every tier. No expiry, no subscription.
+        Per-Vox value improves at every tier. No expiry, no subscription.
       </p>
 
       <div className="overflow-x-auto rounded-xl border bg-card">
@@ -244,9 +244,9 @@ function ComparisonTable() {
           <thead className="bg-muted/50 text-left">
             <tr>
               <th className="px-4 py-3 font-semibold">Tier</th>
-              <th className="px-4 py-3 text-right font-semibold">Credits</th>
+              <th className="px-4 py-3 text-right font-semibold">Vox</th>
               <th className="px-4 py-3 text-right font-semibold">Price</th>
-              <th className="px-4 py-3 text-right font-semibold">Per credit</th>
+              <th className="px-4 py-3 text-right font-semibold">Per Vox</th>
               <th className="px-4 py-3 text-right font-semibold">
                 Savings vs Starter
               </th>
@@ -299,7 +299,7 @@ function ComparisonTable() {
       </div>
 
       <p className="mt-3 text-center text-xs text-muted-foreground">
-        Per-credit savings calculated against the {starter.name} tier rate
+        Per-Vox savings calculated against the {starter.name} tier rate
         of {formatPerCreditCents(starter.perCreditUSD)}.
       </p>
     </section>
@@ -309,19 +309,19 @@ function ComparisonTable() {
 function PricingFaq() {
   const faqs: { q: string; a: React.ReactNode }[] = [
     {
-      q: "Do credits expire?",
+      q: "Does Vox expire?",
       a: (
         <p>
-          No. Once you buy credits, they're yours forever — even if you
+          No. Once you buy Vox, it's yours forever — even if you
           take a break from VoxDex.
         </p>
       ),
     },
     {
-      q: "Can I cash out my credits?",
+      q: "Can I cash out my Vox?",
       a: (
         <p>
-          No. Credits are for use on VoxDex only. They have no cash value
+          No. Vox is for use on VoxDex only. It has no cash value
           and can't be exchanged for money or transferred to other users.
           See our{" "}
           <Link
@@ -366,7 +366,7 @@ function PricingFaq() {
       q: "Is there a subscription option?",
       a: (
         <p>
-          Not yet. Right now you buy credits as you need them. We may add
+          Not yet. Right now you buy Vox as you need it. We may add
           subscriptions in the future.
         </p>
       ),
@@ -409,8 +409,8 @@ function PricingDisclaimer() {
     <section className="mx-auto max-w-3xl">
       <p className="text-center text-xs leading-relaxed text-muted-foreground">
         All prices in US dollars. Your local currency equivalent at
-        checkout depends on your bank's exchange rate. Credits are for
-        entertainment use on VoxDex only and have no cash value. See our{" "}
+        checkout depends on your bank's exchange rate. Vox is for
+        entertainment use on VoxDex only and has no cash value. See our{" "}
         <Link
           href="/terms"
           className="underline underline-offset-2 hover:text-foreground"

@@ -52,7 +52,7 @@ interface ReconciliationResponse {
 }
 
 /**
- * Admin Credits section — two tabs:
+ * Admin Vox section — two tabs:
  *
  *   1. Actions: live CRUD against credit_actions. Edits invalidate
  *      the gamificationService cache server-side, so a tweak to
@@ -62,12 +62,16 @@ interface ReconciliationResponse {
  *   2. Reconciliation: drift report from /api/admin/credit-reconciliation.
  *      Surfaces human users (not agents or the AMM house wallet) where
  *      profiles.predict_credits != ledger sum.
+ *
+ * Internal API / table / function names keep their "credit" naming
+ * (credit_actions, predictCredits, proposedCredits). Only the
+ * user-visible label is "Vox".
  */
 export function AdminCreditsSection() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold">Credits</h2>
+        <h2 className="text-2xl font-bold">Vox</h2>
         <p className="text-muted-foreground">
           Tune the engagement earn loop and audit ledger drift.
         </p>
@@ -212,7 +216,7 @@ function CreditActionsPanel() {
             <thead>
               <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
                 <th className="px-3 py-2 font-medium">Key / Label</th>
-                <th className="px-3 py-2 font-medium text-right">Credits</th>
+                <th className="px-3 py-2 font-medium text-right">Vox</th>
                 <th className="px-3 py-2 font-medium text-right">Daily cap</th>
                 <th className="px-3 py-2 font-medium">Active</th>
                 <th className="px-3 py-2 font-medium">Notes</th>
@@ -338,7 +342,7 @@ function EditActionDialog({
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label htmlFor="edit-credits">Credits</Label>
+              <Label htmlFor="edit-credits">Vox</Label>
               <Input
                 id="edit-credits"
                 type="number"
@@ -465,7 +469,7 @@ function CreateActionDialog({
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label htmlFor="create-credits">Credits</Label>
+              <Label htmlFor="create-credits">Vox</Label>
               <Input
                 id="create-credits"
                 type="number"
@@ -701,7 +705,7 @@ function ReferralsPanel() {
             <th className="px-3 py-2 font-medium">Referee</th>
             <th className="px-3 py-2 font-medium">Signed up</th>
             <th className="px-3 py-2 font-medium">First action</th>
-            <th className="px-3 py-2 font-medium text-right">Credits</th>
+            <th className="px-3 py-2 font-medium text-right">Vox</th>
           </tr>
         </thead>
         <tbody>

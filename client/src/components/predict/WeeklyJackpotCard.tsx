@@ -278,7 +278,7 @@ export function WeeklyJackpotCard({
                 </div>
               ))}
             <p className={`text-sm font-semibold text-amber-500 ${compact ? "" : "lg:text-right"}`}>
-              Pool: 50,000+ credits
+              Pool: Ꝟ50,000+
             </p>
           </div>
         </div>

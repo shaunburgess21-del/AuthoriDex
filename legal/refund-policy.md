@@ -1,6 +1,6 @@
 ## 1. Overview
 
-VoxDex (Pty) Ltd ("VoxDex", "we", "us", or "our") sells Credits and other paid features through Paddle.com Market Limited ("Paddle"), our Merchant of Record. Paddle is the seller of record for all transactions on the Service and handles billing, refunds, and payment disputes on our behalf.
+VoxDex (Pty) Ltd ("VoxDex", "we", "us", or "our") sells Vox (our in-app virtual currency, denoted "Ꝟ" in the user interface and referred to in earlier versions of this policy and in some internal systems as "Credits") and other paid features through Paddle.com Market Limited ("Paddle"), our Merchant of Record. Paddle is the seller of record for all transactions on the Service and handles billing, refunds, and payment disputes on our behalf.
 
 Refunds for purchases made through Paddle are governed by Paddle's refund policy, available at [https://www.paddle.com/legal/refund-policy](https://www.paddle.com/legal/refund-policy). That policy sets out the statutory withdrawal and refund rights available to consumers in different jurisdictions, as well as Paddle's discretionary refund process.
 
@@ -22,7 +22,7 @@ If you are a consumer in South Africa, the Consumer Protection Act, 2008 may giv
 
 ## 4. Technical issues with the Service
 
-If you experience a technical issue caused by VoxDex - for example, you were charged but Credits were not issued, you were charged twice, or a platform error caused the wrong package to be purchased - please contact us at [hello@voxdex.com](mailto:hello@voxdex.com). Include:
+If you experience a technical issue caused by VoxDex - for example, you were charged but Vox was not issued, you were charged twice, or a platform error caused the wrong package to be purchased - please contact us at [hello@voxdex.com](mailto:hello@voxdex.com). Include:
 
 - The email associated with your VoxDex account
 - The date and approximate time of the transaction
@@ -34,15 +34,15 @@ We will investigate and, where a fault on our side is confirmed, work with Paddl
 
 ## 5. Chargebacks
 
-We strongly encourage you to contact us at [hello@voxdex.com](mailto:hello@voxdex.com) or Paddle before initiating a chargeback with your bank or card issuer - most issues are resolved more quickly directly. If a chargeback is initiated, access to your account and Credits may be suspended pending resolution.
+We strongly encourage you to contact us at [hello@voxdex.com](mailto:hello@voxdex.com) or Paddle before initiating a chargeback with your bank or card issuer - most issues are resolved more quickly directly. If a chargeback is initiated, access to your account and Vox balance may be suspended pending resolution.
 
 ## 6. Account closure
 
-If you close your VoxDex account voluntarily, any unused Credits are forfeited at the time of closure. This does not affect any refund rights you have under Paddle's refund policy or applicable law.
+If you close your VoxDex account voluntarily, any unused Vox is forfeited at the time of closure. This does not affect any refund rights you have under Paddle's refund policy or applicable law.
 
-If we close your account due to a violation of our [Terms of Service](/terms), unused Credits are forfeited without refund, subject to any applicable statutory rights.
+If we close your account due to a violation of our [Terms of Service](/terms), unused Vox is forfeited without refund, subject to any applicable statutory rights.
 
-If we discontinue the Service for operational reasons unrelated to any conduct on your part, we will work with Paddle to make reasonable efforts to refund unused Credits purchased in the preceding 12 months.
+If we discontinue the Service for operational reasons unrelated to any conduct on your part, we will work with Paddle to make reasonable efforts to refund unused Vox purchased in the preceding 12 months.
 
 ## 7. Changes to this policy
 

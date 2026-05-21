@@ -13,7 +13,7 @@ import { Crown, ChevronRight, Check } from "lucide-react";
 import { Link } from "wouter";
 import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
 import { cn } from "@/lib/utils";
-import { formatVolumeCredits } from "@/lib/formatNumber";
+import { formatVox, formatVoxCompact, formatVoxDelta } from "@/lib/currency";
 
 type CategoryFilter = "all" | "favorites" | "trending" | "tech" | "politics" | "business" | "music" | "sports" | "film-tv" | "gaming" | "creator" | "food-drink" | "lifestyle" | "misc";
 
@@ -49,8 +49,8 @@ export interface TopGainerMarket {
   /** LMSR state block. */
   ammState?: unknown;
   /**
-   * Total AMM credits in for the market. Drives a Polymarket-style
-   * "1.2K cr vol" chip on the card.
+   * Total AMM Vox in for the market. Drives a Polymarket-style
+   * "Ꝟ1.2K vol" chip on the card.
    */
   volume?: number;
 }
@@ -106,13 +106,14 @@ export function TopGainerCard({
 }) {
   const visibleCandidateCount = market.candidateCount ?? market.allCandidates?.length ?? market.totalEntries ?? market.leaders.length;
   const canPick = !isPredicted;
-  const volumeLabel = formatVolumeCredits(market.volume ?? 0);
+  const volumeLabel = formatVoxCompact(market.volume ?? 0);
 
   /**
-   * AMM P&L delta with sub-cent zero clamp. Suppressed entirely for
-   * "Multiple picks" pending state where a single P&L number would
-   * be misleading (it represents only the top position, not the
-   * aggregate).
+   * AMM P&L delta. Suppressed entirely for "Multiple picks" pending
+   * state where a single P&L number would be misleading (it
+   * represents only the top position, not the aggregate). The
+   * sub-cent zero clamp is folded into `formatVoxDelta`; we still
+   * compute the raw value here to drive the colour class.
    */
   const isMultiplePicks = predictionSummary?.pickLabel === "Multiple picks";
   const hasPnl = !isMultiplePicks && unrealisedPnl != null && Number.isFinite(unrealisedPnl);
@@ -123,11 +124,7 @@ export function TopGainerCard({
     : pnlValue >= 0
       ? "text-green-700 dark:text-green-400"
       : "text-red-700 dark:text-red-400";
-  const pnlText = !hasPnl
-    ? null
-    : pnlIsZero
-      ? "0.00 cr"
-      : `${pnlValue >= 0 ? "+" : ""}${pnlValue.toFixed(2)} cr`;
+  const pnlText = !hasPnl ? null : formatVoxDelta(pnlValue);
 
   const handlePlacePrediction = () => {
     onShowAllCandidates?.(market);
@@ -265,7 +262,7 @@ export function TopGainerCard({
                 <div className="flex shrink-0 flex-col items-end tabular-nums">
                   <span className="text-[10px] leading-none text-muted-foreground">Stake</span>
                   <span className="text-xs font-semibold leading-tight text-foreground">
-                    {predictionSummary.stakeAmount.toLocaleString("en-US")}
+                    {formatVox(predictionSummary.stakeAmount)}
                   </span>
                 </div>
                 <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />

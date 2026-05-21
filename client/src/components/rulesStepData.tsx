@@ -190,12 +190,12 @@ export const PREDICT_RULES_STEPS: Record<string, RulesStepConfig> = {
       {
         icon: <TrendingUp />,
         headline: "Predict the Future",
-        body: "Stake credits on what you think will happen. Prove you know who the world is paying attention to.",
+        body: "Stake Vox on what you think will happen. Prove you know who the world is paying attention to.",
       },
       {
         icon: <Coins />,
-        headline: "Stake Credits, Win More",
-        body: "Every prediction costs credits. Get it right and you win a share of the pool. All credits are virtual — no real money.",
+        headline: "Stake Vox, Win More",
+        body: "Every prediction costs Vox. Get it right and you win a share of the pool. Vox is virtual — no real money.",
       },
       {
         icon: <LayoutGrid />,
@@ -221,12 +221,12 @@ export const PREDICT_RULES_STEPS: Record<string, RulesStepConfig> = {
       {
         icon: <CheckCircle />,
         headline: "Yes or No",
-        body: "Each market has a clear outcome. Stake your credits on what you believe will happen.",
+        body: "Each market has a clear outcome. Stake your Vox on what you believe will happen.",
       },
       {
         icon: <Scale />,
         headline: "Public Resolution",
-        body: "Markets settle on definitive public information. Each winning share pays 1 credit — cheaper shares pay multiples, and you can sell anytime before close.",
+        body: "Markets settle on definitive public information. Each winning share pays Ꝟ1 — cheaper shares pay multiples, and you can sell anytime before close.",
       },
     ],
   },
@@ -246,8 +246,8 @@ export const PREDICT_RULES_STEPS: Record<string, RulesStepConfig> = {
       },
       {
         icon: <Coins />,
-        headline: "100 Credits Per Entry",
-        body: "Each prediction costs 100 credits. Enter as many times as you want across different celebrities.",
+        headline: "Ꝟ100 Per Entry",
+        body: "Each prediction costs Ꝟ100. Enter as many times as you want across different celebrities.",
       },
       {
         icon: <Clock />,
@@ -273,7 +273,7 @@ export const PREDICT_RULES_STEPS: Record<string, RulesStepConfig> = {
       {
         icon: <Users />,
         headline: "Trade In and Out",
-        body: "Each winning share pays 1 credit at close. Cheaper shares pay multiples if your side wins — sell anytime before close to lock in profits or cut losses.",
+        body: "Each winning share pays Ꝟ1 at close. Cheaper shares pay multiples if your side wins — sell anytime before close to lock in profits or cut losses.",
       },
     ],
   },
@@ -294,7 +294,7 @@ export const PREDICT_RULES_STEPS: Record<string, RulesStepConfig> = {
       {
         icon: <Trophy />,
         headline: "1 Credit Per Winning Share",
-        body: "Each winning share pays 1 credit at close. Cheaper shares pay bigger multiples if your side wins — sell anytime before close to lock in profits.",
+        body: "Each winning share pays Ꝟ1 at close. Cheaper shares pay bigger multiples if your side wins — sell anytime before close to lock in profits.",
       },
     ],
   },

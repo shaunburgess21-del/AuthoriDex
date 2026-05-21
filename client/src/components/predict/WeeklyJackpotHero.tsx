@@ -234,7 +234,7 @@ export function WeeklyJackpotHero(props: WeeklyJackpotHeroProps) {
         data-testid={isProfile ? "button-profile-predict-score" : "button-enter-jackpot"}
       >
         <Crown className="h-5 w-5 mr-2" />
-        Enter Jackpot — 100 Credits
+        Enter Jackpot — Ꝟ100
       </Button>
     );
   };
@@ -356,7 +356,7 @@ export function WeeklyJackpotHero(props: WeeklyJackpotHeroProps) {
             )}
             <div className="flex w-full flex-col items-start gap-1 lg:items-end">
               <p className="text-sm font-semibold text-amber-500 lg:text-right">
-                Pool: {poolSize > 0 ? poolSize.toLocaleString() : "0"} credits
+                Pool: Ꝟ{poolSize > 0 ? poolSize.toLocaleString() : "0"}
               </p>
               {entryCount > 0 && (
                 <p className="text-xs text-muted-foreground lg:text-right">
@@ -382,7 +382,7 @@ export function WeeklyJackpotHero(props: WeeklyJackpotHeroProps) {
                   <span className="font-bold">{Number(lastWinnerData.actualScore).toLocaleString()}</span>
                   {lastWinnerData.margin === 0 ? " — EXACT match!" : `, off by ${Number(lastWinnerData.margin).toLocaleString()}`}
                   {") and won "}
-                  <span className="font-bold text-amber-600 dark:text-amber-400">{Number(lastWinnerData.payout).toLocaleString()} credits</span>
+                  <span className="font-bold text-amber-600 dark:text-amber-400">Ꝟ{Number(lastWinnerData.payout).toLocaleString()}</span>
                 </>
               ) : (
                 <>

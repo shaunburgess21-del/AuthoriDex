@@ -1,5 +1,8 @@
 /**
  * Enriches credit_ledger rows with user-facing titles and deep links.
+ * The Vox amount itself is rendered at the call site via the
+ * `formatVox` helpers in `shared/currency.ts`; this layer just hangs
+ * the contextual label and href on each row.
  */
 
 import { db } from "../db";

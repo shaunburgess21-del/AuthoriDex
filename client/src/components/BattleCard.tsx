@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { Clock } from "lucide-react";
+import { formatVox } from "@/lib/currency";
 
 export interface HeadToHeadBattle {
   id: string;
@@ -66,7 +67,7 @@ export function BattleCard({ battle, compact = false }: BattleCardProps) {
         
         <div className="text-center mb-3">
           <span className="text-sm font-semibold text-primary">
-            Pool: {battle.totalPool.toLocaleString('en-US')} credits
+            Pool: {formatVox(battle.totalPool)}
           </span>
         </div>
         

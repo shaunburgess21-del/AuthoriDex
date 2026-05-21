@@ -24,6 +24,7 @@ import { toast } from "sonner";
 import { getSupabase } from "@/lib/supabase";
 import { formatTimeAgo } from "@/lib/formatDate";
 import { AmmResolutionDialog } from "./AmmResolutionDialog";
+import { CURRENCY } from "@/lib/currency";
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
   const supabase = await getSupabase();
@@ -163,7 +164,7 @@ function PayoutDetailDialog({
                 <Badge variant="outline">{data.ledgerEntries?.refunds || 0} refunds</Badge>
               </div>
             </div>
-            <p className="text-xs text-muted-foreground">Remainder policy: burned (virtual credits)</p>
+            <p className="text-xs text-muted-foreground">Remainder policy: burned (Vox is virtual)</p>
           </div>
         ) : null}
       </DialogContent>
@@ -332,7 +333,7 @@ export function AdminSettlementCenter() {
                     </div>
                     <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
                       {market.category && <span>{market.category}</span>}
-                      <span>{market.pool} credits</span>
+                      <span>{CURRENCY.symbol}{market.pool}</span>
                       <span>{market.betCount} bets</span>
                       <span>{market.uniqueBettors} bettors</span>
                       <span className="flex items-center gap-1">
@@ -393,7 +394,7 @@ export function AdminSettlementCenter() {
                         </Badge>
                       </div>
                       <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
-                        <span>{market.pool} credits</span>
+                        <span>{CURRENCY.symbol}{market.pool}</span>
                         {market.status === "RESOLVED" && (
                           <>
                             <span className="text-green-600 dark:text-green-400">{market.winnersCount} winners</span>

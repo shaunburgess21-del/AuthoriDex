@@ -3,18 +3,19 @@ import { useLocation, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, Wallet, TrendingUp, TrendingDown, Settings2, CreditCard } from "lucide-react";
+import { ArrowLeft, Wallet, TrendingUp, TrendingDown, Settings2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCreditHistory } from "@/hooks/useGamification";
 import { bucketForTxnType, labelForTxnType } from "@shared/credit-config";
+import { CURRENCY, formatVox, voxWord } from "@/lib/currency";
 
 /**
- * Per-user credit history. Mirrors the data shown by the admin
+ * Per-user Vox history. Mirrors the data shown by the admin
  * AdminUserCreditHistory component but trimmed to the fields a
  * normal user cares about (no idempotency keys, no source column,
  * no drift indicator). Powered by `useCreditHistory()` which had
- * been exported with zero consumers since the credits ledger was
- * first added.
+ * been exported with zero consumers since the credit ledger was
+ * first added (internal table name kept, display reads as "Vox").
  */
 
 type FilterId = "all" | "earned" | "spent";
@@ -69,7 +70,7 @@ export default function CreditHistoryPage() {
           >
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <h1 className="text-lg font-semibold">My Credits</h1>
+          <h1 className="text-lg font-semibold">My Vox</h1>
         </div>
       </header>
 
@@ -82,20 +83,20 @@ export default function CreditHistoryPage() {
             </p>
           </div>
           <p className="text-4xl font-bold font-mono text-violet-600 dark:text-violet-400">
-            {balance.toLocaleString("en-US")}
+            {formatVox(balance)}
           </p>
           <p className="text-xs text-muted-foreground mt-2">
-            Spend Credits on predictions; earn them by voting,
-            commenting, posting insights, hitting streak milestones,
-            and through admin-approved suggestions.
+            Spend Vox on predictions; earn it by voting, commenting,
+            posting insights, hitting streak milestones, and through
+            admin-approved suggestions.
           </p>
           <Button
             className="mt-4 w-full sm:w-auto bg-gradient-to-r from-violet-600 to-violet-500 hover:from-violet-700 hover:to-violet-600"
             onClick={() => setLocation("/pricing")}
             data-testid="button-buy-credits-history"
           >
-            <CreditCard className="h-4 w-4 mr-2" />
-            Buy Credits
+            <Wallet className="h-4 w-4 mr-2" />
+            Buy Vox
           </Button>
         </Card>
 
@@ -130,7 +131,7 @@ export default function CreditHistoryPage() {
             <div className="p-8 text-center">
               <p className="text-sm text-muted-foreground">
                 {filter === "all"
-                  ? "No credit activity yet. Cast a vote, post an insight, or place a prediction to get started."
+                  ? "No Vox activity yet. Cast a vote, post an insight, or place a prediction to get started."
                   : "Nothing in this filter."}
               </p>
             </div>
@@ -160,7 +161,13 @@ function CreditLedgerRowItem({ row }: { row: CreditLedgerRow }) {
     minute: "2-digit",
   });
 
-  const sign = row.amount > 0 ? "+" : "";
+  // Mirror `formatVoxDelta` semantics but keep the integer rendering
+  // the ledger has always used — these rows are whole-Vox amounts
+  // (signup grants, prediction stakes, settlement payouts), so the
+  // forced 2dp from `formatVoxDelta` would add noise for no signal.
+  const amountStr = row.amount >= 0
+    ? `+${CURRENCY.symbol}${row.amount.toLocaleString("en-US")}`
+    : `\u2212${CURRENCY.symbol}${Math.abs(row.amount).toLocaleString("en-US")}`;
   const tone =
     bucket === "earned"
       ? "text-emerald-600 dark:text-emerald-400"
@@ -196,11 +203,10 @@ function CreditLedgerRowItem({ row }: { row: CreditLedgerRow }) {
       </div>
       <div className="text-right shrink-0">
         <p className={`text-sm font-mono font-semibold ${tone}`}>
-          {sign}
-          {row.amount.toLocaleString("en-US")}
+          {amountStr}
         </p>
         <p className="text-[11px] text-muted-foreground font-mono hidden sm:block">
-          balance {row.balanceAfter.toLocaleString("en-US")}
+          balance {formatVox(row.balanceAfter)}
         </p>
       </div>
     </>
@@ -214,7 +220,7 @@ function CreditLedgerRowItem({ row }: { row: CreditLedgerRow }) {
       <li data-testid={`credit-row-${row.id}`}>
         <Link
           href={row.href}
-          aria-label={`${title}, ${sign}${row.amount} credits`}
+          aria-label={`${title}, ${row.amount >= 0 ? "+" : "\u2212"}${voxWord(Math.abs(row.amount))}`}
           className={`${rowClass} hover:bg-muted/40 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset`}
         >
           {inner}

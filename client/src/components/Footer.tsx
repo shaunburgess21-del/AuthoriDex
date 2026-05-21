@@ -90,13 +90,13 @@ export function Footer() {
           ))}
         </div>
 
-        {/* Short footer disclaimer: entity, entertainment-only, and
-            virtual-credits / no redeemable cash value. Terms of Service
+        {/* Short footer disclaimer: entity, entertainment-only, and Vox
+            (virtual currency) / no redeemable cash value. Terms of Service
             carries the long-form equivalents; this row is the at-a-glance
             reminder. */}
         <p className="mx-auto mt-3 max-w-2xl text-center text-[11px] leading-relaxed text-muted-foreground/80">
           VoxDex is operated by VoxDex (Pty) Ltd. Provided for entertainment
-          only — virtual credits have no redeemable cash value.
+          only — Vox is a virtual currency with no redeemable cash value.
         </p>
       </div>
     </footer>

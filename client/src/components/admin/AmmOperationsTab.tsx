@@ -538,7 +538,7 @@ export function AmmOperationsTab() {
           </CardTitle>
           <CardDescription>
             Live view of the in-process health-check scheduler. Six audits run every 15 minutes:
-            orphan ledger rows, seed-return drift, stuck markets, negative credits, duplicate
+            orphan ledger rows, seed-return drift, stuck markets, negative Vox, duplicate
             idempotency keys, and agent pause state. See the AMM Monitoring Runbook for the
             failure-mode playbook.
           </CardDescription>

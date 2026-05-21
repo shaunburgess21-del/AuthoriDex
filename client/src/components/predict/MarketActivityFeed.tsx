@@ -5,6 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { UserSocialAvatar } from "@/components/UserSocialAvatar";
 import { Activity } from "lucide-react";
 import { formatActivityAge } from "@/lib/formatDate";
+import { voxWord } from "@/lib/currency";
 
 interface MarketTrade {
   id: string;
@@ -119,7 +120,7 @@ export function MarketActivityFeed({
                 : null;
             const proceeds =
               isAmmSell && t.payoutAmount != null
-                ? Math.round(t.payoutAmount).toLocaleString()
+                ? Math.round(t.payoutAmount)
                 : null;
             const clickable = t.username !== null;
             return (
@@ -193,9 +194,9 @@ export function MarketActivityFeed({
                     )}
                   </p>
                   <p className="text-[10px] text-muted-foreground mt-0.5">
-                    {isAmmSell && proceeds
-                      ? `${proceeds} credits in`
-                      : `${t.stakeAmount.toLocaleString()} credits`}
+                    {isAmmSell && proceeds != null
+                      ? `${voxWord(proceeds)} in`
+                      : voxWord(t.stakeAmount)}
                   </p>
                 </div>
               </div>

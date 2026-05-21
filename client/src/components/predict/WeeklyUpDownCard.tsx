@@ -12,7 +12,7 @@ import { Activity, Star, ListChecks } from "lucide-react";
 import { Link } from "wouter";
 import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
 import { type ApiAmmStateBlock, pricesFor, snapshotFromApi } from "@/lib/ammClient";
-import { formatVolumeCredits } from "@/lib/formatNumber";
+import { formatVoxCompact } from "@/lib/currency";
 
 type CategoryFilter = "all" | "favorites" | "trending" | "tech" | "politics" | "business" | "music" | "sports" | "film-tv" | "gaming" | "creator" | "food-drink" | "lifestyle" | "misc";
 
@@ -44,9 +44,9 @@ export interface PredictionMarket {
   /** Live AMM state snapshot from `/api/native-markets/updown`. */
   ammState?: ApiAmmStateBlock | null;
   /**
-   * Cumulative credits users have spent buying shares on this market
+   * Cumulative Vox users have spent buying shares on this market
    * (mirrors `ammState.totalUserCreditsIn`). Powers the Polymarket-
-   * style "1.2K cr vol" chip on the card and feeds the default sort
+   * style "Ꝟ1.2K vol" chip on the card and feeds the default sort
    * on the Up/Down feed.
    */
   volume?: number;
@@ -76,7 +76,7 @@ export function WeeklyUpDownCard({
   /**
    * AMM live unrealised P&L for the current user's open position on
    * this market. Threaded through to the position banner so the card
-   * can read `[Winning] +13.41 cr   Stake 100`. Null when no position
+   * can read `[Winning] +Ꝟ13.41   Stake 100`. Null when no position
    * summary has loaded yet.
    */
   unrealisedPnl?: number | null;
@@ -200,7 +200,7 @@ export function WeeklyUpDownCard({
           engine="amm"
         />
         {(() => {
-          const volText = formatVolumeCredits(market.volume);
+          const volText = formatVoxCompact(market.volume);
           if (!volText) return null;
           return (
             <span className="text-xs text-muted-foreground">

@@ -36,9 +36,9 @@ import {
   Wallet,
   LayoutDashboard,
   Flame,
-  CreditCard,
   BookOpen,
 } from "lucide-react";
+import { CURRENCY } from "@/lib/currency";
 
 function useMediaQuery(query: string) {
   const [matches, setMatches] = useState(false);
@@ -266,15 +266,15 @@ function UserMenuContent({
           type="button"
           className="w-full flex items-center justify-between p-2.5 rounded-lg bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/40 dark:border-violet-500/30 hover:bg-violet-500/20 dark:hover:bg-violet-500/15 transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           onClick={() => handleNavClick("/me/credits")}
-          aria-label={`My Credits, ${(profile?.predictCredits || 0).toLocaleString("en-US")} balance`}
+          aria-label={`My Vox balance, ${(profile?.predictCredits || 0).toLocaleString("en-US")} Vox`}
           data-testid="link-my-credits-menu"
         >
           <div className="flex items-center gap-2">
             <Wallet className="h-4 w-4 text-violet-600 dark:text-violet-400" />
-            <span className="text-sm text-muted-foreground">Credits</span>
+            <span className="text-sm text-muted-foreground">Vox</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="font-mono font-bold text-sm">{(profile?.predictCredits || 0).toLocaleString('en-US')}</span>
+            <span className="font-mono font-bold text-sm">{CURRENCY.symbol}{(profile?.predictCredits || 0).toLocaleString('en-US')}</span>
             <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-violet-500/40 dark:border-violet-500/30 text-violet-600 dark:text-violet-400">VIRTUAL</Badge>
             <ChevronRight className="h-4 w-4 text-muted-foreground" />
           </div>
@@ -337,7 +337,7 @@ function UserMenuContent({
           data-testid="link-my-credits-activity"
         >
           <Wallet className="h-4 w-4 text-violet-600 dark:text-violet-400" />
-          <span className="flex-1 text-sm">My Credits</span>
+          <span className="flex-1 text-sm">My Vox</span>
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
         </button>
         <button
@@ -349,8 +349,8 @@ function UserMenuContent({
           <span className="flex-1 text-sm">Top Predictors</span>
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
         </button>
-        {/* How It Works — knowledge base for XP, Ranks, Credits, Badges,
-            Vote, Predict. Sits above Buy Credits so users can understand the
+        {/* How It Works — knowledge base for XP, Ranks, Vox, Badges,
+            Vote, Predict. Sits above Buy Vox so users can understand the
             economy before being asked to spend on it. */}
         <button
           className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
@@ -361,17 +361,19 @@ function UserMenuContent({
           <span className="flex-1 text-sm">How It Works</span>
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
         </button>
-        {/* Visually accented (violet matches the Credits pill above) so the
+        {/* Visually accented (violet matches the Vox pill above) so the
             monetization CTA stands out from the muted activity links
-            without becoming the loudest thing in the menu. */}
+            without becoming the loudest thing in the menu. Uses Wallet
+            for the icon — CreditCard implied billing/payment cards
+            rather than the in-app currency we're selling. */}
         <button
           className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-violet-500/10 dark:hover:bg-violet-500/15 transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           onClick={() => handleNavClick("/pricing")}
           data-testid="link-buy-credits"
         >
-          <CreditCard className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+          <Wallet className="h-4 w-4 text-violet-600 dark:text-violet-400" />
           <span className="flex-1 text-sm font-medium text-violet-700 dark:text-violet-300">
-            Buy Credits
+            Buy Vox
           </span>
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
         </button>

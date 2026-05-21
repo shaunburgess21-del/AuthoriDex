@@ -24,6 +24,7 @@ import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } f
 import { Popover, PopoverAnchor, PopoverContent, PopoverClose } from "@/components/ui/popover";
 import { useFavorites } from "@/hooks/useFavorites";
 import { navigateToLogin } from "@/lib/authReturn";
+import { formatVox } from "@/lib/currency";
 import type { LucideIcon } from "lucide-react";
 import {
   X,
@@ -153,7 +154,7 @@ function LeaderboardUpDownSnapshot() {
       </p>
       <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
         Each winning share pays{" "}
-        <span className="font-medium text-foreground">1 credit</span> at close. Cheaper shares pay multiples if your side wins — and you can sell anytime before close to lock in profits.
+        <span className="font-medium text-foreground">Ꝟ1</span> at close. Cheaper shares pay multiples if your side wins — and you can sell anytime before close to lock in profits.
       </p>
     </div>
   );
@@ -1443,7 +1444,7 @@ export default function HomePage() {
       toast("Position sold", {
         description:
           proceeds > 0
-            ? `Proceeds credited: +${proceeds.toLocaleString("en-US")} cr`
+            ? `Proceeds credited: +${formatVox(proceeds)}`
             : "Proceeds have been credited to your wallet.",
       });
       setStakeModalOpen(false);

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 import { getAuthHeaders } from "@/lib/queryClient";
+import { CURRENCY } from "@/lib/currency";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   OnboardingDrawer,
@@ -183,8 +184,8 @@ function PnLCell({
         <div className="cursor-help">{body}</div>
       </TooltipTrigger>
       <TooltipContent side="top" className="text-xs">
-        <div>Realised: {fmt(realised ?? 0)} cr</div>
-        <div>Unrealised: {fmt(unrealised ?? 0)} cr</div>
+        <div>Realised: {CURRENCY.symbol}{fmt(realised ?? 0)}</div>
+        <div>Unrealised: {CURRENCY.symbol}{fmt(unrealised ?? 0)}</div>
       </TooltipContent>
     </Tooltip>
   );
@@ -321,7 +322,7 @@ function UserRow({
           realised={user.realisedPnl}
           unrealised={user.unrealisedPnl}
         />
-        <p className="text-[10px] text-muted-foreground mt-0.5">credits</p>
+        <p className="text-[10px] text-muted-foreground mt-0.5">Vox</p>
       </div>
 
       <div className="shrink-0 min-w-[70px] text-right hidden sm:block">
@@ -478,10 +479,10 @@ export default function UserLeaderboardPage() {
             <div className="min-w-0">
               <h1 className="text-2xl font-bold tracking-tight">Top Predictors</h1>
               <p className="text-muted-foreground text-sm mt-0.5">
-                Ranked by virtual credit profit
+                Ranked by Vox profit
               </p>
               <p className="text-xs text-muted-foreground/70 mt-1">
-                Virtual credits — no real money.
+                Vox is a virtual currency — no real money.
               </p>
               <button
                 type="button"

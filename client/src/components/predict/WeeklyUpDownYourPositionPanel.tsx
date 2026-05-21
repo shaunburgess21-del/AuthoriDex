@@ -2,6 +2,7 @@ import { Link } from "wouter";
 import { BarChart3, ChevronRight, TrendingDown, TrendingUp } from "lucide-react";
 import { WhatNeedsToHappen } from "@/components/predict/WhatNeedsToHappen";
 import { cn } from "@/lib/utils";
+import { formatVox, formatVoxDelta } from "@/lib/currency";
 
 export function weeklyUpDownPickFromEntryLabel(entryLabel: string | undefined): "up" | "down" | null {
   const l = (entryLabel || "").toLowerCase();
@@ -44,7 +45,7 @@ export function WeeklyUpDownYourPositionPanel({
   className?: string;
   tieRule?: string | null;
   /**
-   * Live unrealised P&L (credits) for the user's open position on
+   * Live unrealised P&L (Vox) for the user's open position on
    * this market, shown next to Stake on the card banner. Null when
    * the AMM position summary hasn't loaded yet — in which case we
    * fall back to the Stake-only layout. We deliberately omit a
@@ -101,11 +102,11 @@ export function WeeklyUpDownYourPositionPanel({
     pick === "up" ? "text-[#00C853]" : pick === "down" ? "text-[#FF0000]" : "text-violet-700 dark:text-violet-400";
 
   if (variant === "cardLink") {
-    // Sprint 4.3: P&L badge on the card banner. Raw unrealisedPnl of
-    // e.g. -0.001 would render as "-0.00 cr" (negative zero), which
-    // reads as a bug, so we clamp anything that would round to 0.00
-    // down to a flat zero with no sign + neutral colour. Threshold
-    // is half a cent so the rounding boundary matches `.toFixed(2)`.
+    // Sprint 4.3: P&L badge on the card banner. `formatVoxDelta`
+    // handles the sub-cent zero clamp (raw -0.001 would otherwise
+    // render as "−Ꝟ0.00"); we still need the raw value to drive the
+    // colour class, since the formatted string discards the sign at
+    // the clamp boundary.
     const hasPnl = unrealisedPnl != null && Number.isFinite(unrealisedPnl);
     const pnlValue = hasPnl ? (unrealisedPnl as number) : 0;
     const pnlIsZero = hasPnl && Math.abs(pnlValue) < 0.005;
@@ -114,11 +115,7 @@ export function WeeklyUpDownYourPositionPanel({
       : pnlValue >= 0
         ? "text-green-700 dark:text-green-400"
         : "text-red-700 dark:text-red-400";
-    const pnlText = !hasPnl
-      ? null
-      : pnlIsZero
-        ? "0.00 cr"
-        : `${pnlValue >= 0 ? "+" : ""}${pnlValue.toFixed(2)} cr`;
+    const pnlText = !hasPnl ? null : formatVoxDelta(pnlValue);
 
     const compact = (
       <div
@@ -160,7 +157,7 @@ export function WeeklyUpDownYourPositionPanel({
           <div className="flex items-baseline gap-1 tabular-nums">
             <span className="text-[10px] text-muted-foreground">Stake</span>
             <span className="text-xs font-semibold text-foreground">
-              {stakeAmount.toLocaleString("en-US")}
+              {formatVox(stakeAmount)}
             </span>
           </div>
           <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden />
@@ -222,14 +219,14 @@ export function WeeklyUpDownYourPositionPanel({
             <>
               <p className="font-semibold text-sm">Open position</p>
               <p className="text-[11px] text-muted-foreground leading-snug">
-                You have credits on this market. View details for full breakdown.
+                You have Vox on this market. View details for full breakdown.
               </p>
             </>
           )}
         </div>
         <div className="text-right shrink-0">
           <p className="text-xs text-muted-foreground">Stake</p>
-          <p className="font-semibold text-sm tabular-nums">{stakeAmount.toLocaleString("en-US")}</p>
+          <p className="font-semibold text-sm tabular-nums">{formatVox(stakeAmount)}</p>
         </div>
       </div>
     </div>

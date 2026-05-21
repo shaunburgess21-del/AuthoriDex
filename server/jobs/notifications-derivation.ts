@@ -31,6 +31,7 @@ import {
   type WeeklyDigestStats,
 } from "./weekly-digest-utils";
 import { formatResolutionImminentNotification } from "./resolution-imminent-utils";
+import { formatVox } from "@shared/currency";
 
 const entryPerson = alias(trackedPeople, "entry_person_for_notif");
 import { STREAK_MILESTONES } from "@shared/streak-config";
@@ -692,15 +693,16 @@ async function deriveStreakMilestones(): Promise<number> {
 }
 
 /**
- * Low-credit reminder. Throttled to once per 7 days via a weekly
+ * Low-Vox reminder. Throttled to once per 7 days via a weekly
  * idempotency bucket ("YYYY-WW"). Threshold is intentionally
- * conservative (100 credits) — we want this to be useful, not annoying.
+ * conservative (Ꝟ100) — we want this to be useful, not annoying.
  *
  * Audit (notifications consolidation): the weekly bucket bounds firing
  * to at most one row per user per ISO week. groupKey deliberately not
- * set — users who hit low credits in week N AND week N+2 want both
+ * set — users who hit low Vox in week N AND week N+2 want both
  * rows distinct (they were two separate moments of being low). The
- * inbox cap eventually evicts the older one.
+ * inbox cap eventually evicts the older one. Internal kind / DB
+ * column names ("credits_low", `predictCredits`) stay as-is.
  */
 async function deriveCreditsLow(): Promise<number> {
   const LOW_THRESHOLD = 100;
@@ -720,8 +722,8 @@ async function deriveCreditsLow(): Promise<number> {
     const id = await createNotification({
       userId: row.id,
       kind: "credits_low",
-      title: `Low on credits`,
-      body: `You have ${row.predictCredits.toLocaleString("en-US")} credits left. Top up to keep predicting.`,
+      title: `Low on Vox`,
+      body: `You have ${formatVox(row.predictCredits)} left. Top up to keep predicting.`,
       href: "/pricing",
       entityType: "wallet",
       entityId: row.id,
@@ -899,7 +901,7 @@ async function derivePositionMoveAlerts(): Promise<number> {
  * the dead-week "0 wins, 0 losses" digest that would be noise.
  *
  * Body shape via `formatWeeklyDigestBody`:
- *   "This week: +1,247 credits (8 wins, 3 losses). Best: Jake Paul vs KSI (+470)."
+ *   "This week: +Ꝟ1,247 (8 wins, 3 losses). Best: Jake Paul vs KSI (+Ꝟ470)."
  *
  * What "win"/"loss"/"netCredits" mean here:
  *   - `wins`  = resolved buy rows this week with status='won' AND payoutAmount > 0.

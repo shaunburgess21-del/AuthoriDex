@@ -1,6 +1,11 @@
 /**
  * Pure credit-ledger display builders (no DB). Used by the server
- * enrichment layer and unit tests.
+ * enrichment layer and unit tests. Builders emit the transaction's
+ * `displayTitle` / `displaySubtitle` / `href` — the Vox amount
+ * itself is formatted at the render site (`CreditHistoryPage`) via
+ * `formatVox` / `formatVoxDelta`, so this module never touches the
+ * currency symbol. Internal `credit_ledger` / `txnType` identifiers
+ * stay as-is.
  */
 
 import { labelForTxnType } from "@shared/credit-config";

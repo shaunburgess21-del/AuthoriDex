@@ -32,7 +32,7 @@ import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { getMarketBaselineScore } from "@/lib/predict-market-baseline";
 import { getUpDownWinningState, UP_DOWN_STATE_LABELS } from "@/lib/updownState";
-import { formatVolumeCredits } from "@/lib/formatNumber";
+import { formatVox, formatVoxCompact, formatVoxDelta, formatVoxPrice, voxWord } from "@/lib/currency";
 import { goBack } from "@/lib/goBack";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { useNativeMarketDetail } from "@/hooks/useNativeMarketDetail";
@@ -240,7 +240,7 @@ export default function UpDownDetailPage() {
 
   // Sum across every prior same-side bet on this market so the StakeModal
   // top-up subline shows the user's actual cumulative position (not just
-  // the most recent ticket) when adding more credits to an existing pick.
+  // the most recent ticket) when adding more Vox to an existing pick.
   const userPickTotalStake = useMemo(() => {
     if (!userPick) return 0;
     return userMarketBets
@@ -362,7 +362,7 @@ export default function UpDownDetailPage() {
           : `${origin}${pathname}`;
         const fallbackText = `I just backed ${pendingSelection.choice} on "${hydrated.personName}: Up or Down?" on VoxDex!\n${shareUrl}`;
         toast("Prediction placed!", {
-          description: `${Math.round(shares).toLocaleString()} ${pendingSelection.choice} shares · ${chargeCredits.toLocaleString()} cr`,
+          description: `${Math.round(shares).toLocaleString()} ${pendingSelection.choice} shares · ${formatVox(chargeCredits)}`,
           action: {
             label: "Share",
             onClick: () =>
@@ -442,9 +442,9 @@ export default function UpDownDetailPage() {
         const shareUrl = data?.betId
           ? `${origin}/share/bet/${data.betId}`
           : `${origin}${pathname}`;
-        const fallbackText = `Just took ${proceeds} credits off the table on "${hydrated.personName}: Up or Down?" on VoxDex!\n${shareUrl}`;
+        const fallbackText = `Just took ${voxWord(proceeds)} off the table on "${hydrated.personName}: Up or Down?" on VoxDex!\n${shareUrl}`;
         toast("Position sold", {
-          description: `Sold ${Math.round(shares).toLocaleString()} ${pendingSelection.choice} shares · +${proceeds.toLocaleString()} cr`,
+          description: `Sold ${Math.round(shares).toLocaleString()} ${pendingSelection.choice} shares · +${formatVox(proceeds)}`,
           action: {
             label: "Share",
             onClick: () =>
@@ -656,7 +656,7 @@ export default function UpDownDetailPage() {
             </div>
 
             {(() => {
-              const volText = formatVolumeCredits(hydrated.volume);
+              const volText = formatVoxCompact(hydrated.volume);
               const columns = volText ? "grid-cols-4" : "grid-cols-3";
               return (
                 <div className={`grid ${columns} gap-3 text-center`}>
@@ -732,7 +732,7 @@ export default function UpDownDetailPage() {
                       {priceToPercent(upPrice, 0)}
                     </p>
                     <p className="text-[10px] text-muted-foreground">
-                      {upPrice.toFixed(3)} cr / share
+                      {formatVoxPrice(upPrice, 3)} / share
                     </p>
                   </div>
                   <div className="rounded-lg border border-red-500/30 bg-red-500/5 p-3">
@@ -741,7 +741,7 @@ export default function UpDownDetailPage() {
                       {priceToPercent(downPrice, 0)}
                     </p>
                     <p className="text-[10px] text-muted-foreground">
-                      {downPrice.toFixed(3)} cr / share
+                      {formatVoxPrice(downPrice, 3)} / share
                     </p>
                   </div>
                 </div>
@@ -755,7 +755,7 @@ export default function UpDownDetailPage() {
                     ].map(({ label, pos, side }) => {
                       if (!pos || pos.netShares <= 1e-6) return null;
                       // Unrealised PnL = current mark-to-market value minus
-                      // net credits paid in. Buy = positive netCreditsIn.
+                      // net Vox paid in. Buy = positive netCreditsIn.
                       // We label both gain/loss explicitly so the user
                       // doesn't have to do the arithmetic in their head.
                       const unrealisedPnl = pos.currentValue - pos.netCreditsIn;
@@ -802,10 +802,10 @@ export default function UpDownDetailPage() {
                           <div className="min-w-0 flex-1">
                             <p className="text-sm font-semibold">{label} on {firstName}</p>
                             <p className="text-[11px] text-muted-foreground">
-                              {pos.netShares.toFixed(2)} shares · avg {pos.avgEntryPrice.toFixed(3)} cr · cost {pos.netCreditsIn.toFixed(0)} cr
+                              {pos.netShares.toFixed(2)} shares · avg {formatVoxPrice(pos.avgEntryPrice, 3)} · cost {formatVoxPrice(pos.netCreditsIn, 0)}
                             </p>
-                            {/* Round-3 rewrite: previous copy ("≈ 64.64 cr
-                                now · -35.36 cr" + "Pays 173.82 cr if win
+                            {/* Round-3 rewrite: previous copy ("≈ Ꝟ64.64
+                                now · −Ꝟ35.36" + "Pays Ꝟ173.82 if win
                                 · +73.82 net") read like a spreadsheet.
                                 New framing answers two natural questions
                                 ("what if I sell?" vs "what if I hold?")
@@ -814,17 +814,15 @@ export default function UpDownDetailPage() {
                                 the second line ties the resolution back
                                 to the user's pick. */}
                             <p className="text-[11px] text-muted-foreground">
-                              Sell now: ~{pos.currentValue.toFixed(2)} cr{" "}
+                              Sell now: ~{formatVoxPrice(pos.currentValue)}{" "}
                               <span className={`font-mono font-medium ${pnlColor}`}>
-                                ({unrealisedPnl >= 0 ? "+" : ""}
-                                {unrealisedPnl.toFixed(2)} cr)
+                                ({formatVoxDelta(unrealisedPnl)})
                               </span>
                             </p>
                             <p className="text-[11px] text-muted-foreground">
-                              If {label} wins: {pos.netShares.toFixed(2)} cr{" "}
+                              If {label} wins: {formatVoxPrice(pos.netShares)}{" "}
                               <span className="font-mono font-medium text-green-700 dark:text-green-500">
-                                ({maxProfitIfWin >= 0 ? "+" : ""}
-                                {maxProfitIfWin.toFixed(2)} cr)
+                                ({formatVoxDelta(maxProfitIfWin)})
                               </span>
                             </p>
                           </div>
@@ -1026,7 +1024,7 @@ export default function UpDownDetailPage() {
                 <p className="text-sm font-semibold">Open stake on this market</p>
               </div>
               <p className="text-xs text-muted-foreground tabular-nums">
-                {Number(userBet.stakeAmount || 0).toLocaleString("en-US")} cr
+                {formatVox(Number(userBet.stakeAmount || 0))}
               </p>
             </div>
           ) : (

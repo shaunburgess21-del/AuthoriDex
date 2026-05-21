@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Target, LogIn, Star, MessageSquarePlus, HelpCircle, Lock, CreditCard, Loader2, ChevronDown } from "lucide-react";
+import { Target, LogIn, Star, MessageSquarePlus, HelpCircle, Lock, Wallet, Loader2, ChevronDown } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { useMarketCycle } from "@/hooks/useMarketCycle";
@@ -24,6 +24,7 @@ import {
   priceToPercent,
   snapshotFromApi,
 } from "@/lib/ammClient";
+import { CURRENCY, formatVox, formatVoxPrice, voxWord } from "@/lib/currency";
 
 /**
  * AMM mission copy — all non-jackpot StakeModal flows are LMSR now.
@@ -31,12 +32,12 @@ import {
  */
 const MISSION_HEADERS: Record<string, string> = {
   updown:
-    "Buy UP or DOWN shares. Each winning share pays 1 credit at close — cheaper shares pay bigger multiples. Trade until 5 min before close.",
-  h2h: "Buy shares of your pick. Winning shares pay 1 credit each at close — cheaper shares pay bigger multiples. Sell anytime before close.",
+    "Buy UP or DOWN shares. Each winning share pays Ꝟ1 at close — cheaper shares pay bigger multiples. Trade until 5 min before close.",
+  h2h: "Buy shares of your pick. Winning shares pay Ꝟ1 each at close — cheaper shares pay bigger multiples. Sell anytime before close.",
   gainer:
-    "Buy shares of the candidate you think will gain the most. Each winning share pays 1 credit at close — cheaper underdog shares pay bigger multiples.",
+    "Buy shares of the candidate you think will gain the most. Each winning share pays Ꝟ1 at close — cheaper underdog shares pay bigger multiples.",
   community:
-    "Buy Yes or No shares. Each winning share pays 1 credit on resolution — cheaper shares pay bigger multiples. Sell anytime before close.",
+    "Buy Yes or No shares. Each winning share pays Ꝟ1 on resolution — cheaper shares pay bigger multiples. Sell anytime before close.",
 };
 
 export interface StakeSelection {
@@ -299,7 +300,7 @@ export function StakeModal({
     return "Sell shares";
   })();
   // Header copy. On a follow-up bet we surface "Add to your X stake" so users
-  // know the new credits compound onto an existing position rather than
+  // know the new Vox compounds onto an existing position rather than
   // creating a separate one. Same-side only — opposite-side hedges are
   // blocked at the call site.
   const topUpHeading = (() => {
@@ -322,7 +323,7 @@ export function StakeModal({
   const missionText = isAmmSellMode
     ? "Cash out at the live market price. Bigger orders push the price along the curve."
     : isTopUp
-      ? "Adding more credits compounds onto your existing position."
+      ? "Adding more Vox compounds onto your existing position."
       : MISSION_HEADERS[selection.type] || "Place your prediction on this market.";
 
   const fireConfetti = (origin: { x: number; y: number }) => {
@@ -527,11 +528,11 @@ export function StakeModal({
             // Inlined markup (rather than an inner component) so React
             // doesn't see a fresh component type on every parent render,
             // which would otherwise force the tile DOM to remount.
-            // Round-2 polish: dropped the `opacity-70` on the cr/share
+            // Round-2 polish: dropped the `opacity-70` on the Ꝟ/share
             // line because the muted-side tile already paints text at
             // `text-[<color>]/70`, and stacking opacities (0.7 × 0.7 =
             // 0.49) made the red DOWN price almost unreadable. Bumped
-            // to `font-semibold` so the cr/share reads as a real datum
+            // to `font-semibold` so the Ꝟ/share reads as a real datum
             // rather than a footnote.
             const pickBody = (
               <>
@@ -542,7 +543,7 @@ export function StakeModal({
                   {priceToPercent(pickPrice, 0)}
                 </p>
                 <p className="text-[11px] font-mono font-semibold">
-                  {pickPrice.toFixed(3)} cr/share
+                  {formatVoxPrice(pickPrice, 3)}/share
                 </p>
               </>
             );
@@ -555,7 +556,7 @@ export function StakeModal({
                   {priceToPercent(oppositePrice, 0)}
                 </p>
                 <p className="text-[11px] font-mono font-semibold">
-                  {oppositePrice.toFixed(3)} cr/share
+                  {formatVoxPrice(oppositePrice, 3)}/share
                 </p>
               </>
             );
@@ -644,7 +645,7 @@ export function StakeModal({
                 className="mt-1.5 text-xs text-muted-foreground"
                 data-testid="stake-modal-existing-stake"
               >
-                Currently staked: {selection.existingStake.toLocaleString()} credits.
+                Currently staked: {voxWord(selection.existingStake)}.
                 Adding more will be combined for the same outcome.
               </p>
             )}
@@ -927,13 +928,13 @@ export function StakeModal({
             <>
               <div className="space-y-2">
                 <label className="text-sm font-medium">
-                  Credit budget
+                  Vox budget
                 </label>
                 <Input
                   type="number"
                   min={MIN_STAKE}
                   max={walletBalance}
-                  placeholder="Enter credits to stake"
+                  placeholder="Enter Vox to stake"
                   value={stakeAmount}
                   onChange={(e) => {
                     const v = e.target.value;
@@ -963,7 +964,7 @@ export function StakeModal({
                       variant="outline"
                       size="sm"
                       onClick={() => setStakeAmount(capped > 0 ? String(capped) : "")}
-                      title={capped < amount ? `Stakes ${capped.toLocaleString("en-US")} credits (your balance)` : undefined}
+                      title={capped < amount ? `Stakes ${formatVox(capped)} (your balance)` : undefined}
                       className="flex-1"
                       data-testid={`button-preset-${amount}`}
                     >
@@ -973,7 +974,7 @@ export function StakeModal({
                 })}
                 {/* Tier 1.2: Max chip clamps to wallet balance (with a
                     hard ceiling at 99,999 so a power user with millions
-                    of credits doesn't accidentally one-click an entire
+                    of Vox doesn't accidentally one-click an entire
                     market). Disabled when balance is below MIN_STAKE so
                     a 0-balance user can't tap into a no-op. */}
                 <Button
@@ -985,7 +986,7 @@ export function StakeModal({
                     const maxStake = Math.min(walletBalance, 99999);
                     if (maxStake >= MIN_STAKE) setStakeAmount(String(maxStake));
                   }}
-                  title={`Stakes ${Math.min(walletBalance, 99999).toLocaleString("en-US")} credits (capped at your balance)`}
+                  title={`Stakes ${formatVox(Math.min(walletBalance, 99999))} (capped at your balance)`}
                   className="flex-1"
                   data-testid="button-preset-max"
                 >
@@ -1061,17 +1062,15 @@ export function StakeModal({
                     </div>
                     {hasBuyQuote && ammBuyQuote ? (
                       <p className="text-2xl font-bold leading-tight font-mono text-green-700 dark:text-green-500">
-                        ~{Math.floor(ammBuyQuote.shares).toLocaleString("en-US")}{" "}
-                        <span className="text-base font-medium">cr</span>
+                        ~{formatVox(Math.floor(ammBuyQuote.shares))}
                       </p>
                     ) : hasSellQuote && ammSellQuote ? (
                       <p className="text-2xl font-bold leading-tight font-mono text-green-700 dark:text-green-500">
-                        +{ammSellQuote.proceeds.toLocaleString("en-US")}{" "}
-                        <span className="text-base font-medium">cr</span>
+                        +{formatVox(ammSellQuote.proceeds)}
                       </p>
                     ) : (
                       <p className="text-2xl font-bold leading-tight font-mono text-muted-foreground/50">
-                        — cr
+                        {CURRENCY.symbol}—
                       </p>
                     )}
                   </div>
@@ -1080,7 +1079,7 @@ export function StakeModal({
                       className="shrink-0 inline-flex items-center rounded-full bg-green-500/15 text-green-700 dark:text-green-400 px-2 py-0.5 text-[10px] font-mono font-semibold"
                       data-testid="amm-receipt-net"
                     >
-                      +{Math.max(0, Math.floor(ammBuyQuote.shares) - ammBuyQuote.chargeCredits).toLocaleString("en-US")} net
+                      +{CURRENCY.symbol}{Math.max(0, Math.floor(ammBuyQuote.shares) - ammBuyQuote.chargeCredits).toLocaleString("en-US")} net
                     </span>
                   )}
                 </div>
@@ -1090,7 +1089,7 @@ export function StakeModal({
                     {ammBuyQuote.shares.toFixed(2)} {sideShareLabel}
                     <span className="text-muted-foreground/70">
                       {" · Avg price "}
-                      {ammBuyQuote.pricePerShareAvg.toFixed(3)} cr/share
+                      {formatVoxPrice(ammBuyQuote.pricePerShareAvg, 3)}/share
                     </span>
                   </p>
                 )}
@@ -1105,10 +1104,10 @@ export function StakeModal({
                           price, not what you actually receive. For
                           large sells the curve walks down as you go,
                           so avg < entry by a noticeable margin and
-                          that gap IS where the "I lost 1 credit on
-                          round-trip" credits live. Matches the buy
+                          that gap IS where the "I lost Ꝟ1 on
+                          round-trip" Vox lives. Matches the buy
                           receipt's framing one row up. */}
-                      {ammSellQuote.pricePerShareAvg.toFixed(3)} cr/share
+                      {formatVoxPrice(ammSellQuote.pricePerShareAvg, 3)}/share
                     </span>
                   </p>
                 )}
@@ -1116,7 +1115,7 @@ export function StakeModal({
                 {!hasBuyQuote && !hasSellQuote && (
                   <p className="text-[11px] text-muted-foreground/70 italic border-t border-violet-500/15 pt-1.5">
                     {isBuyMode
-                      ? `Enter at least ${MIN_STAKE} credits to see your potential payout.`
+                      ? `Enter at least ${formatVox(MIN_STAKE)} to see your potential payout.`
                       : "Enter shares to sell to see proceeds."}
                   </p>
                 )}
@@ -1180,7 +1179,7 @@ export function StakeModal({
 
                 {/* Spread / round-trip hint. Only on sell mode —
                     answers the common "I bought for 500, sold for
-                    499, where did 1 credit go?" question. Kept
+                    499, where did Ꝟ1 go?" question. Kept
                     deliberately general so it also reads correctly
                     for users sitting on a winning or losing
                     position (where the price move dwarfs the
@@ -1202,8 +1201,7 @@ export function StakeModal({
                     user has a real quote in front of them. Without
                     these guards we'd be lying ("Live estimate" while
                     the modal is using a stale snapshot) or pointless
-                    ("Live estimate" next to "Enter at least 5
-                    credits..."). */}
+                    ("Live estimate" next to "Enter at least Ꝟ5..."). */}
                 {liveAmmState != null && (hasBuyQuote || hasSellQuote) && (
                   <p className="text-[10px] text-muted-foreground/70 leading-snug">
                     Live estimate — actual{" "}
@@ -1218,26 +1216,26 @@ export function StakeModal({
           <div className="flex items-center justify-between text-xs pt-2 border-t">
             <div>
               <span className="text-muted-foreground">Current Balance: </span>
-              <span className="font-mono font-medium">{walletBalance.toLocaleString('en-US')}</span>
+              <span className="font-mono font-medium">{formatVox(walletBalance)}</span>
             </div>
             {ammMode === "sell" ? (
               <div>
                 <span className="text-muted-foreground">After Sell: </span>
                 <span className="font-mono font-medium text-green-700 dark:text-green-500">
-                  +{(ammSellQuote?.proceeds ?? 0).toLocaleString('en-US')}
+                  +{formatVox(ammSellQuote?.proceeds ?? 0)}
                 </span>
               </div>
             ) : (
               <div>
                 <span className="text-muted-foreground">After Buy: </span>
                 <span className={`font-mono font-medium ${balanceAfter < 0 ? 'text-red-700 dark:text-red-500' : 'text-green-700 dark:text-green-500'}`}>
-                  {balanceAfter >= 0 ? balanceAfter.toLocaleString('en-US') : 'Insufficient'}
+                  {balanceAfter >= 0 ? formatVox(balanceAfter) : 'Insufficient'}
                 </span>
               </div>
             )}
           </div>
 
-          {/* Highest-converting placement for the Buy Credits CTA — the
+          {/* Highest-converting placement for the Buy Vox CTA — the
               user has explicit intent to predict and just discovered
               they can't afford the entry. Two trigger conditions cover
               both "below minimum stake" (idle state) and "tried to
@@ -1245,11 +1243,11 @@ export function StakeModal({
               Sign In button instead, so this only matters once auth'd. */}
           {isLoggedIn && (walletBalance < MIN_STAKE || balanceAfter < 0) && (
             <div className="rounded-lg border border-violet-500/40 bg-violet-500/10 dark:border-violet-500/30 dark:bg-violet-500/8 p-3 flex items-center gap-3">
-              <CreditCard className="h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400" />
+              <Wallet className="h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400" />
               <p className="text-xs text-muted-foreground flex-1">
                 {walletBalance < MIN_STAKE
-                  ? "You need credits to predict."
-                  : "Not enough credits for that stake."}
+                  ? "You need Vox to predict."
+                  : "Not enough Vox for that stake."}
               </p>
               <Button
                 size="sm"
@@ -1261,7 +1259,7 @@ export function StakeModal({
                 }}
                 data-testid="button-buy-credits-stake"
               >
-                Buy credits
+                Buy Vox
               </Button>
             </div>
           )}

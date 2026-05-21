@@ -8,7 +8,7 @@ import { hapticSuccess, hapticError } from "@/lib/haptic";
 import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { useXpBurst } from "@/components/XpBurstProvider";
 import { StakeModal, type StakeSelection } from "@/components/StakeModal";
-import { formatVolumeCredits } from "@/lib/formatNumber";
+import { formatVoxCompact, formatVox, formatVoxDelta, formatVoxPrice, voxWord } from "@/lib/currency";
 import { CategoryPill } from "@/components/CategoryPill";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -849,7 +849,7 @@ export default function MarketDetailPage() {
           : `${origin}/markets/${market.slug}`;
         const fallbackText = `I just backed ${entryLabel} on "${market.title}" on VoxDex!\n${shareUrl}`;
         toast("Shares purchased", {
-          description: `${Math.round(shares).toLocaleString()} ${entryLabel} shares · ${chargeCredits.toLocaleString()} cr`,
+          description: `${Math.round(shares).toLocaleString()} ${entryLabel} shares · ${formatVox(chargeCredits)}`,
           action: {
             label: "Share",
             onClick: () =>
@@ -866,7 +866,7 @@ export default function MarketDetailPage() {
           isAmmTrade ? "Shares purchased" : "Prediction placed!",
           {
             description: isAmmTrade && Number.isFinite(Number(data?.sharesPurchased))
-              ? `You bought ${Number(data.sharesPurchased).toFixed(2)} shares for ${data.chargeCredits ?? "—"} credits.`
+              ? `You bought ${Number(data.sharesPurchased).toFixed(2)} shares for ${Number.isFinite(Number(data?.chargeCredits)) ? formatVox(Number(data.chargeCredits)) : "—"}.`
               : "Your prediction has been recorded.",
           },
         );
@@ -1103,7 +1103,7 @@ export default function MarketDetailPage() {
       toast("Position sold", {
         description:
           proceeds > 0
-            ? `Proceeds credited: +${proceeds.toLocaleString("en-US")} cr`
+            ? `Proceeds credited: +${formatVox(proceeds)}`
             : "Proceeds have been credited to your wallet.",
       });
       if (data?.xp?.xpAwarded) {
@@ -1139,7 +1139,7 @@ export default function MarketDetailPage() {
    * We re-derive `crowdSentiment` from the live LMSR price (rounded
    * to whole %) so the modal hero pill matches the Live Market card
    * immediately above it, and pass `engine: 'amm' + ammState` so the
-   * modal flips into LMSR mode (live cr/share quote, Sell tab gated
+   * modal flips into LMSR mode (live Ꝟ/share quote, Sell tab gated
    * on `ammNetShares`).
    */
   const openBuyModal = (entry: MarketEntry, direction: "yes" | "no" = "yes") => {
@@ -1564,7 +1564,7 @@ export default function MarketDetailPage() {
             list of bars; for binary we show two equal tiles.
             Consolidated Live Market card mirrors the Up/Down + Race
             patterns:
-              1. Header chips (cr VOL + Traders + LIVE)
+              1. Header chips (Ꝟ VOL + Traders + LIVE)
               2. Per-position rows when the user holds netShares on
                  any entry — conversational copy + inline Sell button
               3. Per-entry Buy CTAs:
@@ -1575,7 +1575,7 @@ export default function MarketDetailPage() {
                      mirroring the Race candidate list. */}
         {isAmm && ammPriceMap && market.entries && market.entries.length > 0 && (() => {
           const liveVolume = Number(market.ammState?.totalUserCreditsIn ?? 0);
-          const liveVolumeLabel = liveVolume > 0 ? formatVolumeCredits(liveVolume) : null;
+          const liveVolumeLabel = liveVolume > 0 ? formatVoxCompact(liveVolume) : null;
           // Sprint 5 / Phase 4.3: trader count chip uses the same
           // `totalParticipants` memo as the existing hero stats below
           // so the two surfaces stay numerically aligned.
@@ -1647,18 +1647,18 @@ export default function MarketDetailPage() {
                           <div className="min-w-0">
                             <p className="text-sm font-semibold truncate">{entry.label}</p>
                             <p className="text-[11px] text-muted-foreground">
-                              {pos.netShares.toFixed(2)} shares · avg {pos.avgEntryPrice.toFixed(3)} cr · cost {pos.netCreditsIn.toFixed(0)} cr
+                              {pos.netShares.toFixed(2)} shares · avg {formatVoxPrice(pos.avgEntryPrice, 3)} · cost {formatVoxPrice(pos.netCreditsIn, 0)}
                             </p>
                             <p className="text-[11px] text-muted-foreground">
-                              Sell now: ~{pos.currentValue.toFixed(2)} cr{" "}
+                              Sell now: ~{formatVoxPrice(pos.currentValue)}{" "}
                               <span className={`font-mono font-medium ${pnlClass}`}>
-                                ({pnlIsZero ? "0.00" : (unrealisedPnl >= 0 ? "+" : "") + unrealisedPnl.toFixed(2)} cr)
+                                ({formatVoxDelta(unrealisedPnl)})
                               </span>
                             </p>
                             <p className="text-[11px] text-muted-foreground">
-                              If {entry.label} wins: {pos.netShares.toFixed(2)} cr{" "}
+                              If {entry.label} wins: {formatVoxPrice(pos.netShares)}{" "}
                               <span className="font-mono font-medium text-green-700 dark:text-green-500">
-                                ({maxProfitIfWin >= 0 ? "+" : ""}{maxProfitIfWin.toFixed(2)} cr)
+                                ({formatVoxDelta(maxProfitIfWin)})
                               </span>
                             </p>
                           </div>
@@ -1710,7 +1710,7 @@ export default function MarketDetailPage() {
                         </div>
                         <span className="font-mono font-bold text-sm w-12 text-right tabular-nums">{entry.percentage}%</span>
                         <span className="font-mono text-[10px] text-muted-foreground w-14 text-right tabular-nums hidden sm:block">
-                          {livePrice.toFixed(2)} cr
+                          {formatVoxPrice(livePrice)}
                         </span>
                         <Button
                           size="sm"
@@ -1751,7 +1751,7 @@ export default function MarketDetailPage() {
                       >
                         <p className="text-[10px] text-muted-foreground uppercase tracking-wider truncate">{entry.label}</p>
                         <p className={`text-2xl font-bold font-mono ${priceColor}`}>{entry.percentage}%</p>
-                        <p className="text-[10px] text-muted-foreground tabular-nums">{livePrice.toFixed(2)} cr / share</p>
+                        <p className="text-[10px] text-muted-foreground tabular-nums">{formatVoxPrice(livePrice)} / share</p>
                         <Button
                           size="sm"
                           variant="outline"
@@ -1768,7 +1768,7 @@ export default function MarketDetailPage() {
                 </div>
               )}
               <p className="text-[10px] text-muted-foreground/70 mt-3 text-center">
-                Live LMSR pricing — each share pays 1 credit if the outcome wins.
+                Live LMSR pricing — each share pays Ꝟ1 if the outcome wins.
               </p>
             </Card>
           );
@@ -1846,7 +1846,7 @@ export default function MarketDetailPage() {
                     data-testid="input-jackpot-predicted-score"
                   />
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Jackpot entries are unique per score and cost 100 credits.
+                    Jackpot entries are unique per score and cost Ꝟ100.
                   </p>
                 </div>
 
@@ -2018,7 +2018,7 @@ export default function MarketDetailPage() {
                             )}
                             {w.payout != null && (
                               <span className="font-mono font-semibold text-amber-700 dark:text-amber-300">
-                                {w.payout.toLocaleString("en-US")} cr
+                                {formatVox(w.payout)}
                               </span>
                             )}
                           </span>
@@ -2050,7 +2050,7 @@ export default function MarketDetailPage() {
                       )}
                       {totalPool != null && (
                         <span className="mr-2">
-                          Pool {totalPool.toLocaleString("en-US")} cr
+                          Pool {formatVox(totalPool)}
                         </span>
                       )}
                       {tied != null && tied > 1 && (
@@ -2064,18 +2064,18 @@ export default function MarketDetailPage() {
           </Card>
         )}
 
-        {/* "Outcomes" / "Final pool split" card. Uses staked credits
+        {/* "Outcomes" / "Final pool split" card. Uses staked Vox
             as the historical signal. While the AMM market is open the
             Live Market panel above renders the same info using LMSR
             prices, so we suppress this card. On resolved markets we
-            keep the historical credits-staked view ("Final pool
-            split") since `entriesWithPercentages` is AMM-aware and
-            the headline flips accordingly. */}
+            keep the historical Vox-staked view ("Final pool split")
+            since `entriesWithPercentages` is AMM-aware and the
+            headline flips accordingly. */}
         {!isJackpotMarket && !(isAmm && isOpen) && (
         <Card className="p-5 mb-6" data-testid="section-outcomes">
           {/* On open markets the percentages are an investing signal
               (live crowd odds). Once resolved they're a historical
-              record of how credits ended up split, not your payout.
+              record of how Vox ended up split, not your payout.
               The heading + helper text + per-row "of pool" suffix all
               flip together so the page can't be skim-read as "winning
               outcomes ranked by likelihood". */}
@@ -2085,7 +2085,7 @@ export default function MarketDetailPage() {
           </h2>
           {isClosedMarket ? (
             <p className="text-xs text-muted-foreground mb-4">
-              These percentages show how the crowd staked their credits before close — not the official outcome or your payout.
+              These percentages show how the crowd staked their Vox before close — not the official outcome or your payout.
               {isResolved ? " Official winners are pinned to the top." : ""}
             </p>
           ) : (

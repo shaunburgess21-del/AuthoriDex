@@ -11,31 +11,31 @@
  *   - `won && payout === 0 && preResolveSellProceeds > 0` →
  *     "Your market resolved — you'd sold beforehand". The user sold
  *     all their winner-side shares before resolution, so the on-row
- *     payout is zero but they DID realise credits via the pre-close
+ *     payout is zero but they DID realise Vox via the pre-close
  *     sells. We surface that realised P&L so the bell entry matches
  *     what their wallet already shows (Tier 1.7).
  *   - `won && payout === 0` with no realised proceeds → null
  *     (suppressed). Structurally near-unreachable (winning row with
  *     zero payout and zero pre-close sells), but the guard avoids
- *     the legacy "Stake returned — 0 credits (net -<stake>)" bug
- *     that was visible in the Mark Cuban screenshot.
- *   - `won && profit > 0` → "Your prediction won — +N credits". The
- *     normal happy path: held the position through resolution, made
- *     money.
- *   - `won && profit === 0` → "Stake returned — N credits". Edge case
- *     where the user bought at price=1.0 (parity) and the share paid
- *     out 1:1. Structurally near-unreachable in LMSR pricing but the
+ *     the legacy "Stake returned — Ꝟ0 (net −<stake>)" bug that was
+ *     visible in the Mark Cuban screenshot.
+ *   - `won && profit > 0` → "Your prediction won — +ꝞN". The normal
+ *     happy path: held the position through resolution, made money.
+ *   - `won && profit === 0` → "Stake returned — ꝞN". Edge case where
+ *     the user bought at price=1.0 (parity) and the share paid out
+ *     1:1. Structurally near-unreachable in LMSR pricing but the
  *     wording is accurate for it. Gated behind `payout > 0` above so
- *     this branch never fires with a self-contradictory "net -<stake>"
+ *     this branch never fires with a self-contradictory "net −<stake>"
  *     anymore.
  *   - `!won` → "Your prediction didn't land". Lost the full stake.
  *
  * `won && profit < 0` is structurally impossible under current AMM
- * pricing: max buy price is 1.0 credit/share and a winning share pays
- * 1 credit, so `payout >= stake` for any winner-side row.
+ * pricing: max buy price is Ꝟ1.00 per share and a winning share pays
+ * Ꝟ1, so `payout >= stake` for any winner-side row.
  */
 
 import { formatMarketLead } from "../jobs/notification-market-labels";
+import { CURRENCY, formatVox } from "@shared/currency";
 
 export interface AmmResolutionNotificationInput {
   marketTitle: string;
@@ -45,7 +45,7 @@ export interface AmmResolutionNotificationInput {
   stake: number;
   payout: number;
   /**
-   * Total credits the user realised via winner-side sells BEFORE this
+   * Total Vox the user realised via winner-side sells BEFORE this
    * market resolved. Only consulted on the `won && payout === 0`
    * branch — i.e. when the on-row settlement payout was zero because
    * the user had already exited their winning shares. Pass undefined
@@ -54,6 +54,18 @@ export interface AmmResolutionNotificationInput {
    * call sites don't get a worse experience.
    */
   preResolveSellProceeds?: number;
+}
+
+// Whole-Vox signed delta — Ꝟ-prefixed with a `+` for gains and a
+// Unicode minus for losses. We can't reuse `formatVoxDelta` here
+// because that helper forces two decimal places; resolution
+// notifications operate on integer credit grants and rendering
+// "+Ꝟ500.00" reads off-brand.
+function formatSignedVox(n: number): string {
+  if (!Number.isFinite(n) || n === 0) return `${CURRENCY.symbol}0`;
+  const abs = Math.abs(Math.round(n)).toLocaleString("en-US");
+  if (n > 0) return `+${CURRENCY.symbol}${abs}`;
+  return `\u2212${CURRENCY.symbol}${abs}`;
 }
 
 export interface AmmResolutionNotificationOutput {
@@ -71,33 +83,32 @@ export function buildAmmResolutionNotification(
     const proceeds = preResolveSellProceeds ?? 0;
     if (!Number.isFinite(proceeds) || proceeds <= 0) return null;
     const netRealised = proceeds - stake;
-    const signedNet = `${netRealised >= 0 ? "+" : ""}${netRealised.toLocaleString("en-US")}`;
     return {
       title: `Your market resolved — you'd sold beforehand`,
-      body: `${lead} resolved on your side. You'd already sold those shares for ${proceeds.toLocaleString("en-US")} credits (net ${signedNet}).`,
+      body: `${lead} resolved on your side. You'd already sold those shares for ${formatVox(proceeds)} (net ${formatSignedVox(netRealised)}).`,
     };
   }
 
   const profit = won ? payout - stake : -stake;
-  const signedProfit = `${profit >= 0 ? "+" : ""}${profit.toLocaleString("en-US")}`;
+  const signedProfit = formatSignedVox(profit);
 
   if (won && profit > 0) {
     return {
-      title: `Your prediction won — ${signedProfit} credits`,
-      body: `${lead} resolved. Payout ${payout.toLocaleString("en-US")} credits (net ${signedProfit}).`,
+      title: `Your prediction won — ${signedProfit}`,
+      body: `${lead} resolved. Payout ${formatVox(payout)} (net ${signedProfit}).`,
     };
   }
 
   if (won) {
     return {
-      title: `Stake returned — ${payout.toLocaleString("en-US")} credits`,
+      title: `Stake returned — ${formatVox(payout)}`,
       body: `${lead} resolved. Payout matched your stake (net ${signedProfit}).`,
     };
   }
 
   return {
     title: `Your prediction didn't land`,
-    body: `${lead} resolved. Lost ${stake.toLocaleString("en-US")} credits — better luck next round.`,
+    body: `${lead} resolved. Lost ${formatVox(stake)} — better luck next round.`,
   };
 }
 
@@ -111,7 +122,7 @@ export function buildAmmVoidNotification(
 ): AmmResolutionNotificationOutput {
   const { marketTitle, refund } = input;
   return {
-    title: `Market voided — ${refund.toLocaleString("en-US")} credits refunded`,
-    body: `${marketTitle} was voided. ${refund.toLocaleString("en-US")} credits returned.`,
+    title: `Market voided — ${formatVox(refund)} refunded`,
+    body: `${marketTitle} was voided. ${formatVox(refund)} returned.`,
   };
 }

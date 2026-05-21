@@ -24,6 +24,7 @@ import { OutcomePathChart } from "@/components/predict/OutcomePathChart";
 import { inferPredictionDirection } from "@/pages/me/predictions-utils";
 import { getRecentActivityMarketPath } from "@/lib/predict-display";
 import { cn } from "@/lib/utils";
+import { formatVox } from "@/lib/currency";
 
 export interface MyPredictionCardData {
   betId: string;
@@ -312,7 +313,7 @@ export function MyPredictionCard({
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
           <span className="text-muted-foreground">
             Stake:{" "}
-            <span className="text-foreground font-medium">{prediction.stakeAmount} credits</span>
+            <span className="text-foreground font-medium">{formatVox(prediction.stakeAmount)}</span>
           </span>
           {payoutDisplay > 0 && (
             <span
@@ -323,8 +324,8 @@ export function MyPredictionCard({
               }
             >
               {isResolved ? "" : "Est. "}
-              {prediction.result === "lost" ? "-" : "+"}
-              {payoutDisplay} credits
+              {prediction.result === "lost" ? "−" : "+"}
+              {formatVox(payoutDisplay)}
             </span>
           )}
           <span className="text-muted-foreground ml-auto">
@@ -356,7 +357,7 @@ export function MyPredictionCard({
             <Badge
               variant="outline"
               className="text-[10px] px-1.5 py-0 border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-              title="Live-priced market — each winning share pays 1 credit at settlement"
+              title="Live-priced market — each winning share pays Ꝟ1 at settlement"
             >
               Live price
             </Badge>

@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
-import { ArrowLeft, User, Star, TrendingUp, Settings, LogOut, Vote, Wallet, Shield, Trophy, Eye, Lock, Flame, CreditCard, Award } from "lucide-react";
+import { ArrowLeft, User, Star, TrendingUp, Settings, LogOut, Vote, Wallet, Shield, Trophy, Eye, Lock, Flame, Award } from "lucide-react";
 import { useLocation } from "wouter";
 import { navigateToLogin } from "@/lib/authReturn";
 import { useAuth } from "@/contexts/AuthContext";
@@ -11,6 +11,7 @@ import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { UserRankBadge } from "@/components/UserRankBadge";
 import { ReferAFriendCard } from "@/components/ReferAFriendCard";
 import { ProfileCompletionCard } from "@/components/ProfileCompletionCard";
+import { formatVox } from "@/lib/currency";
 
 export default function MePage() {
   const { user, profile, profileLoading, isAdmin, signOut } = useAuth();
@@ -127,9 +128,9 @@ export default function MePage() {
                 >
                   <div className="flex items-center justify-center gap-1">
                     <Wallet className="h-4 w-4 text-violet-600 dark:text-violet-400" />
-                    <p className="text-2xl font-bold text-violet-600 dark:text-violet-400 font-mono">{(profile?.predictCredits || 0).toLocaleString('en-US')}</p>
+                    <p className="text-2xl font-bold text-violet-600 dark:text-violet-400 font-mono">{formatVox(profile?.predictCredits || 0)}</p>
                   </div>
-                  <p className="text-xs text-muted-foreground">Credits</p>
+                  <p className="text-xs text-muted-foreground">Vox</p>
                 </button>
                 <div className="p-3 rounded-lg bg-orange-500/15 dark:bg-orange-500/10 border border-orange-500/30 dark:border-orange-500/20">
                   <div className="flex items-center justify-center gap-1">
@@ -181,8 +182,8 @@ export default function MePage() {
                   onClick={() => setLocation("/me/credits")}
                   data-testid="button-my-credits"
                 >
-                  <CreditCard className="h-4 w-4" />
-                  My Credits
+                  <Wallet className="h-4 w-4" />
+                  My Vox
                 </Button>
                 <Button 
                   variant="outline" 
@@ -237,9 +238,9 @@ export default function MePage() {
                   </div>
                   <span
                     className="font-mono font-bold text-lg tabular-nums min-w-0 truncate text-violet-600 dark:text-violet-400"
-                    title={(profile?.predictCredits || 0).toLocaleString('en-US')}
+                    title={formatVox(profile?.predictCredits || 0)}
                   >
-                    {(profile?.predictCredits || 0).toLocaleString('en-US')}
+                    {formatVox(profile?.predictCredits || 0)}
                   </span>
                 </button>
                 <div className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg bg-orange-500/15 dark:bg-orange-500/10 border border-orange-500/40 dark:border-orange-500/30 overflow-hidden">
@@ -257,7 +258,7 @@ export default function MePage() {
               </div>
               {/* Top-up CTA lives on the Predictor Stats card (rather than
                   inside the dense 5-stat grid above) so there's room for a
-                  proper button that doesn't squeeze the credit number on
+                  proper button that doesn't squeeze the Vox number on
                   mobile. /pricing is public, so logged-out viewers of this
                   card never reach this surface anyway. */}
               <Button
@@ -265,11 +266,11 @@ export default function MePage() {
                 onClick={() => setLocation("/pricing")}
                 data-testid="button-buy-credits-me"
               >
-                <CreditCard className="h-4 w-4 mr-2" />
-                Buy Credits
+                <Wallet className="h-4 w-4 mr-2" />
+                Buy Vox
               </Button>
               <p className="text-xs text-muted-foreground mt-3">
-                Credits power your predictions. They never expire and have no cash value.
+                Vox powers your predictions. It never expires and has no cash value.
               </p>
             </Card>
 

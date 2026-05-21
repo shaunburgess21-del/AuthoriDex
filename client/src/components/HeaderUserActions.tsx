@@ -22,7 +22,7 @@ interface HeaderUserActionsProps {
  *
  * Pulled out into a single component so adding the bell didn't require
  * touching ~15 inlined headers. Page-specific extras (back button,
- * credits pill, ScrollText icon, logo) stay inline in their pages —
+ * Vox pill, ScrollText icon, logo) stay inline in their pages —
  * we only own the bell+avatar pair.
  *
  * The bell hides itself for logged-out users, so on guest pages this

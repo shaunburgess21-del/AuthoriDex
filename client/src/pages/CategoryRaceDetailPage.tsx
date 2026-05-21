@@ -29,7 +29,7 @@ import { apiRequest, parseApiError } from "@/lib/queryClient";
 import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { goBack } from "@/lib/goBack";
-import { formatVolumeCredits } from "@/lib/formatNumber";
+import { formatVox, formatVoxCompact, formatVoxDelta, formatVoxPrice } from "@/lib/currency";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { useNativeMarketDetail } from "@/hooks/useNativeMarketDetail";
 import { pricesFor, snapshotFromApi } from "@/lib/ammClient";
@@ -374,7 +374,7 @@ export default function CategoryRaceDetailPage() {
           : `${origin}${pathname}`;
         const fallbackText = `I just backed ${candidate.name} in the ${categoryLabel} Race on VoxDex!\n${shareUrl}`;
         toast("Shares purchased", {
-          description: `${Math.round(shares).toLocaleString()} ${candidate.name} shares · ${chargeCredits.toLocaleString()} cr`,
+          description: `${Math.round(shares).toLocaleString()} ${candidate.name} shares · ${formatVox(chargeCredits)}`,
           action: {
             label: "Share",
             onClick: () =>
@@ -389,7 +389,7 @@ export default function CategoryRaceDetailPage() {
       } else {
         toast("Shares purchased", {
           description: Number.isFinite(Number(data?.sharesPurchased))
-            ? `You bought ${Number(data.sharesPurchased).toFixed(2)} shares for ${data.chargeCredits ?? "—"} credits.`
+            ? `You bought ${Number(data.sharesPurchased).toFixed(2)} shares for ${Number.isFinite(Number(data?.chargeCredits)) ? formatVox(Number(data.chargeCredits)) : "—"}.`
             : "Your race prediction has been recorded.",
         });
       }
@@ -464,7 +464,7 @@ export default function CategoryRaceDetailPage() {
       toast("Position sold", {
         description:
           proceeds > 0
-            ? `Proceeds credited: +${proceeds.toLocaleString("en-US")} cr`
+            ? `Proceeds credited: +${formatVox(proceeds)}`
             : "Proceeds have been credited to your wallet.",
       });
       setStakeModalOpen(false);
@@ -647,7 +647,7 @@ export default function CategoryRaceDetailPage() {
           const liveVolume = Number(
             ((market as any)?.ammState?.totalUserCreditsIn ?? (market as any)?.volume ?? 0),
           );
-          const liveVolumeLabel = liveVolume > 0 ? formatVolumeCredits(liveVolume) : null;
+          const liveVolumeLabel = liveVolume > 0 ? formatVoxCompact(liveVolume) : null;
           const openPositions = (ammPositionData?.positions ?? []).filter(
             (p) => p.netShares > 1e-6,
           );
@@ -704,10 +704,11 @@ export default function CategoryRaceDetailPage() {
                         const candidateName = candidate?.name ?? pos.entryLabel;
                         const unrealisedPnl = pos.currentValue - pos.netCreditsIn;
                         const maxProfitIfWin = pos.netShares - pos.netCreditsIn;
-                        // Sub-cent clamp: render -0.00 cr as 0.00 cr so
+                        // Sub-cent clamp: render −Ꝟ0.00 as Ꝟ0.00 so
                         // the user sees a clean break-even instead of a
-                        // misleading negative sign. Mirrors the
-                        // WeeklyUpDownYourPositionPanel clamp.
+                        // misleading negative sign. `formatVoxDelta` does
+                        // the clamp; we still need the raw value here
+                        // for the colour-class branch.
                         const pnlIsZero = Math.abs(unrealisedPnl) < 0.005;
                         const pnlClass = pnlIsZero
                           ? "text-muted-foreground"
@@ -731,18 +732,18 @@ export default function CategoryRaceDetailPage() {
                               <div className="min-w-0 flex-1">
                                 <p className="text-sm font-semibold truncate">{candidateName}</p>
                                 <p className="text-[11px] text-muted-foreground">
-                                  {pos.netShares.toFixed(2)} shares · avg {pos.avgEntryPrice.toFixed(3)} cr · cost {pos.netCreditsIn.toFixed(0)} cr
+                                  {pos.netShares.toFixed(2)} shares · avg {formatVoxPrice(pos.avgEntryPrice, 3)} · cost {formatVoxPrice(pos.netCreditsIn, 0)}
                                 </p>
                                 <p className="text-[11px] text-muted-foreground">
-                                  Sell now: ~{pos.currentValue.toFixed(2)} cr{" "}
+                                  Sell now: ~{formatVoxPrice(pos.currentValue)}{" "}
                                   <span className={`font-mono font-medium ${pnlClass}`}>
-                                    ({pnlIsZero ? "0.00" : (unrealisedPnl >= 0 ? "+" : "") + unrealisedPnl.toFixed(2)} cr)
+                                    ({formatVoxDelta(unrealisedPnl)})
                                   </span>
                                 </p>
                                 <p className="text-[11px] text-muted-foreground">
-                                  If {candidateName} wins: {pos.netShares.toFixed(2)} cr{" "}
+                                  If {candidateName} wins: {formatVoxPrice(pos.netShares)}{" "}
                                   <span className="font-mono font-medium text-green-700 dark:text-green-500">
-                                    ({maxProfitIfWin >= 0 ? "+" : ""}{maxProfitIfWin.toFixed(2)} cr)
+                                    ({formatVoxDelta(maxProfitIfWin)})
                                   </span>
                                 </p>
                               </div>
@@ -835,14 +836,14 @@ export default function CategoryRaceDetailPage() {
                           </div>
                           <span className="font-mono font-bold w-10 text-right tabular-nums">{pct}%</span>
                           <span className="font-mono text-[10px] text-muted-foreground w-14 text-right tabular-nums hidden sm:block">
-                            {c.livePrice.toFixed(3)} cr
+                            {formatVoxPrice(c.livePrice, 3)}
                           </span>
                         </div>
                       );
                     })}
                 </div>
                 <p className="text-[10px] text-muted-foreground/70 mt-3 text-center">
-                  Live LMSR pricing — each share pays 1 credit if the candidate wins.
+                  Live LMSR pricing — each share pays Ꝟ1 if the candidate wins.
                 </p>
               </div>
             </Card>

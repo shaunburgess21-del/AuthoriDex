@@ -33,6 +33,7 @@ import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
 import { getSupabase } from "@/lib/supabase";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { getMarketBaselineScore } from "@/lib/predict-market-baseline";
+import { formatVox, voxWord } from "@/lib/currency";
 import { getCanonicalNativeCycle } from "@/lib/nativeMarketLifecycle";
 import { fireAmmTradeToast } from "@/lib/share-data";
 import { useShareCard } from "@/contexts/ShareCardContext";
@@ -152,7 +153,7 @@ const PREDICT_ONBOARDING_STEPS: readonly OnboardingStep[] = [
   {
     icon: Target,
     heading: "Stake Your Conviction",
-    description: "Back predictions with virtual credits. The bigger the pool, the bigger the potential return.",
+    description: "Back predictions with Vox (our virtual currency). The bigger the pool, the bigger the potential return.",
     gradient: "from-fuchsia-500 to-pink-600",
     glow: "shadow-fuchsia-500/25",
   },
@@ -2131,7 +2132,7 @@ export default function PredictPage() {
       toast("Position sold", {
         description:
           proceeds > 0
-            ? `Proceeds credited: +${proceeds.toLocaleString("en-US")} cr`
+            ? `Proceeds credited: +${formatVox(proceeds)}`
             : "Proceeds have been credited to your wallet.",
       });
       setStakeModalOpen(false);
@@ -2170,7 +2171,7 @@ export default function PredictPage() {
       toast("Position sold", {
         description:
           proceeds > 0
-            ? `Proceeds credited: +${proceeds.toLocaleString("en-US")} cr`
+            ? `Proceeds credited: +${formatVox(proceeds)}`
             : "Proceeds have been credited to your wallet.",
       });
       setStakeModalOpen(false);
@@ -2966,7 +2967,7 @@ export default function PredictPage() {
                   data-testid="predict-mobile-credits-pill"
                 >
                   <Wallet className="hidden [@media(min-width:360px)]:inline-block h-[14px] w-[14px] text-violet-700 dark:text-violet-500" />
-                  <span className="font-mono font-bold text-sm">{walletCredits.toLocaleString('en-US')}</span>
+                  <span className="font-mono font-bold text-sm">{formatVox(walletCredits)}</span>
                 </button>
               )}
               <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setRulesModalOpen("predictions")} aria-label="View predictions rules">
@@ -3041,7 +3042,7 @@ export default function PredictPage() {
                 data-testid="predict-desktop-credits-pill"
               >
                 <Wallet className="h-[14px] w-[14px] text-violet-700 dark:text-violet-500" />
-                <span className="font-mono font-bold text-xs text-violet-700 dark:text-violet-500">{walletCredits.toLocaleString('en-US')}</span>
+                <span className="font-mono font-bold text-xs text-violet-700 dark:text-violet-500">{formatVox(walletCredits)}</span>
               </button>
             )}
           </div>
@@ -3113,7 +3114,7 @@ export default function PredictPage() {
                               : "bg-muted-foreground/50";
                           const proceeds =
                             isAmmSell && item.payoutAmount != null
-                              ? Math.round(item.payoutAmount).toLocaleString("en-US")
+                              ? Math.round(item.payoutAmount)
                               : null;
                           return (
                             <div
@@ -3176,9 +3177,9 @@ export default function PredictPage() {
                                   )}
                                 </p>
                                 <p className="mt-0.5 text-xs text-muted-foreground">
-                                  {isAmmSell && proceeds
-                                    ? `${proceeds} credits in`
-                                    : `${item.stakeAmount.toLocaleString("en-US")} credits`}
+                                  {isAmmSell && proceeds != null
+                                    ? `${voxWord(proceeds)} in`
+                                    : voxWord(item.stakeAmount)}
                                   {!item.isAgent && item.confidence != null ? ` • ${(item.confidence * 100).toFixed(0)}% confidence` : ""}
                                 </p>
                                 {item.rationale && (

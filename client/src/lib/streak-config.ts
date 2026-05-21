@@ -25,8 +25,8 @@ import { STREAK_MILESTONES } from "@shared/streak-config";
  */
 export const STREAK_MILESTONE_DAYS: readonly number[] = STREAK_MILESTONES;
 
-/** Always-shown line nudging the user toward credit-earning actions. */
-export const STREAK_REWARD_TEASE = "Take action on the site to earn Credits.";
+/** Always-shown line nudging the user toward Vox-earning actions. */
+export const STREAK_REWARD_TEASE = "Take action on the site to earn Vox.";
 
 /** Shown only while the user is still working toward the next milestone. */
 export const STREAK_TARGET_REWARD_COPY =
