@@ -77,11 +77,11 @@ test("matchupBucketUrl builds public Supabase path shape", () => {
   );
 });
 
-test("matchupOgImagePath uses shared cache version v9", () => {
-  assert.equal(MATCHUP_OG_IMAGE_VERSION, "9");
+test("matchupOgImagePath uses shared cache version v10", () => {
+  assert.equal(MATCHUP_OG_IMAGE_VERSION, "10");
   assert.equal(
     matchupOgImagePath("football-goat"),
-    "/api/og/vote/matchups/football-goat.jpg?v=9",
+    "/api/og/vote/matchups/football-goat.jpg?v=10",
   );
 });
 
@@ -233,17 +233,17 @@ test("renderMatchupOgImageJpeg flank name bands have visible text", async () => 
   );
 });
 
-/** Centered prompt above VS should render in upper-mid band. */
-test("renderMatchupOgImageJpeg center prompt band has visible text", async () => {
+/** Bottom-left prompt above CTA should render in lower-left band. */
+test("renderMatchupOgImageJpeg bottom-left prompt band has visible text", async () => {
   const jpeg = await renderMatchupOgImageJpeg(PLACEHOLDER_CTX);
   const frac = await midToneFraction(jpeg, {
-    left: 350,
-    top: 90,
+    left: 40,
+    top: 470,
     width: 500,
-    height: 80,
+    height: 120,
   });
   assert.ok(
     frac > 0.01,
-    `center prompt mid-tone ${frac.toFixed(3)} too low`,
+    `bottom-left prompt mid-tone ${frac.toFixed(3)} too low`,
   );
 });

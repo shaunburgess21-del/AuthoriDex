@@ -33,10 +33,10 @@ export function getMatchupOverlayLabels(ctx: MatchupOgContext) {
 
 const VS_CY = 315;
 const VS_RADIUS = 52;
-const VS_TOP_Y = VS_CY - VS_RADIUS;
 const PROMPT_FONT_SIZE = 46;
-/** Baseline so prompt visual center sits midway between image top and VS circle top. */
-const PROMPT_BASELINE_Y = VS_TOP_Y / 2 + PROMPT_FONT_SIZE * 0.35;
+const CTA_BASELINE_Y = 608;
+/** Main heading stacked above bottom-left CTA. */
+const PROMPT_BASELINE_Y = 520;
 const FLANK_FONT_SIZE = 28;
 const FLANK_WEIGHT = 600;
 const FLANK_PAD_X = 16;
@@ -216,12 +216,11 @@ export function buildMatchupOverlaySvg(ctx: MatchupOgContext): string {
   })}
   ${textPath({
     text: labels.prompt,
-    x: HALF_WIDTH,
+    x: 48,
     y: PROMPT_BASELINE_Y,
     fontSize: PROMPT_FONT_SIZE,
     weight: 700,
     fill: "#ffffff",
-    anchor: "middle",
   })}
   ${flankVsNamePill(labels.optionA, "left")}
   ${flankVsNamePill(labels.optionB, "right")}
@@ -241,7 +240,7 @@ export function buildMatchupOverlaySvg(ctx: MatchupOgContext): string {
   ${textPath({
     text: labels.cta,
     x: 48,
-    y: 608,
+    y: CTA_BASELINE_Y,
     fontSize: 22,
     weight: 600,
     fill: "#22d3ee",
