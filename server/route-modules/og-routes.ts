@@ -25,6 +25,15 @@ import {
   renderMatchupOgImageJpeg,
 } from "../services/matchup-og-image";
 import { matchupOgImagePath } from "@shared/matchup-og";
+import { sentimentPollOgImagePath } from "@shared/sentiment-poll-og";
+import {
+  loadSentimentPollOgContext,
+  sentimentPollOgDescription,
+} from "../services/sentiment-poll-og-context";
+import {
+  renderSentimentPollOgImage,
+  renderSentimentPollOgImageJpeg,
+} from "../services/sentiment-poll-og-image";
 import {
   getOgFontFaceStyle,
   logOgFontStartup,
@@ -838,6 +847,51 @@ function matchupOgImageUrl(slug: string): string {
   return `${SITE_URL}${matchupOgImagePath(slug)}`;
 }
 
+function sentimentPollOgImageUrl(slug: string): string {
+  return `${SITE_URL}${sentimentPollOgImagePath(slug)}`;
+}
+
+async function serveSentimentPollOgImage(
+  req: Request,
+  res: Response,
+  format: "png" | "jpeg",
+): Promise<void> {
+  const slug = req.params.slug;
+  const contentType = format === "jpeg" ? "image/jpeg" : "image/png";
+  try {
+    const ctx = await loadSentimentPollOgContext(slug);
+    if (!ctx) {
+      const fallback = loadDefaultOgPng();
+      if (fallback) {
+        res.setHeader("Content-Type", "image/png");
+        res.setHeader("Cache-Control", "public, max-age=300");
+        res.send(fallback);
+        return;
+      }
+      res.status(404).send("poll not found");
+      return;
+    }
+    const image =
+      format === "jpeg"
+        ? await renderSentimentPollOgImageJpeg(ctx)
+        : await renderSentimentPollOgImage(ctx);
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Content-Disposition", "inline");
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    res.send(image);
+  } catch (err: any) {
+    console.error(`[OG] Sentiment poll ${format.toUpperCase()} render failed:`, err?.message);
+    const fallback = loadDefaultOgPng();
+    if (fallback) {
+      res.setHeader("Content-Type", "image/png");
+      res.setHeader("Cache-Control", "public, max-age=300");
+      res.send(fallback);
+      return;
+    }
+    res.status(500).send("og render failed");
+  }
+}
+
 async function serveMatchupOgImage(
   req: Request,
   res: Response,
@@ -1318,8 +1372,8 @@ export function registerOgRoutes(app: Express): void {
     const slug = req.params.slug;
     const canonicalUrl = `${SITE_URL}/polls/${encodeURIComponent(slug)}`;
     try {
-      const poll = await lookupSentimentPoll(slug);
-      if (!poll) {
+      const ctx = await loadSentimentPollOgContext(slug);
+      if (!ctx) {
         res.setHeader("Content-Type", "text/html; charset=utf-8");
         res.setHeader("Cache-Control", "public, max-age=300");
         res.send(
@@ -1332,17 +1386,17 @@ export function registerOgRoutes(app: Express): void {
         );
         return;
       }
-      const description =
-        poll.description ?? poll.subjectText ?? "Cast your vote on VoxDex.";
-      const imageUrl = `${SITE_URL}/api/og/image/market.png?title=${encodeURIComponent(poll.headline)}&subtitle=${encodeURIComponent("Sentiment poll • Cast your vote")}&badge=${encodeURIComponent("Sentiment poll")}`;
+      const description = sentimentPollOgDescription(ctx);
+      const imageUrl = sentimentPollOgImageUrl(ctx.slug);
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       res.setHeader("Cache-Control", "public, max-age=600");
       res.send(
         renderOgHtml({
-          title: `${poll.headline} • VoxDex`,
+          title: `${ctx.headline} • VoxDex`,
           description,
           canonicalUrl,
           imageUrl,
+          imageType: "image/jpeg",
         }),
       );
     } catch (err: any) {
@@ -1405,6 +1459,16 @@ export function registerOgRoutes(app: Express): void {
         );
       }
     },
+  );
+
+  app.get(
+    "/api/og/vote/polls/:slug.jpg",
+    (req, res) => serveSentimentPollOgImage(req, res, "jpeg"),
+  );
+
+  app.get(
+    "/api/og/vote/polls/:slug.png",
+    (req, res) => serveSentimentPollOgImage(req, res, "png"),
   );
 
   app.get(

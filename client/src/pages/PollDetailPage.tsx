@@ -31,6 +31,7 @@ import { goBack } from "@/lib/goBack";
 import { CardComments, useCommentCount } from "@/components/comments/CardComments";
 import { RelatedVoteItems } from "@/components/vote/RelatedVoteItems";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
+import { sentimentPollOgImagePath } from "@shared/sentiment-poll-og";
 import { useSupabaseUrl } from "@/lib/imageResolver";
 import {
   ArrowLeft,
@@ -207,9 +208,7 @@ export default function PollDetailPage() {
     description: poll
       ? poll.description ?? poll.subjectText ?? "Cast your vote on VoxDex."
       : null,
-    image: poll
-      ? `/api/og/image/market.png?title=${encodeURIComponent(poll.headline)}&subtitle=${encodeURIComponent("Sentiment poll • Cast your vote")}&badge=${encodeURIComponent("Sentiment poll")}`
-      : null,
+    image: poll?.slug ? sentimentPollOgImagePath(poll.slug) : null,
   });
 
   if (pollLoading) {
