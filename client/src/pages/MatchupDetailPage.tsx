@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { handleImageError } from "@/lib/imageResolver";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useLocation, Link } from "wouter";
@@ -21,6 +21,11 @@ import { navigateToLogin } from "@/lib/authReturn";
 import { useAnonBudget, applyBudgetFromVoteResponse } from "@/hooks/useAnonBudget";
 import { checkVoteGate } from "@/lib/voteGate";
 import { isBudgetExhaustedVoteError } from "@/lib/voteErrors";
+import {
+  optimisticMatchupRemovePatch,
+  optimisticMatchupVotePatch,
+  type MatchupVoteOption,
+} from "@/lib/optimisticMatchupVote";
 import { CardComments, useCommentCount } from "@/components/comments/CardComments";
 import { RelatedVoteItems } from "@/components/vote/RelatedVoteItems";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
@@ -86,7 +91,14 @@ export default function MatchupDetailPage() {
   const budget = useAnonBudget();
 
   const matchupCommentCount = useCommentCount("matchup", slug || "");
-  const { showNav, historyDepth, goPrev, goNext, prevSlug, nextSlug } = useDetailNavigation(slug || undefined, "matchup");
+  const { showNav, goPrev, goNext, prevSlug, nextSlug, hasVoteListContext, goBackToVoteHub } =
+    useDetailNavigation(slug || undefined, "matchup");
+
+  const handleBackToVote = useCallback(() => {
+    if (hasVoteListContext) goBackToVoteHub();
+    else if (window.history.length > 1) window.history.back();
+    else setLocation("/vote");
+  }, [hasVoteListContext, goBackToVoteHub, setLocation]);
 
   const { data: matchup, isLoading, error } = useQuery<MatchupDetail>({
     queryKey: ["/api/matchups/by-slug", slug],
@@ -102,24 +114,39 @@ export default function MatchupDetailPage() {
     queryKey: ["/api/matchups/user-votes"],
   });
 
+  const slugQueryKey = ["/api/matchups/by-slug", slug] as const;
+  const userVotesQueryKey = ["/api/matchups/user-votes"] as const;
+
   const voteMutation = useMutation({
-    mutationFn: async ({ matchupId, option }: { matchupId: string; option: string }) => {
+    mutationFn: async ({ matchupId, option }: { matchupId: string; option: MatchupVoteOption }) => {
       const res = await apiRequest("POST", `/api/matchups/${matchupId}/vote`, { option });
       return res.json();
     },
-    onSuccess: (data) => {
-      // Phase 4 — sync the anon-budget cache from the server-authoritative
-      // snapshot in the response. No-op for authed users (response.budget
-      // is null), so safe to call unconditionally.
-      applyBudgetFromVoteResponse(queryClient, data);
-      queryClient.invalidateQueries({ queryKey: ["/api/matchups/by-slug", slug] });
-      queryClient.invalidateQueries({ queryKey: ["/api/matchups/user-votes"] });
-      if (data?.xp?.xpAwarded) {
-        triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
+    onMutate: ({ matchupId, option }) => {
+      void queryClient.cancelQueries({ queryKey: slugQueryKey });
+      void queryClient.cancelQueries({ queryKey: userVotesQueryKey });
+      const previousMatchup = queryClient.getQueryData<MatchupDetail>(slugQueryKey);
+      const previousUserVotes = queryClient.getQueryData<Record<string, string>>(userVotesQueryKey);
+      const previousVote = previousUserVotes?.[matchupId] as MatchupVoteOption | undefined;
+      if (previousMatchup) {
+        queryClient.setQueryData<MatchupDetail>(
+          slugQueryKey,
+          optimisticMatchupVotePatch(previousMatchup, option, previousVote),
+        );
       }
-      toast("Vote Recorded", { description: "Your vote has been counted." });
+      queryClient.setQueryData<Record<string, string>>(userVotesQueryKey, (current) => ({
+        ...(current ?? {}),
+        [matchupId]: option,
+      }));
+      return { previousMatchup, previousUserVotes };
     },
-    onError: (error, variables) => {
+    onError: (error, variables, context) => {
+      if (context?.previousMatchup) {
+        queryClient.setQueryData(slugQueryKey, context.previousMatchup);
+      }
+      if (context?.previousUserVotes !== undefined) {
+        queryClient.setQueryData(userVotesQueryKey, context.previousUserVotes);
+      }
       if (isBudgetExhaustedVoteError(error)) {
         navigateToLogin(setLocation, {
           mode: "signup",
@@ -135,6 +162,26 @@ export default function MatchupDetailPage() {
       }
       toast.error("Error", { description: "Failed to cast vote. Please sign in." });
     },
+    onSuccess: (data, _variables, context) => {
+      applyBudgetFromVoteResponse(queryClient, data);
+      if (data && typeof data === "object" && context?.previousMatchup) {
+        const m = context.previousMatchup;
+        queryClient.setQueryData<MatchupDetail>(slugQueryKey, {
+          ...m,
+          optionAVotes: data.optionAVotes ?? m.optionAVotes,
+          optionBVotes: data.optionBVotes ?? m.optionBVotes,
+          neutralVotes: data.neutralVotes ?? m.neutralVotes,
+          totalVotes: data.totalVotes ?? m.totalVotes,
+          optionAPercent: data.optionAPercent ?? m.optionAPercent,
+          optionBPercent: data.optionBPercent ?? m.optionBPercent,
+          neutralPercent: data.neutralPercent ?? m.neutralPercent,
+        });
+      }
+      if (data?.xp?.xpAwarded) {
+        triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
+      }
+      toast("Vote Recorded", { description: "Your vote has been counted." });
+    },
   });
 
   const removeVoteMutation = useMutation({
@@ -142,12 +189,49 @@ export default function MatchupDetailPage() {
       const res = await apiRequest("POST", `/api/matchups/${matchupId}/vote`, { remove: true });
       return res.json();
     },
-    onSuccess: (data) => {
-      // Phase 4 — sync budget cache. Remove paths return budget: null
-      // server-side (no budget delta) but the helper handles that correctly.
+    onMutate: async (matchupId) => {
+      await queryClient.cancelQueries({ queryKey: slugQueryKey });
+      await queryClient.cancelQueries({ queryKey: userVotesQueryKey });
+      const previousMatchup = queryClient.getQueryData<MatchupDetail>(slugQueryKey);
+      const previousUserVotes = queryClient.getQueryData<Record<string, string>>(userVotesQueryKey);
+      const previousVote = previousUserVotes?.[matchupId] as MatchupVoteOption | undefined;
+      if (previousMatchup && previousVote) {
+        queryClient.setQueryData<MatchupDetail>(
+          slugQueryKey,
+          optimisticMatchupRemovePatch(previousMatchup, previousVote),
+        );
+      }
+      queryClient.setQueryData<Record<string, string>>(userVotesQueryKey, (current) => {
+        if (!current) return current;
+        const next = { ...current };
+        delete next[matchupId];
+        return next;
+      });
+      return { previousMatchup, previousUserVotes };
+    },
+    onError: (_error, _matchupId, context) => {
+      if (context?.previousMatchup) {
+        queryClient.setQueryData(slugQueryKey, context.previousMatchup);
+      }
+      if (context?.previousUserVotes !== undefined) {
+        queryClient.setQueryData(userVotesQueryKey, context.previousUserVotes);
+      }
+    },
+    onSuccess: (data, _matchupId, context) => {
       applyBudgetFromVoteResponse(queryClient, data);
-      queryClient.invalidateQueries({ queryKey: ["/api/matchups/by-slug", slug] });
-      queryClient.invalidateQueries({ queryKey: ["/api/matchups/user-votes"] });
+      if (data && typeof data === "object" && context?.previousMatchup) {
+        const m = context.previousMatchup;
+        queryClient.setQueryData<MatchupDetail>(slugQueryKey, {
+          ...m,
+          optionAVotes: data.optionAVotes ?? m.optionAVotes,
+          optionBVotes: data.optionBVotes ?? m.optionBVotes,
+          neutralVotes: data.neutralVotes ?? m.neutralVotes,
+          totalVotes: data.totalVotes ?? m.totalVotes,
+          optionAPercent: data.optionAPercent ?? m.optionAPercent,
+          optionBPercent: data.optionBPercent ?? m.optionBPercent,
+          neutralPercent: data.neutralPercent ?? m.neutralPercent,
+        });
+      }
     },
   });
 
@@ -224,7 +308,7 @@ export default function MatchupDetailPage() {
               {/* Icon-only on mobile so the prev-card chevron next
                   to it has visible breathing room. Label returns
                   at sm: for desktop clarity. */}
-              <Button variant="ghost" size="sm" className="px-2 sm:px-3" onClick={() => { showNav ? window.history.go(-historyDepth) : (window.history.length > 1 ? window.history.back() : setLocation("/vote")); }} data-testid="button-back" aria-label="Back to Vote">
+              <Button variant="ghost" size="sm" className="px-2 sm:px-3" onClick={handleBackToVote} data-testid="button-back" aria-label="Back to Vote">
                 <ArrowLeft className="h-4 w-4 sm:mr-1" />
                 <span className="hidden sm:inline">Vote</span>
               </Button>
@@ -247,12 +331,16 @@ export default function MatchupDetailPage() {
     );
   }
 
-  const userVote = userVotes?.[matchup.id] || null;
+  const pendingOption = voteMutation.isPending ? voteMutation.variables?.option : undefined;
+  const userVote = (userVotes?.[matchup.id] ?? pendingOption ?? null) as MatchupVoteOption | null;
   const hasVoted = userVote !== null;
-  const votedA = userVote === 'option_a';
-  const votedB = userVote === 'option_b';
-  const votedNeutral = userVote === 'neutral';
+  const votedA = userVote === "option_a";
+  const votedB = userVote === "option_b";
+  const votedNeutral = userVote === "neutral";
   const leadingA = matchup.optionAPercent >= matchup.optionBPercent;
+  const votePendingOnOptions =
+    (voteMutation.isPending || removeVoteMutation.isPending) && !hasVoted;
+  const removeVotePending = removeVoteMutation.isPending;
 
   return (
     <div className="min-h-screen bg-background" data-testid="matchup-detail-page">
@@ -265,7 +353,7 @@ export default function MatchupDetailPage() {
             {/* Icon-only on mobile so the prev-card chevron next
                 to it has visible breathing room. Label returns at
                 sm: for desktop clarity. */}
-            <Button variant="ghost" size="sm" className="px-2 sm:px-3" onClick={() => { showNav ? window.history.go(-historyDepth) : (window.history.length > 1 ? window.history.back() : setLocation("/vote")); }} data-testid="button-back" aria-label="Back to Vote">
+            <Button variant="ghost" size="sm" className="px-2 sm:px-3" onClick={handleBackToVote} data-testid="button-back" aria-label="Back to Vote">
               <ArrowLeft className="h-4 w-4 sm:mr-1" />
               <span className="hidden sm:inline">Vote</span>
             </Button>
@@ -342,10 +430,13 @@ export default function MatchupDetailPage() {
 
             <div className="flex items-stretch gap-0 relative mb-4 -mx-5">
             <button
+              disabled={votePendingOnOptions}
               onClick={() => {
-                if (!votedA) handleVote(matchup.id, 'option_a');
+                if (!votedA && !votePendingOnOptions) handleVote(matchup.id, "option_a");
               }}
               className={`flex-1 flex flex-col rounded-none border transition-all duration-300 overflow-hidden cursor-pointer ${
+                votePendingOnOptions ? "opacity-60 cursor-not-allowed" : ""
+              } ${
                 hasVoted
                   ? votedA
                     ? 'border-slate-300/60 ring-2 ring-white/15'
@@ -382,11 +473,14 @@ export default function MatchupDetailPage() {
 
             <div className="absolute left-1/2 top-[calc(50%-18px)] -translate-x-1/2 -translate-y-1/2 z-20 flex flex-col items-center gap-1">
               <button
+                disabled={votePendingOnOptions}
                 onClick={() => {
-                  if (!votedNeutral) handleVote(matchup.id, 'neutral');
+                  if (!votedNeutral && !votePendingOnOptions) handleVote(matchup.id, "neutral");
                 }}
                 data-testid="button-vote-neutral"
                 className={`h-14 w-14 md:h-11 md:w-11 rounded-full border-2 flex items-center justify-center shadow-lg transition-all duration-300 ${
+                  votePendingOnOptions ? "opacity-60 cursor-not-allowed" : ""
+                } ${
                   votedNeutral
                     ? 'bg-gradient-to-br from-slate-500 to-slate-600 border-slate-400 ring-2 ring-slate-400/40'
                     : 'bg-gradient-to-br from-slate-700 to-slate-900 border-slate-500 hover:border-slate-400 hover:ring-2 hover:ring-slate-300/30 cursor-pointer'
@@ -402,10 +496,13 @@ export default function MatchupDetailPage() {
             </div>
 
             <button
+              disabled={votePendingOnOptions}
               onClick={() => {
-                if (!votedB) handleVote(matchup.id, 'option_b');
+                if (!votedB && !votePendingOnOptions) handleVote(matchup.id, "option_b");
               }}
               className={`flex-1 flex flex-col rounded-none border transition-all duration-300 overflow-hidden cursor-pointer ${
+                votePendingOnOptions ? "opacity-60 cursor-not-allowed" : ""
+              } ${
                 hasVoted
                   ? votedB
                     ? 'border-slate-300/60 ring-2 ring-white/15'
@@ -446,8 +543,9 @@ export default function MatchupDetailPage() {
               <span className="text-xs text-muted-foreground">Tap an option or VS to change your vote</span>
               <span className="text-xs text-muted-foreground/40">|</span>
               <button
-                onClick={() => handleRemoveVote(matchup.id)}
-                className="text-xs text-muted-foreground hover:text-red-600/80 dark:hover:text-red-400/80 transition-colors underline-offset-4 hover:underline"
+                disabled={removeVotePending}
+                onClick={() => !removeVotePending && handleRemoveVote(matchup.id)}
+                className="text-xs text-muted-foreground hover:text-red-600/80 dark:hover:text-red-400/80 transition-colors underline-offset-4 hover:underline disabled:opacity-60 disabled:cursor-not-allowed"
                 data-testid="button-remove-vote"
               >
                 Remove vote

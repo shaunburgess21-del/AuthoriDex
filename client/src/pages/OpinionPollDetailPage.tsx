@@ -31,6 +31,7 @@ import { isBudgetExhaustedVoteError } from "@/lib/voteErrors";
 import { formatDate } from "@/lib/formatDate";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { VoteDetailNavCluster } from "@/components/vote/VoteDetailNavCluster";
+import { OpinionPollOptionRow } from "@/components/opinion-polls/OpinionPollOptionRow";
 import { SwipeNavigator } from "@/components/vote/SwipeNavigator";
 import { useDetailNavigation } from "@/hooks/useDetailNavigation";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
@@ -81,7 +82,14 @@ export default function OpinionPollDetailPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const opCommentCount = useCommentCount("opinion-poll", slug || "");
-  const { showNav, historyDepth, goPrev, goNext, prevSlug, nextSlug } = useDetailNavigation(slug || undefined, "opinion");
+  const { showNav, goPrev, goNext, prevSlug, nextSlug, hasVoteListContext, goBackToVoteHub } =
+    useDetailNavigation(slug || undefined, "opinion");
+
+  const handleBackToVote = useCallback(() => {
+    if (hasVoteListContext) goBackToVoteHub();
+    else if (window.history.length > 1) window.history.back();
+    else setLocation("/vote");
+  }, [hasVoteListContext, goBackToVoteHub, setLocation]);
   const [changeDialogOpen, setChangeDialogOpen] = useState(false);
   const [pendingOption, setPendingOption] = useState<{ id: string; name: string } | null>(null);
   const [imgIdx, setImgIdx] = useState(0);
@@ -312,7 +320,7 @@ export default function OpinionPollDetailPage() {
                 it has visible breathing room and the two tap
                 targets don't fight for the same thumb. Label
                 returns at sm: for desktop clarity. */}
-            <Button variant="ghost" size="sm" className="px-2 sm:px-3" onClick={() => { showNav ? window.history.go(-historyDepth) : (window.history.length > 1 ? window.history.back() : setLocation("/vote")); }} data-testid="button-back" aria-label="Back to Vote">
+            <Button variant="ghost" size="sm" className="px-2 sm:px-3" onClick={handleBackToVote} data-testid="button-back" aria-label="Back to Vote">
               <ArrowLeft className="h-4 w-4 sm:mr-1" />
               <span className="hidden sm:inline">Vote</span>
             </Button>
@@ -418,67 +426,33 @@ export default function OpinionPollDetailPage() {
 
           {!hasVoted ? (
             <div className="flex flex-col gap-2.5">
-              {options.map((option: any) => (
-                <div
+              {options.map((option: any, idx: number) => (
+                <OpinionPollOptionRow
                   key={option.id}
-                  className={`w-full flex items-stretch overflow-hidden rounded-lg border border-border/50 bg-muted/30 p-0 text-sm font-medium transition-all duration-200 hover:border-[#EFEFEF]/50 hover:bg-muted/50 dark:hover:border-white/40 dark:hover:bg-white/5 hover:ring-1 hover:ring-inset hover:ring-[#EFEFEF]/40 dark:hover:ring-white/25 ${voteMutation.isPending ? "opacity-60" : ""}`}
-                >
-                  {option.imageUrl ? (
-                    <button
-                      type="button"
-                      aria-label="View larger image"
-                      disabled={voteMutation.isPending}
-                      onClick={() => setExpandedImage({ url: option.imageUrl, alt: option.name })}
-                      className="relative shrink-0 w-14 self-stretch min-h-[2.75rem] cursor-zoom-in border-0 p-0 disabled:cursor-not-allowed"
-                    >
-                      <img
-                        src={option.imageUrl}
-                        alt={option.name}
-                        className="absolute inset-0 h-full w-full object-cover"
-                        onError={(e) => handleImageError(e)}
-                      />
-                    </button>
-                  ) : (
-                    <div className="relative flex shrink-0 w-14 items-center justify-center self-stretch min-h-[2.75rem] bg-cyan-500/15 dark:bg-cyan-500/10">
-                      <span className="text-sm font-semibold text-cyan-600 dark:text-cyan-400">{option.orderIndex + 1}</span>
-                    </div>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      // Phase 4 — anon-budget gate. The pre-Stage-7 toast-only
-                      // anon-block has been removed; fresh-vote isUpsert is false
-                      // (this branch only renders for users with no prior vote).
-                      const decision = checkVoteGate(budget, "opinion_poll", poll.id, false);
-                      if (!decision.proceed) {
-                        navigateToLogin(setLocation, {
-                          mode: "signup",
-                          reason: "vote_limit_reached",
-                          resumeAction: {
-                            ...decision.resumeAction,
-                            cardRoute: window.location.pathname,
-                            pendingVote: { kind: "vote", optionId: option.id },
-                          },
-                        });
-                        return;
-                      }
-                      voteMutation.mutate(option.id);
-                    }}
-                    disabled={voteMutation.isPending}
-                    className={`flex min-w-0 flex-1 flex-col items-stretch py-1.5 pl-2.5 pr-2 text-left transition-transform active:scale-[0.99] ${voteMutation.isPending ? "cursor-not-allowed" : "cursor-pointer"}`}
-                    data-testid={`button-vote-option-${option.id}`}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <span className="min-w-0 flex-1 truncate">{option.name}</span>
-                      {option.personName && option.personName !== option.name && (
-                        <span className="text-xs text-muted-foreground shrink-0">({option.personName})</span>
-                      )}
-                      <span className="shrink-0 text-xs font-mono font-bold text-slate-600">%</span>
-                    </div>
-                    <div className="mt-1 h-2 rounded-full bg-slate-700/50" />
-                    <p className="text-[10px] text-slate-600 mt-0.5">Votes</p>
-                  </button>
-                </div>
+                  pollId={poll.id}
+                  option={option}
+                  orderLabel={(option.orderIndex ?? idx) + 1}
+                  mode="vote"
+                  disabled={voteMutation.isPending}
+                  onVote={() => {
+                    const decision = checkVoteGate(budget, "opinion_poll", poll.id, false);
+                    if (!decision.proceed) {
+                      navigateToLogin(setLocation, {
+                        mode: "signup",
+                        reason: "vote_limit_reached",
+                        resumeAction: {
+                          ...decision.resumeAction,
+                          cardRoute: window.location.pathname,
+                          pendingVote: { kind: "vote", optionId: option.id },
+                        },
+                      });
+                      return;
+                    }
+                    voteMutation.mutate(option.id);
+                  }}
+                  onExpandImage={(url, alt) => setExpandedImage({ url, alt })}
+                  testIdPrefix="button-vote-option"
+                />
               ))}
 
               {!user && (
@@ -492,80 +466,28 @@ export default function OpinionPollDetailPage() {
             </div>
           ) : (
             <div className="flex flex-col gap-2.5">
-              {options.map((option: any) => {
+              {options.map((option: any, idx: number) => {
                 const isSelected = poll.userVote === option.id;
                 const percent = option.percent || 0;
                 const maxPercent = Math.max(...options.map((o: any) => o.percent || 0), 0);
                 const isLeading = percent === maxPercent && percent > 0;
-                const rowClass = `flex items-stretch overflow-hidden rounded-lg border transition-all duration-300 ${
-                  isSelected
-                    ? "border-[#EFEFEF]/45 bg-white/[0.06] dark:border-white/40 dark:bg-white/5"
-                    : "border-border/30 bg-muted/20"
-                }`;
-                const imageColumn = option.imageUrl ? (
-                  <button
-                    type="button"
-                    aria-label="View larger image"
+                return (
+                  <OpinionPollOptionRow
+                    key={option.id}
+                    pollId={poll.id}
+                    option={option}
+                    orderLabel={(option.orderIndex ?? idx) + 1}
+                    mode={isSelected ? "result-selected" : "result-other"}
+                    percent={percent}
+                    isLeading={isLeading}
                     disabled={voteMutation.isPending}
-                    onClick={() => setExpandedImage({ url: option.imageUrl, alt: option.name })}
-                    className="relative shrink-0 w-14 self-stretch min-h-[2.75rem] cursor-zoom-in border-0 p-0 disabled:cursor-not-allowed"
-                  >
-                    <img
-                      src={option.imageUrl}
-                      alt={option.name}
-                      className="absolute inset-0 h-full w-full object-cover"
-                      onError={(e) => handleImageError(e)}
-                    />
-                  </button>
-                ) : (
-                  <div className="relative flex shrink-0 w-14 items-center justify-center self-stretch min-h-[2.75rem] bg-cyan-500/15 dark:bg-cyan-500/10">
-                    <span className="text-sm font-semibold text-cyan-600 dark:text-cyan-400">{option.orderIndex + 1}</span>
-                  </div>
-                );
-                const contentColumn = (
-                  <div className="flex-1 min-w-0 py-1.5 pl-2.5 pr-2">
-                    <div className="flex items-center gap-1.5">
-                      <span className={`min-w-0 flex-1 truncate text-sm ${isSelected ? "font-semibold" : ""}`}>
-                        {option.name}
-                      </span>
-                      {isSelected && <CheckCircle2 className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400 shrink-0" />}
-                      <span className={`shrink-0 text-xs font-mono font-bold ${isLeading ? "text-cyan-600 dark:text-cyan-400" : "text-muted-foreground"}`}>
-                        {percent}%
-                      </span>
-                    </div>
-                    <div className="mt-1 h-2 rounded-full bg-slate-700/50 overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-cyan-500 transition-all duration-700 ease-out"
-                        style={{ width: `${percent}%` }}
-                      />
-                    </div>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">{(option.votes || 0).toLocaleString("en-US")} votes</p>
-                  </div>
-                );
-                return isSelected ? (
-                  <div key={option.id} className={rowClass} data-testid={`opinion-poll-cast-result-${option.id}`}>
-                    {imageColumn}
-                    {contentColumn}
-                  </div>
-                ) : (
-                  <div key={option.id} className={`${rowClass} w-full`} data-testid={`opinion-poll-cast-result-${option.id}`}>
-                    {imageColumn}
-                    <button
-                      type="button"
-                      disabled={voteMutation.isPending}
-                      className={`min-w-0 flex-1 text-left cursor-pointer rounded-r-md hover:ring-1 hover:ring-inset hover:ring-[#EFEFEF]/50 dark:hover:ring-white/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#EFEFEF]/40 dark:focus-visible:ring-white/30 border-0 bg-transparent p-0 ${voteMutation.isPending ? "opacity-60 cursor-not-allowed" : ""}`}
-                      onClick={() => {
-                        // Phase 4 — change-vote is always a free upsert under D3
-                        // (re-vote costs 0 additional units), so no gate needed.
-                        // Anon users with prior votes can change them through the
-                        // same dialog flow.
-                        setPendingOption({ id: option.id, name: option.name });
-                        setChangeDialogOpen(true);
-                      }}
-                    >
-                      {contentColumn}
-                    </button>
-                  </div>
+                    onChangeVote={() => {
+                      setPendingOption({ id: option.id, name: option.name });
+                      setChangeDialogOpen(true);
+                    }}
+                    onExpandImage={(url, alt) => setExpandedImage({ url, alt })}
+                    testIdPrefix="opinion-poll-cast-result"
+                  />
                 );
               })}
 

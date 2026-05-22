@@ -7,8 +7,8 @@ import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constan
 import { sharePage } from "@/lib/share";
 import { useAuth } from "@/contexts/AuthContext";
 import {
+  buildVoteListState,
   navigateWithVoteList,
-  type VoteListHistoryState,
   type VoteListNavType,
 } from "@/lib/voteListNavigation";
 import { CategoryTabStrip } from "./CategoryTabStrip";
@@ -43,6 +43,8 @@ interface VoteSnapScrollViewProps {
   renderCard: (item: SnapItem) => ReactNode;
   onSuggest?: () => void;
   commentMode?: SnapCommentMode;
+  /** Vote hub section filter when opening detail (defaults to "All"). */
+  voteHubActiveSection?: string;
 }
 
 const SECTION_COMMENT_TYPE: Partial<Record<SnapSectionType, CommentEntityType>> = {
@@ -226,6 +228,7 @@ export function VoteSnapScrollView({
   renderCard,
   onSuggest,
   commentMode = "card",
+  voteHubActiveSection = "All",
 }: VoteSnapScrollViewProps) {
   const [, setLocation] = useLocation();
   const commentScrollRef = useRef<HTMLDivElement | null>(null);
@@ -572,18 +575,18 @@ export function VoteSnapScrollView({
       const listItems = categoryItems.get(activeCategory) || [];
       const slugs = listItems.map((i) => i.slug).filter(Boolean);
       if (slugs.length > 0) {
-        const voteList: VoteListHistoryState = {
+        const voteList = buildVoteListState({
           type: listType,
           slugs,
           currentSlug: item.slug,
-          historyDepth: 1,
-        };
+          activeSection: voteHubActiveSection,
+        });
         navigateWithVoteList(setLocation, voteList, `${detailPrefix}${encodeURIComponent(item.slug)}`);
         return;
       }
     }
     setLocation(`${detailPrefix}${encodeURIComponent(item.slug)}`);
-  }, [activeCategory, categoryItems, getVisibleItem, sectionType, setLocation]);
+  }, [activeCategory, categoryItems, getVisibleItem, sectionType, setLocation, voteHubActiveSection]);
 
   const { user } = useAuth();
   const handleShare = useCallback(() => {

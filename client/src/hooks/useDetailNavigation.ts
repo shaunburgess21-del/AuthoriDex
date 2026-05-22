@@ -5,6 +5,7 @@ import {
   type VoteListNavType,
   VOTE_DETAIL_PATH_PREFIX,
   mergeVoteListIntoHistory,
+  navigateBackToVoteHub,
 } from "@/lib/voteListNavigation";
 
 function readContext(
@@ -70,6 +71,13 @@ export function useDetailNavigation(urlSlug: string | undefined, listType: VoteL
     if (nextSlug) navigateToSlug(nextSlug);
   }, [navigateToSlug, nextSlug]);
 
+  const hasVoteListContext = !!snapshot;
+  const voteList = snapshot?.voteList ?? null;
+
+  const goBackToVoteHub = useCallback(() => {
+    if (voteList) navigateBackToVoteHub(setLocation, voteList);
+  }, [setLocation, voteList]);
+
   return {
     showNav,
     historyDepth,
@@ -79,5 +87,7 @@ export function useDetailNavigation(urlSlug: string | undefined, listType: VoteL
     currentIndex,
     goPrev,
     goNext,
+    hasVoteListContext,
+    goBackToVoteHub,
   };
 }

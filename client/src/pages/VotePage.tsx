@@ -106,7 +106,12 @@ import { useAnonBudget, applyBudgetFromVoteResponse } from "@/hooks/useAnonBudge
 import { checkVoteGate } from "@/lib/voteGate";
 import { voteHubSectionFromHash } from "@/lib/voteHubDeepLinks";
 import { useScrollToHash } from "@/hooks/useScrollToHash";
-import { navigateWithVoteList } from "@/lib/voteListNavigation";
+import {
+  buildVoteListState,
+  navigateWithVoteList,
+  readVoteHubReturnState,
+  scrollToVoteHubAnchor,
+} from "@/lib/voteListNavigation";
 import { isBudgetExhaustedVoteError, parseVoteError } from "@/lib/voteErrors";
 import {
   getSentimentPollChoiceColor,
@@ -1437,6 +1442,20 @@ export default function VotePage() {
     return () => window.removeEventListener("hashchange", syncSectionFromHash);
   }, []);
 
+  useEffect(() => {
+    const returnState = readVoteHubReturnState();
+    if (!returnState) return;
+    setActiveSection(returnState.activeSection as SectionToggle);
+    const runScroll = () => {
+      if (returnState.activeSection === "All") {
+        scrollToVoteHubAnchor(returnState.anchorHashId);
+      } else if (returnState.scrollY != null && returnState.scrollY > 0) {
+        window.scrollTo(0, returnState.scrollY);
+      }
+    };
+    requestAnimationFrame(() => requestAnimationFrame(runScroll));
+  }, []);
+
   useScrollToHash([activeSection]);
 
   const enrichedCandidates = dbInductionCandidates;
@@ -1766,31 +1785,46 @@ export default function VotePage() {
     (slug: string) => {
       navigateWithVoteList(
         setLocation,
-        { type: "sentiment", slugs: sentimentSlugList, currentSlug: slug, historyDepth: 1 },
+        buildVoteListState({
+          type: "sentiment",
+          slugs: sentimentSlugList,
+          currentSlug: slug,
+          activeSection,
+        }),
         `/polls/${encodeURIComponent(slug)}`,
       );
     },
-    [sentimentSlugList, setLocation],
+    [sentimentSlugList, setLocation, activeSection],
   );
   const goMatchupDetail = useCallback(
     (slug: string) => {
       navigateWithVoteList(
         setLocation,
-        { type: "matchup", slugs: matchupSlugList, currentSlug: slug, historyDepth: 1 },
+        buildVoteListState({
+          type: "matchup",
+          slugs: matchupSlugList,
+          currentSlug: slug,
+          activeSection,
+        }),
         `/vote/matchups/${encodeURIComponent(slug)}`,
       );
     },
-    [matchupSlugList, setLocation],
+    [matchupSlugList, setLocation, activeSection],
   );
   const goOpinionDetail = useCallback(
     (slug: string) => {
       navigateWithVoteList(
         setLocation,
-        { type: "opinion", slugs: opinionSlugList, currentSlug: slug, historyDepth: 1 },
+        buildVoteListState({
+          type: "opinion",
+          slugs: opinionSlugList,
+          currentSlug: slug,
+          activeSection,
+        }),
         `/vote/opinion-polls/${encodeURIComponent(slug)}`,
       );
     },
-    [opinionSlugList, setLocation],
+    [opinionSlugList, setLocation, activeSection],
   );
 
   const matchupSnapItems: SnapItem[] = useMemo(
@@ -4190,6 +4224,7 @@ export default function VotePage() {
             sectionType="matchups"
             items={matchupSnapItems}
             initialItemId={snapScrollInitialId}
+            voteHubActiveSection={activeSection}
             onSuggest={() => openSuggestModal(() => setMatchupSuggestOpen(true))}
             renderCard={(item) => {
               const m = matchups.find(x => x.id === item.id);
@@ -4214,6 +4249,7 @@ export default function VotePage() {
             sectionType="sentiment"
             items={sentimentSnapItems}
             initialItemId={snapScrollInitialId}
+            voteHubActiveSection={activeSection}
             onSuggest={() => openSuggestModal(() => setStartPollModalOpen(true))}
             renderCard={(item) => {
               const t = dbPolls.find((x: any) => x.id === item.id);
@@ -4236,6 +4272,7 @@ export default function VotePage() {
             sectionType="opinion"
             items={opinionSnapItems}
             initialItemId={snapScrollInitialId}
+            voteHubActiveSection={activeSection}
             onSuggest={() => openSuggestModal(() => setOpinionSuggestOpen(true))}
             renderCard={(item) => {
               const p = opinionPolls.find((x: any) => x.id === item.id);

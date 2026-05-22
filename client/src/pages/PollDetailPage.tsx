@@ -24,6 +24,10 @@ import { useAnonBudget, applyBudgetFromVoteResponse } from "@/hooks/useAnonBudge
 import { checkVoteGate } from "@/lib/voteGate";
 import { isBudgetExhaustedVoteError } from "@/lib/voteErrors";
 import {
+  optimisticSentimentVotePatch,
+  type SentimentChoice,
+} from "@/lib/optimisticSentimentPollVote";
+import {
   getSentimentPollChoiceColor,
   getSentimentPollChoiceLabel,
 } from "@/lib/sentimentPollVoteDisplay";
@@ -95,7 +99,14 @@ export default function PollDetailPage() {
   const { trigger: triggerXpBurst } = useXpBurst();
 
   const pollCommentCount = useCommentCount("poll", slug || "");
-  const { showNav, historyDepth, goPrev, goNext, prevSlug, nextSlug } = useDetailNavigation(slug || undefined, "sentiment");
+  const { showNav, goPrev, goNext, prevSlug, nextSlug, hasVoteListContext, goBackToVoteHub } =
+    useDetailNavigation(slug || undefined, "sentiment");
+
+  const handleBackToVote = useCallback(() => {
+    if (hasVoteListContext) goBackToVoteHub();
+    else if (window.history.length > 1) window.history.back();
+    else setLocation("/vote");
+  }, [hasVoteListContext, goBackToVoteHub, setLocation]);
   const [showVoteChange, setShowVoteChange] = useState(false);
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
   const [imgIdx, setImgIdx] = useState(0);
@@ -138,22 +149,28 @@ export default function PollDetailPage() {
 
   const budget = useAnonBudget();
 
+  const pollQueryKey = ["/api/polls", slug] as const;
+
   const voteMutation = useMutation({
-    mutationFn: async (choice: string) => {
+    mutationFn: async (choice: SentimentChoice) => {
       const res = await apiRequest("POST", `/api/polls/${encodeURIComponent(slug)}/vote`, { choice });
       return res.json();
     },
-    onSuccess: (data) => {
-      // Phase 4 — sync the anon-budget cache from the server-authoritative
-      // snapshot in the response.
-      applyBudgetFromVoteResponse(queryClient, data);
-      queryClient.invalidateQueries({ queryKey: ["/api/polls", slug] });
-      if (data?.xp?.xpAwarded) {
-        triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
+    onMutate: (choice) => {
+      const previousPoll = queryClient.getQueryData<PollData>(pollQueryKey);
+      if (previousPoll) {
+        queryClient.setQueryData<PollData>(
+          pollQueryKey,
+          optimisticSentimentVotePatch(previousPoll, choice),
+        );
       }
-      toast("Vote Recorded", { description: "Your vote has been counted." });
+      void queryClient.cancelQueries({ queryKey: pollQueryKey });
+      return { previousPoll };
     },
-    onError: (error, choice) => {
+    onError: (error, choice, context) => {
+      if (context?.previousPoll) {
+        queryClient.setQueryData(pollQueryKey, context.previousPoll);
+      }
       if (poll && isBudgetExhaustedVoteError(error)) {
         navigateToLogin(setLocation, {
           mode: "signup",
@@ -169,15 +186,27 @@ export default function PollDetailPage() {
       }
       toast.error("Error", { description: "Failed to cast vote. Please sign in." });
     },
+    onSuccess: (data) => {
+      applyBudgetFromVoteResponse(queryClient, data);
+      if (data?.poll && typeof data.poll === "object") {
+        queryClient.setQueryData<PollData>(pollQueryKey, (current) =>
+          current ? { ...current, ...data.poll } : data.poll,
+        );
+      }
+      if (data?.xp?.xpAwarded) {
+        triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
+      }
+      toast("Vote Recorded", { description: "Your vote has been counted." });
+    },
   });
 
-  const handleVote = (choice: string) => {
+  const pendingChoice = voteMutation.isPending ? voteMutation.variables : undefined;
+  const displayUserVote = poll?.userVote ?? pendingChoice ?? null;
+  const showVoteButtons = !displayUserVote || showVoteChange;
+  const voteButtonsDisabled = voteMutation.isPending && !displayUserVote;
+
+  const handleVote = (choice: SentimentChoice) => {
     if (!poll) return;
-    // Phase 4 — anon-budget gate. The pre-Stage-7 toast-only anon-block
-    // has been removed; anon users with remaining budget hit the server,
-    // exhausted users redirect via the gate. isUpsert defaults to false
-    // — poll.userVote is not always populated in this query response;
-    // brief guidance is to pass false when uncertain.
     const decision = checkVoteGate(budget, "trending_poll", poll.id, false);
     if (!decision.proceed) {
       navigateToLogin(setLocation, {
@@ -191,6 +220,7 @@ export default function PollDetailPage() {
       });
       return;
     }
+    setShowVoteChange(false);
     voteMutation.mutate(choice);
   };
 
@@ -248,7 +278,7 @@ export default function PollDetailPage() {
                 it has visible breathing room and the two tap
                 targets don't fight for the same thumb. Label
                 returns at sm: for desktop clarity. */}
-            <Button variant="ghost" size="sm" className="px-2 sm:px-3" onClick={() => { showNav ? window.history.go(-historyDepth) : (window.history.length > 1 ? window.history.back() : setLocation("/vote")); }} data-testid="button-back" aria-label="Back to Vote">
+            <Button variant="ghost" size="sm" className="px-2 sm:px-3" onClick={handleBackToVote} data-testid="button-back" aria-label="Back to Vote">
               <ArrowLeft className="h-4 w-4 sm:mr-1" />
               <span className="hidden sm:inline">Vote</span>
             </Button>
@@ -361,36 +391,36 @@ export default function PollDetailPage() {
         )}
 
         {/* Vote Module */}
-        <Card className="p-5 mb-6 border-cyan-500/30 dark:border-cyan-500/20" data-testid="section-vote-module">
+        <Card className="p-5 mb-6" data-testid="section-vote-module">
           <h2 className="text-lg font-serif font-bold mb-4 flex items-center gap-2">
             <BarChart3 className="h-5 w-5 text-cyan-700 dark:text-cyan-500" />
             Cast Your Vote
           </h2>
 
-          {(!poll.userVote || showVoteChange) ? (
+          {showVoteButtons ? (
             <div className="flex flex-col gap-3 mb-4">
               <button
-                onClick={(e) => { e.stopPropagation(); handleVote("support"); setShowVoteChange(false); }}
-                disabled={voteMutation.isPending}
-                className={`w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-md bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] text-sm font-medium transition-all duration-300 hover:border-[#00C853]/80 hover:bg-[#00C853]/20 ${voteMutation.isPending ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
+                onClick={(e) => { e.stopPropagation(); handleVote("support"); }}
+                disabled={voteButtonsDisabled}
+                className={`w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-md bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] text-sm font-medium transition-all duration-300 hover:border-[#00C853]/80 hover:bg-[#00C853]/20 ${voteButtonsDisabled ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
                 data-testid="button-vote-support"
               >
                 <ThumbsUp className="h-4 w-4 shrink-0" />
                 <span>Support</span>
               </button>
               <button
-                onClick={(e) => { e.stopPropagation(); handleVote("neutral"); setShowVoteChange(false); }}
-                disabled={voteMutation.isPending}
-                className={`w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-md bg-white/5 border border-white/40 text-white text-sm font-medium transition-all duration-300 hover:border-white/80 hover:bg-white/15 ${voteMutation.isPending ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
+                onClick={(e) => { e.stopPropagation(); handleVote("neutral"); }}
+                disabled={voteButtonsDisabled}
+                className={`w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-md bg-white/5 border border-white/40 text-white text-sm font-medium transition-all duration-300 hover:border-white/80 hover:bg-white/15 ${voteButtonsDisabled ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
                 data-testid="button-vote-neutral"
               >
                 <Minus className="h-4 w-4 shrink-0" />
                 <span>Neutral</span>
               </button>
               <button
-                onClick={(e) => { e.stopPropagation(); handleVote("oppose"); setShowVoteChange(false); }}
-                disabled={voteMutation.isPending}
-                className={`w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-md bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] text-sm font-medium transition-all duration-300 hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20 ${voteMutation.isPending ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
+                onClick={(e) => { e.stopPropagation(); handleVote("oppose"); }}
+                disabled={voteButtonsDisabled}
+                className={`w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-md bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] text-sm font-medium transition-all duration-300 hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20 ${voteButtonsDisabled ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
                 data-testid="button-vote-oppose"
               >
                 <ThumbsDown className="h-4 w-4 shrink-0" />
@@ -454,10 +484,10 @@ export default function PollDetailPage() {
                     <span
                       className="font-semibold"
                       style={{
-                        color: poll.userVote ? getSentimentPollChoiceColor(poll.userVote) : undefined,
+                        color: displayUserVote ? getSentimentPollChoiceColor(displayUserVote) : undefined,
                       }}
                     >
-                      {poll.userVote ? getSentimentPollChoiceLabel(poll.userVote) : "—"}
+                      {displayUserVote ? getSentimentPollChoiceLabel(displayUserVote) : "—"}
                     </span>
                   </span>
                 </div>
