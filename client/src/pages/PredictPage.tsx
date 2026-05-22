@@ -3067,7 +3067,7 @@ export default function PredictPage() {
         </div>
       </div>
       {selectedType === "all" && (
-        <div className="container mx-auto px-2 sm:px-4 max-w-7xl pt-[5px] pb-[5px]">
+        <div className="container mx-auto px-2 sm:px-4 max-w-7xl pt-[15px] pb-[5px]">
           {/* Town Square - below section filters, above weekly timer */}
           {recentActivityError ? (
             <div className="mb-8 mt-[5px]">
