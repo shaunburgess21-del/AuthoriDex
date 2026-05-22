@@ -34,6 +34,7 @@ import { VoteDetailNavCluster } from "@/components/vote/VoteDetailNavCluster";
 import { SwipeNavigator } from "@/components/vote/SwipeNavigator";
 import { useDetailNavigation } from "@/hooks/useDetailNavigation";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
+import { opinionPollOgImagePath } from "@shared/opinion-poll-og";
 import { useSupabaseUrl, handleImageError } from "@/lib/imageResolver";
 import {
   ArrowLeft,
@@ -267,9 +268,7 @@ export default function OpinionPollDetailPage() {
     description: poll
       ? poll.summary ?? poll.description ?? "Cast your vote on VoxDex."
       : null,
-    image: poll
-      ? `/api/og/image/market.png?title=${encodeURIComponent(poll.title)}&subtitle=${encodeURIComponent("Opinion poll • Pick a side")}&badge=${encodeURIComponent("Opinion poll")}`
-      : null,
+    image: poll?.slug ? opinionPollOgImagePath(poll.slug) : null,
   });
 
   if (isLoading) {
