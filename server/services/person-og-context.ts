@@ -6,7 +6,10 @@ import {
   trackedPeople,
   trendingPeople,
 } from "@shared/schema";
-import { resolvePersonAvatarUrl } from "./person-images";
+import {
+  resolvePersonAvatarCandidates,
+  resolvePersonAvatarUrl,
+} from "./person-images";
 
 export { personOgDescription } from "./person-og-meta";
 
@@ -15,6 +18,8 @@ export interface PersonOgContext {
   name: string;
   category: string;
   avatarUrl: string | null;
+  imageSlug: string | null;
+  avatarCandidates: string[];
   rank: number | null;
   trendScoreDisplay: string;
   change24h: number | null;
@@ -91,6 +96,8 @@ export async function loadPersonOgContext(
     name: person.name,
     category: person.category || "Celebrity",
     avatarUrl: resolvePersonAvatarUrl(person.avatar, imageSlug),
+    imageSlug,
+    avatarCandidates: resolvePersonAvatarCandidates(person.avatar, imageSlug),
     rank: person.rank > 0 ? person.rank : null,
     trendScoreDisplay: formatTrendScore(person.fameIndex, person.trendScore),
     change24h: person.change24h,

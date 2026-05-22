@@ -43,15 +43,13 @@ import {
   renderOpinionPollOgImage,
   renderOpinionPollOgImageJpeg,
 } from "../services/opinion-poll-og-image";
-import { personOgImagePath } from "@shared/person-og";
-import {
-  loadPersonOgContext,
-  personOgDescription,
-} from "../services/person-og-context";
+import { loadPersonOgContext } from "../services/person-og-context";
 import {
   renderPersonOgImage,
   renderPersonOgImageJpeg,
+  renderPersonOgUnavailableJpeg,
 } from "../services/person-og-image";
+import { assertOgPathFontsLoaded } from "../services/og-svg-text-paths";
 import {
   getOgFontFaceStyle,
   logOgFontStartup,
@@ -813,10 +811,6 @@ function opinionPollOgImageUrl(slug: string): string {
   return `${SITE_URL}${opinionPollOgImagePath(slug)}`;
 }
 
-function personOgImageUrl(id: string): string {
-  return `${SITE_URL}${personOgImagePath(id)}`;
-}
-
 async function servePersonOgImage(
   req: Request,
   res: Response,
@@ -827,14 +821,8 @@ async function servePersonOgImage(
   try {
     const ctx = await loadPersonOgContext(id);
     if (!ctx) {
-      const fallback = loadDefaultOgPng();
-      if (fallback) {
-        res.setHeader("Content-Type", "image/png");
-        res.setHeader("Cache-Control", "public, max-age=300");
-        res.send(fallback);
-        return;
-      }
-      res.status(404).send("person not found");
+      console.warn(`[OG] Person not found for image id=${id}`);
+      res.status(404).type("text/plain").send("person not found");
       return;
     }
     const image =
@@ -846,15 +834,22 @@ async function servePersonOgImage(
     res.setHeader("Cache-Control", "public, max-age=86400");
     res.send(image);
   } catch (err: any) {
-    console.error(`[OG] Person ${format.toUpperCase()} render failed:`, err?.message);
-    const fallback = loadDefaultOgPng();
-    if (fallback) {
-      res.setHeader("Content-Type", "image/png");
-      res.setHeader("Cache-Control", "public, max-age=300");
-      res.send(fallback);
-      return;
+    console.error(
+      `[OG] Person ${format.toUpperCase()} render failed id=${id} fontsLoaded=${assertOgPathFontsLoaded()}:`,
+      err?.message,
+    );
+    if (format === "jpeg") {
+      try {
+        const errImage = await renderPersonOgUnavailableJpeg();
+        res.setHeader("Content-Type", "image/jpeg");
+        res.setHeader("Cache-Control", "public, max-age=60");
+        res.send(errImage);
+        return;
+      } catch (inner: any) {
+        console.error("[OG] Person unavailable JPEG failed:", inner?.message);
+      }
     }
-    res.status(500).send("og render failed");
+    res.status(500).type("text/plain").send("og render failed");
   }
 }
 
@@ -1283,8 +1278,10 @@ export function registerOgRoutes(app: Express): void {
   );
 
   app.get("/api/og/person/:id", async (req: Request, res: Response) => {
+    const id = req.params.id;
+    const canonicalUrl = `${SITE_URL}/person/${encodeURIComponent(id)}`;
     try {
-      const result = await resolvePersonOg(req.params.id);
+      const result = await resolvePersonOg(id);
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       res.setHeader(
         "Cache-Control",
@@ -1292,8 +1289,18 @@ export function registerOgRoutes(app: Express): void {
       );
       res.send(renderOgHtml(result));
     } catch (err: any) {
-      console.error("[OG] Person render failed:", err?.message);
-      res.status(500).send("og render failed");
+      console.error(
+        `[OG] Person HTML failed id=${id} fontsLoaded=${assertOgPathFontsLoaded()}:`,
+        err?.message,
+      );
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.send(
+        renderOgHtml({
+          title: SITE_NAME,
+          description: DEFAULT_DESCRIPTION,
+          canonicalUrl,
+        }),
+      );
     }
   });
 

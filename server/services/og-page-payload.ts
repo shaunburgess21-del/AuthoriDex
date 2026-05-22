@@ -51,7 +51,8 @@ export interface OgPagePayload {
   title: string;
   description: string;
   canonicalUrl: string;
-  imageUrl: string;
+  /** Omit to skip og:image / twitter:image (e.g. person not found). */
+  imageUrl?: string;
   imageType?: string;
   twitterSite?: string;
 }
@@ -86,14 +87,26 @@ export function renderOgHtml(p: OgPagePayload): string {
   const t = escapeHtml(p.title);
   const d = escapeHtml(p.description);
   const url = escapeHtml(p.canonicalUrl);
-  const img = escapeHtml(p.imageUrl);
   const site = escapeHtml(p.twitterSite ?? "@voxdex");
-  const imageTypeMeta = p.imageType
-    ? `\n    <meta property="og:image:type" content="${escapeHtml(p.imageType)}" />`
-    : "";
-  const secureImageMeta = p.imageUrl.startsWith("https://")
-    ? `\n    <meta property="og:image:secure_url" content="${img}" />`
-    : "";
+  const imageBlock = p.imageUrl
+    ? (() => {
+        const img = escapeHtml(p.imageUrl);
+        const imageTypeMeta = p.imageType
+          ? `\n    <meta property="og:image:type" content="${escapeHtml(p.imageType)}" />`
+          : "";
+        const secureImageMeta = p.imageUrl!.startsWith("https://")
+          ? `\n    <meta property="og:image:secure_url" content="${img}" />`
+          : "";
+        return `
+    <meta property="og:image" content="${img}" />${imageTypeMeta}${secureImageMeta}
+    <meta property="og:image:width" content="${OG_WIDTH}" />
+    <meta property="og:image:height" content="${OG_HEIGHT}" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="${img}" />`;
+      })()
+    : `
+    <meta name="twitter:card" content="summary" />`;
   return `<!DOCTYPE html>
 <html lang="en">
   <head>
@@ -106,16 +119,10 @@ export function renderOgHtml(p: OgPagePayload): string {
     <meta property="og:site_name" content="${SITE_NAME}" />
     <meta property="og:title" content="${t}" />
     <meta property="og:description" content="${d}" />
-    <meta property="og:url" content="${url}" />
-    <meta property="og:image" content="${img}" />${imageTypeMeta}${secureImageMeta}
-    <meta property="og:image:width" content="${OG_WIDTH}" />
-    <meta property="og:image:height" content="${OG_HEIGHT}" />
-
-    <meta name="twitter:card" content="summary_large_image" />
+    <meta property="og:url" content="${url}" />${imageBlock}
     <meta name="twitter:site" content="${site}" />
     <meta name="twitter:title" content="${t}" />
     <meta name="twitter:description" content="${d}" />
-    <meta name="twitter:image" content="${img}" />
 
     <meta http-equiv="refresh" content="0; url=${url}" />
   </head>
@@ -667,7 +674,16 @@ export async function resolvePersonOg(id: string): Promise<OgPreviewResult> {
   const canonicalUrl = `${SITE_URL}/person/${encodeURIComponent(id)}`;
   const ctx = await loadPersonOgContext(id);
   if (!ctx) {
-    return fallbackPayload(canonicalUrl, "Person not found — using generic preview.", "person");
+    return withPreviewMeta(
+      {
+        title: SITE_NAME,
+        description: DEFAULT_DESCRIPTION,
+        canonicalUrl,
+      },
+      "person",
+      undefined,
+      ["Person not found — omitting og:image (not the site default card)."],
+    );
   }
   return withPreviewMeta(
     {

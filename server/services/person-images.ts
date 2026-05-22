@@ -22,8 +22,37 @@ export function resolvePersonAvatarUrl(
   storedAvatar: string | null | undefined,
   imageSlug: string | null | undefined,
 ): string | null {
-  if (storedAvatar && /^https?:\/\//i.test(storedAvatar.trim())) {
-    return storedAvatar.trim();
+  const candidates = resolvePersonAvatarCandidates(storedAvatar, imageSlug);
+  return candidates[0] ?? null;
+}
+
+/** Ordered URLs to try when fetching hero photo (stored avatar, then 1–4.webp, legacy png). */
+export function resolvePersonAvatarCandidates(
+  storedAvatar: string | null | undefined,
+  imageSlug: string | null | undefined,
+): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+
+  const push = (url: string | null | undefined) => {
+    if (!url || !/^https?:\/\//i.test(url)) return;
+    const trimmed = url.trim();
+    if (seen.has(trimmed)) return;
+    seen.add(trimmed);
+    out.push(trimmed);
+  };
+
+  push(storedAvatar ?? null);
+
+  if (imageSlug) {
+    for (let i = 1; i <= 4; i++) {
+      push(personConventionImageUrl(imageSlug, i));
+    }
+    const base = supabasePublicBase();
+    if (base) {
+      push(`${base}/celebrity_images/${encodeURIComponent(imageSlug)}/1.png`);
+    }
   }
-  return personConventionImageUrl(imageSlug, 1);
+
+  return out;
 }
