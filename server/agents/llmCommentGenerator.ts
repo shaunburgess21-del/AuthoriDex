@@ -272,11 +272,13 @@ function pickImperfection(): string | null {
  * it a clear pattern to lock onto. The system rule asks for variety
  * but the LLM keeps reaching for the same template anyway.
  *
- * This dice roll picks a hard constraint per comment so the cohort
- * actually achieves the ~50/50 mix:
- *   - 55% direct opener (no 'I went / I chose / I back / For me' opener)
- *   - 35% personal opener (must use one)
- *   - 10% no constraint (model picks freely)
+ * This dice roll picks a hard constraint per comment. We bias hard toward
+ * direct openers because the vote badge already announces which option the
+ * agent picked — soft "I chose X" / "X gets my vote" openers are functionally
+ * identical to the bare label opener ('Support.', 'Oppose:') we already ban.
+ *   - 78% direct opener (lead with take/subject, no vote-announce)
+ *   - 15% personal lean opener (soft personal framing, NEVER vote-announcing)
+ *   - 7%  no constraint (model picks freely)
  *
  * Replies don't get an opener constraint - the reply context already
  * shapes how they should start (engaging with the parent), so adding
@@ -287,8 +289,8 @@ type OpenerStyle = "direct" | "personal" | "free";
 function pickOpenerStyle(isReply: boolean): OpenerStyle {
   if (isReply) return "free";
   const r = Math.random();
-  if (r < 0.55) return "direct";
-  if (r < 0.90) return "personal";
+  if (r < 0.78) return "direct";
+  if (r < 0.93) return "personal";
   return "free";
 }
 
@@ -297,7 +299,7 @@ function openerInstruction(style: OpenerStyle): string {
     case "direct":
       return "OPENER FOR THIS COMMENT: lead with your take or the subject directly. Do NOT open with 'I went', 'I chose', 'I back', 'I picked', 'I went with', 'I'd choose', 'For me' or any other personal-vote announcement. Just state the opinion. Examples: 'Burger wins, hits harder.' / 'Spain by a mile.' / 'Pretty much over already.' / 'Spicy food is the move.' / 'TikTok feels way tighter than the rest.' / 'Yeah this comeback feels too forced.'";
     case "personal":
-      return "OPENER FOR THIS COMMENT: open with a soft personal framing. Pick ONE: 'I went with…', 'I chose…', 'I back…', 'I personally…', 'I honestly…', 'I'd choose…', 'For me, …', 'I way prefer…'. Don't stack two — pick one and move into your take.";
+      return "OPENER FOR THIS COMMENT: open with a soft personal lean — NOT a vote announcement. Pick ONE: 'I personally…', 'I honestly…', 'I'd say…', 'Tbh…', 'Not gonna lie,…', 'Genuinely,…', 'Imo…'. Do NOT use 'I went with X', 'I chose X', 'I back X', 'I'm going with X', 'X gets my vote', 'X is my pick', 'X for me', 'For me, X is…' or any other phrase that names your chosen option as the opener — the UI already shows your vote with a coloured badge next to your name. Lead with the LEAN, then move into the take. Examples: 'Honestly, Princeton is one of the few where the undergrad side still feels like a real priority.' / 'I'd say Spain, food and beaches.' / 'Tbh Drake's done.' / 'I personally find Toyota more reliable.'";
     case "free":
       return "";
   }
@@ -356,10 +358,11 @@ function buildSystemPrompt(
     "- Do not wrap your comment in quotes.",
     "- Do not prefix the comment with your username, display name, or any 'name:' label.",
     "- Do NOT open the comment by announcing your vote with a label word. Words like 'Support.', 'Support —', 'Oppose:', 'Neutral.', 'Approve:', 'Disapprove —', 'Yes,', 'No,' as the FIRST word of the comment are forbidden — those are the labels under the badge, not how a person talks. (Note: opening with the actual subject like 'No, Ali had to go through so many of them...' is fine — it's the standalone label-as-opener that's banned.) The UI already shows your vote with a coloured badge next to your name.",
-    "- OPENERS — vary how you start, do NOT always announce your vote. Roughly half the time, just lead with the take or subject directly (no 'I went' / 'I chose' / 'I back' / 'For me' opener). The other half can use a soft personal opener if it fits. Both patterns are normal:",
-    "    Direct opener (~50% of comments): 'Burger every time, hits harder.' / 'Spicy food is my favourite.' / 'Rivian is best-looking by far.' / 'Definitely not!' / 'Blue for sure, grey is a solid second.' / 'Yeah, people just catch the clips now.' / 'Pretty much over already, the comeback feels too forced.' / 'Spain is the easy pick, food and beaches.'",
-    "    Soft personal opener (~50% of comments): 'I went with X because…', 'I chose X', 'I back X', 'I personally find X…', 'I honestly think…', 'I'd choose…', 'For me, X…', 'I way prefer…'. Don't stack these ('Honestly, I personally think that…' is too many).",
-    "  Pick whichever feels more natural for THIS comment. If you used a personal opener in your last few comments (the LLM has no memory of this, but think about variety) lean toward the direct opener instead. Above all: do NOT default to 'I went with X' on every comment — that pattern repeated across the cohort reads as bot.",
+    "- Do NOT open the comment by announcing which option you picked, even in soft personal phrasing. Forbidden opener forms include 'X gets my vote', 'X is my pick', 'X for me', 'I'm going with X', 'I chose X', 'I went with X', 'I back X', 'I picked X', 'I'd choose X', 'For me, X is…' as the first words of the comment. The vote badge already shows your pick — announcing it again is redundant and reads as bot-like. You may mention your chosen option naturally later in the comment if it fits, just don't lead with the announcement. Lead with the SUBSTANCE instead: instead of 'Princeton gets my vote. It's one of the few where the undergrad side still feels like a priority.' just write 'Princeton is one of the few where the undergrad side still feels like a priority.'",
+    "- OPENERS — vary how you start, almost never announce your vote. About 75–80% of the time, lead with the take or the subject directly. The remaining 15–20% can use a soft personal LEAN (not a vote-announce). Both patterns are normal:",
+    "    Direct opener (default, ~75-80%): 'Princeton is the one where undergrad still feels like a priority.' / 'Burger every time, hits harder.' / 'Spain by a mile.' / 'Spicy food is my favourite.' / 'Rivian is best-looking by far.' / 'Definitely not!' / 'Blue for sure, grey is a solid second.' / 'Yeah, people just catch the clips now.' / 'Pretty much over already, the comeback feels too forced.'",
+    "    Soft personal lean (occasional, ~15-20%, NEVER vote-announcing): 'I honestly think Princeton is the only one where undergrad still feels like a priority.' / 'I'd say Spain, food and beaches.' / 'Tbh Drake's done.' / 'I personally find Toyota more reliable.' / 'Not gonna lie, the comeback feels too forced.' Don't stack these ('Honestly, I personally think that…' is too many).",
+    "  Never open with 'I chose X', 'I went with X', 'I back X', 'X gets my vote', 'X for me', 'For me, X is…' — those duplicate the vote badge and are the single strongest cohort-wide AI-tell. Above all: lead with substance, not with announcing your stance.",
     "- Sound like a human posting on X: contractions, casual flow, occasional sentence fragments are fine.",
     "- A touch of dry wit or humour is welcome when it fits the topic, but never forced and never at someone's expense.",
     "- Reference the ACTUAL subject matter (the people, the topic, the question). No generic platitudes.",
