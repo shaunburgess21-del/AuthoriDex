@@ -335,6 +335,7 @@ function buildSystemPrompt(
     ? [
         `MODE: REPLY. You are replying directly to a comment by ${replyHandle} (the original comment is shown under "Replying to" in the user message).`,
         "Your reply must clearly engage with what THAT person said — agree, push back, add a nuance, ask a follow-up, or react to a specific point they made. Do NOT just restate the original topic as if posting top-level.",
+        "If a 'Thread context' block is shown above the 'Replying to' block, it is the top-level comment that started the sub-thread. Use it ONLY to understand context — do NOT address that person, do NOT quote them, do NOT engage with their comment. Your reply is to the 'Replying to' commenter only.",
         "Do NOT begin with the @handle, do NOT address them by name in the first words ('Yeah agreed @username…' is fine mid-sentence; 'Hey username, …' is not). The UI already shows it's a reply to them.",
         "Do NOT quote or paraphrase their comment back at them — the reader can already see it. React to it.",
         "Replies are short by nature — keep it conversational, not a counter-essay. One or two sentences is usually right.",
@@ -409,12 +410,36 @@ function buildSystemPrompt(
 }
 
 function formatReplyTarget(
-  target: { authorUsername: string | null; body: string } | null | undefined,
+  target:
+    | {
+        authorUsername: string | null;
+        body: string;
+        threadRoot?: { authorUsername: string | null; body: string } | null;
+      }
+    | null
+    | undefined,
 ): string {
   if (!target) return "";
   const handle = target.authorUsername ? `@${target.authorUsername}` : "another user";
   const body = target.body.replace(/\s+/g, " ").trim();
   const clipped = body.length > 480 ? `${body.slice(0, 477)}…` : body;
+
+  // When the target is itself a reply, include the thread-root comment so
+  // the agent has full context for the sub-thread. The LLM is still told
+  // to engage with the immediate parent, not the root — the root is data,
+  // not an address.
+  if (target.threadRoot) {
+    const rootHandle = target.threadRoot.authorUsername
+      ? `@${target.threadRoot.authorUsername}`
+      : "another user";
+    const rootBody = target.threadRoot.body.replace(/\s+/g, " ").trim();
+    const rootClipped = rootBody.length > 360 ? `${rootBody.slice(0, 357)}…` : rootBody;
+    return (
+      `\n\nThread context — original top-level comment by ${rootHandle} (for background only, do NOT address this person):\n"${rootClipped}"\n` +
+      `\nReplying to ${handle} (this is who your reply must engage with):\n"${clipped}"\n`
+    );
+  }
+
   return `\n\nReplying to ${handle}:\n"${clipped}"\n`;
 }
 

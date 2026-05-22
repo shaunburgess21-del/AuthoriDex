@@ -458,6 +458,10 @@ export async function runCommentSweep(): Promise<{
    *  matches SURFACE_PICK_WEIGHTS — if this is 100% open_market the
    *  picker filter is broken regardless of what other counters say. */
   bySurface: Record<CommentSurface, number>;
+  /** Of the replies posted this sweep, how many landed at thread depth 2
+   *  (reply-to-a-reply). Counter for the nested-reply experiment — if it
+   *  trends high we may want to dial AGENT_MAX_REPLY_DEPTH back to 0. */
+  nestedReplies: number;
 }> {
   // Global "pause all agents" kill switch (admin Agents tab toggle).
   if (await isAgentsPaused()) {
@@ -472,6 +476,7 @@ export async function runCommentSweep(): Promise<{
       voteCapDeflections: 0,
       voteCapBlocked: 0,
       bySurface: {} as Record<CommentSurface, number>,
+      nestedReplies: 0,
     };
   }
 
@@ -487,6 +492,7 @@ export async function runCommentSweep(): Promise<{
 
   let posted = 0;
   let replies = 0;
+  let nestedReplies = 0;
   let replyFallbacks = 0;
   let skipped = 0;
   let llmRejected = 0;
@@ -676,10 +682,20 @@ export async function runCommentSweep(): Promise<{
           .where(eq(profiles.id, agent.userId));
       });
       posted++;
-      if (replyTarget) replies++;
+      if (replyTarget) {
+        replies++;
+        // threadRoot is populated only when the target was itself a reply
+        // (depth 1) — so this reply lands at depth 2.
+        if (replyTarget.threadRoot) nestedReplies++;
+      }
       bySurface[parent.parentType]++;
+      const replyTag = replyTarget
+        ? replyTarget.threadRoot
+          ? `nested-replied to @${replyTarget.authorUsername ?? "user"}`
+          : `replied to @${replyTarget.authorUsername ?? "user"}`
+        : "commented";
       log(
-        `[CommentWorker] ${agent.displayName} ${replyTarget ? `replied to @${replyTarget.authorUsername ?? "user"}` : "commented"} on ${parent.parentType}:${parent.parentId} — "${body.slice(0, 80)}${body.length > 80 ? "…" : ""}"`,
+        `[CommentWorker] ${agent.displayName} ${replyTag} on ${parent.parentType}:${parent.parentId} — "${body.slice(0, 80)}${body.length > 80 ? "…" : ""}"`,
       );
     } catch (err) {
       skipped++;
@@ -697,6 +713,7 @@ export async function runCommentSweep(): Promise<{
     voteCapDeflections,
     voteCapBlocked,
     bySurface,
+    nestedReplies,
   };
 }
 
@@ -724,7 +741,7 @@ function scheduleNextSweep(): void {
       log(
         `[CommentWorker] Sweep complete: ${result.posted} posted ` +
           `[matchup:${result.bySurface.matchup}, sentiment:${result.bySurface.trending_poll}, opinion:${result.bySurface.opinion_poll}, world:${result.bySurface.open_market}] ` +
-          `(${result.replies} replies, ${result.voteCapDeflections} vote-cap deflections, ${result.voteCapBlocked} vote-cap blocked), ${result.skipped} skipped`,
+          `(${result.replies} replies, ${result.nestedReplies} nested, ${result.voteCapDeflections} vote-cap deflections, ${result.voteCapBlocked} vote-cap blocked), ${result.skipped} skipped`,
       );
     } catch (err) {
       console.error("[CommentWorker] Sweep failed:", err);
@@ -741,7 +758,7 @@ export function startCommentWorkerScheduler(): void {
       log(
         `[CommentWorker] Initial sweep: ${result.posted} posted ` +
           `[matchup:${result.bySurface.matchup}, sentiment:${result.bySurface.trending_poll}, opinion:${result.bySurface.opinion_poll}, world:${result.bySurface.open_market}] ` +
-          `(${result.replies} replies, ${result.voteCapDeflections} vote-cap deflections, ${result.voteCapBlocked} vote-cap blocked), ${result.skipped} skipped`,
+          `(${result.replies} replies, ${result.nestedReplies} nested, ${result.voteCapDeflections} vote-cap deflections, ${result.voteCapBlocked} vote-cap blocked), ${result.skipped} skipped`,
       );
     } catch (err) {
       console.error("[CommentWorker] Initial sweep failed:", err);

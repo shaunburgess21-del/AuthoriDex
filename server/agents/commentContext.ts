@@ -33,6 +33,24 @@ export type CommentSurface = "matchup" | "trending_poll" | "opinion_poll" | "ope
  *  what a previous user / agent already said. */
 const EXISTING_COMMENT_LIMIT = 5;
 
+/**
+ * How deep into a thread agents are allowed to reply.
+ *   0 = top-level only (original behaviour pre-experiment)
+ *   1 = top-level OR a single reply to a top-level (max thread depth = 2)
+ *
+ * Single-line rollback to original behaviour: set this to 0.
+ */
+const AGENT_MAX_REPLY_DEPTH = 1;
+
+/**
+ * When true, agents may reply to depth-1 comments authored by either humans
+ * or other agents (option A + B from the design discussion). When false,
+ * only human-authored depth-1 comments are eligible (option A only). The
+ * cohort-wide "no all-agent chain of 3" rule still applies in either case
+ * (we never reply to an agent reply whose own parent is also an agent).
+ */
+const ALLOW_AGENT_PARENT_AT_DEPTH_1 = true;
+
 /** Common shape across all surfaces. */
 interface BaseContext {
   surface: CommentSurface;
@@ -58,7 +76,21 @@ export interface ReplyTarget {
    *  with the agent's own position, so the LLM can be told if it should
    *  expect to agree, push back, or add nuance. */
   authorChoiceOnParent?: string | null;
+  /** When the target is itself a reply (depth 1), the root comment that
+   *  started the sub-thread. Passed to the LLM for context only — the agent
+   *  is still told to engage with the immediate parent, not the root. */
+  threadRoot?: { authorUsername: string | null; body: string } | null;
 }
+
+/** Outcome category for one reply-target probe. Counters in the sweep
+ *  result aggregate these so we can see the experiment working without
+ *  shelling into the DB. */
+export type ReplyTargetOutcome =
+  | "none"
+  | "depth0"
+  | "depth1_human"
+  | "depth1_agent"
+  | "blocked_agent_chain";
 
 export interface MatchupContext extends BaseContext {
   surface: "matchup";
@@ -401,15 +433,21 @@ export async function fetchOpenMarketContext(
 }
 
 /**
- * Pick an eligible top-level comment for the given agent to reply to:
+ * Pick an eligible comment for the given agent to reply to. With
+ * AGENT_MAX_REPLY_DEPTH = 1, eligibility extends to first-level replies in
+ * addition to top-level comments — so an agent's reply may land at thread
+ * depth 2 (root → reply → agent reply). Constraints applied:
  *   - not the agent's own comment
  *   - not deleted
- *   - top-level only (no thread replies)
  *   - posted in the last 7 days (anything older feels bot-like)
+ *   - depth ≤ AGENT_MAX_REPLY_DEPTH (parent must be in the 7-day window
+ *     so we can verify the depth — older threads are conservatively skipped)
  *   - the agent has not already replied to it
+ *   - if the depth-1 target is by an agent AND its own parent is by an
+ *     agent, skip (prevents all-agent chains of 3+ comments)
  *
- * Returns the most-recent eligible comment with author username resolved,
- * or null if none qualifies.
+ * Returns the chosen target with `threadRoot` populated when the target is
+ * itself a reply, or null if none qualifies.
  */
 export async function findReplyTarget(
   parentType: CommentSurface,
@@ -417,12 +455,21 @@ export async function findReplyTarget(
   agentUserId: string,
 ): Promise<ReplyTarget | null> {
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-  const candidates = await db
+
+  // Load every non-deleted comment on this parent in the 7-day window —
+  // top-level AND replies. We need replies in the result set so we can
+  // (a) classify each candidate's depth using the in-window parent map and
+  // (b) populate `threadRoot` when the chosen target is itself a reply.
+  // 60 is a generous ceiling — most cards have far fewer active comments.
+  const all = await db
     .select({
       id: unifiedComments.id,
       userId: unifiedComments.userId,
       body: unifiedComments.body,
+      parentCommentId: unifiedComments.parentCommentId,
+      createdAt: unifiedComments.createdAt,
       authorUsername: profiles.username,
+      authorIsAgent: profiles.isAgent,
     })
     .from(unifiedComments)
     .leftJoin(profiles, eq(unifiedComments.userId, profiles.id))
@@ -431,19 +478,39 @@ export async function findReplyTarget(
         eq(unifiedComments.parentType, parentType),
         eq(unifiedComments.parentId, parentId),
         sql`${unifiedComments.deletedAt} IS NULL`,
-        sql`${unifiedComments.parentCommentId} IS NULL`,
-        sql`${unifiedComments.userId} != ${agentUserId}`,
         sql`${unifiedComments.createdAt} >= ${sevenDaysAgo}`,
       ),
     )
     .orderBy(desc(unifiedComments.createdAt))
-    .limit(20);
+    .limit(60);
 
-  if (!candidates.length) return null;
+  if (!all.length) return null;
 
-  // Filter out comments that this agent has already replied to (so threads
-  // don't accumulate from the same agent).
-  const candidateIds = candidates.map((c) => c.id);
+  const byId = new Map(all.map((c) => [c.id, c]));
+
+  /** Depth of a comment within this card. Returns Infinity if the parent
+   *  isn't in the loaded window — in that case we conservatively treat the
+   *  comment as too deep / unverifiable and exclude it. */
+  const depthOf = (commentId: string): number => {
+    const c = byId.get(commentId);
+    if (!c) return Infinity;
+    if (c.parentCommentId === null) return 0;
+    const parent = byId.get(c.parentCommentId);
+    if (!parent) return Infinity;
+    // Parent's parent: if null, parent is top-level → this comment is depth 1.
+    return parent.parentCommentId === null ? 1 : 2;
+  };
+
+  // Build candidate set: not own, depth ≤ AGENT_MAX_REPLY_DEPTH.
+  const depthFiltered = all.filter((c) => {
+    if (c.userId === agentUserId) return false;
+    return depthOf(c.id) <= AGENT_MAX_REPLY_DEPTH;
+  });
+
+  if (!depthFiltered.length) return null;
+
+  // Filter out comments this agent already replied to (no chain camping).
+  const candidateIds = depthFiltered.map((c) => c.id);
   const alreadyReplied = await db
     .select({ parentCommentId: unifiedComments.parentCommentId })
     .from(unifiedComments)
@@ -454,13 +521,31 @@ export async function findReplyTarget(
         sql`${unifiedComments.deletedAt} IS NULL`,
       ),
     );
-  const blocked = new Set(alreadyReplied.map((r) => r.parentCommentId).filter(Boolean) as string[]);
-  const eligible = candidates.filter((c) => !blocked.has(c.id));
+  const blocked = new Set(
+    alreadyReplied.map((r) => r.parentCommentId).filter(Boolean) as string[],
+  );
+
+  // Apply remaining policy filters:
+  //   - cohort-wide "no all-agent chain of 3": skip depth-1 candidates
+  //     where both the target and its parent are agents.
+  //   - if ALLOW_AGENT_PARENT_AT_DEPTH_1 is false, also skip any depth-1
+  //     candidate by an agent (option A only).
+  const eligible = depthFiltered.filter((c) => {
+    if (blocked.has(c.id)) return false;
+    const d = depthOf(c.id);
+    if (d === 1) {
+      const targetIsAgent = c.authorIsAgent === true;
+      const root = c.parentCommentId ? byId.get(c.parentCommentId) : undefined;
+      const rootIsAgent = root?.authorIsAgent === true;
+      if (targetIsAgent && rootIsAgent) return false;
+      if (!ALLOW_AGENT_PARENT_AT_DEPTH_1 && targetIsAgent) return false;
+    }
+    return true;
+  });
+
   if (!eligible.length) return null;
 
-  // Pick a random eligible comment, biased toward the most recent half so
-  // we don't constantly reply to week-old comments. Top-3 weighted 50%,
-  // next-7 weighted 35%, rest weighted 15%.
+  // Pick weighting unchanged: recent-biased.
   const r = Math.random();
   let pickIndex: number;
   if (r < 0.5 && eligible.length >= 1) {
@@ -472,10 +557,23 @@ export async function findReplyTarget(
   }
   const chosen = eligible[Math.min(pickIndex, eligible.length - 1)];
 
+  // If the chosen target is itself a reply, attach the root for LLM context.
+  let threadRoot: ReplyTarget["threadRoot"] = null;
+  if (chosen.parentCommentId) {
+    const root = byId.get(chosen.parentCommentId);
+    if (root) {
+      threadRoot = {
+        authorUsername: root.authorUsername ?? null,
+        body: root.body,
+      };
+    }
+  }
+
   return {
     commentId: chosen.id,
     authorUsername: chosen.authorUsername ?? null,
     body: chosen.body,
+    threadRoot,
   };
 }
 
