@@ -27,7 +27,7 @@ const VOTE_PILL_H = Math.max(
 
 const VOTE_PILL_GAP = 16;
 const VOTE_PILL_MARGIN_X = 48;
-const VOTE_LABEL_FONT_SIZE = 22;
+const VOTE_LABEL_FONT_SIZE = 28;
 const VOTE_LABEL_WEIGHT = 600;
 
 /** Exported for tests — vote pill row geometry. */
