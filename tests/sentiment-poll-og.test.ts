@@ -13,16 +13,17 @@ import {
 import {
   buildSentimentPollOverlaySvg,
   getSentimentPollOverlayLabels,
+  getSentimentPollVotePillLayout,
   renderSentimentPollOgImage,
   renderSentimentPollOgImageJpeg,
 } from "../server/services/sentiment-poll-og-image";
 import { assertOgPathFontsLoaded } from "../server/services/og-svg-text-paths";
 
-test("sentimentPollOgImagePath uses shared cache version v1", () => {
-  assert.equal(SENTIMENT_POLL_OG_IMAGE_VERSION, "1");
+test("sentimentPollOgImagePath uses shared cache version v2", () => {
+  assert.equal(SENTIMENT_POLL_OG_IMAGE_VERSION, "2");
   assert.equal(
     sentimentPollOgImagePath("elon-musk-ai"),
-    "/api/og/vote/polls/elon-musk-ai.jpg?v=1",
+    "/api/og/vote/polls/elon-musk-ai.jpg?v=2",
   );
 });
 
@@ -81,6 +82,14 @@ test("buildSentimentPollOverlaySvg uses path outlines only", () => {
   assert.equal(labels.headline, PLACEHOLDER_CTX.headline);
   const pathCount = (svg.match(/<path/g) ?? []).length;
   assert.ok(pathCount >= 6, `expected >=6 path elements, got ${pathCount}`);
+
+  const layout = getSentimentPollVotePillLayout();
+  assert.ok(layout.VOTE_PILL_H > 70, `pill height ${layout.VOTE_PILL_H} expected >70`);
+  const expectedH = Math.round(layout.VOTE_PILL_H);
+  assert.ok(
+    svg.includes(`height="${expectedH}"`),
+    `SVG should include tall pill height ${expectedH}`,
+  );
 });
 
 test("renderSentimentPollOgImageJpeg returns 1200x630 JPEG under 600KB", async () => {
@@ -165,15 +174,15 @@ test("renderSentimentPollOgImageJpeg vote pill row has visible text", async () =
   const jpeg = await renderSentimentPollOgImageJpeg(PLACEHOLDER_CTX);
   const greenFrac = await greenAccentFraction(jpeg, {
     left: 48,
-    top: 555,
+    top: 510,
     width: 360,
-    height: 60,
+    height: 110,
   });
   const whiteFrac = await nearWhiteFraction(jpeg, {
     left: 400,
-    top: 555,
+    top: 510,
     width: 360,
-    height: 60,
+    height: 110,
   });
   assert.ok(
     greenFrac > 0.003 || whiteFrac > 0.003,

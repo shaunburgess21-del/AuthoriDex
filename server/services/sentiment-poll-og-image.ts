@@ -1,6 +1,6 @@
 import sharp from "sharp";
 import type { SentimentPollOgContext } from "./sentiment-poll-og-context";
-import { textPath } from "./og-svg-text-paths";
+import { glyphExtentBelowBaseline, textPath } from "./og-svg-text-paths";
 
 const OG_WIDTH = 1200;
 const OG_HEIGHT = 630;
@@ -13,13 +13,27 @@ const HERO_JPEG_QUALITY = 85;
 const HEADLINE_FONT_SIZE = 40;
 const HEADLINE_WEIGHT = 700;
 const HEADLINE_BASELINE_Y = 500;
+const HEADLINE_TO_PILL_GAP = 10;
 
-const VOTE_PILL_Y = 562;
-const VOTE_PILL_H = 48;
+const VOTE_PILL_BOTTOM_Y = OG_HEIGHT - 12;
+const HEADLINE_BOTTOM_Y =
+  HEADLINE_BASELINE_Y +
+  glyphExtentBelowBaseline(HEADLINE_FONT_SIZE, HEADLINE_WEIGHT);
+const VOTE_PILL_Y = HEADLINE_BOTTOM_Y + HEADLINE_TO_PILL_GAP;
+const VOTE_PILL_H = Math.max(
+  44,
+  Math.min(120, VOTE_PILL_BOTTOM_Y - VOTE_PILL_Y),
+);
+
 const VOTE_PILL_GAP = 16;
 const VOTE_PILL_MARGIN_X = 48;
-const VOTE_LABEL_FONT_SIZE = 20;
+const VOTE_LABEL_FONT_SIZE = 22;
 const VOTE_LABEL_WEIGHT = 600;
+
+/** Exported for tests — vote pill row geometry. */
+export function getSentimentPollVotePillLayout() {
+  return { VOTE_PILL_Y, VOTE_PILL_H, VOTE_PILL_BOTTOM_Y, HEADLINE_BOTTOM_Y };
+}
 
 const VOTE_CHOICES = [
   {
@@ -136,16 +150,18 @@ async function coverHeroJpeg(
 function horizontalVotePills(): string {
   const rowWidth = OG_WIDTH - VOTE_PILL_MARGIN_X * 2;
   const pillW = (rowWidth - VOTE_PILL_GAP * 2) / 3;
+  const pillY = Math.round(VOTE_PILL_Y);
+  const pillH = Math.round(VOTE_PILL_H);
   const parts: string[] = [];
 
   for (let i = 0; i < VOTE_CHOICES.length; i++) {
     const choice = VOTE_CHOICES[i]!;
     const pillX = VOTE_PILL_MARGIN_X + i * (pillW + VOTE_PILL_GAP);
     const centerX = pillX + pillW / 2;
-    const textY = VOTE_PILL_Y + VOTE_PILL_H / 2 + 7;
+    const textY = pillY + pillH / 2 + 7;
 
     parts.push(
-      `<rect x="${pillX}" y="${VOTE_PILL_Y}" width="${pillW}" height="${VOTE_PILL_H}" rx="10" fill="${choice.fill}" fill-opacity="${choice.fillOpacity}" stroke="${choice.fill}" stroke-opacity="${choice.strokeOpacity}" stroke-width="1.5"/>`,
+      `<rect x="${pillX}" y="${pillY}" width="${pillW}" height="${pillH}" rx="10" fill="${choice.fill}" fill-opacity="${choice.fillOpacity}" stroke="${choice.fill}" stroke-opacity="${choice.strokeOpacity}" stroke-width="1.5"/>`,
       textPath({
         text: choice.label,
         x: centerX,

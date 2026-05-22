@@ -151,6 +151,16 @@ function scaledMetric(
   return (units / unitsPerEm) * fontSize;
 }
 
+/** Pixels from baseline to bottom of glyph ink (descender). */
+export function glyphExtentBelowBaseline(
+  fontSize: number,
+  weight = 400,
+): number {
+  const font = pickFont(weight);
+  const { descender } = fontVerticalMetrics(font);
+  return scaledMetric(font, Math.abs(descender), fontSize);
+}
+
 /** Baseline Y for a line stacked above another (fixed visual gap in px). */
 export function baselineForStackAbove(opts: {
   targetBaseline: number;
