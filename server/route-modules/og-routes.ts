@@ -57,6 +57,21 @@ import {
   logOgFontStartup,
   OG_FONT_FAMILY,
 } from "../services/og-fonts";
+import {
+  renderOgHtml,
+  resolveBetShareOg,
+  resolveCommunityMarketOg,
+  resolveMatchupOg,
+  resolveNativePredictOg,
+  resolveOpinionPollOg,
+  resolvePersonOg,
+  resolveSentimentPollOg,
+  resolveSiteOg,
+  SITE_URL,
+  SITE_NAME,
+  DEFAULT_DESCRIPTION,
+  type AmmPriceChip,
+} from "../services/og-page-payload";
 
 /* ─────────────────────────────────────────────────────────────────────────────
  * Open Graph + Twitter card endpoints + sitemap.xml
@@ -82,12 +97,6 @@ import {
  * The OG image route is generated on the fly with sharp — no extra
  * deps, brand-styled, per-market title overlay. Cached for 24h via
  * Cache-Control so we don't re-render on every crawl. */
-
-const SITE_URL =
-  process.env.PUBLIC_SITE_URL?.replace(/\/$/, "") ?? "https://voxdex.com";
-const SITE_NAME = "VoxDex";
-const DEFAULT_DESCRIPTION =
-  "The voice of the people, indexed. Vote, predict, and track the people and topics shaping global conversation.";
 
 const OG_WIDTH = 1200;
 const OG_HEIGHT = 630;
@@ -130,71 +139,6 @@ function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
-interface OgPagePayload {
-  title: string;
-  description: string;
-  /** Absolute URL to the canonical SPA page humans should land on. */
-  canonicalUrl: string;
-  /** Absolute URL to the OG image. */
-  imageUrl: string;
-  /** e.g. `image/jpeg` — emitted as og:image:type when set. */
-  imageType?: string;
-  /** Optional Twitter creator handle, e.g. `@voxdex`. */
-  twitterSite?: string;
-}
-
-/**
- * Render the minimal HTML doc that crawlers consume. We deliberately
- * keep this small — most crawlers parse only the `<head>` and bail out
- * before reading body. The meta-refresh + JS redirect at the end is for
- * any human who somehow ends up here (clicking a Slack-rewritten link
- * with a debug UA, for example).
- */
-function renderOgHtml(p: OgPagePayload): string {
-  const t = escapeHtml(p.title);
-  const d = escapeHtml(p.description);
-  const url = escapeHtml(p.canonicalUrl);
-  const img = escapeHtml(p.imageUrl);
-  const site = escapeHtml(p.twitterSite ?? "@voxdex");
-  const imageTypeMeta = p.imageType
-    ? `\n    <meta property="og:image:type" content="${escapeHtml(p.imageType)}" />`
-    : "";
-  const secureImageMeta =
-    p.imageUrl.startsWith("https://")
-      ? `\n    <meta property="og:image:secure_url" content="${img}" />`
-      : "";
-  return `<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <title>${t}</title>
-    <meta name="description" content="${d}" />
-    <link rel="canonical" href="${url}" />
-
-    <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="${SITE_NAME}" />
-    <meta property="og:title" content="${t}" />
-    <meta property="og:description" content="${d}" />
-    <meta property="og:url" content="${url}" />
-    <meta property="og:image" content="${img}" />${imageTypeMeta}${secureImageMeta}
-    <meta property="og:image:width" content="${OG_WIDTH}" />
-    <meta property="og:image:height" content="${OG_HEIGHT}" />
-
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:site" content="${site}" />
-    <meta name="twitter:title" content="${t}" />
-    <meta name="twitter:description" content="${d}" />
-    <meta name="twitter:image" content="${img}" />
-
-    <meta http-equiv="refresh" content="0; url=${url}" />
-  </head>
-  <body>
-    <p>Redirecting to <a href="${url}">${url}</a>…</p>
-    <script>window.location.replace(${JSON.stringify(p.canonicalUrl)});</script>
-  </body>
-</html>`;
-}
-
 /* ───────────────────────────────────────────────────── OG image generation
  *
  * Market/share cards still rasterize SVG via sharp/librsvg with `<text>`.
@@ -212,11 +156,7 @@ function renderOgHtml(p: OgPagePayload): string {
  * `accent` drives the chip colour: emerald for "UP / YES" outcomes,
  * rose for "DOWN / NO", violet for everything else (named candidates).
  */
-export interface AmmPriceChip {
-  label: string;
-  pct: number;
-  accent: "up" | "down" | "other";
-}
+export type { AmmPriceChip };
 
 const PRICE_CHIP_FILL: Record<AmmPriceChip["accent"], string> = {
   up: "#10B981",
@@ -1181,56 +1121,19 @@ export function registerOgRoutes(app: Express): void {
   app.get(
     "/api/og/share/bet/:betId",
     async (req: Request, res: Response) => {
-      const betId = req.params.betId;
       try {
-        const bet = await lookupBetForShare(betId);
-        if (!bet || !isBetSharePublic(bet)) {
-          // Fall through to a generic VoxDex preview pointing at /predict.
-          res.setHeader("Content-Type", "text/html; charset=utf-8");
-          res.setHeader("Cache-Control", "public, max-age=300");
-          res.send(
-            renderOgHtml({
-              title: `${SITE_NAME} — Predict`,
-              description: DEFAULT_DESCRIPTION,
-              canonicalUrl: `${SITE_URL}/predict`,
-              imageUrl: `${SITE_URL}/api/og/image/default.png`,
-            }),
-          );
-          return;
-        }
-
-        const copy = deriveBetShareCopy(bet);
-        const canonicalUrl = canonicalMarketUrl(bet);
-        const imageUrl = `${SITE_URL}/api/og/share/bet/${encodeURIComponent(betId)}.png`;
-        // Slack / iMessage / X render og:title as a bold text line above
-        // the preview image. Tag-style bracket prefix keeps the variants
-        // consistent — `[BACKED DOWN] @andre on Bill Gates` reads the same
-        // for buys, sells, wins, and refunds without per-variant grammar.
-        const previewTitle = bet.ownerUsername
-          ? `[${copy.badge}] @${bet.ownerUsername} on ${copy.title}`
-          : `[${copy.badge}] ${copy.title}`;
+        const result = await resolveBetShareOg(req.params.betId);
         res.setHeader("Content-Type", "text/html; charset=utf-8");
-        // Bet rows are append-only; the OG can be cached for a day.
-        res.setHeader("Cache-Control", "public, max-age=86400");
-        res.send(
-          renderOgHtml({
-            title: `${previewTitle} • VoxDex`,
-            description: copy.subtitle,
-            canonicalUrl,
-            imageUrl,
-          }),
+        res.setHeader(
+          "Cache-Control",
+          result.warnings.length > 0 ? "public, max-age=300" : "public, max-age=86400",
         );
+        res.send(renderOgHtml(result));
       } catch (err: any) {
         console.error("[OG] Bet HTML render failed:", err?.message);
+        const fallback = await resolveSiteOg(`${SITE_URL}/predict`);
         res.setHeader("Content-Type", "text/html; charset=utf-8");
-        res.send(
-          renderOgHtml({
-            title: SITE_NAME,
-            description: DEFAULT_DESCRIPTION,
-            canonicalUrl: `${SITE_URL}/predict`,
-            imageUrl: `${SITE_URL}/api/og/image/default.png`,
-          }),
-        );
+        res.send(renderOgHtml(fallback));
       }
     },
   );
@@ -1268,59 +1171,18 @@ export function registerOgRoutes(app: Express): void {
    * keep the static "World market • Predict on VoxDex" treatment so
    * the new code doesn't regress the existing surface. */
   app.get("/api/og/markets/:slug", async (req: Request, res: Response) => {
-    const slug = req.params.slug;
-    const market = await lookupCommunityMarket(slug);
-    const canonicalUrl = `${SITE_URL}/markets/${encodeURIComponent(slug)}`;
-
-    if (!market) {
-      // Render a generic preview rather than a 404 — Slack/iMessage will
-      // render an empty card if we 404, and the human will land on the
-      // SPA's own NotFound page anyway via the meta-refresh.
+    try {
+      const result = await resolveCommunityMarketOg(req.params.slug);
       res.setHeader("Content-Type", "text/html; charset=utf-8");
-      res.setHeader("Cache-Control", "public, max-age=300");
-      res.send(
-        renderOgHtml({
-          title: SITE_NAME,
-          description: DEFAULT_DESCRIPTION,
-          canonicalUrl,
-          imageUrl: `${SITE_URL}/api/og/image/default.png`,
-        }),
+      res.setHeader(
+        "Cache-Control",
+        result.warnings.length > 0 ? "public, max-age=300" : "public, max-age=600",
       );
-      return;
+      res.send(renderOgHtml(result));
+    } catch (err: any) {
+      console.error("[OG] Community market HTML failed:", err?.message);
+      res.status(500).send("og render failed");
     }
-
-    let subtitle = "World market • Predict on VoxDex";
-    let pricesQuery = "";
-    if (market.engine === "amm") {
-      try {
-        const prices = await lookupLatestAmmPrices(market.id);
-        const enriched = buildAmmMarketCopy("community", prices);
-        if (enriched) {
-          subtitle = enriched.subtitle;
-          pricesQuery = pricesParamFromChips(enriched.chips);
-        }
-      } catch (err: any) {
-        console.error(
-          "[OG] AMM community price lookup failed:",
-          err?.message,
-        );
-      }
-    }
-
-    const description =
-      market.teaser ?? market.summary ?? DEFAULT_DESCRIPTION;
-    const imageUrl = `${SITE_URL}/api/og/image/market.png?title=${encodeURIComponent(market.title)}&subtitle=${encodeURIComponent(subtitle)}&badge=${encodeURIComponent("World market")}${pricesQuery}`;
-
-    res.setHeader("Content-Type", "text/html; charset=utf-8");
-    res.setHeader("Cache-Control", "public, max-age=600");
-    res.send(
-      renderOgHtml({
-        title: `${market.title} • VoxDex`,
-        description,
-        canonicalUrl,
-        imageUrl,
-      }),
-    );
   });
 
   /* Native (updown / h2h / race / jackpot) OG HTML page. We branch on
@@ -1328,123 +1190,20 @@ export function registerOgRoutes(app: Express): void {
   app.get(
     "/api/og/predict/:type/:marketId",
     async (req: Request, res: Response) => {
-      const type = req.params.type;
-      const marketId = req.params.marketId;
-      const validTypes = new Set(["updown", "h2h", "race", "jackpot"]);
-      const canonicalPath =
-        type === "race"
-          ? `/predict/race/${marketId}`
-          : type === "h2h"
-            ? `/predict/h2h/${marketId}`
-            : type === "updown"
-              ? `/predict/updown/${marketId}`
-              : `/predict#jackpot`;
-      const canonicalUrl = `${SITE_URL}${canonicalPath}`;
-
-      const fallback = (
-        title: string,
-        subtitle: string,
-        badge: string,
-        chips?: AmmPriceChip[],
-      ) => {
-        const imageUrl = `${SITE_URL}/api/og/image/market.png?title=${encodeURIComponent(title)}&subtitle=${encodeURIComponent(subtitle)}&badge=${encodeURIComponent(badge)}${pricesParamFromChips(chips)}`;
-        res.setHeader("Content-Type", "text/html; charset=utf-8");
-        res.setHeader("Cache-Control", "public, max-age=600");
-        res.send(
-          renderOgHtml({
-            title: `${title} • VoxDex`,
-            description: subtitle,
-            canonicalUrl,
-            imageUrl,
-          }),
-        );
-      };
-
-      if (!validTypes.has(type)) {
-        fallback(SITE_NAME, DEFAULT_DESCRIPTION, "Predict");
-        return;
-      }
-
       try {
-        const market = await lookupNativeMarket(marketId);
-        if (!market) {
-          fallback(SITE_NAME, DEFAULT_DESCRIPTION, "Predict");
-          return;
-        }
-
-        // Sprint 3: for AMM markets fetch the latest LMSR prices so we
-        // can override the static subtitle + show the price chip row
-        // on the preview thumbnail. Jackpot stays parimutuel for now.
-        const ammPrices =
-          market.engine === "amm" && type !== "jackpot"
-            ? await lookupLatestAmmPrices(market.id).catch((err) => {
-                console.error(
-                  "[OG] AMM native price lookup failed:",
-                  err?.message,
-                );
-                return [];
-              })
-            : [];
-
-        if (type === "updown") {
-          const personName =
-            (await lookupPersonName(market.personId)) ?? "this person";
-          const enriched =
-            ammPrices.length > 0
-              ? buildAmmMarketCopy("updown", ammPrices, personName)
-              : null;
-          fallback(
-            `${personName}: Up or Down?`,
-            enriched?.subtitle ??
-              "Will their Trend Score close above or below the weekly baseline?",
-            "Up / Down",
-            enriched?.chips,
-          );
-          return;
-        }
-
-        if (type === "h2h") {
-          const entries = await lookupNativeEntries(market.id);
-          const a = entries[0]?.label ?? "Side A";
-          const b = entries[1]?.label ?? "Side B";
-          const enriched =
-            ammPrices.length > 0 ? buildAmmMarketCopy("h2h", ammPrices) : null;
-          fallback(
-            `${a} vs ${b}`,
-            enriched?.subtitle ??
-              "Head-to-head: who'll gain more Trend Score points this week?",
-            "Head to head",
-            enriched?.chips,
-          );
-          return;
-        }
-
-        if (type === "race") {
-          const categoryLabel = market.category ?? "Category Race";
-          const enriched =
-            ammPrices.length > 0
-              ? buildAmmMarketCopy("gainer", ammPrices, null, categoryLabel)
-              : null;
-          fallback(
-            `${categoryLabel} Race`,
-            enriched?.subtitle ??
-              "Pick the biggest mover in the category this week.",
-            "Race",
-            enriched?.chips,
-          );
-          return;
-        }
-
-        // jackpot
-        const personName = await lookupPersonName(market.personId);
-        fallback(
-          personName ? `${personName} Jackpot` : "Weekly Jackpot",
-          "Pick a Trend Score number, win the pool if you're closest.",
-          "Jackpot",
+        const result = await resolveNativePredictOg(
+          req.params.type,
+          req.params.marketId,
         );
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        res.setHeader(
+          "Cache-Control",
+          result.warnings.length > 0 ? "public, max-age=300" : "public, max-age=600",
+        );
+        res.send(renderOgHtml(result));
       } catch (err: any) {
         console.error("[OG] Native render failed:", err?.message);
-        fallback(SITE_NAME, DEFAULT_DESCRIPTION, "Predict");
+        res.status(500).send("og render failed");
       }
     },
   );
@@ -1452,17 +1211,11 @@ export function registerOgRoutes(app: Express): void {
   /* Generic OG HTML for the homepage / Predict page / static surfaces.
    * Crawlers that follow share-this-page links (e.g. /predict#updown)
    * land here when we strip the hash for routing. */
-  app.get("/api/og/site", (_req: Request, res: Response) => {
+  app.get("/api/og/site", async (_req: Request, res: Response) => {
+    const result = await resolveSiteOg();
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("Cache-Control", "public, max-age=600");
-    res.send(
-      renderOgHtml({
-        title: `${SITE_NAME} — Vox Populi`,
-        description: DEFAULT_DESCRIPTION,
-        canonicalUrl: SITE_URL,
-        imageUrl: `${SITE_URL}/api/og/image/default.png`,
-      }),
-    );
+    res.send(renderOgHtml(result));
   });
 
   /* ─────────────────────────────────────────────────── vote sections
@@ -1477,94 +1230,34 @@ export function registerOgRoutes(app: Express): void {
    * every shareable surface. */
 
   app.get("/api/og/polls/:slug", async (req: Request, res: Response) => {
-    const slug = req.params.slug;
-    const canonicalUrl = `${SITE_URL}/polls/${encodeURIComponent(slug)}`;
     try {
-      const ctx = await loadSentimentPollOgContext(slug);
-      if (!ctx) {
-        res.setHeader("Content-Type", "text/html; charset=utf-8");
-        res.setHeader("Cache-Control", "public, max-age=300");
-        res.send(
-          renderOgHtml({
-            title: SITE_NAME,
-            description: DEFAULT_DESCRIPTION,
-            canonicalUrl,
-            imageUrl: `${SITE_URL}/api/og/image/default.png`,
-          }),
-        );
-        return;
-      }
-      const description = sentimentPollOgDescription(ctx);
-      const imageUrl = sentimentPollOgImageUrl(ctx.slug);
+      const result = await resolveSentimentPollOg(req.params.slug);
       res.setHeader("Content-Type", "text/html; charset=utf-8");
-      res.setHeader("Cache-Control", "public, max-age=600");
-      res.send(
-        renderOgHtml({
-          title: `${ctx.headline} • VoxDex`,
-          description,
-          canonicalUrl,
-          imageUrl,
-          imageType: "image/jpeg",
-        }),
+      res.setHeader(
+        "Cache-Control",
+        result.warnings.length > 0 ? "public, max-age=300" : "public, max-age=600",
       );
+      res.send(renderOgHtml(result));
     } catch (err: any) {
       console.error("[OG] Sentiment poll render failed:", err?.message);
-      res.setHeader("Content-Type", "text/html; charset=utf-8");
-      res.send(
-        renderOgHtml({
-          title: SITE_NAME,
-          description: DEFAULT_DESCRIPTION,
-          canonicalUrl,
-          imageUrl: `${SITE_URL}/api/og/image/default.png`,
-        }),
-      );
+      res.status(500).send("og render failed");
     }
   });
 
   app.get(
     "/api/og/opinion-polls/:slug",
     async (req: Request, res: Response) => {
-      const slug = req.params.slug;
-      const canonicalUrl = `${SITE_URL}/vote/opinion-polls/${encodeURIComponent(slug)}`;
       try {
-        const ctx = await loadOpinionPollOgContext(slug);
-        if (!ctx) {
-          res.setHeader("Content-Type", "text/html; charset=utf-8");
-          res.setHeader("Cache-Control", "public, max-age=300");
-          res.send(
-            renderOgHtml({
-              title: SITE_NAME,
-              description: DEFAULT_DESCRIPTION,
-              canonicalUrl,
-              imageUrl: `${SITE_URL}/api/og/image/default.png`,
-            }),
-          );
-          return;
-        }
-        const description = opinionPollOgDescription(ctx);
-        const imageUrl = opinionPollOgImageUrl(ctx.slug);
+        const result = await resolveOpinionPollOg(req.params.slug);
         res.setHeader("Content-Type", "text/html; charset=utf-8");
-        res.setHeader("Cache-Control", "public, max-age=600");
-        res.send(
-          renderOgHtml({
-            title: `${ctx.title} • VoxDex`,
-            description,
-            canonicalUrl,
-            imageUrl,
-            imageType: "image/jpeg",
-          }),
+        res.setHeader(
+          "Cache-Control",
+          result.warnings.length > 0 ? "public, max-age=300" : "public, max-age=600",
         );
+        res.send(renderOgHtml(result));
       } catch (err: any) {
         console.error("[OG] Opinion poll render failed:", err?.message);
-        res.setHeader("Content-Type", "text/html; charset=utf-8");
-        res.send(
-          renderOgHtml({
-            title: SITE_NAME,
-            description: DEFAULT_DESCRIPTION,
-            canonicalUrl,
-            imageUrl: `${SITE_URL}/api/og/image/default.png`,
-          }),
-        );
+        res.status(500).send("og render failed");
       }
     },
   );
@@ -1590,47 +1283,17 @@ export function registerOgRoutes(app: Express): void {
   );
 
   app.get("/api/og/person/:id", async (req: Request, res: Response) => {
-    const id = req.params.id;
-    const canonicalUrl = `${SITE_URL}/person/${encodeURIComponent(id)}`;
     try {
-      const ctx = await loadPersonOgContext(id);
-      if (!ctx) {
-        res.setHeader("Content-Type", "text/html; charset=utf-8");
-        res.setHeader("Cache-Control", "public, max-age=300");
-        res.send(
-          renderOgHtml({
-            title: SITE_NAME,
-            description: DEFAULT_DESCRIPTION,
-            canonicalUrl,
-            imageUrl: `${SITE_URL}/api/og/image/default.png`,
-          }),
-        );
-        return;
-      }
-      const description = personOgDescription(ctx);
-      const imageUrl = personOgImageUrl(ctx.id);
+      const result = await resolvePersonOg(req.params.id);
       res.setHeader("Content-Type", "text/html; charset=utf-8");
-      res.setHeader("Cache-Control", "public, max-age=600");
-      res.send(
-        renderOgHtml({
-          title: `${ctx.name} • VoxDex`,
-          description,
-          canonicalUrl,
-          imageUrl,
-          imageType: "image/jpeg",
-        }),
+      res.setHeader(
+        "Cache-Control",
+        result.warnings.length > 0 ? "public, max-age=300" : "public, max-age=600",
       );
+      res.send(renderOgHtml(result));
     } catch (err: any) {
       console.error("[OG] Person render failed:", err?.message);
-      res.setHeader("Content-Type", "text/html; charset=utf-8");
-      res.send(
-        renderOgHtml({
-          title: SITE_NAME,
-          description: DEFAULT_DESCRIPTION,
-          canonicalUrl,
-          imageUrl: `${SITE_URL}/api/og/image/default.png`,
-        }),
-      );
+      res.status(500).send("og render failed");
     }
   });
 
@@ -1655,48 +1318,17 @@ export function registerOgRoutes(app: Express): void {
   );
 
   app.get("/api/og/matchups/:slug", async (req: Request, res: Response) => {
-    const slug = req.params.slug;
-    const canonicalUrl = `${SITE_URL}/vote/matchups/${encodeURIComponent(slug)}`;
     try {
-      const ctx = await loadMatchupOgContext(slug);
-      if (!ctx) {
-        res.setHeader("Content-Type", "text/html; charset=utf-8");
-        res.setHeader("Cache-Control", "public, max-age=300");
-        res.send(
-          renderOgHtml({
-            title: SITE_NAME,
-            description: DEFAULT_DESCRIPTION,
-            canonicalUrl,
-            imageUrl: `${SITE_URL}/api/og/image/default.png`,
-          }),
-        );
-        return;
-      }
-      const prompt = matchupOgPromptTitle(ctx);
-      const description = matchupOgDescription(ctx);
-      const imageUrl = matchupOgImageUrl(ctx.slug);
+      const result = await resolveMatchupOg(req.params.slug);
       res.setHeader("Content-Type", "text/html; charset=utf-8");
-      res.setHeader("Cache-Control", "public, max-age=600");
-      res.send(
-        renderOgHtml({
-          title: prompt,
-          description,
-          canonicalUrl,
-          imageUrl,
-          imageType: "image/jpeg",
-        }),
+      res.setHeader(
+        "Cache-Control",
+        result.warnings.length > 0 ? "public, max-age=300" : "public, max-age=600",
       );
+      res.send(renderOgHtml(result));
     } catch (err: any) {
       console.error("[OG] Matchup render failed:", err?.message);
-      res.setHeader("Content-Type", "text/html; charset=utf-8");
-      res.send(
-        renderOgHtml({
-          title: SITE_NAME,
-          description: DEFAULT_DESCRIPTION,
-          canonicalUrl,
-          imageUrl: `${SITE_URL}/api/og/image/default.png`,
-        }),
-      );
+      res.status(500).send("og render failed");
     }
   });
 

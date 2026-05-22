@@ -2311,3 +2311,27 @@ export interface BroadcastAudience {
   /** When kind === 'single_user'. */
   userId?: string;
 }
+
+/** Site-wide strip shown above app content (all visitors, including logged-out). */
+export const siteAnnouncements = pgTable("site_announcements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  message: text("message").notNull(),
+  href: text("href"),
+  style: text("style").notNull().default("promo"),
+  startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+  endsAt: timestamp("ends_at", { withTimezone: true }),
+  isEnabled: boolean("is_enabled").notNull().default(true),
+  dismissible: boolean("dismissible").notNull().default(true),
+  createdBy: varchar("created_by").references(() => profiles.id, {
+    onDelete: "set null",
+  }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  startsAtIdx: index("idx_site_announcements_starts_at").on(table.startsAt),
+}));
+
+export type SiteAnnouncement = typeof siteAnnouncements.$inferSelect;
+export type InsertSiteAnnouncement = typeof siteAnnouncements.$inferInsert;
+
+export type SiteBannerStyle = "info" | "promo" | "warning";

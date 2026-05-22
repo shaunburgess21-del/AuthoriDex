@@ -9,6 +9,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { BottomNav } from "@/components/BottomNav";
+import { SiteBanner } from "@/components/SiteBanner";
 import { Footer } from "@/components/Footer";
 import { PWAUpdatePrompt } from "@/components/PWAUpdatePrompt";
 import { ScrollToTop } from "@/components/ScrollToTop";
@@ -386,9 +387,15 @@ function App() {
                     wins, leaderboard) opens the same instance via
                     `useShareCard()`. */}
                 <ShareCardProvider>
-                  <ErrorBoundary>
-                    <Router />
-                  </ErrorBoundary>
+                  <SiteBanner />
+                  <div
+                    className="min-h-0"
+                    style={{ paddingTop: "var(--site-banner-height, 0px)" }}
+                  >
+                    <ErrorBoundary>
+                      <Router />
+                    </ErrorBoundary>
+                  </div>
                 </ShareCardProvider>
               </XpBurstProvider>
               <Footer />

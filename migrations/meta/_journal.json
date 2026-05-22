@@ -470,6 +470,13 @@
       "when": 1780089600000,
       "tag": "0066_agent_comment_pool_and_volume",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1780176000000,
+      "tag": "0067_site_announcements",
+      "breakpoints": true
     }
   ]
 }
