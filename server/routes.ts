@@ -14574,7 +14574,7 @@ Only return the JSON object.`;
           const m = opinionPollMeta.get(row.parentId);
           parentTitle = m?.title ?? null;
           parentCategory = m?.category ?? null;
-          parentLink = m?.slug ? `/polls/${m.slug}` : null;
+          parentLink = m?.slug ? `/vote/opinion-polls/${m.slug}` : null;
         } else if (row.parentType === "open_market") {
           const m = marketMeta.get(row.parentId);
           parentTitle = m?.title ?? null;
