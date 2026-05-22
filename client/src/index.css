@@ -13,15 +13,28 @@
  * narrower stem than the digits next to it, so "Ꝟ11,011" reads as
  * the glyph being shrunken and dropped a few px.
  *
- * The fix is a synthetic font-face that scopes a curated local()
+ * The fix is two synthetic font-faces that scope a curated local()
  * fallback chain to just U+A75E (and U+A75F, the lowercase variant,
- * to future-proof if we ever use it). Adding 'VoxGlyph' at the head
- * of every font stack makes the browser consult this face FIRST for
- * the Vox character only and fall through to the regular webfont
- * for everything else — so digits, body copy, etc. are unaffected.
+ * to future-proof if we ever use it). Adding the appropriate name at
+ * the head of every font stack makes the browser consult the face
+ * FIRST for the Vox character only and fall through to the regular
+ * webfont for everything else — so digits, body copy, etc. are
+ * unaffected.
  *
- * No network request is made: this is `local()`-only. The fallback
- * order targets each major platform's best-coverage system font:
+ * Two faces are needed because intrinsic Ꝟ cap-heights differ across
+ * platforms — what lines up with JetBrains Mono digits on Windows
+ * (Segoe UI Symbol) overshoots on Android (Noto Sans). Each face
+ * has its own size-adjust calibration:
+ *   - 'VoxGlyph'      — desktop chain (Segoe UI / SF Pro), size 118%
+ *   - 'VoxGlyphTouch' — touch chain (Noto Sans / Roboto), size 100%
+ *
+ * The :root font stack uses 'VoxGlyph'; an `@media (pointer: coarse)`
+ * block lower in this file swaps in 'VoxGlyphTouch' on phones /
+ * tablets / touchscreen laptops.
+ *
+ * No network request is made: every src entry is `local()`-only.
+ * The combined local chain across both faces covers every major
+ * platform that ships U+A75E:
  *   - Segoe UI Symbol / Segoe UI: Windows (ships U+A75E since Vista)
  *   - SF Pro Text / system-ui: macOS, iOS
  *   - Noto Sans / Roboto: Android, ChromeOS, Linux distros
