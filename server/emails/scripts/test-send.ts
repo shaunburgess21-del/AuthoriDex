@@ -55,7 +55,9 @@ async function main() {
     to: RECIPIENT,
     subject: "VoxDex — pipeline test",
     category: "auth",
+    templateName: "pipeline_test",
     template: React.createElement(TestTemplate),
+    idempotencyKey: `test:pipeline:${Date.now()}`,
     tags: [{ name: "type", value: "pipeline-test" }],
   });
 

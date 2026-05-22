@@ -33,7 +33,7 @@
  */
 
 import * as React from "react";
-import { Heading, Section, Text } from "react-email";
+import { Button, Heading, Section, Text } from "react-email";
 import { Layout } from "../components/Layout";
 import { CURRENCY } from "@shared/currency";
 import { colors, radius, spacing, typography } from "../theme";
@@ -82,9 +82,13 @@ export function WelcomeEmail({
   // reinforcement.
   const voxLabel = `${formatCredits(creditAmount)} ${CURRENCY.name}`;
 
+  // Long, descriptive preheader so Outlook for Windows desktop fills its
+  // inbox preview from our copy instead of appending a literal "<end>".
+  const preview = `Your VoxDex account is ready. You've got ${voxLabel} of starter balance — virtual play currency for predictions on the people and events shaping the world.`;
+
   return (
     <Layout
-      preview="Your VoxDex account was created successfully."
+      preview={preview}
       footerContext="You're receiving this because you just created a VoxDex account."
       baseUrl={baseUrl}
       unsubscribeUrl={unsubscribeUrl}
@@ -105,17 +109,21 @@ export function WelcomeEmail({
         <Text style={creditsLabelStyle}>Your starting balance</Text>
         <Text style={creditsAmountStyle}>{voxLabel}</Text>
         <Text style={{ ...typography.small, margin: 0 }}>
-          That's {CURRENCY.symbol}{formatCredits(creditAmount)} to spend on
-          predictions, weekly markets, and building your track record.
+          {CURRENCY.name} is VoxDex's in-app virtual play currency — not real
+          money. Spend your {CURRENCY.symbol}
+          {formatCredits(creditAmount)} on predictions, weekly markets, and
+          building your track record.
         </Text>
       </Section>
 
-      {/* Primary CTA. Plain <a> styled as a button — most reliable
-          render path across Gmail / Outlook / Apple Mail. */}
+      {/* Primary CTA. Uses react-email's Button which renders a
+          table-wrapped, bulletproof button across Outlook / Gmail /
+          Apple Mail — preserves padding + background colour where
+          a raw <a> would collapse to a styled-text link. */}
       <Section style={ctaContainerStyle}>
-        <a href={`${baseUrl}/predict`} style={ctaButtonStyle}>
+        <Button href={`${baseUrl}/predict`} style={ctaButtonStyle}>
           Place your first prediction
-        </a>
+        </Button>
       </Section>
 
       <Section style={dividerStyle} />

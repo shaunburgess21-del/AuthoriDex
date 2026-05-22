@@ -25,11 +25,11 @@ import {
  * Replaces the "Coming soon" stub the page used to render. Per the
  * plan, three columns:
  *   - In-app  : live and editable today.
- *   - Email   : pre-rendered, disabled, badge "Coming soon".
+ *   - Email   : live for predictions / favorites / social / account.
  *   - Push    : pre-rendered, disabled, badge "Coming soon".
  *
  * Storing all three columns now keeps the data model multi-channel
- * from day one — when we wire SendGrid / Web Push later we don't need
+ * from day one — when we wire Web Push later we don't need
  * a follow-up migration or UI change beyond removing the disabled flag.
  *
  * Each row is one user-facing category (predictions / favorites /
@@ -71,7 +71,8 @@ export function NotificationPreferences() {
         </div>
       </div>
       <p className="text-xs text-muted-foreground mb-5">
-        Choose what we ping you about. You can always change this later.
+        Choose what we ping you about. Email updates are off by default — turn
+        on the categories you want. You can change this anytime.
       </p>
 
       {/* Column header. Hidden on small viewports — we render channel
@@ -80,12 +81,7 @@ export function NotificationPreferences() {
       <div className="hidden sm:grid grid-cols-[1fr_60px_60px_60px] items-end gap-4 pb-3 border-b text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
         <span>Category</span>
         <span className="text-center">In-app</span>
-        <span className="text-center">
-          Email
-          <Badge variant="outline" className="ml-1 text-[9px] font-normal py-0 px-1 leading-none">
-            Soon
-          </Badge>
-        </span>
+        <span className="text-center">Email</span>
         <span className="text-center">
           Push
           <Badge variant="outline" className="ml-1 text-[9px] font-normal py-0 px-1 leading-none">
@@ -102,6 +98,7 @@ export function NotificationPreferences() {
             prefs={data}
             onChange={update}
             disabled={isUpdating}
+            emailEnabled={cat !== "system"}
           />
         ))}
       </div>
@@ -236,9 +233,17 @@ interface CategoryRowProps {
   prefs: NotificationPreferencesRow;
   onChange: (patch: Partial<NotificationPreferencesRow>) => void;
   disabled?: boolean;
+  /** System announcements are in-app only — no marketing email toggle. */
+  emailEnabled?: boolean;
 }
 
-function CategoryRow({ category, prefs, onChange, disabled }: CategoryRowProps) {
+function CategoryRow({
+  category,
+  prefs,
+  onChange,
+  disabled,
+  emailEnabled = true,
+}: CategoryRowProps) {
   const inAppKey = `${category}InApp` as keyof NotificationPreferencesRow;
   const emailKey = `${category}Email` as keyof NotificationPreferencesRow;
   const pushKey = `${category}Push` as keyof NotificationPreferencesRow;
@@ -266,18 +271,25 @@ function CategoryRow({ category, prefs, onChange, disabled }: CategoryRowProps) 
       </div>
 
       <div className="flex items-center justify-between sm:justify-center gap-2">
-        <span className="sm:hidden text-xs text-muted-foreground inline-flex items-center gap-1">
-          Email
-          <Badge variant="outline" className="text-[9px] font-normal py-0 px-1 leading-none">
-            Soon
-          </Badge>
-        </span>
-        <Switch
-          checked={Boolean(prefs[emailKey])}
-          onCheckedChange={() => {}}
-          disabled
-          aria-label={`Email notifications for ${CATEGORY_LABELS[category]} (coming soon)`}
-        />
+        <span className="sm:hidden text-xs text-muted-foreground">Email</span>
+        {emailEnabled ? (
+          <Switch
+            id={`pref-${category}-email`}
+            checked={Boolean(prefs[emailKey])}
+            onCheckedChange={(checked) =>
+              onChange({ [emailKey]: checked } as Partial<NotificationPreferencesRow>)
+            }
+            disabled={disabled}
+            data-testid={`switch-pref-${category}-email`}
+            aria-label={`Email notifications for ${CATEGORY_LABELS[category]}`}
+          />
+        ) : (
+          <Switch
+            checked={false}
+            disabled
+            aria-label={`Email notifications for ${CATEGORY_LABELS[category]} (not available)`}
+          />
+        )}
       </div>
 
       <div className="flex items-center justify-between sm:justify-center gap-2">

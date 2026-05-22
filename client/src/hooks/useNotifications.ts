@@ -5,6 +5,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import type {
@@ -577,6 +578,9 @@ export function useNotificationPreferences() {
       if (context?.previous) {
         queryClient.setQueryData(PREFS_QUERY_KEY, context.previous);
       }
+      toast.error("Could not save notification preferences", {
+        description: "Please try again.",
+      });
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: PREFS_QUERY_KEY });

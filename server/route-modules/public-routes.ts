@@ -173,6 +173,8 @@ export function registerPublicRoutes(app: Express): void {
       to: CONTACT_INBOX,
       subject: contactSubmissionSubject(topic, subject),
       category: "lifecycle",
+      templateName: "contact_submission",
+      skipMarketingChecks: true,
       replyTo: email,
       idempotencyKey,
       tags: [

@@ -26,7 +26,12 @@ async function main() {
     to: RECIPIENT,
     subject: `Your VoxDex code: ${SAMPLE_CODE}`,
     category: "auth",
-    template: React.createElement(VerifyEmail, { code: SAMPLE_CODE }),
+    templateName: "verify",
+    template: React.createElement(VerifyEmail, {
+      code: SAMPLE_CODE,
+      flow: "signup",
+    }),
+    idempotencyKey: `test:verify:${SAMPLE_CODE}`,
     tags: [{ name: "type", value: "verify-email-test" }],
   });
 

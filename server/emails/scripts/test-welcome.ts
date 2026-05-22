@@ -33,10 +33,13 @@ async function main() {
     to: RECIPIENT,
     subject: WELCOME_SUBJECT,
     category: "lifecycle",
+    templateName: "welcome",
+    skipMarketingChecks: true,
     template: React.createElement(WelcomeEmail, {
       baseUrl: TEST_BASE_URL,
       unsubscribeUrl: buildUnsubscribeUrl("test-user", TEST_BASE_URL),
     }),
+    idempotencyKey: `test:welcome:${Date.now()}`,
     tags: [{ name: "type", value: "welcome-email-test" }],
   });
 

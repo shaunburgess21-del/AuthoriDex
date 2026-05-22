@@ -25,7 +25,7 @@ import type { Request, Response } from "express";
 import { Webhook } from "standardwebhooks";
 
 import { sendEmail } from "../send";
-import { VerifyEmail } from "../templates/auth/VerifyEmail";
+import { VerifyEmail, type VerifyEmailFlow } from "../templates/auth/VerifyEmail";
 
 // ---- Types ----------------------------------------------------------------
 //
@@ -34,6 +34,7 @@ import { VerifyEmail } from "../templates/auth/VerifyEmail";
 
 interface SupabaseAuthHookPayload {
   user: {
+    id: string;
     email: string;
   };
   email_data: {
@@ -62,6 +63,27 @@ function sanitizeOtpToken(rawToken: string): string {
   return trimmed.replace(/<end>/gi, "").trim();
 }
 
+function resolveEmailChangeToken(email_data: SupabaseAuthHookPayload["email_data"]): string {
+  const primary = sanitizeOtpToken(email_data.token);
+  if (primary) return primary;
+  if (email_data.token_new) {
+    return sanitizeOtpToken(email_data.token_new);
+  }
+  return primary;
+}
+
+function resolveEmailChangeIdempotencyKey(
+  email_data: SupabaseAuthHookPayload["email_data"],
+): string {
+  // Supabase fires twice (old + new inbox). Prefer the new-address hash
+  // when present so the two messages never share one idempotency key.
+  const hashPart =
+    email_data.token_hash_new && email_data.token_new
+      ? email_data.token_hash_new
+      : email_data.token_hash;
+  return `auth:email_change:${hashPart}`;
+}
+
 // ---- Webhook verifier -----------------------------------------------------
 
 function getWebhookVerifier(): Webhook {
@@ -73,10 +95,57 @@ function getWebhookVerifier(): Webhook {
     );
   }
 
-  // Supabase secrets are stored as `v1,whsec_<base64>`. The
-  // standardwebhooks library wants just the <base64> part.
   const secret = raw.replace("v1,whsec_", "");
   return new Webhook(secret);
+}
+
+async function sendAuthOtpEmail(args: {
+  user: SupabaseAuthHookPayload["user"];
+  subject: string;
+  flow: VerifyEmailFlow;
+  code: string;
+  idempotencyKey: string;
+  action: string;
+  /**
+   * Omit on signup — profiles row may not exist yet (FK on email_send_log).
+   * Pass for magic link / recovery / email change when the account exists.
+   */
+  userId?: string;
+}): Promise<void> {
+  const result = await sendEmail({
+    to: args.user.email,
+    subject: args.subject,
+    category: "auth",
+    templateName: "verify",
+    template: React.createElement(VerifyEmail, {
+      code: args.code,
+      flow: args.flow,
+    }),
+    userId: args.userId,
+    idempotencyKey: args.idempotencyKey,
+    tags: [
+      { name: "source", value: "supabase-auth-hook" },
+      { name: "action", value: args.action },
+    ],
+  });
+
+  if (!result.ok) {
+    throw new Error(result.error);
+  }
+
+  if (result.skipped) {
+    console.log(
+      `[auth-hook] Send skipped (${result.reason}). action=${args.action} to=${args.user.email}`,
+    );
+  }
+}
+
+function assertValidOtpCode(code: string, action: string): void {
+  if (!code || !/^\d{6}$/.test(code)) {
+    throw new Error(
+      `[auth-hook] Invalid or missing OTP for action=${action} (expected 6 digits)`,
+    );
+  }
 }
 
 // ---- Route handler --------------------------------------------------------
@@ -85,12 +154,6 @@ export async function handleAuthHook(
   req: Request,
   res: Response,
 ): Promise<void> {
-  // ---- 1. Verify signature ----
-  //
-  // req.body here is a Buffer because we register this route with
-  // express.raw() middleware. If it's not a Buffer, the middleware
-  // wasn't applied correctly.
-
   if (!Buffer.isBuffer(req.body)) {
     console.error(
       "[auth-hook] Rejected: body is not a Buffer. " +
@@ -119,11 +182,8 @@ export async function handleAuthHook(
     return;
   }
 
-  // ---- 2. Dispatch by action type ----
-
   const { user, email_data } = payload;
   const { token, token_hash, email_action_type } = email_data;
-  const cleanToken = sanitizeOtpToken(token);
 
   console.log(
     `[auth-hook] Verified. action=${email_action_type} to=${user.email}`,
@@ -131,57 +191,66 @@ export async function handleAuthHook(
 
   try {
     switch (email_action_type) {
-      case "signup":
-      case "magiclink": {
-        const subject =
-          email_action_type === "signup"
-            ? `Your VoxDex code: ${cleanToken}`
-            : `Your VoxDex sign-in code: ${cleanToken}`;
-
-        const result = await sendEmail({
-          to: user.email,
-          subject,
-          category: "auth",
-          template: React.createElement(VerifyEmail, { code: cleanToken }),
-          idempotencyKey: `auth:${email_action_type}:${token_hash}`,
-          tags: [
-            { name: "source", value: "supabase-auth-hook" },
-            { name: "action", value: email_action_type },
-          ],
+      case "signup": {
+        const cleanToken = sanitizeOtpToken(token);
+        assertValidOtpCode(cleanToken, "signup");
+        await sendAuthOtpEmail({
+          user,
+          subject: `Your VoxDex code: ${cleanToken}`,
+          flow: "signup",
+          code: cleanToken,
+          idempotencyKey: `auth:signup:${token_hash}`,
+          action: "signup",
         });
+        break;
+      }
 
-        if (!result.ok) {
-          throw new Error(result.error);
-        }
+      case "magiclink": {
+        const cleanToken = sanitizeOtpToken(token);
+        assertValidOtpCode(cleanToken, "magiclink");
+        await sendAuthOtpEmail({
+          user,
+          subject: `Your VoxDex sign-in code: ${cleanToken}`,
+          flow: "signup",
+          code: cleanToken,
+          idempotencyKey: `auth:magiclink:${token_hash}`,
+          action: "magiclink",
+        });
         break;
       }
 
       case "recovery": {
-        // TODO: dedicated PasswordResetEmail template.
-        const result = await sendEmail({
-          to: user.email,
+        const cleanToken = sanitizeOtpToken(token);
+        assertValidOtpCode(cleanToken, "recovery");
+        await sendAuthOtpEmail({
+          user,
           subject: `Your VoxDex password reset code: ${cleanToken}`,
-          category: "auth",
-          template: React.createElement(VerifyEmail, { code: cleanToken }),
+          flow: "recovery",
+          code: cleanToken,
           idempotencyKey: `auth:recovery:${token_hash}`,
-          tags: [
-            { name: "source", value: "supabase-auth-hook" },
-            { name: "action", value: "recovery" },
-          ],
+          action: "recovery",
+          userId: user.id,
         });
+        break;
+      }
 
-        if (!result.ok) {
-          throw new Error(result.error);
-        }
+      case "email_change": {
+        const cleanToken = resolveEmailChangeToken(email_data);
+        assertValidOtpCode(cleanToken, "email_change");
+        await sendAuthOtpEmail({
+          user,
+          subject: "Confirm your new VoxDex email",
+          flow: "email_change",
+          code: cleanToken,
+          idempotencyKey: resolveEmailChangeIdempotencyKey(email_data),
+          action: "email_change",
+          userId: user.id,
+        });
         break;
       }
 
       case "invite":
-      case "reauthentication":
-      case "email_change": {
-        // Stubs — acknowledge so Supabase doesn't retry, but don't
-        // actually send. Implement when the features that trigger
-        // them exist.
+      case "reauthentication": {
         console.warn(
           `[auth-hook] Action '${email_action_type}' is not yet ` +
             `implemented. Acknowledging to prevent Supabase retries, ` +
@@ -203,7 +272,6 @@ export async function handleAuthHook(
       }
     }
 
-    // ---- 3. Success ----
     res.status(200).json({});
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

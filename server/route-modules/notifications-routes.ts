@@ -307,10 +307,9 @@ export function registerNotificationsRoutes(app: Express): void {
         return res.status(400).json({ error: "Invalid preference payload", details: parsed.error.format() });
       }
 
-      // Filter out email/push toggles in v1 — the UI is disabled for
-      // these channels, but a hostile client could PATCH them directly.
-      // We accept them silently (so phase-2 rollout doesn't need a
-      // breaking change) but currently no dispatcher reads those flags.
+      // Email toggles are user-facing in Settings; sendEmail() enforces
+      // *Email columns for engagement mail and email_unsubscribe_state for
+      // lifecycle. Push columns remain UI-disabled until that channel ships.
       const updates: Record<string, boolean | Date> = { ...parsed.data, updatedAt: new Date() };
       if (Object.keys(parsed.data).length === 0) {
         return res.status(400).json({ error: "No fields to update" });

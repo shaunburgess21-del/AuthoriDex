@@ -7646,10 +7646,12 @@ Only return the JSON object.`;
 
         void (async () => {
           try {
-            await sendEmail({
+            const result = await sendEmail({
               to: req.userEmail!,
               subject: welcomeSubject(creditAmount),
               category: "lifecycle",
+              templateName: "welcome",
+              userId,
               template: React.createElement(WelcomeEmail, {
                 baseUrl,
                 creditAmount,
@@ -7661,6 +7663,15 @@ Only return the JSON object.`;
                 { name: "template", value: "welcome" },
               ],
             });
+            if (result.ok && result.skipped) {
+              console.log(
+                `[welcome-email] Skipped (${result.reason}) for user=${userId}`,
+              );
+            } else if (!result.ok) {
+              console.error(
+                `[welcome-email] Send failed for user=${userId}: ${result.error}`,
+              );
+            }
           } catch (err) {
             console.error(
               `[welcome-email] Send failed for user=${userId}:`,

@@ -2229,6 +2229,22 @@ export type EmailUnsubscribeState = typeof emailUnsubscribeState.$inferSelect;
 export type InsertEmailUnsubscribeState = typeof emailUnsubscribeState.$inferInsert;
 
 /**
+ * Durable idempotency for outbound email sends. One row per logical send;
+ * INSERT ON CONFLICT DO NOTHING gates duplicate Resend calls across retries
+ * and deploys. Rows are backend-only (no RLS).
+ */
+export const emailSendLog = pgTable("email_send_log", {
+  idempotencyKey: text("idempotency_key").primaryKey(),
+  userId: varchar("user_id").references(() => profiles.id, { onDelete: "cascade" }),
+  category: text("category").notNull(),
+  template: text("template").notNull(),
+  sentAt: timestamp("sent_at").notNull().defaultNow(),
+});
+
+export type EmailSendLog = typeof emailSendLog.$inferSelect;
+export type InsertEmailSendLog = typeof emailSendLog.$inferInsert;
+
+/**
  * Per-(user, market) mute. Composes with the category-level toggles in
  * `notificationPreferences`: a notification is delivered only if (a) the
  * user has the relevant category enabled AND (b) the market isn't on

@@ -477,6 +477,13 @@
       "when": 1780176000000,
       "tag": "0067_site_announcements",
       "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1780262400000,
+      "tag": "0068_email_send_log",
+      "breakpoints": true
     }
   ]
 }

@@ -2,13 +2,11 @@
  * The one function every email send in the codebase goes through.
  *
  * Wraps the Resend SDK with:
+ *   - marketing preference + unsubscribe enforcement
+ *   - DB-backed idempotency (survives deploys / cron retries)
  *   - consistent logging
  *   - normalized error handling
- *   - optional idempotency (prevents duplicate sends on retries)
  *   - a dev-mode dry run (EMAIL_DRY_RUN=true logs instead of sending)
- *
- * Callers pass a React template component and props; this module
- * handles rendering, sender selection, and delivery.
  *
  * Usage:
  *   import { sendEmail } from "./send";
@@ -18,16 +16,29 @@
  *     to: "user@example.com",
  *     subject: "Your VoxDex code: 428913",
  *     category: "auth",
- *     template: <VerifyEmail code="428913" />,
- *     idempotencyKey: `verify:${userId}:${attemptId}`,
+ *     templateName: "verify",
+ *     template: <VerifyEmail code="428913" flow="signup" />,
+ *     userId: profileId,
+ *     idempotencyKey: `auth:signup:${tokenHash}`,
  *   });
  */
 
 import * as React from "react";
+import { eq } from "drizzle-orm";
 
+import { emailSendLog } from "@shared/schema";
+import { db } from "../db";
+import { logger } from "../log";
 import { resend, senders, replyTo, type EmailCategory } from "./client";
+import {
+  evaluateMarketingGate,
+  logEmailSuppressed,
+  type EmailPreferenceKey,
+} from "./marketing-gate";
 
 // ---- Types ----------------------------------------------------------------
+
+export type { EmailPreferenceKey };
 
 export interface SendEmailArgs {
   /** Recipient email address. */
@@ -39,78 +50,95 @@ export interface SendEmailArgs {
   /** Which sender identity + domain reputation bucket to use. */
   category: EmailCategory;
 
+  /** Short template id stored in email_send_log (e.g. "welcome", "verify"). */
+  templateName: string;
+
   /** A React element — the rendered template. */
   template: React.ReactElement;
 
   /**
-   * Optional dedupe key. If the same key was used within the last
-   * 24 hours, the send is skipped and a `skipped` result returned.
-   *
-   * Use whenever a send could be triggered twice by the same logical
-   * event (cron retry, webhook redelivery, user double-click, etc.).
+   * Profile id for prefs / unsubscribe / send log. Required for engagement;
+   * recommended for lifecycle user-facing mail. Omit for internal recipients
+   * when combined with skipMarketingChecks.
+   */
+  userId?: string;
+
+  /**
+   * Required for category "engagement" — maps to notification_preferences
+   * *Email columns.
+   */
+  preferenceKey?: EmailPreferenceKey;
+
+  /**
+   * When true, skip email_unsubscribe_state and per-category checks.
+   * Use for contact-form mail to team@voxdex.com.
+   */
+  skipMarketingChecks?: boolean;
+
+  /**
+   * Optional dedupe key. INSERT into email_send_log ON CONFLICT skips Resend.
    */
   idempotencyKey?: string;
 
   /** Optional plain-text fallback. If omitted, Resend generates one. */
   text?: string;
 
-  /**
-   * Optional metadata tags. Stored with the Resend send record and
-   * visible in the Resend dashboard — useful for filtering by
-   * campaign, user segment, etc.
-   */
   tags?: Array<{ name: string; value: string }>;
 
-  /**
-   * Optional per-send Reply-To override. If omitted we fall back to
-   * the category default in `senders`/`replyTo` (hello@voxdex.com).
-   *
-   * Used by the contact-form pipeline to set Reply-To to the
-   * visitor's email so hitting Reply in the team inbox replies
-   * straight to them — without changing the From address (which
-   * has to stay on a verified domain for deliverability).
-   */
   replyTo?: string;
 }
 
+export type SendEmailSkipReason = "dry_run" | "duplicate" | "suppressed";
+
 export type SendEmailResult =
   | { ok: true; id: string; skipped?: false }
-  | { ok: true; id: null; skipped: true; reason: "dry_run" | "duplicate" }
+  | { ok: true; id: null; skipped: true; reason: SendEmailSkipReason }
   | { ok: false; error: string };
 
-// ---- In-memory idempotency cache -----------------------------------------
-//
-// Simple Map-based dedupe for now. Survives process lifetime but not
-// restarts, which is fine for short-window dedupe (seconds to minutes).
-// If we need durable cross-restart dedupe later (e.g. for the Weekly
-// Wrap cron that runs across deploys), we'll promote this to a DB
-// table. Not over-engineering until we need it.
+const isDryRun = process.env.EMAIL_DRY_RUN === "true";
 
-const seenKeys = new Map<string, number>();
-const IDEMPOTENCY_WINDOW_MS = 24 * 60 * 60 * 1000; // 24 hours
+// TODO: monthly prune job for email_send_log rows older than 90 days.
 
-function checkAndRecordIdempotency(key: string): "fresh" | "duplicate" {
-  const now = Date.now();
+async function claimIdempotencyKey(args: {
+  idempotencyKey: string;
+  userId?: string;
+  category: EmailCategory;
+  templateName: string;
+}): Promise<"claimed" | "duplicate" | "unavailable"> {
+  try {
+    const [inserted] = await db
+      .insert(emailSendLog)
+      .values({
+        idempotencyKey: args.idempotencyKey,
+        userId: args.userId ?? null,
+        category: args.category,
+        template: args.templateName,
+      })
+      .onConflictDoNothing({ target: emailSendLog.idempotencyKey })
+      .returning({ idempotencyKey: emailSendLog.idempotencyKey });
 
-  // Periodic cleanup of expired keys — cheap, runs only on check.
-  for (const [k, ts] of seenKeys) {
-    if (now - ts > IDEMPOTENCY_WINDOW_MS) {
-      seenKeys.delete(k);
-    }
+    return inserted ? "claimed" : "duplicate";
+  } catch (err) {
+    logger.warn(
+      { err, idempotencyKey: args.idempotencyKey },
+      "[emails] Idempotency claim failed; proceeding without dedupe",
+    );
+    return "unavailable";
   }
-
-  const seenAt = seenKeys.get(key);
-  if (seenAt !== undefined && now - seenAt < IDEMPOTENCY_WINDOW_MS) {
-    return "duplicate";
-  }
-
-  seenKeys.set(key, now);
-  return "fresh";
 }
 
-// ---- Send -----------------------------------------------------------------
-
-const isDryRun = process.env.EMAIL_DRY_RUN === "true";
+async function releaseIdempotencyKey(idempotencyKey: string): Promise<void> {
+  try {
+    await db
+      .delete(emailSendLog)
+      .where(eq(emailSendLog.idempotencyKey, idempotencyKey));
+  } catch (err) {
+    logger.warn(
+      { err, idempotencyKey },
+      "[emails] Failed to release idempotency key after send failure",
+    );
+  }
+}
 
 export async function sendEmail(
   args: SendEmailArgs,
@@ -119,7 +147,11 @@ export async function sendEmail(
     to,
     subject,
     category,
+    templateName,
     template,
+    userId,
+    preferenceKey,
+    skipMarketingChecks,
     idempotencyKey,
     text,
     tags,
@@ -127,30 +159,76 @@ export async function sendEmail(
   } = args;
   const effectiveReplyTo = replyToOverride ?? replyTo;
 
-  // ---- Idempotency check ----
-  if (idempotencyKey) {
-    const status = checkAndRecordIdempotency(idempotencyKey);
-    if (status === "duplicate") {
-      console.log(
-        `[emails] Skipping duplicate send. key=${idempotencyKey} to=${to}`,
-      );
-      return { ok: true, id: null, skipped: true, reason: "duplicate" };
-    }
+  if (category === "engagement" && !userId) {
+    logEmailSuppressed({
+      category,
+      preferenceKey,
+      reason: "missing_user_id",
+      to,
+      templateName,
+    });
+    return { ok: true, id: null, skipped: true, reason: "suppressed" };
   }
 
-  // ---- Dry run (dev convenience) ----
+  if (category === "engagement" && !preferenceKey) {
+    logEmailSuppressed({
+      userId,
+      category,
+      reason: "missing_preference_key",
+      to,
+      templateName,
+    });
+    return { ok: true, id: null, skipped: true, reason: "suppressed" };
+  }
+
   if (isDryRun) {
-    console.log(
-      `[emails] DRY RUN — would send: ` +
-        `to=${to} subject="${subject}" category=${category}`,
+    logger.info(
+      { to, subject, category, templateName },
+      "[emails] DRY RUN — would send",
     );
     return { ok: true, id: null, skipped: true, reason: "dry_run" };
   }
 
-  // ---- Actual send ----
+  const gate = await evaluateMarketingGate({
+    category,
+    userId,
+    preferenceKey,
+    skipMarketingChecks,
+  });
+
+  if (!gate.allowed) {
+    logEmailSuppressed({
+      userId,
+      category,
+      preferenceKey,
+      reason: gate.reason,
+      to,
+      templateName,
+    });
+    return { ok: true, id: null, skipped: true, reason: "suppressed" };
+  }
+
+  let claimedIdempotencyKey: string | undefined;
+  if (idempotencyKey) {
+    const claim = await claimIdempotencyKey({
+      idempotencyKey,
+      userId,
+      category,
+      templateName,
+    });
+    if (claim === "duplicate") {
+      logger.info(
+        { idempotencyKey, to, templateName },
+        "[emails] Skipping duplicate send (DB idempotency)",
+      );
+      return { ok: true, id: null, skipped: true, reason: "duplicate" };
+    }
+    if (claim === "claimed") {
+      claimedIdempotencyKey = idempotencyKey;
+    }
+  }
+
   try {
-    // Lazy-resolved: throws with a clear message if RESEND_API_KEY
-    // is missing, rather than crashing server boot. Caught below.
     const { data, error } = await resend.emails.send({
       from: senders[category],
       to,
@@ -162,31 +240,37 @@ export async function sendEmail(
     });
 
     if (error) {
-      console.error(
-        `[emails] Send failed. to=${to} subject="${subject}" ` +
-          `error=${error.name}: ${error.message}`,
+      if (claimedIdempotencyKey) {
+        await releaseIdempotencyKey(claimedIdempotencyKey);
+      }
+      logger.error(
+        { to, subject, category, templateName, error: error.message },
+        "[emails] Send failed",
       );
       return { ok: false, error: `${error.name}: ${error.message}` };
     }
 
     if (!data?.id) {
-      // Shouldn't happen per Resend's contract, but guard anyway.
-      console.error(
-        `[emails] Send returned no id. to=${to} subject="${subject}"`,
-      );
+      if (claimedIdempotencyKey) {
+        await releaseIdempotencyKey(claimedIdempotencyKey);
+      }
+      logger.error({ to, subject, category }, "[emails] Send returned no id");
       return { ok: false, error: "Resend returned no message id" };
     }
 
-    console.log(
-      `[emails] Sent. id=${data.id} to=${to} subject="${subject}" ` +
-        `category=${category}`,
+    logger.info(
+      { id: data.id, to, subject, category, templateName, userId },
+      "[emails] Sent",
     );
     return { ok: true, id: data.id };
   } catch (err) {
+    if (claimedIdempotencyKey) {
+      await releaseIdempotencyKey(claimedIdempotencyKey);
+    }
     const message = err instanceof Error ? err.message : String(err);
-    console.error(
-      `[emails] Send threw. to=${to} subject="${subject}" ` +
-        `error=${message}`,
+    logger.error(
+      { to, subject, category, templateName, error: message },
+      "[emails] Send threw",
     );
     return { ok: false, error: message };
   }
