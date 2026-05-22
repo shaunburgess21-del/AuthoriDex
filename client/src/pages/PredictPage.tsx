@@ -1418,11 +1418,17 @@ export default function PredictPage() {
     queryKey: ['/api/me/predictions'],
     enabled: !!user,
   });
-  const { data: recentActivity = [], error: recentActivityError, refetch: refetchRecentActivity } = useQuery<RecentPredictionActivity[]>({
+  const {
+    data: recentActivity,
+    isPending: recentActivityPending,
+    error: recentActivityError,
+    refetch: refetchRecentActivity,
+  } = useQuery<RecentPredictionActivity[]>({
     queryKey: ['/api/predict/recent-activity'],
     staleTime: 60_000,
     refetchInterval: 90_000,
   });
+  const activityItems = recentActivity ?? [];
 
   const userBetsByMarket = useMemo(() => {
     const map = new Map<
@@ -3069,40 +3075,55 @@ export default function PredictPage() {
       {selectedType === "all" && (
         <div className="container mx-auto px-2 sm:px-4 max-w-7xl pt-[15px] pb-[5px]">
           {/* Town Square - below section filters, above weekly timer */}
-          {recentActivityError ? (
-            <div className="mb-8 mt-[5px]">
-              <Card className="p-6 text-center">
-                <p className="text-destructive mb-2">Couldn&apos;t load Town Square</p>
-                <p className="text-muted-foreground text-sm mb-4">Please try again in a moment.</p>
-                <Button onClick={() => refetchRecentActivity()} size="sm">
-                  Retry
-                </Button>
-              </Card>
-            </div>
-          ) : recentActivity.length > 0 ? (
-            <div className="mb-8 mt-[5px] min-w-0 shrink-0 rounded-xl pulse-card-blue transition-all duration-200" data-testid="town-square-card">
-              <div className={`px-3 sm:px-4 ${townSquareCollapsed ? 'py-4' : 'pt-5 pb-4'}`}>
-                <div
-                  className="flex items-center gap-3 cursor-pointer select-none group"
-                  onClick={() => setTownSquareCollapsed(!townSquareCollapsed)}
-                  data-testid="town-square-header"
-                >
-                  <div className="h-9 w-9 rounded-lg flex items-center justify-center pulse-icon-blue shrink-0">
-                    <MessageSquare className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-semibold text-foreground dark:text-slate-100">Town Square</h3>
-                    <p className="text-[10px] text-muted-foreground dark:text-slate-500 uppercase tracking-wider">Recent prediction activity across live markets</p>
-                  </div>
-                  <div className={`h-6 w-6 rounded-md flex items-center justify-center bg-muted/50 dark:bg-slate-700/30 transition-transform duration-200 shrink-0 ${townSquareCollapsed ? '' : 'rotate-180'}`}>
-                    <ChevronDown className="h-4 w-4 text-muted-foreground dark:text-slate-400 group-hover:text-foreground dark:group-hover:text-slate-200 transition-colors" />
-                  </div>
+          <div className="mb-[17px] mt-[5px] min-w-0 shrink-0 rounded-xl pulse-card-blue transition-all duration-200" data-testid="town-square-card">
+            <div className={`px-3 sm:px-4 ${townSquareCollapsed ? 'py-4' : 'pt-5 pb-4'}`}>
+              <div
+                className="flex items-center gap-3 cursor-pointer select-none group"
+                onClick={() => setTownSquareCollapsed(!townSquareCollapsed)}
+                data-testid="town-square-header"
+              >
+                <div className="h-9 w-9 rounded-lg flex items-center justify-center pulse-icon-blue shrink-0">
+                  <MessageSquare className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                 </div>
-                {!townSquareCollapsed && (
-                  <div className="mt-4">
-                    <Card className="border-border/50 dark:border-slate-700/50 bg-muted/30 dark:bg-slate-800/30">
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-sm font-semibold text-foreground dark:text-slate-100">Town Square</h3>
+                  <p className="text-[10px] text-muted-foreground dark:text-slate-500 uppercase tracking-wider">Recent prediction activity across live markets</p>
+                </div>
+                <div className={`h-6 w-6 rounded-md flex items-center justify-center bg-muted/50 dark:bg-slate-700/30 transition-transform duration-200 shrink-0 ${townSquareCollapsed ? '' : 'rotate-180'}`}>
+                  <ChevronDown className="h-4 w-4 text-muted-foreground dark:text-slate-400 group-hover:text-foreground dark:group-hover:text-slate-200 transition-colors" />
+                </div>
+              </div>
+              {!townSquareCollapsed && (
+                <div className="mt-4">
+                  <Card className="border-border/50 dark:border-slate-700/50 bg-muted/30 dark:bg-slate-800/30">
+                    {recentActivityError ? (
+                      <div className="p-6 text-center">
+                        <p className="text-destructive mb-2">Couldn&apos;t load Town Square</p>
+                        <p className="text-muted-foreground text-sm mb-4">Please try again in a moment.</p>
+                        <Button onClick={() => refetchRecentActivity()} size="sm">
+                          Retry
+                        </Button>
+                      </div>
+                    ) : recentActivityPending ? (
                       <div className="divide-y divide-border/50">
-                        {recentActivity.slice(0, 8).map((item) => {
+                        {[0, 1, 2].map((i) => (
+                          <div key={i} className="flex items-start gap-3 px-4 py-3">
+                            <Skeleton className="h-9 w-9 shrink-0 rounded-full" />
+                            <div className="min-w-0 flex-1 space-y-2">
+                              <Skeleton className="h-4 w-2/3" />
+                              <Skeleton className="h-3 w-full" />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : activityItems.length === 0 ? (
+                      <p className="px-4 py-6 text-center text-sm text-muted-foreground">
+                        No recent activity yet
+                      </p>
+                    ) : (
+                      <>
+                      <div className="divide-y divide-border/50">
+                        {activityItems.slice(0, 8).map((item) => {
                           const actionType = item.actionType ?? "parimutuel";
                           const isAmmBuy = actionType === "buy";
                           const isAmmSell = actionType === "sell";
@@ -3210,12 +3231,13 @@ export default function PredictPage() {
                           Show more activity →
                         </button>
                       </div>
-                    </Card>
-                  </div>
-                )}
-              </div>
+                      </>
+                    )}
+                  </Card>
+                </div>
+              )}
             </div>
-          ) : null}
+          </div>
         </div>
       )}
       <div className="container mx-auto px-2 sm:px-4 py-8 max-w-7xl pt-[5px] pb-[5px]">
