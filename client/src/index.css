@@ -27,6 +27,10 @@
  *   - Noto Sans / Roboto: Android, ChromeOS, Linux distros
  *   - sans-serif: ultimate generic fallback
  * ------------------------------------------------------------------ */
+/* Desktop face. Segoe UI Symbol / SF Pro / Helvetica Neue render
+   Ꝟ at a relatively small cap-height vs JetBrains Mono digits, so
+   we scale up ~18% to match. The local() chain leads with the
+   Windows + macOS system fonts that are available on desktop. */
 @font-face {
   font-family: 'VoxGlyph';
   src: local('Segoe UI Symbol'),
@@ -34,26 +38,32 @@
        local('SF Pro Text'),
        local('-apple-system'),
        local('Helvetica Neue'),
-       local('Noto Sans'),
-       local('Roboto'),
        local('Arial');
   unicode-range: U+A75E, U+A75F;
   font-display: swap;
-  /* `size-adjust` scales the metrics of this synthetic face only —
-     it does NOT affect the layout/advance-width of surrounding
-     glyphs because the unicode-range scopes this @font-face to a
-     single character. The fallback system fonts (Segoe UI Symbol
-     etc.) render Ꝟ at their own cap-height, which is noticeably
-     shorter than JetBrains Mono's tall numerals; bumping by ~18%
-     brings the glyph up to match the digits visually in mono
-     contexts (the place the gap shows most). It also reads fine
-     in sans contexts — slightly larger but in line with brand
-     emphasis on the symbol.
-     Supported in all evergreen browsers (Chrome 92+, Firefox 92+,
-     Safari 17+, Edge 92+). Older browsers ignore the descriptor
-     and fall back to the un-scaled glyph, which is the same state
-     we were in before this rule existed — no regression risk. */
   size-adjust: 118%;
+}
+
+/* Touch / mobile face. Android falls through to Noto Sans / Roboto,
+   which already render Ꝟ at a noticeably larger cap-height than the
+   desktop fonts — applying the same +18% scale overshoots the digits
+   visibly. Drop the scale to 100% so the glyph sits at its native
+   size, which on Android is already roughly digit-height. iOS uses
+   SF Pro either way; size-adjust 100% reads fine there too because
+   SF Pro's Ꝟ also has a tall cap-height. The whole face is selected
+   inside the (pointer: coarse) media query below so touch devices
+   pick it up regardless of viewport width. */
+@font-face {
+  font-family: 'VoxGlyphTouch';
+  src: local('Noto Sans'),
+       local('Roboto'),
+       local('SF Pro Text'),
+       local('-apple-system'),
+       local('Helvetica Neue'),
+       local('Arial');
+  unicode-range: U+A75E, U+A75F;
+  font-display: swap;
+  size-adjust: 100%;
 }
 
 /* LIGHT MODE */
@@ -134,7 +144,10 @@
      system font that actually ships the glyph — see the @font-face
      block at the top of this file. It only kicks in for U+A75E /
      U+A75F via unicode-range, so everything else still renders in
-     Inter / Space Grotesk / JetBrains Mono. */
+     Inter / Space Grotesk / JetBrains Mono. The (pointer: coarse)
+     override below swaps in 'VoxGlyphTouch' on mobile/tablet where
+     the local fallback chain resolves to a different system font
+     with different intrinsic metrics. */
   --font-sans: 'VoxGlyph', 'Inter', system-ui, sans-serif;
   --font-serif: 'VoxGlyph', 'Space Grotesk', sans-serif;
   --font-mono: 'VoxGlyph', 'JetBrains Mono', monospace;
@@ -187,6 +200,24 @@
   /* Fallback for older browsers */
   --destructive-border: hsl(var(--destructive));
   --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+}
+
+/* Touch / mobile override for the Vox glyph font stack. (pointer:
+   coarse) catches phones + tablets + touchscreen laptops — anything
+   without a precise mouse pointer. Touchscreen Windows laptops will
+   pick up 'VoxGlyphTouch' instead of 'VoxGlyph', but Segoe UI Symbol
+   sits later in the touch face's src chain too so they still render
+   the same glyph — just without the +18% scale that's only correct
+   for the desktop font picks (Noto Sans / SF Pro on mobile already
+   render Ꝟ at digit-height without scaling). Applies to both light
+   and dark themes because only the font stack changes; the color
+   tokens still resolve through :root / .dark normally. */
+@media (pointer: coarse) {
+  :root {
+    --font-sans: 'VoxGlyphTouch', 'Inter', system-ui, sans-serif;
+    --font-serif: 'VoxGlyphTouch', 'Space Grotesk', sans-serif;
+    --font-mono: 'VoxGlyphTouch', 'JetBrains Mono', monospace;
+  }
 }
 
 .dark {
