@@ -822,6 +822,22 @@ async function servePersonOgImage(
     const ctx = await loadPersonOgContext(id);
     if (!ctx) {
       console.warn(`[OG] Person not found for image id=${id}`);
+      try {
+        let errImage = await renderPersonOgUnavailableJpeg();
+        if (format === "png") {
+          errImage = await sharp(errImage).png().toBuffer();
+        }
+        res.status(404);
+        res.setHeader("Content-Type", contentType);
+        res.setHeader("Cache-Control", "public, max-age=60");
+        res.send(errImage);
+        return;
+      } catch (unavailErr: any) {
+        console.error(
+          "[OG] Person unavailable image failed:",
+          unavailErr?.message,
+        );
+      }
       res.status(404).type("text/plain").send("person not found");
       return;
     }

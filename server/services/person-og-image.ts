@@ -15,17 +15,19 @@ const WIDGET_ROW_Y = 458;
 const WIDGET_ROW_H = 132;
 
 const CONTENT_TOP = 100;
-const HERO_GAP_ABOVE_WIDGETS = 8;
-const HERO_X = 360;
-const HERO_W = OG_WIDTH - HERO_X - 24;
-const HERO_H = WIDGET_ROW_Y - HERO_GAP_ABOVE_WIDGETS - CONTENT_TOP;
+const PHOTO_GAP_ABOVE_WIDGETS = 8;
+const PHOTO_X = 48;
+const PHOTO_Y = CONTENT_TOP;
+const PHOTO_SIZE =
+  WIDGET_ROW_Y - PHOTO_GAP_ABOVE_WIDGETS - CONTENT_TOP;
 
-const NAME_X = 48;
+const TEXT_GAP = 24;
+const NAME_X = PHOTO_X + PHOTO_SIZE + TEXT_GAP;
 const NAME_BASELINE_Y = 188;
 /** Exported for tests — celebrity name size on OG card. */
 export const PERSON_OG_NAME_FONT_SIZE = 56;
 
-const RANK_PILL_X = 48;
+const RANK_PILL_X = NAME_X;
 const RANK_PILL_Y = 228;
 const RANK_PILL_HEIGHT = 44;
 const RANK_PILL_FONT_SIZE = 21;
@@ -65,13 +67,13 @@ export interface PersonOgHeroLayout {
   contentTop: number;
 }
 
-/** Exported for tests — hero photo region geometry. */
+/** Exported for tests — left 1:1 photo region geometry. */
 export function getPersonOgHeroLayout(): PersonOgHeroLayout {
   return {
-    heroX: HERO_X,
-    heroY: CONTENT_TOP,
-    heroWidth: HERO_W,
-    heroHeight: HERO_H,
+    heroX: PHOTO_X,
+    heroY: PHOTO_Y,
+    heroWidth: PHOTO_SIZE,
+    heroHeight: PHOTO_SIZE,
     contentTop: CONTENT_TOP,
   };
 }
@@ -286,9 +288,6 @@ export function buildPersonOgOverlaySvg(ctx: PersonOgContext): string {
     labels.rank,
   );
 
-  const heroFadeWidth = 200;
-  const heroFadeHeight = HERO_H;
-
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${OG_WIDTH}" height="${OG_HEIGHT}" viewBox="0 0 ${OG_WIDTH} ${OG_HEIGHT}">
   <defs>
@@ -296,15 +295,9 @@ export function buildPersonOgOverlaySvg(ctx: PersonOgContext): string {
       <stop offset="0%" stop-color="#0f172a" stop-opacity="0.9"/>
       <stop offset="100%" stop-color="#0f172a" stop-opacity="0"/>
     </linearGradient>
-    <linearGradient id="heroLeftFade" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#0f172a" stop-opacity="0.85"/>
-      <stop offset="55%" stop-color="#0f172a" stop-opacity="0.45"/>
-      <stop offset="100%" stop-color="#0f172a" stop-opacity="0"/>
-    </linearGradient>
   </defs>
 
   <rect width="${OG_WIDTH}" height="140" fill="url(#topFade)"/>
-  <rect x="${HERO_X}" y="${CONTENT_TOP}" width="${heroFadeWidth}" height="${heroFadeHeight}" fill="url(#heroLeftFade)"/>
 
   ${textPath({
     text: labels.brand,
@@ -371,21 +364,21 @@ async function fetchFirstHeroImageBuffer(
 
 function buildHeroPlaceholderSvg(name: string): string {
   const initial = (name.trim().charAt(0) || "?").toUpperCase();
-  const fontSize = Math.round(HERO_H * 0.28);
+  const fontSize = Math.round(PHOTO_SIZE * 0.28);
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="${HERO_W}" height="${HERO_H}">
+<svg xmlns="http://www.w3.org/2000/svg" width="${PHOTO_SIZE}" height="${PHOTO_SIZE}">
   <defs>
     <linearGradient id="heroPh" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#0f172a"/>
       <stop offset="100%" stop-color="#164e63"/>
     </linearGradient>
   </defs>
-  <rect width="${HERO_W}" height="${HERO_H}" fill="url(#heroPh)"/>
+  <rect width="${PHOTO_SIZE}" height="${PHOTO_SIZE}" fill="url(#heroPh)"/>
   ${textPath({
     text: initial,
-    x: HERO_W / 2,
-    y: HERO_H / 2 + fontSize * 0.2,
+    x: PHOTO_SIZE / 2,
+    y: PHOTO_SIZE / 2 + fontSize * 0.2,
     fontSize,
     weight: 700,
     fill: "#ffffff",
@@ -406,7 +399,7 @@ async function buildHeroPhotoPanel(ctx: PersonOgContext): Promise<Buffer> {
   if (buf) {
     try {
       return await sharp(buf)
-        .resize(HERO_W, HERO_H, { fit: "cover", position: "centre" })
+        .resize(PHOTO_SIZE, PHOTO_SIZE, { fit: "cover", position: "centre" })
         .png()
         .toBuffer();
     } catch {
@@ -480,7 +473,7 @@ async function compositePersonBase(ctx: PersonOgContext): Promise<sharp.Sharp> {
       background: { r: 15, g: 23, b: 42, alpha: 1 },
     },
   }).composite([
-    { input: hero, left: HERO_X, top: CONTENT_TOP },
+    { input: hero, left: PHOTO_X, top: PHOTO_Y },
     { input: overlay, left: 0, top: 0 },
   ]);
 }

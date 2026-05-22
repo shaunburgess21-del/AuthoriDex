@@ -26,11 +26,19 @@ import {
 } from "../server/services/person-og-image";
 import { assertOgPathFontsLoaded } from "../server/services/og-svg-text-paths";
 
-test("personOgImagePath uses shared cache version v2", () => {
-  assert.equal(PERSON_OG_IMAGE_VERSION, "2");
+test("personOgImagePath uses shared cache version v3", () => {
+  assert.equal(PERSON_OG_IMAGE_VERSION, "3");
   assert.equal(
     personOgImagePath("elon-musk"),
-    "/api/og/person/elon-musk.jpg?v=2",
+    "/api/og/person/elon-musk.jpg?v=3",
+  );
+});
+
+test("personOgImagePath uses trending person id from profile URL", () => {
+  const uuid = "191aa3af-3c31-4e8a-87c2-3f8a2d07ae1c";
+  assert.equal(
+    personOgImagePath(uuid),
+    `/api/og/person/${encodeURIComponent(uuid)}.jpg?v=3`,
   );
 });
 
@@ -111,13 +119,15 @@ test("opentype path fonts load for person OG", () => {
   assert.ok(assertOgPathFontsLoaded());
 });
 
-test("getPersonOgHeroLayout spans content area to widgets", () => {
+test("getPersonOgHeroLayout is left-aligned 1:1 square to widgets", () => {
   const hero = getPersonOgHeroLayout();
   const widgets = getPersonOgWidgetLayout();
-  assert.equal(hero.heroX, 360);
+  const photoSize = widgets.widgetRowY - 8 - hero.contentTop;
+  assert.equal(hero.heroX, 48);
   assert.equal(hero.heroY, 100);
-  assert.equal(hero.heroHeight, widgets.widgetRowY - 8 - hero.contentTop);
-  assert.equal(hero.heroWidth, 1200 - 360 - 24);
+  assert.equal(hero.heroWidth, photoSize);
+  assert.equal(hero.heroHeight, photoSize);
+  assert.equal(hero.heroWidth, 350);
 });
 
 test("buildPersonOgOverlaySvg has no full-canvas opaque background", () => {
