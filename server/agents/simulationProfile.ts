@@ -47,7 +47,7 @@ const DEFAULT_SIMULATION_PROFILE: AgentSimulationProfile = {
   // halved dailyCommentChance below so volume and pacing both ease.
   weeklyCommentCap: 2,
   dailyVoteChance: 0.18,
-  dailyCommentChance: 0.026,
+  dailyCommentChance: 0.020,
   commentStyle: "casual",
   bankrollProfile: "normal",
 };

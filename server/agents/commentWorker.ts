@@ -9,16 +9,12 @@
  * generic. Quality over quantity.
  */
 
-import { and, count, desc, eq, gt, gte, inArray, sql } from "drizzle-orm";
+import { and, count, eq, gte, inArray, sql } from "drizzle-orm";
 import {
   agentConfigs,
   comments as unifiedComments,
-  matchups,
-  opinionPolls,
   opinionPollVotes,
-  predictionMarkets,
   profiles,
-  trendingPolls,
   trendingPollVotes,
   votes,
 } from "@shared/schema";
@@ -38,6 +34,13 @@ import {
   countAgentVotesThisWeek,
 } from "./voteWorker";
 import { isAgentsPaused } from "./runtime-state";
+import {
+  fetchMatchupParentPool,
+  fetchOpenMarketParentPool,
+  fetchOpinionPollParentPool,
+  fetchTrendingPollParentPool,
+  type CommentParentPoolStats,
+} from "./commentParentPool";
 
 /**
  * Probability that an agent's daily comment becomes a reply to someone
@@ -50,9 +53,9 @@ const REPLY_PROBABILITY = 0.30;
 
 /**
  * Defensive cap on how many comments a single sweep can post platform-wide.
- * With 56 agents × ~10% daily chance × weeklyCap=1, expected daily volume is
- * 3-6 comments. This ceiling exists so a misconfiguration can't quietly
- * generate hundreds.
+ * With 56 agents × per-sweep dailyCommentChance × weeklyCommentCap, expected
+ * daily volume is ~7-8 comments. This ceiling exists so a misconfiguration
+ * can't quietly generate hundreds.
  */
 const MAX_COMMENTS_PER_SWEEP = 30;
 
@@ -93,73 +96,36 @@ async function countAgentCommentsThisWeek(userId: string): Promise<number> {
  *  per-user filtering. Reused by both the top-level path (which then
  *  excludes parents the agent has already commented on) and the reply
  *  path (which doesn't — replying to a thread you've already posted in
- *  is normal). */
+ *  is normal).
+ *
+ *  Each surface uses a hybrid pool (see commentParentPool.ts): ~70 newest
+ *  plus ~130 random live rows, merged to 200. When the catalogue has ≤200
+ *  live items we load all of them. chooseParent() still picks uniformly
+ *  within the merged pool so explore rows get equal odds alongside recent. */
 async function getOpenParents(): Promise<EligibleCommentParent[]> {
   const now = new Date();
-  // Limits raised from 30 → 200 per surface. The previous 30-newest cap
-  // meant agents were structurally blind to anything older — with 159
-  // celebrities driving sentiment/opinion volume, the older two-thirds
-  // of the catalogue never received a single agent comment regardless
-  // of quality. 200 covers the realistic active set without flooding
-  // the picker (chooseParent samples uniformly within the picked surface
-  // so older items now get equal odds of being chosen). The order is
-  // still desc(createdAt) so that if you DO have more than 200 items in
-  // a surface, the most recent are kept (oldest legacy items drop off
-  // gracefully).
-  const PER_SURFACE_LIMIT = 200;
-  const [faceOffs, trendPolls, opinion, markets] = await Promise.all([
-    db
-      .select({
-        parentId: matchups.id,
-        title: matchups.title,
-        category: matchups.category,
-      })
-      .from(matchups)
-      .where(and(eq(matchups.isActive, true), eq(matchups.visibility, "live")))
-      .orderBy(desc(matchups.createdAt))
-      .limit(PER_SURFACE_LIMIT),
-    db
-      .select({
-        parentId: trendingPolls.id,
-        title: trendingPolls.headline,
-        category: trendingPolls.category,
-      })
-      .from(trendingPolls)
-      .where(eq(trendingPolls.visibility, "live"))
-      .orderBy(desc(trendingPolls.createdAt))
-      .limit(PER_SURFACE_LIMIT),
-    db
-      .select({
-        parentId: opinionPolls.id,
-        title: opinionPolls.title,
-        category: opinionPolls.category,
-      })
-      .from(opinionPolls)
-      .where(eq(opinionPolls.visibility, "live"))
-      .orderBy(desc(opinionPolls.createdAt))
-      .limit(PER_SURFACE_LIMIT),
-    db
-      .select({
-        parentId: predictionMarkets.id,
-        title: predictionMarkets.title,
-        category: predictionMarkets.category,
-      })
-      .from(predictionMarkets)
-      .where(and(
-        eq(predictionMarkets.marketType, "community"),
-        eq(predictionMarkets.status, "OPEN"),
-        eq(predictionMarkets.visibility, "live"),
-        gt(predictionMarkets.endAt, now),
-      ))
-      .orderBy(desc(predictionMarkets.createdAt))
-      .limit(PER_SURFACE_LIMIT),
+  const [matchupPool, trendingPool, opinionPool, marketPool] = await Promise.all([
+    fetchMatchupParentPool(),
+    fetchTrendingPollParentPool(),
+    fetchOpinionPollParentPool(),
+    fetchOpenMarketParentPool(now),
   ]);
 
+  const poolLog = (label: string, stats: CommentParentPoolStats) =>
+    `${label} recent=${stats.recent} explore=${stats.explore} merged=${stats.merged}`;
+
+  log(
+    `[CommentWorker] Parent pools: ${poolLog("matchup", matchupPool.stats)}, ` +
+      `${poolLog("sentiment", trendingPool.stats)}, ` +
+      `${poolLog("opinion", opinionPool.stats)}, ` +
+      `${poolLog("world", marketPool.stats)}`,
+  );
+
   return [
-    ...faceOffs.map((row) => ({ ...row, parentType: "matchup" as const })),
-    ...trendPolls.map((row) => ({ ...row, parentType: "trending_poll" as const })),
-    ...opinion.map((row) => ({ ...row, parentType: "opinion_poll" as const })),
-    ...markets.map((row) => ({ ...row, parentType: "open_market" as const })),
+    ...matchupPool.rows.map((row) => ({ ...row, parentType: "matchup" as const })),
+    ...trendingPool.rows.map((row) => ({ ...row, parentType: "trending_poll" as const })),
+    ...opinionPool.rows.map((row) => ({ ...row, parentType: "opinion_poll" as const })),
+    ...marketPool.rows.map((row) => ({ ...row, parentType: "open_market" as const })),
   ];
 }
 
@@ -736,16 +702,11 @@ export async function runCommentSweep(): Promise<{
 
 /**
  * Comment sweep cadence: every ~4 hours (with ±20 min jitter to avoid
- * predictable bursts). Previously this fired once per day at a random
- * hour, which combined with the per-agent dailyCommentChance of ~8% gave
- * the entire 56-agent cohort a 4-5 daily attempt budget — most of which
- * burned on agents already past their weekly cap. Sweeping 6x/day with
- * the new weekly cap of 3-4 produces ~10-15 visible comments/day while
- * still respecting per-persona budgets.
+ * predictable bursts). Sweeping ~6x/day with per-sweep dailyCommentChance
+ * (noisy 0.034, casual 0.020, others 0.013) yields ~7-8 visible comments/day
+ * while respecting weeklyCommentCap per persona.
  *
- * dailyCommentChance is now effectively a per-sweep chance; we accept
- * that rename-by-behaviour because it gives noisy bands the volume they
- * need (0.14 × 6 = ~58% daily) without changing the field everywhere.
+ * dailyCommentChance is effectively a per-sweep probability, not once daily.
  */
 const COMMENT_SWEEP_INTERVAL_MS = 4 * 60 * 60_000;
 

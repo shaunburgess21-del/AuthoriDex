@@ -222,8 +222,8 @@ function buildSimulationProfile(seed: typeof V2_HANDLES[number]): AgentSimulatio
     weeklyCommentCap: band === "noisy" || band === "casual" ? 2 : 1,
     // +30% from 0.20/0.18/0.10/0.14 -> 0.26/0.23/0.13/0.18.
     dailyVoteChance: band === "liquidity" ? 0.26 : band === "noisy" ? 0.23 : band === "sharp" ? 0.13 : 0.18,
-    // +30% from 0.035/0.02/0.013 -> 0.045/0.026/0.017.
-    dailyCommentChance: band === "noisy" ? 0.045 : band === "casual" ? 0.026 : 0.017,
+    // −25% from 0.045/0.026/0.017 -> 0.034/0.020/0.013 (~7–8 comments/day).
+    dailyCommentChance: band === "noisy" ? 0.034 : band === "casual" ? 0.020 : 0.013,
     commentStyle: band === "sharp" ? "analytical" : band === "noisy" ? "skeptical" : band === "liquidity" ? "short" : "casual",
     bankrollProfile: large ? "large" : band === "liquidity" ? "small" : "normal",
   };
