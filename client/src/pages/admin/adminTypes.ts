@@ -30,6 +30,7 @@ export type AdminSection =
   | "badges"
   | "agents"
   | "categories"
+  | "branding"
   | "tools";
 
 export interface AdminStats {
