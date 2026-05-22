@@ -1772,10 +1772,17 @@ export default function PredictPage() {
   // so the UI doesn't silently show a stale picker target.
   useEffect(() => {
     if (!selectedJackpotPerson) return;
+    // Don't validate against the eligibility list until the jackpot
+    // markets query has actually resolved — otherwise the empty default
+    // `jackpotEligiblePeople` clears the just-picked rank-1 person and
+    // races with the initializer effect above, producing a visible
+    // flicker on first page load while `/api/trending` and
+    // `/api/native-markets/jackpot` arrive at different times.
+    if (!nativeJackpotData) return;
     if (!jackpotEligiblePeople.some((p) => p.id === selectedJackpotPerson.id)) {
       setSelectedJackpotPerson(null);
     }
-  }, [selectedJackpotPerson, jackpotEligiblePeople]);
+  }, [selectedJackpotPerson, jackpotEligiblePeople, nativeJackpotData]);
 
   // Sync global category filter to all section filters
   useEffect(() => {
