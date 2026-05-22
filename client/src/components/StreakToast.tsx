@@ -84,11 +84,15 @@ export function StreakToast({
   const nextMilestone = getNextMilestone(currentStreak);
   const daysToNext = nextMilestone ? nextMilestone - currentStreak : null;
 
+  const toastWidth =
+    "w-[min(340px,calc(100vw-2rem))] sm:w-[360px]";
+
   // Milestone variant gets a warmer border and a sparkle accent so it
-  // stands out from the routine daily check-in toast.
+  // stands out from the routine daily check-in toast. bg-card keeps the
+  // panel opaque; the gradient tints on top (see BadgeToast).
   const containerClasses = isMilestone
-    ? "w-[340px] sm:w-[360px] rounded-2xl border-2 border-amber-500/60 bg-gradient-to-br from-amber-500/10 to-orange-500/10 shadow-[0_0_24px_rgba(245,158,11,0.25)] p-4 relative"
-    : "w-[340px] sm:w-[360px] rounded-2xl border border-orange-500/30 bg-card shadow-lg p-4 relative";
+    ? `${toastWidth} rounded-2xl border-2 border-amber-500/60 bg-card bg-gradient-to-br from-amber-500/15 to-orange-500/10 shadow-[0_0_24px_rgba(245,158,11,0.25)] p-4 relative`
+    : `${toastWidth} rounded-2xl border border-orange-500/30 bg-card shadow-lg p-4 relative`;
 
   return (
     <div

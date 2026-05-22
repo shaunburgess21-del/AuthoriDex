@@ -272,7 +272,11 @@ export function useDailyCheckin(enabled: boolean = true) {
                   graceUsed: data.graceUsed ?? false,
                   onClose: () => toast.dismiss(id),
                 }),
-              { duration: STREAK_TOAST_DURATION_MS },
+              {
+                duration: STREAK_TOAST_DURATION_MS,
+                className:
+                  "p-0 bg-transparent border-0 shadow-none overflow-visible",
+              },
             );
           }, STREAK_TOAST_DELAY_MS);
         }
