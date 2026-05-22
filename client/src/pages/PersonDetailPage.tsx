@@ -72,6 +72,8 @@ import { AvatarHeightHeadline } from "@/components/AvatarHeightHeadline";
 import { VersusCard, type VersusCardMatchup } from "@/components/matchups/VersusCard";
 import { OpinionPollCard } from "@/components/opinion-polls/OpinionPollCard";
 import { PersonNeighbourNav } from "@/components/PersonNeighbourNav";
+import { useDocumentMeta } from "@/hooks/useDocumentMeta";
+import { personOgImagePath } from "@shared/person-og";
 
 const LazyPredictTab = lazy(() =>
   import("@/components/PredictTab").then((m) => ({ default: m.PredictTab }))
@@ -872,10 +874,42 @@ export default function PersonDetailPage() {
   };
 
   const { data: person, isLoading, error } = useQuery<
-    TrendingPerson & { wikiSlug?: string | null; imageSlug?: string | null; categoryRank?: number }
+    TrendingPerson & {
+      wikiSlug?: string | null;
+      imageSlug?: string | null;
+      categoryRank?: number;
+      approvalAvgRating?: number | null;
+    }
   >({
     queryKey: [`/api/trending/${params?.id}`],
     enabled: !!params?.id,
+  });
+
+  const { data: celebrityProfile } = useQuery<{
+    shortBio: string;
+    longBio: string | null;
+  }>({
+    queryKey: ["/api/celebrity-profile", person?.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/celebrity-profile/${person!.id}`);
+      if (!res.ok) throw new Error("Failed to load profile");
+      return res.json();
+    },
+    enabled: !!person?.id,
+    staleTime: 10 * 60 * 1000,
+  });
+
+  // Dynamic <title> + OG/Twitter meta. Crawlers use /api/og/person/:id
+  // (vercel.json bot rewrite); keep the live document head in sync.
+  useDocumentMeta({
+    title: person ? `${person.name} • VoxDex` : "Celebrity profile • VoxDex",
+    description: person
+      ? celebrityProfile?.shortBio ??
+        celebrityProfile?.longBio ??
+        person.bio ??
+        `Track ${person.name} on VoxDex.`
+      : null,
+    image: person?.id ? personOgImagePath(person.id) : null,
   });
 
   const { data: hotMoversData } = useQuery<{ data: Array<{ id: string }> }>({

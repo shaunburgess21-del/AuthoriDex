@@ -43,6 +43,15 @@ import {
   renderOpinionPollOgImage,
   renderOpinionPollOgImageJpeg,
 } from "../services/opinion-poll-og-image";
+import { personOgImagePath } from "@shared/person-og";
+import {
+  loadPersonOgContext,
+  personOgDescription,
+} from "../services/person-og-context";
+import {
+  renderPersonOgImage,
+  renderPersonOgImageJpeg,
+} from "../services/person-og-image";
 import {
   getOgFontFaceStyle,
   logOgFontStartup,
@@ -864,6 +873,51 @@ function opinionPollOgImageUrl(slug: string): string {
   return `${SITE_URL}${opinionPollOgImagePath(slug)}`;
 }
 
+function personOgImageUrl(id: string): string {
+  return `${SITE_URL}${personOgImagePath(id)}`;
+}
+
+async function servePersonOgImage(
+  req: Request,
+  res: Response,
+  format: "png" | "jpeg",
+): Promise<void> {
+  const id = req.params.id;
+  const contentType = format === "jpeg" ? "image/jpeg" : "image/png";
+  try {
+    const ctx = await loadPersonOgContext(id);
+    if (!ctx) {
+      const fallback = loadDefaultOgPng();
+      if (fallback) {
+        res.setHeader("Content-Type", "image/png");
+        res.setHeader("Cache-Control", "public, max-age=300");
+        res.send(fallback);
+        return;
+      }
+      res.status(404).send("person not found");
+      return;
+    }
+    const image =
+      format === "jpeg"
+        ? await renderPersonOgImageJpeg(ctx)
+        : await renderPersonOgImage(ctx);
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Content-Disposition", "inline");
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    res.send(image);
+  } catch (err: any) {
+    console.error(`[OG] Person ${format.toUpperCase()} render failed:`, err?.message);
+    const fallback = loadDefaultOgPng();
+    if (fallback) {
+      res.setHeader("Content-Type", "image/png");
+      res.setHeader("Cache-Control", "public, max-age=300");
+      res.send(fallback);
+      return;
+    }
+    res.status(500).send("og render failed");
+  }
+}
+
 async function serveOpinionPollOgImage(
   req: Request,
   res: Response,
@@ -1524,6 +1578,61 @@ export function registerOgRoutes(app: Express): void {
     "/api/og/vote/opinion-polls/:slug.png",
     (req, res) => serveOpinionPollOgImage(req, res, "png"),
   );
+
+  app.get(
+    "/api/og/person/:id.jpg",
+    (req, res) => servePersonOgImage(req, res, "jpeg"),
+  );
+
+  app.get(
+    "/api/og/person/:id.png",
+    (req, res) => servePersonOgImage(req, res, "png"),
+  );
+
+  app.get("/api/og/person/:id", async (req: Request, res: Response) => {
+    const id = req.params.id;
+    const canonicalUrl = `${SITE_URL}/person/${encodeURIComponent(id)}`;
+    try {
+      const ctx = await loadPersonOgContext(id);
+      if (!ctx) {
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        res.setHeader("Cache-Control", "public, max-age=300");
+        res.send(
+          renderOgHtml({
+            title: SITE_NAME,
+            description: DEFAULT_DESCRIPTION,
+            canonicalUrl,
+            imageUrl: `${SITE_URL}/api/og/image/default.png`,
+          }),
+        );
+        return;
+      }
+      const description = personOgDescription(ctx);
+      const imageUrl = personOgImageUrl(ctx.id);
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader("Cache-Control", "public, max-age=600");
+      res.send(
+        renderOgHtml({
+          title: `${ctx.name} • VoxDex`,
+          description,
+          canonicalUrl,
+          imageUrl,
+          imageType: "image/jpeg",
+        }),
+      );
+    } catch (err: any) {
+      console.error("[OG] Person render failed:", err?.message);
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.send(
+        renderOgHtml({
+          title: SITE_NAME,
+          description: DEFAULT_DESCRIPTION,
+          canonicalUrl,
+          imageUrl: `${SITE_URL}/api/og/image/default.png`,
+        }),
+      );
+    }
+  });
 
   app.get(
     "/api/og/vote/polls/:slug.jpg",
