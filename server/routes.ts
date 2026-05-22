@@ -113,7 +113,8 @@ import {
 import { FDX_SID_COOKIE, readFdxSid } from "./lib/anonIdentity";
 import { consumeBudgetUnit, getBudgetStatus } from "./lib/anonBudget";
 import { anonVoteIpRateLimit } from "./middleware/anonRateLimit";
-import { resolvePublicMatchupBySlugOrId } from "./utils/matchup-resolve";
+import { isLikelyMatchupUuid, resolvePublicMatchupBySlugOrId } from "./utils/matchup-resolve";
+import { minTierForCapability } from "./services/gamification-utils";
 import { registerCronRoutes, registerPublicRoutes, registerGamificationRoutes, registerFavoritesRoutes, registerNotificationsRoutes, registerAdminNotificationsRoutes, registerAdminBrandingRoutes, registerOgRoutes, registerShareRoutes, registerBadgesRoutes } from "./route-modules";
 import { handleAuthHook } from "./emails/routes/auth-hook";
 import { sendEmail } from "./emails/send";
@@ -333,21 +334,39 @@ async function resolveUnifiedCommentParent(input: {
   }
 
   if (input.parentType === "trending_poll") {
-    const [poll] = await db
+    const [bySlug] = await db
       .select({ id: trendingPolls.id })
       .from(trendingPolls)
       .where(eq(trendingPolls.slug, parentSlug))
       .limit(1);
-    return poll?.id ?? null;
+    if (bySlug) return bySlug.id;
+    if (isLikelyMatchupUuid(parentSlug)) {
+      const [byId] = await db
+        .select({ id: trendingPolls.id })
+        .from(trendingPolls)
+        .where(eq(trendingPolls.id, parentSlug))
+        .limit(1);
+      return byId?.id ?? null;
+    }
+    return null;
   }
 
   if (input.parentType === "opinion_poll") {
-    const [poll] = await db
+    const [bySlug] = await db
       .select({ id: opinionPolls.id })
       .from(opinionPolls)
       .where(eq(opinionPolls.slug, parentSlug))
       .limit(1);
-    return poll?.id ?? null;
+    if (bySlug) return bySlug.id;
+    if (isLikelyMatchupUuid(parentSlug)) {
+      const [byId] = await db
+        .select({ id: opinionPolls.id })
+        .from(opinionPolls)
+        .where(eq(opinionPolls.id, parentSlug))
+        .limit(1);
+      return byId?.id ?? null;
+    }
+    return null;
   }
 
   const [market] = await db
@@ -5434,7 +5453,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/comments", requireAuth, requireMinTier("can_comment"), async (req: AuthRequest, res) => {
+  app.post("/api/comments", requireAuth, async (req: AuthRequest, res) => {
     try {
       if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "username")) {
         return sendBadRequest(res, "Username is resolved from the authenticated profile");
@@ -5454,6 +5473,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (err) {
         if (err instanceof ZodError) return sendZodError(res, err);
         return sendBadRequest(res, "Invalid comment body");
+      }
+
+      // can_comment (tier 2+) applies to community insights only; poll/matchup
+      // discussion is open to every authenticated Citizen (same as voting).
+      if (parsed.parentType === "community_insight") {
+        const allowed = await gamificationService.checkPermission(req.userId!, "can_comment");
+        if (!allowed) {
+          return res.status(403).json({
+            error: "Insufficient rank",
+            required: minTierForCapability("can_comment"),
+            capability: "can_comment",
+          });
+        }
       }
 
       const resolvedParentId = await resolveUnifiedCommentParent(parsed);

@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { parseApiError } from "@/lib/queryClient";
 import type { CommentAdapter, CommentItem, ThreadedComment, VoteType } from "./types";
 import { buildThreadedComments } from "./buildThreadedComments";
 
@@ -84,8 +85,17 @@ export function useCommentThread(adapter: CommentAdapter): UseCommentThreadResul
       invalidateAll();
       adapter.onPostSuccess?.(data);
     },
-    onError: () => {
-      toast.error("Error", { description: "Failed to post comment. Please sign in." });
+    onError: (error) => {
+      const { title, description, status } = parseApiError(error, "Failed to post comment");
+      if (status === 401) {
+        toast.error("Error", { description: "Failed to post comment. Please sign in." });
+      } else if (status === 403) {
+        toast.error(title, {
+          description: description ?? "Reach Aspirant rank (1,000 XP) to comment on insights.",
+        });
+      } else {
+        toast.error(title, { description: description ?? "Please try again." });
+      }
     },
   });
 
