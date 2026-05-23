@@ -1010,13 +1010,14 @@ export const profiles = pgTable("profiles", {
   genderPublic: boolean("gender_public").notNull().default(true),
   countryPublic: boolean("country_public").notNull().default(true),
   ethnicityPublic: boolean("ethnicity_public").notNull().default(false),
-  // Account-tab extras — see migration 0061_profile_extended.sql.
+  // Account-tab extras — see migrations 0061, 0070.
   // recoveryEmail is treated as opt-in PII and is never exposed via
-  // public profile endpoints. The verified flag is always reset to
-  // false in the PATCH handler whenever recoveryEmail changes; the
-  // verification flow itself is a follow-up prompt.
+  // public profile endpoints. OTP hash/expiry are server-only.
   recoveryEmail: text("recovery_email"),
   recoveryEmailVerified: boolean("recovery_email_verified").notNull().default(false),
+  // Pending recovery-email OTP — never returned from /api/profile/me.
+  recoveryEmailVerifyCodeHash: text("recovery_email_verify_code_hash"),
+  recoveryEmailVerifyExpiresAt: timestamp("recovery_email_verify_expires_at"),
   phoneNumber: text("phone_number"),
   // About-Me discoverability fields. Stored without the leading '@'
   // (the PATCH handler strips it) so we can reconstruct social URLs

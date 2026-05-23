@@ -15,7 +15,11 @@ import { Heading, Section, Text } from "react-email";
 import { Layout } from "../components/Layout";
 import { colors, radius, spacing, typography } from "../theme";
 
-export type VerifyEmailFlow = "signup" | "recovery" | "email_change";
+export type VerifyEmailFlow =
+  | "signup"
+  | "recovery"
+  | "email_change"
+  | "recovery_email";
 
 interface VerifyEmailProps {
   code: string;
@@ -63,6 +67,16 @@ const FLOW_COPY: Record<
       "You're receiving this because a VoxDex email change was requested for this address.",
     ignoreLine:
       "If you didn't request this change, you can ignore this email.",
+  },
+  recovery_email: {
+    preview: (code) =>
+      `Your VoxDex recovery email code: ${code}. Enter it in Account settings to verify this address. This code expires in 10 minutes.`,
+    heading: "Verify your recovery email",
+    body: "Enter this code in VoxDex Account settings to verify this recovery address:",
+    footerContext:
+      "You're receiving this because someone added or updated a recovery email on a VoxDex account.",
+    ignoreLine:
+      "If you didn't request this, you can ignore this email.",
   },
 };
 

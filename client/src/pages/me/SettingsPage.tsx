@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -48,6 +48,22 @@ import { AvatarPicker } from "@/components/avatar/AvatarPicker";
 import { NotificationPreferences } from "@/components/notifications/NotificationPreferences";
 import { uploadAvatarFile, uploadGeneratedAvatar } from "@/lib/avatar/upload";
 import { PasswordCard } from "./PasswordCard";
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot,
+} from "@/components/ui/input-otp";
+
+const RECOVERY_EMAIL_RESEND_COOLDOWN_S = 30;
+const RECOVERY_EMAIL_CODE_LENGTH = 6;
+
+function maskEmail(email: string): string {
+  const [local, domain] = email.split("@");
+  if (!local || !domain) return email;
+  const visible =
+    local.length <= 2 ? local[0] ?? "*" : `${local.slice(0, 2)}***`;
+  return `${visible}@${domain}`;
+}
 import { InterestsPicker } from "@/components/interests/InterestsPicker";
 import { cn } from "@/lib/utils";
 import { CountryCombobox } from "@/components/ui/CountryCombobox";
@@ -933,10 +949,6 @@ function PrivacyRow({
 
 /**
  * Tab 3: Account — recovery email, phone number, password.
- * Verification flow for the recovery email is intentionally
- * deferred: storing a value already sets verified=false on the
- * server, so a future verification handler can flip it without
- * any frontend changes here.
  */
 function AccountTab({ signOut }: { signOut: () => Promise<void> }) {
   const { profile, refreshProfile } = useAuth();
@@ -946,6 +958,9 @@ function AccountTab({ signOut }: { signOut: () => Promise<void> }) {
   const [phoneNumber, setPhoneNumber] = useState(profile?.phoneNumber ?? "");
   const [dirtyEmail, setDirtyEmail] = useState(false);
   const [dirtyPhone, setDirtyPhone] = useState(false);
+  const [verifyCode, setVerifyCode] = useState("");
+  const [verifyError, setVerifyError] = useState<string | null>(null);
+  const [resendIn, setResendIn] = useState(0);
 
   useEffect(() => {
     if (!profile) return;
@@ -953,23 +968,109 @@ function AccountTab({ signOut }: { signOut: () => Promise<void> }) {
     if (!dirtyPhone) setPhoneNumber(profile.phoneNumber ?? "");
   }, [profile, dirtyEmail, dirtyPhone]);
 
+  useEffect(() => {
+    if (resendIn <= 0) return;
+    const id = setInterval(() => {
+      setResendIn((prev) => (prev <= 1 ? 0 : prev - 1));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [resendIn]);
+
+  const needsVerification =
+    Boolean(profile?.recoveryEmail) && !profile?.recoveryEmailVerified;
+
   const saveEmail = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("PATCH", "/api/profile/me", {
         recoveryEmail: recoveryEmail.trim() || null,
       });
-      return res.json();
+      return res.json() as Promise<{
+        verificationEmailSent?: boolean;
+        recoveryEmail?: string | null;
+      }>;
     },
-    onSuccess: async () => {
+    onSuccess: async (data) => {
       await refreshProfile();
       setDirtyEmail(false);
-      toast("Recovery email saved");
+      setVerifyCode("");
+      setVerifyError(null);
+      const saved = (data.recoveryEmail ?? recoveryEmail.trim()) || null;
+      if (saved && data.verificationEmailSent) {
+        setResendIn(RECOVERY_EMAIL_RESEND_COOLDOWN_S);
+        toast("Recovery email saved", {
+          description: `Check ${maskEmail(saved)} for a verification code.`,
+        });
+      } else {
+        toast("Recovery email saved");
+      }
     },
     onError: () =>
       toast.error("Could not save recovery email", {
         description: "Please try again.",
       }),
   });
+
+  const verifyRecoveryEmail = useMutation({
+    mutationFn: async (code: string) => {
+      const res = await apiRequest(
+        "POST",
+        "/api/profile/me/recovery-email/verify",
+        { code },
+      );
+      return res.json();
+    },
+    onSuccess: async () => {
+      await refreshProfile();
+      setVerifyCode("");
+      setVerifyError(null);
+      toast("Recovery email verified");
+    },
+    onError: async (err: unknown) => {
+      let message = "Could not verify code. Please try again.";
+      if (err && typeof err === "object" && "message" in err) {
+        const raw = String((err as { message: string }).message);
+        if (raw.includes("expired")) {
+          message = "That code has expired. Resend a new one.";
+        } else if (raw.includes("too_many_attempts")) {
+          message = "Too many attempts. Resend a new code.";
+        } else if (raw.includes("invalid_code")) {
+          message = "Invalid code. Check the email and try again.";
+        }
+      }
+      setVerifyError(message);
+    },
+  });
+
+  const resendVerification = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest(
+        "POST",
+        "/api/profile/me/recovery-email/resend",
+      );
+      return res.json();
+    },
+    onSuccess: () => {
+      setResendIn(RECOVERY_EMAIL_RESEND_COOLDOWN_S);
+      setVerifyCode("");
+      setVerifyError(null);
+      if (profile?.recoveryEmail) {
+        toast("Verification code sent", {
+          description: `We sent a new code to ${maskEmail(profile.recoveryEmail)}.`,
+        });
+      }
+    },
+    onError: () => {
+      toast.error("Could not resend code", {
+        description: "Wait a moment and try again.",
+      });
+    },
+  });
+
+  const handleVerifyCodeChange = useCallback((next: string) => {
+    const sanitized = next.replace(/\D/g, "").slice(0, RECOVERY_EMAIL_CODE_LENGTH);
+    setVerifyCode(sanitized);
+    setVerifyError(null);
+  }, []);
 
   const savePhone = useMutation({
     mutationFn: async () => {
@@ -1042,10 +1143,67 @@ function AccountTab({ signOut }: { signOut: () => Promise<void> }) {
           <p className="text-xs text-muted-foreground">
             Used to recover your account if you lose access. Different from
             your login email.
-            {profile?.recoveryEmail && !profile?.recoveryEmailVerified
-              ? " Verification coming soon."
-              : ""}
           </p>
+          {needsVerification && profile?.recoveryEmail && (
+            <div className="space-y-3 pt-2 border-t border-border/60">
+              <p className="text-xs text-muted-foreground">
+                Enter the 6-digit code sent to{" "}
+                <span className="font-medium text-foreground">
+                  {maskEmail(profile.recoveryEmail)}
+                </span>
+                .
+              </p>
+              <div className="flex flex-wrap items-end gap-3">
+                <InputOTP
+                  maxLength={RECOVERY_EMAIL_CODE_LENGTH}
+                  value={verifyCode}
+                  onChange={handleVerifyCodeChange}
+                  data-testid="input-recovery-email-otp"
+                >
+                  <InputOTPGroup>
+                    {Array.from({ length: RECOVERY_EMAIL_CODE_LENGTH }).map(
+                      (_, i) => (
+                        <InputOTPSlot key={i} index={i} />
+                      ),
+                    )}
+                  </InputOTPGroup>
+                </InputOTP>
+                <Button
+                  size="sm"
+                  onClick={() => verifyRecoveryEmail.mutate(verifyCode)}
+                  disabled={
+                    verifyCode.length !== RECOVERY_EMAIL_CODE_LENGTH ||
+                    verifyRecoveryEmail.isPending
+                  }
+                  data-testid="button-verify-recovery-email"
+                >
+                  {verifyRecoveryEmail.isPending && (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  )}
+                  Verify
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => resendVerification.mutate()}
+                  disabled={
+                    resendIn > 0 ||
+                    resendVerification.isPending ||
+                    saveEmail.isPending
+                  }
+                  data-testid="button-resend-recovery-email"
+                >
+                  {resendVerification.isPending && (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  )}
+                  {resendIn > 0 ? `Resend (${resendIn}s)` : "Resend code"}
+                </Button>
+              </div>
+              {verifyError && (
+                <p className="text-xs text-destructive">{verifyError}</p>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="space-y-2 pt-2 border-t border-border/60">

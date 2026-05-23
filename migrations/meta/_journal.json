@@ -491,6 +491,13 @@
       "when": 1780348800000,
       "tag": "0069_notification_swipe_invert",
       "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "7",
+      "when": 1780435200000,
+      "tag": "0070_recovery_email_verification",
+      "breakpoints": true
     }
   ]
 }

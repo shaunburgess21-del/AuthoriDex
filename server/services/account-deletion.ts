@@ -428,6 +428,8 @@ export async function finaliseAccountDeletion(userId: string): Promise<void> {
       // Account-tab extras (migration 0061).
       recoveryEmail: null,
       recoveryEmailVerified: false,
+      recoveryEmailVerifyCodeHash: null,
+      recoveryEmailVerifyExpiresAt: null,
       phoneNumber: null,
       // Social handles + occupation (migration 0061).
       socialXHandle: null,

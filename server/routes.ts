@@ -39,6 +39,13 @@ import {
   checkAndAwardProfileBadges,
   checkAndAwardUpvoteReceivedBadges,
 } from "./services/badges";
+import {
+  clearRecoveryEmailVerification,
+  confirmRecoveryEmailCode,
+  resendRecoveryEmailVerification,
+  sendRecoveryEmailVerification,
+  stripRecoveryEmailVerificationFields,
+} from "./services/recovery-email-verification";
 import { SIGNUP_CREDIT_GRANT } from "@shared/credit-config";
 import { formatVox } from "@shared/currency";
 import { generateUniqueReferralCode } from "./utils/referral-code";
@@ -7364,7 +7371,7 @@ Only return the JSON object.`;
       }
       
       const { isAgent, ...publicProfile } = profile[0];
-      res.json(publicProfile);
+      res.json(stripRecoveryEmailVerificationFields(publicProfile));
     } catch (error: any) {
       console.error("Error fetching profile:", error.message);
       res.status(500).json({ error: "Failed to fetch profile" });
@@ -7511,7 +7518,7 @@ Only return the JSON object.`;
       }
       // Recovery email — verified is always reset to false on edit
       // so a stale verified flag can never survive a value change.
-      // TODO: send verification email when recoveryEmail changes
+      let recoveryEmailChangedTo: string | null | undefined;
       if (recoveryEmail !== undefined) {
         const next = cap(recoveryEmail, 254);
         if (next !== null && !isValidEmail(next)) {
@@ -7519,6 +7526,7 @@ Only return the JSON object.`;
         }
         updateData.recoveryEmail = next;
         updateData.recoveryEmailVerified = false;
+        recoveryEmailChangedTo = next;
       }
       if (phoneNumber !== undefined) {
         updateData.phoneNumber = cap(phoneNumber, 20);
@@ -7594,16 +7602,96 @@ Only return the JSON object.`;
       await db.update(profiles).set(updateData).where(eq(profiles.id, userId));
       const updated = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
 
+      let verificationEmailSent = false;
+      if (recoveryEmailChangedTo !== undefined) {
+        if (recoveryEmailChangedTo === null) {
+          await clearRecoveryEmailVerification(userId);
+        } else {
+          const sendResult = await sendRecoveryEmailVerification(
+            userId,
+            recoveryEmailChangedTo,
+          );
+          if (!sendResult.ok) {
+            console.error(
+              `[profile] recovery email verification send failed userId=${userId}: ${sendResult.error}`,
+            );
+          } else if (sendResult.sent) {
+            verificationEmailSent = true;
+          }
+        }
+      }
+
       // Profile-completion fan-out: badges + lifetime-once XP/credits.
       // Non-blocking; a single failure never aborts the PATCH response.
       void checkAndAwardProfileBadges(userId);
 
-      res.json(updated[0]);
+      res.json({
+        ...stripRecoveryEmailVerificationFields(updated[0]),
+        ...(verificationEmailSent ? { verificationEmailSent: true } : {}),
+      });
     } catch (error: any) {
       console.error("Error updating profile:", error.message);
       res.status(500).json({ error: "Failed to update profile" });
     }
   });
+
+  app.post(
+    "/api/profile/me/recovery-email/verify",
+    requireAuth,
+    async (req: AuthRequest, res) => {
+      try {
+        const userId = req.userId!;
+        const { code } = req.body ?? {};
+        if (typeof code !== "string" || code.trim().length === 0) {
+          return res.status(400).json({ error: "code_required" });
+        }
+
+        const result = await confirmRecoveryEmailCode(userId, code);
+        if (!result.ok) {
+          const status =
+            result.error === "too_many_attempts" ? 429 : 400;
+          return res.status(status).json({ error: result.error });
+        }
+
+        const updated = await db
+          .select()
+          .from(profiles)
+          .where(eq(profiles.id, userId))
+          .limit(1);
+        res.json(stripRecoveryEmailVerificationFields(updated[0]));
+      } catch (error: any) {
+        console.error("Error verifying recovery email:", error.message);
+        res.status(500).json({ error: "Failed to verify recovery email" });
+      }
+    },
+  );
+
+  app.post(
+    "/api/profile/me/recovery-email/resend",
+    requireAuth,
+    async (req: AuthRequest, res) => {
+      try {
+        const userId = req.userId!;
+        const result = await resendRecoveryEmailVerification(userId);
+        if (!result.ok) {
+          return res.status(500).json({ error: result.error });
+        }
+        if (!result.sent) {
+          if (result.reason === "already_verified") {
+            return res.json({ verificationEmailSent: false, alreadyVerified: true });
+          }
+          if (result.reason === "no_recovery_email") {
+            return res.status(400).json({ error: result.reason });
+          }
+          return res.status(429).json({ error: result.reason });
+        }
+        res.json({ verificationEmailSent: true });
+      } catch (error: any) {
+        console.error("Error resending recovery email verification:", error.message);
+        res.status(500).json({ error: "Failed to resend verification email" });
+      }
+    },
+  );
 
   // Welcome flow: set username + record ToS acceptance in a single call.
   // Idempotent — safe to call multiple times; tosAcceptedAt is set on every
