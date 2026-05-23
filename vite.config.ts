@@ -10,7 +10,11 @@ export default defineConfig({
     runtimeErrorOverlay(),
     VitePWA({
       registerType: "autoUpdate",
-      includeAssets: ["voxdex-logo.svg", "voxdex-favicon.svg"],
+      includeAssets: [
+        "voxdex-logo.svg",
+        "voxdex-favicon.svg",
+        "fonts/vox-mark.woff2",
+      ],
       manifest: {
         name: "VoxDex - Vox Populi",
         short_name: "VoxDex",

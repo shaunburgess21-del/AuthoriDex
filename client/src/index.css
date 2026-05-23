@@ -13,43 +13,39 @@
  * narrower stem than the digits next to it, so "Ꝟ11,011" reads as
  * the glyph being shrunken and dropped a few px.
  *
- * The fix is two synthetic font-faces that scope a curated local()
- * fallback chain to just U+A75E (and U+A75F, the lowercase variant,
- * to future-proof if we ever use it). Adding the appropriate name at
- * the head of every font stack makes the browser consult the face
- * FIRST for the Vox character only and fall through to the regular
- * webfont for everything else — so digits, body copy, etc. are
- * unaffected.
+ * iOS Safari does not reliably supply U+A75E from SF Pro (and
+ * local('SF Pro Text') often fails to match). When no font in the
+ * stack covers the codepoint, WebKit shows Apple's Last Resort
+ * placeholder — a tall stack of horizontal lines. A tiny hosted
+ * subset (public/fonts/vox-mark.woff2, Noto Sans, two codepoints)
+ * is therefore the primary src for both faces; local() entries are
+ * progressive enhancement on platforms that already ship the glyph.
  *
- * Two faces are needed because intrinsic Ꝟ cap-heights differ across
- * platforms — what lines up with JetBrains Mono digits on Windows
- * (Segoe UI Symbol) overshoots on Android (Noto Sans). Each face
- * has its own size-adjust calibration:
- *   - 'VoxGlyph'      — desktop chain (Segoe UI / SF Pro), size 118%
- *   - 'VoxGlyphTouch' — touch chain (Noto Sans / Roboto), size 100%
+ * Two synthetic font-faces scope the shim to U+A75E and U+A75F only.
+ * Prepend the appropriate face at the head of every font stack so the
+ * browser consults it FIRST for the Vox character and falls through
+ * to Inter / JetBrains Mono for everything else.
  *
- * The :root font stack uses 'VoxGlyph'; an `@media (pointer: coarse)`
- * block lower in this file swaps in 'VoxGlyphTouch' on phones /
- * tablets / touchscreen laptops.
+ * Intrinsic Ꝟ cap-heights differ across platforms — what lines up
+ * with JetBrains Mono digits on Windows (Segoe UI Symbol) overshoots
+ * on touch (Noto). Each face has its own size-adjust:
+ *   - 'VoxGlyph'      — desktop, size 118%
+ *   - 'VoxGlyphTouch' — (pointer: coarse), size 100%
  *
- * No network request is made: every src entry is `local()`-only.
- * The combined local chain across both faces covers every major
- * platform that ships U+A75E:
- *   - Segoe UI Symbol / Segoe UI: Windows (ships U+A75E since Vista)
- *   - SF Pro Text / system-ui: macOS, iOS
- *   - Noto Sans / Roboto: Android, ChromeOS, Linux distros
- *   - sans-serif: ultimate generic fallback
+ * Regenerate vox-mark.woff2:
+ *   pyftsubset scripts/.cache/NotoSans-Regular.ttf \
+ *     --unicodes=U+A75E,U+A75F --flavor=woff2 \
+ *     --output-file=public/fonts/vox-mark.woff2
  * ------------------------------------------------------------------ */
-/* Desktop face. Segoe UI Symbol / SF Pro / Helvetica Neue render
-   Ꝟ at a relatively small cap-height vs JetBrains Mono digits, so
-   we scale up ~18% to match. The local() chain leads with the
-   Windows + macOS system fonts that are available on desktop. */
+/* Desktop face. Hosted Noto subset first; local() for Windows/macOS
+   when available. Segoe UI Symbol renders Ꝟ smaller than JetBrains
+   Mono digits — scale ~18% on the hosted/local picks. */
 @font-face {
   font-family: 'VoxGlyph';
-  src: local('Segoe UI Symbol'),
+  src: url('/fonts/vox-mark.woff2') format('woff2'),
+       local('Segoe UI Symbol'),
        local('Segoe UI'),
        local('SF Pro Text'),
-       local('-apple-system'),
        local('Helvetica Neue'),
        local('Arial');
   unicode-range: U+A75E, U+A75F;
@@ -57,21 +53,15 @@
   size-adjust: 118%;
 }
 
-/* Touch / mobile face. Android falls through to Noto Sans / Roboto,
-   which already render Ꝟ at a noticeably larger cap-height than the
-   desktop fonts — applying the same +18% scale overshoots the digits
-   visibly. Drop the scale to 100% so the glyph sits at its native
-   size, which on Android is already roughly digit-height. iOS uses
-   SF Pro either way; size-adjust 100% reads fine there too because
-   SF Pro's Ꝟ also has a tall cap-height. The whole face is selected
-   inside the (pointer: coarse) media query below so touch devices
-   pick it up regardless of viewport width. */
+/* Touch / mobile face. Same hosted subset (required for iOS); 100%
+   size-adjust because Noto cap-height already matches mono digits.
+   Selected via (pointer: coarse) below. */
 @font-face {
   font-family: 'VoxGlyphTouch';
-  src: local('Noto Sans'),
+  src: url('/fonts/vox-mark.woff2') format('woff2'),
+       local('Noto Sans'),
        local('Roboto'),
        local('SF Pro Text'),
-       local('-apple-system'),
        local('Helvetica Neue'),
        local('Arial');
   unicode-range: U+A75E, U+A75F;
@@ -153,14 +143,12 @@
   --chart-4: 35 91% 50%;
   --chart-5: 0 72% 51%;
 
-  /* 'VoxGlyph' is prepended so the Ꝟ brand mark (U+A75E) picks up a
-     system font that actually ships the glyph — see the @font-face
-     block at the top of this file. It only kicks in for U+A75E /
-     U+A75F via unicode-range, so everything else still renders in
-     Inter / Space Grotesk / JetBrains Mono. The (pointer: coarse)
-     override below swaps in 'VoxGlyphTouch' on mobile/tablet where
-     the local fallback chain resolves to a different system font
-     with different intrinsic metrics. */
+  /* 'VoxGlyph' is prepended so the Ꝟ brand mark (U+A75E) uses the
+     hosted subset in public/fonts/vox-mark.woff2 — see @font-face at
+     the top of this file. unicode-range limits it to U+A75E / U+A75F;
+     everything else stays in Inter / Space Grotesk / JetBrains Mono.
+     (pointer: coarse) below swaps in 'VoxGlyphTouch' with different
+     size-adjust for touch devices. */
   --font-sans: 'VoxGlyph', 'Inter', system-ui, sans-serif;
   --font-serif: 'VoxGlyph', 'Space Grotesk', sans-serif;
   --font-mono: 'VoxGlyph', 'JetBrains Mono', monospace;
@@ -216,15 +204,9 @@
 }
 
 /* Touch / mobile override for the Vox glyph font stack. (pointer:
-   coarse) catches phones + tablets + touchscreen laptops — anything
-   without a precise mouse pointer. Touchscreen Windows laptops will
-   pick up 'VoxGlyphTouch' instead of 'VoxGlyph', but Segoe UI Symbol
-   sits later in the touch face's src chain too so they still render
-   the same glyph — just without the +18% scale that's only correct
-   for the desktop font picks (Noto Sans / SF Pro on mobile already
-   render Ꝟ at digit-height without scaling). Applies to both light
-   and dark themes because only the font stack changes; the color
-   tokens still resolve through :root / .dark normally. */
+   coarse) catches phones + tablets + touchscreen laptops. Both faces
+   load the same vox-mark.woff2 subset (critical for iOS); touch uses
+   100% size-adjust vs desktop 118%. Applies to light and dark themes. */
 @media (pointer: coarse) {
   :root {
     --font-sans: 'VoxGlyphTouch', 'Inter', system-ui, sans-serif;
