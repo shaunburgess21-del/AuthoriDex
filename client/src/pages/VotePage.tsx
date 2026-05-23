@@ -1429,6 +1429,7 @@ export default function VotePage() {
   const [snapScrollOpen, setSnapScrollOpen] = useState(false);
   const [snapScrollSection, setSnapScrollSection] = useState<SnapSectionType>("matchups");
   const [snapScrollInitialId, setSnapScrollInitialId] = useState<string | undefined>();
+  const [snapScrollStartOnAll, setSnapScrollStartOnAll] = useState(false);
   // Hoisted so handleAuthRequired / snapshot sync below can read the saved scroll Y.
   const savedSnapWindowScrollRef = useRef<number | null>(null);
 
@@ -2022,12 +2023,14 @@ export default function VotePage() {
     savedSnapWindowScrollRef.current = window.scrollY;
     setSnapScrollSection(section);
     setSnapScrollInitialId(itemId);
+    setSnapScrollStartOnAll(source === "header-icon");
     setSnapScrollOpen(true);
     window.history.pushState({ overlay: `snap-${section}` }, "");
   }, [isMobile]);
 
   const closeSnapScroll = useCallback(() => {
     setSnapScrollOpen(false);
+    setSnapScrollStartOnAll(false);
     window.history.back();
   }, []);
 
@@ -4224,6 +4227,7 @@ export default function VotePage() {
             sectionType="matchups"
             items={matchupSnapItems}
             initialItemId={snapScrollInitialId}
+            initialCategoryAll={snapScrollStartOnAll}
             voteHubActiveSection={activeSection}
             onSuggest={() => openSuggestModal(() => setMatchupSuggestOpen(true))}
             renderCard={(item) => {
@@ -4249,6 +4253,7 @@ export default function VotePage() {
             sectionType="sentiment"
             items={sentimentSnapItems}
             initialItemId={snapScrollInitialId}
+            initialCategoryAll={snapScrollStartOnAll}
             voteHubActiveSection={activeSection}
             onSuggest={() => openSuggestModal(() => setStartPollModalOpen(true))}
             renderCard={(item) => {
@@ -4272,6 +4277,7 @@ export default function VotePage() {
             sectionType="opinion"
             items={opinionSnapItems}
             initialItemId={snapScrollInitialId}
+            initialCategoryAll={snapScrollStartOnAll}
             voteHubActiveSection={activeSection}
             onSuggest={() => openSuggestModal(() => setOpinionSuggestOpen(true))}
             renderCard={(item) => {
@@ -4297,6 +4303,7 @@ export default function VotePage() {
             commentMode="person"
             items={valueSnapItems}
             initialItemId={snapScrollInitialId}
+            initialCategoryAll={snapScrollStartOnAll}
             onSuggest={() => openSuggestModal(() => setCurateSuggestOpen(true))}
             renderCard={(item) => {
               const person = filteredValueCelebrities.find((p: any) => p.id === item.id);
@@ -4319,6 +4326,7 @@ export default function VotePage() {
             commentMode="none"
             items={inductionSnapItems}
             initialItemId={snapScrollInitialId}
+            initialCategoryAll={snapScrollStartOnAll}
             onSuggest={() => openSuggestModal(() => setInductionSuggestOpen(true))}
             renderCard={(item) => {
               const idx = filteredCandidates.findIndex((c: any) => c.id === item.id);
@@ -4346,6 +4354,7 @@ export default function VotePage() {
             commentMode="person"
             items={curateSnapItems}
             initialItemId={snapScrollInitialId}
+            initialCategoryAll={snapScrollStartOnAll}
             onSuggest={() => openSuggestModal(() => setCurateSuggestOpen(true))}
             renderCard={(item) => {
               const person: CuratePerson = { id: item.id, name: item.title, category: item.category, imageUrl: null };

@@ -45,6 +45,8 @@ interface VoteSnapScrollViewProps {
   commentMode?: SnapCommentMode;
   /** Vote hub section filter when opening detail (defaults to "All"). */
   voteHubActiveSection?: string;
+  /** When true, category tab starts on All (e.g. section-header expand). */
+  initialCategoryAll?: boolean;
 }
 
 const SECTION_COMMENT_TYPE: Partial<Record<SnapSectionType, CommentEntityType>> = {
@@ -229,6 +231,7 @@ export function VoteSnapScrollView({
   onSuggest,
   commentMode = "card",
   voteHubActiveSection = "All",
+  initialCategoryAll = false,
 }: VoteSnapScrollViewProps) {
   const [, setLocation] = useLocation();
   const commentScrollRef = useRef<HTMLDivElement | null>(null);
@@ -276,12 +279,13 @@ export function VoteSnapScrollView({
   }, [normalizedItems]);
 
   const initialCategoryIdx = useMemo(() => {
+    if (initialCategoryAll) return 0;
     if (!initialItemId) return 0;
     const item = normalizedItems.find((i) => i.id === initialItemId);
     if (!item) return 0;
     const idx = categories.indexOf(item.category);
     return idx >= 0 ? idx : 0;
-  }, [initialItemId, normalizedItems, categories]);
+  }, [initialCategoryAll, initialItemId, normalizedItems, categories]);
 
   const [activeCategoryIdx, setActiveCategoryIdx] = useState(initialCategoryIdx);
   const [visualCategoryIdx, setVisualCategoryIdx] = useState(initialCategoryIdx);
@@ -359,7 +363,7 @@ export function VoteSnapScrollView({
   useEffect(() => {
     if (!open || !initialItemId) return;
     const timer = setTimeout(() => {
-      const cat = categories[initialCategoryIdx] || "All";
+      const cat = initialCategoryAll ? "All" : (categories[initialCategoryIdx] || "All");
       const catItems = categoryItems.get(cat) || [];
       const idx = catItems.findIndex((i) => i.id === initialItemId);
       const el = columnScrollRefs.current[cat];
@@ -368,7 +372,7 @@ export function VoteSnapScrollView({
       }
     }, 100);
     return () => clearTimeout(timer);
-  }, [open, initialItemId, initialCategoryIdx, categories, categoryItems]);
+  }, [open, initialItemId, initialCategoryAll, initialCategoryIdx, categories, categoryItems]);
 
   // ── Comment swipe native listener ─────────────────────────────────────
   useEffect(() => {
@@ -799,7 +803,7 @@ export function VoteSnapScrollView({
                                     role="button"
                                     aria-label={isExpanded ? "Collapse" : "Expand"}
                                   >
-                                    <div className="w-16 h-1.5 rounded-full bg-muted-foreground/60" />
+                                    <div className="w-16 h-[3px] rounded-full bg-muted-foreground/[0.42]" />
                                   </div>
                                 </div>
 

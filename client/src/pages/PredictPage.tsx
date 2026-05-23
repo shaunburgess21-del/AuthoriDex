@@ -1180,6 +1180,7 @@ export default function PredictPage() {
   const [snapScrollOpen, setSnapScrollOpen] = useState(false);
   const [snapScrollSection, setSnapScrollSection] = useState<SnapSectionType>("world-markets");
   const [snapScrollInitialId, setSnapScrollInitialId] = useState<string | undefined>();
+  const [snapScrollStartOnAll, setSnapScrollStartOnAll] = useState(false);
   const savedSnapWindowScrollRef = useRef<number | null>(null);
 
   const openSuggestModal = (open: () => void) => {
@@ -1200,12 +1201,14 @@ export default function PredictPage() {
     savedSnapWindowScrollRef.current = window.scrollY;
     setSnapScrollSection(section);
     setSnapScrollInitialId(itemId);
+    setSnapScrollStartOnAll(source === "header-icon");
     setSnapScrollOpen(true);
     window.history.pushState({ overlay: `snap-${section}` }, "");
   }, [isMobile]);
 
   const closeSnapScroll = useCallback(() => {
     setSnapScrollOpen(false);
+    setSnapScrollStartOnAll(false);
     window.history.back();
   }, []);
 
@@ -3081,7 +3084,7 @@ export default function PredictPage() {
                 onClick={() => setTownSquareCollapsed(!townSquareCollapsed)}
                 data-testid="town-square-header"
               >
-                <div className="h-9 w-9 rounded-lg flex items-center justify-center pulse-icon-blue shrink-0">
+                <div className="h-9 w-9 rounded-lg flex items-center justify-center pulse-icon-voxdex shrink-0">
                   <Users className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -4055,6 +4058,7 @@ export default function PredictPage() {
             commentMode="card"
             items={worldMarketSnapItems}
             initialItemId={snapScrollInitialId}
+            initialCategoryAll={snapScrollStartOnAll}
             onSuggest={() => openSuggestModal(() => setCreateModalOpen(true))}
             renderCard={(item) => {
               const market = openMarkets.find((m: any) => String(m.id) === item.id);
@@ -4082,6 +4086,7 @@ export default function PredictPage() {
             commentMode="person"
             items={updownSnapItems}
             initialItemId={snapScrollInitialId}
+            initialCategoryAll={snapScrollStartOnAll}
             onSuggest={() => openSuggestModal(() => setCreateModalOpen(true))}
             renderCard={(item) => {
               const market = filteredUpDown.find((m: any) => String(m.id) === item.id);

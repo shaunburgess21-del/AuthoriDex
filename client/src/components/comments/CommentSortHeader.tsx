@@ -37,20 +37,39 @@ export function CommentSortHeader({
 }: CommentSortHeaderProps) {
   const [singularCountWord, pluralCountWord] = COUNT_WORDS[countLabel];
   const inlineCountWord = count === 1 ? singularCountWord : pluralCountWord;
+  const countText =
+    variant === "card" ? `${countLabel} (${count})` : `${count} ${inlineCountWord}`;
+  const focusButtonClass =
+    "inline-flex items-center gap-2 rounded-lg text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400 hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 
   return (
     <div className="flex items-center gap-2 mb-3 px-1">
       <div className="flex items-center gap-2">
-        <MessageSquare className="h-4 w-4 text-cyan-700 dark:text-cyan-500" />
-        <span className="text-sm font-semibold">
-          {variant === "card" ? `${countLabel} (${count})` : `${count} ${inlineCountWord}`}
-        </span>
+        {onOpenFocusMode ? (
+          <button
+            type="button"
+            onClick={onOpenFocusMode}
+            className={`${focusButtonClass} -ml-1 px-1 py-1`}
+            aria-label="Open discussion in full screen"
+            data-interactive="true"
+            data-testid="button-discussion-label-expand"
+          >
+            <MessageSquare className="h-4 w-4 text-cyan-700 dark:text-cyan-500" />
+            <span className="text-sm font-semibold text-foreground">{countText}</span>
+          </button>
+        ) : (
+          <>
+            <MessageSquare className="h-4 w-4 text-cyan-700 dark:text-cyan-500" />
+            <span className="text-sm font-semibold">{countText}</span>
+          </>
+        )}
         {onOpenFocusMode && (
           <button
             ref={expandTriggerRef}
             type="button"
             onClick={onOpenFocusMode}
-            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400 hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            className={`${focusButtonClass} h-10 w-10 shrink-0 justify-center`}
+            data-interactive="true"
             aria-label="Open discussion in full screen"
             data-testid="button-discussion-expand"
           >
