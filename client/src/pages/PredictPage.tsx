@@ -99,7 +99,6 @@ import {
   Heart,
   Laugh,
   Maximize2,
-  MessageSquare,
   type LucideIcon
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -3083,7 +3082,7 @@ export default function PredictPage() {
                 data-testid="town-square-header"
               >
                 <div className="h-9 w-9 rounded-lg flex items-center justify-center pulse-icon-blue shrink-0">
-                  <MessageSquare className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  <Users className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <h3 className="text-sm font-semibold text-foreground dark:text-slate-100">Town Square</h3>

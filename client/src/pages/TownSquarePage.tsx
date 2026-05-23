@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UserSocialAvatar } from "@/components/UserSocialAvatar";
-import { ArrowLeft, MessageSquare } from "lucide-react";
+import { ArrowLeft, Users } from "lucide-react";
 import { formatActivityAge } from "@/lib/formatDate";
 import { getRecentActivityMarketPath } from "@/lib/predict-display";
 import { voxWord } from "@/lib/currency";
@@ -93,7 +93,7 @@ export default function TownSquarePage() {
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-start gap-4">
             <div className="h-12 w-12 rounded-xl bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/30 dark:border-violet-500/20 flex items-center justify-center shrink-0">
-              <MessageSquare className="h-6 w-6 text-violet-600 dark:text-violet-400" />
+              <Users className="h-6 w-6 text-violet-600 dark:text-violet-400" />
             </div>
             <div>
               <h1 className="text-2xl font-bold tracking-tight">Town Square</h1>
