@@ -59,6 +59,20 @@ function hourBucket(): number {
   return Math.floor(Date.now() / (60 * 60 * 1000));
 }
 
+function resendIdempotencyBucket(): number {
+  return Math.floor(Date.now() / RESEND_COOLDOWN_MS);
+}
+
+function buildIdempotencyKey(
+  userId: string,
+  email: string,
+  purpose: "initial" | "resend",
+): string {
+  const bucket =
+    purpose === "resend" ? resendIdempotencyBucket() : hourBucket();
+  return `recovery-email:${purpose}:${userId}:${email}:${bucket}`;
+}
+
 function resetVerifyAttempts(userId: string): void {
   verifyAttemptsByUser.delete(userId);
 }
@@ -91,12 +105,14 @@ export type SendRecoveryEmailResult =
 export async function sendRecoveryEmailVerification(
   userId: string,
   recoveryEmail: string,
+  options?: { purpose?: "initial" | "resend" },
 ): Promise<SendRecoveryEmailResult> {
   const secret = getSigningSecret();
   if (!secret) {
     return { ok: false, error: "server_misconfigured" };
   }
 
+  const purpose = options?.purpose ?? "initial";
   const normalizedEmail = recoveryEmail.trim().toLowerCase();
   const code = generateOtpCode();
   const codeHash = hashRecoveryEmailCode(userId, normalizedEmail, code);
@@ -104,20 +120,11 @@ export async function sendRecoveryEmailVerification(
     return { ok: false, error: "server_misconfigured" };
   }
 
-  const expiresAt = new Date(Date.now() + CODE_TTL_MS);
-
-  await db
-    .update(profiles)
-    .set({
-      recoveryEmailVerifyCodeHash: codeHash,
-      recoveryEmailVerifyExpiresAt: expiresAt,
-    })
-    .where(eq(profiles.id, userId));
-
-  resetVerifyAttempts(userId);
-  lastSentAtByUser.set(userId, Date.now());
-
-  const idempotencyKey = `recovery-email:${userId}:${normalizedEmail}:${hourBucket()}`;
+  const idempotencyKey = buildIdempotencyKey(
+    userId,
+    normalizedEmail,
+    purpose,
+  );
   const result = await sendEmail({
     to: normalizedEmail,
     subject: `Your VoxDex recovery email code: ${code}`,
@@ -132,6 +139,7 @@ export async function sendRecoveryEmailVerification(
     tags: [
       { name: "source", value: "recovery-email-verification" },
       { name: "action", value: "recovery_email" },
+      { name: "purpose", value: purpose },
     ],
   });
 
@@ -142,6 +150,18 @@ export async function sendRecoveryEmailVerification(
   if (result.skipped && result.reason === "duplicate") {
     return { ok: true, sent: false, reason: "duplicate" };
   }
+
+  const expiresAt = new Date(Date.now() + CODE_TTL_MS);
+  await db
+    .update(profiles)
+    .set({
+      recoveryEmailVerifyCodeHash: codeHash,
+      recoveryEmailVerifyExpiresAt: expiresAt,
+    })
+    .where(eq(profiles.id, userId));
+
+  resetVerifyAttempts(userId);
+  lastSentAtByUser.set(userId, Date.now());
 
   return { ok: true, sent: true };
 }
@@ -228,7 +248,15 @@ export async function confirmRecoveryEmailCode(
 
 export type ResendRecoveryEmailResult =
   | { ok: true; sent: true }
-  | { ok: true; sent: false; reason: "cooldown" | "already_verified" | "no_recovery_email" }
+  | {
+      ok: true;
+      sent: false;
+      reason:
+        | "cooldown"
+        | "duplicate"
+        | "already_verified"
+        | "no_recovery_email";
+    }
   | { ok: false; error: string };
 
 export async function resendRecoveryEmailVerification(
@@ -259,12 +287,16 @@ export async function resendRecoveryEmailVerification(
   const sendResult = await sendRecoveryEmailVerification(
     userId,
     row.recoveryEmail,
+    { purpose: "resend" },
   );
   if (!sendResult.ok) {
     return { ok: false, error: sendResult.error };
   }
   if (sendResult.sent) {
     return { ok: true, sent: true };
+  }
+  if (sendResult.reason === "duplicate") {
+    return { ok: true, sent: false, reason: "duplicate" };
   }
   return { ok: true, sent: false, reason: "cooldown" };
 }

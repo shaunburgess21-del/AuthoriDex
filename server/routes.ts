@@ -7683,6 +7683,12 @@ Only return the JSON object.`;
           if (result.reason === "no_recovery_email") {
             return res.status(400).json({ error: result.reason });
           }
+          if (result.reason === "duplicate") {
+            return res.json({
+              verificationEmailSent: false,
+              error: "duplicate",
+            });
+          }
           return res.status(429).json({ error: result.reason });
         }
         res.json({ verificationEmailSent: true });

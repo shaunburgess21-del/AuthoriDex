@@ -1047,21 +1047,42 @@ function AccountTab({ signOut }: { signOut: () => Promise<void> }) {
         "POST",
         "/api/profile/me/recovery-email/resend",
       );
-      return res.json();
+      return res.json() as Promise<{
+        verificationEmailSent?: boolean;
+        error?: string;
+      }>;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       setResendIn(RECOVERY_EMAIL_RESEND_COOLDOWN_S);
       setVerifyCode("");
       setVerifyError(null);
+      if (data.error === "duplicate") {
+        toast("Code already sent", {
+          description: profile?.recoveryEmail
+            ? `Check ${maskEmail(profile.recoveryEmail)} for your verification code.`
+            : "Check your recovery email inbox.",
+        });
+        return;
+      }
       if (profile?.recoveryEmail) {
         toast("Verification code sent", {
           description: `We sent a new code to ${maskEmail(profile.recoveryEmail)}.`,
         });
       }
     },
-    onError: () => {
+    onError: (err: unknown) => {
+      const raw =
+        err && typeof err === "object" && "message" in err
+          ? String((err as { message: string }).message)
+          : "";
+      if (raw.includes("cooldown")) {
+        toast("Please wait", {
+          description: "You can resend again after the countdown finishes.",
+        });
+        return;
+      }
       toast.error("Could not resend code", {
-        description: "Wait a moment and try again.",
+        description: "Check your server logs or try again in a moment.",
       });
     },
   });
