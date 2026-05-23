@@ -279,7 +279,7 @@ export default function OpinionPollDetailPage() {
     image: poll?.slug ? opinionPollOgImagePath(poll.slug) : null,
   });
 
-  if (isLoading) {
+  if (isLoading && !poll) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-cyan-700 dark:text-cyan-500" />

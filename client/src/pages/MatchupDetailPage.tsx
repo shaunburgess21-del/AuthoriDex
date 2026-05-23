@@ -288,7 +288,7 @@ export default function MatchupDetailPage() {
     url: canonicalShareUrl ?? null,
   });
 
-  if (isLoading) {
+  if (isLoading && !matchup) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-cyan-700 dark:text-cyan-500" />

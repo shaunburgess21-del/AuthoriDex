@@ -405,7 +405,7 @@ export default function VotesPage() {
             onToggleVisibility={handleToggleVisibility}
             profileIsPrivate={profileIsPrivate}
             isPending={visibility.isPending}
-            isLoading={isLoading}
+            isLoading={isLoading && votes === undefined}
             isFetching={isFetching}
             error={error as Error | undefined}
             setLocation={setLocation}

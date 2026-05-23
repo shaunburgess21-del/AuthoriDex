@@ -280,6 +280,8 @@ export default function PredictionsPage() {
     ? normalizeResponse(rawData)
     : { predictions: [], stats: null };
 
+  const predictionsInitialLoading = isLoading && rawData === undefined;
+
   const categories = useMemo(
     () => Array.from(new Set(predictions.map((p) => p.marketCategory).filter(Boolean))),
     [predictions],
@@ -488,7 +490,7 @@ export default function PredictionsPage() {
 
         {activeTab === "overview" && (
           <OverviewTab
-            isLoading={isLoading}
+            isLoading={predictionsInitialLoading}
             stats={stats}
             predictions={predictions}
             plChartData={plChartData}
@@ -505,7 +507,7 @@ export default function PredictionsPage() {
 
         {activeTab === "predictions" && (
           <PredictionsTabPanel
-            isLoading={isLoading}
+            isLoading={predictionsInitialLoading}
             error={error as Error | undefined}
             predictions={predictions}
             filtered={filtered}
@@ -530,7 +532,7 @@ export default function PredictionsPage() {
         {activeTab === "open" && (
           <OpenTabPanel
             openBets={openBets}
-            isLoading={isLoading}
+            isLoading={predictionsInitialLoading}
             profileIsPrivate={profileIsPrivate}
             onToggleVisibility={handleToggleVisibility}
             isPending={visibility.isPending}
@@ -1631,7 +1633,7 @@ function OpenTabPanel({
   );
   const totalOpenCount = jackpotOpenBets.length + ammPositions.length;
 
-  if (isLoading || isLoadingAmm) {
+  if ((isLoading && openBets.length === 0) || (isLoadingAmm && ammPositions.length === 0 && jackpotOpenBets.length === 0)) {
     return (
       <div className="space-y-3">
         {Array.from({ length: 3 }).map((_, i) => (

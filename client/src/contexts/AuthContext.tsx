@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback } from "react";
+import { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { toast } from "sonner";
 import { getSupabase } from "@/lib/supabase";
@@ -105,6 +105,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileJustCreated, setProfileJustCreated] = useState<boolean | null>(null);
+  /** Tracks the last known auth user id so we only bust leaderboard caches on real transitions. */
+  const sessionUserIdRef = useRef<string | null>(null);
 
   const syncProfile = useCallback(async (accessToken: string, retries = 3) => {
     try {
@@ -210,6 +212,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (mounted) {
           setSession(currentSession);
           setUser(currentSession?.user ?? null);
+          sessionUserIdRef.current = currentSession?.user?.id ?? null;
           setLoading(false);
 
           if (currentSession?.access_token) {
@@ -220,12 +223,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
           async (_event, newSession) => {
             if (!mounted) return;
+            const prevUserId = sessionUserIdRef.current;
+            const newUserId = newSession?.user?.id ?? null;
+
             setSession(newSession);
             setUser(newSession?.user ?? null);
+            sessionUserIdRef.current = newUserId;
 
             if (newSession?.access_token && _event === "SIGNED_IN") {
-              queryClient.invalidateQueries({ queryKey: ["/api/leaderboard"] });
-              queryClient.invalidateQueries({ queryKey: ["/api/celebrity"] });
+              // Supabase may emit SIGNED_IN when restoring an existing session or
+              // refocusing a tab. Only invalidate when the authenticated user actually
+              // changes so the home leaderboard does not flash a second full-page load.
+              if (newUserId && newUserId !== prevUserId) {
+                queryClient.invalidateQueries({ queryKey: ["/api/leaderboard"] });
+                queryClient.invalidateQueries({ queryKey: ["/api/celebrity"] });
+              }
               await syncProfile(newSession.access_token);
             } else if (!newSession) {
               clearLocalVoteCache();
@@ -261,6 +273,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
       clearLocalVoteCache();
+      sessionUserIdRef.current = null;
       queryClient.invalidateQueries({ queryKey: ["/api/leaderboard"] });
       queryClient.invalidateQueries({ queryKey: ["/api/celebrity"] });
       setProfile(null);

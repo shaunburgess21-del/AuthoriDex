@@ -549,7 +549,7 @@ export default function CategoryRaceDetailPage() {
     image: `/api/og/image/market.png?title=${encodeURIComponent(raceTitle)}&subtitle=${encodeURIComponent("Biggest mover this week")}&badge=${encodeURIComponent("Race")}`,
   });
 
-  if (isLoading) {
+  if (isLoading && !market) {
     return <MarketDetailSkeleton variant="weekly" />;
   }
 

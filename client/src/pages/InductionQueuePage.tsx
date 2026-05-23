@@ -203,7 +203,7 @@ export default function InductionQueuePage() {
     return Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
   }, [candidates]);
 
-  if (isLoading) {
+  if (isLoading && inductionData === undefined) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-cyan-700 dark:text-cyan-500" />

@@ -1288,7 +1288,7 @@ export default function MarketDetailPage() {
       : null,
   });
 
-  if (isLoading) {
+  if (isLoading && !market) {
     return <MarketDetailSkeleton />;
   }
 

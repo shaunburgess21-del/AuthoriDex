@@ -1240,7 +1240,7 @@ export default function PersonDetailPage() {
     }
   };
 
-  if (isLoading) {
+  if (isLoading && !person) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -1251,7 +1251,7 @@ export default function PersonDetailPage() {
     );
   }
 
-  if (error || (!person && !isLoading)) {
+  if (error || !person) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -1262,10 +1262,6 @@ export default function PersonDetailPage() {
         </div>
       </div>
     );
-  }
-
-  if (!person) {
-    return null;
   }
 
   const handlePredictClick = () => {

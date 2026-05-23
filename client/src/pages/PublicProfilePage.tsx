@@ -1403,7 +1403,7 @@ export default function PublicProfilePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [username]);
 
-  if (isLoading) {
+  if (isLoading && !profile) {
     return (
       <div className="min-h-screen pb-20 md:pb-0">
         <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">

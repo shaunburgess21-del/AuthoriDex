@@ -1525,6 +1525,7 @@ export default function HomePage() {
     hasNextPage,
     isFetchingNextPage,
     isLoading,
+    isFetching,
     error,
   } = useInfiniteQuery<TrendingResponse>({
     queryKey: ['/api/leaderboard', searchQuery, category, leaderboardTab, sortDirection],
@@ -1550,6 +1551,7 @@ export default function HomePage() {
       return loadedCount < lastPage.totalCount ? loadedCount : undefined;
     },
     initialPageParam: 0,
+    staleTime: 5 * 60 * 1000,
     refetchInterval: 5 * 60 * 1000,
     placeholderData: keepPreviousData,
   });
@@ -1785,6 +1787,11 @@ export default function HomePage() {
     onRefresh: handlePullRefresh,
   });
 
+  const hasLeaderboardData = (data?.pages?.length ?? 0) > 0;
+  const showLeaderboardInitialLoader = isLoading && !hasLeaderboardData;
+  const showLeaderboardBackgroundRefresh =
+    isFetching && hasLeaderboardData && !isFetchingNextPage && !isPullRefreshing;
+
   const hasActiveFilters = searchQuery || category !== "all";
   const resolveCategoryLabel = useCallback(
     (id: string): string => {
@@ -1837,7 +1844,7 @@ export default function HomePage() {
     [insightSignals]
   );
 
-  if (isLoading) {
+  if (showLeaderboardInitialLoader) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -1863,6 +1870,19 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen pb-20 md:pb-0" ref={pullRefreshRef}>
+      {showLeaderboardBackgroundRefresh && (
+        <div
+          className="fixed top-[var(--site-banner-height,0px)] left-0 right-0 z-[55] flex justify-center pointer-events-none pt-2"
+          aria-live="polite"
+          aria-busy="true"
+          data-testid="leaderboard-background-refresh"
+        >
+          <div className="flex items-center gap-2 rounded-full border border-primary/20 bg-background/90 px-3 py-1.5 text-xs text-muted-foreground shadow-sm backdrop-blur-sm">
+            <RefreshCw className="h-3.5 w-3.5 animate-spin text-primary" aria-hidden />
+            Updating leaderboard…
+          </div>
+        </div>
+      )}
       {(pullDistance > 0 || isPullRefreshing) && (
         <div
           className="fixed top-0 left-0 right-0 z-[60] flex items-center justify-center pointer-events-none transition-opacity"

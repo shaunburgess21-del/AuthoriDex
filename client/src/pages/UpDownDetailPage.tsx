@@ -565,7 +565,7 @@ export default function UpDownDetailPage() {
     )}&subtitle=${encodeURIComponent("Up or down this week?")}&badge=${encodeURIComponent("Up / Down")}`,
   });
 
-  if (isLoading) {
+  if (isLoading && !market) {
     return <MarketDetailSkeleton variant="weekly" />;
   }
 

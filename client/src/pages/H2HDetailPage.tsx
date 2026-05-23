@@ -564,7 +564,7 @@ export default function H2HDetailPage() {
     image: `/api/og/image/market.png?title=${encodeURIComponent(h2hShareTitle)}&subtitle=${encodeURIComponent("Who'll gain more this week?")}&badge=${encodeURIComponent("Head to head")}`,
   });
 
-  if (isLoading) {
+  if (isLoading && !market) {
     return <MarketDetailSkeleton variant="weekly" />;
   }
 
