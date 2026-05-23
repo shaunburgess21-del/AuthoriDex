@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { ArrowLeft, BookOpen, ChevronRight, Flame, Info, Sparkles } from "lucide-react";
 import {
@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useUserStats } from "@/hooks/useGamification";
+import { useScrollToHash } from "@/hooks/useScrollToHash";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   KNOWLEDGE_TABS,
@@ -332,7 +333,13 @@ function XpSection({ onJumpToTab }: XpSectionProps) {
       </Card>
 
       {grouped.map(({ category, rows }) => (
-        <div key={category} className="space-y-2">
+        <div
+          key={category}
+          className={category === "Streak" ? "scroll-mt-28 space-y-2" : "space-y-2"}
+          {...(category === "Streak"
+            ? { id: "streak", "data-hash-anchor": true }
+            : {})}
+        >
           <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             {category}
           </h3>
@@ -1313,6 +1320,14 @@ const SECTION_BY_TAB: Record<KnowledgeTabId, SectionRenderer> = {
 export default function HowItWorksPage() {
   const [, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState<KnowledgeTabId>("xp");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const hash = window.location.hash.replace(/^#/, "");
+    if (hash === "streak") setActiveTab("xp");
+  }, []);
+
+  useScrollToHash([activeTab]);
 
   const ActiveSection = SECTION_BY_TAB[activeTab];
 

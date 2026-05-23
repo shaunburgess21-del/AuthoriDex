@@ -30,6 +30,7 @@ import { buildAgentActionStakeIdempotencyKey, buildAgentBetMetadata } from "./ac
 import { getMarketBettingCutoff } from "../native-markets/lifecycle";
 import { isAgentsPaused } from "./runtime-state";
 import { executeBuy, executeSell, type TradeError } from "../services/amm-trades";
+import { syncProfilePredictionStats } from "../services/profile-prediction-stats";
 import { sizeAmmBudget } from "./sizing";
 import { type AmmStateSnapshot } from "@shared/lib/amm/positions";
 
@@ -761,7 +762,6 @@ async function executeJackpotAction(
         .update(profiles)
         .set({
           predictCredits: sql`${profiles.predictCredits} - ${JACKPOT_TICKET_COST}`,
-          totalPredictions: sql`${profiles.totalPredictions} + 1`,
         })
         .where(
           and(
@@ -830,6 +830,7 @@ async function executeJackpotAction(
     });
 
     await markExecuted(action.id);
+    void syncProfilePredictionStats(agent.userId);
     log(`[ActionWorker] Jackpot executed: agent=${agent.displayName} market=${action.marketId} score=${predictedScore} confidence=${decision.confidence}`);
   } catch (err: any) {
     // Check if the bet was committed despite the error

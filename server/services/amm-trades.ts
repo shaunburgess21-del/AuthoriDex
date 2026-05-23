@@ -42,6 +42,7 @@ import {
 } from "@shared/lib/amm/positions";
 import { pricesAll } from "@shared/lib/amm/lmsr";
 import { db } from "../db";
+import { syncProfilePredictionStats } from "./profile-prediction-stats";
 import {
   buildBuyReplayResponse,
   buildSellReplayResponse,
@@ -263,13 +264,6 @@ export async function executeBuy(
       .update(profiles)
       .set({
         predictCredits: sql`${profiles.predictCredits} - ${chargeCredits}`,
-        // Bump the public `totalPredictions` snapshot once per successful
-        // buy regardless of caller. The parimutuel `placeMarketBet`
-        // helper used to do this for humans; the agent worker used to
-        // patch agents afterwards. Centralising it here keeps the
-        // counter in lock-step with `market_bets` for both paths and
-        // removes the actionWorker double-counting risk.
-        totalPredictions: sql`${profiles.totalPredictions} + 1`,
       })
       .where(
         sql`${profiles.id} = ${userId} AND ${profiles.predictCredits} >= ${chargeCredits}`,
@@ -386,6 +380,13 @@ export async function executeBuy(
       console.error("[amm-trades] notifyPriceChange after buy failed (non-fatal):", err);
     }
   }
+
+  // Recompute denormalized win_rate / total_predictions after the bet
+  // row commits. Skipped when an outer tx is passed — caller must sync.
+  if (!txOpt && !("error" in result)) {
+    void syncProfilePredictionStats(userId);
+  }
+
   return result;
 }
 

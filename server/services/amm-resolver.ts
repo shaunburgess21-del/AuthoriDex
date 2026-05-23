@@ -49,6 +49,7 @@ import {
 const entryPerson = alias(trackedPeople, "amm_resolver_entry_person");
 import { gamificationService } from "./gamification";
 import { checkAndAwardPredictionWinBadges } from "./badges";
+import { syncProfilePredictionStats } from "./profile-prediction-stats";
 import { scoreResolvedMarket } from "../agents/performanceUpdater";
 
 type DbOrTx = Pick<typeof db, "select" | "insert" | "update">;
@@ -365,6 +366,7 @@ async function emitResolutionSideEffects(result: ResolveAmmMarketResult): Promis
           },
           idempotencyKey: `market_void_refund:${marketId}:${row.userId}`,
         });
+        void syncProfilePredictionStats(row.userId);
       }
       return;
     }
@@ -435,7 +437,10 @@ async function emitResolutionSideEffects(result: ResolveAmmMarketResult): Promis
     // rows.
     const soldOutNotified = new Set<string>();
 
+    const usersToSync = new Set<string>();
+
     for (const bet of settledBuys) {
+      usersToSync.add(bet.userId);
       const won = bet.status === "won";
       const stake = bet.stakeAmount ?? 0;
       const payout = bet.payoutAmount ?? 0;
@@ -522,6 +527,10 @@ async function emitResolutionSideEffects(result: ResolveAmmMarketResult): Promis
       } catch (err) {
         log(`[AmmResolver] Win-badge check failed for ${marketId}/${userId}: ${(err as Error)?.message ?? err}`);
       }
+    }
+
+    for (const userId of usersToSync) {
+      void syncProfilePredictionStats(userId);
     }
 
     // Agent performance scoring (fire-and-forget).

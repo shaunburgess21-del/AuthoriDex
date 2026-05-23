@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 import { ArrowLeft, User, Star, TrendingUp, Settings, LogOut, Vote, Wallet, Shield, Trophy, Eye, Lock, Flame, Award } from "lucide-react";
+import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { navigateToLogin } from "@/lib/authReturn";
 import { useAuth } from "@/contexts/AuthContext";
@@ -14,8 +15,12 @@ import { ProfileCompletionCard } from "@/components/ProfileCompletionCard";
 import { formatVox } from "@/lib/currency";
 
 export default function MePage() {
-  const { user, profile, profileLoading, isAdmin, signOut } = useAuth();
+  const { user, profile, profileLoading, isAdmin, signOut, refreshProfile } = useAuth();
   const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (user) void refreshProfile();
+  }, [user, refreshProfile]);
 
   const displayName = profile?.username || user?.email?.split("@")[0] || "User";
 
@@ -108,18 +113,33 @@ export default function MePage() {
               </div>
               
               <div className="grid grid-cols-3 sm:grid-cols-5 gap-3 mb-6 text-center">
-                <div className="p-3 rounded-lg bg-muted/50">
+                <button
+                  type="button"
+                  className="p-3 rounded-lg bg-muted/50 hover:bg-muted/70 transition-colors w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  onClick={() => setLocation("/me/votes")}
+                  data-testid="link-me-votes-stat"
+                >
                   <p className="text-2xl font-bold text-cyan-600 dark:text-cyan-400">{profile?.totalVotes || 0}</p>
                   <p className="text-xs text-muted-foreground">Votes Cast</p>
-                </div>
-                <div className="p-3 rounded-lg bg-muted/50">
+                </button>
+                <button
+                  type="button"
+                  className="p-3 rounded-lg bg-muted/50 hover:bg-muted/70 transition-colors w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  onClick={() => setLocation("/me/predictions?tab=predictions")}
+                  data-testid="link-me-predictions-stat"
+                >
                   <p className="text-2xl font-bold text-violet-600 dark:text-violet-400">{profile?.totalPredictions || 0}</p>
                   <p className="text-xs text-muted-foreground">Predictions</p>
-                </div>
-                <div className="p-3 rounded-lg bg-muted/50">
+                </button>
+                <button
+                  type="button"
+                  className="p-3 rounded-lg bg-muted/50 hover:bg-muted/70 transition-colors w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  onClick={() => setLocation("/me/predictions")}
+                  data-testid="link-me-win-rate-stat"
+                >
                   <p className="text-2xl font-bold text-green-600 dark:text-green-400">{profile?.winRate || 0}%</p>
                   <p className="text-xs text-muted-foreground">Win Rate</p>
-                </div>
+                </button>
                 <button
                   type="button"
                   className="p-3 rounded-lg bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/30 dark:border-violet-500/20 hover:bg-violet-500/20 dark:hover:bg-violet-500/15 transition-colors w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
@@ -132,13 +152,18 @@ export default function MePage() {
                   </div>
                   <p className="text-xs text-muted-foreground">Vox</p>
                 </button>
-                <div className="p-3 rounded-lg bg-orange-500/15 dark:bg-orange-500/10 border border-orange-500/30 dark:border-orange-500/20">
+                <button
+                  type="button"
+                  className="p-3 rounded-lg bg-orange-500/15 dark:bg-orange-500/10 border border-orange-500/30 dark:border-orange-500/20 hover:bg-orange-500/20 dark:hover:bg-orange-500/15 transition-colors w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  onClick={() => setLocation("/how-it-works#streak")}
+                  data-testid="link-me-streak-stat"
+                >
                   <div className="flex items-center justify-center gap-1">
                     <Flame className="h-4 w-4 text-orange-600 dark:text-orange-400" />
                     <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">{profile?.currentStreak || 0}</p>
                   </div>
                   <p className="text-xs text-muted-foreground">Streak</p>
-                </div>
+                </button>
               </div>
               
               <ProfileCompletionCard />

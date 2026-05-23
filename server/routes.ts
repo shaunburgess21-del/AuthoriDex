@@ -91,6 +91,11 @@ import { voidMarketBets } from "./jobs/market-resolver";
 import { deriveNativeMarketLifecycle, getWeeklyBettingCutoff, getMarketBettingCutoff } from "./native-markets/lifecycle";
 import { executeBuy, executeSell } from "./services/amm-trades";
 import { fireAmmPlacementHooks } from "./services/amm-bet-hooks";
+import {
+  classifyPredictionResult,
+  computeUserFacingPredictionStats,
+  syncProfilePredictionStats,
+} from "./services/profile-prediction-stats";
 import { computeDriftDelta } from "./services/credit-drift";
 import { computeEarlyBirdMultiplier } from "./jobs/settlement-utils";
 import { recomputeCelebrityMetrics } from "./services/celebrity-metrics-recompute";
@@ -7166,6 +7171,7 @@ Only return the JSON object.`;
           await tx.update(profiles).set(updateData).where(eq(profiles.id, userId));
           await tx.insert(creditLedger).values(initialGrantEntry).onConflictDoNothing();
         });
+        await syncProfilePredictionStats(userId);
         const updated = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
 
         return res.json({ profile: updated[0], created: false });
@@ -9457,24 +9463,19 @@ Only return the JSON object.`;
       const hiddenSet = await loadHiddenItemSet(userId);
 
       const predictions = bets.map(b => {
-        let result: 'won' | 'lost' | 'refunded' | 'pending' = 'pending';
-        let payout = 0;
         const displayEntryLabel =
           b.marketType === 'community' && b.direction === 'no'
             ? `No on ${b.entryLabel}`
             : b.entryLabel;
 
-        if (b.marketStatus === 'RESOLVED') {
-          if (b.betStatus === 'won' || (b.betStatus === 'active' && b.entryResolutionStatus === 'winner')) {
-            result = 'won';
-            payout = b.payoutAmount ?? b.potentialPayout ?? 0;
-          } else if (b.betStatus === 'lost' || b.betStatus === 'active') {
-            result = 'lost';
-          }
-        } else if (b.marketStatus === 'VOID') {
-          result = 'refunded';
-          payout = b.stakeAmount;
-        }
+        const { result, payout } = classifyPredictionResult({
+          marketStatus: b.marketStatus,
+          betStatus: b.betStatus,
+          entryResolutionStatus: b.entryResolutionStatus,
+          stakeAmount: b.stakeAmount,
+          payoutAmount: b.payoutAmount,
+          potentialPayout: b.potentialPayout,
+        });
 
         const isNative = b.marketType !== 'community';
 
@@ -9518,30 +9519,7 @@ Only return the JSON object.`;
         };
       });
 
-      const won = predictions.filter(p => p.result === 'won').length;
-      const lost = predictions.filter(p => p.result === 'lost').length;
-      const refunded = predictions.filter(p => p.result === 'refunded').length;
-      const pending = predictions.filter(p => p.result === 'pending').length;
-
-      const netCredits = predictions.reduce((sum, p) => {
-        if (p.result === 'won') return sum + (p.payout - p.stakeAmount);
-        if (p.result === 'lost') return sum - p.stakeAmount;
-        return sum;
-      }, 0);
-
-      const winRate = (won + lost) > 0
-        ? Math.round((won / (won + lost)) * 1000) / 10
-        : 0;
-
-      const categoryWins: Record<string, number> = {};
-      for (const p of predictions) {
-        if (p.result === 'won' && p.marketCategory) {
-          categoryWins[p.marketCategory] = (categoryWins[p.marketCategory] || 0) + 1;
-        }
-      }
-      const bestCategory = Object.keys(categoryWins).length > 0
-        ? Object.entries(categoryWins).sort((a, b) => b[1] - a[1])[0][0]
-        : null;
+      const aggregateStats = await computeUserFacingPredictionStats(userId);
 
       const [hiddenCountRow] = await db
         .select({ count: sql<number>`count(*)::int` })
@@ -9552,14 +9530,14 @@ Only return the JSON object.`;
       res.json({
         predictions,
         stats: {
-          total: predictions.length,
-          won,
-          lost,
-          refunded,
-          pending,
-          netCredits,
-          winRate,
-          bestCategory,
+          total: aggregateStats.total,
+          won: aggregateStats.won,
+          lost: aggregateStats.lost,
+          refunded: aggregateStats.refunded,
+          pending: aggregateStats.pending,
+          netCredits: aggregateStats.netCredits,
+          winRate: aggregateStats.winRate,
+          bestCategory: aggregateStats.bestCategory,
           currentStreak: userProfile?.currentStreak ?? 0,
           hiddenCount: totalHidden,
         },
@@ -19252,7 +19230,6 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           .update(profiles)
           .set({
             predictCredits: sql`${profiles.predictCredits} - ${JACKPOT_TICKET_COST}`,
-            totalPredictions: sql`${profiles.totalPredictions} + 1`,
           })
           .where(and(
             eq(profiles.id, authReq.userId!),
@@ -19347,6 +19324,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       } catch (e) { console.error("XP award for jackpot entry failed:", e); }
       await maybeFireReferralCredit(authReq.userId!);
       await checkAndAwardPredictionBadges(authReq.userId!);
+      await syncProfilePredictionStats(authReq.userId!);
 
       return res.json({
         betId: (result as any).betId,

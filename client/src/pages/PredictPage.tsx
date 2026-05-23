@@ -133,6 +133,7 @@ import {
 import { WeeklyJackpotHero } from "@/components/predict/WeeklyJackpotHero";
 import { OpenMarketCard } from "@/components/predict/OpenMarketCard";
 import { WorldMarketsStickyHeader } from "@/components/predict/WorldMarketsStickyHeader";
+import { WorldMarketsCategoryStacks } from "@/components/predict/WorldMarketsCategoryStacks";
 import { VoteSnapScrollView, type SnapItem, type SnapSectionType } from "@/components/snap-scroll/VoteSnapScrollView";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useScrollToHash } from "@/hooks/useScrollToHash";
@@ -2773,6 +2774,23 @@ export default function PredictPage() {
     ],
   );
 
+  const communityByCategory = useMemo(
+    () => {
+      const map = new Map<string, any[]>();
+      for (const m of filteredCommunity) {
+        const cat = normalizeMarketCategory(m.category);
+        if (!map.has(cat)) map.set(cat, []);
+        map.get(cat)!.push(m);
+      }
+      return Array.from(map.entries()).sort(([a], [b]) =>
+        getMarketCategoryLabel(a).localeCompare(getMarketCategoryLabel(b)),
+      );
+    },
+    [filteredCommunity],
+  );
+
+  const showCommunityCategoryStacks = isMobile && communityCategory === "all";
+
   const updownCategoryFilters = useMemo(
     () =>
       buildSectionCategoryOptions({
@@ -2874,6 +2892,50 @@ export default function PredictPage() {
         title: m.title || "",
       })),
     [filteredCommunity],
+  );
+
+  const renderCommunityMarketCard = useCallback(
+    (market: any) => (
+      <div
+        key={market.id}
+        className="max-md:h-auto max-md:self-start w-full"
+        data-testid={`card-community-${market.id}`}
+        onClick={(e) => handleCardEmptyTap(e, "world-markets", String(market.id))}
+      >
+        <OpenMarketCard
+          market={market}
+          onNavigate={(slug, pick, direction) =>
+            setLocation(
+              `/markets/${slug}${pick ? `?pick=${pick}${direction ? `&direction=${direction}` : ""}` : ""}`,
+            )
+          }
+          onPickEntry={handleCommunityPickEntry}
+          isMarketClosed={market.status !== "OPEN"}
+          userBetResult={userBetsByMarket.get(String(market.id))}
+          userBetsPerEntry={userBetsPerEntry.get(String(market.id))}
+          onFilterCategory={handleCategoryPillFilter}
+          categoryRaceMap={raceMap}
+          leaderboardCategories={leaderboardCats}
+          onBrowseFullScreen={
+            isMobile ? () => openSnapScroll("world-markets", String(market.id), "browse-button") : undefined
+          }
+          unrealisedPnl={ammPositionByMarket.get(String(market.id))?.unrealisedPnl ?? null}
+        />
+      </div>
+    ),
+    [
+      ammPositionByMarket,
+      handleCardEmptyTap,
+      handleCategoryPillFilter,
+      handleCommunityPickEntry,
+      isMobile,
+      leaderboardCats,
+      openSnapScroll,
+      raceMap,
+      setLocation,
+      userBetsByMarket,
+      userBetsPerEntry,
+    ],
   );
 
   const updownSnapItems: SnapItem[] = useMemo(
@@ -3707,47 +3769,71 @@ export default function PredictPage() {
                   </Button>
                 </Card>
               ) : isLoadingOpenMarkets ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {Array.from({ length: 6 }).map((_, i) => (
-                    <Card key={i} className="p-4 space-y-3">
-                      <div className="flex items-center gap-2">
-                        <Skeleton className="h-5 w-16 rounded-md" />
-                        <Skeleton className="h-5 w-20 rounded-md" />
-                      </div>
-                      <Skeleton className="h-5 w-full" />
-                      <Skeleton className="h-4 w-3/4" />
-                      <div className="flex items-center justify-between pt-2">
-                        <Skeleton className="h-8 w-24 rounded-md" />
-                        <Skeleton className="h-8 w-24 rounded-md" />
-                      </div>
-                    </Card>
-                  ))}
-                </div>
+                showCommunityCategoryStacks ? (
+                  <div className="md:hidden flex flex-col gap-6">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <Card key={i} className="p-4 space-y-3 min-h-[420px]">
+                        <div className="flex items-center gap-2">
+                          <Skeleton className="h-5 w-16 rounded-md" />
+                          <Skeleton className="h-5 w-20 rounded-md" />
+                        </div>
+                        <Skeleton className="h-5 w-full" />
+                        <Skeleton className="h-4 w-3/4" />
+                        <div className="flex items-center justify-between pt-2">
+                          <Skeleton className="h-8 w-24 rounded-md" />
+                          <Skeleton className="h-8 w-24 rounded-md" />
+                        </div>
+                        <div className="flex justify-center gap-1.5 pt-2">
+                          <Skeleton className="h-1.5 w-1.5 rounded-full" />
+                          <Skeleton className="h-1.5 w-1.5 rounded-full" />
+                          <Skeleton className="h-1.5 w-1.5 rounded-full" />
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <Card key={i} className="p-4 space-y-3">
+                        <div className="flex items-center gap-2">
+                          <Skeleton className="h-5 w-16 rounded-md" />
+                          <Skeleton className="h-5 w-20 rounded-md" />
+                        </div>
+                        <Skeleton className="h-5 w-full" />
+                        <Skeleton className="h-4 w-3/4" />
+                        <div className="flex items-center justify-between pt-2">
+                          <Skeleton className="h-8 w-24 rounded-md" />
+                          <Skeleton className="h-8 w-24 rounded-md" />
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                )
               ) : filteredCommunity.length > 0 ? (
-                <CardSection ref={communitySectionRef} desktopLimit={9} gap="gap-4" testIdPrefix="section-community" dotActiveColor="bg-violet-500" mobileSlideMinHeight="min-h-[420px]">
-                  {filteredCommunity.map((market: any) => (
-                    <div
-                      key={market.id}
-                      className="max-md:h-auto max-md:self-start w-full"
-                      data-testid={`card-community-${market.id}`}
-                      onClick={(e) => handleCardEmptyTap(e, "world-markets", String(market.id))}
-                    >
-                      <OpenMarketCard
-                        market={market}
-                        onNavigate={(slug, pick, direction) => setLocation(`/markets/${slug}${pick ? `?pick=${pick}${direction ? `&direction=${direction}` : ''}` : ''}`)}
-                        onPickEntry={handleCommunityPickEntry}
-                        isMarketClosed={market.status !== 'OPEN'}
-                        userBetResult={userBetsByMarket.get(String(market.id))}
-                        userBetsPerEntry={userBetsPerEntry.get(String(market.id))}
-                        onFilterCategory={handleCategoryPillFilter}
-                        categoryRaceMap={raceMap}
-                        leaderboardCategories={leaderboardCats}
-                        onBrowseFullScreen={isMobile ? () => openSnapScroll("world-markets", String(market.id), "browse-button") : undefined}
-                        unrealisedPnl={ammPositionByMarket.get(String(market.id))?.unrealisedPnl ?? null}
-                      />
-                    </div>
-                  ))}
-                </CardSection>
+                showCommunityCategoryStacks ? (
+                  <WorldMarketsCategoryStacks
+                    ref={communitySectionRef}
+                    groups={communityByCategory.map(([categoryId, markets]) => ({
+                      categoryId,
+                      markets,
+                    }))}
+                    renderMarket={renderCommunityMarketCard}
+                    testIdPrefix="section-community"
+                    dotActiveColor="bg-violet-500"
+                    mobileSlideMinHeight="min-h-[420px]"
+                  />
+                ) : (
+                  <CardSection
+                    ref={communitySectionRef}
+                    desktopLimit={9}
+                    gap="gap-4"
+                    testIdPrefix="section-community"
+                    dotActiveColor="bg-violet-500"
+                    mobileSlideMinHeight="min-h-[420px]"
+                  >
+                    {filteredCommunity.map((market: any) => renderCommunityMarketCard(market))}
+                  </CardSection>
+                )
               ) : (
                 <div className="text-center py-8 text-muted-foreground">
                   No markets available yet
