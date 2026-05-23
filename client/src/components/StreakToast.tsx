@@ -6,6 +6,9 @@ import {
   getNextMilestone,
 } from "@/lib/streak-config";
 
+const toastWidth =
+  "w-full max-w-[min(384px,calc(100vw-1rem))] sm:max-w-[400px]";
+
 interface StreakToastProps {
   /** Day count after the daily-login bump just applied server-side. */
   currentStreak: number;
@@ -83,9 +86,6 @@ export function StreakToast({
   const beatsBest = longestStreak !== undefined && currentStreak >= longestStreak && currentStreak > 1;
   const nextMilestone = getNextMilestone(currentStreak);
   const daysToNext = nextMilestone ? nextMilestone - currentStreak : null;
-
-  const toastWidth =
-    "w-[min(340px,calc(100vw-2rem))] sm:w-[360px]";
 
   const iconPillClasses =
     "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#3C83F6]/15 text-[#3C83F6] dark:bg-[#3C83F6]/20 dark:text-[#93C5FD]";

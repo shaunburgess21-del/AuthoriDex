@@ -1145,6 +1145,21 @@ html [data-sonner-toaster][data-sonner-theme="dark"] [data-rich-colors="true"][d
   transform: translateX(-50%) var(--y) !important;
 }
 
+/* StreakToast — slot width must match STREAK_TOAST_WIDTH_CSS in streak-config.ts */
+[data-sonner-toast].streak-toast-host {
+  width: min(384px, calc(100vw - 1rem)) !important;
+  max-width: calc(100vw - 1rem) !important;
+  margin-inline: auto !important;
+  left: 50% !important;
+  right: auto !important;
+  transform: translateX(-50%) var(--y) !important;
+}
+
+[data-sonner-toast].streak-toast-host[data-expanded="true"] {
+  left: 50% !important;
+  transform: translateX(-50%) var(--y) !important;
+}
+
 /* ===== HASH DEEP-LINK SCROLL OFFSET =====
  * Pages with a sticky top bar (PredictPage, detail pages) need their
  * fragment targets to settle BELOW the bar — otherwise the section

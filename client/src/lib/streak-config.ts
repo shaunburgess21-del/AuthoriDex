@@ -35,6 +35,9 @@ export const STREAK_TARGET_REWARD_COPY =
 /** Sonner duration in ms — long enough to read timeline dots + milestone copy. */
 export const STREAK_TOAST_DURATION_MS = 8000;
 
+/** Sonner `--width` and StreakToast card width — keep in sync. */
+export const STREAK_TOAST_WIDTH_CSS = "min(384px, calc(100vw - 1rem))";
+
 /**
  * Delay between the XP burst (viewport-center floater) and the toast
  * (top-center card). Lets the eye register the burst first, then read

@@ -7,6 +7,7 @@ import { StreakToast } from "@/components/StreakToast";
 import {
   STREAK_TOAST_DELAY_MS,
   STREAK_TOAST_DURATION_MS,
+  STREAK_TOAST_WIDTH_CSS,
 } from "@/lib/streak-config";
 
 export type Capability = 
@@ -275,9 +276,9 @@ export function useDailyCheckin(enabled: boolean = true) {
               {
                 duration: STREAK_TOAST_DURATION_MS,
                 className:
-                  "p-0 bg-transparent border-0 shadow-none overflow-visible",
+                  "streak-toast-host p-0 bg-transparent border-0 shadow-none overflow-visible",
                 style: {
-                  "--width": "min(360px, calc(100vw - 2rem))",
+                  "--width": STREAK_TOAST_WIDTH_CSS,
                 } as CSSProperties,
               },
             );
