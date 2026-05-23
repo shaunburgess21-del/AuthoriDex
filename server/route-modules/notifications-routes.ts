@@ -14,7 +14,9 @@ import {
   dismissNotificationGroup,
   markAllNotificationsRead,
   markNotificationGroupRead,
+  markNotificationGroupUnread,
   markNotificationRead,
+  markNotificationUnread,
   markNotificationsSeen,
   type NotificationCategory,
 } from "../services/notifications";
@@ -30,7 +32,9 @@ import {
  *   POST   /api/me/notifications/seen
  *   POST   /api/me/notifications/read-all
  *   POST   /api/me/notifications/:id/read
+ *   POST   /api/me/notifications/:id/unread
  *   POST   /api/me/notifications/group/read           { groupKey }
+ *   POST   /api/me/notifications/group/unread         { groupKey }
  *   POST   /api/me/notifications/group/dismiss        { groupKey }
  *   DELETE /api/me/notifications/:id
  *   GET    /api/me/notification-preferences
@@ -205,6 +209,20 @@ export function registerNotificationsRoutes(app: Express): void {
     }
   });
 
+  app.post("/api/me/notifications/group/unread", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const groupKey = typeof req.body?.groupKey === "string" ? req.body.groupKey : "";
+      if (!groupKey) {
+        return res.status(400).json({ error: "groupKey required" });
+      }
+      const updated = await markNotificationGroupUnread(req.userId!, groupKey);
+      res.json({ updated });
+    } catch (error: any) {
+      req.log?.error({ err: error }, "[notifications] mark group unread failed");
+      res.status(500).json({ error: "Failed to mark notification group unread" });
+    }
+  });
+
   // ── Soft-dismiss every undismissed row in a groupKey ─────────────────
   // Companion to the group-read endpoint. Dismissing a collapsed head
   // without this would "roll back" the inbox to a stale older milestone
@@ -234,6 +252,19 @@ export function registerNotificationsRoutes(app: Express): void {
     } catch (error: any) {
       req.log?.error({ err: error }, "[notifications] mark read failed");
       res.status(500).json({ error: "Failed to mark notification read" });
+    }
+  });
+
+  app.post("/api/me/notifications/:id/unread", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      if (!id) return res.status(400).json({ error: "Notification id required" });
+      const ok = await markNotificationUnread(req.userId!, id);
+      if (!ok) return res.status(404).json({ error: "Notification not found or already unread" });
+      res.json({ success: true });
+    } catch (error: any) {
+      req.log?.error({ err: error }, "[notifications] mark unread failed");
+      res.status(500).json({ error: "Failed to mark notification unread" });
     }
   });
 

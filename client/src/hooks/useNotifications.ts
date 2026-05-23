@@ -315,6 +315,118 @@ export function useMarkNotificationGroupRead() {
   });
 }
 
+export function useMarkNotificationUnread() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (notificationId: string) => {
+      const res = await apiRequest("POST", `/api/me/notifications/${notificationId}/unread`);
+      return res.json();
+    },
+    onMutate: async (notificationId) => {
+      await queryClient.cancelQueries({ queryKey: COUNTS_QUERY_KEY });
+      const previousCounts = queryClient.getQueryData<NotificationCountsResponse>(COUNTS_QUERY_KEY);
+      if (previousCounts) {
+        queryClient.setQueryData<NotificationCountsResponse>(COUNTS_QUERY_KEY, {
+          ...previousCounts,
+          unread: Math.min(previousCounts.cap, previousCounts.unread + 1),
+        });
+      }
+
+      const previousLists = queryClient.getQueriesData<{ pages?: NotificationListResponse[] }>({ queryKey: LIST_QUERY_KEY });
+      for (const [key, data] of previousLists) {
+        if (!data?.pages) continue;
+        queryClient.setQueryData(key, {
+          ...data,
+          pages: data.pages.map((page) => ({
+            ...page,
+            items: page.items.map((row) =>
+              row.id === notificationId && row.readAt
+                ? { ...row, readAt: null }
+                : row,
+            ),
+          })),
+        });
+      }
+      return { previousCounts, previousLists };
+    },
+    onError: (_err, _id, context) => {
+      if (context?.previousCounts) {
+        queryClient.setQueryData(COUNTS_QUERY_KEY, context.previousCounts);
+      }
+      if (context?.previousLists) {
+        for (const [key, data] of context.previousLists) {
+          queryClient.setQueryData(key, data);
+        }
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: COUNTS_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: LIST_QUERY_KEY });
+    },
+  });
+}
+
+export function useMarkNotificationGroupUnread() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (groupKey: string) => {
+      const res = await apiRequest(
+        "POST",
+        "/api/me/notifications/group/unread",
+        { groupKey },
+      );
+      return res.json();
+    },
+    onMutate: async (groupKey) => {
+      await queryClient.cancelQueries({ queryKey: COUNTS_QUERY_KEY });
+      await queryClient.cancelQueries({ queryKey: LIST_QUERY_KEY });
+
+      const readIds = new Set<string>();
+      const previousLists = queryClient.getQueriesData<{ pages?: NotificationListResponse[] }>({ queryKey: LIST_QUERY_KEY });
+      for (const [key, data] of previousLists) {
+        if (!data?.pages) continue;
+        queryClient.setQueryData(key, {
+          ...data,
+          pages: data.pages.map((page) => ({
+            ...page,
+            items: page.items.map((row) => {
+              if (row.groupKey !== groupKey || !row.readAt) return row;
+              readIds.add(row.id);
+              return { ...row, readAt: null };
+            }),
+          })),
+        });
+      }
+
+      const previousCounts = queryClient.getQueryData<NotificationCountsResponse>(COUNTS_QUERY_KEY);
+      if (previousCounts && readIds.size > 0) {
+        queryClient.setQueryData<NotificationCountsResponse>(COUNTS_QUERY_KEY, {
+          ...previousCounts,
+          unread: Math.min(previousCounts.cap, previousCounts.unread + readIds.size),
+        });
+      }
+
+      return { previousCounts, previousLists };
+    },
+    onError: (_err, _groupKey, context) => {
+      if (context?.previousCounts) {
+        queryClient.setQueryData(COUNTS_QUERY_KEY, context.previousCounts);
+      }
+      if (context?.previousLists) {
+        for (const [key, data] of context.previousLists) {
+          queryClient.setQueryData(key, data);
+        }
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: COUNTS_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: LIST_QUERY_KEY });
+    },
+  });
+}
+
 export function useMarkAllNotificationsRead() {
   const queryClient = useQueryClient();
 

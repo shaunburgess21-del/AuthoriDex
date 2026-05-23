@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { db } from "../db";
 import { notificationPreferences, notifications, notificationMarketMutes, profiles } from "@shared/schema";
 import { logger } from "../log";
@@ -471,6 +471,24 @@ export async function markNotificationRead(userId: string, notificationId: strin
   return result.length > 0;
 }
 
+export async function markNotificationUnread(
+  userId: string,
+  notificationId: string,
+): Promise<boolean> {
+  const result = await db
+    .update(notifications)
+    .set({ readAt: null })
+    .where(
+      and(
+        eq(notifications.id, notificationId),
+        eq(notifications.userId, userId),
+        isNotNull(notifications.readAt),
+      ),
+    )
+    .returning({ id: notifications.id });
+  return result.length > 0;
+}
+
 export async function markAllNotificationsRead(userId: string): Promise<number> {
   const now = new Date();
   const result = await db
@@ -508,6 +526,30 @@ export async function markNotificationGroupRead(
         eq(notifications.userId, userId),
         eq(notifications.groupKey, groupKey),
         isNull(notifications.readAt),
+      ),
+    )
+    .returning({ id: notifications.id });
+  return result.length;
+}
+
+/**
+ * Mark every read notification in a groupKey as unread.
+ *
+ * Symmetric companion to `markNotificationGroupRead` for swipe-toggle
+ * on collapsed head rows. Does not touch `seen_at`.
+ */
+export async function markNotificationGroupUnread(
+  userId: string,
+  groupKey: string,
+): Promise<number> {
+  const result = await db
+    .update(notifications)
+    .set({ readAt: null })
+    .where(
+      and(
+        eq(notifications.userId, userId),
+        eq(notifications.groupKey, groupKey),
+        isNotNull(notifications.readAt),
       ),
     )
     .returning({ id: notifications.id });

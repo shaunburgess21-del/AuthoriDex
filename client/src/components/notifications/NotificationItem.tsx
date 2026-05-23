@@ -9,7 +9,9 @@ import {
   useDismissNotification,
   useDismissNotificationGroup,
   useMarkNotificationGroupRead,
+  useMarkNotificationGroupUnread,
   useMarkNotificationRead,
+  useMarkNotificationUnread,
   useNotificationPreferences,
 } from "@/hooks/useNotifications";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -65,7 +67,7 @@ interface NotificationItemProps {
  * is always visible (no hover) — we keep it always rendered and rely
  * on opacity to gate hover-only display via Tailwind.
  *
- * Mobile (`swipeEnabled`): swipe right = mark read, swipe left = delete
+ * Mobile (`swipeEnabled`): swipe right = toggle read/unread, swipe left = delete
  * (directions respect Settings → invert swipe actions).
  */
 export function NotificationItem({
@@ -76,7 +78,9 @@ export function NotificationItem({
   const [, setLocation] = useLocation();
   const isMobile = useIsMobile();
   const markRead = useMarkNotificationRead();
+  const markUnread = useMarkNotificationUnread();
   const markGroupRead = useMarkNotificationGroupRead();
+  const markGroupUnread = useMarkNotificationGroupUnread();
   const dismiss = useDismissNotification();
   const dismissGroup = useDismissNotificationGroup();
   const prefs = useNotificationPreferences();
@@ -112,6 +116,23 @@ export function NotificationItem({
       markGroupRead.mutate(notification.groupKey);
     } else {
       markRead.mutate(notification.id);
+    }
+  };
+
+  const performMarkUnread = () => {
+    if (isUnread) return;
+    if (isCollapsedHead && notification.groupKey) {
+      markGroupUnread.mutate(notification.groupKey);
+    } else {
+      markUnread.mutate(notification.id);
+    }
+  };
+
+  const performToggleRead = () => {
+    if (isUnread) {
+      performMarkRead();
+    } else {
+      performMarkUnread();
     }
   };
 
@@ -261,7 +282,7 @@ export function NotificationItem({
       invertSwipe={prefs.data?.invertNotificationSwipe ?? false}
       isUnread={isUnread}
       disabled={isExiting}
-      onMarkRead={performMarkRead}
+      onToggleRead={performToggleRead}
       onDismiss={performDismiss}
       onDragConsumed={() => {
         swipeConsumedRef.current = true;

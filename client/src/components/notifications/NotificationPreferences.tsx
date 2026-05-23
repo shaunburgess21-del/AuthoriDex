@@ -115,7 +115,7 @@ export function NotificationPreferences() {
 }
 
 /**
- * Mobile inbox swipe-direction preference. Default: swipe right = mark read,
+ * Mobile inbox swipe-direction preference. Default: swipe right = toggle read,
  * swipe left = delete. When inverted, those directions swap.
  */
 function InboxGesturesSection({
@@ -131,8 +131,8 @@ function InboxGesturesSection({
     <div className="mt-6 pt-5 border-t" data-testid="inbox-gestures-section">
       <h3 className="text-sm font-semibold mb-1">Inbox gestures</h3>
       <p className="text-xs text-muted-foreground mb-3">
-        On mobile, swipe right marks a notification as read and swipe left
-        deletes it. Turn this on to reverse those directions.
+        On mobile, swipe right toggles read/unread and swipe left deletes.
+        Turn this on to reverse those directions.
       </p>
       <div className="flex items-center justify-between gap-4">
         <Label htmlFor="invert-notification-swipe" className="text-sm font-medium cursor-pointer">
