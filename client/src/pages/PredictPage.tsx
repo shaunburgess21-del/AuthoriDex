@@ -252,7 +252,7 @@ const PREDICTION_TYPES: { id: PredictionType; label: string; mobileLabel: string
   { id: "updown", label: "Up/Down", mobileLabel: "Up/Down", icon: <TrendingUp className="h-4 w-4" /> },
   { id: "h2h", label: "Head-to-Head", mobileLabel: "H2H", icon: <Swords className="h-4 w-4" /> },
   { id: "gainer", label: "Category Races", mobileLabel: "Races", icon: <BarChart3 className="h-4 w-4" /> },
-  { id: "community", label: "World", mobileLabel: "Markets", icon: <Scale className="h-4 w-4" /> },
+  { id: "community", label: "World Markets", mobileLabel: "Markets", icon: <Scale className="h-4 w-4" /> },
 ];
 
 function HorizontalScroll({ children, className = "" }: { children: React.ReactNode; className?: string }) {
