@@ -1132,6 +1132,19 @@ html [data-sonner-toaster][data-sonner-theme="dark"] [data-rich-colors="true"][d
   color: hsl(217 91% 70%);
 }
 
+/* Custom toasts (StreakToast, BadgeToast) set their own width; without
+ * this, Sonner's top-center math drifts left when --width != card width.
+ * See https://github.com/emilkowalski/sonner/issues/611 */
+[data-sonner-toast][data-x-position="center"] {
+  left: 50% !important;
+  transform: translateX(-50%) var(--y) !important;
+}
+
+[data-sonner-toast][data-x-position="center"][data-expanded="true"] {
+  left: 50% !important;
+  transform: translateX(-50%) var(--y) !important;
+}
+
 /* ===== HASH DEEP-LINK SCROLL OFFSET =====
  * Pages with a sticky top bar (PredictPage, detail pages) need their
  * fragment targets to settle BELOW the bar — otherwise the section

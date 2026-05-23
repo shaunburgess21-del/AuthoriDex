@@ -1,4 +1,4 @@
-import { Check, Flame, Gift, Sparkles, X } from "lucide-react";
+import { CalendarCheck, Check, Gift, Sparkles, X } from "lucide-react";
 import {
   STREAK_MILESTONES,
   STREAK_REWARD_TEASE,
@@ -87,12 +87,15 @@ export function StreakToast({
   const toastWidth =
     "w-[min(340px,calc(100vw-2rem))] sm:w-[360px]";
 
-  // Milestone variant gets a warmer border and a sparkle accent so it
+  const iconPillClasses =
+    "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#3C83F6]/15 text-[#3C83F6] dark:bg-[#3C83F6]/20 dark:text-[#93C5FD]";
+
+  // Milestone variant gets a stronger border and sparkle accent so it
   // stands out from the routine daily check-in toast. bg-card keeps the
   // panel opaque; the gradient tints on top (see BadgeToast).
   const containerClasses = isMilestone
-    ? `${toastWidth} rounded-2xl border-2 border-amber-500/60 bg-card bg-gradient-to-br from-amber-500/15 to-orange-500/10 shadow-[0_0_24px_rgba(245,158,11,0.25)] p-4 relative`
-    : `${toastWidth} rounded-2xl border border-orange-500/30 bg-card shadow-lg p-4 relative`;
+    ? `${toastWidth} rounded-2xl border-2 border-[#3C83F6]/60 bg-card bg-gradient-to-br from-[#3C83F6]/15 to-[#3C83F6]/10 shadow-[0_0_24px_rgba(60,131,246,0.25)] p-4 relative`
+    : `${toastWidth} rounded-2xl border border-[#3C83F6]/30 bg-card shadow-lg p-4 relative`;
 
   return (
     <div
@@ -112,14 +115,8 @@ export function StreakToast({
       </button>
 
       <div className="flex items-start gap-2.5 pr-6">
-        <span
-          className={
-            isMilestone
-              ? "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-500/25 text-amber-500 dark:bg-amber-500/30 dark:text-amber-300"
-              : "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-orange-500/15 text-orange-500 dark:bg-orange-500/20 dark:text-orange-300"
-          }
-        >
-          {isMilestone ? <Sparkles className="h-4 w-4" /> : <Flame className="h-4 w-4" />}
+        <span className={iconPillClasses}>
+          {isMilestone ? <Sparkles className="h-4 w-4" /> : <CalendarCheck className="h-4 w-4" />}
         </span>
         <div className="space-y-0.5">
           <p className="text-[15px] font-semibold leading-tight">
@@ -127,7 +124,7 @@ export function StreakToast({
           </p>
           {xpAwarded > 0 && (
             <p className="text-xs text-muted-foreground">
-              <span className="font-mono font-semibold text-amber-600 dark:text-amber-400">
+              <span className="font-mono font-semibold text-[#3C83F6] dark:text-[#93C5FD]">
                 +{xpAwarded} XP
               </span>{" "}
               · {reason}
@@ -154,10 +151,10 @@ export function StreakToast({
 
           const nodeClasses = isGift
             ? isCompleted
-              ? "bg-amber-500 text-white shadow-[0_0_0_3px_rgba(245,158,11,0.25)]"
+              ? "bg-[#3C83F6] text-white shadow-[0_0_0_3px_rgba(60,131,246,0.25)]"
               : "bg-muted text-muted-foreground"
             : isCompleted
-              ? "bg-orange-500 text-white shadow-[0_0_0_3px_rgba(249,115,22,0.18)]"
+              ? "bg-[#3C83F6] text-white shadow-[0_0_0_3px_rgba(60,131,246,0.18)]"
               : "bg-muted text-muted-foreground/70";
 
           return (
@@ -179,7 +176,7 @@ export function StreakToast({
                 <div
                   className={`h-[2px] flex-1 ${
                     connectorActive
-                      ? "bg-orange-500/70"
+                      ? "bg-[#3C83F6]/70"
                       : "bg-muted-foreground/25"
                   }`}
                 />
@@ -199,7 +196,7 @@ export function StreakToast({
           </p>
         )}
         {beatsBest && (
-          <p className="text-[12px] text-amber-600 dark:text-amber-400 font-medium">
+          <p className="text-[12px] text-[#3C83F6] dark:text-[#93C5FD] font-medium">
             New personal best.
           </p>
         )}

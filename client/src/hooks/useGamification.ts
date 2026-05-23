@@ -1,5 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useEffect, createElement } from "react";
+import { useEffect, createElement, type CSSProperties } from "react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { toast } from "sonner";
 import { useXpBurst } from "@/components/XpBurstProvider";
@@ -276,6 +276,9 @@ export function useDailyCheckin(enabled: boolean = true) {
                 duration: STREAK_TOAST_DURATION_MS,
                 className:
                   "p-0 bg-transparent border-0 shadow-none overflow-visible",
+                style: {
+                  "--width": "min(360px, calc(100vw - 2rem))",
+                } as CSSProperties,
               },
             );
           }, STREAK_TOAST_DELAY_MS);

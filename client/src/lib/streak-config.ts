@@ -32,8 +32,8 @@ export const STREAK_REWARD_TEASE = "Take action on the site to earn Vox.";
 export const STREAK_TARGET_REWARD_COPY =
   "Hit your next milestone to unlock bonus XP.";
 
-/** Sonner duration in ms — slightly longer than default so users can read the dots + copy. */
-export const STREAK_TOAST_DURATION_MS = 5500;
+/** Sonner duration in ms — long enough to read timeline dots + milestone copy. */
+export const STREAK_TOAST_DURATION_MS = 8000;
 
 /**
  * Delay between the XP burst (viewport-center floater) and the toast
