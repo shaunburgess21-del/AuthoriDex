@@ -26,16 +26,18 @@ function recomputeMatchupPercents(
   };
 }
 
-function bumpOption(
-  matchup: MatchupVoteShape,
+function bumpOption<P extends MatchupVoteShape>(
+  matchup: P,
   option: MatchupVoteOption,
   delta: number,
-): MatchupVoteShape {
-  const next = { ...matchup };
-  if (option === "option_a") next.optionAVotes = Math.max(0, next.optionAVotes + delta);
-  else if (option === "option_b") next.optionBVotes = Math.max(0, next.optionBVotes + delta);
-  else next.neutralVotes = Math.max(0, next.neutralVotes + delta);
-  return next;
+): P {
+  if (option === "option_a") {
+    return { ...matchup, optionAVotes: Math.max(0, matchup.optionAVotes + delta) };
+  }
+  if (option === "option_b") {
+    return { ...matchup, optionBVotes: Math.max(0, matchup.optionBVotes + delta) };
+  }
+  return { ...matchup, neutralVotes: Math.max(0, matchup.neutralVotes + delta) };
 }
 
 export function optimisticMatchupVotePatch<P extends MatchupVoteShape>(
@@ -43,7 +45,7 @@ export function optimisticMatchupVotePatch<P extends MatchupVoteShape>(
   option: MatchupVoteOption,
   previousVote: MatchupVoteOption | null | undefined,
 ): P {
-  let m = { ...matchup };
+  let m: P = { ...matchup };
   if (previousVote) {
     m = bumpOption(m, previousVote, -1);
     m = bumpOption(m, option, 1);
@@ -57,14 +59,14 @@ export function optimisticMatchupVotePatch<P extends MatchupVoteShape>(
     m.neutralVotes,
     m.totalVotes,
   );
-  return { ...m, ...percents };
+  return { ...m, ...percents } as P;
 }
 
 export function optimisticMatchupRemovePatch<P extends MatchupVoteShape>(
   matchup: P,
   previousVote: MatchupVoteOption,
 ): P {
-  let m = bumpOption({ ...matchup }, previousVote, -1);
+  let m: P = bumpOption({ ...matchup }, previousVote, -1);
   m = { ...m, totalVotes: Math.max(0, m.totalVotes - 1) };
   const percents = recomputeMatchupPercents(
     m.optionAVotes,
@@ -72,5 +74,5 @@ export function optimisticMatchupRemovePatch<P extends MatchupVoteShape>(
     m.neutralVotes,
     m.totalVotes,
   );
-  return { ...m, ...percents };
+  return { ...m, ...percents } as P;
 }
