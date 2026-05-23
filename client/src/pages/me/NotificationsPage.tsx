@@ -25,6 +25,7 @@ import {
 } from "@/hooks/useNotifications";
 import { NotificationItem } from "@/components/notifications/NotificationItem";
 import { NotificationsEmptyState } from "@/components/notifications/NotificationsEmptyState";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 
 /**
@@ -41,6 +42,7 @@ type Tab = "all" | "unread";
 export default function NotificationsArchivePage() {
   const { user, loading } = useAuth();
   const [, setLocation] = useLocation();
+  const isMobile = useIsMobile();
   const [tab, setTab] = useState<Tab>("all");
   const [category, setCategory] = useState<NotificationCategory | null>(null);
   const markAllRead = useMarkAllNotificationsRead();
@@ -199,7 +201,11 @@ export default function NotificationsArchivePage() {
           ) : (
             <div className="divide-y">
               {items.map((row) => (
-                <NotificationItem key={row.id} notification={row} />
+                <NotificationItem
+                  key={row.id}
+                  notification={row}
+                  swipeEnabled={isMobile}
+                />
               ))}
             </div>
           )}

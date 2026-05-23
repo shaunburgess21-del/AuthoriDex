@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { TrendingDown, TrendingUp, X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -10,8 +10,11 @@ import {
   useDismissNotificationGroup,
   useMarkNotificationGroupRead,
   useMarkNotificationRead,
+  useNotificationPreferences,
 } from "@/hooks/useNotifications";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { getRecentActivityMarketPath } from "@/lib/predict-display";
+import { NotificationSwipeableRow } from "./NotificationSwipeableRow";
 
 const DIRECTION_AWARE_KINDS = new Set([
   "favorite_hot_mover",
@@ -48,6 +51,8 @@ interface NotificationItemProps {
   notification: NotificationRow;
   /** Called after click navigation so the parent panel can close itself. */
   onNavigate?: () => void;
+  /** Enable mobile swipe-to-read / swipe-to-delete (parent gates by context). */
+  swipeEnabled?: boolean;
 }
 
 /**
@@ -59,14 +64,24 @@ interface NotificationItemProps {
  * compete visually with the row content. On touch devices the button
  * is always visible (no hover) — we keep it always rendered and rely
  * on opacity to gate hover-only display via Tailwind.
+ *
+ * Mobile (`swipeEnabled`): swipe right = mark read, swipe left = delete
+ * (directions respect Settings → invert swipe actions).
  */
-export function NotificationItem({ notification, onNavigate }: NotificationItemProps) {
+export function NotificationItem({
+  notification,
+  onNavigate,
+  swipeEnabled = false,
+}: NotificationItemProps) {
   const [, setLocation] = useLocation();
+  const isMobile = useIsMobile();
   const markRead = useMarkNotificationRead();
   const markGroupRead = useMarkNotificationGroupRead();
   const dismiss = useDismissNotification();
   const dismissGroup = useDismissNotificationGroup();
+  const prefs = useNotificationPreferences();
   const [isExiting, setIsExiting] = useState(false);
+  const swipeConsumedRef = useRef(false);
 
   const meta = getKindMeta(notification.kind);
   const direction = getNotificationDirection(notification.kind, notification.metadata);
@@ -86,22 +101,37 @@ export function NotificationItem({ notification, onNavigate }: NotificationItemP
   const isUnread = !notification.readAt;
   const resolvedHref = resolveNotificationHref(notification);
   const isInternalLink = !!resolvedHref && resolvedHref.startsWith("/");
-  // True when this row stands in for additional collapsed rows behind
-  // it (`flattenNotifications` set `collapsedCount` and we have a
-  // groupKey to address the bundle). The click/dismiss handlers route
-  // to the group mutations so the user's interaction affects every
-  // row they're standing in for, not just the visible head.
   const isCollapsedHead =
     (notification.collapsedCount ?? 0) > 0 && !!notification.groupKey;
 
-  const handleClick = () => {
-    if (isUnread) {
-      if (isCollapsedHead && notification.groupKey) {
-        markGroupRead.mutate(notification.groupKey);
-      } else {
-        markRead.mutate(notification.id);
-      }
+  const useSwipe = swipeEnabled && isMobile;
+
+  const performMarkRead = () => {
+    if (!isUnread) return;
+    if (isCollapsedHead && notification.groupKey) {
+      markGroupRead.mutate(notification.groupKey);
+    } else {
+      markRead.mutate(notification.id);
     }
+  };
+
+  const performDismiss = () => {
+    setIsExiting(true);
+    setTimeout(() => {
+      if (isCollapsedHead && notification.groupKey) {
+        dismissGroup.mutate(notification.groupKey);
+      } else {
+        dismiss.mutate(notification.id);
+      }
+    }, 120);
+  };
+
+  const handleClick = () => {
+    if (swipeConsumedRef.current) {
+      swipeConsumedRef.current = false;
+      return;
+    }
+    performMarkRead();
     if (resolvedHref) {
       if (isInternalLink) {
         setLocation(resolvedHref);
@@ -114,19 +144,10 @@ export function NotificationItem({ notification, onNavigate }: NotificationItemP
 
   const handleDismiss = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setIsExiting(true);
-    // Slight delay matches the fade-out feel — list filters out the
-    // row the moment the dismiss mutation lands.
-    setTimeout(() => {
-      if (isCollapsedHead && notification.groupKey) {
-        dismissGroup.mutate(notification.groupKey);
-      } else {
-        dismiss.mutate(notification.id);
-      }
-    }, 120);
+    performDismiss();
   };
 
-  return (
+  const rowContent = (
     <div
       role="button"
       tabIndex={0}
@@ -137,6 +158,9 @@ export function NotificationItem({ notification, onNavigate }: NotificationItemP
           handleClick();
         }
       }}
+      onPointerDown={() => {
+        swipeConsumedRef.current = false;
+      }}
       className={cn(
         "group relative flex gap-3 px-4 py-3 transition-colors cursor-pointer",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
@@ -145,8 +169,6 @@ export function NotificationItem({ notification, onNavigate }: NotificationItemP
       )}
       data-testid={`notification-item-${notification.kind}`}
     >
-      {/* Left: kind-specific icon chip. The colored chip is the primary
-          visual cue; the unread dot to the left of it is the secondary. */}
       <div className="flex items-start gap-2.5 shrink-0">
         {isUnread && (
           <span
@@ -164,8 +186,6 @@ export function NotificationItem({ notification, onNavigate }: NotificationItemP
         </div>
       </div>
 
-      {/* Center: title + body + relative time. min-w-0 so flex truncation
-          works correctly when title is longer than the panel width. */}
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
           <p
@@ -177,19 +197,9 @@ export function NotificationItem({ notification, onNavigate }: NotificationItemP
             {notification.title}
           </p>
           <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
-            {/* Collapse indicator. `collapsedCount` is set by
-                `flattenNotifications` when this row represents the head
-                of a groupKey bucket (typically the latest closing-soon
-                milestone for a market). Renders inline with the
-                timestamp so the user can see the row is hiding earlier
-                rows without us pulling them into the list itself. */}
             {(notification.collapsedCount ?? 0) > 0 && (
               <span
                 className={cn(
-                  // Match the neighbouring timestamp's 10px font so the
-                  // chip doesn't look like a different size class — 9px
-                  // sat half a step below the timestamp and read as a
-                  // typo at standard density.
                   "px-1.5 py-0.5 rounded-full text-[10px] font-medium",
                   "bg-muted text-muted-foreground/80",
                   "leading-none whitespace-nowrap",
@@ -217,12 +227,6 @@ export function NotificationItem({ notification, onNavigate }: NotificationItemP
         )}
       </div>
 
-      {/* Dismiss action.
-          - Touch devices (no hover): always visible at 60% opacity so
-            users can actually tap it.
-          - Hover devices: hidden until row is hovered or focused. The
-            `(hover:hover)` media query is the standard way to detect
-            true hover-capable pointers. */}
       <button
         type="button"
         onClick={handleDismiss}
@@ -246,5 +250,24 @@ export function NotificationItem({ notification, onNavigate }: NotificationItemP
         <X className="h-3.5 w-3.5" aria-hidden="true" />
       </button>
     </div>
+  );
+
+  if (!useSwipe) {
+    return rowContent;
+  }
+
+  return (
+    <NotificationSwipeableRow
+      invertSwipe={prefs.data?.invertNotificationSwipe ?? false}
+      isUnread={isUnread}
+      disabled={isExiting}
+      onMarkRead={performMarkRead}
+      onDismiss={performDismiss}
+      onDragConsumed={() => {
+        swipeConsumedRef.current = true;
+      }}
+    >
+      {rowContent}
+    </NotificationSwipeableRow>
   );
 }

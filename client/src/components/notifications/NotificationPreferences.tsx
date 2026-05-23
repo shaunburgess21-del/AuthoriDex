@@ -104,7 +104,50 @@ export function NotificationPreferences() {
       </div>
 
       <MutedMarketsSection />
+
+      <InboxGesturesSection
+        invertSwipe={data.invertNotificationSwipe ?? false}
+        onChange={(checked) => update({ invertNotificationSwipe: checked })}
+        disabled={isUpdating}
+      />
     </Card>
+  );
+}
+
+/**
+ * Mobile inbox swipe-direction preference. Default: swipe right = mark read,
+ * swipe left = delete. When inverted, those directions swap.
+ */
+function InboxGesturesSection({
+  invertSwipe,
+  onChange,
+  disabled,
+}: {
+  invertSwipe: boolean;
+  onChange: (checked: boolean) => void;
+  disabled: boolean;
+}) {
+  return (
+    <div className="mt-6 pt-5 border-t" data-testid="inbox-gestures-section">
+      <h3 className="text-sm font-semibold mb-1">Inbox gestures</h3>
+      <p className="text-xs text-muted-foreground mb-3">
+        On mobile, swipe right marks a notification as read and swipe left
+        deletes it. Turn this on to reverse those directions.
+      </p>
+      <div className="flex items-center justify-between gap-4">
+        <Label htmlFor="invert-notification-swipe" className="text-sm font-medium cursor-pointer">
+          Invert swipe actions
+        </Label>
+        <Switch
+          id="invert-notification-swipe"
+          checked={invertSwipe}
+          onCheckedChange={onChange}
+          disabled={disabled}
+          data-testid="switch-invert-notification-swipe"
+          aria-label="Invert notification swipe actions"
+        />
+      </div>
+    </div>
   );
 }
 

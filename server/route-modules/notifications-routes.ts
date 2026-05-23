@@ -68,6 +68,7 @@ const PREFERENCE_FIELDS = [
   "socialPush",
   "accountPush",
   "systemPush",
+  "invertNotificationSwipe",
 ] as const;
 
 const updatePreferencesSchema = z

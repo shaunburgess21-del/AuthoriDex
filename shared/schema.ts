@@ -2205,6 +2205,9 @@ export const notificationPreferences = pgTable("notification_preferences", {
   accountPush: boolean("account_push").notNull().default(false),
   systemPush: boolean("system_push").notNull().default(false),
 
+  /** When true, swipe-right dismisses and swipe-left marks read (mobile inbox). */
+  invertNotificationSwipe: boolean("invert_notification_swipe").notNull().default(false),
+
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 

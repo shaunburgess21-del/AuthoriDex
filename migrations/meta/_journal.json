@@ -484,6 +484,13 @@
       "when": 1780262400000,
       "tag": "0068_email_send_log",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1780348800000,
+      "tag": "0069_notification_swipe_invert",
+      "breakpoints": true
     }
   ]
 }

@@ -167,6 +167,7 @@ export function NotificationsPanel({ onClose, variant = "popover" }: Notificatio
                 key={row.id}
                 notification={row}
                 onNavigate={onClose}
+                swipeEnabled={variant === "sheet"}
               />
             ))}
             {list.hasNextPage && (

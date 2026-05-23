@@ -96,6 +96,8 @@ export interface NotificationPreferences {
   socialPush: boolean;
   accountPush: boolean;
   systemPush: boolean;
+  /** When true, swipe-right dismisses and swipe-left marks read (mobile inbox). */
+  invertNotificationSwipe: boolean;
   updatedAt: string;
 }
 
