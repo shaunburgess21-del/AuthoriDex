@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo, createContext, type ReactNode } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence, useMotionValue, useTransform, animate as motionAnimate } from "framer-motion";
-import { ArrowLeft, ArrowUp, Inbox, MessageCircle, Plus, X } from "lucide-react";
+import { ArrowLeft, ArrowUp, Inbox, Plus, X } from "lucide-react";
 import { getCategoryStyle } from "@/components/CategoryPill";
 import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
 import { sharePage } from "@/lib/share";
@@ -791,27 +791,16 @@ export function VoteSnapScrollView({
 
                                 {/* Drag handle / expand toggle */}
                                 <div className="flex justify-center">
-                                  {commentMode === "person" && !isExpanded ? (
-                                    <button
-                                      type="button"
-                                      onClick={() => setExpandedItemId(item.id)}
-                                      className="flex items-center gap-2 px-5 py-2.5 mt-1 rounded-full border border-border/50 bg-muted/20 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/40 active:scale-[0.97]"
-                                    >
-                                      <MessageCircle className="h-3.5 w-3.5" />
-                                      View Insights
-                                    </button>
-                                  ) : (
-                                    <div
-                                      className="flex flex-col items-center px-6 pt-3 pb-3 cursor-grab active:cursor-grabbing touch-none select-none"
-                                      onTouchStart={handleDragStart}
-                                      onTouchEnd={(e) => handleDragEnd(e, item.id)}
-                                      onClick={() => setExpandedItemId(isExpanded ? null : item.id)}
-                                      role="button"
-                                      aria-label={isExpanded ? "Collapse" : "Expand"}
-                                    >
-                                      <div className="w-16 h-1.5 rounded-full bg-muted-foreground/60" />
-                                    </div>
-                                  )}
+                                  <div
+                                    className="flex flex-col items-center px-6 pt-3 pb-3 cursor-grab active:cursor-grabbing touch-none select-none"
+                                    onTouchStart={handleDragStart}
+                                    onTouchEnd={(e) => handleDragEnd(e, item.id)}
+                                    onClick={() => setExpandedItemId(isExpanded ? null : item.id)}
+                                    role="button"
+                                    aria-label={isExpanded ? "Collapse" : "Expand"}
+                                  >
+                                    <div className="w-16 h-1.5 rounded-full bg-muted-foreground/60" />
+                                  </div>
                                 </div>
 
                                 {/* Comments / insights section */}
