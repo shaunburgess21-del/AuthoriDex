@@ -115,7 +115,12 @@ import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { UserSocialAvatar } from "@/components/UserSocialAvatar";
 import { formatActivityAge } from "@/lib/formatDate";
 import { getMarketCategoryLabel, normalizeMarketCategory, CATEGORIES_OPEN, OPINION_POLL_MIN_OPTIONS, OPINION_POLL_MAX_OPTIONS } from "@shared/constants";
-import { buildSectionCategoryOptions } from "@/lib/sectionCategoryFilters";
+import { buildSectionCategoryOptions, isPinnedCategory } from "@/lib/sectionCategoryFilters";
+import {
+  communityChipForMarket,
+  filterCommunityMarkets,
+  openMarketPool,
+} from "@/lib/filterCommunityMarkets";
 import { SuggestCategorySelect, SuggestDurationPicker, OpinionOptionRow, type OpinionOptionInput } from "@/components/suggest";
 import { OnboardingDrawer, type OnboardingStep, type OnboardingDrawerHandle } from "@/components/OnboardingDrawer";
 import { UnifiedSectionHeader } from "@/components/UnifiedSectionHeader";
@@ -2593,16 +2598,6 @@ export default function PredictPage() {
       (best, l) => Math.max(best, Number((l as any).currentScore ?? 0)),
       0,
     );
-  // Sum of real stakes across an /api/open-markets row's entries. Replaces the
-  // old `seedVolume` fallback used by the Trending sort, so trending now ranks
-  // by the same honest pool the cards display.
-  const openMarketPool = (m: any): number =>
-    (m?.entries || []).reduce(
-      (sum: number, e: any) =>
-        sum + Number(e?.totalStake || 0) + Number(e?.noStake || 0),
-      0,
-    );
-
   /* The four filteredX lists are wrapped in useMemo not because the
    * filter+sort itself is expensive (markets are O(few-dozen)), but
    * because they feed downstream snap-item useMemos and section
@@ -2738,31 +2733,13 @@ export default function PredictPage() {
 
   const filteredCommunity = useMemo(
     () =>
-      openMarkets
-        .filter(
-          (m: any) =>
-            (communityCategory === "all" ||
-              communityCategory === "trending" ||
-              (communityCategory === "favorites"
-                ? !!m.personId && favoriteIds.has(m.personId)
-                : normalizeMarketCategory(m.category) ===
-                  communityCategory)) &&
-            (!communitySearch ||
-              m.title
-                ?.toLowerCase()
-                .includes(communitySearch.toLowerCase())) &&
-            passesMyPositionsFilter(m.id),
-        )
-        .sort((a: any, b: any) =>
-          communityCategory === "trending"
-            ? trendingCompare(
-                Number(a.activeParticipantCount ?? 0),
-                Number(b.activeParticipantCount ?? 0),
-                openMarketPool(a),
-                openMarketPool(b),
-              )
-            : 0,
-        ),
+      filterCommunityMarkets(
+        openMarkets,
+        communityCategory,
+        communitySearch,
+        favoriteIds,
+        passesMyPositionsFilter,
+      ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       openMarkets,
@@ -2772,6 +2749,27 @@ export default function PredictPage() {
       userBetsByMarket,
       favoriteIds,
     ],
+  );
+
+  const getCommunityMarketsForCategory = useCallback(
+    (categoryId: string) =>
+      filterCommunityMarkets(
+        openMarkets,
+        categoryId,
+        communitySearch,
+        favoriteIds,
+        passesMyPositionsFilter,
+      ),
+    [openMarkets, communitySearch, favoriteIds, passesMyPositionsFilter],
+  );
+
+  const resolveCommunityChipForMarketId = useCallback(
+    (marketId: string) => {
+      const market = openMarkets.find((m: any) => String(m.id) === marketId);
+      if (!market) return null;
+      return communityChipForMarket(market, favoriteIds);
+    },
+    [openMarkets, favoriteIds],
   );
 
   const communityByCategory = useMemo(
@@ -2789,7 +2787,8 @@ export default function PredictPage() {
     [filteredCommunity],
   );
 
-  const showCommunityCategoryStacks = isMobile && communityCategory === "all";
+  const showCommunityMobileStacks = isMobile;
+  const communityStackLayout = isPinnedCategory(communityCategory) ? "grouped" : "single";
 
   const updownCategoryFilters = useMemo(
     () =>
@@ -3769,10 +3768,10 @@ export default function PredictPage() {
                   </Button>
                 </Card>
               ) : isLoadingOpenMarkets ? (
-                showCommunityCategoryStacks ? (
+                showCommunityMobileStacks ? (
                   <div className="md:hidden flex flex-col gap-6">
                     {Array.from({ length: 3 }).map((_, i) => (
-                      <Card key={i} className="p-4 space-y-3 min-h-[420px]">
+                      <Card key={i} className="p-4 space-y-3">
                         <div className="flex items-center gap-2">
                           <Skeleton className="h-5 w-16 rounded-md" />
                           <Skeleton className="h-5 w-20 rounded-md" />
@@ -3810,17 +3809,22 @@ export default function PredictPage() {
                   </div>
                 )
               ) : filteredCommunity.length > 0 ? (
-                showCommunityCategoryStacks ? (
+                showCommunityMobileStacks ? (
                   <WorldMarketsCategoryStacks
                     ref={communitySectionRef}
+                    layout={communityStackLayout}
                     groups={communityByCategory.map(([categoryId, markets]) => ({
                       categoryId,
                       markets,
                     }))}
+                    categoryFilters={communityCategoryFilters}
+                    activeCategory={communityCategory}
+                    onCategoryChange={setCommunityCategory}
+                    getMarketsForCategory={getCommunityMarketsForCategory}
+                    resolveChipForMarketId={resolveCommunityChipForMarketId}
                     renderMarket={renderCommunityMarketCard}
                     testIdPrefix="section-community"
                     dotActiveColor="bg-violet-500"
-                    mobileSlideMinHeight="min-h-[420px]"
                   />
                 ) : (
                   <CardSection
@@ -3829,7 +3833,6 @@ export default function PredictPage() {
                     gap="gap-4"
                     testIdPrefix="section-community"
                     dotActiveColor="bg-violet-500"
-                    mobileSlideMinHeight="min-h-[420px]"
                   >
                     {filteredCommunity.map((market: any) => renderCommunityMarketCard(market))}
                   </CardSection>

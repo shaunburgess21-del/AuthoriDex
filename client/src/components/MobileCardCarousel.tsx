@@ -33,11 +33,20 @@ export interface MobileCardCarouselProps {
   dotActiveColor?: string;
   mobileSlideMinHeight?: string;
   className?: string;
+  /** When false, dots are hidden (e.g. single-market rows still skip via totalSlides <= 1). */
+  showDots?: boolean;
 }
 
 export const MobileCardCarousel = forwardRef<CardSectionHandle, MobileCardCarouselProps>(
   function MobileCardCarousel(
-    { items, testIdPrefix, dotActiveColor = "bg-cyan-400", mobileSlideMinHeight, className },
+    {
+      items,
+      testIdPrefix,
+      dotActiveColor = "bg-cyan-400",
+      mobileSlideMinHeight,
+      className,
+      showDots = true,
+    },
     ref,
   ) {
     const dotActive: WindowedDotAccent = dotActiveColor.includes("violet") ? "violet" : "cyan";
@@ -140,16 +149,18 @@ export const MobileCardCarousel = forwardRef<CardSectionHandle, MobileCardCarous
             );
           })}
         </Swiper>
-        <WindowedDotIndicator
-          totalSlides={items.length}
-          activeIndex={activeIndex}
-          accent={dotActive}
-          testIdPrefix={`${testIdPrefix}-dots`}
-          onDotClick={(idx) => {
-            userOrParentControlledRef.current = true;
-            swiperRef.current?.slideTo(idx);
-          }}
-        />
+        {showDots ? (
+          <WindowedDotIndicator
+            totalSlides={items.length}
+            activeIndex={activeIndex}
+            accent={dotActive}
+            testIdPrefix={`${testIdPrefix}-dots`}
+            onDotClick={(idx) => {
+              userOrParentControlledRef.current = true;
+              swiperRef.current?.slideTo(idx);
+            }}
+          />
+        ) : null}
       </div>
     );
   },
