@@ -24699,6 +24699,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
   app.get("/api/admin/amm/persona-pnl", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { agentConfigs } = await import("@shared/schema");
+      const { SIMULATION_V2_COHORT_ID } = await import("./agents/simulationProfile");
 
       const daysRaw = Number(req.query.days);
       const days =
@@ -24744,6 +24745,8 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         LEFT JOIN market_bets mb ON mb.agent_id = ac.id
           AND mb.status IN ('won','lost')
           AND mb.settled_at > ${cutoff}
+        WHERE ac.is_active = true
+          AND ac.simulation_profile->>'cohortId' = ${SIMULATION_V2_COHORT_ID}
         GROUP BY persona_band
         ORDER BY persona_band
       `)).rows as unknown as Array<{
@@ -24778,6 +24781,8 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
             'prediction_refund'
           )
           AND cl.created_at > ${cutoff}
+        WHERE ac.is_active = true
+          AND ac.simulation_profile->>'cohortId' = ${SIMULATION_V2_COHORT_ID}
         GROUP BY persona_band
         ORDER BY persona_band
       `)).rows as unknown as Array<{
@@ -24788,9 +24793,8 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
 
       const pnlByBand = new Map(pnlRows.map((r) => [r.persona_band, r]));
 
-      // Join the two queries by band. `unknown` band exists if any agent
-      // was seeded before simulation_profile was populated — keep it in
-      // the output for visibility rather than silently filtering.
+      // Join the two queries by band. `unknown` only appears for active V2
+      // agents missing personaBand in simulation_profile (edge case).
       const bands = brierRows.map((b) => {
         const pnl = pnlByBand.get(b.persona_band);
         const settled = b.settled_bets ?? 0;
@@ -25508,11 +25512,14 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
               -- Direction (yes/no) is only meaningful on multi-option community
               -- markets; native markets and binary community markets have no
               -- Yes/No semantics so we just show the entry label + stake.
+              -- AMM sells store negative stake_amount; use ABS and label sells.
               CASE
+                WHEN mb.action_type = 'sell' THEN
+                  CONCAT('Sold ', COALESCE(me.label, '?'), ' for ', ABS(mb.stake_amount), ' credits')
                 WHEN pm.market_type = 'community' AND pm.open_market_type = 'multi'
-                  THEN CONCAT(mb.direction::text, ' on ', COALESCE(me.label, '?'), ' for ', mb.stake_amount, ' credits')
+                  THEN CONCAT(mb.direction::text, ' on ', COALESCE(me.label, '?'), ' for ', ABS(mb.stake_amount), ' credits')
                 ELSE
-                  CONCAT(COALESCE(me.label, '?'), ' for ', mb.stake_amount, ' credits')
+                  CONCAT(COALESCE(me.label, '?'), ' for ', ABS(mb.stake_amount), ' credits')
               END AS detail,
               NULL::text AS sub_kind
             FROM market_bets mb

@@ -244,6 +244,11 @@ async function repairWipeAndReseed(row: MarketRow): Promise<void> {
   await db.transaction(async (tx) => {
     const idempotencyKey = `amm_seed_${row.id}`;
 
+    // Credit the house wallet so seedAmmMarket can debit again without
+    // double-charging. Do NOT write a separate amm_seed_refund ledger row:
+    // we delete the old amm_seed_debit and seedAmmMarket writes a new one,
+    // so the ledger net change must be zero (refund row + delete debit would
+    // leave +seed on the ledger while the wallet nets to zero).
     if (row.ammHouseSeedAmount && row.ammHouseSeedAmount > 0) {
       const [updatedHouse] = await tx
         .update(profiles)
@@ -258,24 +263,6 @@ async function repairWipeAndReseed(row: MarketRow): Promise<void> {
           `[repair-amm-outcomes] House profile ${HOUSE_PROFILE_ID} missing — cannot refund seed for ${row.slug}`,
         );
       }
-
-      await tx.insert(creditLedger).values({
-        userId: HOUSE_PROFILE_ID,
-        txnType: "amm_seed_refund",
-        amount: row.ammHouseSeedAmount,
-        walletType: "VIRTUAL",
-        balanceAfter: updatedHouse.predictCredits,
-        source: "amm_repair",
-        idempotencyKey: `amm_seed_refund_${row.id}_${Date.now()}`,
-        metadata: {
-          marketId: row.id,
-          reason: "repair-amm-outcomes wipe-and-reseed",
-          originalSeedAmount: row.ammHouseSeedAmount,
-          originalLiquidityB: row.ammLiquidityB,
-          originalOutcomeOrderLength: row.ammOutcomeOrder.length,
-          entriesCount: row.entriesCount,
-        },
-      });
     }
 
     await tx

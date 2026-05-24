@@ -34,6 +34,7 @@
     "amm:create-open": "tsx scripts/amm-create-open-market.ts",
     "amm:void": "tsx scripts/amm-void-market.ts",
     "amm:reconcile-orphans": "tsx ops/reconcile-orphan-amm-seeds.ts",
+    "amm:reconcile-house-ledger": "tsx ops/reconcile-house-ledger-drift.ts",
     "world:calibrate": "tsx scripts/world-market-calibration.ts",
     "repair:amm-outcomes": "tsx --env-file=.env server/scripts/repair-amm-outcomes.ts"
   },

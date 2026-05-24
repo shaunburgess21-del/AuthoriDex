@@ -53,3 +53,9 @@ test("drift delta: throws on infinite ledger sum", () => {
     /ledgerSum must be finite/,
   );
 });
+
+test("drift delta: house ledger reconciliation case (repair-amm-outcomes orphan refunds)", () => {
+  const wallet = 999_696_987;
+  const ledgerSum = 999_731_987;
+  assert.equal(computeDriftDelta({ wallet, ledgerSum }), -35_000);
+});

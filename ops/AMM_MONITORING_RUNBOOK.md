@@ -292,6 +292,8 @@ invocations work without `--env-file` flags.
 | `npm run amm:smoke` | `npx tsx scripts/amm-smoke.ts` | Full lifecycle smoke. Creates a draft market, sweeps live H2H / UpDown / Race markets, runs an env-gated jackpot smoke. Reads `.env` + `.env.smoke`. |
 | `npm run amm:loadgen -- --market-id <id> --buys-per-user 20` | `npx tsx scripts/amm-loadgen.ts --market-id <id> --buys-per-user 20` | Concurrent-buy stress test against one market. Reports p50/p95/p99 latency and DB invariants. Reads `.env` + `.env.smoke`. |
 | `npm run amm:health` | `npx tsx scripts/amm-health-check.ts` | Read-only health audit (orphan ledger / seed drift / stuck markets / negative credits / dup idem keys / agent pause). Cron-able. Reads `.env`. Exits non-zero on issues. |
+| `npm run amm:reconcile-house-ledger` | `npx tsx ops/reconcile-house-ledger-drift.ts` | One-shot ledger-only fix when house `predict_credits` != `SUM(credit_ledger.amount)` (see section 7b). `--dry-run` first. Does not change the wallet. |
+| `npm run amm:reconcile-orphans` | `npx tsx ops/reconcile-orphan-amm-seeds.ts` | Refund house for orphan `amm_seed_debit` rows on deleted markets. |
 
 > `<id>` in the loadgen command is a **placeholder** — replace it with an
 > actual market UUID. Find one fast with:
@@ -319,6 +321,42 @@ SMOKE_PHASE_C=skip         # set to skip jackpot phase
 `SMOKE_FORCE_RESOLVE` is the kill-switch for the jackpot smoke
 endpoint. Leave it unset (or `false`) in normal production deploys so
 the endpoint returns 403 even if an admin token leaks.
+
+### 7b. House ledger reconciliation drift
+
+**Symptom:** Admin AMM → Invariants shows `house_ledger_reconciliation`
+ERROR — `House profile.predict_credits` does not match
+`SUM(credit_ledger.amount)` for the house profile. Overview drift card
+is red; Operations cron may still be ALL CLEAR (that scheduler does not
+run this check).
+
+**Common cause:** `repair-amm-outcomes.ts` wipe-reseed (before the fix)
+wrote `amm_seed_refund` ledger rows while deleting the original
+`amm_seed_debit` and re-seeding. The house **wallet** nets to zero per
+market; the **ledger** gains +`houseSeedAmount` per repaired market.
+
+**Verify:**
+
+```sql
+SELECT p.predict_credits AS wallet,
+       COALESCE(SUM(cl.amount), 0) AS ledger_sum,
+       p.predict_credits - COALESCE(SUM(cl.amount), 0) AS drift
+FROM profiles p
+LEFT JOIN credit_ledger cl ON cl.user_id = p.id
+WHERE p.id = '00000000-0000-0000-0000-0000000000aa'
+GROUP BY p.id, p.predict_credits;
+```
+
+**Fix (ledger-only, idempotent):**
+
+```
+npm run amm:reconcile-house-ledger -- --dry-run
+npm run amm:reconcile-house-ledger
+```
+
+Writes `txn_type = 'house_ledger_reconciliation'` with
+`amount = wallet - ledgerSum` (negative when the ledger is overstated).
+Re-run Invariants in admin to confirm green.
 
 ### Windows / PowerShell note
 
