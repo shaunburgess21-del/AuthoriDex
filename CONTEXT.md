@@ -1,5 +1,24 @@
 # VoxDex — Project Context
 
+---
+
+## ⚠️ STATUS: CONTEXT.md OUT OF DATE (as of 2026-05-24)
+
+This file was last meaningfully updated 2026-03-07 and **does not reflect the current state of the project**. Significant work has shipped since then including:
+
+- Project rebrand: AuthoriDex → VoxDex
+- Full prediction market system (Up/Down, H2H, Top Gainer, Weekly Jackpot, World Markets)
+- AMM/LMSR migration from parimutuel (4 phases complete, soak test pending pre-launch)
+- AI agent system: 14 personas across two-path architecture (native trend signals + GPT web-search for World Markets)
+- Email system Phase 1: Resend + React Email, Welcome template live, OTP-only auth, Phase 2 templates in WIP
+- Induction queue with user voting and leaderboard CTA
+- Paddle merchant verification in progress (refund policy aligned)
+- Repo migrated from OneDrive to `C:\dev\AuthoriDex` on 2026-05-24
+
+**Treat this file as a historical reference until a full rewrite is done.** Source of truth for current state: the codebase itself, ARCHITECTURE.md, and recent git log (`git log --oneline -50`).
+
+---
+
 > **This file is the single source of truth for AI agents working on this project.**
 > At the end of every Cursor Agent session, update this file with what was built, changed, or decided.
 
