@@ -29,7 +29,9 @@ export async function checkAndEmitProviderCoverageAlerts(
       ),
     )
     .orderBy(desc(ingestionRuns.startedAt))
-    .limit(24);
+    // 24h window typically has ~24 hourly rows; allow headroom for backfills
+    // so the prior-healthy gate doesn't silently drop the oldest healthy run.
+    .limit(72);
 
   const historyByProvider = buildProviderHistoryFromRuns(
     recentRuns
