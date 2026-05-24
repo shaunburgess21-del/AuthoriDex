@@ -13,6 +13,10 @@ import { toast } from "sonner";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedApiError, signInToVoteToastOptions, signInToVoteTitle } from "@/lib/signInToVoteToast";
 import { navigateToLogin } from "@/lib/authReturn";
+import {
+  SENTIMENT_POLL_SUPPORT_BUTTON_COMPACT_CLASS,
+  SENTIMENT_POLL_SUPPORT_BADGE_BG_CLASS,
+} from "@/lib/sentimentPollVoteDisplay";
 
 export interface InductionCandidate {
   id: string;
@@ -97,7 +101,7 @@ function InductionCandidateRow({
       <div className="relative shrink-0">
         <PersonAvatar name={candidate.name} imageSlug={candidate.imageSlug} imageContext="induction" size="sm" />
         {isVoted && (
-          <div className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-emerald-500 flex items-center justify-center">
+          <div className={`absolute -top-1 -right-1 h-4 w-4 rounded-full flex items-center justify-center ${SENTIMENT_POLL_SUPPORT_BADGE_BG_CLASS}`}>
             <Check className="h-2.5 w-2.5 text-white" />
           </div>
         )}
@@ -129,7 +133,7 @@ function InductionCandidateRow({
         size="sm"
         onClick={handleVoteClick}
         className={`shrink-0 ${isVoted 
-          ? 'bg-emerald-500/15 dark:bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 dark:text-emerald-300 hover:bg-emerald-500/25 dark:hover:bg-emerald-500/20' 
+          ? SENTIMENT_POLL_SUPPORT_BUTTON_COMPACT_CLASS
           : 'bg-gradient-to-r from-cyan-600 to-cyan-500 text-white'
         }`}
         data-testid={`button-vote-${candidate.id}`}

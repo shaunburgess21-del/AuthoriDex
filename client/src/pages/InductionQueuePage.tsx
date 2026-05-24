@@ -18,6 +18,12 @@ import { useCategoryRaceMap } from "@/hooks/useCategoryRaceMap";
 import { useLeaderboardCategories } from "@/hooks/useLeaderboardCategories";
 import { normalizeMarketCategory, type FilterCategory, CATEGORIES_WITH_FILTERS } from "@shared/constants";
 import { Button } from "@/components/ui/button";
+import {
+  SENTIMENT_POLL_SUPPORT_BUTTON_CLASS,
+  SENTIMENT_POLL_SUPPORT_BADGE_BG_CLASS,
+  SENTIMENT_POLL_SUPPORT_BADGE_SHADOW_CLASS,
+} from "@/lib/sentimentPollVoteDisplay";
+import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -365,7 +371,7 @@ export default function InductionQueuePage() {
                             className="h-28 w-28 md:h-24 md:w-24"
                           />
                           {isVoted && (
-                            <div className="absolute -top-1 -right-1 h-6 w-6 rounded-full bg-emerald-500 flex items-center justify-center shadow-lg shadow-emerald-500/30">
+                            <div className={`absolute -top-1 -right-1 h-6 w-6 rounded-full flex items-center justify-center shadow-lg ${SENTIMENT_POLL_SUPPORT_BADGE_BG_CLASS} ${SENTIMENT_POLL_SUPPORT_BADGE_SHADOW_CLASS}`}>
                               <Check className="h-3.5 w-3.5 text-white" />
                             </div>
                           )}
@@ -391,13 +397,17 @@ export default function InductionQueuePage() {
 
                       {/* Vote button */}
                       {isVoted ? (
-                        <Button
-                          className="w-full bg-emerald-500/15 dark:bg-emerald-500/10 border border-emerald-500/30 dark:border-emerald-500/20 text-emerald-500 dark:text-emerald-300 hover:bg-emerald-500/25 dark:hover:bg-emerald-500/20"
+                        <button
+                          type="button"
                           disabled
+                          className={cn(
+                            SENTIMENT_POLL_SUPPORT_BUTTON_CLASS,
+                            "disabled:opacity-100 disabled:cursor-default",
+                          )}
                         >
-                          <Check className="h-4 w-4 mr-2" />
-                          Voted
-                        </Button>
+                          <Check className="h-4 w-4 shrink-0" />
+                          <span>Voted</span>
+                        </button>
                       ) : (
                         <button
                           onClick={() => handleVote(candidate.id)}

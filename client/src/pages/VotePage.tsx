@@ -117,6 +117,8 @@ import { isBudgetExhaustedVoteError, parseVoteError } from "@/lib/voteErrors";
 import {
   getSentimentPollChoiceColor,
   getSentimentPollChoiceLabel,
+  SENTIMENT_POLL_SUPPORT_BUTTON_CLASS,
+  SENTIMENT_POLL_SUPPORT_BADGE_BG_CLASS,
 } from "@/lib/sentimentPollVoteDisplay";
 import { getClientWeekDeadlines } from "@/hooks/useMarketCycle";
 import { SuggestCategorySelect } from "@/components/suggest/SuggestCategorySelect";
@@ -423,7 +425,7 @@ function InductionCandidateCard({
         <div className="relative">
           <PersonAvatar name={candidate.name} imageSlug={candidate.imageSlug} imageContext="induction" className="h-40 w-40 md:h-32 md:w-32" />
           {isVoted && (
-            <div className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-emerald-500 flex items-center justify-center">
+            <div className={`absolute -top-1 -right-1 h-5 w-5 rounded-full flex items-center justify-center ${SENTIMENT_POLL_SUPPORT_BADGE_BG_CLASS}`}>
               <Check className="h-3 w-3 text-white" />
             </div>
           )}
@@ -446,14 +448,15 @@ function InductionCandidateCard({
       </div>
       
       {isVoted ? (
-        <Button 
+        <button
+          type="button"
           onClick={handleVoteClick}
-          className="w-full bg-emerald-500/15 dark:bg-emerald-500/10 border border-emerald-500/30 dark:border-emerald-500/20 text-emerald-500 dark:text-emerald-300 hover:bg-emerald-500/25 dark:hover:bg-emerald-500/20"
+          className={SENTIMENT_POLL_SUPPORT_BUTTON_CLASS}
           data-testid={`button-induct-${candidate.id}`}
         >
-          <Check className="h-4 w-4 mr-2" />
-          Voted
-        </Button>
+          <Check className="h-4 w-4 shrink-0" />
+          <span>Voted</span>
+        </button>
       ) : (
         <button
           onClick={handleVoteClick}
