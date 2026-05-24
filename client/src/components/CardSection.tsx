@@ -22,6 +22,8 @@ interface CardSectionProps {
   centerShortRows?: boolean;
   /** Optional Tailwind min-height class applied to each mobile slide wrapper. Anchors Swiper container height so following siblings (dots) don't shift between variable-height cards. */
   mobileSlideMinHeight?: string;
+  /** Collapse Swiper height to the active slide (content-sized cards). Disables Virtual slides. */
+  autoHeight?: boolean;
 }
 
 function desktopChildKey(child: unknown, index: number): string | number {
@@ -41,6 +43,7 @@ export const CardSection = forwardRef<CardSectionHandle, CardSectionProps>(funct
     dotActiveColor = "bg-cyan-400",
     centerShortRows = false,
     mobileSlideMinHeight,
+    autoHeight,
   },
   ref,
 ) {
@@ -87,6 +90,7 @@ export const CardSection = forwardRef<CardSectionHandle, CardSectionProps>(funct
           testIdPrefix={testIdPrefix}
           dotActiveColor={dotActiveColor}
           mobileSlideMinHeight={mobileSlideMinHeight}
+          autoHeight={autoHeight}
         />
       </div>
     </div>

@@ -3663,7 +3663,7 @@ export default function PredictPage() {
             ) : gainerLoading ? (
               <CardGridSkeleton count={3} />
             ) : filteredGainers.length > 0 ? (
-              <CardSection ref={gainerSectionRef} desktopLimit={9} gap="gap-4" testIdPrefix="section-gainer" dotActiveColor="bg-violet-500" mobileSlideMinHeight="min-h-[420px]">
+              <CardSection ref={gainerSectionRef} desktopLimit={9} gap="gap-4" testIdPrefix="section-gainer" dotActiveColor="bg-violet-500" autoHeight>
                 {filteredGainers.map((market) => (
                   <TopGainerCard 
                     key={market.id}
