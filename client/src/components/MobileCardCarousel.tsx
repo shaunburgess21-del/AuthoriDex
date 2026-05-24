@@ -35,6 +35,11 @@ export interface MobileCardCarouselProps {
   className?: string;
   /** When false, dots are hidden (e.g. single-market rows still skip via totalSlides <= 1). */
   showDots?: boolean;
+  /**
+   * Collapse Swiper height to the active slide (content-sized cards).
+   * Disables Virtual slides; use for World Markets grouped rows.
+   */
+  autoHeight?: boolean;
 }
 
 export const MobileCardCarousel = forwardRef<CardSectionHandle, MobileCardCarouselProps>(
@@ -46,6 +51,7 @@ export const MobileCardCarousel = forwardRef<CardSectionHandle, MobileCardCarous
       mobileSlideMinHeight,
       className,
       showDots = true,
+      autoHeight = false,
     },
     ref,
   ) {
@@ -54,6 +60,12 @@ export const MobileCardCarousel = forwardRef<CardSectionHandle, MobileCardCarous
     const swiperRef = useRef<SwiperType | null>(null);
     const pendingSlideKeyRef = useRef<string | null>(null);
     const userOrParentControlledRef = useRef(false);
+
+    const modules = useMemo(() => (autoHeight ? [A11y] : [A11y, Virtual]), [autoHeight]);
+
+    const refreshAutoHeight = useCallback(() => {
+      requestAnimationFrame(() => swiperRef.current?.updateAutoHeight());
+    }, []);
 
     const slideToIndex = useCallback((idx: number) => {
       setActiveIndex(idx);
@@ -105,12 +117,17 @@ export const MobileCardCarousel = forwardRef<CardSectionHandle, MobileCardCarous
       swiperRef.current?.slideTo(0, 0);
     }, [items.length]);
 
+    useEffect(() => {
+      if (!autoHeight) return;
+      refreshAutoHeight();
+    }, [items, autoHeight, refreshAutoHeight]);
+
     if (items.length === 0) return null;
 
     return (
       <div className={className ?? "relative w-full"} data-testid={testIdPrefix}>
         <Swiper
-          modules={[A11y, Virtual]}
+          modules={modules}
           spaceBetween={0}
           slidesPerView={1}
           threshold={10}
@@ -118,14 +135,17 @@ export const MobileCardCarousel = forwardRef<CardSectionHandle, MobileCardCarous
           resistanceRatio={0.85}
           speed={300}
           cssMode={false}
-          virtual
+          autoHeight={autoHeight}
+          virtual={autoHeight ? undefined : true}
           pagination={false}
           onSwiper={(s) => {
             swiperRef.current = s;
+            if (autoHeight) refreshAutoHeight();
           }}
           onSlideChange={(s) => {
             setActiveIndex(s.activeIndex);
             userOrParentControlledRef.current = true;
+            if (autoHeight) s.updateAutoHeight();
             (document.activeElement as HTMLElement | undefined)?.blur?.();
           }}
           a11y={{
@@ -139,7 +159,7 @@ export const MobileCardCarousel = forwardRef<CardSectionHandle, MobileCardCarous
           {items.map((item, i) => {
             const slideKey = mobileSlideKey(item, i);
             return (
-              <SwiperSlide key={slideKey} virtualIndex={i}>
+              <SwiperSlide key={slideKey} {...(autoHeight ? {} : { virtualIndex: i })}>
                 <div
                   className={`w-full px-1.5${mobileSlideMinHeight ? ` ${mobileSlideMinHeight} flex flex-col [&>*]:h-full` : ""}`}
                 >

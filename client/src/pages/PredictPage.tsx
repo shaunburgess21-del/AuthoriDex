@@ -2894,34 +2894,37 @@ export default function PredictPage() {
   );
 
   const renderCommunityMarketCard = useCallback(
-    (market: any) => (
-      <div
-        key={market.id}
-        className="max-md:h-auto max-md:self-start w-full"
-        data-testid={`card-community-${market.id}`}
-        onClick={(e) => handleCardEmptyTap(e, "world-markets", String(market.id))}
-      >
-        <OpenMarketCard
-          market={market}
-          onNavigate={(slug, pick, direction) =>
-            setLocation(
-              `/markets/${slug}${pick ? `?pick=${pick}${direction ? `&direction=${direction}` : ""}` : ""}`,
-            )
-          }
-          onPickEntry={handleCommunityPickEntry}
-          isMarketClosed={market.status !== "OPEN"}
-          userBetResult={userBetsByMarket.get(String(market.id))}
-          userBetsPerEntry={userBetsPerEntry.get(String(market.id))}
-          onFilterCategory={handleCategoryPillFilter}
-          categoryRaceMap={raceMap}
-          leaderboardCategories={leaderboardCats}
-          onBrowseFullScreen={
-            isMobile ? () => openSnapScroll("world-markets", String(market.id), "browse-button") : undefined
-          }
-          unrealisedPnl={ammPositionByMarket.get(String(market.id))?.unrealisedPnl ?? null}
-        />
-      </div>
-    ),
+    (market: any, context?: "carousel" | "stack") => {
+      const isCarousel = context === "carousel";
+      return (
+        <div
+          key={market.id}
+          className={isCarousel ? "w-full" : "max-md:h-auto max-md:self-start w-full"}
+          data-testid={`card-community-${market.id}`}
+          onClick={(e) => handleCardEmptyTap(e, "world-markets", String(market.id))}
+        >
+          <OpenMarketCard
+            market={market}
+            onNavigate={(slug, pick, direction) =>
+              setLocation(
+                `/markets/${slug}${pick ? `?pick=${pick}${direction ? `&direction=${direction}` : ""}` : ""}`,
+              )
+            }
+            onPickEntry={handleCommunityPickEntry}
+            isMarketClosed={market.status !== "OPEN"}
+            userBetResult={userBetsByMarket.get(String(market.id))}
+            userBetsPerEntry={userBetsPerEntry.get(String(market.id))}
+            onFilterCategory={handleCategoryPillFilter}
+            categoryRaceMap={raceMap}
+            leaderboardCategories={leaderboardCats}
+            onBrowseFullScreen={
+              isMobile ? () => openSnapScroll("world-markets", String(market.id), "browse-button") : undefined
+            }
+            unrealisedPnl={ammPositionByMarket.get(String(market.id))?.unrealisedPnl ?? null}
+          />
+        </div>
+      );
+    },
     [
       ammPositionByMarket,
       handleCardEmptyTap,

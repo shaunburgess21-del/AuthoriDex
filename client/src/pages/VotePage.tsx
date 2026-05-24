@@ -97,6 +97,7 @@ import { ScrollMaskedChipRow } from "@/components/ScrollMaskedChipRow";
 import { CategoryRowWithSearch } from "@/components/CategoryRowWithSearch";
 import { FILTER_INACTIVE_PILL_VOTE, FILTER_INACTIVE_SECTION_TOGGLE } from "@/lib/filterControlStyles";
 import { VoteSnapScrollView, type SnapItem, type SnapSectionType } from "@/components/snap-scroll/VoteSnapScrollView";
+import { ShapeVoxDexStickyHeader } from "@/components/vote/ShapeVoxDexStickyHeader";
 import {
   navigateToLogin,
   AUTH_APPLY_VOTE_UI_ONCE_KEY,
@@ -285,11 +286,10 @@ const curateProfilePolls: CurateProfilePoll[] = [
 const SECTION_TOGGLES = ["All", "Sentiment Polls", "Matchups", "Opinion Polls", "Underrated/Overrated", "Induction Queue", "Curate Profile"] as const;
 type SectionToggle = typeof SECTION_TOGGLES[number];
 
-const isGovernanceSection = (section: SectionToggle) => 
-  section === "Induction Queue" || section === "Curate Profile";
-
-const isPublicOpinionSection = (section: SectionToggle) =>
-  section === "Sentiment Polls" || section === "Matchups" || section === "Opinion Polls" || section === "Underrated/Overrated";
+const isShapeVoxDexSection = (section: SectionToggle) =>
+  section === "Underrated/Overrated" ||
+  section === "Induction Queue" ||
+  section === "Curate Profile";
 
 const SECTION_RULES = {
   induction: {
@@ -3082,9 +3082,13 @@ export default function VotePage() {
         </section>
         )}
 
-        {/* ZONE 2: Value Perception - Underrated/Overrated Section */}
+        {/* Shape the VoxDex: sticky splitter + Underrated/Overrated, Induction, Curate */}
+        {(activeSection === "All" || isShapeVoxDexSection(activeSection)) && (
+        <div data-testid="shape-voxdex-sticky-scope">
+          <ShapeVoxDexStickyHeader onInfoClick={() => setInfoModalOpen("governance")} />
+
         {(activeSection === "All" || activeSection === "Underrated/Overrated") && (
-        <section id="vote-value" data-hash-anchor className="mb-10 scroll-mt-28">
+        <section id="vote-value" data-hash-anchor className="mb-10 mt-[5px] scroll-mt-28">
           <UnifiedSectionHeader
             title="Overrated / Underrated "
             subtitle="overhyped or underappreciated?"
@@ -3178,32 +3182,7 @@ export default function VotePage() {
         </section>
         )}
 
-        {/* GOVERNANCE HEADER DIVIDER - Shows between Zone 1 and Zone 3 */}
-        {/* Show when: All, Induction Queue, or Curate Profile is selected */}
-        {/* Hide when: Matchups or Sentiment Polls is selected */}
-        {(activeSection === "All" || isGovernanceSection(activeSection)) && (
-        <div className="relative overflow-hidden mb-6">
-          <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 via-transparent to-transparent" />
-          <div className="relative py-4">
-            <div className="text-center">
-              <h2 className="text-3xl md:text-4xl font-serif font-bold mb-2" data-testid="text-governance-title">
-                Shape the VoxDex
-              </h2>
-              <p className="text-muted-foreground max-w-2xl mx-auto mb-3">Vote on new inductees and curate profile images</p>
-              <button
-                onClick={() => setInfoModalOpen("governance")}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/20 hover:bg-cyan-500/25 dark:hover:bg-cyan-500/20 hover:border-cyan-500/30 transition-all cursor-pointer"
-                data-testid="button-governance-info"
-              >
-                <Sparkles className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
-                <span className="text-sm text-cyan-600 dark:text-cyan-400 font-medium">Community Governance</span>
-              </button>
-            </div>
-          </div>
-        </div>
-        )}
-
-        {/* ZONE 3: Governance - Induction Queue Section */}
+        {/* Induction Queue */}
         {(activeSection === "All" || activeSection === "Induction Queue") && (
         <section id="vote-induction" data-hash-anchor className="mb-10 scroll-mt-28">
           <UnifiedSectionHeader
@@ -3323,7 +3302,7 @@ export default function VotePage() {
         </section>
         )}
 
-        {/* ZONE 3: Governance - Curate Profile Section */}
+        {/* Curate Profile */}
         {(activeSection === "All" || activeSection === "Curate Profile") && (
         <section id="vote-curate" data-hash-anchor className="mb-10 scroll-mt-28">
           <UnifiedSectionHeader
@@ -3400,6 +3379,9 @@ export default function VotePage() {
             onCardEmptyTap={isMobile ? (personId, e) => handleCardEmptyTap(e, "curate", personId) : undefined}
           />
         </section>
+        )}
+
+        </div>
         )}
 
         <div className="text-center pb-8">

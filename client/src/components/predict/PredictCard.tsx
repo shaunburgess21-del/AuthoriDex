@@ -48,7 +48,9 @@ export function PredictCard({
             </Badge>
           </div>
         )}
-        <div className={autoSize ? "flex flex-col max-md:flex-none md:flex-1" : "flex flex-col flex-1"}>{children}</div>
+        <div className={autoSize ? "flex flex-col max-md:flex-none md:flex-1" : "flex flex-col flex-1"}>
+          {children}
+        </div>
       </Card>
     </div>
   );

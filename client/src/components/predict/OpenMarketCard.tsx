@@ -163,6 +163,21 @@ function PendingBetLinkRow({ entryLabel, stakeAmount, href, onTopUp, onLinkClick
   );
 }
 
+function openMarketPredictCardProps(
+  slug: string,
+  isMarketClosed: boolean,
+  isInactive: boolean | undefined,
+  inactiveMessage: string | undefined,
+) {
+  return {
+    autoSize: true as const,
+    testId: `card-market-${slug}`,
+    className: isMarketClosed && !isInactive ? "opacity-75" : "",
+    inactive: isInactive,
+    inactiveMessage,
+  };
+}
+
 function BinaryMarketCard({ market, entries, participants, timeLabel, onNavigate, onPickEntry, isMarketClosed, isInactive = false, inactiveMessage, userBetResult, userBetsPerEntry, onFilterCategory, categoryRaceMap, leaderboardCategories, onBrowseFullScreen, unrealisedPnl }: { market: any; entries: any[]; participants: number; timeLabel: string; onNavigate: (slug: string, pick?: string, direction?: string) => void; /** When provided, tapping the "Your pick" pin opens the StakeModal in topUp mode instead of routing to the detail page. */ onPickEntry?: (market: any, entry: any, direction: "yes" | "no") => void; isMarketClosed: boolean; isInactive?: boolean; inactiveMessage?: string; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number }; userBetsPerEntry?: Map<string, { yesStake: number; noStake: number }>; onFilterCategory?: (cat: string) => void; categoryRaceMap?: Map<string, string>; leaderboardCategories?: Set<string>; onBrowseFullScreen?: () => void; /** AMM unrealised P&L for the user's top position on this market. */ unrealisedPnl?: number | null }) {
   const rememberAnchor = () => rememberCommunityCardAnchor(market?.id);
   const navigateWithAnchor = (slug: string, pick?: string, direction?: string) => {
@@ -186,7 +201,9 @@ function BinaryMarketCard({ market, entries, participants, timeLabel, onNavigate
   const noPercent = Math.max(0, Math.min(100, Math.round(ammNoPrice * 100)));
 
   return (
-    <PredictCard testId={`card-market-${market.slug}`} className={`${isMarketClosed && !isInactive ? 'opacity-75' : ''}`} inactive={isInactive} inactiveMessage={inactiveMessage}>
+    <PredictCard
+      {...openMarketPredictCardProps(market.slug, isMarketClosed, isInactive, inactiveMessage)}
+    >
       <div className="flex items-center justify-between mb-3 flex-wrap gap-1">
         <div className="flex items-center gap-1.5">
           <Badge variant="outline" className="text-xs">
@@ -221,31 +238,28 @@ function BinaryMarketCard({ market, entries, participants, timeLabel, onNavigate
         </a>
       )}
 
-      <div className="flex flex-col max-md:mt-auto md:contents">
-        <div className="pt-1 md:mt-auto md:pt-1">
-          <div className="mb-2 md:mb-3">
-            <ParticipantAvatarStack participants={market.recentParticipants} totalCount={participants} />
-          </div>
+      <div className="mb-2">
+        <ParticipantAvatarStack participants={market.recentParticipants} totalCount={participants} />
+      </div>
 
-          <div className="mb-2 md:mb-3">
-            <div className="h-3 rounded-full bg-red-500/25 dark:bg-red-500/20 overflow-hidden">
-              <div className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all" style={{ width: `${yesPercent}%` }} />
-            </div>
-            <div className="flex items-center justify-between text-xs mt-1.5">
-              <span className="text-green-500 font-semibold">Yes {yesPercent}%</span>
-              <span className="text-red-500 font-semibold">No {noPercent}%</span>
-            </div>
-          </div>
+      <div className="mb-2">
+        <div className="h-3 rounded-full bg-red-500/25 dark:bg-red-500/20 overflow-hidden">
+          <div className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all" style={{ width: `${yesPercent}%` }} />
         </div>
+        <div className="flex items-center justify-between text-xs mt-1.5">
+          <span className="text-green-500 font-semibold">Yes {yesPercent}%</span>
+          <span className="text-red-500 font-semibold">No {noPercent}%</span>
+        </div>
+      </div>
 
-        <div className="max-md:mt-1">
-          {isMarketClosed ? (
-            <Button className="w-full bg-muted text-muted-foreground cursor-not-allowed" disabled>
-              <Lock className="h-4 w-4 mr-2" />
-              Closed
-            </Button>
-          ) : userBetResult?.result === "pending" ? (
-            (() => {
+      <div>
+        {isMarketClosed ? (
+          <Button className="w-full bg-muted text-muted-foreground cursor-not-allowed" disabled>
+            <Lock className="h-4 w-4 mr-2" />
+            Closed
+          </Button>
+        ) : userBetResult?.result === "pending" ? (
+          (() => {
               // Wire the pin to top-up parity with native cards: when we
               // can identify the picked entry from userBetsPerEntry and
               // onPickEntry is provided, the pin opens the StakeModal in
@@ -266,55 +280,54 @@ function BinaryMarketCard({ market, entries, participants, timeLabel, onNavigate
                   }
                 }
               }
-              return (
-                <PendingBetLinkRow
-                  entryLabel={userBetResult.entryLabel}
-                  stakeAmount={userBetResult.stakeAmount}
-                  href={`/markets/${market.slug}`}
-                  onLinkClick={rememberAnchor}
-                  onTopUp={pickedEntry && onPickEntry ? () => onPickEntry(market, pickedEntry, pickedDirection) : undefined}
-                  unrealisedPnl={unrealisedPnl ?? null}
-                />
-              );
-            })()
-          ) : (
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                className="!min-h-0 h-auto px-4 py-3 md:py-2.5 bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20 flex flex-col items-center justify-center gap-0.5"
-                onClick={() => {
-                  if (onPickEntry && yesEntry) {
-                    onPickEntry(market, yesEntry, "yes");
-                  } else {
-                    navigateWithAnchor(market.slug, "yes");
-                  }
-                }}
-                data-testid={`button-yes-${market.slug}`}
-              >
-                <span className="leading-none">Yes {yesPercent}%</span>
-                <span className="text-[10px] font-mono opacity-80 leading-none">
-                  {formatVoxPrice(ammYesPrice)}/share
-                </span>
-              </Button>
-              <Button
-                className="!min-h-0 h-auto px-4 py-3 md:py-2.5 bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20 flex flex-col items-center justify-center gap-0.5"
-                onClick={() => {
-                  if (onPickEntry && noEntry) {
-                    onPickEntry(market, noEntry, "yes");
-                  } else {
-                    navigateWithAnchor(market.slug, "no");
-                  }
-                }}
-                data-testid={`button-no-${market.slug}`}
-              >
-                <span className="leading-none">No {noPercent}%</span>
-                <span className="text-[10px] font-mono opacity-80 leading-none">
-                  {formatVoxPrice(ammNoPrice)}/share
-                </span>
-              </Button>
-            </div>
-          )}
-          <UserBetResult betResult={userBetResult} isMarketClosed={isMarketClosed} />
-        </div>
+            return (
+              <PendingBetLinkRow
+                entryLabel={userBetResult.entryLabel}
+                stakeAmount={userBetResult.stakeAmount}
+                href={`/markets/${market.slug}`}
+                onLinkClick={rememberAnchor}
+                onTopUp={pickedEntry && onPickEntry ? () => onPickEntry(market, pickedEntry, pickedDirection) : undefined}
+                unrealisedPnl={unrealisedPnl ?? null}
+              />
+            );
+          })()
+        ) : (
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              className="!min-h-0 h-auto px-4 py-3 md:py-2.5 bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20 flex flex-col items-center justify-center gap-0.5"
+              onClick={() => {
+                if (onPickEntry && yesEntry) {
+                  onPickEntry(market, yesEntry, "yes");
+                } else {
+                  navigateWithAnchor(market.slug, "yes");
+                }
+              }}
+              data-testid={`button-yes-${market.slug}`}
+            >
+              <span className="leading-none">Yes {yesPercent}%</span>
+              <span className="text-[10px] font-mono opacity-80 leading-none">
+                {formatVoxPrice(ammYesPrice)}/share
+              </span>
+            </Button>
+            <Button
+              className="!min-h-0 h-auto px-4 py-3 md:py-2.5 bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20 flex flex-col items-center justify-center gap-0.5"
+              onClick={() => {
+                if (onPickEntry && noEntry) {
+                  onPickEntry(market, noEntry, "yes");
+                } else {
+                  navigateWithAnchor(market.slug, "no");
+                }
+              }}
+              data-testid={`button-no-${market.slug}`}
+            >
+              <span className="leading-none">No {noPercent}%</span>
+              <span className="text-[10px] font-mono opacity-80 leading-none">
+                {formatVoxPrice(ammNoPrice)}/share
+              </span>
+            </Button>
+          </div>
+        )}
+        <UserBetResult betResult={userBetResult} isMarketClosed={isMarketClosed} />
       </div>
     </PredictCard>
   );
@@ -553,7 +566,9 @@ function MultiMarketCard({ market, entries, participants, timeLabel, onNavigate,
   };
 
   return (
-    <PredictCard autoSize testId={`card-market-${market.slug}`} className={`${isMarketClosed && !isInactive ? 'opacity-75' : ''}`} inactive={isInactive} inactiveMessage={inactiveMessage}>
+    <PredictCard
+      {...openMarketPredictCardProps(market.slug, isMarketClosed, isInactive, inactiveMessage)}
+    >
       <div className="flex items-center justify-between mb-3 flex-wrap gap-1">
         <div className="flex items-center gap-1.5">
           <Badge variant="outline" className="text-xs">
@@ -628,9 +643,7 @@ function MultiMarketCard({ market, entries, participants, timeLabel, onNavigate,
         })}
       </div>
 
-      {/* Three-column footer: +N more (left), View details (center), options pill (right).
-          `autoSize` on PredictCard drops the 390px mobile min-height so the footer
-          sits directly under the option rows without a dead gap. */}
+      {/* Three-column footer: +N more (left), View details (center), options pill (right). */}
       <div className="mt-2.5 grid grid-cols-3 items-center gap-1 max-md:gap-0.5 md:gap-2">
         <div className="min-w-0">
           {remainingCount > 0 && (
@@ -774,7 +787,9 @@ function UpDownMarketCard({ market, entries, participants, timeLabel, onNavigate
   const pnlText = !hasPnl ? null : formatVoxDelta(pnlValue);
 
   return (
-    <PredictCard testId={`card-market-${market.slug}`} className={`${isMarketClosed && !isInactive ? 'opacity-75' : ''}`} inactive={isInactive} inactiveMessage={inactiveMessage}>
+    <PredictCard
+      {...openMarketPredictCardProps(market.slug, isMarketClosed, isInactive, inactiveMessage)}
+    >
       <div className="flex items-center justify-between mb-3 flex-wrap gap-1">
         <div className="flex items-center gap-1.5">
           <Badge variant="outline" className="text-xs">
@@ -809,35 +824,33 @@ function UpDownMarketCard({ market, entries, participants, timeLabel, onNavigate
         </a>
       )}
 
-      <div className="mt-auto pt-1">
-        <div className="mb-2">
-          <ParticipantAvatarStack participants={market.recentParticipants} totalCount={participants} />
-        </div>
-
-        <div className="mb-2">
-          <div className="h-3 rounded-full bg-red-500/25 dark:bg-red-500/20 overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all" style={{ width: `${abovePercent}%` }} />
-          </div>
-          <div className="flex items-center justify-between text-xs mt-1.5">
-            <span className="text-green-500 font-semibold">Above {abovePercent}%</span>
-            <span className="text-red-500 font-semibold">Below {belowPercent}%</span>
-          </div>
-        </div>
-
-        {hasPnl && pnlText && (
-          <div
-            className="mb-2 flex items-center justify-between gap-2 rounded-md border border-border/40 bg-muted/30 px-3 py-2"
-            data-testid={`community-card-pnl-${market.slug}`}
-          >
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Your position
-            </span>
-            <span className={`text-xs font-semibold font-mono tabular-nums ${pnlClass}`}>
-              {pnlText}
-            </span>
-          </div>
-        )}
+      <div className="mb-2">
+        <ParticipantAvatarStack participants={market.recentParticipants} totalCount={participants} />
       </div>
+
+      <div className="mb-2">
+        <div className="h-3 rounded-full bg-red-500/25 dark:bg-red-500/20 overflow-hidden">
+          <div className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all" style={{ width: `${abovePercent}%` }} />
+        </div>
+        <div className="flex items-center justify-between text-xs mt-1.5">
+          <span className="text-green-500 font-semibold">Above {abovePercent}%</span>
+          <span className="text-red-500 font-semibold">Below {belowPercent}%</span>
+        </div>
+      </div>
+
+      {hasPnl && pnlText && (
+        <div
+          className="mb-2 flex items-center justify-between gap-2 rounded-md border border-border/40 bg-muted/30 px-3 py-2"
+          data-testid={`community-card-pnl-${market.slug}`}
+        >
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Your position
+          </span>
+          <span className={`text-xs font-semibold font-mono tabular-nums ${pnlClass}`}>
+            {pnlText}
+          </span>
+        </div>
+      )}
 
       <div>
         {isMarketClosed ? (

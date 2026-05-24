@@ -26,6 +26,8 @@ export type WorldMarketsCategoryFilter = {
 
 export type WorldMarketsStackLayout = "grouped" | "single";
 
+export type WorldMarketsRenderContext = "carousel" | "stack";
+
 export interface WorldMarketsCategoryStacksProps {
   layout: WorldMarketsStackLayout;
   groups: WorldMarketsCategoryGroup[];
@@ -33,7 +35,7 @@ export interface WorldMarketsCategoryStacksProps {
   activeCategory: string;
   onCategoryChange: (categoryId: string) => void;
   getMarketsForCategory: (categoryId: string) => unknown[];
-  renderMarket: (market: unknown) => ReactNode;
+  renderMarket: (market: unknown, context?: WorldMarketsRenderContext) => ReactNode;
   /** Resolve chip id for back-navigation restore (market id string). */
   resolveChipForMarketId?: (marketId: string) => string | null;
   testIdPrefix?: string;
@@ -150,7 +152,7 @@ export const WorldMarketsCategoryStacks = forwardRef<
     return (
       <div className="md:hidden flex flex-col" data-testid={`${testIdPrefix}-stacks`}>
         {groups.map(({ categoryId, markets }, rowIndex) => {
-          const slides = markets.map((market) => renderMarket(market));
+          const slides = markets.map((market) => renderMarket(market, "carousel"));
           const isLast = rowIndex === groups.length - 1;
           return (
             <div key={categoryId} data-testid={`${testIdPrefix}-row-${categoryId}`}>
@@ -162,6 +164,7 @@ export const WorldMarketsCategoryStacks = forwardRef<
                 items={slides}
                 testIdPrefix={`${testIdPrefix}-category-${categoryId}`}
                 dotActiveColor={dotActiveColor}
+                autoHeight
               />
               {!isLast ? <CategoryRowDivider /> : null}
             </div>
