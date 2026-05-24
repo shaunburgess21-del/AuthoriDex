@@ -13,15 +13,20 @@ VoxDex is a live influence index and prediction platform. It ranks over 150 publ
 - Backend: Node.js, Express, TypeScript
 - Database: PostgreSQL via Supabase (Drizzle ORM)
 - Hosting: Railway (backend), Vercel (frontend)
-- Auth: Supabase (email + password, OTP fallback, Google OAuth)
+- Auth: Supabase (email + password, OTP fallback, Google OAuth). API auth validates Supabase JWTs in `server/auth-middleware.ts` (not express-session).
 
 ## Folder Structure
 - `client/` — React frontend
 - `server/` — Express backend
 - `shared/` — Shared types/schemas used by both frontend and backend
-- `server/trending/` — Score engine (DO NOT modify without full understanding)
-- `server/ingestion/` — Data ingestion jobs
-- `server/jobs/` — Background schedulers
+- `server/scoring/` — Trend score engine (`trendScore.ts`, `normalize.ts`) — DO NOT modify without explicit ask
+- `server/jobs/ingest.ts` — Scheduled score ingestion (writes `trending_people`, `trend_snapshots`)
+- `server/jobs/` — Other background schedulers (markets, agents, email, etc.)
+- `server/agents/` — Simulation agents (runner, decision engine, world markets LLM, seeder)
+- `server/emails/` — Resend dispatch, auth hook, React Email templates
+- `server/services/` — AMM house/trades/resolver, badges, gamification, etc.
+- `server/providers/` — External API integrations (SerpApi Trends, Serper, Mediastack, Wiki, etc.)
+- `shared/lib/amm/` — LMSR math shared by server and client (single source of truth)
 
 ## Critical Rules — Read Before Every Change
 
@@ -29,7 +34,7 @@ VoxDex is a live influence index and prediction platform. It ranks over 150 publ
 - NEVER push directly to `main` branch without asking first
 - NEVER modify `server/db.ts` without understanding Drizzle + Supabase pooler setup
 - NEVER expose `SUPABASE_SERVICE_ROLE_KEY` to the frontend
-- NEVER modify the score engine (`server/trending/`) without being explicitly asked
+- NEVER modify the score engine (`server/scoring/`, `server/jobs/ingest.ts` score path) without being explicitly asked
 - NEVER change scheduler timing without being explicitly asked
 - NEVER delete or rename database tables without a migration plan
 - NEVER commit `.env` files to git
@@ -61,7 +66,7 @@ VoxDex is a live influence index and prediction platform. It ranks over 150 publ
 - All API routes defined in `server/routes.ts`
 - Always return consistent response shapes: `{ data: ... }` or `{ error: ... }`
 - Never break existing endpoint URLs — frontend depends on them
-- Authentication uses express-session — check auth middleware before adding protected routes
+- Authentication uses Supabase Bearer JWT via `requireAuth` — check `server/auth-middleware.ts` before adding protected routes
 
 ## Environment
 - Local dev: `npm run dev` (loads `.env` automatically via --env-file flag)
@@ -94,3 +99,109 @@ VoxDex is a live influence index and prediction platform. It ranks over 150 publ
 
 ## Agent Workflow
 Never modify or remove cross-env, --env-file=.env, or NODE_ENV from the dev or start scripts in package.json. These are required for Windows compatibility.
+
+---
+
+## Prediction Markets
+
+VoxDex offers five market types, all settled in virtual credits:
+
+- **Up/Down** — Will [person]'s trend score go up or down by [date]? Binary outcome.
+- **H2H (Head-to-Head)** — Which of two people will have the higher trend score by [date]? Binary outcome.
+- **Top Gainer** (`marketType: gainer`) — Which person from a category will have the largest trend score increase over the market window? Multi-outcome.
+- **Weekly Jackpot** (`marketType: jackpot`) — Weekly themed exact-score market with a pooled prize. **Stays parimutuel** (intentionally not migrated to AMM).
+- **World Markets** (`marketType: community` in DB) — Real-world events (politics, sports, entertainment, etc.). Outcomes depend on external reality, not trend scores.
+
+### Market Engine: AMM/LMSR (native + World Markets only)
+
+Up/Down, H2H, Top Gainer, and World Markets use **AMM with LMSR** pricing. Weekly Jackpot remains **parimutuel** — `generateWeeklyJackpot` sets `engine: 'parimutuel'` explicitly (`server/jobs/market-generator.ts`).
+
+Native non-jackpot markets were migrated from parimutuel to AMM in a multi-phase rebuild (parimutuel resolver paths removed for new native markets; jackpot was always excluded).
+
+- **Engine dispatch:** `prediction_markets.engine` is `'amm'` (default) or `'parimutuel'` (jackpot + legacy rows). Bet/settlement routes branch on engine. Cutoff helper: `getMarketBettingCutoff()` in `server/native-markets/lifecycle.ts`.
+- **AMM state:** one `market_amm_state` row per AMM market (liquidity `b`, share quantities, house seed). Trades: `amm_buy` / `amm_sell` on `market_bets` + `credit_ledger`.
+- **House singleton:** one `is_house` profile seeds AMM markets (`server/services/amm-house.ts`, fixed UUID in migrations).
+- **AMM cutoff:** trading closes at `endAt − pre_resolve_cooldown` (default **5 minutes**, admin-tunable via `amm_runtime_settings`). Jackpot uses a separate weekly cutoff (Friday 23:59 UTC).
+- **`buyCost` overflow guard:** `shared/lib/amm/lmsr.ts` switches formulas when `Δ/b` is large — preserve this.
+- **Settlement is idempotent** — re-resolving an already-settled AMM market is a no-op (`server/services/amm-resolver.ts`).
+- **Financial audit trail:** `credit_ledger` rows with idempotency keys; admin actions also log to `admin_audit_log`.
+
+### Two-Path Agent System (market liquidity simulation)
+
+~**56** V2 simulation agents (`server/agents/agentSeeder.ts`) place predictions to simulate human activity:
+
+- **Native markets** (Up/Down, H2H, Top Gainer, Weekly Jackpot) — deterministic trait-vector engine using internal trend signals, with LLM-generated rationales/comments.
+- **World Markets** (`community`) — GPT with web search via `worldMarketEngine.ts` when `WORLD_MARKETS_LLM_ENABLED=true` (budget-gated). Kill switch: set env to `false`.
+
+Persona bands: sharp, casual, noisy, liquidity, whale. World-market bets are scheduled with staggered `executeAfter` delays to bootstrap liquidity before users arrive. Brier scores tracked on agent configs / admin tiles.
+
+Key files: `agentRunner.ts` (orchestration), `decisionEngine.ts` (native picks), `worldMarketEngine.ts` (LLM + web search), `actionWorker.ts` (executes queued bets). Jackpot agents use exact-score `jackpot_bet`, not AMM shares.
+
+**Rule:** Do not modify agent personas, dispatch logic, or settlement code without being explicitly asked. World Market LLM spend is gated by `WORLD_MARKETS_LLM_ENABLED` (must be literal `true`/`1`/`yes`/`on` — Railway `TRUE` broke once) plus `WORLD_MARKETS_DAILY_BUDGET_USD`. Phase 5 admin dashboard (`AdminAmmSection`) is for AMM ops/reconciliation only.
+
+---
+
+## Email System
+
+Transactional emails via **Resend** + **React Email** templates.
+
+### Senders (production, when `EMAIL_SENDER_DOMAIN_READY=true`)
+- `hello@voxdex.com` — auth + lifecycle (verify, welcome, account)
+- `updates@voxdex.com` — engagement digests/notifications
+
+Until domain ready, all categories use Resend sandbox (`onboarding@resend.dev`).
+
+### Architecture
+- Templates: `server/emails/templates/` (`auth/`, `lifecycle/`, `components/`). Phase 2 `engagement/` templates may not exist yet.
+- Dispatch: `server/emails/send.ts` — all sends go through `sendEmail()`. Prefs via `marketing-gate.ts`. Idempotency: `email_send_log` (not a separate `idempotency_log` table). Dev: `EMAIL_DRY_RUN=true` logs instead of sending.
+- Auth emails: Supabase Send Email hook at `server/emails/routes/auth-hook.ts` — **6-digit OTP codes**, not magic-link URLs.
+- Sign-in UX: email+password primary, OTP fallback (`client/src/pages/LoginPage.tsx`). Signup uses password + verify OTP.
+- Prefs: `notification_preferences`; global unsubscribe: `email_unsubscribe_state`. Use helpers in `send.ts` — do not bypass.
+
+### Status
+- **Phase 1 live:** Welcome, verify, recovery, email-change (auth hook). Founder sign-off received.
+- **Phase 2 in progress:** additional lifecycle/engagement templates.
+
+### Rules
+- Never send from unverified domains — Resend rejects.
+- Auth-flow emails go through the auth hook, not direct `sendEmail` for the same events.
+- Preview React Email templates locally before committing visual changes.
+
+---
+
+## Trend Score Engine
+
+`server/scoring/` + ingestion in `server/jobs/ingest.ts` compute the **fameIndex** that ranks public figures. **Do not modify without an explicit ask.** Markets, leaderboards, and agent picks depend on stable outputs.
+
+### Signal sources (in score today)
+
+Velocity composite (60% of fameIndex): wiki pageview delta **35%**, news article delta **45%**, news **momentum** slot (24h vs 7d article ratio) **20%**. Mass composite (40%): wiki 7d pageviews + IG/YT followers when present.
+
+### Display-only momentum cards (persisted, not in score yet)
+
+UI signal cards share Low / Medium / High thresholds (ratio <1.0, 1.0–2.0, ≥2.0). None of these are wired into `velocityScore` yet:
+
+- **News Momentum** — 24h vs 7d article-count ratio (distinct from the news *delta* and *momentum slot* that already affect the score).
+- **Wiki Momentum** — 24h vs 7d Wikipedia pageview ratio (`normalizeWikiMomentum` in `server/scoring/normalize.ts`).
+- **Google Trends momentum** — latest interest vs 7d average from SerpApi (`normalizeTrendsMomentum`).
+
+### Google Trends ingestion
+
+Fetched via **SerpApi using Topic IDs** (`googleTrendsTopicId` on people) — not raw search terms. Gated to ~12h cadence in ingest.
+
+### Aggregation pattern
+
+- **Mass (stock)** — baseline fame (wiki 7d avg, followers).
+- **Velocity (flow)** — deltas + news momentum ratio.
+- **EMA smoothing** — cross-snapshot fameIndex blend (0.7 current / 0.3 previous tick when prior exists).
+
+### Monitoring
+
+- `/api/system/freshness` and `/api/system/health` — do not break.
+- `server/scoring/sourceHealth.ts` — provider health for ingest.
+
+### Rules
+
+- Read-only unless the task explicitly targets scoring.
+- New signals/weights need an audit script + explicit brief before merge.
+- Serper `searchVolume` is **not** a score input (zeroed in velocity weights).
