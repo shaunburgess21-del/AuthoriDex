@@ -1,10 +1,14 @@
 import type { KeyboardEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Loader2, Maximize2, Minimize2, X } from "lucide-react";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 import { Button } from "@/components/ui/button";
 
 const COMPOSER_MAX_HEIGHT_PX = 160;
+
+const TEXTAREA_BASE_CLASS =
+  "text-foreground caret-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-0 focus:border-border/30";
 
 type ComposerMode = "auto" | "manual" | "fullscreen";
 
@@ -57,7 +61,6 @@ export function CommentComposer({
 
   const isManualComposer = composerMode === "manual";
   const isFullscreenComposer = composerMode === "fullscreen";
-  const inlineExpanded = variant === "inline" && isFullscreenComposer;
 
   const showButtons = isFocused || value.length > 0;
   const submitDisabled = disabled || !value.trim() || isPending;
@@ -203,11 +206,52 @@ export function CommentComposer({
     );
   };
 
+  const fullscreenOverlay = isFullscreenComposer ? (
+    <div
+      className="fixed inset-0 z-[70] flex flex-col bg-background p-4 safe-top text-foreground"
+      data-testid="comment-composer-fullscreen"
+      data-interactive="true"
+    >
+      <div className="mb-3 flex items-center justify-between border-b border-border/20 pb-3">
+        <div>
+          <p className="text-sm font-semibold">Write a comment</p>
+          {replyTo && (
+            <p className="text-xs text-cyan-600 dark:text-cyan-400">
+              Replying to @{replyTo.username}
+            </p>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() => setComposerMode("auto")}
+          className="rounded-lg p-2 text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          aria-label="Close full-screen composer"
+        >
+          <X className="h-5 w-5" />
+        </button>
+      </div>
+      <div className="relative flex-1 min-h-0">
+        <textarea
+          ref={fullscreenInputRef}
+          placeholder={replyTo ? `Reply to @${replyTo.username}...` : placeholder}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
+          onKeyDown={handleKeyDown}
+          className={`h-full w-full resize-none rounded-2xl border border-border/30 bg-muted/30 px-4 py-4 text-base ${TEXTAREA_BASE_CLASS}`}
+          data-testid={testIds?.inputFullscreen ?? "input-comment-fullscreen"}
+        />
+      </div>
+      {renderActionRow("-fullscreen")}
+    </div>
+  ) : null;
+
   return (
     <>
       <div
         ref={composerContainerRef}
-        className={`pt-3 border-t border-border/20${inlineExpanded ? " flex-1 flex flex-col" : ""}`}
+        className="pt-3 border-t border-border/20"
         style={{ paddingBottom: "env(safe-area-inset-bottom, 4px)" }}
       >
         {replyTo && (
@@ -223,7 +267,7 @@ export function CommentComposer({
             </button>
           </div>
         )}
-        <div className={`flex gap-2 items-start${inlineExpanded ? " flex-1" : ""}`}>
+        <div className="flex gap-2 items-start">
           <div className="flex h-[42px] shrink-0 items-center">
             <UserProfileAvatar
               displayName={authorDisplayName}
@@ -232,8 +276,8 @@ export function CommentComposer({
               fallbackClassName="text-[10px]"
             />
           </div>
-          <div className={`flex-1 min-w-0${inlineExpanded ? " flex flex-col" : ""}`}>
-            <div className={`relative${inlineExpanded ? " flex-1 min-h-0 flex flex-col" : ""}`}>
+          <div className="flex-1 min-w-0">
+            <div className="relative">
               <textarea
                 ref={inputRef}
                 placeholder={replyTo ? `Reply to @${replyTo.username}...` : placeholder}
@@ -247,7 +291,7 @@ export function CommentComposer({
                 onFocus={() => setIsFocused(true)}
                 onBlur={() => setIsFocused(false)}
                 onKeyDown={handleKeyDown}
-                className={`block w-full bg-muted/30 border border-border/30 rounded-xl px-3 py-2 ${supportsFullscreen ? "pr-12" : "pr-3"} text-base resize-none placeholder:text-muted-foreground/50 focus:outline-none focus:ring-0 focus:border-border/30${isManualComposer ? " h-40 overflow-y-auto" : ""}${inlineExpanded ? " flex-1 min-h-0" : ""}`}
+                className={`block w-full bg-muted/30 border border-border/30 rounded-xl px-3 py-2 ${supportsFullscreen ? "pr-12" : "pr-3"} text-base resize-none ${TEXTAREA_BASE_CLASS}${isManualComposer ? " h-40 overflow-y-auto" : ""}`}
                 rows={1}
                 data-testid={testIds?.input ?? "input-comment"}
               />
@@ -271,42 +315,7 @@ export function CommentComposer({
         </div>
       </div>
 
-      {isFullscreenComposer && (
-        <div className="fixed inset-0 z-[70] flex flex-col bg-background p-4 safe-top" data-testid="comment-composer-fullscreen">
-          <div className="mb-3 flex items-center justify-between border-b border-border/20 pb-3">
-            <div>
-              <p className="text-sm font-semibold">Write a comment</p>
-              {replyTo && (
-                <p className="text-xs text-cyan-600 dark:text-cyan-400">
-                  Replying to @{replyTo.username}
-                </p>
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={() => setComposerMode("auto")}
-              className="rounded-lg p-2 text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              aria-label="Close full-screen composer"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-          <div className="relative flex-1 min-h-0">
-            <textarea
-              ref={fullscreenInputRef}
-              placeholder={replyTo ? `Reply to @${replyTo.username}...` : placeholder}
-              value={value}
-              onChange={(e) => onChange(e.target.value)}
-              onFocus={() => setIsFocused(true)}
-              onBlur={() => setIsFocused(false)}
-              onKeyDown={handleKeyDown}
-              className="h-full w-full resize-none rounded-2xl border border-border/30 bg-muted/30 px-4 py-4 text-base placeholder:text-muted-foreground/50 focus:outline-none focus:ring-0 focus:border-border/30"
-              data-testid={testIds?.inputFullscreen ?? "input-comment-fullscreen"}
-            />
-          </div>
-          {renderActionRow("-fullscreen")}
-        </div>
-      )}
+      {fullscreenOverlay && createPortal(fullscreenOverlay, document.body)}
     </>
   );
 }

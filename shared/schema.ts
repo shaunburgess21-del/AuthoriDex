@@ -1050,6 +1050,9 @@ export const profiles = pgTable("profiles", {
   // re-prompt gate together with totalVotes / totalPredictions and time
   // elapsed so we soft-nudge engaged users instead of nagging on every visit.
   interestsPromptDismissedAt: timestamp("interests_prompt_dismissed_at"),
+  // Set when the user dismisses the inactive VersusCard help footer (X).
+  // NULL = show hint until dismissed; mirrors interests_prompt_dismissed_at.
+  matchupHelpDismissedAt: timestamp("matchup_help_dismissed_at"),
   // Multi-step onboarding (migration 0063). `onboardingStep` is the highest
   // step the user has reached (0..5 — see WelcomePage container for the
   // ordered list). `onboardingCompletedAt` is stamped when the user lands

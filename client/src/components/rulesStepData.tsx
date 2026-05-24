@@ -164,9 +164,9 @@ export const VOTE_RULES_STEPS: Record<string, RulesStepConfig> = {
     ctaLabel: "Let's Go →",
     steps: [
       {
-        icon: <Users />,
-        headline: "You Run the Show",
-        body: "No editors, no gatekeepers. VoxDex is 100% shaped, ranked, and managed by you.",
+        icon: <BarChart3 />,
+        headline: "Overrated or Underrated?",
+        body: "Vote whether each figure is overhyped or underappreciated. It's about public perception—not personal taste.",
       },
       {
         icon: <UserPlus />,

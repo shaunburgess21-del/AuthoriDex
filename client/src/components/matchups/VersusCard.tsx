@@ -1,55 +1,12 @@
-import { useEffect, useState, type MouseEvent } from "react";
+import { type MouseEvent } from "react";
 import { Link } from "wouter";
-import { Eye, EyeOff, Users } from "lucide-react";
+import { Users, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
 import { handleImageError } from "@/lib/imageResolver";
 import { normalizeMarketCategory } from "@shared/constants";
-
-const MATCHUP_HELP_HIDDEN_KEY = "authoridex_matchup_help_hidden";
-const MATCHUP_HELP_EVENT = "authoridex-matchup-help-hidden-changed";
-
-function readMatchupHelpHidden(): boolean {
-  if (typeof window === "undefined") return false;
-
-  try {
-    return window.localStorage.getItem(MATCHUP_HELP_HIDDEN_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
-function useMatchupHelpHidden() {
-  const [helpHidden, setHelpHidden] = useState(readMatchupHelpHidden);
-
-  useEffect(() => {
-    const syncFromStorage = () => setHelpHidden(readMatchupHelpHidden());
-
-    window.addEventListener(MATCHUP_HELP_EVENT, syncFromStorage);
-    window.addEventListener("storage", syncFromStorage);
-
-    return () => {
-      window.removeEventListener(MATCHUP_HELP_EVENT, syncFromStorage);
-      window.removeEventListener("storage", syncFromStorage);
-    };
-  }, []);
-
-  function toggleHelpHidden() {
-    const next = !helpHidden;
-    setHelpHidden(next);
-
-    try {
-      window.localStorage.setItem(MATCHUP_HELP_HIDDEN_KEY, next ? "1" : "0");
-    } catch {
-      /* Preference persistence is optional in private browsing. */
-    }
-
-    window.dispatchEvent(new CustomEvent(MATCHUP_HELP_EVENT));
-  }
-
-  return { helpHidden, toggleHelpHidden };
-}
+import { useMatchupHelpDismissed } from "@/hooks/useMatchupHelpDismissed";
 
 /** Matchup row shape for VersusCard (Vote page + profile Vote tab). */
 export interface VersusCardMatchup {
@@ -102,7 +59,7 @@ export function VersusCard({
   const votedA = userVote === "option_a";
   const votedB = userVote === "option_b";
   const votedNeutral = userVote === "neutral";
-  const { helpHidden, toggleHelpHidden } = useMatchupHelpHidden();
+  const { dismissed: helpDismissed, dismissHelp } = useMatchupHelpDismissed();
 
   return (
     <div className="relative group h-full">
@@ -205,13 +162,13 @@ export function VersusCard({
                   if (!votedNeutral) onVote(matchup.id, "neutral", e);
                 }}
                 data-testid={`button-vote-neutral-${matchup.id}`}
-                className={`h-14 w-14 md:h-11 md:w-11 rounded-full border-2 flex items-center justify-center shadow-lg transition-all duration-300 ${
+                className={`h-14 w-14 rounded-full border-2 flex items-center justify-center shadow-lg transition-all duration-300 ${
                   votedNeutral
                     ? "bg-gradient-to-br from-slate-500 to-slate-600 dark:from-slate-500 dark:to-slate-600 border-slate-400 dark:border-slate-400 ring-2 ring-slate-400/40 dark:ring-slate-400/40"
                     : "bg-gradient-to-br from-muted to-card dark:from-slate-700 dark:to-slate-900 border-border dark:border-slate-500 hover:border-slate-400 dark:hover:border-slate-400 hover:ring-2 hover:ring-slate-300/30 cursor-pointer"
                 }`}
               >
-                <span className={`text-sm md:text-xs font-bold ${votedNeutral ? "text-white" : "text-foreground dark:text-slate-200"}`}>VS</span>
+                <span className={`text-sm md:text-base font-bold ${votedNeutral ? "text-white" : "text-foreground dark:text-slate-200"}`}>VS</span>
               </button>
               {votedNeutral && (
                 <span className="text-[9px] font-semibold text-slate-500 dark:text-slate-400 bg-card dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-1 py-px leading-none whitespace-nowrap shadow-sm">
@@ -315,8 +272,11 @@ export function VersusCard({
                 </span>
               </div>
             </div>
+          </div>
+
+          <div className="px-4 mt-2 min-h-7 flex items-center justify-center">
             {hasVoted ? (
-              <div className="flex items-center justify-center gap-2 mt-2">
+              <div className="flex items-center justify-center gap-2">
                 <span className="text-[10px] text-slate-500/70">Tap an image or VS to change your vote</span>
                 <span className="text-[10px] text-slate-500/40">|</span>
                 <button
@@ -328,27 +288,24 @@ export function VersusCard({
                   Remove vote
                 </button>
               </div>
-            ) : (
-              <div className="flex items-center justify-center gap-2 text-xs text-slate-500/70 mt-2">
+            ) : !helpDismissed ? (
+              <div className="flex items-center justify-center gap-2 text-xs text-slate-500/70">
+                <span className="font-medium">Tap an image to vote or VS to remain Neutral</span>
                 <button
                   type="button"
-                  onClick={toggleHelpHidden}
-                  aria-label={helpHidden ? "Show matchup help text" : "Hide matchup help text"}
-                  title={helpHidden ? "Show matchup help text" : "Hide matchup help text"}
-                  className={`inline-flex h-5 w-5 items-center justify-center rounded-full transition-colors ${
-                    helpHidden
-                      ? "text-slate-500 hover:bg-slate-500/10 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-400"
-                      : "text-cyan-600/70 hover:bg-cyan-500/10 hover:text-cyan-600 dark:text-cyan-400/70 dark:hover:text-cyan-400"
-                  }`}
-                  data-testid={`button-toggle-matchup-help-${matchup.id}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    dismissHelp();
+                  }}
+                  aria-label="Dismiss matchup help"
+                  title="Dismiss"
+                  className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-slate-500/10 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-400"
+                  data-testid="button-dismiss-matchup-help"
                 >
-                  {helpHidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                  <X className="h-3.5 w-3.5" />
                 </button>
-                {!helpHidden && (
-                  <span className="font-medium">Tap an image to vote or VS to remain Neutral</span>
-                )}
               </div>
-            )}
+            ) : null}
           </div>
         </div>
       </Card>

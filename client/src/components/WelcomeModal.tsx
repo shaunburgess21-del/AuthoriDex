@@ -47,7 +47,7 @@ const STEPS: readonly OnboardingStep[] = [
 
     heading: "Make Predictions",
 
-    description: "Forecast real outcomes across politics, sports, culture, and markets.",
+    description: "Call it before it happens — on the leaderboard and in the real world.",
 
     gradient: "from-violet-500 to-purple-600",
 

@@ -8037,6 +8037,41 @@ Only return the JSON object.`;
     }
   });
 
+  app.patch("/api/profile/me/matchup-help-dismissed", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.userId!;
+
+      const existing = await db
+        .select({ matchupHelpDismissedAt: profiles.matchupHelpDismissedAt })
+        .from(profiles)
+        .where(eq(profiles.id, userId))
+        .limit(1);
+
+      if (existing.length === 0) {
+        return res.status(404).json({ error: "Profile not found" });
+      }
+
+      if (existing[0].matchupHelpDismissedAt) {
+        return res.json({
+          matchupHelpDismissedAt: existing[0].matchupHelpDismissedAt,
+        });
+      }
+
+      const updated = await db
+        .update(profiles)
+        .set({ matchupHelpDismissedAt: new Date() })
+        .where(eq(profiles.id, userId))
+        .returning({ matchupHelpDismissedAt: profiles.matchupHelpDismissedAt });
+
+      res.json({
+        matchupHelpDismissedAt: updated[0].matchupHelpDismissedAt,
+      });
+    } catch (error: any) {
+      console.error("Error dismissing matchup help:", error.message);
+      res.status(500).json({ error: "Failed to dismiss matchup help" });
+    }
+  });
+
   // Update current user's avatar (seed + URL)
   app.patch("/api/profile/avatar", requireAuth, async (req: AuthRequest, res) => {
     try {

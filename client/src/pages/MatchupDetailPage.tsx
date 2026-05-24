@@ -478,7 +478,7 @@ export default function MatchupDetailPage() {
                   if (!votedNeutral && !votePendingOnOptions) handleVote(matchup.id, "neutral");
                 }}
                 data-testid="button-vote-neutral"
-                className={`h-14 w-14 md:h-11 md:w-11 rounded-full border-2 flex items-center justify-center shadow-lg transition-all duration-300 ${
+                className={`h-14 w-14 rounded-full border-2 flex items-center justify-center shadow-lg transition-all duration-300 ${
                   votePendingOnOptions ? "opacity-60 cursor-not-allowed" : ""
                 } ${
                   votedNeutral
@@ -486,7 +486,7 @@ export default function MatchupDetailPage() {
                     : 'bg-gradient-to-br from-slate-700 to-slate-900 border-slate-500 hover:border-slate-400 hover:ring-2 hover:ring-slate-300/30 cursor-pointer'
                 }`}
               >
-                <span className={`text-sm md:text-xs font-bold ${votedNeutral ? 'text-white' : 'text-slate-200'}`}>VS</span>
+                <span className={`text-sm md:text-base font-bold ${votedNeutral ? 'text-white' : 'text-slate-200'}`}>VS</span>
               </button>
               {votedNeutral && (
                 <span className="text-[9px] font-semibold text-slate-400 bg-slate-800 border border-slate-600 rounded px-1 py-px leading-none whitespace-nowrap shadow-sm">
