@@ -1,129 +1,17 @@
 # VoxDex — Project Context
 
----
-
-## ⚠️ STATUS: CONTEXT.md OUT OF DATE (as of 2026-05-24)
-
-This file was last meaningfully updated 2026-03-07 and **does not reflect the current state of the project**. Significant work has shipped since then including:
-
-- Project rebrand: AuthoriDex → VoxDex
-- Full prediction market system (Up/Down, H2H, Top Gainer, Weekly Jackpot, World Markets)
-- AMM/LMSR migration from parimutuel (4 phases complete, soak test pending pre-launch)
-- AI agent system: 14 personas across two-path architecture (native trend signals + GPT web-search for World Markets)
-- Email system Phase 1: Resend + React Email, Welcome template live, OTP-only auth, Phase 2 templates in WIP
-- Induction queue with user voting and leaderboard CTA
-- Paddle merchant verification in progress (refund policy aligned)
-- Repo migrated from OneDrive to `C:\dev\AuthoriDex` on 2026-05-24
-
-**Treat this file as a historical reference until a full rewrite is done.** Source of truth for current state: the codebase itself, ARCHITECTURE.md, and recent git log (`git log --oneline -50`).
+> **Current project context lives in `.cursorrules`** (read automatically by Cursor agents on every session).
+>
+> For deeper architectural reference, see `ARCHITECTURE.md`.
+>
+> For recent changes, run `git log --oneline -20`.
+>
+> This file is intentionally minimal to avoid stale duplicate documentation. If you're a Cursor agent and you need project context, start with `.cursorrules`.
 
 ---
 
-> **This file is the single source of truth for AI agents working on this project.**
-> At the end of every Cursor Agent session, update this file with what was built, changed, or decided.
+## Why this file is short
 
----
+Previous versions of this file attempted to mirror project state (stack, features, recent changes) but inevitably drifted out of date. The decision (2026-05-24) was to consolidate authoritative project context into `.cursorrules` and let the git log handle change history.
 
-## Project Overview
-
-VoxDex is a fame/popularity trend tracking app. It tracks public figures' trending status using a trend score engine, AI-powered summaries, polling features, and real-time data ingestion.
-
-**Founders:** Andrew & Shaun
-
----
-
-## Tech Stack
-
-| Layer | Technology | Host |
-|-------|-----------|------|
-| Frontend | (Verify framework — React/Next.js) | Vercel |
-| Backend / Trend Score Engine | (Verify language/framework) | Railway |
-| Database | PostgreSQL | Supabase |
-| AI Summaries | OpenAI API (model: `gpt-5.4`) | — |
-| Auth | Supabase Auth (verify) | — |
-| Repo | GitHub (shared between Andrew & Shaun) | — |
-| Dev Environment | Cursor Pro + Claude Code | Local |
-
----
-
-## Architecture
-
-```
-[Vercel Frontend] <--API--> [Railway Backend]
-                                  |
-                                  ├── Trend Score Engine (scheduled ingestion runs)
-                                  ├── AI Summary Generation (OpenAI gpt-5.4)
-                                  └── Supabase PostgreSQL (profiles, scores, polls, etc.)
-```
-
-### Key Flows
-- **Ingestion Runs:** Backend runs scheduled jobs to pull data from sources, compute trend scores, and store results in Supabase.
-- **Trend Scores:** Calculated via the trend score engine on Railway. Freshness/health endpoints exist for monitoring.
-- **Polling:** Two types — Opinion Polls and Sentiment Polls. Large bank of pre-built polling content.
-- **AI Summaries:** Generated via OpenAI gpt-5.4 for public figure profiles (About bios, Why Trending summaries, etc.).
-
----
-
-## Core Features
-
-- [ ] Trend score tracking and display
-- [ ] AI-powered profile summaries
-- [ ] Opinion Polls
-- [ ] Sentiment Polls
-- [ ] Search and discovery
-- [ ] (Add more as they're built)
-
----
-
-## Key Files & Directories
-
-> Update this section as the project evolves. List important files so new agent sessions know where to look.
-
-```
-/                         # Repo root
-├── CONTEXT.md            # ← You are here
-├── .cursorrules          # Persistent Cursor Agent instructions (TODO: create)
-├── .gitignore            # Hardened — blocks .env, service keys
-├── (list key dirs/files as they become clear)
-```
-
----
-
-## Environment & Secrets
-
-- Supabase Service Role Key — rotated after accidental commit; now blocked by `.gitignore` and a pre-commit hook
-- All secrets stored in environment variables on Railway (backend) and Vercel (frontend)
-- **Never commit `.env` files or API keys to the repo**
-
----
-
-## Recent Changes
-
-> **Update this section at the end of every Cursor Agent session.**
-> Format: `[DATE] — Brief description of what changed`
-
-- [2026-03-07] — Created CONTEXT.md for cross-session context persistence
-
----
-
-## Post-Launch Backlog
-
-- Admin panel diagnostics: per-source success rate history, circuit breaker event log, API quota usage tracking
-
----
-
-## Conventions & Decisions
-
-- **Git workflow:** Andrew and Shaun collaborate via shared GitHub repo
-- **AI model:** OpenAI `gpt-5.4` (default via `AI_DEFAULT_MODEL`; per-scope env overrides available — see `server/config/ai-models.ts`)
-- **Security:** Pre-commit hook prevents accidental secret commits
-- **MCP integrations:** Exploring Railway, Vercel, and GitHub MCPs in Cursor
-- (Add architectural decisions, naming conventions, patterns as they're established)
-
----
-
-## How to Use This File
-
-1. **Starting a new Cursor Agent session?** Reference this file with `@CONTEXT.md` so the agent reads it.
-2. **Finishing a session?** Prompt the agent: *"Update CONTEXT.md with what we just built/changed."*
-3. **Both founders should keep this updated** — it's the shared memory between sessions and between Andrew and Shaun's workflows.
+If you find yourself needing a piece of project context that isn't in `.cursorrules`, `ARCHITECTURE.md`, or the recent git log — that's a signal to add it to `.cursorrules`, not to expand this file.
