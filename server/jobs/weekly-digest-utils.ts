@@ -52,21 +52,155 @@ export function isWeeklyDigestFireWindow(now: Date = new Date()): boolean {
   return minutesSinceMidnight >= 18 * 60 && minutesSinceMidnight < 18 * 60 + 30;
 }
 
+/** Sunday 17:30–18:00 UTC — rank snapshots run before the in-app digest. */
+export function isRankSnapshotFireWindow(now: Date = new Date()): boolean {
+  if (now.getUTCDay() !== 0) return false;
+  const minutesSinceMidnight = now.getUTCHours() * 60 + now.getUTCMinutes();
+  return minutesSinceMidnight >= 17 * 60 + 30 && minutesSinceMidnight < 18 * 60;
+}
+
+/** Sunday 18:30–19:00 UTC — Weekly Wrap email fires after the in-app digest. */
+export function isWeeklyWrapFireWindow(now: Date = new Date()): boolean {
+  if (now.getUTCDay() !== 0) return false;
+  const minutesSinceMidnight = now.getUTCHours() * 60 + now.getUTCMinutes();
+  return minutesSinceMidnight >= 18 * 60 + 30 && minutesSinceMidnight < 19 * 60;
+}
+
+/**
+ * ISO week immediately before `isoWeek` (e.g. 2026-W21 → 2026-W20).
+ * Returns null if parsing fails.
+ */
+export function previousIsoYearWeek(isoWeek: string): string | null {
+  const match = /^(\d{4})-W(\d{2})$/.exec(isoWeek);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const week = Number(match[2]);
+  if (!Number.isFinite(year) || !Number.isFinite(week) || week < 1 || week > 53) {
+    return null;
+  }
+  const jan4 = new Date(Date.UTC(year, 0, 4));
+  const jan4Day = jan4.getUTCDay() || 7;
+  const week1Monday = new Date(jan4);
+  week1Monday.setUTCDate(jan4.getUTCDate() - jan4Day + 1);
+  const targetMonday = new Date(week1Monday);
+  targetMonday.setUTCDate(week1Monday.getUTCDate() + (week - 1) * 7 - 7);
+  return isoYearWeek(targetMonday);
+}
+
+/** In-app digest body fields (subset of full weekly stats). */
 export interface WeeklyDigestStats {
-  /** Count of resolved buy rows where the user's side won AND payout > stake. */
   wins: number;
-  /** Count of resolved buy rows where the user's side lost (status='lost'). */
   losses: number;
-  /** Net Vox delta over the week (signed). Field name kept as
-   *  `netCredits` to match the internal DB / ledger naming. */
   netCredits: number;
-  /** Best winning pick, if any won by enough to be worth a call-out. */
   bestPick?: {
-    /** Person name or market title — whichever reads best on the chip. */
     label: string;
-    /** Signed profit on the pick (always positive for a "best" call-out). */
     profit: number;
   };
+}
+
+/** Full stats for Weekly Wrap email + shared digest computation. */
+export interface FullWeeklyDigestStats {
+  wins: number;
+  losses: number;
+  netCredits: number;
+  bestPick: { label: string; profit: number } | null;
+  worstPick: { label: string; profit: number } | null;
+  rankDelta: { previous: number; current: number } | null;
+  jackpot: { won: boolean; profit: number } | null;
+  topMoversNextWeek: Array<{ name: string; change24h: number }>;
+  windowStart: Date;
+  windowEnd: Date;
+}
+
+/** Pure roll-up over settled buy rows — extracted so it can be unit tested. */
+export interface SettledBuyRow {
+  status: string;
+  stakeAmount: number | null;
+  payoutAmount: number | null;
+  marketTitle: string | null;
+  /** Pre-resolved display label (caller runs resolvePickContextLabel). */
+  pickLabel: string | null;
+}
+
+export interface BuyRollUp {
+  wins: number;
+  losses: number;
+  netCredits: number;
+  bestPick: { label: string; profit: number } | null;
+  worstPick: { label: string; profit: number } | null;
+}
+
+/**
+ * Roll resolved buy rows into wins/losses/net + best/worst-pick callouts.
+ *
+ * Mirrors the legacy logic from `deriveWeeklyDigest`:
+ *   - wins  = status='won' AND payout > 0
+ *   - losses = status='lost'
+ *   - bestPick   = the largest +profit win
+ *   - worstPick  = the largest -profit loss (signed profit, always negative)
+ */
+export function rollUpSettledBuys(rows: SettledBuyRow[]): BuyRollUp {
+  let wins = 0;
+  let losses = 0;
+  let netCredits = 0;
+  let bestPick: BuyRollUp["bestPick"] = null;
+  let worstPick: BuyRollUp["worstPick"] = null;
+
+  for (const bet of rows) {
+    const stake = bet.stakeAmount ?? 0;
+    const payout = bet.payoutAmount ?? 0;
+    const label = bet.pickLabel ?? bet.marketTitle ?? "Top pick";
+    if (bet.status === "won" && payout > 0) {
+      wins += 1;
+      const profit = payout - stake;
+      netCredits += profit;
+      if (profit > 0 && (!bestPick || profit > bestPick.profit)) {
+        bestPick = { label, profit };
+      }
+    } else if (bet.status === "lost") {
+      losses += 1;
+      const loss = -stake;
+      netCredits += loss;
+      if (stake > 0 && (!worstPick || stake > Math.abs(worstPick.profit))) {
+        worstPick = {
+          label: bet.pickLabel ?? bet.marketTitle ?? "Tough call",
+          profit: loss,
+        };
+      }
+    }
+  }
+
+  return { wins, losses, netCredits, bestPick, worstPick };
+}
+
+export interface JackpotRow {
+  status: string;
+  stakeAmount: number | null;
+  payoutAmount: number | null;
+}
+
+/**
+ * Net jackpot P&L + "did any ticket pay out" boolean. Returns null when the
+ * user didn't settle any jackpot rows this week so the email can omit the
+ * whole section.
+ */
+export function summariseJackpotRows(
+  rows: JackpotRow[],
+): { won: boolean; profit: number } | null {
+  if (rows.length === 0) return null;
+  let net = 0;
+  let anyWin = false;
+  for (const row of rows) {
+    const stake = row.stakeAmount ?? 0;
+    if (row.status === "won") {
+      const payout = row.payoutAmount ?? 0;
+      net += payout - stake;
+      if (payout > 0) anyWin = true;
+    } else if (row.status === "lost") {
+      net -= stake;
+    }
+  }
+  return { won: anyWin && net > 0, profit: net };
 }
 
 /**

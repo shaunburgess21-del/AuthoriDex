@@ -28,8 +28,13 @@ import {
   isoYearWeek,
   isWeeklyDigestFireWindow,
   WEEKLY_DIGEST_TITLE,
-  type WeeklyDigestStats,
 } from "./weekly-digest-utils";
+import {
+  getWeeklyDigestStats,
+  listActiveDigestUserIds,
+} from "./weekly-digest-stats";
+import { runUserRankSnapshot } from "./user-rank-snapshot";
+import { runWeeklyWrapEmail } from "./weekly-wrap-email";
 import { formatResolutionImminentNotification } from "./resolution-imminent-utils";
 import { formatVox } from "@shared/currency";
 
@@ -917,122 +922,22 @@ async function derivePositionMoveAlerts(): Promise<number> {
 async function deriveWeeklyDigest(): Promise<number> {
   if (!isWeeklyDigestFireWindow()) return 0;
 
-  // Find users active in the past 7 days. `marketBets.createdAt`
-  // captures the moment the buy/sell happened, which is what
-  // "active this week" should anchor to.
-  const sevenDaysAgo = sql`NOW() - INTERVAL '7 days'`;
-  const activeUserRows = await db
-    .select({ userId: marketBets.userId })
-    .from(marketBets)
-    .innerJoin(profiles, eq(profiles.id, marketBets.userId))
-    .where(
-      and(
-        eq(profiles.isAgent, false),
-        gte(marketBets.createdAt, sevenDaysAgo),
-      ),
-    )
-    .groupBy(marketBets.userId);
-
-  if (activeUserRows.length === 0) return 0;
+  const activeUserIds = await listActiveDigestUserIds();
+  if (activeUserIds.length === 0) return 0;
 
   const weekBucket = isoYearWeek(new Date());
-
   let inserted = 0;
-  for (const { userId } of activeUserRows) {
-    // Per-user roll-up. Three lightweight queries — kept separate for
-    // readability rather than one mega-CTE; the active-user count is
-    // small at this stage of the product so the round-trip cost is
-    // acceptable. If this becomes a hot spot, fold into a single
-    // grouped query.
-    const settledBuys = await db
-      .select({
-        marketId: marketBets.marketId,
-        stakeAmount: marketBets.stakeAmount,
-        payoutAmount: marketBets.payoutAmount,
-        status: marketBets.status,
-        marketTitle: predictionMarkets.title,
-        marketType: predictionMarkets.marketType,
-        entryLabel: marketEntries.label,
-        candidateName: entryPerson.name,
-        personName: trackedPeople.name,
-      })
-      .from(marketBets)
-      .innerJoin(predictionMarkets, eq(marketBets.marketId, predictionMarkets.id))
-      .innerJoin(marketEntries, eq(marketBets.entryId, marketEntries.id))
-      .leftJoin(entryPerson, eq(marketEntries.personId, entryPerson.id))
-      .leftJoin(trackedPeople, eq(predictionMarkets.personId, trackedPeople.id))
-      .where(
-        and(
-          eq(marketBets.userId, userId),
-          eq(marketBets.actionType, "buy"),
-          inArray(marketBets.status, ["won", "lost"]),
-          gte(marketBets.settledAt, sevenDaysAgo),
-        ),
-      );
 
-    const sellRows = await db
-      .select({
-        stakeAmount: marketBets.stakeAmount,
-      })
-      .from(marketBets)
-      .where(
-        and(
-          eq(marketBets.userId, userId),
-          eq(marketBets.actionType, "sell"),
-          gte(marketBets.createdAt, sevenDaysAgo),
-        ),
-      );
+  for (const userId of activeUserIds) {
+    const stats = await getWeeklyDigestStats(userId, { isoWeek: weekBucket });
+    if (stats.wins === 0 && stats.losses === 0) continue;
 
-    let wins = 0;
-    let losses = 0;
-    let netCredits = 0;
-    let bestPick: WeeklyDigestStats["bestPick"] | undefined;
-    for (const bet of settledBuys) {
-      const stake = bet.stakeAmount ?? 0;
-      const payout = bet.payoutAmount ?? 0;
-      if (bet.status === "won" && payout > 0) {
-        wins += 1;
-        const profit = payout - stake;
-        netCredits += profit;
-        // Best-pick callout: require profit > 0. Jackpot pari-mutuel
-        // pools that pay out less than the stake can produce a
-        // `status=won && payout > 0 && profit < 0` row; without this
-        // guard the body would render "Best: <market> (-50)" which
-        // reads worse than no best-pick line at all.
-        if (profit > 0 && (!bestPick || profit > bestPick.profit)) {
-          const pickLabel = resolvePickContextLabel({
-            marketType: bet.marketType,
-            candidateName: bet.candidateName,
-            entryLabel: bet.entryLabel,
-            personName: bet.personName,
-          });
-          bestPick = {
-            label: pickLabel ?? bet.marketTitle ?? "Top pick",
-            profit,
-          };
-        }
-      } else if (bet.status === "lost") {
-        losses += 1;
-        netCredits -= stake;
-      }
-    }
-    // Sells: stakeAmount on a sell is stored as -proceeds. The "P&L on
-    // a sell" is realised at sell time as `proceeds - sold_shares *
-    // avg_buy_cost`, but the full per-share-cost-basis math is heavy
-    // — the digest is a roundup, not a leaderboard, so the simpler
-    // "proceeds add into your week" reading is acceptable here. The
-    // matching debits already showed up in the digest of the week the
-    // buys settled (if they did). For week-level roundup purposes, the
-    // proceeds count as positive credit flow.
-    for (const sell of sellRows) {
-      netCredits += -(sell.stakeAmount ?? 0);
-    }
-
-    // No notification if the user only sold and never had a resolved
-    // win or loss this week — the body would read confusingly.
-    if (wins === 0 && losses === 0) continue;
-
-    const body = formatWeeklyDigestBody({ wins, losses, netCredits, bestPick });
+    const body = formatWeeklyDigestBody({
+      wins: stats.wins,
+      losses: stats.losses,
+      netCredits: stats.netCredits,
+      bestPick: stats.bestPick ?? undefined,
+    });
 
     const id = await createNotification({
       userId,
@@ -1042,7 +947,13 @@ async function deriveWeeklyDigest(): Promise<number> {
       href: "/me/predictions",
       entityType: "user",
       entityId: userId,
-      metadata: { wins, losses, netCredits, bestPick: bestPick ?? null, week: weekBucket },
+      metadata: {
+        wins: stats.wins,
+        losses: stats.losses,
+        netCredits: stats.netCredits,
+        bestPick: stats.bestPick,
+        week: weekBucket,
+      },
       idempotencyKey: `weekly_digest:${userId}:${weekBucket}`,
     });
     if (id) inserted += 1;
@@ -1214,7 +1125,9 @@ export async function runNotificationsDerivation(): Promise<NotificationsDerivat
       ["streak_milestone", deriveStreakMilestones],
       ["credits_low", deriveCreditsLow],
       ["position_move_alert", derivePositionMoveAlerts],
+      ["user_rank_snapshot", runUserRankSnapshot],
       ["weekly_pnl_digest", deriveWeeklyDigest],
+      ["weekly_wrap_email", runWeeklyWrapEmail],
       ["position_resolution_imminent", derivePositionResolutionImminent],
     ];
     for (const [name, fn] of steps) {

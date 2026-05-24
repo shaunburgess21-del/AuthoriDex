@@ -2233,6 +2233,29 @@ export type EmailUnsubscribeState = typeof emailUnsubscribeState.$inferSelect;
 export type InsertEmailUnsubscribeState = typeof emailUnsubscribeState.$inferInsert;
 
 /**
+ * Weekly leaderboard rank snapshots for Weekly Wrap rank-delta copy.
+ * `period` reserves weekly/monthly slots; v1 only writes `all` (lifetime).
+ */
+export const userRankSnapshots = pgTable(
+  "user_rank_snapshots",
+  {
+    userId: varchar("user_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    isoWeek: text("iso_week").notNull(),
+    period: text("period").notNull().default("all"),
+    rank: integer("rank").notNull(),
+    capturedAt: timestamp("captured_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.userId, table.isoWeek, table.period] }),
+  }),
+);
+
+export type UserRankSnapshot = typeof userRankSnapshots.$inferSelect;
+export type InsertUserRankSnapshot = typeof userRankSnapshots.$inferInsert;
+
+/**
  * Durable idempotency for outbound email sends. One row per logical send;
  * INSERT ON CONFLICT DO NOTHING gates duplicate Resend calls across retries
  * and deploys. Rows are backend-only (no RLS).

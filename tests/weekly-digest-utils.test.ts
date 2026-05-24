@@ -4,7 +4,9 @@ import assert from "node:assert/strict";
 import {
   formatWeeklyDigestBody,
   isoYearWeek,
+  isRankSnapshotFireWindow,
   isWeeklyDigestFireWindow,
+  isWeeklyWrapFireWindow,
   WEEKLY_DIGEST_TITLE,
 } from "../server/jobs/weekly-digest-utils";
 
@@ -69,6 +71,26 @@ test("isWeeklyDigestFireWindow: Sunday 17:59 UTC does NOT fire (before window)",
 test("isWeeklyDigestFireWindow: Monday 18:00 UTC does NOT fire (wrong day)", () => {
   const d = new Date(Date.UTC(2026, 4, 18, 18, 0));
   assert.equal(isWeeklyDigestFireWindow(d), false);
+});
+
+test("isRankSnapshotFireWindow: Sunday 17:30 UTC fires", () => {
+  const d = new Date(Date.UTC(2026, 4, 17, 17, 30));
+  assert.equal(isRankSnapshotFireWindow(d), true);
+});
+
+test("isRankSnapshotFireWindow: Sunday 18:00 UTC does NOT fire", () => {
+  const d = new Date(Date.UTC(2026, 4, 17, 18, 0));
+  assert.equal(isRankSnapshotFireWindow(d), false);
+});
+
+test("isWeeklyWrapFireWindow: Sunday 18:30 UTC fires", () => {
+  const d = new Date(Date.UTC(2026, 4, 17, 18, 30));
+  assert.equal(isWeeklyWrapFireWindow(d), true);
+});
+
+test("isWeeklyWrapFireWindow: Sunday 19:00 UTC does NOT fire", () => {
+  const d = new Date(Date.UTC(2026, 4, 17, 19, 0));
+  assert.equal(isWeeklyWrapFireWindow(d), false);
 });
 
 test("formatWeeklyDigestBody: positive net with best pick", () => {

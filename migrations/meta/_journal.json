@@ -498,6 +498,13 @@
       "when": 1780435200000,
       "tag": "0070_recovery_email_verification",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1780521600000,
+      "tag": "0071_user_rank_snapshots",
+      "breakpoints": true
     }
   ]
 }

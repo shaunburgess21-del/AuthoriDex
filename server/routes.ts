@@ -7079,6 +7079,74 @@ Only return the JSON object.`;
     }
   });
 
+  // Dev/admin: send a real-data Weekly Wrap to the caller's inbox (or target user).
+  app.post(
+    "/api/dev/preview-weekly-wrap",
+    requireAuth,
+    requireAdmin,
+    async (req: AuthRequest, res) => {
+      try {
+        const targetUserId =
+          typeof req.body?.userId === "string" && req.body.userId.trim()
+            ? req.body.userId.trim()
+            : req.userId!;
+        const sendToCaller = req.body?.sendToCaller === true;
+        const { getWeeklyDigestStats } = await import("./jobs/weekly-digest-stats");
+        const { sendEmail } = await import("./emails/send");
+        const { getSupabaseAuthEmail } = await import("./services/supabase-auth-email");
+        const {
+          WeeklyWrapEmail,
+          weeklyWrapSubject,
+        } = await import("./emails/templates/engagement/WeeklyWrapEmail");
+        const { buildUnsubscribeUrl } = await import("./emails/unsubscribe");
+
+        const stats = await getWeeklyDigestStats(targetUserId);
+        const baseUrl = resolvePublicAppUrl(req);
+        const to = sendToCaller
+          ? req.userEmail
+          : await getSupabaseAuthEmail(targetUserId);
+
+        if (!to) {
+          return res.status(400).json({
+            error: "No email address available for preview send",
+          });
+        }
+
+        const result = await sendEmail({
+          to,
+          subject: weeklyWrapSubject(stats),
+          category: "engagement",
+          templateName: "weekly_wrap",
+          userId: targetUserId,
+          skipMarketingChecks: true,
+          template: React.createElement(WeeklyWrapEmail, {
+            stats,
+            baseUrl,
+            unsubscribeUrl: buildUnsubscribeUrl(targetUserId, baseUrl),
+          }),
+          tags: [{ name: "type", value: "weekly-wrap-preview" }],
+        });
+
+        if (!result.ok) {
+          return res.status(500).json({ error: result.error });
+        }
+
+        res.json({
+          ok: true,
+          skipped: result.skipped ?? false,
+          reason: result.skipped ? result.reason : undefined,
+          resendId: result.id,
+          to,
+          stats,
+        });
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error("[dev/preview-weekly-wrap] failed:", message);
+        res.status(500).json({ error: message });
+      }
+    },
+  );
+
   // ==================== PROFILE ENDPOINTS ====================
 
   // Single source of truth for the signup credit grant. Referenced by:
