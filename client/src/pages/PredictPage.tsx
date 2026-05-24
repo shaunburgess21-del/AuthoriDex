@@ -115,7 +115,7 @@ import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { UserSocialAvatar } from "@/components/UserSocialAvatar";
 import { formatActivityAge } from "@/lib/formatDate";
 import { getMarketCategoryLabel, normalizeMarketCategory, CATEGORIES_OPEN, OPINION_POLL_MIN_OPTIONS, OPINION_POLL_MAX_OPTIONS } from "@shared/constants";
-import { buildSectionCategoryOptions, isPinnedCategory } from "@/lib/sectionCategoryFilters";
+import { buildSectionCategoryOptions } from "@/lib/sectionCategoryFilters";
 import {
   communityChipForMarket,
   filterCommunityMarkets,
@@ -2772,23 +2772,7 @@ export default function PredictPage() {
     [openMarkets, favoriteIds],
   );
 
-  const communityByCategory = useMemo(
-    () => {
-      const map = new Map<string, any[]>();
-      for (const m of filteredCommunity) {
-        const cat = normalizeMarketCategory(m.category);
-        if (!map.has(cat)) map.set(cat, []);
-        map.get(cat)!.push(m);
-      }
-      return Array.from(map.entries()).sort(([a], [b]) =>
-        getMarketCategoryLabel(a).localeCompare(getMarketCategoryLabel(b)),
-      );
-    },
-    [filteredCommunity],
-  );
-
   const showCommunityMobileStacks = isMobile;
-  const communityStackLayout = isPinnedCategory(communityCategory) ? "grouped" : "single";
 
   const updownCategoryFilters = useMemo(
     () =>
@@ -2894,12 +2878,10 @@ export default function PredictPage() {
   );
 
   const renderCommunityMarketCard = useCallback(
-    (market: any, context?: "carousel" | "stack") => {
-      const isCarousel = context === "carousel";
-      return (
+    (market: any) => (
         <div
           key={market.id}
-          className={isCarousel ? "w-full" : "max-md:h-auto max-md:self-start w-full"}
+          className="max-md:h-auto max-md:self-start w-full"
           data-testid={`card-community-${market.id}`}
           onClick={(e) => handleCardEmptyTap(e, "world-markets", String(market.id))}
         >
@@ -2923,8 +2905,7 @@ export default function PredictPage() {
             unrealisedPnl={ammPositionByMarket.get(String(market.id))?.unrealisedPnl ?? null}
           />
         </div>
-      );
-    },
+    ),
     [
       ammPositionByMarket,
       handleCardEmptyTap,
@@ -3772,7 +3753,7 @@ export default function PredictPage() {
                 </Card>
               ) : isLoadingOpenMarkets ? (
                 showCommunityMobileStacks ? (
-                  <div className="md:hidden flex flex-col gap-6">
+                  <div className="md:hidden flex flex-col gap-4">
                     {Array.from({ length: 3 }).map((_, i) => (
                       <Card key={i} className="p-4 space-y-3">
                         <div className="flex items-center gap-2">
@@ -3784,11 +3765,6 @@ export default function PredictPage() {
                         <div className="flex items-center justify-between pt-2">
                           <Skeleton className="h-8 w-24 rounded-md" />
                           <Skeleton className="h-8 w-24 rounded-md" />
-                        </div>
-                        <div className="flex justify-center gap-1.5 pt-2">
-                          <Skeleton className="h-1.5 w-1.5 rounded-full" />
-                          <Skeleton className="h-1.5 w-1.5 rounded-full" />
-                          <Skeleton className="h-1.5 w-1.5 rounded-full" />
                         </div>
                       </Card>
                     ))}
@@ -3815,11 +3791,6 @@ export default function PredictPage() {
                 showCommunityMobileStacks ? (
                   <WorldMarketsCategoryStacks
                     ref={communitySectionRef}
-                    layout={communityStackLayout}
-                    groups={communityByCategory.map(([categoryId, markets]) => ({
-                      categoryId,
-                      markets,
-                    }))}
                     categoryFilters={communityCategoryFilters}
                     activeCategory={communityCategory}
                     onCategoryChange={setCommunityCategory}
@@ -3827,7 +3798,6 @@ export default function PredictPage() {
                     resolveChipForMarketId={resolveCommunityChipForMarketId}
                     renderMarket={renderCommunityMarketCard}
                     testIdPrefix="section-community"
-                    dotActiveColor="bg-violet-500"
                   />
                 ) : (
                   <CardSection
@@ -3845,7 +3815,7 @@ export default function PredictPage() {
                   No markets available yet
                 </div>
               )}
-              <div className="text-center mt-2 md:mt-6">
+              <div className="hidden md:block text-center mt-6">
                 <Button 
                   variant="ghost" 
                   size="sm" 
