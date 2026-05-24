@@ -84,7 +84,7 @@ export function WelcomeEmail({
 
   // Long, descriptive preheader so Outlook for Windows desktop fills its
   // inbox preview from our copy instead of appending a literal "<end>".
-  const preview = `Your VoxDex account is ready. You've got ${voxLabel} of starter balance — virtual play currency for predictions on the people and events shaping the world.`;
+  const preview = `Your VoxDex account is ready with ${voxLabel} to spend. Virtual play currency for predictions on the people and events shaping the world.`;
 
   return (
     <Layout
