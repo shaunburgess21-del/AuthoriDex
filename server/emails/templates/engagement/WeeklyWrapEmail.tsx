@@ -24,7 +24,9 @@ export function weeklyWrapSubject(
 ): string {
   const resolved = stats.wins + stats.losses;
   if (resolved <= 0) return "Your VoxDex week";
-  return `Your VoxDex week: ${stats.wins}W-${stats.losses}L`;
+  const winsLabel = stats.wins === 1 ? "1 win" : `${stats.wins} wins`;
+  const lossesLabel = stats.losses === 1 ? "1 loss" : `${stats.losses} losses`;
+  return `Your VoxDex week: ${winsLabel}, ${lossesLabel}`;
 }
 
 /** Hero P&L uses word "Vox" — avoids Outlook tofu on the Ꝟ glyph. */

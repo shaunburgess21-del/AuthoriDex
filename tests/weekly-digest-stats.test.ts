@@ -18,8 +18,25 @@ test("weeklyWrapSubject: base when no resolved bets", () => {
   assert.equal(weeklyWrapSubject({ wins: 0, losses: 0 }), "Your VoxDex week");
 });
 
-test("weeklyWrapSubject: W-L variant when resolved", () => {
-  assert.equal(weeklyWrapSubject({ wins: 12, losses: 8 }), "Your VoxDex week: 12W-8L");
+test("weeklyWrapSubject: plural variant when resolved", () => {
+  assert.equal(
+    weeklyWrapSubject({ wins: 12, losses: 8 }),
+    "Your VoxDex week: 12 wins, 8 losses",
+  );
+});
+
+test("weeklyWrapSubject: singular labels when count is 1", () => {
+  assert.equal(
+    weeklyWrapSubject({ wins: 1, losses: 1 }),
+    "Your VoxDex week: 1 win, 1 loss",
+  );
+});
+
+test("weeklyWrapSubject: handles wins-only", () => {
+  assert.equal(
+    weeklyWrapSubject({ wins: 3, losses: 0 }),
+    "Your VoxDex week: 3 wins, 0 losses",
+  );
 });
 
 test("formatHeroPnl: uses Vox word not symbol", () => {
