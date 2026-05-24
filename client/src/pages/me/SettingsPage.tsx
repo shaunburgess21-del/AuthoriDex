@@ -30,14 +30,25 @@ import {
   KeyRound,
   Check,
   AlertTriangle,
+  Trash2,
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { navigateToLogin } from "@/lib/authReturn";
 import { useAuth } from "@/contexts/AuthContext";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 import { toast } from "sonner";
-import { useMutation } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ApiError, apiRequest, parseApiError } from "@/lib/queryClient";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import {
   Popover,
@@ -1276,18 +1287,268 @@ function AccountTab({ signOut }: { signOut: () => Promise<void> }) {
             Sign Out
           </Button>
         </div>
-        <div className="flex items-center justify-between">
-          <div className="space-y-0.5">
-            <Label className="text-destructive">Delete Account</Label>
+        <AccountDeletionRow />
+      </Card>
+    </div>
+  );
+}
+
+type DeletionStatus = {
+  pending: boolean;
+  finalised: boolean;
+  requestedAt: string | null;
+  scheduledFor: string | null;
+  deletedAt: string | null;
+};
+
+const DELETION_STATUS_KEY = ["/api/me/account/deletion-status"] as const;
+
+function formatScheduledFor(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+
+/**
+ * Danger Zone account-deletion control. Wires the existing
+ * 7-day soft-delete backend (POST /api/me/account/delete,
+ * POST /api/me/account/cancel-deletion, GET /api/me/account/deletion-status).
+ *
+ * - If a deletion is already pending: shows the scheduled date and a
+ *   Cancel deletion button. The user stays logged in and can cancel
+ *   any time before the window elapses.
+ * - Otherwise: opens an AlertDialog with an optional reason field and
+ *   a type-DELETE-to-confirm input. The server's 7-day window means
+ *   no irreversible action happens until the sweeper finalises.
+ * - Admin self-deletion is blocked server-side; we surface the 409
+ *   message inline so operators understand the demotion handshake.
+ */
+function AccountDeletionRow() {
+  const queryClient = useQueryClient();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const [confirmText, setConfirmText] = useState("");
+  const [dialogError, setDialogError] = useState<string | null>(null);
+
+  const statusQuery = useQuery<DeletionStatus>({
+    queryKey: DELETION_STATUS_KEY,
+    staleTime: 30 * 1000,
+  });
+
+  const status = statusQuery.data;
+
+  const scheduleMutation = useMutation({
+    mutationFn: async (payload: { reason: string | null }) => {
+      const res = await apiRequest("POST", "/api/me/account/delete", payload);
+      return (await res.json()) as { scheduledFor: string | null; message: string };
+    },
+    onSuccess: async (data) => {
+      setDialogOpen(false);
+      setReason("");
+      setConfirmText("");
+      setDialogError(null);
+      await queryClient.invalidateQueries({ queryKey: DELETION_STATUS_KEY });
+      const when = formatScheduledFor(data.scheduledFor);
+      toast("Account deletion scheduled", {
+        description: when
+          ? `Your account will be deleted on ${when}. You can cancel any time before then.`
+          : data.message,
+      });
+    },
+    onError: (err) => {
+      if (err instanceof ApiError) {
+        // 409 admin guard — surface message inline; keep dialog open.
+        try {
+          const body = JSON.parse(err.message.replace(/^\d{3}:\s*/, ""));
+          if (body && typeof body === "object" && typeof body.message === "string") {
+            setDialogError(body.message);
+            return;
+          }
+        } catch {
+          // Fall through to toast.
+        }
+      }
+      const parsed = parseApiError(err, "Could not schedule deletion");
+      toast.error(parsed.title, { description: parsed.description });
+    },
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/me/account/cancel-deletion", {});
+      return res.json();
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: DELETION_STATUS_KEY });
+      toast("Deletion cancelled", {
+        description: "Your account is fully active again.",
+      });
+    },
+    onError: (err) => {
+      const parsed = parseApiError(err, "Could not cancel deletion");
+      toast.error(parsed.title, { description: parsed.description });
+    },
+  });
+
+  const handleDialogOpenChange = (open: boolean) => {
+    setDialogOpen(open);
+    if (!open) {
+      setReason("");
+      setConfirmText("");
+      setDialogError(null);
+    }
+  };
+
+  // Defensive fallback. In practice an anonymised user can't reach
+  // Settings (Supabase Auth row may still exist but the profile is
+  // wiped), but render rather than crash if we ever do.
+  if (status?.finalised) {
+    return (
+      <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3">
+        <p className="text-sm font-medium text-destructive">Account already deleted</p>
+        <p className="text-xs text-muted-foreground mt-1">
+          This account has been anonymised and cannot be recovered.
+        </p>
+      </div>
+    );
+  }
+
+  if (status?.pending) {
+    const when = formatScheduledFor(status.scheduledFor);
+    return (
+      <div className="space-y-3 rounded-md border border-destructive/40 bg-destructive/5 p-3">
+        <div className="flex items-start gap-2">
+          <AlertTriangle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
+          <div className="space-y-0.5 min-w-0">
+            <p className="text-sm font-medium text-destructive">
+              Account scheduled for deletion
+            </p>
             <p className="text-xs text-muted-foreground">
-              Permanently delete your account and all data
+              {when
+                ? `Your account will be permanently deleted on ${when}. You can still cancel before then.`
+                : "Your account is scheduled for deletion. You can still cancel before the scheduled date."}
             </p>
           </div>
-          <Button variant="destructive" disabled>
-            Coming Soon
+        </div>
+        <div className="flex justify-end">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => cancelMutation.mutate()}
+            disabled={cancelMutation.isPending}
+            data-testid="button-cancel-account-deletion"
+          >
+            {cancelMutation.isPending && (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            )}
+            Cancel deletion
           </Button>
         </div>
-      </Card>
+      </div>
+    );
+  }
+
+  const canConfirm = confirmText === "DELETE" && !scheduleMutation.isPending;
+
+  return (
+    <div className="flex items-center justify-between">
+      <div className="space-y-0.5">
+        <Label className="text-destructive">Delete Account</Label>
+        <p className="text-xs text-muted-foreground">
+          Permanently delete your account and all data
+        </p>
+      </div>
+      <AlertDialog open={dialogOpen} onOpenChange={handleDialogOpenChange}>
+        <Button
+          variant="destructive"
+          onClick={() => setDialogOpen(true)}
+          disabled={statusQuery.isLoading}
+          data-testid="button-delete-account"
+        >
+          <Trash2 className="h-4 w-4 mr-2" />
+          Delete account
+        </Button>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete your account?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>
+                  Your account will be scheduled for deletion in{" "}
+                  <span className="font-medium text-foreground">7 days</span>. You
+                  can sign back in any time before then to cancel.
+                </p>
+                <p>
+                  After the cooling-off window, your username, avatar, bio,
+                  demographics, recovery email, phone number and social handles
+                  will be permanently anonymised. Your public profile will be
+                  hidden and any remaining predict credits will be wiped.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <div className="space-y-3 py-1">
+            <div className="space-y-1.5">
+              <Label htmlFor="deletion-reason" className="text-xs">
+                Reason (optional)
+              </Label>
+              <Textarea
+                id="deletion-reason"
+                value={reason}
+                onChange={(e) => setReason(e.target.value.slice(0, 500))}
+                placeholder="Tell us why you're leaving (optional)"
+                rows={3}
+                data-testid="input-deletion-reason"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="deletion-confirm" className="text-xs">
+                Type <span className="font-mono font-semibold">DELETE</span> to
+                confirm
+              </Label>
+              <Input
+                id="deletion-confirm"
+                value={confirmText}
+                onChange={(e) => setConfirmText(e.target.value)}
+                autoComplete="off"
+                spellCheck={false}
+                data-testid="input-deletion-confirm"
+              />
+            </div>
+            {dialogError ? (
+              <p role="alert" className="text-xs text-destructive">
+                {dialogError}
+              </p>
+            ) : null}
+          </div>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-deletion-cancel">
+              Keep my account
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                if (!canConfirm) return;
+                setDialogError(null);
+                scheduleMutation.mutate({
+                  reason: reason.trim() ? reason.trim() : null,
+                });
+              }}
+              disabled={!canConfirm}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="button-deletion-confirm"
+            >
+              {scheduleMutation.isPending && (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              )}
+              Schedule deletion
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

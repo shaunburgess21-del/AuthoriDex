@@ -657,6 +657,7 @@ export async function checkAndAwardProfileBadges(
         countryOfOrigin: profiles.countryOfOrigin,
         countryOfResidence: profiles.countryOfResidence,
         ethnicity: profiles.ethnicity,
+        onboardingCompletedAt: profiles.onboardingCompletedAt,
       })
       .from(profiles)
       .where(eq(profiles.id, userId))
@@ -698,7 +699,11 @@ export async function checkAndAwardProfileBadges(
       }
     };
 
-    if (hasText(profile.avatarUrl)) {
+    // "Fresh Look" only fires once the user has finished onboarding —
+    // the seeded generative avatar that signup auto-saves shouldn't
+    // unlock it. Any later change (generative pick OR custom upload)
+    // from Settings is treated as an earned avatar choice.
+    if (hasText(profile.avatarUrl) && profile.onboardingCompletedAt) {
       await badgeService.awardBadge(userId, "avatar_uploaded");
       await awardProfileTier("profile_avatar");
     }

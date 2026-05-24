@@ -469,8 +469,8 @@ export const BADGES: BadgeConfig[] = [
   // ---- PROFILE (4) ----
   {
     key: "avatar_uploaded",
-    name: "Avatar Uploaded",
-    description: "Add a profile photo",
+    name: "Fresh Look",
+    description: "Change your avatar after signing up",
     category: BADGE_CATEGORIES.PROFILE,
     rarity: BADGE_RARITIES.COMMON,
     icon: "camera",

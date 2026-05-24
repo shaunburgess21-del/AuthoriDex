@@ -12605,10 +12605,23 @@ Only return the JSON object.`;
       }
 
       const userEmail = await getSupabaseAuthEmail(userId);
+      // Tolerate orphans: if the Supabase Auth row was already removed
+      // (e.g. deleted directly in the Supabase dashboard), the profile
+      // row may still be here holding the unique username hostage. We
+      // log + continue so the admin panel can always finish the cleanup.
+      let authAlreadyMissing = false;
       const { error: authDeleteError } = await supabaseServer.auth.admin.deleteUser(userId);
       if (authDeleteError) {
-        console.error(`[Admin Users] Supabase auth delete failed for ${userId}:`, authDeleteError.message);
-        return res.status(502).json({ error: `Failed to delete Supabase auth user: ${authDeleteError.message}` });
+        const status = (authDeleteError as any)?.status;
+        const msg = authDeleteError.message || "";
+        const isMissing = status === 404 || /user.*not.*found/i.test(msg);
+        if (isMissing) {
+          authAlreadyMissing = true;
+          console.warn(`[Admin Users] Supabase auth user ${userId} already missing; proceeding with app-data cleanup.`);
+        } else {
+          console.error(`[Admin Users] Supabase auth delete failed for ${userId}:`, msg);
+          return res.status(502).json({ error: `Failed to delete Supabase auth user: ${msg}` });
+        }
       }
 
       await db.transaction(async (tx) => {
@@ -12648,7 +12661,8 @@ Only return the JSON object.`;
           newData: null,
           metadata: {
             reason: trimmedReason,
-            deletedAuthUser: true,
+            deletedAuthUser: !authAlreadyMissing,
+            authAlreadyMissing,
             authEmail: userEmail,
           },
         });
