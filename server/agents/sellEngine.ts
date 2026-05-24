@@ -172,7 +172,7 @@ export function computeSellDecision(
   // Score vs weekly open reversed against the held side — exit even when
   // AMM price still looks fine (UP shares in profit while score crashed).
   if (scoreReversal) {
-    const elevatedPSell = Math.min(0.85, tuning.pSellBottom + 0.35);
+    const elevatedPSell = Math.min(0.85, tuning.pSellBottom + 0.25);
     // Score already broke the thesis — skip the hope-for-reversal gate
     // that normally blocks loss-zone exits.
     if (rng.nextFloat() >= elevatedPSell) return null;

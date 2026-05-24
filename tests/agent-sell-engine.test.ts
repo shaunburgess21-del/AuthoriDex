@@ -294,7 +294,7 @@ test("isScoreReversal detects UP held while score below open", () => {
       anchor: 0.55,
       livePrice: 0.58,
       netShares: 50,
-      scoreContext: { pctChangeVsOpen: -0.08, heldEntryIsUp: true },
+      scoreContext: { pctChangeVsOpen: -0.13, heldEntryIsUp: true },
     }),
     true,
   );

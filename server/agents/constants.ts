@@ -227,7 +227,7 @@ export const REPREDICT_MAX_PER_MARKET = 1;
 export const CONVICTION_SCORE_AGREE_FLIP = 0.12;
 export const CONVICTION_SCORE_DISAGREE_FLIP_BASE = 0.55;
 export const CONVICTION_SCORE_DISAGREE_FLIP_CONTRARIAN = 0.10;
-export const SCORE_REVERSAL_SELL_PCT = 0.05;
+export const SCORE_REVERSAL_SELL_PCT = 0.10;
 export const MISPRICED_PRIORITY_SLICE = 5;
 export const MISPRICED_SCORE_PCT = 0.08;
 export const MISPRICED_UP_PRICE_HIGH = 0.52;
@@ -312,7 +312,7 @@ export const SELL_PERSONA_TUNING: Record<
     pSellTop: 0.30,
     pSellBottom: 0.20,
     hopeForReversalPct: 0.40,
-    earlyProfitPct: 0.12,
+    earlyProfitPct: 0.06,
     topFractionRange: [0.40, 0.70],
     bottomFractionRange: [0.30, 0.60],
     earlyFractionRange: [0.20, 0.40],
@@ -323,7 +323,7 @@ export const SELL_PERSONA_TUNING: Record<
     pSellTop: 0.45,
     pSellBottom: 0.30,
     hopeForReversalPct: 0.30,
-    earlyProfitPct: 0.15,
+    earlyProfitPct: 0.08,
     topFractionRange: [0.50, 0.90],
     bottomFractionRange: [0.40, 0.75],
     earlyFractionRange: [0.20, 0.45],
@@ -345,7 +345,7 @@ export const SELL_PERSONA_TUNING: Record<
     pSellTop: 0.40,
     pSellBottom: 0.35,
     hopeForReversalPct: 0.25,
-    earlyProfitPct: 0.08,
+    earlyProfitPct: 0.04,
     topFractionRange: [0.55, 0.85],
     bottomFractionRange: [0.50, 0.80],
     earlyFractionRange: [0.20, 0.40],
