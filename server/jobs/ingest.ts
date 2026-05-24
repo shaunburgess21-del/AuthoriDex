@@ -10,6 +10,7 @@ import { fetchMultiSourceNewsBatch, type AggregatorStats } from "../providers/ne
 import { computeTrendScore } from "../scoring/trendScore";
 import { refreshSourceStats } from "../scoring/sourceStats";
 import { evaluateCanaries, CanaryReport, getCanaryNames } from "../scoring/canaryMonitor";
+import { checkAndEmitProviderCoverageAlerts } from "../services/ingest-provider-alert-runner";
 import {
   calculateGlobalHealthMetrics,
   updateSourceHealth,
@@ -2903,6 +2904,12 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
       hourBucket: hourTimestamp,
       healthSummary,
     });
+
+    try {
+      await checkAndEmitProviderCoverageAlerts(healthSummary as Record<string, unknown>);
+    } catch (alertErr) {
+      console.warn("[Ingest] Provider coverage alert check failed:", alertErr);
+    }
 
     await persistSystemKey(LAST_RUN_META_KEY, _lastRunMeta);
     await persistSystemKey(HEALTH_SUMMARY_KEY, healthSummary);

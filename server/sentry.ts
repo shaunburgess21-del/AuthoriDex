@@ -80,6 +80,37 @@ export function captureBackgroundError(err: unknown, context?: Record<string, un
 }
 
 /**
+ * Capture a background warning/message. Safe to call whether or not
+ * Sentry is initialized.
+ */
+export function captureBackgroundMessage(
+  message: string,
+  options?: {
+    level?: "warning" | "error" | "info";
+    tags?: Record<string, string>;
+    extra?: Record<string, unknown>;
+  },
+) {
+  const dsnConfigured = !!(process.env.SENTRY_DSN && process.env.SENTRY_DSN.trim());
+  if (!dsnConfigured) return;
+  const level = options?.level ?? "warning";
+  Sentry.withScope((scope) => {
+    scope.setLevel(level);
+    if (options?.tags) {
+      for (const [k, v] of Object.entries(options.tags)) {
+        scope.setTag(k, v);
+      }
+    }
+    if (options?.extra) {
+      for (const [k, v] of Object.entries(options.extra)) {
+        scope.setExtra(k, v);
+      }
+    }
+    Sentry.captureMessage(message);
+  });
+}
+
+/**
  * Mount Sentry's request handler. Call BEFORE any routes so all incoming
  * requests are tagged correctly. No-op when Sentry is disabled.
  */

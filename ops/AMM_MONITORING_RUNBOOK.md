@@ -22,6 +22,7 @@ section 2 for a generic webhook payload shape).
 | **P0** | `[AmmResolver]` AND (`failed` OR `error`) | An AMM market resolution crashed mid-tx. Money may not have moved. | Flip `agent_runtime_state.paused=true`. Inspect `prediction_markets.status` for the affected id. |
 | **P0** | `duplicate key value violates unique constraint "credit_ledger_idempotency_key"` | Two concurrent calls tried to write the same `amm_buy_*` / `amm_sell_*` / `amm_seed_*` key. Idempotency caught it — no double-debit — but it indicates a race. | Search the logs for the colliding key. Confirm the user only got one bet row in `market_bets`. Open an incident. |
 | **P0** | `[MarketResolver]` AND `failed` | Cron resolver loop crashed. Markets won't auto-settle until restart. | Check Railway deploy logs for stack trace. Re-deploy if the container is wedged. |
+| **P1** | `[IngestAlert] provider=` | A news provider's per-person article coverage dropped below 25% for 3 consecutive hourly ingest runs after having been ≥50% in the prior 24h (Mediastack billing outage, API key, etc.). | Check provider dashboard / billing. Confirm `ingestion_runs.health_summary` → `coverage.newsAggregator.providers.<name>`. Re-run ingest after fix; ratio should recover within 1–2 hours. |
 | **P1** | `[ActionWorker] AMM error` | Agent trade hit a structured `TradeError`. Single agent action is dead-lettered. | Usually self-heals; only investigate if the same agent appears > 5 times in 10 minutes. |
 | **P1** | `[AmmTrades]` AND (`Insufficient credits` OR `Market closed` OR `Invalid entry`) | A human or agent buy was rejected at the route boundary. Expected during normal operation. | Inspect rate only — sustained > 10/min suggests UI showing stale state. |
 | **P2** | `[amm-bet-hooks]` AND (`failed` OR `XP award failed`) | A post-trade side-effect (XP / referral / badge / engagement) hit an exception. Bet itself succeeded. | Low priority. Aggregate by `surface` tag in Sentry and triage in batches. |
@@ -34,6 +35,7 @@ section 2 for a generic webhook payload shape).
 "[MarketResolver]" "failed"
 "duplicate key value" "credit_ledger_idempotency_key"
 "[ActionWorker] AMM error"
+"[IngestAlert] provider="
 "[amm-bet-hooks]"
 ```
 

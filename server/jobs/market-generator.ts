@@ -3,7 +3,7 @@ import { db, withDbAdvisoryLock } from "../db";
 import { predictionMarkets, marketEntries, trackedPeople, trendingPeople } from "@shared/schema";
 import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
 import { eq, and, desc, inArray, sql, gte } from "drizzle-orm";
-import { buildOpeningScores } from "../native-markets/openingScores";
+import { buildOpeningScores, loadOpeningScoreMap } from "../native-markets/openingScores";
 import {
   getMarketBettingCutoff,
   getWeeklyBettingCutoff as getWeeklyBettingCutoffForEndAt,
@@ -151,24 +151,7 @@ export async function generateWeeklyUpDown(): Promise<number> {
   // within hours; 14 days is a generous cushion. Without this bound the
   // planner sometimes falls off the (person_id, timestamp DESC) index on a
   // long IN-list and times out on Supabase's statement_timeout.
-  const openingSnapRows = personIdList.length > 0
-    ? await db.execute(sql`
-        SELECT DISTINCT ON (person_id) person_id, fame_index, timestamp
-        FROM trend_snapshots
-        WHERE person_id IN (${sql.join(personIdList.map(id => sql`${id}`), sql`, `)})
-          AND timestamp > NOW() - INTERVAL '14 days'
-        ORDER BY person_id, timestamp DESC
-      `)
-    : { rows: [] };
-  const openingScoreMap = new Map<string, { score: number; snapshotAt: string }>();
-  for (const row of (openingSnapRows.rows || [])) {
-    if (row.fame_index != null) {
-      openingScoreMap.set(String(row.person_id), {
-        score: Number(row.fame_index),
-        snapshotAt: new Date(row.timestamp as string).toISOString(),
-      });
-    }
-  }
+  const openingScoreMap = await loadOpeningScoreMap(personIdList, db);
 
   const engine = nativeEngineFor("updown");
   let created = 0;
@@ -189,7 +172,16 @@ export async function generateWeeklyUpDown(): Promise<number> {
       endAt: sunday,
       closeAt: getMarketBettingCutoff(sunday, engine),
       weekNumber,
-      metadata: openScore ? { openingScore: { personId: person.id, score: openScore.score, snapshotAt: openScore.snapshotAt } } : undefined,
+      metadata: openScore
+        ? {
+            openingScore: {
+              personId: person.id,
+              score: openScore.score,
+              snapshotAt: openScore.snapshotAt,
+              ...(openScore.sampleCount != null ? { sampleCount: openScore.sampleCount } : {}),
+            },
+          }
+        : undefined,
       featured: false,
     };
 
@@ -734,21 +726,7 @@ export async function generateWeeklyH2H(): Promise<number> {
     log(`[MarketGenerator:H2H] Week ${weekNumber}: built ${pairings.length} pairings (mode=${useTop4PerCategory ? "top4-per-category" : "legacy-top30"})`);
 
     const allPersonIds = Array.from(new Set(pairings.flatMap(([a, b]) => [a.id, b.id])));
-    const snapRows = allPersonIds.length > 0
-      ? await tx.execute(sql`
-          SELECT DISTINCT ON (person_id) person_id, fame_index, timestamp
-          FROM trend_snapshots
-          WHERE person_id IN (${sql.join(allPersonIds.map(id => sql`${id}`), sql`, `)})
-            AND timestamp > NOW() - INTERVAL '14 days'
-          ORDER BY person_id, timestamp DESC
-        `)
-      : { rows: [] };
-    const snapMap = new Map<string, { score: number; snapshotAt: string }>();
-    for (const row of (snapRows.rows || [])) {
-      if (row.fame_index != null) {
-        snapMap.set(String(row.person_id), { score: Number(row.fame_index), snapshotAt: new Date(row.timestamp as string).toISOString() });
-      }
-    }
+    const snapMap = await loadOpeningScoreMap(allPersonIds, tx);
 
     const engine = nativeEngineFor("h2h");
     let createdCount = 0;
@@ -873,21 +851,7 @@ export async function generateWeeklyGainer(): Promise<{ created: number; updated
     : [];
   const scoreMap = new Map(liveScores.map(p => [p.id, p.fameIndex ?? 0]));
 
-  const snapRows = allIds.length > 0
-    ? await db.execute(sql`
-        SELECT DISTINCT ON (person_id) person_id, fame_index, timestamp
-        FROM trend_snapshots
-        WHERE person_id IN (${sql.join(allIds.map(id => sql`${id}`), sql`, `)})
-          AND timestamp > NOW() - INTERVAL '14 days'
-        ORDER BY person_id, timestamp DESC
-      `)
-    : { rows: [] };
-  const snapMap = new Map<string, { score: number; snapshotAt: string }>();
-  for (const row of (snapRows.rows || [])) {
-    if (row.fame_index != null) {
-      snapMap.set(String(row.person_id), { score: Number(row.fame_index), snapshotAt: new Date(row.timestamp as string).toISOString() });
-    }
-  }
+  const snapMap = await loadOpeningScoreMap(allIds, db);
 
   const engine = nativeEngineFor("gainer");
   let created = 0;
