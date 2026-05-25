@@ -984,9 +984,12 @@ const RESOLUTION_IMMINENT_LOOKAHEAD_MS = 6 * 60 * 60 * 1000;
  *     longer act, but P&L is about to land). Fans out at a single
  *     6h heads-up only to users with skin in the game.
  *
- * Idempotency: `position_resolution_imminent:${userId}:${marketId}`
+ * Idempotency: `position_resolution_imminent:${userId}:${marketId}:${entryId}`
  * — once fired, never re-fires for the same position regardless of
  * how many ticks land in the 6h window.
+ *
+ * groupKey: `position_resolution_imminent:${userId}` collapses the
+ * inbox to one head row + "+N earlier" when a user holds many positions.
  */
 async function derivePositionResolutionImminent(): Promise<number> {
   const lookaheadEnd = new Date(Date.now() + RESOLUTION_IMMINENT_LOOKAHEAD_MS);
@@ -1026,6 +1029,9 @@ async function derivePositionResolutionImminent(): Promise<number> {
         entryLabel: marketEntries.label,
         candidateName: entryPerson.name,
         netShares: sql<string>`SUM(CASE WHEN ${marketBets.actionType} = 'buy' THEN ${marketBets.shareCount}::numeric ELSE -${marketBets.shareCount}::numeric END)`,
+        // Sells store stakeAmount as negative proceeds — SUM matches
+        // loadAmmPositionsFor netCreditsIn (buy cost minus realised sells).
+        netCreditsIn: sql<string>`SUM(${marketBets.stakeAmount})`,
       })
       .from(marketBets)
       .innerJoin(profiles, eq(profiles.id, marketBets.userId))
@@ -1066,10 +1072,13 @@ async function derivePositionResolutionImminent(): Promise<number> {
         personName: market.personName,
       });
 
+      const stakeCredits = Number(row.netCreditsIn ?? 0);
+
       const { title, body } = formatResolutionImminentNotification({
         marketTitle,
         contextLabel,
         netShares,
+        stakeCredits,
         hoursRemaining,
       });
 
@@ -1086,8 +1095,10 @@ async function derivePositionResolutionImminent(): Promise<number> {
           marketId: market.id,
           entryId: row.entryId,
           netShares: Math.round(netShares),
+          stakeCredits: Math.max(0, Math.round(stakeCredits)),
           hoursRemaining: Math.max(0, Math.floor(hoursRemaining)),
         },
+        groupKey: `position_resolution_imminent:${row.userId}`,
         idempotencyKey: `position_resolution_imminent:${row.userId}:${market.id}:${row.entryId}`,
       });
       if (id) inserted += 1;

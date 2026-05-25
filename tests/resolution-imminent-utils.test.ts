@@ -1,82 +1,120 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
+import { CURRENCY } from "@shared/currency";
 import { formatResolutionImminentNotification } from "../server/jobs/resolution-imminent-utils";
 
-const EMDASH = "\u2014";
+const SYM = CURRENCY.symbol;
 const MIDDOT = "\u00b7";
 
-test("6h remaining: Your position title and market-only body", () => {
+function body(stake: number, shares: string, shareWord: string, payout: number): string {
+  const stakeFmt = `${SYM}${stake.toLocaleString("en-US")}`;
+  const payoutFmt = `${SYM}${payout.toLocaleString("en-US")}`;
+  return `Staked ${stakeFmt} ${MIDDOT} ${shares} ${shareWord} (${payoutFmt} if your pick wins)`;
+}
+
+test("6h remaining: market-first title and stake + payout body", () => {
   const out = formatResolutionImminentNotification({
     marketTitle: "Mark Cuban: Up or Down?",
     contextLabel: "Mark Cuban",
     netShares: 240,
+    stakeCredits: 180,
     hoursRemaining: 6,
   });
-  assert.equal(out.title, `Your position resolves in 6h ${EMDASH} you're still holding`);
-  assert.equal(
-    out.body,
-    `Mark Cuban: Up or Down? ${MIDDOT} 240 shares. Last call before payout lands.`,
-  );
+  assert.equal(out.title, "Mark Cuban: Up or Down? resolves in 6h");
+  assert.equal(out.body, body(180, "240", "shares", 240));
 });
 
 test("3.7h remaining floors to 3h", () => {
   const out = formatResolutionImminentNotification({
     marketTitle: "Conor McGregor: Up or Down?",
     netShares: 100,
+    stakeCredits: 75,
     hoursRemaining: 3.7,
   });
-  assert.equal(out.title, `Your position resolves in 3h ${EMDASH} you're still holding`);
+  assert.equal(out.title, "Conor McGregor: Up or Down? resolves in 3h");
 });
 
 test("0.5h remaining renders as <1h", () => {
   const out = formatResolutionImminentNotification({
     marketTitle: "Tesla: Up or Down?",
     netShares: 50,
+    stakeCredits: 40,
     hoursRemaining: 0.5,
   });
-  assert.equal(out.title, `Your position resolves in <1h ${EMDASH} you're still holding`);
+  assert.equal(out.title, "Tesla: Up or Down? resolves in <1h");
 });
 
-test("category race body leads with candidate pick", () => {
+test("category race title and body lead with candidate pick", () => {
   const out = formatResolutionImminentNotification({
     marketTitle: "Category Race: Streaming",
     contextLabel: "Clavicular",
     netShares: 335,
+    stakeCredits: 280,
     hoursRemaining: 6,
   });
-  assert.equal(
-    out.body,
-    `Clavicular ${MIDDOT} Category Race: Streaming ${MIDDOT} 335 shares. Last call before payout lands.`,
-  );
+  assert.equal(out.title, `Clavicular ${MIDDOT} Category Race: Streaming resolves in 6h`);
+  assert.equal(out.body, body(280, "335", "shares", 335));
 });
 
 test("netShares uses singular share when count rounds to 1", () => {
   const out = formatResolutionImminentNotification({
     marketTitle: "Who wins?",
     netShares: 1,
+    stakeCredits: 1,
     hoursRemaining: 4,
   });
-  assert.equal(out.body, `Who wins? ${MIDDOT} 1 share. Last call before payout lands.`);
+  assert.equal(out.body, body(1, "1", "share", 1));
 });
 
 test("large netShares uses en-US thousands separator", () => {
   const out = formatResolutionImminentNotification({
     marketTitle: "Whale market",
     netShares: 12_345.7,
+    stakeCredits: 10_000,
     hoursRemaining: 5,
   });
-  assert.equal(
-    out.body,
-    `Whale market ${MIDDOT} 12,346 shares. Last call before payout lands.`,
-  );
+  assert.equal(out.title, "Whale market resolves in 5h");
+  assert.equal(out.body, body(10_000, "12,346", "shares", 12_346));
 });
 
-test("negative netShares clamps to 0 shares", () => {
+test("negative netShares clamps to 0 shares and payout", () => {
   const out = formatResolutionImminentNotification({
     marketTitle: "Defensive",
     netShares: -5,
+    stakeCredits: 50,
     hoursRemaining: 2,
   });
-  assert.equal(out.body, `Defensive ${MIDDOT} 0 shares. Last call before payout lands.`);
+  assert.equal(out.body, body(50, "0", "shares", 0));
+});
+
+test("losing-side position: stake exceeds max payout if pick wins", () => {
+  const out = formatResolutionImminentNotification({
+    marketTitle: "Elon Musk vs Dario Amodei",
+    netShares: 247,
+    stakeCredits: 500,
+    hoursRemaining: 5,
+  });
+  assert.equal(out.title, "Elon Musk vs Dario Amodei resolves in 5h");
+  assert.equal(out.body, body(500, "247", "shares", 247));
+});
+
+test("break-even stake equals share count", () => {
+  const out = formatResolutionImminentNotification({
+    marketTitle: "Even odds",
+    netShares: 100,
+    stakeCredits: 100,
+    hoursRemaining: 4,
+  });
+  assert.equal(out.body, body(100, "100", "shares", 100));
+});
+
+test("negative stakeCredits clamps to 0 staked", () => {
+  const out = formatResolutionImminentNotification({
+    marketTitle: "Over-sold edge",
+    netShares: 50,
+    stakeCredits: -20,
+    hoursRemaining: 3,
+  });
+  assert.equal(out.body, body(0, "50", "shares", 50));
 });

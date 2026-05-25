@@ -8,6 +8,7 @@
  * heads-up before P&L lands in their wallet.
  */
 
+import { formatVox } from "@shared/currency";
 import { formatMarketLead } from "./notification-market-labels";
 
 export interface ResolutionImminentInput {
@@ -15,6 +16,8 @@ export interface ResolutionImminentInput {
   /** Person name or entry side when it adds context beyond marketTitle. */
   contextLabel?: string | null;
   netShares: number;
+  /** Net credits at risk (buy stakes minus sell proceeds). */
+  stakeCredits: number;
   hoursRemaining: number;
 }
 
@@ -26,8 +29,10 @@ export interface ResolutionImminentOutput {
 /**
  * Render the title + body for the resolution-imminent notification.
  *
- * Title leads with "Your position" (not celebrity/category). Body
- * names the pick + market via formatMarketLead, then share count.
+ * Title leads with the market/pick via formatMarketLead. Body shows
+ * stake vs share count and upside if the pick wins (Ꝟ1 per share).
+ * Symmetric for winning and losing sides — a losing pick still shows
+ * honest stake and max payout without implying current P&L.
  *
  * `hoursRemaining` is clamped to >= 0 and floored to whole hours.
  * Anything under one hour renders as "<1h".
@@ -43,9 +48,15 @@ export function formatResolutionImminentNotification(
   const sharesRounded = Math.max(0, Math.round(netShares));
   const shareWord = sharesRounded === 1 ? "share" : "shares";
   const marketLead = formatMarketLead(marketTitle, contextLabel);
+  const stakeRounded = Number.isFinite(input.stakeCredits)
+    ? Math.max(0, Math.round(input.stakeCredits))
+    : 0;
+  const payoutIfWin = sharesRounded;
 
   return {
-    title: `Your position resolves in ${label} \u2014 you're still holding`,
-    body: `${marketLead} \u00b7 ${sharesRounded.toLocaleString("en-US")} ${shareWord}. Last call before payout lands.`,
+    title: `${marketLead} resolves in ${label}`,
+    body:
+      `Staked ${formatVox(stakeRounded)} · ${sharesRounded.toLocaleString("en-US")} ${shareWord} ` +
+      `(${formatVox(payoutIfWin)} if your pick wins)`,
   };
 }
