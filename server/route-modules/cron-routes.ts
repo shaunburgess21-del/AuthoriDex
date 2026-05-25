@@ -436,6 +436,33 @@ export function registerCronRoutes(app: Express): void {
     }
   });
 
+  // One-shot backfill for profiles missing source_hash or on a stale
+  // prompt version. Idempotent — re-running after success is a no-op
+  // because the predicate then matches zero rows. Heavy (one OpenAI
+  // call per candidate, batched 5 at a time) so don't schedule it;
+  // trigger manually after a prompt_version bump or schema migration.
+  app.post("/api/cron/backfill-profile-metadata", verifyCronSecret, async (_req, res) => {
+    const startTime = Date.now();
+    try {
+      const { runProfileMetadataBackfill } = await import("../backfill-profile-metadata");
+      const result = await runProfileMetadataBackfill();
+      res.json({
+        success: true,
+        message: "Profile metadata backfill completed",
+        ...result,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error("[Cron] Profile metadata backfill error:", error);
+      res.status(500).json({
+        success: false,
+        error: error.message,
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  });
+
   app.get("/api/cron/health", verifyCronSecret, async (_req, res) => {
     // Include upstream provider state so external monitors can alert on Serper
     // auth/quota/rate-limit outages instead of silently degrading product features.

@@ -790,6 +790,37 @@ async function startServer() {
     } else {
       log("[AccountDeletionSweeper] Skipped - serverless mode. Use POST /api/cron/process-account-deletions.");
     }
+
+    // Celebrity profile (About section) bio regeneration. Daily sweep:
+    // only profiles past their 30-day TTL, on a stale prompt version,
+    // or missing source_hash are regenerated. The HTTP endpoint also
+    // services this on a stale-while-revalidate path; the cron exists
+    // to warm cold long-tail profiles users haven't visited recently.
+    if (!SERVERLESS_MODE) {
+      startScheduler("CelebrityProfileRefresh", startCelebrityProfileRefreshScheduler);
+    } else {
+      log("[CelebrityProfileRefresh] Skipped - serverless mode. Use POST /api/cron/refresh-celebrity-profiles.");
+    }
+
+    // Net worth refresh (independent of the OpenAI bio regen above).
+    // Standard cohort = weekly; high-volatility cohort (business / tech /
+    // finance) = every 6h. We run both timers here; each one filters
+    // candidates by netWorthUpdatedAt internally so they're cheap no-ops
+    // when nothing is due.
+    if (!SERVERLESS_MODE) {
+      startScheduler("NetWorthRefresh", startNetWorthRefreshScheduler);
+    } else {
+      log("[NetWorthRefresh] Skipped - serverless mode. Use POST /api/cron/refresh-net-worth.");
+    }
+
+    // Why-Trending warmer for top-20 + hot movers. Cadence matches the
+    // 4h cache TTL so caches stay fresh without users paying the cold-
+    // path OpenAI latency.
+    if (!SERVERLESS_MODE) {
+      startScheduler("WhyTrendingRefresh", startWhyTrendingRefreshScheduler);
+    } else {
+      log("[WhyTrendingRefresh] Skipped - serverless mode. Use POST /api/cron/refresh-why-trending.");
+    }
   });
 }
 
@@ -985,6 +1016,98 @@ function startAccountDeletionSweeperScheduler() {
       ACCOUNT_DELETION_SWEEPER_INTERVAL_MS,
     );
   }, 120_000);
+}
+
+// ─── Celebrity profile (About) bio refresh scheduler ─────────────────────────
+const CELEBRITY_PROFILE_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24h
+
+async function runScheduledCelebrityProfileRefresh(): Promise<void> {
+  try {
+    const { runCelebrityProfileCronRefresh } = await import("./jobs/celebrity-profile-cron");
+    const result = await runCelebrityProfileCronRefresh();
+    log(
+      `[CelebrityProfileRefresh] OK — total=${result.total} refreshed=${result.refreshed} ` +
+        `skipped=${result.skipped} errors=${result.errors} duration=${result.durationMs}ms`,
+    );
+  } catch (err: any) {
+    log(`[CelebrityProfileRefresh] Scheduler tick failed (will retry next interval): ${err?.message ?? err}`);
+  }
+}
+
+function startCelebrityProfileRefreshScheduler() {
+  if (SERVERLESS_MODE) return;
+  log("[CelebrityProfileRefresh] Starting (every 24h)");
+  // Stagger initial run 5 min after boot so it doesn't pile onto the
+  // higher-frequency schedulers' first ticks. The work itself is heavy
+  // (OpenAI calls per profile) so we don't want to coincide with the
+  // ingestion sweep at :02.
+  setTimeout(() => {
+    void runScheduledCelebrityProfileRefresh();
+    setInterval(() => void runScheduledCelebrityProfileRefresh(), CELEBRITY_PROFILE_REFRESH_INTERVAL_MS);
+  }, 5 * 60 * 1000);
+}
+
+// ─── Net worth refresh scheduler (standard + high-volatility) ────────────────
+const NET_WORTH_STANDARD_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24h (filters >7d internally)
+const NET_WORTH_HIGH_INTERVAL_MS = 6 * 60 * 60 * 1000; // every 6h for high-volatility
+
+async function runScheduledNetWorthRefresh(volatility: "standard" | "high"): Promise<void> {
+  try {
+    const { runNetWorthCronRefresh } = await import("./jobs/celebrity-profile-cron");
+    const result = await runNetWorthCronRefresh(volatility);
+    if (result.candidates === 0) {
+      return; // nothing to do, stay quiet
+    }
+    log(
+      `[NetWorthRefresh:${volatility}] OK — candidates=${result.candidates} wrote=${result.wrote} ` +
+        `kept=${result.kept} providerUnavailable=${result.providerUnavailable} ` +
+        `errors=${result.errors} duration=${result.durationMs}ms`,
+    );
+  } catch (err: any) {
+    log(`[NetWorthRefresh:${volatility}] Scheduler tick failed: ${err?.message ?? err}`);
+  }
+}
+
+function startNetWorthRefreshScheduler() {
+  if (SERVERLESS_MODE) return;
+  log("[NetWorthRefresh] Starting (standard: every 24h, high: every 6h)");
+  setTimeout(() => {
+    void runScheduledNetWorthRefresh("standard");
+    setInterval(() => void runScheduledNetWorthRefresh("standard"), NET_WORTH_STANDARD_INTERVAL_MS);
+  }, 7 * 60 * 1000);
+  setTimeout(() => {
+    void runScheduledNetWorthRefresh("high");
+    setInterval(() => void runScheduledNetWorthRefresh("high"), NET_WORTH_HIGH_INTERVAL_MS);
+  }, 8 * 60 * 1000);
+}
+
+// ─── Why-Trending warmer scheduler ───────────────────────────────────────────
+const WHY_TRENDING_REFRESH_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4h, matches cache TTL
+
+async function runScheduledWhyTrendingRefresh(): Promise<void> {
+  try {
+    const { runWhyTrendingCronRefresh } = await import("./jobs/why-trending-cron");
+    const result = await runWhyTrendingCronRefresh();
+    log(
+      `[WhyTrendingRefresh] OK — candidates=${result.candidates} regenerated=${result.regenerated} ` +
+        `extended=${result.extended} hit=${result.hit} rateLimited=${result.rateLimited} ` +
+        `locked=${result.locked} noNews=${result.noNews} providerUnavailable=${result.providerUnavailable} ` +
+        `errors=${result.errors} duration=${result.durationMs}ms`,
+    );
+  } catch (err: any) {
+    log(`[WhyTrendingRefresh] Scheduler tick failed (will retry next interval): ${err?.message ?? err}`);
+  }
+}
+
+function startWhyTrendingRefreshScheduler() {
+  if (SERVERLESS_MODE) return;
+  log("[WhyTrendingRefresh] Starting (every 4h)");
+  // Stagger 3 min in so the first warm-up runs after ingestion has
+  // had a chance to populate ranks at :02.
+  setTimeout(() => {
+    void runScheduledWhyTrendingRefresh();
+    setInterval(() => void runScheduledWhyTrendingRefresh(), WHY_TRENDING_REFRESH_INTERVAL_MS);
+  }, 3 * 60 * 1000);
 }
 
 startServer().catch((error) => {
