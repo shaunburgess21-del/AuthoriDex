@@ -32,6 +32,9 @@ export interface VersusCardMatchup {
   optionAPercent: number;
   optionBPercent: number;
   neutralPercent?: number;
+  personAId?: string | null;
+  personBId?: string | null;
+  relatedPersonIds?: string[];
 }
 
 export function VersusCard({
