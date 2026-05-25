@@ -166,6 +166,7 @@ interface InductionCandidate {
   name: string;
   initials: string;
   imageSlug: string | null;
+  avatar: string | null;
   category: "Tech" | "Music" | "Creator" | "Sports" | "Business" | "Politics" | "Film & TV" | "Gaming" | "Food & Drink" | "Lifestyle" | "Comedy";
   votes: number;
 }
@@ -423,7 +424,7 @@ function InductionCandidateCard({
 
       <div className="flex flex-col items-center text-center mb-2 md:mb-4">
         <div className="relative">
-          <PersonAvatar name={candidate.name} imageSlug={candidate.imageSlug} imageContext="induction" className="h-40 w-40 md:h-32 md:w-32" />
+          <PersonAvatar name={candidate.name} avatar={candidate.avatar} imageSlug={candidate.imageSlug} imageContext="induction" className="h-40 w-40 md:h-32 md:w-32" />
           {isVoted && (
             <div className={`absolute -top-1 -right-1 h-5 w-5 rounded-full flex items-center justify-center ${SENTIMENT_POLL_SUPPORT_BADGE_BG_CLASS}`}>
               <Check className="h-3 w-3 text-white" />
@@ -1272,6 +1273,7 @@ export default function VotePage() {
       displayName: string;
       category: string;
       imageSlug: string | null;
+      avatar: string | null;
       seedVotes: number;
       wikiSlug: string | null;
       isActive: boolean;
@@ -1349,6 +1351,7 @@ export default function VotePage() {
     name: c.displayName,
     initials: c.displayName.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase(),
     imageSlug: c.imageSlug,
+    avatar: c.avatar ?? null,
     category: c.category as InductionCandidate['category'],
     votes: c.seedVotes,
   }));

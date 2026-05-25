@@ -23,6 +23,7 @@ export interface InductionCandidate {
   name: string;
   initials: string;
   imageSlug?: string | null;
+  avatar?: string | null;
   category: "Tech" | "Music" | "Creator" | "Sports" | "Business" | "Politics" | "Film & TV" | "Gaming" | "Food & Drink" | "Lifestyle" | "Comedy";
   votes: number;
 }
@@ -99,7 +100,7 @@ function InductionCandidateRow({
       </div>
       
       <div className="relative shrink-0">
-        <PersonAvatar name={candidate.name} imageSlug={candidate.imageSlug} imageContext="induction" size="sm" />
+        <PersonAvatar name={candidate.name} avatar={candidate.avatar} imageSlug={candidate.imageSlug} imageContext="induction" size="sm" />
         {isVoted && (
           <div className={`absolute -top-1 -right-1 h-4 w-4 rounded-full flex items-center justify-center ${SENTIMENT_POLL_SUPPORT_BADGE_BG_CLASS}`}>
             <Check className="h-2.5 w-2.5 text-white" />
@@ -211,6 +212,7 @@ export function InductionLeaderboardSlice({
     name: c.displayName,
     initials: c.displayName.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase(),
     imageSlug: c.imageSlug,
+    avatar: c.avatar ?? null,
     category: c.category as InductionCandidate['category'],
     votes: c.seedVotes,
   }));

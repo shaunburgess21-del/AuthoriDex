@@ -100,6 +100,7 @@ import {
 import { computeDriftDelta } from "./services/credit-drift";
 import { computeEarlyBirdMultiplier } from "./jobs/settlement-utils";
 import { recomputeCelebrityMetrics } from "./services/celebrity-metrics-recompute";
+import { enrichInductionCandidatesWithAvatars } from "./services/person-images";
 import { z, ZodError } from "zod";
 import { sendError, sendBadRequest, sendZodError } from "./utils/api-response";
 import { approveInductionCandidate } from "./services/induction-service";
@@ -23007,10 +23008,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         votesDown: 0,
       }).returning();
 
-      if (isFirstImageForPerson) {
-        await db.update(trackedPeople).set({ avatar: publicUrl }).where(eq(trackedPeople.id, id));
-        await db.update(trendingPeople).set({ avatar: publicUrl }).where(eq(trendingPeople.id, id));
-      }
+      await syncWinningAvatarForPerson(id);
 
       res.json({ success: true, image: newImage });
     } catch (error: any) {
@@ -23069,7 +23067,8 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         .from(inductionCandidates)
         .where(eq(inductionCandidates.isActive, true))
         .orderBy(...orderTerms);
-      res.json({ data: candidates, totalCount: candidates.length });
+      const data = await enrichInductionCandidatesWithAvatars(candidates);
+      res.json({ data, totalCount: data.length });
     } catch (error: any) {
       console.error("Error fetching induction candidates:", error);
       res.status(500).json({ error: "Failed to fetch induction candidates" });

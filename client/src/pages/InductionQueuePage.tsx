@@ -48,6 +48,7 @@ interface InductionCandidate {
   displayName: string;
   category: string;
   imageSlug: string | null;
+  avatar: string | null;
   seedVotes: number;
   wikiSlug: string | null;
   isActive: boolean;
@@ -366,6 +367,7 @@ export default function InductionQueuePage() {
                         <div className="relative mb-3">
                           <PersonAvatar
                             name={candidate.displayName}
+                            avatar={candidate.avatar}
                             imageSlug={candidate.imageSlug}
                             imageContext="induction"
                             className="h-28 w-28 md:h-24 md:w-24"
@@ -509,7 +511,7 @@ export default function InductionQueuePage() {
             <div className="flex items-end justify-center gap-6">
               {/* 2nd place */}
               <div className="flex flex-col items-center">
-                <PersonAvatar name={candidates[1].displayName} imageSlug={candidates[1].imageSlug} imageContext="induction" className="h-20 w-20 mb-2 ring-2 ring-slate-400/30" />
+                <PersonAvatar name={candidates[1].displayName} avatar={candidates[1].avatar} imageSlug={candidates[1].imageSlug} imageContext="induction" className="h-20 w-20 mb-2 ring-2 ring-slate-400/30" />
                 <p className="font-medium text-sm mb-1">{candidates[1].displayName}</p>
                 <Badge variant="outline" className="text-xs border-slate-500/50 dark:border-slate-400/40 text-slate-500 dark:text-slate-300">#2 · {candidates[1].seedVotes.toLocaleString("en-US")}</Badge>
                 <div className="mt-2 w-20 h-16 rounded-t-lg bg-slate-400/10 border border-b-0 border-slate-400/20" />
@@ -517,14 +519,14 @@ export default function InductionQueuePage() {
               {/* 1st place */}
               <div className="flex flex-col items-center">
                 <Crown className="h-5 w-5 text-yellow-600 dark:text-yellow-400 mb-1" />
-                <PersonAvatar name={candidates[0].displayName} imageSlug={candidates[0].imageSlug} imageContext="induction" className="h-24 w-24 mb-2 ring-2 ring-yellow-500/40" />
+                <PersonAvatar name={candidates[0].displayName} avatar={candidates[0].avatar} imageSlug={candidates[0].imageSlug} imageContext="induction" className="h-24 w-24 mb-2 ring-2 ring-yellow-500/40" />
                 <p className="font-semibold text-base mb-1">{candidates[0].displayName}</p>
                 <Badge variant="outline" className="text-xs border-yellow-500/50 dark:border-yellow-500/40 text-yellow-500 dark:text-yellow-300">#1 · {candidates[0].seedVotes.toLocaleString("en-US")}</Badge>
                 <div className="mt-2 w-24 h-24 rounded-t-lg bg-yellow-500/15 dark:bg-yellow-500/10 border border-b-0 border-yellow-500/30 dark:border-yellow-500/20" />
               </div>
               {/* 3rd place */}
               <div className="flex flex-col items-center">
-                <PersonAvatar name={candidates[2].displayName} imageSlug={candidates[2].imageSlug} imageContext="induction" className="h-18 w-18 mb-2 ring-2 ring-orange-500/30" />
+                <PersonAvatar name={candidates[2].displayName} avatar={candidates[2].avatar} imageSlug={candidates[2].imageSlug} imageContext="induction" className="h-18 w-18 mb-2 ring-2 ring-orange-500/30" />
                 <p className="font-medium text-sm mb-1">{candidates[2].displayName}</p>
                 <Badge variant="outline" className="text-xs border-orange-500/50 dark:border-orange-500/40 text-orange-500 dark:text-orange-300">#3 · {candidates[2].seedVotes.toLocaleString("en-US")}</Badge>
                 <div className="mt-2 w-18 h-12 rounded-t-lg bg-orange-500/15 dark:bg-orange-500/10 border border-b-0 border-orange-500/30 dark:border-orange-500/20" />
