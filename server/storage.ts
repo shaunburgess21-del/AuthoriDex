@@ -56,6 +56,11 @@ export interface IStorage {
   getCelebrityProfile(personId: string): Promise<CelebrityProfile | undefined>;
   setCelebrityProfile(profile: InsertCelebrityProfile): Promise<CelebrityProfile>;
   updateCelebrityProfile(personId: string, profile: Partial<InsertCelebrityProfile>): Promise<CelebrityProfile | undefined>;
+  /** Partial update without bumping generatedAt (net worth, volatility, etc.). */
+  updateCelebrityProfileFields(
+    personId: string,
+    fields: Partial<InsertCelebrityProfile>,
+  ): Promise<CelebrityProfile | undefined>;
 }
 
 export class MemStorage implements IStorage {
@@ -194,6 +199,30 @@ export class MemStorage implements IStorage {
       const [updated] = await db
         .update(celebrityProfiles)
         .set({ ...stripProfileMetadata(profile), generatedAt: new Date() })
+        .where(eq(celebrityProfiles.personId, personId))
+        .returning(celebrityProfileBaseColumns);
+      return updated ? withFallbackProfileMetadata(updated) : undefined;
+    }
+  }
+
+  async updateCelebrityProfileFields(
+    personId: string,
+    fields: Partial<InsertCelebrityProfile>,
+  ): Promise<CelebrityProfile | undefined> {
+    const { generatedAt: _generatedAt, ...rest } = fields;
+    try {
+      const [updated] = await db
+        .update(celebrityProfiles)
+        .set(rest)
+        .where(eq(celebrityProfiles.personId, personId))
+        .returning();
+      return updated;
+    } catch (error) {
+      if (!isMissingProfileMetadataError(error)) throw error;
+      const legacy = stripProfileMetadata(rest as Partial<InsertCelebrityProfile>);
+      const [updated] = await db
+        .update(celebrityProfiles)
+        .set(legacy)
         .where(eq(celebrityProfiles.personId, personId))
         .returning(celebrityProfileBaseColumns);
       return updated ? withFallbackProfileMetadata(updated) : undefined;

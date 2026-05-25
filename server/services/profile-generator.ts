@@ -1,12 +1,26 @@
 import OpenAI from "openai";
 import { createHash } from "crypto";
 import { z } from "zod";
-import { type CelebrityProfile, type InsertCelebrityProfile, type TrendingPerson } from "@shared/schema";
+import { eq } from "drizzle-orm";
+import {
+  type CelebrityProfile,
+  type InsertCelebrityProfile,
+  type TrendingPerson,
+  apiCache,
+} from "@shared/schema";
+import { db } from "../db";
 import { storage } from "../storage";
 import { fetchNetWorthContext, fetchWebSearchContext, type NetWorthContext, type WebSearchContext } from "../providers/serper";
 import { getAiModel, getChatCompletionTokenLimit } from "../config/ai-models";
+import { classifyNetWorthVolatility } from "./net-worth-refresher";
 
 export const PROFILE_PROMPT_VERSION = 3;
+export const PROFILE_BIO_TTL_DAYS = 30;
+/** Cron only force-regenerates bios older than this (daily job). */
+export const PROFILE_BIO_CRON_REFRESH_DAYS = 25;
+
+const PROFILE_LOCK_TTL_SECONDS = 120;
+const inFlightRegenerations = new Map<string, Promise<void>>();
 
 const HIGH_RISK_CATEGORY_RE = /politic|business|tech|technology|finance|world leader|government/i;
 const ROLE_CHANGE_RE = /\b(defeated|lost election|no longer|former|replaced by|succeeded by|ousted|resigned|stepped down|appointed|elected|inaugurated|became|named|will become|set to become)\b/i;
@@ -45,9 +59,17 @@ const generatedProfileSchema = z.object({
 
 type GeneratedProfile = z.infer<typeof generatedProfileSchema>;
 
+export type ProfileCacheStatus =
+  | "HIT"
+  | "STALE"
+  | "MISSING_HASH"
+  | "MISS"
+  | "REGENERATED"
+  | "SOURCE_UNCHANGED";
+
 export interface ProfileGenerationResult {
   profile: CelebrityProfile;
-  cacheStatus: "HIT" | "REGENERATED" | "SOURCE_UNCHANGED";
+  cacheStatus: ProfileCacheStatus;
   validationNotes: string[];
 }
 
@@ -71,34 +93,94 @@ interface OpenAiWebContext {
   sources: Array<{ title: string; url: string }>;
 }
 
-export function getProfileCacheTtlDays(person: TrendingPerson): number {
-  if ((person.rank ?? Number.MAX_SAFE_INTEGER) <= 20) return 1;
-  if (person.category && HIGH_RISK_CATEGORY_RE.test(person.category)) return 1;
-  return 7;
+/** @deprecated Use PROFILE_BIO_TTL_DAYS — uniform TTL for all celebrities. */
+export function getProfileCacheTtlDays(_person?: TrendingPerson): number {
+  return PROFILE_BIO_TTL_DAYS;
 }
 
-export function isCelebrityProfileFresh(profile: CelebrityProfile, person: TrendingPerson): boolean {
+export function isCelebrityProfileFresh(profile: CelebrityProfile): boolean {
   const generatedAt = new Date(profile.generatedAt).getTime();
-  const ttlMs = getProfileCacheTtlDays(person) * 24 * 60 * 60 * 1000;
-  const promptVersion = (profile as any).promptVersion ?? 0;
+  const ttlMs = PROFILE_BIO_TTL_DAYS * 24 * 60 * 60 * 1000;
+  const promptVersion = profile.promptVersion ?? 0;
   return Date.now() - generatedAt < ttlMs && promptVersion >= PROFILE_PROMPT_VERSION;
 }
 
-export async function getOrGenerateCelebrityProfile(
+function profileNeedsBackgroundRefresh(profile: CelebrityProfile): boolean {
+  if (!isCelebrityProfileFresh(profile)) return true;
+  if (!profile.sourceHash) return true;
+  if ((profile.promptVersion ?? 0) < PROFILE_PROMPT_VERSION) return true;
+  return false;
+}
+
+function staleCacheStatus(profile: CelebrityProfile): ProfileCacheStatus {
+  if (!profile.sourceHash) return "MISSING_HASH";
+  return "STALE";
+}
+
+async function acquireProfileLock(personId: string): Promise<boolean> {
+  const lockKey = `profile_lock:${personId}`;
+  const [lockRow] = await db.select().from(apiCache).where(eq(apiCache.cacheKey, lockKey)).limit(1);
+  if (lockRow?.expiresAt && lockRow.expiresAt > new Date()) {
+    return false;
+  }
+  const lockNow = new Date();
+  const lockExpires = new Date(lockNow.getTime() + PROFILE_LOCK_TTL_SECONDS * 1000);
+  await db
+    .insert(apiCache)
+    .values({
+      cacheKey: lockKey,
+      provider: "system",
+      responseData: JSON.stringify({ personId, lockedAt: lockNow.toISOString() }),
+      fetchedAt: lockNow,
+      expiresAt: lockExpires,
+    })
+    .onConflictDoUpdate({
+      target: apiCache.cacheKey,
+      set: {
+        fetchedAt: lockNow,
+        expiresAt: lockExpires,
+        responseData: JSON.stringify({ personId, lockedAt: lockNow.toISOString() }),
+      },
+    });
+  return true;
+}
+
+async function releaseProfileLock(personId: string): Promise<void> {
+  const lockKey = `profile_lock:${personId}`;
+  try {
+    await db
+      .insert(apiCache)
+      .values({
+        cacheKey: lockKey,
+        provider: "system",
+        responseData: JSON.stringify({ personId, releasedAt: new Date().toISOString() }),
+        fetchedAt: new Date(),
+        expiresAt: new Date(0),
+      })
+      .onConflictDoUpdate({
+        target: apiCache.cacheKey,
+        set: { expiresAt: new Date(0), fetchedAt: new Date() },
+      });
+  } catch {
+    /* best-effort */
+  }
+}
+
+async function regenerateCelebrityProfileBlocking(
   person: TrendingPerson,
   options: ProfileGenerationOptions = {},
 ): Promise<ProfileGenerationResult> {
   const cached = await storage.getCelebrityProfile(person.id);
-  if (cached && !options.forceRefresh && isCelebrityProfileFresh(cached, person)) {
-    return { profile: cached, cacheStatus: "HIT", validationNotes: [] };
-  }
-
   const context = await buildProfileContext(person);
 
   if (cached && !options.forceRefresh) {
-    const cachedSourceHash = (cached as any).sourceHash ?? null;
-    const cachedPromptVersion = (cached as any).promptVersion ?? 0;
-    if (cachedSourceHash && cachedSourceHash === context.sourceHash && cachedPromptVersion >= PROFILE_PROMPT_VERSION) {
+    const cachedSourceHash = cached.sourceHash ?? null;
+    const cachedPromptVersion = cached.promptVersion ?? 0;
+    if (
+      cachedSourceHash
+      && cachedSourceHash === context.sourceHash
+      && cachedPromptVersion >= PROFILE_PROMPT_VERSION
+    ) {
       const extended = await storage.updateCelebrityProfile(person.id, {
         generatedAt: new Date(),
       } as Partial<InsertCelebrityProfile>);
@@ -121,6 +203,58 @@ export async function getOrGenerateCelebrityProfile(
   }
 
   return { profile, cacheStatus: "REGENERATED", validationNotes };
+}
+
+function scheduleBackgroundProfileRefresh(
+  person: TrendingPerson,
+  options: ProfileGenerationOptions = {},
+): void {
+  if (inFlightRegenerations.has(person.id)) return;
+
+  const work = (async () => {
+    const acquired = await acquireProfileLock(person.id);
+    if (!acquired) {
+      console.log(`[Profile] Background refresh skipped (locked) for ${person.name}`);
+      return;
+    }
+    try {
+      await regenerateCelebrityProfileBlocking(person, options);
+      console.log(`[Profile] Background refresh completed for ${person.name}`);
+    } catch (err: any) {
+      console.error(`[Profile] Background refresh failed for ${person.name}:`, err?.message ?? err);
+    } finally {
+      await releaseProfileLock(person.id);
+      inFlightRegenerations.delete(person.id);
+    }
+  })();
+
+  inFlightRegenerations.set(person.id, work);
+  void work;
+}
+
+export async function getOrGenerateCelebrityProfile(
+  person: TrendingPerson,
+  options: ProfileGenerationOptions = {},
+): Promise<ProfileGenerationResult> {
+  if (options.forceRefresh) {
+    return regenerateCelebrityProfileBlocking(person, options);
+  }
+
+  const cached = await storage.getCelebrityProfile(person.id);
+
+  if (cached) {
+    if (!profileNeedsBackgroundRefresh(cached)) {
+      return { profile: cached, cacheStatus: "HIT", validationNotes: [] };
+    }
+    scheduleBackgroundProfileRefresh(person, options);
+    return {
+      profile: cached,
+      cacheStatus: staleCacheStatus(cached),
+      validationNotes: [],
+    };
+  }
+
+  return regenerateCelebrityProfileBlocking(person, options);
 }
 
 export async function generateProfilePreview(
@@ -438,6 +572,7 @@ function toProfileData(
   context: ProfileContext,
   validationNotes: string[],
 ): InsertCelebrityProfile {
+  const now = new Date();
   return {
     personId: person.id,
     personName: person.name,
@@ -449,13 +584,15 @@ function toProfileData(
     basedIn: parsed.basedIn,
     basedInCountryCode: parsed.basedInCountryCode.toUpperCase(),
     estimatedNetWorth: parsed.estimatedNetWorth,
-    generatedAt: new Date(),
+    generatedAt: now,
     promptVersion: PROFILE_PROMPT_VERSION,
     sourceHash: context.sourceHash,
     sourceUrls: context.sourceUrls,
     confidence: parsed.confidence ?? null,
-    asOfDate: new Date().toISOString().slice(0, 10),
+    asOfDate: now.toISOString().slice(0, 10),
     validationNotes,
+    netWorthUpdatedAt: now,
+    netWorthVolatility: classifyNetWorthVolatility(person.category),
   } as InsertCelebrityProfile;
 }
 
@@ -489,7 +626,7 @@ function deriveShortBio(longBio: string): string {
   return `${trimmed.slice(0, 247).trimEnd()}...`;
 }
 
-function extractNetWorthFromContext(context: NetWorthContext | null): string | null {
+export function extractNetWorthFromContext(context: NetWorthContext | null): string | null {
   for (const source of context?.sources ?? []) {
     const sourceText = `${source.title} ${source.snippet}`;
     if (!isTrustedNetWorthSource(source.link) || !isLikelyNetWorthSource(sourceText)) continue;

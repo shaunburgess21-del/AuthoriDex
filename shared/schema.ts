@@ -403,6 +403,8 @@ export const celebrityProfiles = pgTable("celebrity_profiles", {
   confidence: real("confidence"),
   asOfDate: text("as_of_date"),
   validationNotes: text("validation_notes").array(),
+  netWorthUpdatedAt: timestamp("net_worth_updated_at"),
+  netWorthVolatility: text("net_worth_volatility").notNull().default("standard"), // 'standard' | 'high'
   generatedAt: timestamp("generated_at").notNull().defaultNow(),
 });
 

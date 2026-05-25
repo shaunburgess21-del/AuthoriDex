@@ -55,6 +55,7 @@ import { useFavorites } from "@/hooks/useFavorites";
 import { useOpinionPollVoteMutation } from "@/hooks/useOpinionPollVoteMutation";
 import { formatNumber, getApprovalColor } from "@/lib/formatNumber";
 import { WhyTrendingCard } from "@/components/WhyTrendingCard";
+import { InlineCelebrityBio } from "@/components/InlineCelebrityBio";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { profileSectionGridClass } from "@/lib/profileSectionGridClass";
@@ -80,9 +81,6 @@ const LazyPredictTab = lazy(() =>
 );
 const LazyTrendChart = lazy(() =>
   import("@/components/TrendChart").then((m) => ({ default: m.TrendChart }))
-);
-const LazyInlineCelebrityBio = lazy(() =>
-  import("@/components/InlineCelebrityBio").then((m) => ({ default: m.InlineCelebrityBio }))
 );
 const LazyCommunityInsights = lazy(() =>
   import("@/components/CommunityInsights").then((m) => ({ default: m.CommunityInsights }))
@@ -888,6 +886,7 @@ export default function PersonDetailPage() {
   const { data: celebrityProfile } = useQuery<{
     shortBio: string;
     longBio: string | null;
+    cacheStatus?: string;
   }>({
     queryKey: ["/api/celebrity-profile", person?.id],
     queryFn: async () => {
@@ -897,6 +896,7 @@ export default function PersonDetailPage() {
     },
     enabled: !!person?.id,
     staleTime: 10 * 60 * 1000,
+    placeholderData: (prev) => prev,
   });
 
   // Dynamic <title> + OG/Twitter meta. Crawlers use /api/og/person/:id
@@ -1476,9 +1476,7 @@ export default function PersonDetailPage() {
         {/* OVERVIEW TAB */}
         {activeTab === "overview" && (
           <>
-            <Suspense fallback={<ProfileLazyFallback />}>
-              <LazyInlineCelebrityBio personId={person.id} personName={person.name} />
-            </Suspense>
+            <InlineCelebrityBio personId={person.id} personName={person.name} />
 
             <div className="flex justify-end mb-2">
               <a

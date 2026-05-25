@@ -1,6 +1,7 @@
-import { MapPin, DollarSign, Sparkles, Loader2 } from "lucide-react";
+import { MapPin, DollarSign, Sparkles } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import * as Flags from "country-flag-icons/react/3x2";
+import { Skeleton } from "@/components/ui/skeleton";
 import { formatNetWorth } from "@/lib/formatNumber";
 
 interface CelebrityProfile {
@@ -17,6 +18,7 @@ interface CelebrityProfile {
   asOfDate?: string | null;
   sourceUrls?: string[] | null;
   generatedAt: string;
+  cacheStatus?: string;
 }
 
 interface InlineCelebrityBioProps {
@@ -46,8 +48,29 @@ function CountryDisplay({ countryCode, countryName }: { countryCode: string; cou
   );
 }
 
+function InlineCelebrityBioSkeleton() {
+  return (
+    <div className="mb-8 space-y-4" data-testid="inline-bio-loading">
+      <div className="space-y-2">
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-4 w-4/5" />
+      </div>
+      <div className="space-y-1.5">
+        <Skeleton className="h-3 w-20" />
+        <Skeleton className="h-4 w-3/4" />
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <Skeleton className="h-16 w-full rounded-lg" />
+        <Skeleton className="h-16 w-full rounded-lg" />
+      </div>
+      <Skeleton className="h-20 w-full rounded-lg" />
+    </div>
+  );
+}
+
 export function InlineCelebrityBio({ personId, personName: _personName }: InlineCelebrityBioProps) {
-  const { data: profile, isLoading, error } = useQuery<CelebrityProfile>({
+  const { data: profile, isLoading, error, isFetching } = useQuery<CelebrityProfile>({
     queryKey: ["/api/celebrity-profile", personId],
     queryFn: async () => {
       const res = await fetch(`/api/celebrity-profile/${personId}`);
@@ -55,15 +78,12 @@ export function InlineCelebrityBio({ personId, personName: _personName }: Inline
       return res.json();
     },
     enabled: !!personId,
+    staleTime: 10 * 60 * 1000,
+    placeholderData: (prev) => prev,
   });
 
-  if (isLoading) {
-    return (
-      <div className="mb-8 flex items-center gap-2 text-sm text-muted-foreground" data-testid="inline-bio-loading">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        <span>Loading profile…</span>
-      </div>
-    );
+  if (isLoading && !profile) {
+    return <InlineCelebrityBioSkeleton />;
   }
 
   if (error || !profile) {
@@ -71,9 +91,15 @@ export function InlineCelebrityBio({ personId, personName: _personName }: Inline
   }
 
   const aboutText = profile.longBio || profile.shortBio;
+  const isRevalidating = isFetching && !!profile.cacheStatus && profile.cacheStatus !== "HIT";
 
   return (
     <div className="mb-8 space-y-4" data-testid="inline-celebrity-bio">
+      {isRevalidating && (
+        <p className="text-xs text-muted-foreground" data-testid="inline-bio-revalidating">
+          Updating profile…
+        </p>
+      )}
       <p
         className="text-base leading-relaxed text-muted-foreground"
         data-testid="text-celebrity-bio"

@@ -737,7 +737,15 @@ export async function fetchWebSearchContext(name: string): Promise<WebSearchCont
     return null;
   }
 
+  const cacheKey = `serper:web:${name.replace(/\s+/g, "_").toLowerCase()}`;
+  const CACHE_TTL_HOURS = 24;
+
   try {
+    const cached = await getCachedResponse(cacheKey);
+    if (cached) {
+      return JSON.parse(cached.responseData) as WebSearchContext;
+    }
+
     const currentYear = new Date().getFullYear();
     // Search for recent news about the person
     const newsResponse = await serperFetch("https://google.serper.dev/news", {
@@ -796,7 +804,9 @@ export async function fetchWebSearchContext(name: string): Promise<WebSearchCont
 
     console.log(`[Serper] Web search for ${name}: ${headlines.length} headlines, ${snippets.length} snippets`);
 
-    return { headlines, snippets, sources };
+    const result: WebSearchContext = { headlines, snippets, sources };
+    await setCachedResponse(cacheKey, "serper", JSON.stringify(result), CACHE_TTL_HOURS);
+    return result;
   } catch (error) {
     console.error(`[Serper] Error fetching web search context for ${name}:`, error);
     return null;
@@ -819,7 +829,8 @@ export async function fetchTrendingNewsContext(name: string): Promise<TrendingNe
   }
 
   const cacheKey = `serper:trending:${name.replace(/\s+/g, "_").toLowerCase()}`;
-  const CACHE_TTL_HOURS = 3; // Cache trending context for 3 hours
+  // Keep aligned with WHY_TRENDING_CACHE_TTL_HOURS so hash-extension can match on cache expiry.
+  const CACHE_TTL_HOURS = 4;
 
   try {
     const cached = await getCachedResponse(cacheKey);
@@ -890,7 +901,15 @@ export async function fetchNetWorthContext(name: string): Promise<NetWorthContex
     return null;
   }
 
+  const cacheKey = `serper:networth:${name.replace(/\s+/g, "_").toLowerCase()}`;
+  const CACHE_TTL_HOURS = 24;
+
   try {
+    const cached = await getCachedResponse(cacheKey);
+    if (cached) {
+      return JSON.parse(cached.responseData) as NetWorthContext;
+    }
+
     // Search specifically for net worth with current year
     const currentYear = new Date().getFullYear();
     const response = await serperFetch(SERPER_BASE_URL, {
@@ -937,7 +956,9 @@ export async function fetchNetWorthContext(name: string): Promise<NetWorthContex
 
     console.log(`[Serper] Net worth search for ${name}: found ${sources.length} sources, estimate: ${estimate || 'none extracted'}`);
 
-    return { estimate, sources };
+    const result: NetWorthContext = { estimate, sources };
+    await setCachedResponse(cacheKey, "serper", JSON.stringify(result), CACHE_TTL_HOURS);
+    return result;
   } catch (error) {
     console.error(`[Serper] Error fetching net worth for ${name}:`, error);
     return null;

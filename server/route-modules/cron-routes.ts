@@ -368,6 +368,74 @@ export function registerCronRoutes(app: Express): void {
     }
   });
 
+  app.post("/api/cron/refresh-celebrity-profiles", verifyCronSecret, async (_req, res) => {
+    const startTime = Date.now();
+    try {
+      const { runCelebrityProfileCronRefresh } = await import("../jobs/celebrity-profile-cron");
+      const result = await runCelebrityProfileCronRefresh();
+      res.json({
+        success: true,
+        message: "Celebrity profile refresh completed",
+        ...result,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error("[Cron] Celebrity profile refresh error:", error);
+      res.status(500).json({
+        success: false,
+        error: error.message,
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  });
+
+  app.post("/api/cron/refresh-net-worth", verifyCronSecret, async (req, res) => {
+    const startTime = Date.now();
+    try {
+      const volatility = req.query.volatility === "high" ? "high" : "standard";
+      const { runNetWorthCronRefresh } = await import("../jobs/celebrity-profile-cron");
+      const result = await runNetWorthCronRefresh(volatility);
+      res.json({
+        success: true,
+        message: `Net worth refresh (${volatility}) completed`,
+        volatility,
+        ...result,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error("[Cron] Net worth refresh error:", error);
+      res.status(500).json({
+        success: false,
+        error: error.message,
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  });
+
+  app.post("/api/cron/refresh-why-trending", verifyCronSecret, async (_req, res) => {
+    const startTime = Date.now();
+    try {
+      const { runWhyTrendingCronRefresh } = await import("../jobs/why-trending-cron");
+      const result = await runWhyTrendingCronRefresh();
+      res.json({
+        success: true,
+        message: "Why Trending refresh completed",
+        ...result,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error("[Cron] Why Trending refresh error:", error);
+      res.status(500).json({
+        success: false,
+        error: error.message,
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  });
+
   app.get("/api/cron/health", verifyCronSecret, async (_req, res) => {
     // Include upstream provider state so external monitors can alert on Serper
     // auth/quota/rate-limit outages instead of silently degrading product features.
