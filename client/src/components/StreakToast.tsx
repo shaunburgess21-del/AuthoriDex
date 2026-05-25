@@ -1,4 +1,4 @@
-import { CalendarCheck, Check, Gift, Sparkles, X } from "lucide-react";
+import { CalendarCheck, Check, Gift, Sparkles, Trophy, X } from "lucide-react";
 import {
   STREAK_MILESTONES,
   STREAK_REWARD_TEASE,
@@ -61,12 +61,41 @@ function buildTimeline(currentStreak: number): {
   start: number;
   end: number;
   giftDay: number;
+  pastTopTier: boolean;
 } {
-  const next = getNextMilestone(currentStreak);
-  const giftDay = next ?? STREAK_MILESTONES[STREAK_MILESTONES.length - 1];
+  const milestones = STREAK_MILESTONES as readonly number[];
+  const topMilestone = milestones[milestones.length - 1];
+  const pastTopTier = currentStreak > topMilestone;
+  // On a milestone-hit toast, anchor the gift to today so the celebration
+  // row is fully completed instead of pivoting to an empty next-window.
+  const isOnMilestone = milestones.includes(currentStreak);
+  // Past the top milestone, anchor to current day so the trophy slot
+  // renders at the end of the visible window.
+  const next = pastTopTier
+    ? currentStreak
+    : isOnMilestone
+      ? currentStreak
+      : (getNextMilestone(currentStreak) ?? topMilestone);
+  const giftDay = next;
   const end = Math.max(giftDay, currentStreak);
   const start = Math.max(1, end - (STREAK_TARGET_DAYS - 1));
-  return { start, end, giftDay };
+  return { start, end, giftDay, pastTopTier };
+}
+
+function timelineAriaLabel(
+  slots: number[],
+  giftDay: number,
+  currentStreak: number,
+  pastTopTier: boolean,
+): string {
+  const range =
+    slots.length === 1
+      ? `day ${slots[0]}`
+      : `days ${slots[0]} through ${slots[slots.length - 1]}`;
+  const tail = pastTopTier
+    ? "you have reached the top tier"
+    : `day ${giftDay} is the next milestone`;
+  return `Streak progress: ${range}, currently day ${currentStreak}, ${tail}`;
 }
 
 export function StreakToast({
@@ -79,7 +108,7 @@ export function StreakToast({
   graceUsed = false,
   onClose,
 }: StreakToastProps) {
-  const { start, end, giftDay } = buildTimeline(currentStreak);
+  const { start, end, giftDay, pastTopTier } = buildTimeline(currentStreak);
   const slots: number[] = [];
   for (let d = start; d <= end; d += 1) slots.push(d);
 
@@ -139,8 +168,8 @@ export function StreakToast({
       </div>
 
       <div
-        className="mt-3.5 mb-1 flex items-center gap-0"
-        aria-label={`Streak progress: day ${currentStreak} of ${giftDay}`}
+        className="mt-3.5 mb-1 flex items-start gap-0"
+        aria-label={timelineAriaLabel(slots, giftDay, currentStreak, pastTopTier)}
       >
         {slots.map((dayNumber, idx) => {
           const isLastSlot = idx === slots.length - 1;
@@ -157,30 +186,48 @@ export function StreakToast({
               ? "bg-[#3C83F6] text-white shadow-[0_0_0_3px_rgba(60,131,246,0.18)]"
               : "bg-muted text-muted-foreground/70";
 
+          const giftLabel = pastTopTier ? "Top tier" : `Day ${giftDay}`;
+
           return (
             <div
               key={dayNumber}
-              className={`flex items-center ${isLastSlot ? "" : "flex-1"}`}
+              className={`flex min-w-0 flex-col ${isLastSlot ? "items-center" : "flex-1"}`}
             >
-              <div
-                className={`relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-colors ${nodeClasses}`}
-                data-testid={`streak-dot-${dayNumber}${isGift ? "-gift" : ""}`}
-              >
-                {isGift ? (
-                  <Gift className="h-3.5 w-3.5" />
-                ) : isCompleted ? (
-                  <Check className="h-3.5 w-3.5" strokeWidth={3} />
-                ) : null}
-              </div>
-              {!isLastSlot && (
+              <div className={`flex h-7 items-center ${isLastSlot ? "" : "w-full"}`}>
                 <div
-                  className={`h-[2px] flex-1 ${
-                    connectorActive
-                      ? "bg-[#3C83F6]/70"
-                      : "bg-muted-foreground/25"
-                  }`}
-                />
-              )}
+                  className={`relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-colors ${nodeClasses}`}
+                  data-testid={`streak-dot-${dayNumber}${isGift ? "-gift" : ""}`}
+                >
+                  {isGift ? (
+                    pastTopTier ? (
+                      <Trophy className="h-3.5 w-3.5" />
+                    ) : (
+                      <Gift className="h-3.5 w-3.5" />
+                    )
+                  ) : isCompleted ? (
+                    <Check className="h-3.5 w-3.5" strokeWidth={3} />
+                  ) : null}
+                </div>
+                {!isLastSlot && (
+                  <div
+                    className={`h-[2px] flex-1 ${
+                      connectorActive
+                        ? "bg-[#3C83F6]/70"
+                        : "bg-muted-foreground/25"
+                    }`}
+                  />
+                )}
+              </div>
+              <span
+                className={`mt-1 text-center text-[10px] tabular-nums leading-none ${
+                  isGift
+                    ? "font-medium text-[#3C83F6] dark:text-[#93C5FD]"
+                    : "w-7 truncate text-muted-foreground"
+                }`}
+                data-testid={`streak-dot-label-${dayNumber}${isGift ? "-gift" : ""}`}
+              >
+                {isGift ? giftLabel : dayNumber}
+              </span>
             </div>
           );
         })}
@@ -191,8 +238,8 @@ export function StreakToast({
         {daysToNext !== null && daysToNext > 0 && !isMilestone && (
           <p className="text-[12px] text-muted-foreground">
             {daysToNext === 1
-              ? `1 day to your Day ${nextMilestone} milestone.`
-              : `${daysToNext} days to your Day ${nextMilestone} milestone.`}
+              ? `1 day to Day ${nextMilestone}.`
+              : `${daysToNext} days to Day ${nextMilestone}.`}
           </p>
         )}
         {beatsBest && (

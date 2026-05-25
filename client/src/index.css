@@ -1145,6 +1145,24 @@ html [data-sonner-toaster][data-sonner-theme="dark"] [data-rich-colors="true"][d
   transform: translateX(-50%) var(--y) !important;
 }
 
+/* Sonner's built-in @media (max-width: 600px) pins top-center toasts to
+ * mobile-offset-left and sets each toast to left:0; right:0 — which reads
+ * as off-center for our fixed-width StreakToast card on phones. */
+@media (max-width: 600px) {
+  [data-sonner-toast].streak-toast-host {
+    left: 50% !important;
+    right: auto !important;
+    width: min(384px, calc(100vw - 1rem)) !important;
+    max-width: calc(100vw - 1rem) !important;
+    transform: translateX(-50%) var(--y) !important;
+  }
+
+  [data-sonner-toast].streak-toast-host[data-expanded="true"] {
+    left: 50% !important;
+    transform: translateX(-50%) var(--y) !important;
+  }
+}
+
 /* ===== HASH DEEP-LINK SCROLL OFFSET =====
  * Pages with a sticky top bar (PredictPage, detail pages) need their
  * fragment targets to settle BELOW the bar — otherwise the section

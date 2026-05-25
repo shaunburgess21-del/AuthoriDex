@@ -276,7 +276,7 @@ export function useDailyCheckin(enabled: boolean = true) {
               {
                 duration: STREAK_TOAST_DURATION_MS,
                 className:
-                  "streak-toast-host p-0 bg-transparent border-0 shadow-none overflow-visible",
+                  "streak-toast-host box-border p-0 bg-transparent border-0 shadow-none overflow-visible",
                 style: {
                   "--width": STREAK_TOAST_WIDTH_CSS,
                 } as CSSProperties,

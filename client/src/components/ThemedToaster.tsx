@@ -17,6 +17,10 @@ export function ThemedToaster() {
       position="top-center"
       duration={4000}
       swipeDirections={["top", "left", "right"]}
+      /* Symmetric gutters so Sonner's mobile top-center layout doesn't
+       * bias the streak card toward one edge (see index.css streak-toast). */
+      offset="0.5rem"
+      mobileOffset={{ left: "0.5rem", right: "0.5rem", top: "0.5rem" }}
     />
   );
 }
