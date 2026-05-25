@@ -60,6 +60,7 @@ import { optimizeImage } from "./utils/image-optimize";
 import geoip from "geoip-lite";
 import { getTrendContext, getTrendContextBatch, formatRelativeTime, type TrendContext } from "./services/trend-context";
 import { fetchTrendingNewsContext, probeSerperSearchLive, refreshSerperCacheForPerson, getSerperDegradedState, getSerperRunStats } from "./providers/serper";
+import { TRENDS_DELTA_METHOD } from "./providers/trends-window";
 import { generateProfilePreview, getOrGenerateCelebrityProfile } from "./services/profile-generator";
 import { getSourceStats, refreshSourceStats } from "./scoring/sourceStats";
 import { VOTE_TAB_VOTE_TYPES } from "./utils/vote-actions";
@@ -3170,17 +3171,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const trendsMomentumRatio = Number(trendsDiag?.raw?.trendsMomentumRatio ?? 0);
       const trendsMomentumLevel = computeMomentumLevel(trendsMomentumRatio);
 
-      // Day-over-day delta for the Google Trends Activity pill — latest
-      // ~4h mean vs oldest ~4h mean from the SAME `now 1-d` SerpApi
-      // response (both % of that window's single peak). Persisted at ingest
-      // as `trendsInterest` / `trendsPrevDayInterest`. Cross-snapshot
-      // comparison was retired May 2026: each fetch rebases 100 to that
-      // day's peak, so yesterday's snapshot is not comparable to today's.
+      // Google Trends Activity pill — latest 24h vs previous 24h on one
+      // `now 7-d` SerpApi response (persisted as trendsInterest /
+      // trendsPrevDayInterest). Legacy intra-day snapshots are ignored.
+      const TRENDS_DISPLAY_DEAD_ZONE_PCT = 5;
+      const trendsDeltaMethod = trendsDiag?.raw?.trendsDeltaMethod;
+      const trendsHasDayOverDayMethod = trendsDeltaMethod === TRENDS_DELTA_METHOD;
       const trendsPrevDayInterest = Number(trendsDiag?.raw?.trendsPrevDayInterest ?? 0);
-      const rawTrendsDeltaPct = trendsPrevDayInterest > 0 && trendsInterest > 0
+      const rawTrendsDeltaPct = trendsHasDayOverDayMethod && trendsPrevDayInterest > 0 && trendsInterest > 0
         ? Math.round(((trendsInterest - trendsPrevDayInterest) / trendsPrevDayInterest) * 100)
         : 0;
-      const trendsDeltaPct = Math.abs(rawTrendsDeltaPct) <= DELTA_DEAD_ZONE_PCT ? 0 : rawTrendsDeltaPct;
+      const trendsDeltaPct = Math.abs(rawTrendsDeltaPct) <= TRENDS_DISPLAY_DEAD_ZONE_PCT ? 0 : rawTrendsDeltaPct;
 
       const trendsFetchedAtRaw = trendsDiag?.raw?.trendsFetchedAt;
       let trendsFetchedAgeHours: number | null = null;
@@ -3190,7 +3191,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           trendsFetchedAgeHours = Math.round((Date.now() - fetchedMs) / (1000 * 60 * 60) * 10) / 10;
         }
       }
-      if ((trendsInterest ?? 0) > 0) activeSources.push("trends");
+      if (trendsHasDayOverDayMethod && (trendsInterest ?? 0) > 0) activeSources.push("trends");
 
       res.json({
         asOf: latest.timestamp.toISOString(),
@@ -3286,9 +3287,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             level: wikiMomentumLevel,
           },
           // Google Trends — activity card + dormant momentum (not in velocityScore).
-          // avg7d: same-window 24h series mean (not calendar 7-day) until Option 3.
-          // deltaPct: latest ~4h vs oldest ~4h on one `now 1-d` graph (activity %).
-          trends: trendsInterest > 0 ? {
+          // deltaPct: latest 24h vs previous 24h on one `now 7-d` graph.
+          trends: trendsHasDayOverDayMethod && trendsInterest > 0 ? {
             interest: Math.round(trendsInterest * 10) / 10,
             avg7d: Math.round(trendsAvg7dVal * 10) / 10,
             avg90d: Math.round(trendsAvg90dVal * 10) / 10,

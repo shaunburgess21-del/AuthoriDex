@@ -36,17 +36,16 @@ import {
   getSerpApiTrendsRunStats,
   resetSerpApiTrendsRunStats,
   shouldFetchGoogleTrends,
+  TRENDS_DELTA_METHOD,
+  TRENDS_SERPAPI_WINDOW,
   type TrendsBatchResult,
 } from "../providers/serpapi-trends";
 
 const GDELT_CANDIDATE_COUNT = 25;
-// Cutover for the Google Trends daily-normalisation rollout (May 2026).
-// Before this timestamp, snapshots stored `trendsInterest` on the legacy
-// `now 7-d` scale (% of weekly peak hour). After it, they live on the new
-// `now 1-d` scale (% of today's peak hour). Mixing the two would make the
-// rolling 7-day baseline meaningless, so the history-derived `trendsAvg7d`
-// and `trendsPrevDayInterest` both filter to `timestamp >= cutover`. Set
-// to deploy time; can be overridden via env for staging or replays.
+// Cutover for Google Trends scale changes. Snapshots persisted before this
+// timestamp are filtered out of the rolling baseline / 24h-prior comparator
+// to prevent mixing of incompatible Google Trends scales (legacy `now 1-d`
+// head/tail vs current `now 7-d` day-over-day). Override via env for replays.
 const TRENDS_DAILY_SCALE_CUTOVER = new Date(
   process.env.TRENDS_DAILY_SCALE_CUTOVER ?? "2026-05-13T11:00:00.000Z",
 );
@@ -59,6 +58,11 @@ const TRENDS_DAILY_SCALE_CUTOVER = new Date(
 // nearest-match selection in the loop prevents the 12h neighbour from
 // ever winning when a true 24h-ago snapshot is available.
 const TRENDS_PREV_DAY_TOLERANCE_MS = 12 * 60 * 60 * 1000;
+
+// Process-lifetime flag: once we've persisted at least one snapshot on the
+// new day-over-day method, every subsequent ingest can skip the DB rollout
+// probe. Avoids a JSONB-key scan over `trend_snapshots` every cycle.
+let _trendsDayOverDayRolloutComplete = false;
 
 async function computeNewsCandidates(
   people: Array<{ id: string; name: string }>,
@@ -971,6 +975,8 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
       trendsMomentumLevel: string;
       trendsUsedFallbackName: boolean;
       trendsFetchedAt: string;
+      trendsDeltaMethod: string;
+      trendsWindow: string;
     }>();
 
     for (const snap of historicalSnapshots) {
@@ -999,7 +1005,13 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
 
       const raw = diag?.raw;
       const carriedInterest = raw?.trendsInterest;
-      if (carriedInterest != null && carriedInterest !== "null" && Number(carriedInterest) > 0) {
+      const carriedMethod = raw?.trendsDeltaMethod;
+      if (
+        carriedMethod === TRENDS_DELTA_METHOD
+        && carriedInterest != null
+        && carriedInterest !== "null"
+        && Number(carriedInterest) > 0
+      ) {
         const snapAt = new Date(snap.timestamp);
         const existingTrends = latestTrendsDiagMap.get(snap.personId);
         if (!existingTrends || snapAt.getTime() > new Date(existingTrends.trendsFetchedAt).getTime()) {
@@ -1014,6 +1026,8 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
               typeof raw?.trendsFetchedAt === "string" && raw.trendsFetchedAt
                 ? raw.trendsFetchedAt
                 : snapAt.toISOString(),
+            trendsDeltaMethod: TRENDS_DELTA_METHOD,
+            trendsWindow: String(raw?.trendsWindow ?? TRENDS_SERPAPI_WINDOW),
           });
         }
       }
@@ -1603,7 +1617,31 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           }
         }
         shouldFetchTrends = shouldFetchGoogleTrends(lastSerpApiFetchAt);
-        if (!shouldFetchTrends && lastSerpApiFetchAt) {
+        let forceTrendsDayOverDayRollout = false;
+        if (!_trendsDayOverDayRolloutComplete) {
+          try {
+            const rolloutRow = await db.execute(
+              sql`SELECT EXISTS (
+                    SELECT 1 FROM trend_snapshots
+                    WHERE snapshot_origin = 'ingest'
+                      AND diagnostics::jsonb->'raw'->>'trendsDeltaMethod' = ${TRENDS_DELTA_METHOD}
+                  ) AS has_new_method`,
+            );
+            const hasNewMethod = !!(rolloutRow.rows[0] as { has_new_method?: boolean })?.has_new_method;
+            if (hasNewMethod) {
+              _trendsDayOverDayRolloutComplete = true;
+            } else {
+              forceTrendsDayOverDayRollout = true;
+            }
+          } catch (e) {
+            console.warn("[Ingest] Google Trends rollout check failed, will fetch:", (e as Error).message);
+            forceTrendsDayOverDayRollout = true;
+          }
+        }
+        if (forceTrendsDayOverDayRollout) {
+          shouldFetchTrends = true;
+          console.log("[Ingest] Google Trends: forcing fetch for day-over-day rollout");
+        } else if (!shouldFetchTrends && lastSerpApiFetchAt) {
           const elapsedMin = Math.round((Date.now() - lastSerpApiFetchAt.getTime()) / 60000);
           console.log(
             `[Ingest] Google Trends: skipping — last SerpApi fetch ${elapsedMin}min ago (gate: 12h)`,
@@ -1636,6 +1674,7 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           if (coveredCount === 0) sourceStatuses.trends = "FAILED";
           else if (coverage >= 0.7) sourceStatuses.trends = "OK";
           else sourceStatuses.trends = "DEGRADED";
+          if (coveredCount > 0) _trendsDayOverDayRolloutComplete = true;
         } catch (e) {
           console.error("[Ingest] Google Trends batch fetch failed:", (e as Error).message);
           if (!trendsFetchOk) sourceStatuses.trends = "FAILED";
@@ -1655,8 +1694,8 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     // ══════════════════════════════════════════════════════════════════════════
     // GOOGLE TRENDS HISTORY — snapshot fallback when fetch is skipped
     // ══════════════════════════════════════════════════════════════════════════
-    // Fresh fetches supply momentum baseline from the same `now 1-d` series
-    // (`avg24hInterest` → persisted as trendsAvg7d). This block remains for
+    // Fresh fetches supply momentum baseline from the same `now 7-d` series
+    // (`avgWindowInterest` → persisted as trendsAvg7d). This block remains for
     // skip cycles and legacy fallbacks only.
     //
     // Option 3 (future): daily `now 7-d` SerpApi gate for a true weekly
@@ -2074,7 +2113,7 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           // Same-window 24h mean when fetched; carry-forward or history on skip.
           trendsAvg7d: (() => {
             const carriedFwd = latestTrendsDiagMap.get(person.id);
-            if (trends && trends.avg24hInterest > 0) return trends.avg24hInterest;
+            if (trends && trends.avgWindowInterest > 0) return trends.avgWindowInterest;
             if (carriedFwd != null && carriedFwd.trendsAvg7d > 0) return carriedFwd.trendsAvg7d;
             return computeTrendsAvg7d(person.id, trends?.latestInterest ?? 0);
           })(),
@@ -2200,8 +2239,8 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
 
         let trendsInterestLatest = trends?.latestInterest ?? 0;
         let trendsAvg7d =
-          trends && trends.avg24hInterest > 0
-            ? trends.avg24hInterest
+          trends && trends.avgWindowInterest > 0
+            ? trends.avgWindowInterest
             : computeTrendsAvg7d(person.id, trendsInterestLatest);
         let trendsPrevDayInterest =
           trends && trends.prevWindowInterest > 0
@@ -2250,6 +2289,10 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
               trendsMomentumRatio,
               trendsMomentumLevel,
               trendsTopicId: person.googleTrendsTopicId ?? null,
+              trendsWindow: TRENDS_SERPAPI_WINDOW,
+              ...(hasFreshTrendsFetch ? { trendsDeltaMethod: TRENDS_DELTA_METHOD } : trendsCarried?.trendsDeltaMethod
+                ? { trendsDeltaMethod: trendsCarried.trendsDeltaMethod }
+                : {}),
               trendsUsedFallbackName: hasFreshTrendsFetch
                 ? !person.googleTrendsTopicId
                 : (trendsCarried?.trendsUsedFallbackName ?? !person.googleTrendsTopicId),

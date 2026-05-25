@@ -4,62 +4,42 @@
 // Fetches Google Trends "Interest over time" timeseries via SerpApi's
 // google_trends engine. One query per call (no batching) so each person's
 // 0-100 score is normalised against THEIR OWN peak, not against the loudest
-// person in a shared batch. Uses date=now 1-d (past 24h, ~8-min resolution)
-// so the 0-100 scale is rebased against TODAY's peak hour — matching what
-// users see on the Google Trends UI "Past 24h" view. Previous versions used
-// `now 7-d`, which crushed everyone whose week contained a single viral
-// hour (e.g. a cricket match for Kohli) into the low single digits even
-// when their current interest was genuinely high. The 7-day baseline is
-// reconstructed from snapshot history; the 24h delta uses head/tail slices
-// of the same response (see trends-window.ts).
+// person in a shared batch. Uses date=now 7-d so the latest 24h and the
+// prior 24h are on one shared peak scale for a true day-over-day delta
+// (same mental model as News Activity / Wikipedia Pulse).
 //
 // Why per-person and not batched? When you submit q=a,b,c,d,e to Google
 // Trends, ALL series are normalised against the single highest point across
-// all 5 queries combined. So if Trump is in a batch with Elon, Elon's score
-// gets crushed against Trump's biggest day. Per-person fetches eliminate
-// this cross-contamination at the cost of 5× more API calls.
+// all 5 queries combined. Per-person fetches eliminate cross-contamination.
 //
-// Also provides Topic ID autocomplete lookups for entity disambiguation
-// (see `fetchTrendsTopicSuggestions`).
+// Also provides Topic ID autocomplete lookups for entity disambiguation.
 
 import { db } from "../db";
 import { apiCache } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import {
-  computeTrendsWindowMeans,
+  computeTrendsDayOverDayMeans,
+  TRENDS_SERPAPI_WINDOW,
   type TrendsTimeseriesPoint,
 } from "./trends-window";
 
 export type { TrendsTimeseriesPoint } from "./trends-window";
 export {
-  computeTrendsWindowMeans,
-  trendsWindowSize,
+  computeTrendsDayOverDayMeans,
   shouldFetchGoogleTrends,
+  TRENDS_DELTA_METHOD,
   TRENDS_FETCH_INTERVAL_MS,
+  TRENDS_SERPAPI_WINDOW,
 } from "./trends-window";
 
 const SERPAPI_API_KEY = process.env.SERPAPI_API_KEY;
 const SERPAPI_BASE_URL = "https://serpapi.com/search.json";
 const REQUEST_TIMEOUT_MS = 25_000;
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
-// Cache TTL for the per-person `now 1-d` SerpApi response. MUST stay
-// below the ingest job's TRENDS_FETCH_INTERVAL_MS (currently 12h),
-// otherwise every other intended fetch silently returns a stale cached
-// response and persists the same `latestInterest` across consecutive
-// snapshots — which collapses the rolling avg7d and the day-over-day
-// delta to "no signal". The cache's purpose is to dedupe near-
-// simultaneous re-runs of the ingest job (manual triggers, retries,
-// dev work), not to act as a multi-cycle data store.
+// Cache TTL for the per-person SerpApi response. MUST stay below the ingest
+// job's TRENDS_FETCH_INTERVAL_MS (currently 12h).
 const TRENDS_DATA_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
-// Topic ID autocomplete results are essentially static — a celeb's
-// Google Trends entity ID doesn't change once minted. Long TTL keeps
-// admin "Lookup" clicks free after the first hit, while still allowing
-// occasional refresh for new/edge-case entities.
 const AUTOCOMPLETE_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-// Google Trends date window. "now 1-d" = past 24 hours at ~8-minute
-// resolution (~180 points). Matches the "Past 24 hours" view on the
-// Google Trends UI: 100 = the busiest 8-minute slot in the last 24h.
-const TRENDS_DATE_WINDOW = "now 1-d";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -74,18 +54,12 @@ export interface TrendsBatchInput {
 export interface TrendsBatchResult {
   personId: string;
   timeseries: TrendsTimeseriesPoint[];
-  // Mean of the most recent ~4h slice of the timeseries. With `now 1-d`
-  // this is "% of today's peak hour" — directly comparable to the score
-  // shown on the Google Trends UI "Past 24h" view.
+  /** Mean of the latest 24h on the `now 7-d` scale (% of week's peak hour). */
   latestInterest: number;
-  // Mean of the oldest ~4h slice of the SAME timeseries (same 24h window
-  // and peak normalisation). Used for the day-over-day delta pill: both
-  // ends must share one peak or cross-snapshot comparisons falsely show
-  // huge drops after a viral hour rolls out of yesterday's window.
+  /** Mean of the previous 24h on the same scale (day-over-day comparator). */
   prevWindowInterest: number;
-  // Full-series mean on the same window/peak — baseline for dormant momentum
-  // diagnostics (persisted as trendsAvg7d until Option 3 weekly fetch exists).
-  avg24hInterest: number;
+  /** Mean over the full returned series (~7d) on the same scale — momentum baseline. */
+  avgWindowInterest: number;
 }
 
 export interface TopicSuggestion {
@@ -95,7 +69,7 @@ export interface TopicSuggestion {
 }
 
 // ---------------------------------------------------------------------------
-// Run stats (mirrors serper.ts pattern)
+// Run stats
 // ---------------------------------------------------------------------------
 
 let _callsAttempted = 0;
@@ -163,7 +137,7 @@ async function serpApiFetch(params: Record<string, string>): Promise<any | null>
 }
 
 // ---------------------------------------------------------------------------
-// DB cache helpers (api_cache table, same pattern as other providers)
+// DB cache helpers
 // ---------------------------------------------------------------------------
 
 async function getCached(cacheKey: string): Promise<any | null> {
@@ -216,31 +190,12 @@ async function setCache(
 }
 
 // ---------------------------------------------------------------------------
-// fetchGoogleTrendsBatch — per-person TIMESERIES fetch (one query per call)
+// fetchGoogleTrendsBatch — per-person TIMESERIES fetch
 // ---------------------------------------------------------------------------
 
 /**
- * Fetch Google Trends TIMESERIES data for a list of people. Each person is
- * fetched in their own SerpApi call (one query per call) so that the 0-100
- * scaling is normalised per-person rather than against the loudest peak in
- * a shared batch. Returns one result per person with the past-24h
- * timeseries (~180 8-minute points) and a "latest" reading (mean of the
- * most recent ~4h slice, picked for intra-day responsiveness at our 12h
- * cadence).
- *
- * The 0-100 scale is rebased against TODAY's peak hour because we query
- * `now 1-d`. This matches the Google Trends UI "Past 24h" view so a
- * celeb who is genuinely trending right now reads in the 50-100 band
- * regardless of whether they had a bigger spike earlier in the week.
- *
- * People with a `googleTrendsTopicId` use the Topic ID (preferred for
- * disambiguation). Others fall back to name search with a warning.
- *
- * The 24h delta comparator (`prevWindowInterest`) is the mean of the
- * oldest ~4h of this same response (≈24h ago within the window).
- * `avg24hInterest` is the mean of the full series (same peak) for the
- * dormant momentum baseline. True weekly baseline = future Option 3
- * (`now 7-d` once daily) when a Trends Momentum card ships.
+ * Fetch Google Trends TIMESERIES for each person on `now 7-d`. Day-over-day
+ * delta uses latest-24h mean vs previous-24h mean on one normalised scale.
  */
 export async function fetchGoogleTrendsBatch(
   people: TrendsBatchInput[],
@@ -261,7 +216,7 @@ export async function fetchGoogleTrendsBatch(
       console.warn(`[SerpApi Trends] No Topic ID for "${p.name}" (${p.personId}) — falling back to name search`);
     }
 
-    const cacheKey = `serpapi_trends:person:${q}:${TRENDS_DATE_WINDOW}`;
+    const cacheKey = `serpapi_trends:person:${q}:${TRENDS_SERPAPI_WINDOW}`;
     let data = await getCached(cacheKey);
 
     if (!data) {
@@ -269,7 +224,7 @@ export async function fetchGoogleTrendsBatch(
         engine: "google_trends",
         q,
         data_type: "TIMESERIES",
-        date: TRENDS_DATE_WINDOW,
+        date: TRENDS_SERPAPI_WINDOW,
         tz: "0",
       });
 
@@ -288,27 +243,25 @@ export async function fetchGoogleTrendsBatch(
       const series: TrendsTimeseriesPoint[] = [];
       for (const point of timeline) {
         const ts = new Date(parseInt(point.timestamp, 10) * 1000).toISOString();
-        // Only one query per call now, so just take the first value entry.
         const v = point.values?.[0];
         if (v) series.push({ date: ts, interest: v.extracted_value ?? 0 });
       }
 
       if (series.length > 0) {
-        const { latestInterest, prevWindowInterest, avg24hInterest } = computeTrendsWindowMeans(series);
+        const { latestInterest, prevWindowInterest, avgWindowInterest } =
+          computeTrendsDayOverDayMeans(series);
         results.push({
           personId: p.personId,
           timeseries: series,
           latestInterest,
           prevWindowInterest,
-          avg24hInterest,
+          avgWindowInterest,
         });
       } else {
-        results.push({ personId: p.personId, timeseries: [], latestInterest: 0, prevWindowInterest: 0, avg24hInterest: 0 });
+        results.push({ personId: p.personId, timeseries: [], latestInterest: 0, prevWindowInterest: 0, avgWindowInterest: 0 });
       }
     } else if (data) {
-      // SerpApi returned success but no timeline — likely below Trends'
-      // entity threshold for the queried window.
-      results.push({ personId: p.personId, timeseries: [], latestInterest: 0, prevWindowInterest: 0, avg24hInterest: 0 });
+      results.push({ personId: p.personId, timeseries: [], latestInterest: 0, prevWindowInterest: 0, avgWindowInterest: 0 });
     }
 
     if (i < people.length - 1) {
@@ -320,16 +273,9 @@ export async function fetchGoogleTrendsBatch(
 }
 
 // ---------------------------------------------------------------------------
-// fetchTrendsTopicSuggestions — autocomplete for Topic ID disambiguation
+// fetchTrendsTopicSuggestions
 // ---------------------------------------------------------------------------
 
-/**
- * Query SerpApi's Google Trends Autocomplete engine to get entity suggestions
- * for a given person name. Returns Topic IDs (e.g. `/m/0cqt90`) along with
- * their titles and types (e.g. "Person", "Politician", "Company").
- *
- * Used by the admin endpoint and the backfill script.
- */
 export async function fetchTrendsTopicSuggestions(
   query: string,
 ): Promise<TopicSuggestion[]> {
@@ -364,10 +310,6 @@ export async function fetchTrendsTopicSuggestions(
 
   return suggestions;
 }
-
-// ---------------------------------------------------------------------------
-// Utility: check if Trends data is available
-// ---------------------------------------------------------------------------
 
 export function isSerpApiTrendsConfigured(): boolean {
   return !!SERPAPI_API_KEY;

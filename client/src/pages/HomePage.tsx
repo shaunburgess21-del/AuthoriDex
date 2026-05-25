@@ -749,6 +749,10 @@ interface InsightSignal {
   deltaPct: number;
 }
 
+// Hide chips for signals between ±5% so tiny noise (e.g. -2% rounding) doesn't
+// pile up under Cooling. Matches the profile card's "rising/falling" threshold.
+const INSIGHT_SIGNAL_DEAD_ZONE_PCT = 5;
+
 function InsightPanelContent({
   person,
   loading,
@@ -1835,12 +1839,16 @@ export default function HomePage() {
   }, [selectedInsightMomentum]);
 
   const insightGrowthSignals = useMemo<InsightSignal[]>(
-    () => insightSignals.filter((item) => Number.isFinite(item.deltaPct) && item.deltaPct > 0),
+    () => insightSignals.filter(
+      (item) => Number.isFinite(item.deltaPct) && item.deltaPct >= INSIGHT_SIGNAL_DEAD_ZONE_PCT,
+    ),
     [insightSignals]
   );
 
   const insightCoolingSignals = useMemo<InsightSignal[]>(
-    () => insightSignals.filter((item) => Number.isFinite(item.deltaPct) && item.deltaPct < 0),
+    () => insightSignals.filter(
+      (item) => Number.isFinite(item.deltaPct) && item.deltaPct <= -INSIGHT_SIGNAL_DEAD_ZONE_PCT,
+    ),
     [insightSignals]
   );
 

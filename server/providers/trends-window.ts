@@ -5,38 +5,61 @@ export interface TrendsTimeseriesPoint {
   interest: number;
 }
 
-const LATEST_TAIL_FRACTION = 1 / 6;
-const LATEST_TAIL_MAX_POINTS = 30;
-const LATEST_TAIL_MIN_POINTS = 4;
+/** SerpApi `date` param for activity + day-over-day delta (one shared peak scale). */
+export const TRENDS_SERPAPI_WINDOW = "now 7-d";
 
-/** Shared head/tail window size for interest smoothing (~4h at `now 1-d`). */
-export function trendsWindowSize(seriesLength: number): number {
-  return Math.min(
-    LATEST_TAIL_MAX_POINTS,
-    Math.max(LATEST_TAIL_MIN_POINTS, Math.floor(seriesLength * LATEST_TAIL_FRACTION)),
-  );
+/** Persisted on snapshots so routes/UI only use comparable day-over-day deltas. */
+export const TRENDS_DELTA_METHOD = "latest_24h_vs_previous_24h";
+
+const MS_PER_24H = 24 * 60 * 60 * 1000;
+
+function meanInterest(points: TrendsTimeseriesPoint[]): number {
+  if (points.length === 0) return 0;
+  return points.reduce((s, x) => s + x.interest, 0) / points.length;
 }
 
-export function computeTrendsWindowMeans(series: TrendsTimeseriesPoint[]): {
+/**
+ * Day-over-day means from one `now 7-d` response (same peak normalisation).
+ * - latestInterest: mean of points in the latest 24h ending at the series end
+ * - prevWindowInterest: mean of points in the prior 24h
+ * - avgWindowInterest: mean over the full returned series (7d momentum baseline)
+ */
+export function computeTrendsDayOverDayMeans(
+  series: TrendsTimeseriesPoint[],
+): {
   latestInterest: number;
   prevWindowInterest: number;
-  /** Mean of all points in the `now 1-d` series (same peak normalisation). */
-  avg24hInterest: number;
+  avgWindowInterest: number;
 } {
   if (series.length === 0) {
-    return { latestInterest: 0, prevWindowInterest: 0, avg24hInterest: 0 };
+    return { latestInterest: 0, prevWindowInterest: 0, avgWindowInterest: 0 };
   }
-  const win = Math.min(trendsWindowSize(series.length), series.length);
-  const lastWindow = series.slice(-win);
-  const firstWindow = series.slice(0, win);
-  const latestInterest = lastWindow.length > 0
-    ? lastWindow.reduce((s, x) => s + x.interest, 0) / lastWindow.length
-    : 0;
-  const prevWindowInterest = firstWindow.length > 0
-    ? firstWindow.reduce((s, x) => s + x.interest, 0) / firstWindow.length
-    : 0;
-  const avg24hInterest = series.reduce((s, x) => s + x.interest, 0) / series.length;
-  return { latestInterest, prevWindowInterest, avg24hInterest };
+
+  const sorted = [...series].sort(
+    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+  );
+  const endMs = new Date(sorted[sorted.length - 1].date).getTime();
+  if (!Number.isFinite(endMs)) {
+    return { latestInterest: 0, prevWindowInterest: 0, avgWindowInterest: 0 };
+  }
+
+  const latestStart = endMs - MS_PER_24H;
+  const prevStart = endMs - 2 * MS_PER_24H;
+
+  const latestPoints: TrendsTimeseriesPoint[] = [];
+  const prevPoints: TrendsTimeseriesPoint[] = [];
+  for (const p of sorted) {
+    const t = new Date(p.date).getTime();
+    if (!Number.isFinite(t)) continue;
+    if (t > latestStart && t <= endMs) latestPoints.push(p);
+    else if (t > prevStart && t <= latestStart) prevPoints.push(p);
+  }
+
+  return {
+    latestInterest: meanInterest(latestPoints),
+    prevWindowInterest: meanInterest(prevPoints),
+    avgWindowInterest: meanInterest(sorted),
+  };
 }
 
 // ---------------------------------------------------------------------------

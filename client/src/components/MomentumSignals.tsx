@@ -126,10 +126,9 @@ function fallbackLevel(source: "momentum" | "wiki-momentum" | "news" | "wiki" | 
     return "high";
   }
   if (source === "trends") {
-    // Google Trends interest is 0-100 normalised. Thresholds based on
-    // the scale's natural distribution across our tracked cohort.
-    if (value < 25) return "low";
-    if (value < 50) return "medium";
+    // `now 7-d` scale (% of week's peak). Recalibrated May 2026 for day-over-day fetch.
+    if (value < 15) return "low";
+    if (value < 35) return "medium";
     return "high";
   }
   if (value < 500) return "low";
