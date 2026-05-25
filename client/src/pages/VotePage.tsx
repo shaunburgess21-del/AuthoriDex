@@ -76,7 +76,7 @@ import type { Swiper as SwiperType } from "swiper";
 import "swiper/css";
 import { motion, AnimatePresence } from "framer-motion";
 import { getMarketCategoryLabel, normalizeMarketCategory, type FilterCategory, CATEGORIES_LEADERBOARD, CATEGORIES_OPEN, OPINION_POLL_MIN_OPTIONS, OPINION_POLL_MAX_OPTIONS } from "@shared/constants";
-import { buildSectionCategoryOptions } from "@/lib/sectionCategoryFilters";
+import { buildSectionCategoryOptions, involvesAnyFavorite } from "@/lib/sectionCategoryFilters";
 import { CurateSection } from "@/components/curate";
 import { CurateProfileCard as CurateProfileCardComponent, type CuratePerson } from "@/components/curate/CurateProfileCard";
 import { UnderratedOverratedCard } from "@/components/UnderratedOverratedCard";
@@ -1495,6 +1495,8 @@ export default function VotePage() {
     const matchesCategory =
       topicsCategoryFilter === "all" ||
       topicsCategoryFilter === "trending" ||
+      (topicsCategoryFilter === "favorites" &&
+        involvesAnyFavorite(favoriteIds, [t.personId, ...(t.relatedPersonIds || [])])) ||
       normalizeMarketCategory(t.category) === topicsCategoryFilter;
     const matchesSearch = (t.headline ?? '').toLowerCase().includes(topicsSearchQuery.toLowerCase()) ||
                          (t.description || '').toLowerCase().includes(topicsSearchQuery.toLowerCase());
@@ -1505,6 +1507,11 @@ export default function VotePage() {
     const matchesCategory =
       opinionPollsCategoryFilter === "all" ||
       opinionPollsCategoryFilter === "trending" ||
+      (opinionPollsCategoryFilter === "favorites" &&
+        involvesAnyFavorite(favoriteIds, [
+          ...(p.options || []).map((o: any) => o.personId),
+          ...(p.relatedPersonIds || []),
+        ])) ||
       normalizeMarketCategory(p.category) === opinionPollsCategoryFilter;
     const matchesSearch = (p.title || '').toLowerCase().includes(opinionPollsSearchQuery.toLowerCase()) ||
                          (p.description || '').toLowerCase().includes(opinionPollsSearchQuery.toLowerCase());
@@ -1722,6 +1729,12 @@ export default function VotePage() {
     const matchesCategory =
       matchupsCategoryFilter === "all" ||
       matchupsCategoryFilter === "trending" ||
+      (matchupsCategoryFilter === "favorites" &&
+        involvesAnyFavorite(favoriteIds, [
+          f.personAId,
+          f.personBId,
+          ...(f.relatedPersonIds || []),
+        ])) ||
       normalizeMarketCategory(f.category) === matchupsCategoryFilter;
     const matchesSearch = (f.title ?? '').toLowerCase().includes(matchupsSearchQuery.toLowerCase()) ||
                          (f.optionAText ?? '').toLowerCase().includes(matchupsSearchQuery.toLowerCase()) ||
@@ -1907,17 +1920,18 @@ export default function VotePage() {
       const matchesCategory =
         curateCategoryFilter === "all" ||
         curateCategoryFilter === "trending" ||
+        (curateCategoryFilter === "favorites" && favoriteIds.has(p.id)) ||
         normalizeMarketCategory(p.category) === curateCategoryFilter;
       const matchesSearch = !search || p.name.toLowerCase().includes(search);
       return matchesCategory && matchesSearch;
     });
-  }, [curateTrendingCelebrities, curateCategoryFilter, curateSearchQuery]);
+  }, [curateTrendingCelebrities, curateCategoryFilter, curateSearchQuery, favoriteIds]);
 
   const topicsCategoryOptions = useMemo(
     () =>
       buildSectionCategoryOptions({
         categories: dbPolls.map((t: any) => t.category),
-        includeFavorites: false,
+        includeFavorites: true,
         includeTrending: true,
         selectedCategory: topicsCategoryFilter,
       }),
@@ -1928,7 +1942,7 @@ export default function VotePage() {
     () =>
       buildSectionCategoryOptions({
         categories: matchups.filter((m) => m.isActive).map((m) => m.category),
-        includeFavorites: false,
+        includeFavorites: true,
         includeTrending: true,
         selectedCategory: matchupsCategoryFilter,
       }),
@@ -1939,7 +1953,7 @@ export default function VotePage() {
     () =>
       buildSectionCategoryOptions({
         categories: opinionPolls.map((p: any) => p.category),
-        includeFavorites: false,
+        includeFavorites: true,
         includeTrending: true,
         selectedCategory: opinionPollsCategoryFilter,
       }),
@@ -1972,7 +1986,7 @@ export default function VotePage() {
     () =>
       buildSectionCategoryOptions({
         categories: curateTrendingCelebrities.map((p: any) => p.category),
-        includeFavorites: false,
+        includeFavorites: true,
         includeTrending: true,
         selectedCategory: curateCategoryFilter,
       }),

@@ -13,6 +13,7 @@ import { CurateProfileCard, type CuratePerson } from "./CurateProfileCard";
 import { CurateViewResultsOverlay } from "./CurateViewResultsOverlay";
 import { CurateViewAllOverlay } from "./CurateViewAllOverlay";
 import { normalizeMarketCategory, type FilterCategory } from "@shared/constants";
+import { useFavorites } from "@/hooks/useFavorites";
 
 interface TrendingPerson {
   id: string;
@@ -50,6 +51,7 @@ export function CurateSection({
   const [carouselIndex, setCarouselIndex] = useState(0);
   const swiperRef = useRef<SwiperType | null>(null);
 
+  const { favoriteIds } = useFavorites();
   const { data: allCelebritiesResponse, isLoading } = useQuery<{ data: TrendingPerson[] } | TrendingPerson[]>({
     queryKey: ['/api/trending?sort=rank&limit=100'],
   });
@@ -71,11 +73,15 @@ export function CurateSection({
     if (categoryFilter === "trending") return [...allCelebrities]
       .filter(matchesSearch)
       .sort((a: any, b: any) => ((b.fameScore ?? b.score ?? 0) - (a.fameScore ?? a.score ?? 0)));
-    if (categoryFilter === "favorites") return allCelebrities.filter(matchesSearch);
+    if (categoryFilter === "favorites") {
+      return allCelebrities.filter(
+        (person) => favoriteIds.has(person.id) && matchesSearch(person),
+      );
+    }
     return allCelebrities.filter(
       person => normalizeMarketCategory(person.category) === categoryFilter && matchesSearch(person)
     );
-  }, [allCelebrities, categoryFilter, searchQuery]);
+  }, [allCelebrities, categoryFilter, searchQuery, favoriteIds]);
 
   const curatePersons: CuratePerson[] = useMemo(() => {
     return filteredCelebrities.map(person => ({

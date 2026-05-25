@@ -67,3 +67,13 @@ export function isPinnedCategory(category: string): boolean {
   const c = category.toLowerCase();
   return c === "all" || c === "favorites" || c === "trending";
 }
+
+export function involvesAnyFavorite(
+  favoriteIds: Set<string>,
+  ids: Iterable<string | null | undefined>,
+): boolean {
+  for (const id of ids) {
+    if (id && favoriteIds.has(id)) return true;
+  }
+  return false;
+}
