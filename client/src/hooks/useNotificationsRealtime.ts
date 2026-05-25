@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { getSupabase } from "@/lib/supabase";
 import { shouldAutoToast } from "@/lib/notifications/registry";
+import { ToastBurstCoalescer } from "@/lib/notifications/toast-burst-coalesce";
 import { useInvalidateNotifications } from "@/hooks/useNotifications";
 import { dispatchRankUp } from "@/components/RankUpModal";
 import { STREAK_BADGE_KEYS } from "@shared/badge-config";
@@ -84,11 +85,17 @@ export function useNotificationsRealtime(): void {
   // doesn't tear the channel down.
   const refreshProfileRef = useRef(refreshProfile);
   refreshProfileRef.current = refreshProfile;
+  const toastBurstRef = useRef(new ToastBurstCoalescer());
 
   useEffect(() => {
     if (!isLoggedIn || !user?.id) {
       lastUserIdRef.current = null;
+      toastBurstRef.current.reset();
       return;
+    }
+
+    if (lastUserIdRef.current !== user.id) {
+      toastBurstRef.current.reset();
     }
 
     let cancelled = false;
@@ -214,27 +221,39 @@ export function useNotificationsRealtime(): void {
               // existing Sonner instance mounted in App.tsx so the
               // styling matches every other toast in the app.
               if (shouldAutoToast(row.kind)) {
-                const description = row.body || undefined;
-                const href = row.href;
-                if (href) {
-                  toast(row.title, {
-                    description,
+                const burst = toastBurstRef.current.record(row.kind);
+                const notificationsHref = "/me/notifications";
+
+                if (burst.action === "summary") {
+                  const summaryTitle = toastBurstRef.current.summaryTitle(
+                    row.kind,
+                    burst.extra,
+                  );
+                  toast(summaryTitle, {
+                    id: toastBurstRef.current.summaryToastId(row.kind),
                     action: {
-                      label: "View",
-                      onClick: () => {
-                        // Internal links → SPA navigation via wouter.
-                        // External links (rare) → full-page navigate.
-                        if (/^https?:\/\//i.test(href)) {
-                          window.location.assign(href);
-                        } else {
-                          setLocationRef.current(href);
-                        }
-                      },
+                      label: "View all",
+                      onClick: () => setLocationRef.current(notificationsHref),
                     },
                   });
-                } else {
-                  toast(row.title, { description });
+                  return;
                 }
+
+                const description = row.body || undefined;
+                const href = row.href ?? notificationsHref;
+                toast(row.title, {
+                  description,
+                  action: {
+                    label: "View",
+                    onClick: () => {
+                      if (/^https?:\/\//i.test(href)) {
+                        window.location.assign(href);
+                      } else {
+                        setLocationRef.current(href);
+                      }
+                    },
+                  },
+                });
               }
             },
           )

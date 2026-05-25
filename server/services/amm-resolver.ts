@@ -38,6 +38,7 @@ import {
 } from "@shared/schema";
 import { db } from "../db";
 import { log } from "../log";
+import { notificationDayBucket } from "../jobs/notification-buckets";
 import { resolvePickContextLabel } from "../jobs/notification-market-labels";
 import { HOUSE_PROFILE_ID, returnAmmSeedAtSettlement } from "./amm-house";
 import { createNotification } from "./notifications";
@@ -347,6 +348,7 @@ async function emitResolutionSideEffects(result: ResolveAmmMarketResult): Promis
           ),
         );
 
+      const voidDayBucket = notificationDayBucket();
       for (const row of refundRows) {
         const refund = row.amount ?? 0;
         const { title, body } = buildAmmVoidNotification({ marketTitle, refund });
@@ -364,6 +366,7 @@ async function emitResolutionSideEffects(result: ResolveAmmMarketResult): Promis
             refund,
             marketType: marketMeta?.marketType,
           },
+          groupKey: `market_void_refund:${row.userId}:${voidDayBucket}`,
           idempotencyKey: `market_void_refund:${marketId}:${row.userId}`,
         });
         void syncProfilePredictionStats(row.userId);
@@ -438,6 +441,7 @@ async function emitResolutionSideEffects(result: ResolveAmmMarketResult): Promis
     const soldOutNotified = new Set<string>();
 
     const usersToSync = new Set<string>();
+    const dayBucket = notificationDayBucket();
 
     for (const bet of settledBuys) {
       usersToSync.add(bet.userId);
@@ -499,6 +503,7 @@ async function emitResolutionSideEffects(result: ResolveAmmMarketResult): Promis
             ? { preResolveSellProceeds }
             : {}),
         },
+        groupKey: `market_resolved:${bet.userId}:${dayBucket}`,
         idempotencyKey: `market_resolved:${marketId}:${bet.id}`,
       });
     }

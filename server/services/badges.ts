@@ -41,6 +41,7 @@ import {
   votes,
   type Badge,
 } from "@shared/schema";
+import { notificationDayBucket } from "../jobs/notification-buckets";
 import { createNotification } from "./notifications";
 import {
   BADGES,
@@ -148,6 +149,7 @@ class BadgeService {
         const description =
           cached?.description ?? seed?.description ?? "You earned a badge.";
         const icon = cached?.icon ?? seed?.icon ?? "award";
+        const dayBucket = notificationDayBucket();
         await createNotification({
           userId,
           kind: "badge_awarded",
@@ -163,6 +165,7 @@ class BadgeService {
             icon,
             description,
           },
+          groupKey: `badge_awarded:${userId}:${dayBucket}`,
           idempotencyKey: `badge_awarded:${userId}:${badgeKey}`,
         });
       } catch (notifyErr) {

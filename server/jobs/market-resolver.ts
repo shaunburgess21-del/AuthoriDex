@@ -11,6 +11,11 @@ import { resolveAmmMarket, type ResolveAmmMarketResult } from "../services/amm-r
 import { getAiModel, getChatCompletionTokenLimit } from "../config/ai-models";
 import { gamificationService } from "../services/gamification";
 import { checkAndAwardPredictionWinBadges } from "../services/badges";
+import { notificationDayBucket } from "./notification-buckets";
+import {
+  buildJackpotResolvedLossNotification,
+  buildJackpotResolvedWinNotification,
+} from "./jackpot-resolved-utils";
 import { createNotification } from "../services/notifications";
 import OpenAI from "openai";
 import { fetchTrendingNewsContext } from "../providers/serper";
@@ -359,6 +364,7 @@ export async function voidMarketBets(marketId: string): Promise<number> {
       const marketTitle = marketMeta?.title ?? "A market you bet on";
       const href = marketMeta?.slug ? `/markets/${marketMeta.slug}` : `/me/predictions`;
 
+      const voidDayBucket = notificationDayBucket();
       for (const bet of refundedBets) {
         await createNotification({
           userId: bet.userId,
@@ -370,6 +376,7 @@ export async function voidMarketBets(marketId: string): Promise<number> {
           entityId: marketId,
           marketId,
           metadata: { betId: bet.id, refund: bet.stakeAmount },
+          groupKey: `market_void_refund:${bet.userId}:${voidDayBucket}`,
           idempotencyKey: `market_void_refund:${marketId}:${bet.id}`,
         });
       }
@@ -939,37 +946,49 @@ export async function resolveJackpot(
       .where(and(eq(marketBets.marketId, market.id), eq(marketBets.status, "won")));
     const payoutById = new Map(settledWinnerBets.map(b => [b.id, b.payoutAmount ?? 0]));
 
+    const resolvedDayBucket = notificationDayBucket();
     for (const w of winners) {
       const share = payoutById.get(w.id) ?? 0;
       const profit = share - w.stakeAmount;
-      const signedProfit = `${profit >= 0 ? "+" : ""}${profit.toLocaleString("en-US")}`;
-      const title = profit > 0
-        ? `Jackpot win — ${signedProfit} credits`
-        : `Jackpot — stake returned (${share.toLocaleString("en-US")} credits)`;
+      const { title, body } = buildJackpotResolvedWinNotification({
+        marketTitle,
+        actualScore,
+        predictedScore: w.predictedScore,
+        diff: w.diff,
+        stake: w.stakeAmount,
+        payout: share,
+      });
       await createNotification({
         userId: w.userId,
         kind: "market_resolved",
         title,
-        body: `${marketTitle} closed at ${actualScore}. You predicted ${w.predictedScore} (off by ${w.diff}). Payout ${share.toLocaleString("en-US")} (net ${signedProfit}).`,
+        body,
         href,
         entityType: "market",
         entityId: market.id,
         marketId: market.id,
         metadata: { betId: w.id, status: "won", payout: share, stake: w.stakeAmount, profit, actualScore, predictedScore: w.predictedScore, margin: w.diff },
+        groupKey: `market_resolved:${w.userId}:${resolvedDayBucket}`,
         idempotencyKey: `market_resolved:${market.id}:${w.id}`,
       });
     }
     for (const loser of losers) {
+      const { title, body } = buildJackpotResolvedLossNotification({
+        marketTitle,
+        actualScore,
+        stake: loser.stakeAmount,
+      });
       await createNotification({
         userId: loser.userId,
         kind: "market_resolved",
-        title: `Jackpot didn't land`,
-        body: `${marketTitle} closed at ${actualScore}. Lost ${loser.stakeAmount.toLocaleString("en-US")} credits.`,
+        title,
+        body,
         href,
         entityType: "market",
         entityId: market.id,
         marketId: market.id,
         metadata: { betId: loser.id, status: "lost", payout: 0, stake: loser.stakeAmount, profit: -loser.stakeAmount, actualScore },
+        groupKey: `market_resolved:${loser.userId}:${resolvedDayBucket}`,
         idempotencyKey: `market_resolved:${market.id}:${loser.id}`,
       });
     }

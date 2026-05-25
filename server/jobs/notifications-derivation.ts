@@ -364,7 +364,7 @@ async function deriveFavoriteHotMovers(): Promise<number> {
       // gives the client-side panel a collapse target so a person who
       // alternates between climbing fast and slipping fast over several
       // days surfaces as one row with the latest direction.
-      groupKey: `favorite_hot_mover:${fav.userId}:${fav.personId}`,
+      groupKey: `favorite_hot_mover:${fav.userId}`,
       idempotencyKey: `favhot:${fav.userId}:${fav.personId}:${bucket}`,
     });
     if (id) inserted += 1;
@@ -882,10 +882,11 @@ async function derivePositionMoveAlerts(): Promise<number> {
           currentValue: evaluation.currentValue,
           unrealisedPnl,
         },
-        // groupKey collapses prior alerts on the same position so the
-        // panel shows one row per (user, market, entry) rather than a
-        // long ladder as the price oscillates above/below threshold.
-        groupKey: `position_move_alert:${userId}:${pos.marketId}:${pos.entryId}`,
+        // groupKey per user collapses many positions moving in the same
+        // window into one inbox head + "+N earlier". Per-(market, entry)
+        // cooldown still gates re-fires; widening the key only affects
+        // panel display, not emission rate.
+        groupKey: `position_move_alert:${userId}`,
         idempotencyKey: `position_move:${userId}:${pos.marketId}:${pos.entryId}:${bucket}`,
       });
       if (id) inserted += 1;

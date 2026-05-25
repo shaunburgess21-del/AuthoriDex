@@ -6,12 +6,7 @@ import {
   buildAmmVoidNotification,
 } from "../server/services/amm-resolver-notifications";
 
-// Pure helper — no DB. These tests pin the AMM resolution notification
-// wording so the calibration fixes (Sprint: notification-calibration-fixes)
-// don't regress. See `amm-resolver-notifications.ts` for the full
-// rationale on each branch.
-
-test("won + positive payout → 'Your prediction won — +ꝞN' with thousands separator", () => {
+test("won + positive payout → market-first title with signed profit", () => {
   const built = buildAmmResolutionNotification({
     marketTitle: "Vladimir Putin: Up or Down?",
     won: true,
@@ -19,11 +14,8 @@ test("won + positive payout → 'Your prediction won — +ꝞN' with thousands s
     payout: 207,
   });
   assert.ok(built, "expected a notification, got null");
-  assert.equal(built!.title, "Your prediction won — +Ꝟ107");
-  assert.equal(
-    built!.body,
-    "Vladimir Putin: Up or Down? resolved. Payout Ꝟ207 (net +Ꝟ107).",
-  );
+  assert.equal(built!.title, "Vladimir Putin: Up or Down? won +Ꝟ107");
+  assert.equal(built!.body, "Resolved. Payout Ꝟ207 (net +Ꝟ107).");
 });
 
 test("won + positive payout with large numbers uses en-US thousands separator", () => {
@@ -34,14 +26,11 @@ test("won + positive payout with large numbers uses en-US thousands separator", 
     payout: 12_345,
   });
   assert.ok(built);
-  assert.equal(built!.title, "Your prediction won — +Ꝟ7,345");
-  assert.equal(
-    built!.body,
-    "Jake Paul vs KSI resolved. Payout Ꝟ12,345 (net +Ꝟ7,345).",
-  );
+  assert.equal(built!.title, "Jake Paul vs KSI won +Ꝟ7,345");
+  assert.equal(built!.body, "Resolved. Payout Ꝟ12,345 (net +Ꝟ7,345).");
 });
 
-test("lost → 'Your prediction didn't land' with stake amount", () => {
+test("lost → market-first title; distinct per market on resolution nights", () => {
   const built = buildAmmResolutionNotification({
     marketTitle: "Chamath Palihapitiya: Up or Down?",
     won: false,
@@ -49,14 +38,31 @@ test("lost → 'Your prediction didn't land' with stake amount", () => {
     payout: 0,
   });
   assert.ok(built);
-  assert.equal(built!.title, "Your prediction didn't land");
-  assert.equal(
-    built!.body,
-    "Chamath Palihapitiya: Up or Down? resolved. Lost Ꝟ100 — better luck next round.",
-  );
+  assert.equal(built!.title, "Chamath Palihapitiya: Up or Down? didn't land");
+  assert.equal(built!.body, "Resolved. Lost Ꝟ100.");
 });
 
-test("gainer win with contextLabel leads body with candidate pick", () => {
+test("many losses on different markets get distinct titles", () => {
+  const a = buildAmmResolutionNotification({
+    marketTitle: "Theo Von",
+    contextLabel: "Category Race: Comedy",
+    won: false,
+    stake: 100,
+    payout: 0,
+  });
+  const b = buildAmmResolutionNotification({
+    marketTitle: "Elon Musk vs Dario Amodei",
+    won: false,
+    stake: 200,
+    payout: 0,
+  });
+  assert.ok(a && b);
+  assert.notEqual(a!.title, b!.title);
+  assert.match(a!.title, /Theo Von/);
+  assert.match(b!.title, /Elon Musk vs Dario Amodei/);
+});
+
+test("gainer win with contextLabel leads title with candidate pick", () => {
   const built = buildAmmResolutionNotification({
     marketTitle: "Category Race: Streaming",
     contextLabel: "Clavicular",
@@ -65,20 +71,14 @@ test("gainer win with contextLabel leads body with candidate pick", () => {
     payout: 200,
   });
   assert.ok(built);
-  assert.equal(built!.title, "Your prediction won — +Ꝟ100");
   assert.equal(
-    built!.body,
-    "Clavicular · Category Race: Streaming resolved. Payout Ꝟ200 (net +Ꝟ100).",
+    built!.title,
+    "Clavicular · Category Race: Streaming won +Ꝟ100",
   );
+  assert.equal(built!.body, "Resolved. Payout Ꝟ200 (net +Ꝟ100).");
 });
 
 test("won-but-fully-sold without pre-close proceeds (back-compat) → suppressed (null)", () => {
-  // Buy row marked status='won' but payoutAmount=0 because the user
-  // sold all their winner-side shares before resolution. When the
-  // caller hasn't aggregated pre-close sells (preResolveSellProceeds
-  // omitted) the builder degrades to the legacy suppression, so older
-  // call sites don't regress into the self-contradictory
-  // "Stake returned — Ꝟ0 (net −Ꝟ500)" message.
   const built = buildAmmResolutionNotification({
     marketTitle: "Mark Cuban: Up or Down?",
     won: true,
@@ -88,11 +88,7 @@ test("won-but-fully-sold without pre-close proceeds (back-compat) → suppressed
   assert.equal(built, null);
 });
 
-test("won-but-fully-sold with profitable pre-close proceeds → 'sold beforehand' with positive net", () => {
-  // Tier 1.7: user bought Ꝟ500 of the winning side, sold for Ꝟ720
-  // before resolution. Settlement row shows payout=0 (no shares left
-  // to pay out) but they DID realise +Ꝟ220. Resolution ping should
-  // reflect that, not stay silent.
+test("won-but-fully-sold with profitable pre-close proceeds → sold beforehand", () => {
   const built = buildAmmResolutionNotification({
     marketTitle: "Mark Cuban: Up or Down?",
     won: true,
@@ -101,18 +97,17 @@ test("won-but-fully-sold with profitable pre-close proceeds → 'sold beforehand
     preResolveSellProceeds: 720,
   });
   assert.ok(built, "expected a notification when sold-beforehand proceeds > 0");
-  assert.equal(built!.title, "Your market resolved — you'd sold beforehand");
+  assert.equal(
+    built!.title,
+    "Mark Cuban: Up or Down? resolved — you'd sold beforehand",
+  );
   assert.equal(
     built!.body,
-    "Mark Cuban: Up or Down? resolved on your side. You'd already sold those shares for Ꝟ720 (net +Ꝟ220).",
+    "You'd already sold those shares for Ꝟ720 (net +Ꝟ220).",
   );
 });
 
-test("won-but-fully-sold with pre-close proceeds below stake → signed-negative net is rendered", () => {
-  // User sold winner-side shares early at a loss (e.g. bought at a
-  // high price then panic-sold on a swing). They still get closure
-  // with the realised loss spelled out. The negative net uses the
-  // Unicode minus (U+2212) to keep glyph spacing aligned with `+`.
+test("won-but-fully-sold with pre-close proceeds below stake → signed-negative net", () => {
   const built = buildAmmResolutionNotification({
     marketTitle: "Some Market",
     won: true,
@@ -121,18 +116,14 @@ test("won-but-fully-sold with pre-close proceeds below stake → signed-negative
     preResolveSellProceeds: 750,
   });
   assert.ok(built);
-  assert.equal(built!.title, "Your market resolved — you'd sold beforehand");
+  assert.equal(built!.title, "Some Market resolved — you'd sold beforehand");
   assert.equal(
     built!.body,
-    "Some Market resolved on your side. You'd already sold those shares for Ꝟ750 (net \u2212Ꝟ250).",
+    "You'd already sold those shares for Ꝟ750 (net \u2212Ꝟ250).",
   );
 });
 
-test("won-but-fully-sold with preResolveSellProceeds === 0 → suppressed (degenerate)", () => {
-  // Structurally near-unreachable (winner-side buy with payout=0 and
-  // ZERO pre-close sells), but the guard avoids resurrecting the
-  // legacy "net -<stake>" bug if a future code path passes a zero
-  // proceeds figure explicitly.
+test("won-but-fully-sold with preResolveSellProceeds === 0 → suppressed", () => {
   const built = buildAmmResolutionNotification({
     marketTitle: "Degenerate market",
     won: true,
@@ -155,9 +146,6 @@ test("won-but-fully-sold with non-finite proceeds → suppressed", () => {
 });
 
 test("preResolveSellProceeds is ignored on non-zero payout branches", () => {
-  // The new field only matters for the won-but-fully-sold path. A
-  // normal winner with payout > 0 should still render the standard
-  // "Your prediction won" wording even if proceeds is plumbed.
   const built = buildAmmResolutionNotification({
     marketTitle: "Plumb-through guard",
     won: true,
@@ -166,15 +154,10 @@ test("preResolveSellProceeds is ignored on non-zero payout branches", () => {
     preResolveSellProceeds: 999,
   });
   assert.ok(built);
-  assert.equal(built!.title, "Your prediction won — +Ꝟ107");
+  assert.equal(built!.title, "Plumb-through guard won +Ꝟ107");
 });
 
-test("won + payout === stake (profit=0, parity buy) → 'Stake returned' wording is accurate now that payout=0 is suppressed upstream", () => {
-  // Edge case in LMSR pricing where the user bought at price=1.0
-  // and a winning share paid out 1:1. The 'Stake returned' wording
-  // is semantically correct here — the original bug was only that
-  // this branch also fired for payout=0 (Mark Cuban case), which
-  // is now suppressed at the head of the helper.
+test("won + payout === stake (parity buy) → stake returned title", () => {
   const built = buildAmmResolutionNotification({
     marketTitle: "Parity buy market",
     won: true,
@@ -182,18 +165,11 @@ test("won + payout === stake (profit=0, parity buy) → 'Stake returned' wording
     payout: 200,
   });
   assert.ok(built, "expected a notification, got null");
-  assert.equal(built!.title, "Stake returned — Ꝟ200");
-  assert.equal(
-    built!.body,
-    "Parity buy market resolved. Payout matched your stake (net Ꝟ0).",
-  );
+  assert.equal(built!.title, "Parity buy market — stake returned");
+  assert.equal(built!.body, "Resolved. Payout Ꝟ200 (net Ꝟ0).");
 });
 
-test("won + payout=0 must NOT trigger the 'Stake returned' branch (regression guard for Mark Cuban bug)", () => {
-  // Belt-and-braces: the original bug was payout=0 falling into the
-  // 'Stake returned' branch and printing a self-contradictory
-  // 'net -<stake>' body. Even if a future edit reorders branches,
-  // this case must return null.
+test("won + payout=0 must NOT trigger stake-returned branch", () => {
   const built = buildAmmResolutionNotification({
     marketTitle: "Regression guard",
     won: true,

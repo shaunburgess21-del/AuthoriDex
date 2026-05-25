@@ -7,31 +7,8 @@
  * and `buildAmmVoidNotification` and fans the results through
  * `createNotification` with the appropriate idempotency keys.
  *
- * Branch matrix (see audit, Sprint: notification-calibration-fixes):
- *   - `won && payout === 0 && preResolveSellProceeds > 0` →
- *     "Your market resolved — you'd sold beforehand". The user sold
- *     all their winner-side shares before resolution, so the on-row
- *     payout is zero but they DID realise Vox via the pre-close
- *     sells. We surface that realised P&L so the bell entry matches
- *     what their wallet already shows (Tier 1.7).
- *   - `won && payout === 0` with no realised proceeds → null
- *     (suppressed). Structurally near-unreachable (winning row with
- *     zero payout and zero pre-close sells), but the guard avoids
- *     the legacy "Stake returned — Ꝟ0 (net −<stake>)" bug that was
- *     visible in the Mark Cuban screenshot.
- *   - `won && profit > 0` → "Your prediction won — +ꝞN". The normal
- *     happy path: held the position through resolution, made money.
- *   - `won && profit === 0` → "Stake returned — ꝞN". Edge case where
- *     the user bought at price=1.0 (parity) and the share paid out
- *     1:1. Structurally near-unreachable in LMSR pricing but the
- *     wording is accurate for it. Gated behind `payout > 0` above so
- *     this branch never fires with a self-contradictory "net −<stake>"
- *     anymore.
- *   - `!won` → "Your prediction didn't land". Lost the full stake.
- *
- * `won && profit < 0` is structurally impossible under current AMM
- * pricing: max buy price is Ꝟ1.00 per share and a winning share pays
- * Ꝟ1, so `payout >= stake` for any winner-side row.
+ * Titles lead with formatMarketLead so a resolution-night inbox does
+ * not repeat identical generic headlines across many positions.
  */
 
 import { formatMarketLead } from "../jobs/notification-market-labels";
@@ -61,7 +38,7 @@ export interface AmmResolutionNotificationInput {
 // because that helper forces two decimal places; resolution
 // notifications operate on integer credit grants and rendering
 // "+Ꝟ500.00" reads off-brand.
-function formatSignedVox(n: number): string {
+export function formatSignedVox(n: number): string {
   if (!Number.isFinite(n) || n === 0) return `${CURRENCY.symbol}0`;
   const abs = Math.abs(Math.round(n)).toLocaleString("en-US");
   if (n > 0) return `+${CURRENCY.symbol}${abs}`;
@@ -84,8 +61,8 @@ export function buildAmmResolutionNotification(
     if (!Number.isFinite(proceeds) || proceeds <= 0) return null;
     const netRealised = proceeds - stake;
     return {
-      title: `Your market resolved — you'd sold beforehand`,
-      body: `${lead} resolved on your side. You'd already sold those shares for ${formatVox(proceeds)} (net ${formatSignedVox(netRealised)}).`,
+      title: `${lead} resolved \u2014 you'd sold beforehand`,
+      body: `You'd already sold those shares for ${formatVox(proceeds)} (net ${formatSignedVox(netRealised)}).`,
     };
   }
 
@@ -94,21 +71,21 @@ export function buildAmmResolutionNotification(
 
   if (won && profit > 0) {
     return {
-      title: `Your prediction won — ${signedProfit}`,
-      body: `${lead} resolved. Payout ${formatVox(payout)} (net ${signedProfit}).`,
+      title: `${lead} won ${signedProfit}`,
+      body: `Resolved. Payout ${formatVox(payout)} (net ${signedProfit}).`,
     };
   }
 
   if (won) {
     return {
-      title: `Stake returned — ${formatVox(payout)}`,
-      body: `${lead} resolved. Payout matched your stake (net ${signedProfit}).`,
+      title: `${lead} \u2014 stake returned`,
+      body: `Resolved. Payout ${formatVox(payout)} (net ${signedProfit}).`,
     };
   }
 
   return {
-    title: `Your prediction didn't land`,
-    body: `${lead} resolved. Lost ${formatVox(stake)} — better luck next round.`,
+    title: `${lead} didn't land`,
+    body: `Resolved. Lost ${formatVox(stake)}.`,
   };
 }
 
