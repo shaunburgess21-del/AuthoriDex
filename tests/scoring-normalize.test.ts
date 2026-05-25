@@ -14,6 +14,7 @@ import {
   PLATFORM_WEIGHTS,
   MASS_ALLOCATION,
   VELOCITY_ALLOCATION,
+  DEFAULT_SOURCE_STATS,
   type SourceStats,
 } from "../server/scoring/normalize";
 
@@ -310,6 +311,39 @@ test("normalizeTrendsMomentum curve parity with wiki/news momentum", () => {
       `all momentum curves should match; ratio=${ratio} → trends=${trends}, news=${news}, wiki=${wiki}`,
     );
   }
+});
+
+// ─── News percentile steepness (native-markets calibration regression) ───
+test("normalizeSourceValue: news 29 vs 30 is monotonic under default stats", () => {
+  const newsStats = DEFAULT_SOURCE_STATS.news;
+  const r29 = normalizeSourceValue(29, newsStats);
+  const r30 = normalizeSourceValue(30, newsStats);
+  assert.ok(r30 > r29, "30 articles should rank above 29");
+  assert.ok(
+    r30 - r29 > 0.005,
+    `+1 article should move rank; got delta=${(r30 - r29).toFixed(4)}`,
+  );
+});
+
+/** Tight band around tracked-celeb news_count (~25–35) — steep steps amplify in velocity. */
+test("normalizeSourceValue: news 29 vs 30 steep step in tracked-celeb band stats", () => {
+  const trackedCelebNewsStats: SourceStats = {
+    count: 500,
+    min: 0,
+    max: 80,
+    p25: 22,
+    p50: 28,
+    p75: 30,
+    p90: 38,
+    mean: 29,
+  };
+  const r29 = normalizeSourceValue(29, trackedCelebNewsStats);
+  const r30 = normalizeSourceValue(30, trackedCelebNewsStats);
+  assert.ok(r30 > r29);
+  assert.ok(
+    r30 - r29 > 0.02,
+    `expected meaningful step for +1 article in celeb band; got delta=${(r30 - r29).toFixed(4)}`,
+  );
 });
 
 // ─── Display-only scoping safety rail: Trends (May 2026) ─────────────────

@@ -24,6 +24,7 @@ import { eq, and, sql, gte, lte, desc, inArray } from "drizzle-orm";
 import { log } from "../log";
 import { computePrediction, computeJackpotPrediction } from "./decisionEngine";
 import { computeWorldMarketPrediction } from "./worldMarketEngine";
+import { prefetchNativeAssessmentsForSweep } from "./nativeMarketEngine";
 import { JACKPOT_TICKET_COST } from "../config/constants";
 import { getWeeklyBettingCutoff } from "../jobs/market-generator";
 import { getMarketBettingCutoff } from "../native-markets/lifecycle";
@@ -503,6 +504,15 @@ async function runAgentBatchOnce(): Promise<{
     }
   }
 
+  const nativeAssessmentByMarket = await prefetchNativeAssessmentsForSweep(
+    rankerInputs
+      .filter(
+        (r): r is { market: MarketWithEntries; signals: TrendSignals } =>
+          r != null && r.signals != null,
+      )
+      .map((r) => ({ market: r.market, signals: r.signals })),
+  );
+
   let scheduled = 0;
   let abstained = 0;
   let skipped = 0;
@@ -795,6 +805,7 @@ async function runAgentBatchOnce(): Promise<{
         decision = computePrediction(agentData, marketData, signals, crowd, undefined, entrySignals, {
           priority,
           decisiveLatched,
+          nativeAssessment: nativeAssessmentByMarket.get(market.id) ?? null,
         });
       }
 
@@ -1094,6 +1105,7 @@ type UpdownMarketRow = {
   engine?: string | null;
   metadata?: unknown;
   endAt?: Date | null;
+  createdAt?: Date | null;
 };
 
 function filterAmmPerPersonUpdown(
@@ -1519,6 +1531,39 @@ async function runRepredictSweep(
     entriesByMarket.set(market.id, entries);
   }
 
+  const nativeAssessmentByMarket = await prefetchNativeAssessmentsForSweep(
+    ammUpdown
+      .filter((m) => m.personId)
+      .map((market) => {
+        const entries = entriesByMarket.get(market.id) ?? [];
+        const signals = signalsByPerson.get(market.personId!) ?? {
+          trendScore: 50,
+          fameIndex: 5000,
+          scoreBaseline: 5000,
+          scoreDelta7d: 0,
+          change24h: 0,
+          momentum: "Unknown",
+          trendDirection: "FLAT",
+        };
+        return {
+          market: {
+            id: market.id,
+            marketType: "updown" as const,
+            openMarketType: market.openMarketType ?? null,
+            status: "OPEN" as const,
+            title: market.title ?? "",
+            category: null,
+            personId: market.personId,
+            endAt: market.endAt ?? null,
+            createdAt: market.createdAt ?? null,
+            metadata: market.metadata,
+            entries,
+          },
+          signals,
+        };
+      }),
+  );
+
   for (const agent of agents) {
     const agentData = toAgentData(agent);
 
@@ -1626,6 +1671,7 @@ async function runRepredictSweep(
         category: null,
         personId: market.personId,
         endAt: market.endAt ?? null,
+        createdAt: market.createdAt ?? null,
         entries,
       };
 
@@ -1636,7 +1682,10 @@ async function runRepredictSweep(
         computeCrowdSplit(entries),
         undefined,
         undefined,
-        { decisiveLatched },
+        {
+          decisiveLatched,
+          nativeAssessment: nativeAssessmentByMarket.get(market.id) ?? null,
+        },
       );
       decision = applySimulationDecisionLayer(agentData, marketData, decision);
       if (decision.abstain || !decision.entryId) continue;
@@ -2229,7 +2278,7 @@ function normaliseMomentum(raw: string | null | undefined): TrendMomentum {
   }
 }
 
-async function getTrendSignals(
+export async function getTrendSignals(
   personId: string | null,
   options: { includeMultiWindow?: boolean; openingScore?: number | null } = {},
 ): Promise<TrendSignals> {

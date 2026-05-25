@@ -199,13 +199,11 @@ export interface TrendScoreResult {
 }
 
 // ── CROSS-SNAPSHOT EMA CONSTANTS (Apr 2026 trend-engine tuning) ──────────────
-// Weight of the *current tick's* raw composite in the smoothed fameIndex.
-// 0.70 means breakouts hit 70% of their raw value on the first tick they
-// occur, ~91% by tick 2, ~98% by tick 4. Drops follow the same curve.
-const FAME_INDEX_EMA_ALPHA_CURRENT = 0.70;
-// Weight of the previous tick's *smoothed* fameIndex (i.e. the value
-// already persisted to trend_snapshots).
-const FAME_INDEX_EMA_ALPHA_PREVIOUS = 0.30;
+// TEMPORARY (May 2026 native-markets calibration): tightened from 0.70/0.30
+// while ingest news-count smoothing (3-tick) is verified stable in prod for
+// ~7 days. Relax back to 0.70/0.30 once sawtooth is confirmed gone.
+const FAME_INDEX_EMA_ALPHA_CURRENT = 0.50;
+const FAME_INDEX_EMA_ALPHA_PREVIOUS = 0.50;
 
 export function computeTrendScore(
   inputs: TrendInputs,

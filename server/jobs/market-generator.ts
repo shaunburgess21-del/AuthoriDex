@@ -151,7 +151,7 @@ export async function generateWeeklyUpDown(): Promise<number> {
   // within hours; 14 days is a generous cushion. Without this bound the
   // planner sometimes falls off the (person_id, timestamp DESC) index on a
   // long IN-list and times out on Supabase's statement_timeout.
-  const openingScoreMap = await loadOpeningScoreMap(personIdList, db);
+  const openingScoreMap = await loadOpeningScoreMap(personIdList, db, { asOf: monday });
 
   const engine = nativeEngineFor("updown");
   let created = 0;
@@ -179,6 +179,8 @@ export async function generateWeeklyUpDown(): Promise<number> {
               score: openScore.score,
               snapshotAt: openScore.snapshotAt,
               ...(openScore.sampleCount != null ? { sampleCount: openScore.sampleCount } : {}),
+              ...(openScore.windowMethod != null ? { windowMethod: openScore.windowMethod } : {}),
+              ...(openScore.windowDays != null ? { windowDays: openScore.windowDays } : {}),
             },
           }
         : undefined,
@@ -262,23 +264,8 @@ export async function ensureUpDownMarketForInductee(person: {
     .limit(1);
   if (already) return "skipped";
 
-  const snapRows = await db.execute(sql`
-    SELECT fame_index, timestamp
-    FROM trend_snapshots
-    WHERE person_id = ${person.id}
-    ORDER BY timestamp DESC
-    LIMIT 1
-  `);
-  let openScore: { score: number; snapshotAt: string } | undefined;
-  const row = (snapRows.rows || [])[0] as
-    | { fame_index: unknown; timestamp: unknown }
-    | undefined;
-  if (row?.fame_index != null) {
-    openScore = {
-      score: Number(row.fame_index),
-      snapshotAt: new Date(String(row.timestamp)).toISOString(),
-    };
-  }
+  const openingScoreMap = await loadOpeningScoreMap([person.id], db, { asOf: monday });
+  const openScore = openingScoreMap.get(person.id);
 
   const engine = nativeEngineFor("updown");
   const baseSlug = `updown-${person.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-week-${weekNumber}`;
@@ -300,6 +287,9 @@ export async function ensureUpDownMarketForInductee(person: {
             personId: person.id,
             score: openScore.score,
             snapshotAt: openScore.snapshotAt,
+            ...(openScore.sampleCount != null ? { sampleCount: openScore.sampleCount } : {}),
+            ...(openScore.windowMethod != null ? { windowMethod: openScore.windowMethod } : {}),
+            ...(openScore.windowDays != null ? { windowDays: openScore.windowDays } : {}),
           },
         }
       : undefined,
@@ -726,7 +716,7 @@ export async function generateWeeklyH2H(): Promise<number> {
     log(`[MarketGenerator:H2H] Week ${weekNumber}: built ${pairings.length} pairings (mode=${useTop4PerCategory ? "top4-per-category" : "legacy-top30"})`);
 
     const allPersonIds = Array.from(new Set(pairings.flatMap(([a, b]) => [a.id, b.id])));
-    const snapMap = await loadOpeningScoreMap(allPersonIds, tx);
+    const snapMap = await loadOpeningScoreMap(allPersonIds, tx, { asOf: monday });
 
     const engine = nativeEngineFor("h2h");
     let createdCount = 0;
@@ -851,7 +841,7 @@ export async function generateWeeklyGainer(): Promise<{ created: number; updated
     : [];
   const scoreMap = new Map(liveScores.map(p => [p.id, p.fameIndex ?? 0]));
 
-  const snapMap = await loadOpeningScoreMap(allIds, db);
+  const snapMap = await loadOpeningScoreMap(allIds, db, { asOf: monday });
 
   const engine = nativeEngineFor("gainer");
   let created = 0;

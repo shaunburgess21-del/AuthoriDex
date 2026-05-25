@@ -23786,6 +23786,60 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
     }
   });
 
+  app.get("/api/admin/native-markets/calibration", requireAuth, requireAdmin, async (_req: AuthRequest, res) => {
+    try {
+      const {
+        getNativeCalibrationRows,
+        getNativeLlmStatus,
+        buildCalibrationHistogram,
+      } = await import("./services/native-markets-calibration");
+      const rows = await getNativeCalibrationRows();
+      res.json({
+        ok: true,
+        status: getNativeLlmStatus(rows),
+        rows,
+        histogram: buildCalibrationHistogram(rows),
+      });
+    } catch (err: any) {
+      console.error("[AgentAdmin] native-markets calibration failed:", err);
+      res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
+    }
+  });
+
+  app.get("/api/admin/native-markets/llm-status", requireAuth, requireAdmin, async (_req: AuthRequest, res) => {
+    try {
+      const { getNativeLlmStatus } = await import("./services/native-markets-calibration");
+      res.json({ ok: true, ...getNativeLlmStatus() });
+    } catch (err: any) {
+      console.error("[AgentAdmin] native-markets llm-status failed:", err);
+      res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
+    }
+  });
+
+  app.post("/api/admin/native-markets/refresh-assessment", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const marketId = typeof req.body?.marketId === "string" ? req.body.marketId : "";
+      if (!marketId) {
+        return res.status(400).json({ ok: false, error: "marketId required" });
+      }
+      const { refreshNativeAssessment } = await import("./services/native-markets-calibration");
+      const result = await refreshNativeAssessment(marketId);
+      if (!result.ok) {
+        const status =
+          result.error === "market_not_found"
+            ? 404
+            : result.error === "llm_disabled"
+              ? 403
+              : 503;
+        return res.status(status).json(result);
+      }
+      res.json(result);
+    } catch (err: any) {
+      console.error("[AgentAdmin] native-markets refresh failed:", err);
+      res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
+    }
+  });
+
   // ============================================================================
   // GLOBAL "PAUSE ALL AGENTS" KILL SWITCH
   // ----------------------------------------------------------------------------

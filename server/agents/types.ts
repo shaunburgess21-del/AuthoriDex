@@ -30,6 +30,7 @@ export interface MarketWithEntries {
   category: string | null;
   personId: string | null;
   endAt: Date | null;
+  createdAt?: Date | null;
   teaser?: string | null;
   resolutionCriteria?: string[] | null;
   metadata?: unknown;
@@ -130,7 +131,14 @@ export interface CrowdSplit {
 
 export interface PredictionDecision {
   abstain: boolean;
-  abstainReason?: "domain" | "activity_gate" | "low_edge" | "random" | "world_abstain" | "api_error";
+  abstainReason?:
+    | "domain"
+    | "activity_gate"
+    | "low_edge"
+    | "random"
+    | "no_signal"
+    | "world_abstain"
+    | "api_error";
   entryId?: string;
   // Yes = agent thinks the outcome WILL happen (back the entry).
   // No  = agent thinks the outcome WILL NOT happen (short the entry).

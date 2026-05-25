@@ -323,7 +323,7 @@ test("computeTrendScore: trendsMomentum is 0 when inputs omit Trends data", () =
 //   spikingSourceCount === 0     (constant placeholder)
 //   velocityAdjusted === velocityScore (no taper/damping)
 //   rawFameIndex === round( (mass*0.4 + velocity*0.6) * 10000 )
-//   fameIndex === round( 0.7·rawFameIndex + 0.3·previousFameIndex )
+//   fameIndex === round( 0.5·rawFameIndex + 0.5·previousFameIndex )  (May 2026 temp)
 
 test("computeTrendScore: rawFameIndex equals fameIndex when no previous tick", () => {
   const out = computeTrendScore(baseInputs());
@@ -362,7 +362,7 @@ test("computeTrendScore: rawFameIndex equals raw mass/velocity composite (within
 });
 
 test("computeTrendScore: cross-snapshot EMA dampens fameIndex toward previous tick", () => {
-  // With a recent prior tick supplied, fameIndex should be a 70/30 blend of
+  // With a recent prior tick supplied, fameIndex should be a 50/50 blend of
   // the raw composite and the prior fameIndex. Pre-EMA composite is still
   // exposed as rawFameIndex.
   const withoutPrev = computeTrendScore(baseInputs());
@@ -375,7 +375,7 @@ test("computeTrendScore: cross-snapshot EMA dampens fameIndex toward previous ti
   );
   assert.equal(withPrev.rawFameIndex, withoutPrev.fameIndex,
     "rawFameIndex should match the no-prev fameIndex (EMA happens after raw is computed)");
-  const expected = Math.round(withoutPrev.fameIndex * 0.7 + 900_000 * 0.3);
+  const expected = Math.round(withoutPrev.fameIndex * 0.5 + 900_000 * 0.5);
   assert.ok(
     Math.abs(withPrev.fameIndex - expected) < 2,
     `expected EMA blend ≈ ${expected}, got ${withPrev.fameIndex}`

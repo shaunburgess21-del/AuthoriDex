@@ -38,6 +38,7 @@ import {
   Vote,
 } from "lucide-react";
 import { toast } from "sonner";
+import { NativeMarketsCalibrationSection } from "./NativeMarketsCalibrationSection";
 
 const COHORT_ID = "v2-2026-prelaunch";
 
@@ -1150,6 +1151,8 @@ export function AdminAgentsSection() {
       </Card>
 
       <SharpRankerCard />
+
+      <NativeMarketsCalibrationSection />
 
       <ActivityStreamCard />
 

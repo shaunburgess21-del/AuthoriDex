@@ -269,30 +269,15 @@ test("prestige bias is disarmed when pctChangeVsOpen < -0.05 on a famous person"
   );
 });
 
-test("prestige bias still fires when pctChangeVsOpen is shallow (-0.02, above the -0.05 threshold)", () => {
-  // Right above the threshold (-0.05): a person in 2% drawdown is
-  // "essentially flat", and the prestige heuristic should remain
-  // active. We give the agent a small UP nudge via composite signals
-  // (positive 7d delta + UP trendDirection) so the total UP lean can
-  // clear the edge gate when prestige fires; without prestige it would
-  // abstain. This isolates the "prestige still fires" property from
-  // the random-abstain noise floor.
-  //
-  // Plan D: the original test relied on `newsLevel: "red"` for the small
-  // UP nudge. Post-Plan-D wiki/news are gone from the decision engine,
-  // so the analog is `trendDirection: "UP"` (the composite that already
-  // collapses news/wiki/momentum into a single UP/DOWN/FLAT consensus).
-  // riskAppetite is lowered to 0.2 so the sharp edge gate (0.025 at n=2)
-  // sits below the post-Plan-D Up lean even at worst-case jitter — the
-  // property under test is "prestige fires", not "the edge gate clears".
+test("prestige bias still fires when pctChangeVsOpen is positive and above gate", () => {
   const market = makeBinaryUpDownMarket();
   const agent = makeSharpAgent({ prestigeBias: 0.9, riskAppetite: 0.2 });
   const signals = makeSignals({
     scoreBaseline: 400_000,
     fameIndex: 392_000,
-    pctChangeVsOpen: -0.02,    // shallower than -0.05 → guard not triggered
-    scoreDelta7d: 8,           // composite momentum signal — small positive nudge
-    trendDirection: "UP",      // Plan D analog of the old newsLevel "red" UP nudge
+    pctChangeVsOpen: 0.03,
+    scoreDelta7d: 8,
+    trendDirection: "UP",
   });
 
   const decision = computePrediction(agent, market, signals, {}, createPRNG(PRNG_SEED));
@@ -301,7 +286,126 @@ test("prestige bias still fires when pctChangeVsOpen is shallow (-0.02, above th
   assert.equal(
     decision.entryId,
     "entry-up",
-    "shallow drawdown should still let the prestige UP boost combine with the composite signals",
+    "positive vs-open should let prestige UP boost combine with composite signals",
+  );
+});
+
+test("nativeAssessment probability tilts toward UP when LLM is bullish", () => {
+  const market = makeBinaryUpDownMarket();
+  const agent = makeSharpAgent();
+  const signals = makeSignals({ pctChangeVsOpen: 0.04, trendDirection: "UP" });
+  const without = computePrediction(agent, market, signals, {}, createPRNG(PRNG_SEED));
+  const withLlm = computePrediction(agent, market, signals, {}, createPRNG(PRNG_SEED), undefined, {
+    nativeAssessment: {
+      expectedDirection: "UP",
+      probability: 0.85,
+      rationale: "test",
+      fetchedAt: new Date().toISOString(),
+      model: "test",
+      marketType: "updown",
+    },
+  });
+  assert.equal(without.abstain, false);
+  assert.equal(withLlm.abstain, false);
+  assert.ok(
+    (withLlm.rawProbability ?? 0) >= (without.rawProbability ?? 0),
+    `LLM should not reduce UP lean: without=${without.rawProbability} with=${withLlm.rawProbability}`,
+  );
+});
+
+test("nativeAssessment tilts H2H toward entry A when probability favors A", () => {
+  const market: MarketWithEntries = {
+    id: "h2h-1",
+    marketType: "h2h",
+    status: "OPEN",
+    title: "A vs B",
+    category: "politics",
+    personId: null,
+    endAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+    entries: [
+      { id: "entry-a", label: "Alice", totalStake: 0, personId: "p-a" },
+      { id: "entry-b", label: "Bob", totalStake: 0, personId: "p-b" },
+    ],
+  };
+  const agent = makeSharpAgent();
+  const signals = makeSignals({ pctChangeVsOpen: 0, trendDirection: "FLAT" });
+  const entrySignals = new Map([
+    [
+      "entry-a",
+      makeSignals({ fameIndex: 60_000, pctChangeVsOpen: 0.08, trendDirection: "UP" }),
+    ],
+    [
+      "entry-b",
+      makeSignals({ fameIndex: 60_000, pctChangeVsOpen: -0.04, trendDirection: "DOWN" }),
+    ],
+  ]);
+  const llmOpts = {
+    nativeAssessment: {
+      expectedDirection: "UP" as const,
+      probability: 0.85,
+      rationale: "test",
+      fetchedAt: new Date().toISOString(),
+      model: "test",
+      marketType: "h2h" as const,
+    },
+  };
+  let withoutProb = 0;
+  let withProb = 0;
+  for (let seed = 1; seed <= 50; seed++) {
+    const without = computePrediction(
+      agent,
+      market,
+      signals,
+      {},
+      createPRNG(seed),
+      entrySignals,
+    );
+    const withLlm = computePrediction(
+      agent,
+      market,
+      signals,
+      {},
+      createPRNG(seed),
+      entrySignals,
+      llmOpts,
+    );
+    if (!without.abstain && without.entryId === "entry-a") {
+      withoutProb = without.rawProbability ?? 0;
+    }
+    if (!withLlm.abstain && withLlm.entryId === "entry-a") {
+      withProb = withLlm.rawProbability ?? 0;
+      break;
+    }
+  }
+  assert.ok(withProb > 0, "expected non-abstaining LLM-boosted pick for entry A");
+  assert.ok(
+    withProb >= withoutProb,
+    `LLM should not reduce P(A): without=${withoutProb} with=${withProb}`,
+  );
+});
+
+test("young market with sparse signal abstains at high rate for standard agents", () => {
+  const market: MarketWithEntries = {
+    ...makeBinaryUpDownMarket(),
+    createdAt: new Date(),
+  };
+  const agent = makeSharpAgent({
+    simulationProfile: {
+      schemaVersion: 2,
+      cohortId: SIMULATION_V2_COHORT_ID,
+      personaBand: "casual",
+    },
+  });
+  const signals = makeSignals({ pctChangeVsOpen: undefined, change24h: 0 });
+  let abstainCount = 0;
+  const trials = 200;
+  for (let seed = 0; seed < trials; seed++) {
+    const d = computePrediction(agent, market, signals, {}, createPRNG(seed));
+    if (d.abstain && d.abstainReason === "no_signal") abstainCount++;
+  }
+  assert.ok(
+    abstainCount >= trials * 0.4,
+    `expected >=40% no_signal abstains, got ${abstainCount}/${trials}`,
   );
 });
 

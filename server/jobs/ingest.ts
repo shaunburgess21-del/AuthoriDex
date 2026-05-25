@@ -8,6 +8,11 @@ import { fetchSerperBatch, fetchSerperNewsBatch, getSerperRunStats, resetSerperR
 import { fetchMediastackBatch, isMediastackConfigured, MediastackBatchStats, shouldRefreshMediastack } from "../providers/mediastack";
 import { fetchMultiSourceNewsBatch, type AggregatorStats } from "../providers/news-aggregator";
 import { computeTrendScore } from "../scoring/trendScore";
+import {
+  appendToRecentSeriesMap,
+  smoothLastNTicks,
+  NEWS_SMOOTHING_WINDOW,
+} from "../scoring/smoothing";
 import { refreshSourceStats } from "../scoring/sourceStats";
 import { evaluateCanaries, CanaryReport, getCanaryNames } from "../scoring/canaryMonitor";
 import { checkAndEmitProviderCoverageAlerts } from "../services/ingest-provider-alert-runner";
@@ -921,11 +926,15 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
       newsDelta: trendSnapshots.newsDelta,
       searchDelta: trendSnapshots.searchDelta,
       diagnostics: trendSnapshots.diagnostics,
-    }).from(trendSnapshots).where(
+    }    ).from(trendSnapshots).where(
       and(
         gte(trendSnapshots.timestamp, time7dAgo),
         eq(trendSnapshots.snapshotOrigin, 'ingest')
       )
+    );
+
+    historicalSnapshots.sort(
+      (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
     );
     
     // Create maps for different lookups:
@@ -967,6 +976,11 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     const snapshot7dMap = new Map<string, { trendScore: number; fameIndex: number | null; timestamp?: Date; basisHours?: number }>();
     // Newest snapshot per person that still has Google Trends diagnostics
     // (hourly ticks between 12h SerpApi fetches omit trends unless we carry forward).
+    // Last N hourly news_count / news7d values for 3-tick smoothing into
+    // computeTrendScore (May 2026 — native-markets calibration).
+    const recentNewsCountSeriesMap = new Map<string, number[]>();
+    const recentNews7dSeriesMap = new Map<string, number[]>();
+
     const latestTrendsDiagMap = new Map<string, {
       trendsInterest: number;
       trendsPrevDayInterest: number;
@@ -984,6 +998,14 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
       const diff24h = Math.abs(snapTime - time24hAgo.getTime());
       const diff7d = Math.abs(snapTime - time7dAgo.getTime());
       const diag = snap.diagnostics as Record<string, any> | null;
+      const rawDiag = diag?.raw as Record<string, unknown> | undefined;
+      if (snap.newsCount != null && Number.isFinite(snap.newsCount)) {
+        appendToRecentSeriesMap(recentNewsCountSeriesMap, snap.personId, snap.newsCount);
+      }
+      const histNews7d = rawDiag?.news7d;
+      if (typeof histNews7d === "number" && Number.isFinite(histNews7d) && histNews7d > 0) {
+        appendToRecentSeriesMap(recentNews7dSeriesMap, snap.personId, histNews7d);
+      }
 
       // Track most recent snapshot per person (for EMA smoothing continuity + fallback data)
       const existingRecent = mostRecentMap.get(snap.personId);
@@ -2098,6 +2120,26 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           ? (wikiPageviews7dSum - wikiPageviews24h) / 7
           : (wiki?.averageDaily7d ?? 0);
 
+        // 3-tick smoothing on news inputs fed to scoring only — persisted
+        // trend_snapshots.news_count stays raw for diagnostics.
+        const newsCountSeries = [
+          ...(recentNewsCountSeriesMap.get(person.id) ?? []),
+          newsCount,
+        ];
+        const newsCountForScoring =
+          smoothLastNTicks(newsCountSeries, NEWS_SMOOTHING_WINDOW) ?? newsCount;
+
+        const rawNews7dForScoring =
+          (news7dHistorySamplesMap.get(person.id) ?? 0) >= PERSONAL_BASELINE_MIN_OBSERVATIONS
+            ? (news7dHistoryAvgMap.get(person.id) ?? 0)
+            : (news?.averageDaily7d ?? 0);
+        const news7dSeries = [
+          ...(recentNews7dSeriesMap.get(person.id) ?? []),
+          rawNews7dForScoring,
+        ];
+        const news7dForScoring =
+          smoothLastNTicks(news7dSeries, NEWS_SMOOTHING_WINDOW) ?? rawNews7dForScoring;
+
         const inputs = {
           wikiPageviews: wiki?.pageviews24h || 0,
           wikiPageviews7dAvg: wiki?.averageDaily7d || 0, // 7-day average for stable mass baseline
@@ -2120,28 +2162,10 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           wikiDelta: wiki?.delta || 0,
           newsDelta: newsDelta,
           searchDelta: searchDelta,
-          // Raw values for normalization - use graceful degradation values
-          newsCount: newsCount,
+          // Smoothed values for velocity normalization + momentum slot.
+          newsCount: newsCountForScoring,
           searchVolume: searchVolume,
-          // News 7-day daily average — feeds the news-momentum velocity
-          // slot. Source priority (Apr 2026 — PR4):
-          //   1. SQL aggregate over our own last-7-days `news_count`
-          //      snapshots (`news7dHistoryAvgMap`). Canonical because
-          //      it's independent of provider quirks (Mediastack=0,
-          //      Serper/GDELT capped at ~35.71/day) and reflects
-          //      actually-measured history.
-          //   2. Provider-supplied value (used only when we have
-          //      <PERSONAL_BASELINE_MIN_OBSERVATIONS samples — i.e. a
-          //      brand-new tracked person without enough history yet).
-          //   3. 0 (no signal — momentum slot becomes 0, card renders
-          //      as "establishing baseline").
-          // Held values (EMA / soft-hold) deliberately use the raw
-          // history here — the smoothing applies to 24h count, not the
-          // 7d denominator.
-          newsAverageDaily7d:
-            (news7dHistorySamplesMap.get(person.id) ?? 0) >= PERSONAL_BASELINE_MIN_OBSERVATIONS
-              ? (news7dHistoryAvgMap.get(person.id) ?? 0)
-              : (news?.averageDaily7d ?? 0),
+          newsAverageDaily7d: news7dForScoring,
           // Previous values for recovery detection (data returning after API failure)
           // Only pass previous values if current data is FRESH (not fallback)
           // This ensures recovery mode triggers when we get fresh data after using fallback

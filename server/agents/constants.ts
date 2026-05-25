@@ -8,6 +8,14 @@ export const NEGATIVE_HINTS = ["down", "fall", "lower", "no", "lose", "decline",
 // on actually crowded markets rather than firing on any minor lean.
 export const CONTRARIAN_TRIGGER_THRESHOLD = 0.65;
 
+// Prestige UP-tilt only when baseline reflects real leaderboard stature.
+export const PRESTIGE_MIN_BASELINE = 200_000;
+
+// Young markets with no directional signal — throttle Monday-morning pile-on.
+export const NO_SIGNAL_ABSTAIN_RATE_STANDARD = 0.60;
+export const NO_SIGNAL_ABSTAIN_RATE_SHARP = 0.30;
+export const YOUNG_MARKET_HOURS = 24;
+
 // Minimum agent confidence (0-1) required before we generate an LLM
 // rationale. Anything below 0.65 is treated as a low-conviction trade
 // and gets a templated reason instead — saves both LLM cost and the
@@ -217,21 +225,38 @@ export const WORLD_MARKETS_PER_CALL_ESTIMATE_USD = (() => {
 // 1 conviction re-bet per agent per market so a runaway score doesn't
 // turn into a stack of compounding positions.
 export const CONVICTION_SCORE_THRESHOLD_PCT = 0.05;
-export const CONVICTION_MAX_PER_MARKET = 1;
 
 // Score-aligned follow-up tunables (Up/Down AMM — May 2026).
 // Conviction and re-predict read pctChangeVsOpen vs weekly open, not AMM price delta.
+// Phase 3 (May 2026): loosened after Phase 1 news smoothing verified — do not
+// lower further while trend-score sawtooth remains elevated.
 export const DECISIVE_WEEKLY_MOVE_PCT = 0.10;
-export const REPREDICT_PCT_THRESHOLD = 0.10;
-export const REPREDICT_MAX_PER_MARKET = 1;
+export const REPREDICT_PCT_THRESHOLD = 0.06;
+export const REPREDICT_MAX_PER_MARKET = 2;
 export const CONVICTION_SCORE_AGREE_FLIP = 0.12;
 export const CONVICTION_SCORE_DISAGREE_FLIP_BASE = 0.55;
 export const CONVICTION_SCORE_DISAGREE_FLIP_CONTRARIAN = 0.10;
-export const SCORE_REVERSAL_SELL_PCT = 0.10;
+export const SCORE_REVERSAL_SELL_PCT = 0.06;
+export const CONVICTION_MAX_PER_MARKET = 2;
 export const MISPRICED_PRIORITY_SLICE = 5;
 export const MISPRICED_SCORE_PCT = 0.08;
 export const MISPRICED_UP_PRICE_HIGH = 0.52;
 export const MISPRICED_UP_PRICE_LOW = 0.48;
+
+// ---------------------------------------------------------------------------
+// Native markets LLM assessment (Up/Down, H2H, Gainer — May 2026)
+// ---------------------------------------------------------------------------
+export const NATIVE_MARKETS_LLM_ENABLED = envFlag(process.env.NATIVE_MARKETS_LLM_ENABLED);
+export const NATIVE_MARKETS_DAILY_BUDGET_USD = (() => {
+  const raw = Number(process.env.NATIVE_MARKETS_DAILY_BUDGET_USD);
+  return Number.isFinite(raw) && raw > 0 ? raw : 2.0;
+})();
+export const NATIVE_MARKETS_PER_CALL_ESTIMATE_USD = (() => {
+  const raw = Number(process.env.NATIVE_MARKETS_PER_CALL_ESTIMATE_USD);
+  return Number.isFinite(raw) && raw > 0 ? raw : 0.012;
+})();
+export const NATIVE_LLM_BOOST_WEIGHT = 0.15;
+export const NATIVE_ASSESSMENT_TTL_MS = 24 * 60 * 60 * 1000;
 
 // ---------------------------------------------------------------------------
 // Agent sells (Phase 1 — AMM up/down only)

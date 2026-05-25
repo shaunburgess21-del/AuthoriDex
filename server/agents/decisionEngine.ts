@@ -18,7 +18,13 @@ import {
   WORLD_MARKET_BOOST_ENABLED,
   JACKPOT_AGENT_COLLISION_RANGE,
   DECISIVE_WEEKLY_MOVE_PCT,
+  PRESTIGE_MIN_BASELINE,
+  NO_SIGNAL_ABSTAIN_RATE_STANDARD,
+  NO_SIGNAL_ABSTAIN_RATE_SHARP,
+  YOUNG_MARKET_HOURS,
+  NATIVE_LLM_BOOST_WEIGHT,
 } from "./constants";
+import type { NativeAssessment } from "./nativeMarketTypes";
 import { JACKPOT_MAX_PREDICTED_SCORE } from "../config/constants";
 import { productionRNG, type RNG } from "./prng";
 import { getSimulationProfile } from "./simulationProfile";
@@ -41,7 +47,11 @@ export function computePrediction(
   crowd: CrowdSplit,
   rng: RNG = productionRNG,
   entrySignals?: Map<string, TrendSignals>,
-  options: { priority?: "high" | "normal"; decisiveLatched?: boolean } = {},
+  options: {
+    priority?: "high" | "normal";
+    decisiveLatched?: boolean;
+    nativeAssessment?: NativeAssessment | null;
+  } = {},
 ): PredictionDecision {
   const abstain = (
     reason: PredictionDecision["abstainReason"]
@@ -98,6 +108,31 @@ export function computePrediction(
 
   // Step 2: Activity gate
   if (rng.nextFloat() > agent.activityRate) return abstain("activity_gate");
+
+  // Step 2a: Young market + no directional signal — reduce Monday pile-on.
+  const isNativeMarket =
+    market.marketType === "updown" ||
+    market.marketType === "h2h" ||
+    market.marketType === "gainer";
+  const isSignalSparse =
+    isNativeMarket &&
+    (signals.pctChangeVsOpen == null ||
+      (Number.isFinite(signals.pctChangeVsOpen) &&
+        Math.abs(signals.pctChangeVsOpen) < 0.02)) &&
+    Math.abs(signals.change24h) < 0.5;
+  const marketCreatedAt = market.createdAt
+    ? new Date(market.createdAt).getTime()
+    : null;
+  const isYoungMarket =
+    marketCreatedAt != null &&
+    Number.isFinite(marketCreatedAt) &&
+    Date.now() - marketCreatedAt < YOUNG_MARKET_HOURS * 60 * 60 * 1000;
+  if (isSignalSparse && isYoungMarket) {
+    const sparseAbstainRate = sharp
+      ? NO_SIGNAL_ABSTAIN_RATE_SHARP
+      : NO_SIGNAL_ABSTAIN_RATE_STANDARD;
+    if (rng.nextFloat() < sparseAbstainRate) return abstain("no_signal");
+  }
 
   // Step 2b: Community cadence — spread agent participation across sweeps.
   // Skipped when WORLD_MARKET_BOOST_ENABLED because WORLD_MARKET_DELAY_RANGES
@@ -179,6 +214,42 @@ export function computePrediction(
     entries.forEach((e) => { scores[e.id] = 1 / n; });
   }
 
+  // H2H / Gainer: LLM probability tilts the leading entry (entry 0 in
+  // prompt). Up/Down uses POSITIVE_HINTS in Step 3a via computeSignalBoost.
+  if (
+    options.nativeAssessment &&
+    Number.isFinite(options.nativeAssessment.probability) &&
+    (market.marketType === "h2h" || market.marketType === "gainer")
+  ) {
+    const llmTilt =
+      (options.nativeAssessment.probability - 0.5) *
+      2 *
+      NATIVE_LLM_BOOST_WEIGHT *
+      agent.recencyWeight;
+    if (market.marketType === "h2h" && entries.length === 2) {
+      scores[entries[0].id] = Math.max(
+        0.05,
+        Math.min(0.95, (scores[entries[0].id] ?? 0.5) + llmTilt),
+      );
+      scores[entries[1].id] = Math.max(
+        0.05,
+        Math.min(0.95, (scores[entries[1].id] ?? 0.5) - llmTilt),
+      );
+    } else if (market.marketType === "gainer" && entries.length >= 2) {
+      scores[entries[0].id] = Math.max(
+        0.05,
+        Math.min(0.95, (scores[entries[0].id] ?? 1 / n) + llmTilt),
+      );
+      const share = llmTilt / (entries.length - 1);
+      for (let i = 1; i < entries.length; i++) {
+        scores[entries[i].id] = Math.max(
+          0.05,
+          Math.min(0.95, (scores[entries[i].id] ?? 1 / n) - share),
+        );
+      }
+    }
+  }
+
   // Step 3a: Trend signal adjustments
   // Per-agent jitter (±0.06) breaks the lock-step "every agent reads the
   // same composite signals → all pick the same side" pattern that was
@@ -192,7 +263,12 @@ export function computePrediction(
   // making identical decisions but doesn't bury their edge in noise.
   const jitterRange = sharp ? 0.03 : 0.06;
   const jitter = (rng.nextFloat() * 2 - 1) * jitterRange;
-  const baseSignalBoost = computeSignalBoost(signals, agent);
+  const baseSignalBoost = computeSignalBoost(
+    signals,
+    agent,
+    options.nativeAssessment,
+    market.marketType,
+  );
   // Multi-window momentum bonus: only sharps get this. When 7d and 14d
   // disagree (e.g. 7d falling but 14d still strongly rising), the agent
   // assumes mean-reversion is in play and dampens the short-window signal.
@@ -267,10 +343,17 @@ export function computePrediction(
   // already moved decisively the other way. `decisivelyDown` is
   // hoisted to the top of the function so every guard reads the same
   // value.
+  const hasPositiveDirectionalSignal =
+    (signals.pctChangeVsOpen != null &&
+      Number.isFinite(signals.pctChangeVsOpen) &&
+      signals.pctChangeVsOpen > 0.02) ||
+    (signals.change24h > 0.5 && signals.scoreDelta7d >= 0);
+
   if (
-    signals.scoreBaseline > 6500 &&
+    signals.scoreBaseline > PRESTIGE_MIN_BASELINE &&
     agent.prestigeBias > 0.6 &&
-    !decisivelyDown
+    !decisivelyDown &&
+    hasPositiveDirectionalSignal
   ) {
     const prestigeBoost = (agent.prestigeBias - 0.5) * 0.12;
     entries.forEach((entry) => {
@@ -462,6 +545,8 @@ export function computePrediction(
 function computeSignalBoost(
   signals: TrendSignals,
   agent: AgentConfigData,
+  nativeAssessment?: NativeAssessment | null,
+  marketType?: string,
 ): number {
   let boost = 0;
 
@@ -513,6 +598,17 @@ function computeSignalBoost(
   // FLAT means "no signals agree clearly" rather than "neutral".
   if (signals.trendDirection === "UP") boost += 0.03 * agent.recencyWeight;
   else if (signals.trendDirection === "DOWN") boost -= 0.03 * agent.recencyWeight;
+
+  // Native LLM read — Up/Down only (H2H/Gainer applied in Step 3 above).
+  if (
+    nativeAssessment &&
+    Number.isFinite(nativeAssessment.probability) &&
+    marketType !== "h2h" &&
+    marketType !== "gainer"
+  ) {
+    const llmTilt = (nativeAssessment.probability - 0.5) * 2;
+    boost += llmTilt * NATIVE_LLM_BOOST_WEIGHT * agent.recencyWeight;
+  }
 
   return boost;
 }
