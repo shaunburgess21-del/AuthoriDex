@@ -10,7 +10,7 @@ import {
   personConventionImageUrl,
   resolvePersonAvatarCandidates,
   resolvePersonAvatarUrl,
-} from "../server/services/person-images";
+} from "../server/services/person-avatar-urls";
 import {
   buildOverallRankPillSvg,
   buildPersonOgOverlaySvg,
