@@ -36,6 +36,10 @@
  *   pyftsubset scripts/.cache/NotoSans-Regular.ttf \
  *     --unicodes=U+A75E,U+A75F --flavor=woff2 \
  *     --output-file=public/fonts/vox-mark.woff2
+ *
+ * Email inline mark (iOS Mail cannot load woff2):
+ *   npx tsx scripts/generate-vox-mark-email-png.ts
+ *   → public/fonts/vox-mark-email.png
  * ------------------------------------------------------------------ */
 /* Desktop face. Same hosted Noto subset as touch; 100% size-adjust so
    Ꝟ matches digit cap-height (118% overshot on Windows when woff2 loads). */

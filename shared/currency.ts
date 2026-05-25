@@ -38,6 +38,37 @@ export const CURRENCY = {
   symbolHtml: VOX_SYMBOL,
 } as const;
 
+/** Hosted PNG for email clients that cannot render U+A75E (e.g. iOS Mail). */
+export const VOX_MARK_EMAIL_PATH = "/fonts/vox-mark-email.png";
+
+export function voxMarkEmailUrl(baseUrl: string): string {
+  return `${baseUrl.replace(/\/+$/, "")}${VOX_MARK_EMAIL_PATH}`;
+}
+
+function formatIntEmail(n: number): string {
+  if (!Number.isFinite(n)) return "0";
+  return Math.round(Math.abs(n)).toLocaleString("en-US");
+}
+
+export type VoxAmountEmailVariant = "positive" | "negative" | "parens";
+
+/**
+ * Plain-text amount fragment for email (glyph rendered separately via Img).
+ *   positive → "+471"
+ *   negative → "−500"
+ *   parens   → "500" (caller wraps with parens around mark+amount)
+ */
+export function formatVoxAmountEmail(
+  amount: number,
+  variant: VoxAmountEmailVariant,
+): string {
+  const n = formatIntEmail(amount);
+  if (variant === "positive") return `+${n}`;
+  if (variant === "negative") return `\u2212${n}`;
+  if (amount < 0) return `\u2212${n}`;
+  return n;
+}
+
 function formatInt(n: number): string {
   if (!Number.isFinite(n)) return "0";
   return Math.round(n).toLocaleString("en-US");

@@ -4,7 +4,8 @@
 
 import * as React from "react";
 import { Button, Heading, Section, Text } from "react-email";
-import { formatVox, voxWord } from "@shared/currency";
+import { voxWord } from "@shared/currency";
+import { VoxAmount } from "../components/VoxAmount";
 import type { FullWeeklyDigestStats } from "../../../jobs/weekly-digest-utils";
 import { Layout } from "../components/Layout";
 import { colors, fonts, radius, spacing, typography } from "../theme";
@@ -29,7 +30,8 @@ export function weeklyWrapSubject(
   return `Your VoxDex week: ${winsLabel}, ${lossesLabel}`;
 }
 
-/** Hero P&L uses word "Vox" — avoids Outlook tofu on the Ꝟ glyph. */
+/** Hero P&L uses word "Vox" — avoids Outlook tofu on the Ꝟ glyph.
+ *  Best/worst pick amounts use VoxAmount (hosted PNG) for iOS Mail. */
 export function formatHeroPnl(netCredits: number): string {
   const abs = Math.abs(netCredits);
   const word = voxWord(abs);
@@ -124,7 +126,8 @@ export function WeeklyWrapEmail({
         <Section style={blockStyle}>
           <Text style={blockHeadingStyle}>Your best call</Text>
           <Text style={typography.body}>
-            You called {bestPick.label} — netted you +{formatVox(bestPick.profit)}.
+            You called {bestPick.label} — netted you{" "}
+            <VoxAmount baseUrl={baseUrl} amount={bestPick.profit} variant="positive" />.
           </Text>
         </Section>
       ) : null}
@@ -133,7 +136,8 @@ export function WeeklyWrapEmail({
         <Section style={blockStyle}>
           <Text style={blockHeadingStyle}>Toughest call this week</Text>
           <Text style={typography.body}>
-            {worstPick.label} closed against you ({formatVox(worstPick.profit)}).
+            {worstPick.label} closed against you{" "}
+            <VoxAmount baseUrl={baseUrl} amount={worstPick.profit} variant="parens" />.
           </Text>
         </Section>
       ) : null}
