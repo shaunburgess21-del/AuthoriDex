@@ -228,10 +228,10 @@ export function UnderratedOverratedCard({
         </div>
       ) : (
         <>
-          <div className="flex flex-1 items-center justify-center py-4 md:py-3">
+          <div className="flex flex-1 items-start justify-center pt-2 pb-0 md:pt-1.5 md:pb-0">
             <Link
               href={`/vote/value-rankings?focus=${encodeURIComponent(person.id)}`}
-              className="group inline-flex items-center gap-2 rounded-full border border-cyan-500/25 bg-cyan-500/10 px-4 py-2 text-sm font-medium text-cyan-600 transition-all duration-200 hover:border-cyan-500/45 hover:bg-cyan-500/15 dark:border-cyan-400/25 dark:bg-cyan-400/10 dark:text-cyan-400 dark:hover:border-cyan-400/45 dark:hover:bg-cyan-400/15"
+              className="group inline-flex items-center gap-2 -translate-y-[5px] rounded-full border border-cyan-500/25 bg-cyan-500/10 px-4 py-2 text-sm font-medium text-cyan-600 transition-all duration-200 hover:border-cyan-500/45 hover:bg-cyan-500/15 dark:border-cyan-400/25 dark:bg-cyan-400/10 dark:text-cyan-400 dark:hover:border-cyan-400/45 dark:hover:bg-cyan-400/15"
               data-testid={`link-value-compare-${person.id}`}
               onClick={(e) => e.stopPropagation()}
             >
@@ -240,7 +240,7 @@ export function UnderratedOverratedCard({
               <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 group-hover:translate-x-0.5" aria-hidden />
             </Link>
           </div>
-          <div className="flex flex-col gap-4 md:gap-3">
+          <div className="flex flex-col gap-4 md:gap-3 translate-y-3">
           <div className="flex items-center gap-3 md:gap-2.5">
             <ArrowUp className="h-5 w-5 md:h-4 md:w-4 text-[#00C853] shrink-0" />
             <span className="text-base font-medium md:text-sm text-[#00C853] w-[5.25rem] md:w-20 shrink-0">Underrated</span>
