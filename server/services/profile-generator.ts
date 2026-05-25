@@ -43,13 +43,28 @@ const monthIndex: Record<string, number> = {
   december: 11,
 };
 
+// Country-code coercion: tolerate the common model output drift (lowercase,
+// padding, 3-letter ISO, punctuation like "?", empty string) so a malformed
+// code doesn't synchronously throw out of the Zod parse and skip the retry
+// loop. The strict 2-letter requirement is enforced as a soft validation
+// note instead (see validateGeneratedProfile), which gives the model a
+// second chance with explicit feedback before we fall back in
+// applyValidationFallbacks.
+const countryCodeSchema = z.preprocess((value) => {
+  if (typeof value !== "string") return "";
+  const cleaned = value.replace(/[^A-Za-z]/g, "").toUpperCase();
+  // "USA"/"GBR" → "US"/"GB" handles the most common alpha-3 drift; truly
+  // ambiguous results land as "" or 1 char and are caught downstream.
+  return cleaned.slice(0, 2);
+}, z.string().max(2));
+
 const generatedProfileSchema = z.object({
   longBio: z.string().min(120).max(1600),
   knownFor: z.string().min(3).max(500),
   fromCountry: z.string().min(2).max(80),
-  fromCountryCode: z.string().length(2),
+  fromCountryCode: countryCodeSchema,
   basedIn: z.string().min(2).max(80),
-  basedInCountryCode: z.string().length(2),
+  basedInCountryCode: countryCodeSchema,
   estimatedNetWorth: z.preprocess(
     (value) => typeof value === "string" && value.trim() === "" ? "Not available" : value,
     z.string().min(2).max(80),
@@ -341,6 +356,7 @@ async function generateValidatedProfile(
   });
 
   let lastNotes: string[] = [];
+  let lastParsed: GeneratedProfile | null = null;
   for (let attempt = 0; attempt < 2; attempt++) {
     const tokenLimit = getChatCompletionTokenLimit(model, 1000);
     const response = await openai.chat.completions.create({
@@ -356,7 +372,27 @@ async function generateValidatedProfile(
     const content = response.choices[0]?.message?.content;
     if (!content) throw new Error("No response from AI");
 
-    const parsed = generatedProfileSchema.parse(JSON.parse(content));
+    // safeParse so structural failures (longBio too short, knownFor missing,
+    // etc.) feed back into the retry loop as explicit notes rather than
+    // throwing and skipping the whole profile.
+    let rawJson: unknown;
+    try {
+      rawJson = JSON.parse(content);
+    } catch (err) {
+      lastNotes = ["Previous response was not valid JSON. Return a JSON object with the exact shape requested."];
+      continue;
+    }
+    const parseResult = generatedProfileSchema.safeParse(rawJson);
+    if (!parseResult.success) {
+      lastNotes = parseResult.error.issues.map((iss) => {
+        const path = iss.path.join(".") || "(root)";
+        return `Field "${path}" failed: ${iss.message}. Fix this field in your next response.`;
+      });
+      continue;
+    }
+
+    const parsed = parseResult.data;
+    lastParsed = parsed;
     const validationNotes = validateGeneratedProfile(person, parsed, context);
     if (validationNotes.length === 0 || attempt === 1) {
       return { parsed: applyValidationFallbacks(person, parsed, context, validationNotes), validationNotes };
@@ -365,7 +401,16 @@ async function generateValidatedProfile(
     lastNotes = validationNotes;
   }
 
-  throw new Error("Profile generation failed validation");
+  // After two attempts, the model still produced something we couldn't fully
+  // accept. Prefer salvaging the last parsed result (with fallbacks applied)
+  // over failing the whole profile — a profile with a "XX" country code is
+  // better than no refresh at all, and applyValidationFallbacks will pick
+  // sensible substitutes where possible.
+  if (lastParsed) {
+    const finalNotes = validateGeneratedProfile(person, lastParsed, context);
+    return { parsed: applyValidationFallbacks(person, lastParsed, context, finalNotes), validationNotes: finalNotes };
+  }
+  throw new Error(`Profile generation failed validation after 2 attempts: ${lastNotes.join("; ")}`);
 }
 
 function buildSystemPrompt(): string {
@@ -543,6 +588,22 @@ function validateGeneratedProfile(person: TrendingPerson, profile: GeneratedProf
     notes.push("Billion-dollar net worth is not backed by a strong billionaire source for this person; use Not available.");
   }
 
+  // Soft 2-letter check. The Zod schema coerces "USA"→"US" and "us"→"US", so
+  // we only land here when the model returned something genuinely unusable
+  // (empty, "?", "X"). Surfacing as a validation note triggers the retry
+  // path with explicit feedback; the final fallback in
+  // applyValidationFallbacks handles the case where the retry also fails.
+  if (profile.fromCountryCode.length !== 2) {
+    notes.push(
+      `fromCountryCode must be exactly 2 letters (ISO 3166-1 alpha-2). You returned "${profile.fromCountryCode}". Pick a valid two-letter code based on fromCountry "${profile.fromCountry}".`,
+    );
+  }
+  if (profile.basedInCountryCode.length !== 2) {
+    notes.push(
+      `basedInCountryCode must be exactly 2 letters (ISO 3166-1 alpha-2). You returned "${profile.basedInCountryCode}". Pick a valid two-letter code based on basedIn "${profile.basedIn}".`,
+    );
+  }
+
   return notes;
 }
 
@@ -563,6 +624,22 @@ function applyValidationFallbacks(person: TrendingPerson, profile: GeneratedProf
   if (isUnsupportedBillionDollarNetWorth(person, next.estimatedNetWorth, context)) {
     next.estimatedNetWorth = "Not available";
   }
+  // Country-code last-resort fallbacks. Preferred order is:
+  //   basedInCountryCode → fromCountryCode (e.g. for nomadic figures whose
+  //     residence the model couldn't pin down, the country of origin is a
+  //     reasonable proxy and is rarely ambiguous)
+  //   fromCountryCode → basedInCountryCode (rare but symmetric)
+  //   either → "XX" as the documented "unknown" placeholder, so the rest
+  //     of the profile saves successfully instead of failing the whole
+  //     refresh on one missing field.
+  if (next.basedInCountryCode.length !== 2 && next.fromCountryCode.length === 2) {
+    next.basedInCountryCode = next.fromCountryCode;
+  }
+  if (next.fromCountryCode.length !== 2 && next.basedInCountryCode.length === 2) {
+    next.fromCountryCode = next.basedInCountryCode;
+  }
+  if (next.basedInCountryCode.length !== 2) next.basedInCountryCode = "XX";
+  if (next.fromCountryCode.length !== 2) next.fromCountryCode = "XX";
   return next;
 }
 
