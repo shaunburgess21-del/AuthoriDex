@@ -12,18 +12,15 @@ export { resolvePickContextLabel as resolvePositionMoveContextLabel };
  * unit tests without touching the DB. Mirrors the pattern used by
  * `amm-resolver-notifications.ts`.
  *
- * The deriver loads open AMM positions, calls `evaluatePositionMove`
- * for each row, and (if the result is non-null) fires a notification
- * built by `buildPositionMoveNotification`.
+ * Alerts fire on milestone crosses (20 / 50 / 100% |move|), not on a
+ * timer while a position hovers above a single threshold.
  */
 
-/**
- * Minimum absolute % move (|currentValue - netCreditsIn| / netCreditsIn)
- * required before we surface the alert. Conservative by design — moves
- * happen all day and we don't want the panel turning into a stock
- * ticker. Tunable per-deploy via the constant in the deriver file.
- */
-export const POSITION_MOVE_PCT_THRESHOLD_DEFAULT = 15;
+/** @deprecated Use POSITION_MOVE_MILESTONES — smallest milestone is 20%. */
+export const POSITION_MOVE_PCT_THRESHOLD_DEFAULT = 20;
+
+/** Absolute % move milestones; highest crossed milestone wins per tick. */
+export const POSITION_MOVE_MILESTONES = [20, 50, 100] as const;
 
 /**
  * Skip positions where the user's net credits in is less than this.
@@ -36,7 +33,6 @@ export const POSITION_MOVE_MIN_NOTIONAL_DEFAULT = 100;
 export interface PositionMoveEvaluationInput {
   netCreditsIn: number;
   currentValue: number;
-  pctThreshold?: number;
   minNotional?: number;
 }
 
@@ -45,22 +41,35 @@ export interface PositionMoveEvaluationOutput {
   direction: "up" | "down";
   /** Signed percentage move, e.g. +18.5 or -22.0. Rounded to 1 dp. */
   pctMove: number;
+  /** Highest |pctMove| milestone in POSITION_MOVE_MILESTONES that was crossed. */
+  milestone: number;
   /** Floored credit values for display. */
   netCreditsIn: number;
   currentValue: number;
 }
 
 /**
+ * Returns the highest milestone in POSITION_MOVE_MILESTONES that
+ * |pctMove| has reached, or null when below the smallest milestone.
+ */
+export function pickPositionMoveMilestone(pctMove: number): number | null {
+  if (!Number.isFinite(pctMove)) return null;
+  const abs = Math.abs(pctMove);
+  let crossed: number | null = null;
+  for (const m of POSITION_MOVE_MILESTONES) {
+    if (abs >= m) crossed = m;
+  }
+  return crossed;
+}
+
+/**
  * Decide whether a single (user, market, entry) position qualifies for
- * a move-alert notification. Returns `null` to mean "no notification" —
- * either the move is below threshold, the position is dust, or the
- * inputs are degenerate (e.g. zero cost basis from a fully-sold-out
- * row that somehow stayed in the open set).
+ * a move-alert notification. Returns `null` when no milestone is
+ * crossed, the position is dust, or inputs are degenerate.
  */
 export function evaluatePositionMove(
   input: PositionMoveEvaluationInput,
 ): PositionMoveEvaluationOutput | null {
-  const pctThreshold = input.pctThreshold ?? POSITION_MOVE_PCT_THRESHOLD_DEFAULT;
   const minNotional = input.minNotional ?? POSITION_MOVE_MIN_NOTIONAL_DEFAULT;
   const { netCreditsIn, currentValue } = input;
 
@@ -70,12 +79,13 @@ export function evaluatePositionMove(
 
   const rawPct = ((currentValue - netCreditsIn) / netCreditsIn) * 100;
   const pctMove = Math.round(rawPct * 10) / 10;
-
-  if (Math.abs(pctMove) < pctThreshold) return null;
+  const milestone = pickPositionMoveMilestone(pctMove);
+  if (milestone === null) return null;
 
   return {
     direction: pctMove >= 0 ? "up" : "down",
     pctMove,
+    milestone,
     netCreditsIn: Math.floor(netCreditsIn),
     currentValue: Math.floor(currentValue),
   };
@@ -98,7 +108,8 @@ export interface PositionMoveNotificationOutput {
  * User-facing copy for an open-position move alert. Titles lead with
  * "Your position" so users read P&L first, not a celebrity name
  * (which would be confused with trend-score alerts). Body names the
- * market and stake → current sell value.
+ * market and stake → current sell value. Shows actual pctMove, not
+ * the milestone bucket.
  */
 export function buildPositionMoveNotification(
   input: PositionMoveNotificationInput,

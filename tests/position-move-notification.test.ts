@@ -4,43 +4,67 @@ import assert from "node:assert/strict";
 import {
   buildPositionMoveNotification,
   evaluatePositionMove,
+  pickPositionMoveMilestone,
+  POSITION_MOVE_MILESTONES,
   POSITION_MOVE_MIN_NOTIONAL_DEFAULT,
   POSITION_MOVE_PCT_THRESHOLD_DEFAULT,
   resolvePositionMoveContextLabel,
 } from "../server/jobs/position-move-notification";
 
-// Pure helpers — no DB. These tests pin the threshold + dust gates
-// and the title/body wording so the position-move-alert deriver
-// doesn't accidentally regress when we tune the constants or
-// reformat the strings.
-
-test("evaluation: above-threshold up move returns 'up' direction with rounded pctMove", () => {
-  const ev = evaluatePositionMove({ netCreditsIn: 500, currentValue: 593 });
-  assert.ok(ev, "expected evaluation, got null");
-  assert.equal(ev!.direction, "up");
-  assert.equal(ev!.pctMove, 18.6);
-  assert.equal(ev!.netCreditsIn, 500);
-  assert.equal(ev!.currentValue, 593);
+test("pickPositionMoveMilestone: below smallest milestone", () => {
+  assert.equal(pickPositionMoveMilestone(18), null);
+  assert.equal(pickPositionMoveMilestone(-19.9), null);
+  assert.equal(pickPositionMoveMilestone(NaN), null);
 });
 
-test("evaluation: above-threshold down move returns 'down' direction with negative pctMove", () => {
+test("pickPositionMoveMilestone: maps to highest crossed milestone", () => {
+  assert.equal(pickPositionMoveMilestone(20), 20);
+  assert.equal(pickPositionMoveMilestone(22), 20);
+  assert.equal(pickPositionMoveMilestone(49), 20);
+  assert.equal(pickPositionMoveMilestone(55), 50);
+  assert.equal(pickPositionMoveMilestone(99), 50);
+  assert.equal(pickPositionMoveMilestone(100), 100);
+  assert.equal(pickPositionMoveMilestone(250), 100);
+  assert.equal(pickPositionMoveMilestone(-22), 20);
+  assert.equal(pickPositionMoveMilestone(-75), 50);
+});
+
+test("evaluation: above-threshold up move returns milestone 20", () => {
+  const ev = evaluatePositionMove({ netCreditsIn: 500, currentValue: 650 });
+  assert.ok(ev, "expected evaluation, got null");
+  assert.equal(ev!.direction, "up");
+  assert.equal(ev!.pctMove, 30);
+  assert.equal(ev!.milestone, 20);
+  assert.equal(ev!.netCreditsIn, 500);
+  assert.equal(ev!.currentValue, 650);
+});
+
+test("evaluation: above-threshold down move returns milestone 20", () => {
   const ev = evaluatePositionMove({ netCreditsIn: 500, currentValue: 390 });
   assert.ok(ev);
   assert.equal(ev!.direction, "down");
   assert.equal(ev!.pctMove, -22.0);
+  assert.equal(ev!.milestone, 20);
 });
 
-test("evaluation: sub-threshold move (±14.9%) is suppressed", () => {
-  const ev1 = evaluatePositionMove({ netCreditsIn: 1000, currentValue: 1149 });
+test("evaluation: sub-threshold move (±19.9%) is suppressed", () => {
+  const ev1 = evaluatePositionMove({ netCreditsIn: 1000, currentValue: 1199 });
   assert.equal(ev1, null);
-  const ev2 = evaluatePositionMove({ netCreditsIn: 1000, currentValue: 851 });
+  const ev2 = evaluatePositionMove({ netCreditsIn: 1000, currentValue: 801 });
   assert.equal(ev2, null);
 });
 
-test("evaluation: exactly at threshold (±15.0%) fires", () => {
-  const ev = evaluatePositionMove({ netCreditsIn: 1000, currentValue: 1150 });
+test("evaluation: exactly at 20% milestone fires", () => {
+  const ev = evaluatePositionMove({ netCreditsIn: 1000, currentValue: 1200 });
   assert.ok(ev);
-  assert.equal(ev!.pctMove, 15.0);
+  assert.equal(ev!.pctMove, 20.0);
+  assert.equal(ev!.milestone, 20);
+});
+
+test("evaluation: 55% move maps to milestone 50", () => {
+  const ev = evaluatePositionMove({ netCreditsIn: 1000, currentValue: 1550 });
+  assert.ok(ev);
+  assert.equal(ev!.milestone, 50);
 });
 
 test("evaluation: dust position (netCreditsIn < 100) is suppressed even if move is huge", () => {
@@ -58,36 +82,23 @@ test("evaluation: non-finite inputs return null", () => {
   assert.equal(evaluatePositionMove({ netCreditsIn: 500, currentValue: Infinity }), null);
 });
 
-test("evaluation: custom thresholds override defaults", () => {
-  // With default 15% threshold, a 10% move is suppressed; with a 5%
-  // threshold the same input fires.
-  const noFire = evaluatePositionMove({ netCreditsIn: 1000, currentValue: 1100 });
-  assert.equal(noFire, null);
-  const fire = evaluatePositionMove({
-    netCreditsIn: 1000,
-    currentValue: 1100,
-    pctThreshold: 5,
-  });
-  assert.ok(fire);
-  assert.equal(fire!.pctMove, 10);
-});
-
 test("default constants match the deriver's documented thresholds", () => {
-  assert.equal(POSITION_MOVE_PCT_THRESHOLD_DEFAULT, 15);
+  assert.equal(POSITION_MOVE_PCT_THRESHOLD_DEFAULT, 20);
+  assert.deepEqual(POSITION_MOVE_MILESTONES, [20, 50, 100]);
   assert.equal(POSITION_MOVE_MIN_NOTIONAL_DEFAULT, 100);
 });
 
 test("notification: up title leads with Your position and signed pct", () => {
-  const ev = evaluatePositionMove({ netCreditsIn: 500, currentValue: 593 })!;
+  const ev = evaluatePositionMove({ netCreditsIn: 500, currentValue: 650 })!;
   const { title, body } = buildPositionMoveNotification({
     marketTitle: "Conor McGregor: Up or Down?",
     contextLabel: "Conor McGregor",
     evaluation: ev,
   });
-  assert.equal(title, "Your position is up +18.6%");
+  assert.equal(title, "Your position is up +30.0%");
   assert.equal(
     body,
-    "Conor McGregor: Up or Down? · Staked Ꝟ500, worth Ꝟ593 now. Tap to review.",
+    "Conor McGregor: Up or Down? · Staked Ꝟ500, worth Ꝟ650 now. Tap to review.",
   );
 });
 
@@ -119,7 +130,8 @@ test("notification: context label leads when not redundant with market title", (
 });
 
 test("notification: category race body leads with candidate pick", () => {
-  const ev = evaluatePositionMove({ netCreditsIn: 100, currentValue: 81 })!;
+  const ev = evaluatePositionMove({ netCreditsIn: 100, currentValue: 75 })!;
+  assert.equal(ev.milestone, 20);
   const contextLabel = resolvePositionMoveContextLabel({
     marketType: "gainer",
     candidateName: "Clavicular",
@@ -132,10 +144,10 @@ test("notification: category race body leads with candidate pick", () => {
     contextLabel,
     evaluation: ev,
   });
-  assert.equal(title, "Your position is down 19.0%");
+  assert.equal(title, "Your position is down 25.0%");
   assert.equal(
     body,
-    "Clavicular · Category Race: Streaming · Staked Ꝟ100, worth Ꝟ81 now. Tap to review.",
+    "Clavicular · Category Race: Streaming · Staked Ꝟ100, worth Ꝟ75 now. Tap to review.",
   );
 });
 
@@ -165,6 +177,8 @@ test("resolvePositionMoveContextLabel: updown prefers market person", () => {
 
 test("notification: large Vox values use en-US thousands separator in body", () => {
   const ev = evaluatePositionMove({ netCreditsIn: 5_000, currentValue: 7_345 })!;
+  assert.equal(ev.milestone, 20);
+  assert.equal(ev.pctMove, 46.9);
   const { body } = buildPositionMoveNotification({
     marketTitle: "Jake Paul vs KSI",
     evaluation: ev,

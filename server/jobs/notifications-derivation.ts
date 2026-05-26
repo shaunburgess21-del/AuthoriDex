@@ -17,11 +17,11 @@ import { log } from "../log";
 import { createNotification } from "../services/notifications";
 import { loadAmmPositionsFor } from "../services/amm-positions";
 import { resolvePickContextLabel } from "./notification-market-labels";
+import { notificationMonthBucket } from "./notification-buckets";
 import {
   buildPositionMoveNotification,
   evaluatePositionMove,
   POSITION_MOVE_MIN_NOTIONAL_DEFAULT,
-  POSITION_MOVE_PCT_THRESHOLD_DEFAULT,
 } from "./position-move-notification";
 import {
   formatWeeklyDigestBody,
@@ -122,7 +122,7 @@ function currentMilestone(timeUntilCloseMs: number): ClosingMilestoneId | null {
 
 // Hot mover threshold mirrors the trending-people "hot mover" pill in
 // the favorites dashboard — exceptional 24h move, not garden-variety.
-const HOT_MOVER_PCT_THRESHOLD = 15;
+const HOT_MOVER_PCT_THRESHOLD = 20;
 const HOT_MOVER_ROLLING_COOLDOWN_HOURS = 24;
 
 /**
@@ -740,12 +740,6 @@ async function deriveCreditsLow(): Promise<number> {
   return inserted;
 }
 
-// Position move alert tunables. Default thresholds defined in the
-// pure helper so unit tests can pin the same values; the cooldown
-// (how long to silence the same (user, market, entry) after a fire)
-// lives here because it's a deriver-level concern, not a wording one.
-const POSITION_MOVE_COOLDOWN_HOURS = 12;
-
 /**
  * "Your position moved significantly" deriver.
  *
@@ -753,17 +747,14 @@ const POSITION_MOVE_COOLDOWN_HOURS = 12;
  * computes the percentage swing between their amortized cost basis
  * (`netCreditsIn`) and the current realizable sell quote
  * (`currentValue` — already floored, LMSR-convexity aware via
- * `quoteSell`), and fires a `position_move_alert` when the move
- * crosses ±POSITION_MOVE_PCT_THRESHOLD_DEFAULT (15%).
+ * `quoteSell`), and fires a `position_move_alert` when |pctMove|
+ * crosses a milestone (20 / 50 / 100%).
  *
  * Filters/gates layered on top:
- *   - Dust gate: positions with `netCreditsIn < 100` are ignored
- *     (a 10-credit position swinging 50% trains users to ignore the
- *     kind).
- *   - Cooldown: a 12h lookback on `notifications` for the same
- *     (user, market, entry) — same shape as `favorite_hot_mover`.
- *   - Idempotency: 12h time bucket key as a second-line defense if
- *     the cooldown query races.
+ *   - Dust gate: positions with `netCreditsIn < 100` are ignored.
+ *   - Milestone idempotency: each (user, market, entry, direction,
+ *     milestone) fires at most once per UTC month — no 12h re-ping
+ *     while a position hovers above threshold.
  *   - Agent gate + market mute + prefs: handled by `createNotification`.
  *
  * Why per-user iteration: `loadAmmPositionsFor` is the existing tested
@@ -794,12 +785,7 @@ async function derivePositionMoveAlerts(): Promise<number> {
 
   if (userRows.length === 0) return 0;
 
-  // 12h bucket → guarantees max one notification per (user, market,
-  // entry) per 12h even if the cooldown query somehow races.
-  const twelveHourBucketMs = 12 * 60 * 60 * 1000;
-  const bucket = Math.floor(Date.now() / twelveHourBucketMs);
-
-  const cooldownSince = sql`NOW() - make_interval(hours => ${POSITION_MOVE_COOLDOWN_HOURS})`;
+  const monthBucket = notificationMonthBucket();
 
   let inserted = 0;
   for (const { userId } of userRows) {
@@ -818,32 +804,9 @@ async function derivePositionMoveAlerts(): Promise<number> {
       const evaluation = evaluatePositionMove({
         netCreditsIn: pos.netCreditsIn,
         currentValue: pos.currentValue,
-        pctThreshold: POSITION_MOVE_PCT_THRESHOLD_DEFAULT,
         minNotional: POSITION_MOVE_MIN_NOTIONAL_DEFAULT,
       });
       if (!evaluation) continue;
-
-      // Cooldown is per-(user, market, entry) — not per-(user, market) —
-      // so a user holding both UP and DOWN shares on the same market
-      // still gets two distinct alerts when the price diverges. The
-      // metadata JSON predicate filters within the indexed range
-      // (userKindIdx covers `userId, kind, createdAt`); PG falls back
-      // to a small range-scan + filter rather than a seq scan.
-      const [recent] = await db
-        .select({ id: notifications.id })
-        .from(notifications)
-        .where(
-          and(
-            eq(notifications.userId, userId),
-            eq(notifications.kind, "position_move_alert"),
-            eq(notifications.entityType, "market"),
-            eq(notifications.entityId, pos.marketId),
-            sql`${notifications.metadata}->>'entryId' = ${pos.entryId}`,
-            gte(notifications.createdAt, cooldownSince),
-          ),
-        )
-        .limit(1);
-      if (recent) continue;
 
       const contextLabel = resolvePickContextLabel({
         marketType: pos.marketType,
@@ -878,16 +841,18 @@ async function derivePositionMoveAlerts(): Promise<number> {
           candidateName: pos.candidateName,
           direction: evaluation.direction,
           pctMove: evaluation.pctMove,
+          milestone: evaluation.milestone,
           netCreditsIn: evaluation.netCreditsIn,
           currentValue: evaluation.currentValue,
           unrealisedPnl,
         },
         // groupKey per user collapses many positions moving in the same
-        // window into one inbox head + "+N earlier". Per-(market, entry)
-        // cooldown still gates re-fires; widening the key only affects
-        // panel display, not emission rate.
+        // window into one inbox head + "+N earlier". Milestone idempotency
+        // gates re-fires; groupKey only affects panel display.
         groupKey: `position_move_alert:${userId}`,
-        idempotencyKey: `position_move:${userId}:${pos.marketId}:${pos.entryId}:${bucket}`,
+        idempotencyKey:
+          `position_move:${userId}:${pos.marketId}:${pos.entryId}:` +
+          `${evaluation.direction}:${evaluation.milestone}:${monthBucket}`,
       });
       if (id) inserted += 1;
     }
