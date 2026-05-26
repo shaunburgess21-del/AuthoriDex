@@ -74,15 +74,22 @@ interface MomentumData {
       deltaPct: number;       // 24h change in *score* vs prior tick
       level: MomentumLevel;
     };
-    /** Google Trends interest signal (May 2026). Volume-only for now;
-     *  Trends Momentum (acceleration) deferred until 7+ days of data. */
+    /** Google Trends interest signal — score-only card on `now 1-d` window
+     *  (May 2026 refresh). The card displays `interest` + level + freshness;
+     *  the dormant `momentum*` and `avg*` fields are kept for diagnostics
+     *  and a possible future Trends Momentum card. */
     trends?: {
-      interest: number;           // 0..100 Google Trends interest score
-      avg7d: number;              // same-window 24h mean (field name legacy)
-      avg90d: number;             // 90-day average interest (mass)
-      momentumRatio: number;      // interest / max(avg7d, 1), capped at 10×
+      /** Mean of the last ~3 hourly points on the `now 1-d` series, 0..100. */
+      interest: number;
+      /** 24h mean of the same series (intra-day baseline). Field name is
+       *  legacy; semantics is "full-day mean", not a 7-day mean. */
+      avg7d: number;
+      /** Reserved (always 0 today). */
+      avg90d: number;
+      /** Dormant intra-day acceleration: interest / max(avg7d, 1), capped 10×. */
+      momentumRatio: number;
       momentumLevel: MomentumLevel;
-      /** @deprecated May 2026 — score-only card; always 0 from API */
+      /** @deprecated May 2026 — score-only card; always 0 from API. */
       deltaPct: number;
       topicId: string | null;
       fetchedAgeHours?: number;

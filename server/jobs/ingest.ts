@@ -57,9 +57,13 @@ const TRENDS_DAILY_SCALE_CUTOVER = new Date(
 );
 
 // Process-lifetime flag: once we've persisted at least one snapshot on the
-// current methodology, every subsequent ingest can skip the DB rollout
-// probe. Avoids a JSONB-key scan over `trend_snapshots` every cycle.
-let _trendsDayOverDayRolloutComplete = false;
+// current methodology (sentinel = TRENDS_DELTA_METHOD), every subsequent
+// ingest can skip the DB rollout probe. Avoids a JSONB-key scan over
+// `trend_snapshots` every cycle. Doubles as the cutover safety net: when
+// the sentinel changes (e.g. methodology refresh), the first post-deploy
+// ingest tick will see no matching snapshots and force a fresh SerpApi
+// fetch instead of waiting up to 12h for the next cadence gate.
+let _trendsMethodRolloutComplete = false;
 
 async function computeNewsCandidates(
   people: Array<{ id: string; name: string }>,
@@ -1629,30 +1633,30 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           }
         }
         shouldFetchTrends = shouldFetchGoogleTrends(lastSerpApiFetchAt);
-        let forceTrendsDayOverDayRollout = false;
-        if (!_trendsDayOverDayRolloutComplete) {
+        let forceTrendsMethodRollout = false;
+        if (!_trendsMethodRolloutComplete) {
           try {
             const rolloutRow = await db.execute(
               sql`SELECT EXISTS (
                     SELECT 1 FROM trend_snapshots
                     WHERE snapshot_origin = 'ingest'
                       AND diagnostics::jsonb->'raw'->>'trendsDeltaMethod' = ${TRENDS_DELTA_METHOD}
-                  ) AS has_new_method`,
+                  ) AS has_current_method`,
             );
-            const hasNewMethod = !!(rolloutRow.rows[0] as { has_new_method?: boolean })?.has_new_method;
-            if (hasNewMethod) {
-              _trendsDayOverDayRolloutComplete = true;
+            const hasCurrentMethod = !!(rolloutRow.rows[0] as { has_current_method?: boolean })?.has_current_method;
+            if (hasCurrentMethod) {
+              _trendsMethodRolloutComplete = true;
             } else {
-              forceTrendsDayOverDayRollout = true;
+              forceTrendsMethodRollout = true;
             }
           } catch (e) {
             console.warn("[Ingest] Google Trends rollout check failed, will fetch:", (e as Error).message);
-            forceTrendsDayOverDayRollout = true;
+            forceTrendsMethodRollout = true;
           }
         }
-        if (forceTrendsDayOverDayRollout) {
+        if (forceTrendsMethodRollout) {
           shouldFetchTrends = true;
-          console.log("[Ingest] Google Trends: forcing fetch for day-over-day rollout");
+          console.log(`[Ingest] Google Trends: forcing fetch for methodology rollout (sentinel=${TRENDS_DELTA_METHOD})`);
         } else if (!shouldFetchTrends && lastSerpApiFetchAt) {
           const elapsedMin = Math.round((Date.now() - lastSerpApiFetchAt.getTime()) / 60000);
           console.log(
@@ -1686,7 +1690,7 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           if (coveredCount === 0) sourceStatuses.trends = "FAILED";
           else if (coverage >= 0.7) sourceStatuses.trends = "OK";
           else sourceStatuses.trends = "DEGRADED";
-          if (coveredCount > 0) _trendsDayOverDayRolloutComplete = true;
+          if (coveredCount > 0) _trendsMethodRolloutComplete = true;
         } catch (e) {
           console.error("[Ingest] Google Trends batch fetch failed:", (e as Error).message);
           if (!trendsFetchOk) sourceStatuses.trends = "FAILED";
@@ -1758,8 +1762,12 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
      * stored history with the current cycle's `latest` reading so the average
      * always reflects "this point + recent points". Returns `latest` (or 0 if
      * not yet available) when history is empty.
+     *
+     * Persisted under the legacy field name `trendsAvg7d` for backwards
+     * compatibility with existing diagnostics readers; semantics is now
+     * "rolling mean of recent current-interest readings", not a 7-day mean.
      */
-    const computeTrendsAvg7d = (personId: string, latest: number | null | undefined): number => {
+    const computeTrendsBaselineMean = (personId: string, latest: number | null | undefined): number => {
       const h = trendsHistoryMap.get(personId);
       const safeLatest = typeof latest === "number" && Number.isFinite(latest) ? latest : 0;
       if (!h) return safeLatest;
@@ -2131,7 +2139,7 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
             const carriedFwd = latestTrendsDiagMap.get(person.id);
             if (trends && trends.avgWindowInterest > 0) return trends.avgWindowInterest;
             if (carriedFwd != null && carriedFwd.trendsAvg7d > 0) return carriedFwd.trendsAvg7d;
-            return computeTrendsAvg7d(person.id, trends?.currentInterest ?? 0);
+            return computeTrendsBaselineMean(person.id, trends?.currentInterest ?? 0);
           })(),
           wikiDelta: wiki?.delta || 0,
           newsDelta: newsDelta,
@@ -2242,7 +2250,7 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
         let trendsAvg7d =
           trends && trends.avgWindowInterest > 0
             ? trends.avgWindowInterest
-            : computeTrendsAvg7d(person.id, trendsInterestLatest);
+            : computeTrendsBaselineMean(person.id, trendsInterestLatest);
         let trendsMomentumRatio = 0;
         let trendsMomentumLevel: ReturnType<typeof computeMomentumLevel> = "none";
 

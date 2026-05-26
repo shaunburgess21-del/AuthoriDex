@@ -46,6 +46,20 @@ test("computeTrendsCurrentInterest: full-day mean reflects the whole returned se
   assert.equal(avgWindowInterest, 50);
 });
 
+test("computeTrendsCurrentInterest: 3h boundary is exclusive on the older side", () => {
+  // Point at exactly end-3h must NOT be included; window is `t > end-3h`.
+  // This guards the smoothing window from drifting to 4h on aligned series.
+  const end = Date.parse("2026-05-26T20:00:00.000Z");
+  const series = [
+    point(end - 3 * H, 100), // boundary — must be excluded
+    point(end - 2 * H, 50),
+    point(end - 1 * H, 50),
+    point(end - 0 * H, 50),
+  ];
+  const { currentInterest } = computeTrendsCurrentInterest(series);
+  assert.equal(currentInterest, 50);
+});
+
 test("computeTrendsCurrentInterest: out-of-order timestamps are sorted before windowing", () => {
   const end = Date.parse("2026-05-26T20:00:00.000Z");
   const series = [
