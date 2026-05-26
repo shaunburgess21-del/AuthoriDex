@@ -92,7 +92,7 @@ function PricingHeader() {
         Buy Vox
       </h1>
       <p className="text-base text-muted-foreground md:text-lg">
-        Top up to keep predicting. Vox never expires.
+        Top up to keep predicting. Vox is VoxDex&apos;s in-app play-money — no cash value, not redeemable.
       </p>
     </section>
   );
