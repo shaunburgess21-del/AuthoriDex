@@ -348,8 +348,8 @@ function PricingFaq() {
       q: "Are refunds available?",
       a: (
         <p>
-          Refunds are processed by Paddle, our Merchant of Record, in line
-          with Paddle's policy and applicable consumer law. For VoxDex-side
+          Refunds are processed by our Merchant of Record in line with its
+          policy and applicable consumer law. For VoxDex-side
           technical billing issues, contact us and we'll help route your
           request. See our{" "}
           <Link

@@ -1,7 +1,7 @@
 import refundMarkdown from "../../../legal/refund-policy.md?raw";
 import { LegalDocumentPage } from "@/components/legal/LegalDocumentPage";
 
-const LAST_UPDATED = "May 5, 2026";
+const LAST_UPDATED = "May 26, 2026";
 
 export default function RefundPolicyPage() {
   return (

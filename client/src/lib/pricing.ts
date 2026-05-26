@@ -1,10 +1,10 @@
 /**
  * Credit package catalogue surfaced on /pricing.
  *
- * USD-only by design — Paddle handles currency conversion at checkout based
- * on the buyer's billing country, so we don't show local-currency
- * approximations on our side. Prices are stored in dollars (not cents)
- * because the values display directly on cards.
+ * USD-only by design — our Merchant of Record handles currency conversion
+ * at checkout based on the buyer's billing country, so we don't show
+ * local-currency approximations on our side. Prices are stored in dollars
+ * (not cents) because the values display directly on cards.
  *
  * `perCreditUSD` and `savingsPct` are precomputed here so the comparison
  * table and per-credit copy stay in lock-step with the headline prices —
@@ -75,8 +75,8 @@ export const CREDIT_PACKAGES: readonly CreditPackage[] = [
  *
  * TODO: implement first-purchase bonus logic server-side. The pricing page
  * shows this number on a callout, but no purchase flow currently grants the
- * extra credits — that needs the real Paddle integration plus a one-shot
- * server check on the user's lifetime purchase count. */
+ * extra credits — that needs the real Merchant of Record integration plus
+ * a one-shot server check on the user's lifetime purchase count. */
 export const FIRST_TIME_BONUS_PCT = 25;
 
 /** Format USD as "$9.99". */

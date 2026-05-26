@@ -9,12 +9,12 @@ import { voxWord } from "@/lib/currency";
 /**
  * Temporary placeholder for the credit-purchase flow.
  *
- * The real integration with our Merchant of Record (Paddle) lands in a
- * separate PR once their domain review approves voxdex.com. Until then we
- * still need a destination for the "Buy now" CTAs on /pricing so users
- * don't hit a dead link — this page acknowledges the click, names the
- * package they picked (so the choice doesn't feel lost), and routes them
- * back. Replace with the real Paddle Checkout when wiring up payments.
+ * The real integration with our Merchant of Record lands in a separate PR
+ * once we finish onboarding with a provider. Until then we still need a
+ * destination for the "Buy now" CTAs on /pricing so users don't hit a dead
+ * link — this page acknowledges the click, names the package they picked
+ * (so the choice doesn't feel lost), and routes them back. Replace with
+ * the real hosted checkout when wiring up payments.
  */
 export default function CheckoutPage() {
   const [, params] = useRoute<{ packageId: string }>("/checkout/:packageId");
