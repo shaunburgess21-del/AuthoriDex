@@ -156,6 +156,9 @@ function LeaderboardUpDownSnapshot() {
         Each winning share pays{" "}
         <span className="font-medium text-foreground">Ꝟ1</span> at close. Cheaper shares pay multiples if your side wins — and you can sell anytime before close to lock in profits.
       </p>
+      <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground/70">
+        Vox is VoxDex&apos;s virtual currency — no cash value, no real-money payouts.
+      </p>
     </div>
   );
 }

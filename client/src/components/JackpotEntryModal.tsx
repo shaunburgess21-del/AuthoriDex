@@ -514,6 +514,9 @@ export function JackpotEntryModal({
               )}
               Enter Jackpot — Ꝟ100
             </Button>
+            <p className="text-[10px] text-muted-foreground/60 text-center -mt-0.5">
+              Vox is VoxDex&apos;s virtual currency — no cash value.
+            </p>
           </div>
         )}
       </DialogContent>

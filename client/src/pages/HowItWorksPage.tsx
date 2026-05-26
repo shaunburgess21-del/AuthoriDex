@@ -615,6 +615,16 @@ function CreditsSection() {
       </div>
 
       <Card className="space-y-3 p-4">
+        <h3 className="font-semibold">Why virtual currency?</h3>
+        <p className="text-sm text-muted-foreground">
+          Vox is play-money — it has no cash value and can&apos;t be redeemed or
+          withdrawn. We use a virtual currency so anyone, anywhere can predict
+          without putting real money at risk, and so the platform stays purely
+          entertainment.
+        </p>
+      </Card>
+
+      <Card className="space-y-3 p-4">
         <h3 className="font-semibold">Where Vox comes from</h3>
         <ul className="space-y-2 text-sm text-muted-foreground">
           <li>

@@ -3119,6 +3119,11 @@ export default function PredictPage() {
           )}
         </div>
       </div>
+      <div className="container mx-auto px-3 sm:px-4 max-w-7xl pt-2 pb-1">
+        <p className="text-center text-[11px] leading-relaxed text-muted-foreground/70">
+          Vox is VoxDex&apos;s virtual currency — no cash value, no real-money payouts.
+        </p>
+      </div>
       {selectedType === "all" && (
         <div className="container mx-auto px-2 sm:px-4 max-w-7xl pt-[15px] pb-[5px]">
           {/* Town Square - below section filters, above weekly timer */}
